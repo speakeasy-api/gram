@@ -98,9 +98,9 @@ export function MigrateIssuerDialog({
             Consolidate "{issuerDisplayName(source.issuer)}"
           </Dialog.Title>
           <Dialog.Description>
-            Move this authorization server's clients onto another authorization
-            server for the same upstream authorization server, then remove this
-            one. Existing sessions keep working, so nobody has to sign in again.
+            Move this authorization server's clients onto another that serves
+            the same upstream issuer, then remove this one. Existing sessions
+            keep working, so nobody has to sign in again.
           </Dialog.Description>
         </Dialog.Header>
 

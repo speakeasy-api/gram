@@ -70,7 +70,7 @@ function providerLabel(
 ): string {
   if (selected) return selected.name;
   if (draft.providerLoading) return "Checking\u2026";
-  return "Choose an identity provider";
+  return "Choose an authorization server";
 }
 
 /**
@@ -189,7 +189,7 @@ function ProviderGroupItems({
         >
           {group.loadingMore
             ? "Loading\u2026"
-            : `More ${group.tier.toLowerCase()} providers`}
+            : `More ${group.tier.toLowerCase()} authorization servers`}
         </CommandItem>
       ) : null}
     </CommandGroup>
@@ -245,7 +245,7 @@ export function UserIdentityRow({
                     // one" in the meantime invites a pick that the arriving
                     // default would appear to overwrite.
                     disabled={disabled || draft.providerLoading}
-                    ariaLabel="Identity provider"
+                    ariaLabel="Authorization server"
                     className={cn(
                       "gap-1.5",
                       selected && "text-foreground text-base font-medium",
@@ -262,13 +262,15 @@ export function UserIdentityRow({
                   {/* Searched on the server, so cmdk must not filter again. */}
                   <Command shouldFilter={false}>
                     <CommandInput
-                      placeholder="Search identity providers…"
+                      placeholder="Search authorization servers…"
                       value={draft.providerSearch}
                       onValueChange={draft.setProviderSearch}
                       className="h-9"
                     />
                     <CommandList>
-                      <CommandEmpty>No identity providers match.</CommandEmpty>
+                      <CommandEmpty>
+                        No authorization servers match.
+                      </CommandEmpty>
                       {draft.providerGroups.map((group) => (
                         <ProviderGroupItems
                           key={group.tier}
@@ -289,7 +291,7 @@ export function UserIdentityRow({
                       to={createHref}
                       className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm underline underline-offset-2"
                     >
-                      Create a custom identity provider
+                      Create a custom authorization server
                       <ArrowUpRight aria-hidden="true" className="size-3.5" />
                     </Link>
                   </div>
@@ -299,7 +301,7 @@ export function UserIdentityRow({
                 <Badge
                   variant="warning"
                   size="sm"
-                  title="No matching identity provider exists yet. One is created from what the upstream publishes when you save."
+                  title="No matching authorization server exists yet. One is created from what the upstream publishes when you save."
                 >
                   <Badge.Text>Will be created</Badge.Text>
                 </Badge>
@@ -331,15 +333,15 @@ export function UserIdentityRow({
 
       {draft.providerLoadFailed ? (
         <Alert variant="error" dismissible={false}>
-          Couldn&apos;t load this server&apos;s identity providers. Refresh the
-          page to try again.
+          Couldn&apos;t load this server&apos;s authorization servers. Refresh
+          the page to try again.
         </Alert>
       ) : null}
 
       {draft.providerUnreachable ? (
         <Alert variant="warning" dismissible={false}>
-          Couldn&apos;t reach the upstream&apos;s identity provider. Check the
-          server URL, or choose a provider from the list.
+          Couldn&apos;t reach the upstream&apos;s authorization server. Check
+          the server URL, or choose an authorization server from the list.
         </Alert>
       ) : null}
 
@@ -358,7 +360,7 @@ export function UserIdentityRow({
         <div className="flex items-center gap-2">
           <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
           <Text muted small>
-            Registering with {selected?.name ?? "the provider"}…
+            Registering with {selected?.name ?? "the authorization server"}…
           </Text>
         </div>
       ) : null}
@@ -529,7 +531,7 @@ function RegistrationChoices({
   draft: UserIdentityDraft;
   disabled: boolean;
 }): JSX.Element {
-  const name = draft.selected?.name ?? "the provider";
+  const name = draft.selected?.name ?? "the authorization server";
   const loading = draft.clientsLoading || draft.capabilitiesLoading;
   return (
     <RadioCardGroup
@@ -695,7 +697,7 @@ function RegistrationMethodField({
       />
       <Text muted small className="block">
         CIMD publishes the client from Speakeasy; DCR registers it with the
-        provider.
+        authorization server.
       </Text>
     </>
   );

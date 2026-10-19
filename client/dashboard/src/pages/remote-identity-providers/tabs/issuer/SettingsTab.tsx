@@ -142,7 +142,7 @@ export function SettingsTab({
         refetchType: "all",
       });
       setOmitScopeFallback(undefined);
-      toast.success("Provider updated");
+      toast.success("Authorization server updated");
     },
     onError: (error) => {
       console.error("Update authorization server failed", error);
@@ -258,7 +258,7 @@ export function SettingsTab({
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       <SettingsSection
-        title="Provider"
+        title="Authorization server"
         description="How this authorization server is labelled in the dashboard."
       >
         <SettingsField label="Display name" value={name} onChange={setName} />
@@ -269,7 +269,7 @@ export function SettingsTab({
           onChange={setLogoAssetId}
           onUploadingChange={setLogoUploading}
           canEdit={hasOrgAdminScope}
-          description="Shown beside this provider in the dashboard and on the connect consent page. Saved with your other changes."
+          description="Shown beside this authorization server in the dashboard and on the connect consent page. Saved with your other changes."
         />
       </SettingsSection>
 
@@ -281,7 +281,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="Issuer configuration"
-        description="The upstream Authorization Server. Refresh to re-read its RFC 8414 metadata, or change the issuer URL and run discovery to point this provider somewhere else."
+        description="The upstream Authorization Server. Refresh to re-read its RFC 8414 metadata, or change the issuer URL and run discovery to point it somewhere else."
       >
         <IssuerUrlField
           issuerUrl={issuerUrl}
@@ -361,9 +361,9 @@ export function SettingsTab({
               </Button>
             </div>
             <Text small muted>
-              Re-reads this provider's RFC 8414 metadata and saves the endpoints
-              and advertised capabilities immediately. Your other changes on
-              this page are not saved.
+              Re-reads this authorization server's RFC 8414 metadata and saves
+              the endpoints and advertised capabilities immediately. Your other
+              changes on this page are not saved.
             </Text>
           </div>
         )}
@@ -371,7 +371,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="Scopes"
-        description="Requested exactly as chosen when neither the client nor the MCP server names scopes, in place of this provider's supported scopes."
+        description="Requested exactly as chosen when neither the client nor the MCP server names scopes, in place of this authorization server's supported scopes."
       >
         <div className="flex flex-col gap-1.5">
           <Label id="scope-override-label" htmlFor="scope-override">
@@ -415,7 +415,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="Client setup"
-        description="Documentation linked from the New Client sheet so operators can set up an OAuth client with this provider themselves."
+        description="Documentation linked from the New Client sheet so operators can set up an OAuth client with this authorization server themselves."
       >
         <SettingsField
           label="Client setup documentation URL"
@@ -448,8 +448,8 @@ export function SettingsTab({
       <div className="border-destructive/30 flex flex-col gap-2 border p-4">
         <Text className="font-medium">Danger zone</Text>
         <Text small muted>
-          Deleting this provider is permanent. All clients must be deleted
-          first.
+          Deleting this authorization server is permanent. All clients must be
+          deleted first.
         </Text>
         <div>
           <RequireScope scope="org:admin" level="component">
@@ -457,7 +457,7 @@ export function SettingsTab({
               variant="destructive-primary"
               onClick={() => setShowDelete(true)}
             >
-              <Button.Text>Delete provider</Button.Text>
+              <Button.Text>Delete authorization server</Button.Text>
             </Button>
           </RequireScope>
         </div>

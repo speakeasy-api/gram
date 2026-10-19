@@ -882,7 +882,7 @@ export function AttachRemoteIdentityProviderSheet({
                     value={logoAssetId}
                     onChange={setLogoAssetId}
                     onUploadingChange={setLogoUploading}
-                    description="Shown beside this provider in the dashboard and on the connect consent page."
+                    description="Shown beside this authorization server in the dashboard and on the connect consent page."
                   />
 
                   <EndpointsFields
@@ -913,7 +913,7 @@ export function AttachRemoteIdentityProviderSheet({
               <Stack gap={4} className="border-t pt-6">
                 <SectionHeading
                   title="Session Client"
-                  description="The OAuth client Speakeasy registers and uses with this provider."
+                  description="The OAuth client Speakeasy registers and uses with this authorization server."
                 />
                 {clientSectionBody}
               </Stack>
@@ -1098,7 +1098,9 @@ function SelectExistingFields({
 
   return (
     <Stack gap={2}>
-      <Label className="text-muted-foreground text-xs">Authorization Server</Label>
+      <Label className="text-muted-foreground text-xs">
+        Authorization Server
+      </Label>
       <Combobox
         items={issuerOptions}
         selected={selectedIssuerId}
@@ -1116,8 +1118,8 @@ function SelectExistingFields({
       </Combobox>
       {pickFailed ? (
         <FieldError>
-          Failed to load this authorization server. Pick it again, or refresh the
-          page.
+          Failed to load this authorization server. Pick it again, or refresh
+          the page.
         </FieldError>
       ) : (
         <Text muted small>
@@ -1157,8 +1159,8 @@ function SelectExistingClientFields({
           </SelectContent>
         </Select>
         <Text muted small>
-          Bind an existing client of this provider to this MCP server. The
-          client's stored configuration is reused as-is.
+          Bind an existing client of this authorization server to this MCP
+          server. The client's stored configuration is reused as-is.
         </Text>
       </Stack>
 

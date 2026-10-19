@@ -450,7 +450,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       "The upstream service accepts requests without credentials.";
   } else if (isTunneledBacked) {
     authenticationDescription =
-      "Speakeasy authentication is configured; upstream identity providers are optional.";
+      "Speakeasy authentication is configured; upstream authorization servers are optional.";
   }
 
   // Source detail pages are gone; the description still explains the backend,

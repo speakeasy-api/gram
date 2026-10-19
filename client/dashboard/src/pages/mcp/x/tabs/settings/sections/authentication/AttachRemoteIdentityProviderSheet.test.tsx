@@ -299,7 +299,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
     });
 
     const confirm = screen.getAllByRole("button", {
-      name: "Attach Identity Provider",
+      name: "Attach Authorization Server",
     });
     fireEvent.click(confirm[confirm.length - 1] as HTMLElement);
     await waitFor(() => expect(mocks.createProvider).toHaveBeenCalled());
@@ -343,7 +343,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
       ),
     ).toBeTruthy();
     const confirm = screen.getAllByRole("button", {
-      name: "Attach Identity Provider",
+      name: "Attach Authorization Server",
     });
     expect((confirm[confirm.length - 1] as HTMLButtonElement).disabled).toBe(
       true,

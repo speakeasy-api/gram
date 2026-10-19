@@ -243,11 +243,13 @@ function openScopes() {
   fireEvent.click(screen.getByText("Discovered at sign-in"));
 }
 
-describe("client overview identity provider card", () => {
+describe("client overview authorization server card", () => {
   it("shows the issuer's metadata and links to its page", () => {
     renderTab();
 
-    const link = screen.getByRole("link", { name: "View identity provider" });
+    const link = screen.getByRole("link", {
+      name: "View authorization server",
+    });
     expect(link.getAttribute("href")).toBe("/rip/issuer-1/overview");
     expect(screen.getByText("Example IdP")).toBeTruthy();
     expect(
@@ -292,7 +294,7 @@ describe("client overview identity provider card", () => {
   it("omits the card when the issuer failed to load", () => {
     const { container } = renderTab({ issuer: undefined });
 
-    expect(screen.queryByText("View identity provider")).toBeNull();
+    expect(screen.queryByText("View authorization server")).toBeNull();
     expect(container.querySelector(".skeleton")).toBeNull();
     expect(screen.getByText("Client")).toBeTruthy();
   });
@@ -304,7 +306,7 @@ describe("client overview identity provider card", () => {
     });
 
     // The card holds its place with a skeleton until the issuer arrives.
-    expect(screen.queryByText("View identity provider")).toBeNull();
+    expect(screen.queryByText("View authorization server")).toBeNull();
     expect(container.querySelector(".skeleton")).not.toBeNull();
     expect(screen.getByText("Client")).toBeTruthy();
   });

@@ -79,7 +79,7 @@ export function ResourceScopePinField({
           </HoverCardTrigger>
           <HoverCardContent align="start" className="w-80">
             <Text small className="block">
-              {`Scopes are permissions defined by ${serverName || "the MCP server"} and its identity provider, not by Speakeasy. Speakeasy only asks for them when someone signs in; the identity provider decides what to grant and enforces it.`}
+              {`Scopes are permissions defined by ${serverName || "the MCP server"} and its authorization server, not by Speakeasy. Speakeasy only asks for them when someone signs in; the authorization server decides what to grant and enforces it.`}
             </Text>
           </HoverCardContent>
         </HoverCard>

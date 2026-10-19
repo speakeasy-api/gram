@@ -115,7 +115,7 @@ export function ServiceAccountPanel({
                 value: "client-secret",
                 title: "Client Secret",
                 description:
-                  "Paste a client ID and secret from the identity provider.",
+                  "Paste a client ID and secret from the authorization server.",
               },
               {
                 value: "signing-key",
@@ -218,7 +218,7 @@ function OAuthClientFields({
   clientHref: (issuerId: string, clientId: string) => string;
 }): JSX.Element {
   const bound = draft.showingBound(format) ? draft.boundClient : undefined;
-  const providerName = draft.issuer?.name ?? "the identity provider";
+  const providerName = draft.issuer?.name ?? "the authorization server";
   // The client being created reads the provider and these fields, so they
   // hold still until the request settles.
   const locked =
@@ -317,14 +317,14 @@ function ProviderRow({
               disabled={disabled || draft.issuersLoading}
             >
               <SelectTrigger
-                aria-label="Identity provider"
+                aria-label="Authorization server"
                 className="h-auto w-auto gap-1.5 border-0 p-0 text-base font-medium shadow-none"
               >
                 <SelectValue
                   placeholder={
                     draft.issuersLoading
-                      ? "Loading identity providers…"
-                      : "Choose an identity provider"
+                      ? "Loading authorization servers…"
+                      : "Choose an authorization server"
                   }
                 />
               </SelectTrigger>
@@ -370,13 +370,13 @@ function ProviderRow({
       </div>
       {!issuer && !draft.issuersLoading ? (
         <Text muted small>
-          A service account needs the provider&apos;s token endpoint. Missing
-          one?{" "}
+          A service account needs the authorization server&apos;s token
+          endpoint. Missing one?{" "}
           <Link
             to={providersHref}
             className="hover:text-foreground underline underline-offset-2"
           >
-            Add an identity provider
+            Add an authorization server
           </Link>
           .
         </Text>
@@ -418,7 +418,7 @@ function ClientSecretFields({
   draft: ServiceAccountClientDraft;
   disabled: boolean;
 }): JSX.Element {
-  const providerName = draft.issuer?.name ?? "the identity provider";
+  const providerName = draft.issuer?.name ?? "the authorization server";
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
@@ -536,7 +536,8 @@ function SigningKeySteps({
                       </Text>
                     ) : !draft.issuerUsable ? (
                       <Text muted small>
-                        Choose an identity provider with a token endpoint first.
+                        Choose an authorization server with a token endpoint
+                        first.
                       </Text>
                     ) : null}
                   </div>
@@ -663,7 +664,7 @@ function AdvancedFields({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="issuer">
-                  Identity provider URL (default)
+                  Authorization server URL (default)
                 </SelectItem>
                 <SelectItem value="token_endpoint">
                   Token endpoint URL

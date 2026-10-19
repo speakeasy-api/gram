@@ -235,8 +235,9 @@ export function CreateRemoteIdentityProviderSheet({
                 </SelectContent>
               </Select>
               <Text muted small>
-                Organizational providers are inherited by every project. Choose
-                a project to scope the provider to it.
+                Organizational authorization servers are inherited by every
+                project. Choose a project to scope the authorization server to
+                it.
               </Text>
             </Stack>
 
@@ -288,7 +289,7 @@ export function CreateRemoteIdentityProviderSheet({
                   setSlug(value);
                   setSlugDirty(true);
                 }}
-                placeholder="my-identity-provider"
+                placeholder="my-authorization-server"
               />
               <Text muted small>
                 Identifier for this authorization server. Auto-derived from the
@@ -320,7 +321,7 @@ export function CreateRemoteIdentityProviderSheet({
               value={logoAssetId}
               onChange={setLogoAssetId}
               onUploadingChange={setLogoUploading}
-              description="Shown beside this provider in the dashboard and on the connect consent page."
+              description="Shown beside this authorization server in the dashboard and on the connect consent page."
             />
 
             <Stack gap={2}>
@@ -334,7 +335,7 @@ export function CreateRemoteIdentityProviderSheet({
               />
               <Text muted small>
                 Linked from the New Client sheet so operators can set up an
-                OAuth client with this provider themselves.
+                OAuth client with this authorization server themselves.
               </Text>
             </Stack>
 

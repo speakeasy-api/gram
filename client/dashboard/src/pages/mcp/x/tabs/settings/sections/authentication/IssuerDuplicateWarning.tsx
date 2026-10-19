@@ -22,7 +22,7 @@ function tierRationale(
   viewerScope: IssuerDuplicateScope,
 ): string {
   if (viewerScope === "platform") {
-    return "The catalog already covers this authorization server. A second entry gives every tenant two records for one provider with nothing to tell them apart.";
+    return "The catalog already covers this authorization server. A second entry gives every tenant two records for one authorization server with nothing to tell them apart.";
   }
 
   switch (match.tier) {
@@ -36,7 +36,7 @@ function tierRationale(
       // projectName is populated exactly when the caller might not be able to
       // place the match, so its presence is what distinguishes the two cases.
       if (match.projectName) {
-        return "Consolidating onto one record avoids each project maintaining its own metadata and documentation for the same provider.";
+        return "Consolidating onto one record avoids each project maintaining its own metadata and documentation for the same authorization server.";
       }
       return "It's already configured here, so a second record would double the metadata and documentation you maintain.";
   }
@@ -47,13 +47,13 @@ function tierRationale(
 function tierCopy(match: RemoteSessionIssuerDuplicateMatch): string {
   switch (match.tier) {
     case "platform-level":
-      return "Speakeasy already has an identity provider for this issuer URL.";
+      return "Speakeasy already has an authorization server for this issuer URL.";
     case "organization-level":
-      return "Your organization already has an identity provider for this issuer URL.";
+      return "Your organization already has an authorization server for this issuer URL.";
     case "project-specific":
       if (match.projectName)
-        return `Project "${match.projectName}" already has an identity provider for this issuer URL.`;
-      return `This project already has an identity provider for this issuer URL.`;
+        return `Project "${match.projectName}" already has an authorization server for this issuer URL.`;
+      return `This project already has an authorization server for this issuer URL.`;
   }
 }
 
@@ -91,9 +91,9 @@ function otherMatchesSentence(
     .join(", ");
 
   if (others.length === 1) {
-    return `Another identity provider also uses it: ${named}.`;
+    return `Another authorization server also uses it: ${named}.`;
   }
-  return `Other identity providers also use it: ${named}.`;
+  return `Other authorization servers also use it: ${named}.`;
 }
 
 // IssuerDuplicateWarning tells an operator that something they can already see

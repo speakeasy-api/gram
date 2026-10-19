@@ -98,11 +98,13 @@ function RemoteIdentityProvidersOverview() {
       await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Provider is now organizational");
+      toast.success("Authorization server is now organizational");
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to move provider",
+        error instanceof Error
+          ? error.message
+          : "Failed to move authorization server",
       );
     },
   });
@@ -228,9 +230,9 @@ function RemoteIdentityProvidersOverview() {
                 <Text muted small className="max-w-2xl">
                   Common authorization servers maintained by the platform
                   administrators for configuring your own clients. Prefer using
-                  these over creating duplicate providers unless the client
-                  setup documentation needs to be customized when creating MCP
-                  Servers.
+                  these over creating duplicate authorization servers unless the
+                  client setup documentation needs to be customized when
+                  creating MCP Servers.
                 </Text>
               </div>
             </Stack>
@@ -348,12 +350,16 @@ function IssuerTable({
   const actionsHeader = showActions ? [{ label: "" }] : [];
   const headers = showProject
     ? [
-        { label: "Provider" },
+        { label: "Authorization server" },
         { label: "Project" },
         { label: "Clients" },
         ...actionsHeader,
       ]
-    : [{ label: "Provider" }, { label: "Clients" }, ...actionsHeader];
+    : [
+        { label: "Authorization server" },
+        { label: "Clients" },
+        ...actionsHeader,
+      ];
 
   if (!isLoading && items.length === 0) {
     return (
@@ -565,7 +571,7 @@ function RowActions({
               </>
             )}
             <DropdownMenuItem onClick={onConsolidate}>
-              Consolidate into another provider
+              Consolidate into another authorization server
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onDelete}>Delete</DropdownMenuItem>
@@ -609,7 +615,7 @@ function MoveToProjectDialog({
       await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Provider moved");
+      toast.success("Authorization server moved");
       onClose();
     },
     onError: (error) => {
@@ -650,7 +656,7 @@ function MoveToProjectDialog({
         <Dialog.Header>
           <Dialog.Title>Move authorization server</Dialog.Title>
           <Dialog.Description>
-            Choose a project to scope this provider to, or make it
+            Choose a project to scope this authorization server to, or make it
             organizational (inherited by every project).
           </Dialog.Description>
         </Dialog.Header>
@@ -742,10 +748,10 @@ export function DeleteIssuerDialog({
       }}
       title={`Delete "${issuerLabel}"?`}
       description="This permanently removes the authorization server. Clients must be deleted first."
-      confirmLabel="Delete provider"
+      confirmLabel="Delete authorization server"
       isPending={deleteMutation.isPending}
       impact={{
-        summary: `${clientCount} ${clientCount === 1 ? "client is" : "clients are"} registered with this provider.`,
+        summary: `${clientCount} ${clientCount === 1 ? "client is" : "clients are"} registered with this authorization server.`,
         mcpServerNames: preflight?.mcpServerNames,
         isLoading: preflightLoading,
       }}
