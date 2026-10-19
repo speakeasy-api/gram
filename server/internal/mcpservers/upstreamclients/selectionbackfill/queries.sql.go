@@ -179,27 +179,6 @@ SELECT r.id AS mcp_server_id,
        (
          SELECT count(*)
          FROM mcp_server_remote_session_clients AS a
-         JOIN remote_session_clients AS c
-           ON c.id = a.remote_session_client_id
-          AND c.deleted IS FALSE
-         JOIN remote_session_client_user_session_issuers AS link
-           ON link.remote_session_client_id = a.remote_session_client_id
-          AND link.user_session_issuer_id = $3
-         WHERE a.mcp_server_id = r.id
-           AND a.deleted IS FALSE
-           AND EXISTS (
-             SELECT 1
-             FROM remote_sessions AS rs
-             JOIN user_sessions AS credential
-               ON credential.subject_urn = rs.subject_urn
-              AND credential.id = $2::uuid
-             WHERE rs.remote_session_client_id = a.remote_session_client_id
-               AND rs.deleted IS FALSE
-           )
-       )::bigint AS connected_clients,
-       (
-         SELECT count(*)
-         FROM mcp_server_remote_session_clients AS a
          WHERE a.mcp_server_id = r.id
            AND a.deleted IS FALSE
        )::bigint AS associated_clients,
@@ -263,7 +242,6 @@ type ListUpstreamClientSelectionCoverageRow struct {
 	McpServerID        uuid.UUID
 	Selected           bool
 	EligibleClients    int64
-	ConnectedClients   int64
 	AssociatedClients  int64
 	IssuerBoundClients int64
 	EvidenceClients    int64
@@ -286,7 +264,6 @@ func (q *Queries) ListUpstreamClientSelectionCoverage(ctx context.Context, arg L
 			&i.McpServerID,
 			&i.Selected,
 			&i.EligibleClients,
-			&i.ConnectedClients,
 			&i.AssociatedClients,
 			&i.IssuerBoundClients,
 			&i.EvidenceClients,

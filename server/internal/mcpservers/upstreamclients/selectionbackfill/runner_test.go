@@ -158,11 +158,25 @@ func (f *fixture) sessionFor(userIssuerID uuid.UUID, subject urn.SessionSubject)
 
 func (f *fixture) record(userIssuerID, credentialID uuid.UUID) int64 {
 	f.t.Helper()
+	return f.recordPicked(userIssuerID, credentialID, nil)
+}
+
+// recordPicked records choices as issuance does after a consent page that
+// picked a client for each server in picks.
+func (f *fixture) recordPicked(userIssuerID, credentialID uuid.UUID, picks map[uuid.UUID]uuid.UUID) int64 {
+	f.t.Helper()
+	servers, clients := []uuid.UUID{}, []uuid.UUID{}
+	for serverID, clientID := range picks {
+		servers = append(servers, serverID)
+		clients = append(clients, clientID)
+	}
 	n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(f.t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
 		UserSessionIssuerID: userIssuerID,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credentialID,
 		Source:              upstreamclients.SelectionSourceIssuance,
+		PickedMcpServerIds:  servers,
+		PickedClientIds:     clients,
 	})
 	require.NoError(f.t, err)
 	return n
@@ -443,8 +457,6 @@ func TestClassifyMatchesTheRecordedChoice(t *testing.T) {
 		{"already chosen", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: true, EligibleClients: 2, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeSelected},
 		{"one eligible client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 1, AssociatedClients: 2, IssuerBoundClients: 3}, OutcomeClient},
 		{"several eligible clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeAmbiguous},
-		{"several eligible clients, one connected", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, ConnectedClients: 1, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeClient},
-		{"several eligible clients, several connected", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, ConnectedClients: 2, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeAmbiguous},
 		{"associated but not through this issuer", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 1, IssuerBoundClients: 1}, OutcomeUnreachableClient},
 		{"unassociated with bound clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0, IssuerBoundClients: 1}, OutcomeUnassociated},
 		{"unassociated with a gateway client tied to it", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0, IssuerBoundClients: 0, EvidenceClients: 2}, OutcomeUnassociated},
@@ -562,38 +574,32 @@ func (f *fixture) connect(userIssuerID, clientID uuid.UUID, subject urn.SessionS
 	}))
 }
 
-// When a server offers several clients, the card the person connected at
-// consent is the credential's choice; connecting none or several leaves it to
-// a reconnection.
-func TestRecordUpstreamClientSelectionsChoosesTheConnectedClient(t *testing.T) {
+// When a server offers several clients, the one picked on the consent page is
+// the credential's choice; without a pick, as for a credential the backfill
+// covers, it is left to a reconnection. A pick that is not one of the
+// server's eligible clients chooses nothing.
+func TestRecordUpstreamClientSelectionsRecordsTheConsentPick(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	issuer := f.projectIssuer()
 	first, second := f.client(issuer), f.client(issuer)
 	server := f.server(issuer, first, second)
+	stranger := f.client(f.projectIssuer())
 
-	connectedOne := urn.NewUserSubject("connected-one")
-	f.connect(issuer, second, connectedOne)
-	one := f.sessionFor(issuer, connectedOne)
-
-	connectedBoth := urn.NewUserSubject("connected-both")
-	f.connect(issuer, first, connectedBoth)
-	f.connect(issuer, second, connectedBoth)
-	both := f.sessionFor(issuer, connectedBoth)
-
-	none := f.session(issuer)
+	picked := f.session(issuer)
+	unpicked := f.session(issuer)
+	foreign := f.session(issuer)
 
 	preview, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
 	require.NoError(t, err)
-	require.Equal(t, 1, preview.Pairs[OutcomeClient], "the prediction agrees with what is recorded")
-	require.Equal(t, 2, preview.Pairs[OutcomeAmbiguous])
+	require.Equal(t, 3, preview.Pairs[OutcomeAmbiguous], "the backfill has no consent page to pick from")
 
-	f.record(issuer, one)
-	f.record(issuer, both)
-	f.record(issuer, none)
-	require.Equal(t, map[uuid.UUID]uuid.UUID{server: second}, f.selections(one))
-	require.Empty(t, f.selections(both))
-	require.Empty(t, f.selections(none))
+	f.recordPicked(issuer, picked, map[uuid.UUID]uuid.UUID{server: second})
+	f.record(issuer, unpicked)
+	f.recordPicked(issuer, foreign, map[uuid.UUID]uuid.UUID{server: stranger})
+	require.Equal(t, map[uuid.UUID]uuid.UUID{server: second}, f.selections(picked))
+	require.Empty(t, f.selections(unpicked))
+	require.Empty(t, f.selections(foreign))
 }
 
 // A platform client is shared by every organization, so grants for it minted

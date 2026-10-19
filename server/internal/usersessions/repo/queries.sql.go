@@ -4493,24 +4493,14 @@ reachable AS (
         )
       )
 ),
-credential_subject AS (
-    -- A credential is named by its first session row's id, and rotation
-    -- keeps the subject, so that row names the subject.
-    SELECT s.subject_urn
-    FROM user_sessions AS s
-    WHERE s.id = $2::uuid
+picked AS (
+    -- The consent page's pick for each server, as parallel arrays.
+    SELECT unnest($5::uuid[]) AS mcp_server_id,
+           unnest($6::uuid[]) AS remote_session_client_id
 ),
 eligible AS (
     SELECT a.mcp_server_id,
-           a.remote_session_client_id,
-           EXISTS (
-             SELECT 1
-             FROM remote_sessions AS rs
-             JOIN credential_subject AS cs
-               ON cs.subject_urn = rs.subject_urn
-             WHERE rs.remote_session_client_id = a.remote_session_client_id
-               AND rs.deleted IS FALSE
-           ) AS connected
+           a.remote_session_client_id
     FROM mcp_server_remote_session_clients AS a
     JOIN reachable AS r
       ON r.id = a.mcp_server_id
@@ -4532,10 +4522,13 @@ decided AS (
                WHERE e.mcp_server_id = r.id
              ),
              (
-               SELECT CASE WHEN count(*) = 1 THEN (array_agg(e.remote_session_client_id))[1] END
+               SELECT e.remote_session_client_id
                FROM eligible AS e
+               JOIN picked AS p
+                 ON p.mcp_server_id = e.mcp_server_id
+                AND p.remote_session_client_id = e.remote_session_client_id
                WHERE e.mcp_server_id = r.id
-                 AND e.connected
+               LIMIT 1
              )
            ) AS remote_session_client_id,
            (
@@ -4634,6 +4627,8 @@ type RecordUpstreamClientSelectionsParams struct {
 	CredentialID        uuid.UUID
 	Source              string
 	UserSessionIssuerID uuid.UUID
+	PickedMcpServerIds  []uuid.UUID
+	PickedClientIds     []uuid.UUID
 }
 
 // Records, for one inbound credential, the upstream OAuth client it uses for
@@ -4652,9 +4647,9 @@ type RecordUpstreamClientSelectionsParams struct {
 // A client is chosen when it is the server's single associated client that
 // the credential's issuer also binds, which is the client the issuer path
 // serves today. When the issuer binds several of the server's clients, the
-// one the credential's subject has connected (holds a live grant for) is
-// chosen, which is the card picked at consent; several connected, or none,
-// leaves the choice to a reconnection. No-auth is chosen only when the server has no associated
+// one picked on the consent page (picked_mcp_server_ids and picked_client_ids,
+// parallel arrays) is chosen if it is still one of them; without a pick the
+// choice is left to a reconnection. No-auth is chosen only when the server has no associated
 // client, its own issuer binds none, and the credential's issuer binds no
 // client that a grant or the server's derived authorization server ties to
 // it, so a gateway member whose client is ambiguous is never called
@@ -4667,6 +4662,8 @@ func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg Record
 		arg.CredentialID,
 		arg.Source,
 		arg.UserSessionIssuerID,
+		arg.PickedMcpServerIds,
+		arg.PickedClientIds,
 	)
 	if err != nil {
 		return 0, err
