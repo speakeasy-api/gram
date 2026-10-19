@@ -2340,6 +2340,7 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 
 const getPlatformMCPConnectionSettings = `-- name: GetPlatformMCPConnectionSettings :one
 SELECT
+    CASE WHEN $1::text = 'gateway' THEN COALESCE(gateway.discovery_mode, 'progressive') ELSE '' END::text AS discovery_mode,
     CASE WHEN $1::text = 'gateway' THEN gateway.name ELSE COALESCE(server.name, server.slug, '') END::text AS name,
     CASE WHEN $1::text = 'gateway' THEN gateway.visibility ELSE server.visibility END::text AS visibility,
     COALESCE(
@@ -2429,6 +2430,7 @@ type GetPlatformMCPConnectionSettingsParams struct {
 }
 
 type GetPlatformMCPConnectionSettingsRow struct {
+	DiscoveryMode     string
 	Name              string
 	Visibility        string
 	NetworkMode       string
@@ -2448,6 +2450,7 @@ func (q *Queries) GetPlatformMCPConnectionSettings(ctx context.Context, arg GetP
 	)
 	var i GetPlatformMCPConnectionSettingsRow
 	err := row.Scan(
+		&i.DiscoveryMode,
 		&i.Name,
 		&i.Visibility,
 		&i.NetworkMode,
