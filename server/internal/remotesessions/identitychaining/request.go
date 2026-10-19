@@ -34,6 +34,12 @@ type Request struct {
 	// resource identifier is operator supplied, so a resource match alone
 	// could deliver a sibling upstream's token into the tunnel.
 	RemoteSessionIssuerID uuid.NullUUID
+
+	// RemoteSessionClientID, when valid, restricts selection to a binding for
+	// that client: the client the caller's credential chose for the server.
+	// A binding for any other client, even at the same resource, never serves
+	// the caller.
+	RemoteSessionClientID uuid.NullUUID
 }
 
 // complete reports whether every field needed to select a binding is set.
@@ -69,6 +75,7 @@ func NewUpstreamRequest(organizationID string, projectID, userSessionIssuerID uu
 		UserSessionJTI:        "",
 		UpstreamResource:      upstreamResource,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}
 	if tunneled {
 		if !tunneledIssuerID.Valid || tunneledIssuerID.UUID == uuid.Nil {

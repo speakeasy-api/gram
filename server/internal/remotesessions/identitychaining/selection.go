@@ -143,6 +143,10 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 		return none, bindingNotReady
 	case result.State != remotesessions.PreparationStateReady || result.BindingID != b.ID || result.ClientID == uuid.Nil || result.ExternalClientID == "":
 		return none, bindingNotReady
+	case req.RemoteSessionClientID.Valid && result.ClientID != req.RemoteSessionClientID.UUID:
+		// The caller chose another client for this server; this binding is
+		// not one it may be served by.
+		return none, notApplicable
 	}
 	if resource.Discovered && !slices.ContainsFunc(resource.AuthorizationServers, func(server string) bool { return sameIssuer(server, result.Issuer) }) {
 		return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)

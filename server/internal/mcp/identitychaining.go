@@ -55,7 +55,11 @@ func (s *Service) SetIdentityChainer(chainer identityChainer) {
 // interactive routing treats it; one without a derived issuer calls
 // anonymously and so never chains. A remote upstream is identified by its
 // resource.
-func (s *Service) identityChainingRequest(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) (identitychaining.Request, bool) {
+//
+// chosenClientID is the client the caller's credential chose for the
+// upstream, when it has a choice; chaining then only uses a binding for that
+// client.
+func (s *Service) identityChainingRequest(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string, tunneled bool, backendIssuerID, chosenClientID uuid.NullUUID) (identitychaining.Request, bool) {
 	var none identitychaining.Request
 	if s.identityChainer == nil {
 		return none, false
@@ -70,6 +74,7 @@ func (s *Service) identityChainingRequest(ctx context.Context, organizationID st
 	}
 	req, ok := identitychaining.NewRequest(organizationID, projectID, userSessionIssuerID, identity.UserID(), upstreamResource, tunneled, backendIssuerID)
 	req.UserSessionJTI = identity.SessionJTI()
+	req.RemoteSessionClientID = chosenClientID
 	return req, ok
 }
 
@@ -94,7 +99,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 	case selected:
 		backendIssuerID = choice.remoteSessionIssuerID
 	}
-	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, backendIssuerID)
+	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, backendIssuerID, authentication.chosenClient)
 	if !chainable {
 		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
 	}
@@ -232,7 +237,7 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember) fu
 		return nil
 	}
 	return func(ctx context.Context, upstreamResource string) (string, error) {
-		req, chainable := s.identityChainingRequest(ctx, gate.organizationID, member.projectID, gate.userSessionIssuerID, upstreamResource, member.tunneledServerID.Valid, member.remoteSessionIssuerID)
+		req, chainable := s.identityChainingRequest(ctx, gate.organizationID, member.projectID, gate.userSessionIssuerID, upstreamResource, member.tunneledServerID.Valid, member.remoteSessionIssuerID, member.chosenClientID)
 		if !chainable {
 			return "", nil
 		}

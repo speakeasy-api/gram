@@ -84,7 +84,7 @@ func TestConsentChainedClients_RequestMatchesRuntime(t *testing.T) {
 
 			require.True(t, s.consentChainedClients(t.Context(), endpoint, state, []remotesessions.Client{client}, tc.routing)[client.ID])
 
-			runtime, ok := s.identityChainingRequest(humanChainingContext(t, "user-1", chainingTestOrg), endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, endpoint.UpstreamResource, tc.tunneled, uuid.NullUUID{UUID: tunnelIssuer, Valid: true})
+			runtime, ok := s.identityChainingRequest(humanChainingContext(t, "user-1", chainingTestOrg), endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, endpoint.UpstreamResource, tc.tunneled, uuid.NullUUID{UUID: tunnelIssuer, Valid: true}, uuid.NullUUID{})
 			require.True(t, ok)
 			require.NotEmpty(t, runtime.UserSessionJTI)
 			runtime.UserSessionJTI = "" // Consent precedes grant creation and carries no validated grant identifier.

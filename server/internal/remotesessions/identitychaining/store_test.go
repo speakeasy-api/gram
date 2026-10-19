@@ -569,6 +569,21 @@ func TestStore_SelectBindingRestrictedToTunnelIssuer(t *testing.T) {
 	require.Equal(t, f.sel.bindingID, sel.bindingID)
 }
 
+func TestStore_SelectBindingRestrictedToChosenClient(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	other := f.req
+	other.RemoteSessionClientID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), other)
+	require.Equal(t, notApplicable, outcome, "a credential that chose another client is never served by this binding")
+
+	own := f.req
+	own.RemoteSessionClientID = uuid.NullUUID{UUID: f.sel.clientID, Valid: true}
+	sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), own)
+	require.Equal(t, success, outcome)
+	require.Equal(t, f.sel.bindingID, sel.bindingID)
+}
+
 func TestStore_SwitchingBackToExternalReplacesSpeakeasySlot(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
