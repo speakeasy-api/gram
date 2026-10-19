@@ -423,6 +423,11 @@ WHERE m.project_id = @project_id::uuid AND m.deleted IS FALSE
        OR num_nonnulls(s.toolset_id, s.remote_mcp_server_id,
                        s.tunneled_mcp_server_id, s.unproxied_mcp_server_id) <> 1);
 
+-- name: PostflightCountServerToolMetadata :one
+SELECT count(*) FROM mcp_server_tool_metadata
+WHERE project_id = @project_id::uuid AND deleted IS FALSE
+  AND mcp_server_id = @mcp_server_id::uuid;
+
 -- name: PostflightCountActiveQuarantines :one
 SELECT count(*) FROM session_quarantines
 WHERE organization_id = @org_id::text AND project_id = @project_id::uuid AND released_at IS NULL;

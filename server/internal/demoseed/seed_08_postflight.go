@@ -397,6 +397,15 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			count: byProject(s.q.PostflightCountUnservableGatewayMembers),
 			fail:  postflightMustBeZero("%d gateway members are not servable"),
 		},
+		// Slack's recorded tools are what Support Desk's read-only rule is
+		// evaluated against; the unannotated one must stay out of it.
+		{
+			what: "recorded slack tools",
+			count: func() (int64, error) {
+				return s.q.PostflightCountServerToolMetadata(ctx, repo.PostflightCountServerToolMetadataParams{ProjectID: proj, McpServerID: s.det("mcpserver-slack")})
+			},
+			fail: postflightMustEqual(3, "expected 3 recorded Slack tools, found %d"),
+		},
 		{
 			what: "active session quarantines",
 			count: func() (int64, error) {

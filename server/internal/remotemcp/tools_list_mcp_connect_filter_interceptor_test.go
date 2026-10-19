@@ -404,3 +404,32 @@ func TestToolsListMCPConnectFilterInterceptor_KeepsUnclassifiedGrantedTool(t *te
 	require.Len(t, resp.Result.Tools, 1)
 	require.Equal(t, "tool_a", resp.Result.Tools[0].Name)
 }
+
+func TestToolsListMCPConnectFilterInterceptor_DispositionGrantHidesUnclassifiedTool(t *testing.T) {
+	t.Parallel()
+
+	// A disposition-only grant covers tools classified that way. A tool with
+	// no recorded metadata has no classification, so the grant does not
+	// reach it and it is withheld from the listing.
+	engine := newAuthzEngineForTest(t)
+	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   testServerID,
+			"disposition":   "read_only",
+		}),
+	)
+
+	resolver := fakeToolDispositionResolver{dispositions: map[string]string{"list_items": "read_only"}}
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
+
+	resp := newToolsListResponse(t, []*mcp.Tool{
+		{Name: "list_items", InputSchema: map[string]any{}},
+		{Name: "unrecorded_tool", InputSchema: map[string]any{}},
+	})
+	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
+
+	require.Len(t, resp.Result.Tools, 1)
+	require.Equal(t, "list_items", resp.Result.Tools[0].Name)
+}

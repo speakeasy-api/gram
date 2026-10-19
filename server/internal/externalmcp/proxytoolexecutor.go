@@ -66,6 +66,22 @@ func (e *ProxyToolExecutor) HasEntries() bool {
 	return len(e.entries) > 0
 }
 
+// Routes reports whether a call to toolName is dispatched to one of this
+// executor's proxy tools: its name is <slug>--<toolName> for a slug this
+// executor holds. It matches exactly the names MatchPlanInputs resolves.
+func (e *ProxyToolExecutor) Routes(toolName string) bool {
+	slug, _, ok := strings.Cut(toolName, ProxyToolNameDelimiter)
+	if !ok {
+		return false
+	}
+	for _, entry := range e.entries {
+		if entry.SourceSlug == slug {
+			return true
+		}
+	}
+	return false
+}
+
 // MatchPlanInputs checks if the given tool name belongs to any proxy tool in this executor.
 // If matched, resolves the ToolCallPlan inputs and sets ToolName to the external tool name.
 // Returns nil if no match (not an error). Returns error if resolver fails.

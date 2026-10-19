@@ -341,7 +341,7 @@ function ToolNarrowing({
             unavailableLabel: "Tools are discovered at runtime",
             emptyLabel: "No tools recorded",
             emptyContent:
-              "No tools are recorded for this server. You can still restrict tool dispositions.",
+              "No tools are recorded for this server. A disposition limit only reaches tools whose annotations are recorded, so it reaches none of this server's tools until they are.",
             onRetry: metadata.refetch,
           },
         ]
