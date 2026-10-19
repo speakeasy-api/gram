@@ -1371,6 +1371,13 @@ func (m *ChallengeManager) mintAuthorization(
 		expectedIssuer = client.IssuerIdentifier
 	}
 
+	// A nonce binds an ID token to this request, and only an OpenID request
+	// yields an ID token. Some plain OAuth servers reject any parameter they
+	// do not recognise, nonce included, so it is sent only alongside openid.
+	if !requestsOpenID(scopes, omitScope, u.Query()) {
+		nonce = ""
+	}
+
 	state := RemoteLoginState{
 		ID:                    stateID,
 		ParentChallengeID:     parent.ID,
@@ -1414,9 +1421,11 @@ func (m *ChallengeManager) mintAuthorization(
 	q.Set("state", stateParam)
 	q.Set("code_challenge", codeChallenge)
 	q.Set("code_challenge_method", "S256")
-	// Harmless to a plain OAuth server and required for an OpenID one to
-	// bind the ID token to this request.
-	q.Set("nonce", nonce)
+	if nonce != "" {
+		q.Set("nonce", nonce)
+	} else {
+		q.Del("nonce")
+	}
 	switch {
 	case len(scopes) > 0:
 		q.Set("scope", strings.Join(scopes, " "))
@@ -1438,6 +1447,19 @@ func (m *ChallengeManager) mintAuthorization(
 	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
+}
+
+// requestsOpenID reports whether the authorize request will carry the openid
+// scope: the resolved scopes when there are any, else a scope baked into the
+// authorization endpoint's query unless the operator chose to send none.
+func requestsOpenID(scopes []string, omitScope bool, endpointQuery url.Values) bool {
+	if len(scopes) == 0 {
+		if omitScope {
+			return false
+		}
+		scopes = strings.Fields(endpointQuery.Get("scope"))
+	}
+	return slices.Contains(scopes, "openid")
 }
 
 // HandleRemoteLoginCallback is the GET handler for

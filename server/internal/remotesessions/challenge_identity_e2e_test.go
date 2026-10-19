@@ -303,13 +303,17 @@ func loadString(p *atomic.Pointer[string]) string {
 	return ""
 }
 
-// observeNonce records the nonce the authorize redirect carried, for the
-// fixture server to echo in its ID token.
+// observeNonce makes the login an OpenID request and records the nonce its
+// authorize redirect carried, for the fixture server to echo in its ID token.
 func observeNonce(into *atomic.Pointer[string]) syntheticLoginOption {
-	return withAuthorizationURLObserver(func(u *url.URL) {
+	observe := withAuthorizationURLObserver(func(u *url.URL) {
 		nonce := u.Query().Get("nonce")
 		into.Store(&nonce)
 	})
+	return func(o *syntheticLoginOptions) {
+		withOpenIDScope()(o)
+		observe(o)
+	}
 }
 
 func TestRemoteLoginCapturesIDTokenIdentity(t *testing.T) {

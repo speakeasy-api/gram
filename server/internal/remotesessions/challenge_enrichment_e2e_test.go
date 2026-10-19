@@ -166,7 +166,7 @@ func TestRemoteLoginRejectedIDTokenDoesNotFallBackToUserinfo(t *testing.T) {
 		claims := issuer.claims(clientID, "stale-nonce")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"access_token":"access","token_type":"Bearer","expires_in":3600,"id_token":"` + issuer.mint(t, claims) + `"}`))
-	}, withIDTokenIssuer(issuer), withEnrichmentAS(as))
+	}, withIDTokenIssuer(issuer), withOpenIDScope(), withEnrichmentAS(as))
 
 	require.False(t, env.session.IdentitySource.Valid)
 	require.Empty(t, as.drain())
@@ -204,7 +204,7 @@ func TestRemoteLoginRejectedIDTokenMarkerSurvivesExchangeOverflow(t *testing.T) 
 		claims := issuer.claims(clientID, "stale-nonce")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"access_token":"access","token_type":"Bearer","expires_in":3600,"workspace_name":"` + bulk + `","id_token":"` + issuer.mint(t, claims) + `"}`))
-	}, withIDTokenIssuer(issuer), withEnrichmentAS(as))
+	}, withIDTokenIssuer(issuer), withOpenIDScope(), withEnrichmentAS(as))
 
 	require.False(t, env.session.IdentitySource.Valid)
 	require.Empty(t, as.drain())
@@ -236,7 +236,7 @@ func TestRefreshOverflowKeepsRejectedIDTokenMarker(t *testing.T) {
 	// Each document fits the cap on its own; their merge does not.
 	half := strings.Repeat("x", 9<<10)
 	exchange := `,"id_token":"` + issuer.mint(t, issuer.claims(clientID, "stale-nonce")) + `","workspace_name":"` + half + `"`
-	ctx, env := newSyntheticExpiryEnv(t, "idtoken-reject-refresh-overflow", refreshTokenHandler(t, &refreshes, exchange, &refreshBody), withIDTokenIssuer(issuer), withEnrichmentAS(as))
+	ctx, env := newSyntheticExpiryEnv(t, "idtoken-reject-refresh-overflow", refreshTokenHandler(t, &refreshes, exchange, &refreshBody), withIDTokenIssuer(issuer), withOpenIDScope(), withEnrichmentAS(as))
 	require.False(t, env.session.IdentitySource.Valid)
 	require.Equal(t, "rejected", decodeEnrichment(t, env.session.Enrichment).Interfaces["id_token"].Status)
 
