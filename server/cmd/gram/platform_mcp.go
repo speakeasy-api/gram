@@ -56,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
+	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -128,6 +129,8 @@ type platformMCPConfig struct {
 	// RiskFindingList is the ClickHouse read path for individual findings.
 	// Nil serves every organization's per-finding reads from Postgres.
 	RiskFindingList platformmcp.RiskFindingListReader
+	// ChatRiskFindings enriches chat metadata from ClickHouse when the cutover flag is enabled.
+	ChatRiskFindings chatfindings.FindingReader
 	// RiskFalsePositiveFindings receives dismissal state copies. Nil makes
 	// the dismiss and restore tools fail rather than skip ClickHouse.
 	RiskFalsePositiveFindings risk.FalsePositiveFindingsStore
@@ -501,7 +504,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithRiskFindingList(platformmcp.NewRiskFindingListService(config.DB, config.RiskFindingList, config.JWTSigningKey), budgets.RiskFindings).
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
-		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
+		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey).
+			WithRiskFindingsClickHouse(chatfindings.New(config.DB, config.ChatRiskFindings), config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
@@ -1125,7 +1129,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithRiskFindingList(platformmcp.NewRiskFindingListService(config.DB, config.RiskFindingList, config.JWTSigningKey), budgets.RiskFindings).
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
-		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
+		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey).
+			WithRiskFindingsClickHouse(chatfindings.New(config.DB, config.ChatRiskFindings), config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).

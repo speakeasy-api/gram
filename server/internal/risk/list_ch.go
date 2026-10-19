@@ -66,10 +66,17 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	uniqueMatch, nonAssistant bool,
 	assistantID uuid.NullUUID,
 	from, to *time.Time,
+	enabledPoliciesOnly bool,
 ) (*gen.ListRiskResultsResult, error) {
 	projectID := *authCtx.ProjectID
 
-	policyIDs, err := s.visiblePolicyIDs(ctx, projectID, policyID)
+	var policyIDs []string
+	var err error
+	if enabledPoliciesOnly {
+		policyIDs, err = s.enabledPolicyIDs(ctx, projectID, policyID)
+	} else {
+		policyIDs, err = s.visiblePolicyIDs(ctx, projectID, policyID)
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve visible risk policies").LogError(ctx, s.logger)
 	}
@@ -160,6 +167,29 @@ func (s *Service) visiblePolicyIDs(ctx context.Context, projectID uuid.UUID, pol
 	policies, err := s.repo.ListRiskPolicies(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list risk policies: %w", err)
+	}
+	ids := make([]string, 0, len(policies))
+	for _, policy := range policies {
+		ids = append(ids, policy.ID.String())
+	}
+	return ids, nil
+}
+
+func (s *Service) enabledPolicyIDs(ctx context.Context, projectID uuid.UUID, policyID uuid.NullUUID) ([]string, error) {
+	if policyID.Valid {
+		policy, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{ID: policyID.UUID, ProjectID: projectID})
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && !policy.Enabled) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("get enabled risk policy: %w", err)
+		}
+		return []string{policyID.UUID.String()}, nil
+	}
+
+	policies, err := s.repo.ListEnabledRiskPoliciesByProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list enabled risk policies: %w", err)
 	}
 	ids := make([]string, 0, len(policies))
 	for _, policy := range policies {
