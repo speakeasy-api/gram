@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -35,8 +34,7 @@ func NewTestPostgres(ctx context.Context) (_ *postgres.PostgresContainer, _ Post
 	}
 
 	// The maintenance pool is shared by every clone and drop for this
-	// container, so each test pays for a SCRAM handshake only on its own
-	// pool's connections. It is closed before the container stops.
+	// container. It is closed before the container stops.
 	var maintenance *pgxpool.Pool
 	closeMaintenance := testcontainers.ContainerLifecycleHooks{
 		PreStops: []testcontainers.ContainerHook{
@@ -74,7 +72,14 @@ func NewTestPostgres(ctx context.Context) (_ *postgres.PostgresContainer, _ Post
 		WithPublishedPortWait("5432/tcp"),
 		WithLoopbackPorts(),
 		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
-		testcontainers.WithEnv(map[string]string{"PGDATA": "/var/lib/postgresql/data"}),
+		testcontainers.WithEnv(map[string]string{
+			"PGDATA": "/var/lib/postgresql/data",
+			// Skip password auth for TCP connections. A SCRAM-SHA-256
+			// handshake runs PBKDF2 on the client, which dominated test CPU
+			// under -race. The password is hard-coded here, so it never
+			// protected these throwaway containers.
+			"POSTGRES_HOST_AUTH_METHOD": "trust",
+		}),
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 		testcontainers.WithAdditionalLifecycleHooks(closeMaintenance),
 	)
@@ -118,21 +123,17 @@ func postgresURI(ctx context.Context, container *postgres.PostgresContainer) (st
 }
 
 func newPostgresCloneFunc(uri string, maintenance *pgxpool.Pool) PostgresDBCloneFunc {
-	// Clones of one template run one at a time as a precaution. Clones never
-	// connect to the template and CREATE DATABASE takes only a share lock on
-	// it, so the lock may be unnecessary. It covers only the CREATE statement.
-	var cloneMu sync.Mutex
-
+	// Clones run concurrently. PostgreSQL refuses CREATE DATABASE ...
+	// TEMPLATE only while a session is connected to the template, and no
+	// session ever is: maintenance connections use the postgres database and
+	// each test pool connects to its own clone.
 	return func(t *testing.T, name string) (*pgxpool.Pool, error) {
 		t.Helper()
 
 		ctx := t.Context()
 		cloneName := fmt.Sprintf("%s_%s", name, nextPostgresCloneSuffix())
 
-		cloneMu.Lock()
-		_, err := maintenance.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s WITH TEMPLATE gotestdb;", cloneName))
-		cloneMu.Unlock()
-		if err != nil {
+		if _, err := maintenance.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s WITH TEMPLATE gotestdb;", cloneName)); err != nil {
 			return nil, fmt.Errorf("create test database: %w", err)
 		}
 
