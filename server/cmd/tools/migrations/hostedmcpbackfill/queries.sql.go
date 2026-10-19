@@ -1988,14 +1988,3 @@ func (q *Queries) SoftDeleteToolsetFixture(ctx context.Context, arg SoftDeleteTo
 	_, err := q.db.Exec(ctx, softDeleteToolsetFixture, arg.ID, arg.ProjectID)
 	return err
 }
-
-const terminateOtherBackendsFixture = `-- name: TerminateOtherBackendsFixture :exec
-SELECT pg_terminate_backend(pid, 5000)
-FROM pg_catalog.pg_stat_activity
-WHERE datname = current_database() AND pid <> pg_backend_pid()
-`
-
-func (q *Queries) TerminateOtherBackendsFixture(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, terminateOtherBackendsFixture)
-	return err
-}

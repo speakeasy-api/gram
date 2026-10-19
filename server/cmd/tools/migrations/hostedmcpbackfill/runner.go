@@ -211,6 +211,8 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 		Rows:                  nil,
 	}
 	switch {
+	case r.options.MoveDependents && r.options.CleanupOrphans:
+		return report, errors.New("the dependent move and the orphan cleanup are separate phases")
 	case r.options.MoveDependents:
 		report.Phase = phaseDependents
 		return r.runDependents(ctx, report, r.moveOne)

@@ -490,11 +490,6 @@ ON CONFLICT (id) DO NOTHING;
 UPDATE projects SET deleted_at = NULL
 WHERE id = @id AND organization_id = @organization_id;
 
--- name: TerminateOtherBackendsFixture :exec
-SELECT pg_terminate_backend(pid, 5000)
-FROM pg_catalog.pg_stat_activity
-WHERE datname = current_database() AND pid <> pg_backend_pid();
-
 -- name: SeedPluginGithubConnectionFixture :exec
 INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name)
 VALUES (@project_id, 1, 'owner', 'repo');

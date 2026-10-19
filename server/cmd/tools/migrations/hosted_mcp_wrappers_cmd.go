@@ -53,7 +53,11 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	reportPath := fs.String("report", "", "per-row JSON report path; -apply refuses an existing file, and -move-dependents or -cleanup-orphans -apply also writes <report>.journal.jsonl")
 	moveDependents := fs.Bool("move-dependents", false, "re-key toolset-keyed mcp_metadata, plugin_servers and assistant_toolsets onto the canonical wrapper")
 	cleanupOrphans := fs.Bool("cleanup-orphans", false, "remove toolset-keyed mcp_metadata, plugin_servers and assistant_toolsets whose toolset or project is deleted")
-	defaultEmit, _ := strconv.ParseBool(getenv("GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED"))
+	emitEnv := getenv("GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED")
+	defaultEmit, err := strconv.ParseBool(emitEnv)
+	if err != nil && emitEnv != "" {
+		return hostedMCPWrappersConfig{}, fmt.Errorf("invalid $GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED: %w", err)
+	}
 	publicationEmit := fs.Bool("plugin-publication-emit", defaultEmit, "with -cleanup-orphans, enqueue a plugin publication request per removed member of a live project, as the app does (default $GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED)")
 	readersCutOver := fs.Bool("readers-cut-over", false, "confirm AIM-16 phase A (dual-key readers) and phase B (writers switched to the server key) are both fully deployed; required for -move-dependents -apply")
 	if err := fs.Parse(args); err != nil {
@@ -187,12 +191,24 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 	if runErr != nil {
 		code = 1
 		if cfg.options.Apply {
-			log.Printf("hosted-mcp-wrappers stopped early: %v; resume with -cursor %s and a new -report path", runErr, report.LastCursor)
+			log.Printf("hosted-mcp-wrappers %s phase stopped early: %v; resume with the same mode flags (%s), -cursor %s and a new -report path", report.Phase, runErr, hostedMCPWrappersModeFlags(cfg.options), report.LastCursor)
 		} else {
 			log.Printf("hosted-mcp-wrappers stopped early: %v; dry-run cursors commit nothing, so rerun without -cursor", runErr)
 		}
 	}
 	return code
+}
+
+// hostedMCPWrappersModeFlags names the flags that select the run's phase, so a resume stays in it.
+func hostedMCPWrappersModeFlags(options hostedmcpbackfill.Options) string {
+	switch {
+	case options.MoveDependents:
+		return "-apply -move-dependents -readers-cut-over"
+	case options.CleanupOrphans:
+		return "-apply -cleanup-orphans"
+	default:
+		return "-apply"
+	}
 }
 
 func openHostedMCPWrappersOutput(path string, exclusive bool) (*os.File, error) {

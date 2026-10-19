@@ -144,6 +144,8 @@ func TestParseHostedMCPWrappersFlagsCleanupOrphansJournalsOnApply(t *testing.T) 
 	require.Empty(t, dry.journalPath)
 	applied, err := parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-apply", "-report=/tmp/r.json"}, hostedMCPWrappersGetenv, io.Discard)
 	require.NoError(t, err)
+	require.True(t, applied.options.Apply)
+	require.True(t, applied.options.CleanupOrphans)
 	require.Equal(t, "/tmp/r.json.journal.jsonl", applied.journalPath)
 	require.False(t, applied.options.Publication.Enabled)
 
@@ -159,6 +161,21 @@ func TestParseHostedMCPWrappersFlagsCleanupOrphansJournalsOnApply(t *testing.T) 
 	overridden, err := parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-plugin-publication-emit=false"}, emitEnv, io.Discard)
 	require.NoError(t, err)
 	require.False(t, overridden.options.Publication.Enabled)
+	_, err = parseHostedMCPWrappersFlags([]string{"-cleanup-orphans"}, func(key string) string {
+		if key == "GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED" {
+			return "yes"
+		}
+		return hostedMCPWrappersGetenv(key)
+	}, io.Discard)
+	require.ErrorContains(t, err, "GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED")
+}
+
+func TestHostedMCPWrappersModeFlagsKeepTheResumeInItsPhase(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "-apply -cleanup-orphans", hostedMCPWrappersModeFlags(hostedmcpbackfill.Options{CleanupOrphans: true}))
+	require.Equal(t, "-apply -move-dependents -readers-cut-over", hostedMCPWrappersModeFlags(hostedmcpbackfill.Options{MoveDependents: true}))
+	require.Equal(t, "-apply", hostedMCPWrappersModeFlags(hostedmcpbackfill.Options{}))
 }
 
 func TestFileJournalAppendsOneLinePerRecord(t *testing.T) {

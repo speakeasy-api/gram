@@ -17,6 +17,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
+func TestRunRejectsBothDependentPhases(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	opts, _ := cleanupOptions(false)
+	opts.MoveDependents = true
+
+	_, err := NewRunner(f.pool, opts).Run(t.Context())
+	require.ErrorContains(t, err, "separate phases")
+}
+
 func TestCleanupOrphansSkipsRowsReKeyedAfterListing(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -163,7 +173,9 @@ func TestCleanupOrphansReportsCommitUnknown(t *testing.T) {
 			return
 		}
 		terminated = true
-		require.NoError(t, New(f.pool).TerminateOtherBackendsFixture(t.Context()))
+		// Kills the cleanup's connection between the journaled intent and the commit; kept out of the package's queries so no binary can call it.
+		_, err := f.pool.Exec(t.Context(), "SELECT pg_terminate_backend(pid, 5000) FROM pg_catalog.pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()") //nolint:glint // notestingrawsql: test-only fault injection that must not ship in the package's generated queries.
+		require.NoError(t, err)
 	}
 
 	report, err := NewRunner(f.pool, opts).Run(t.Context())
