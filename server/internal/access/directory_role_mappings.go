@@ -280,9 +280,14 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list roles").LogError(ctx, s.logger)
 	}
+	// Roles that are not live are only allowed if the source already maps
+	// them, checked once the current set is loaded below. Deleting a role
+	// leaves its mappings in place (they grant nothing), and a caller adding
+	// another role to the source must be able to keep that row unchanged.
+	var notLiveRoleURNs []string
 	for _, roleURN := range roleURNs {
 		if !slices.Contains(roles, roleURN) {
-			return nil, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogWarn(ctx, s.logger)
+			notLiveRoleURNs = append(notLiveRoleURNs, roleURN)
 		}
 	}
 
@@ -327,6 +332,11 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list current directory role mappings").LogError(ctx, s.logger)
+	}
+	for _, roleURN := range notLiveRoleURNs {
+		if !slices.ContainsFunc(current, func(row repo.ListLiveDirectoryRoleMappingsForSourceRow) bool { return row.RoleUrn == roleURN }) {
+			return nil, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogWarn(ctx, s.logger)
+		}
 	}
 
 	// Check under the source lock, before changing rows or emitting audit events.

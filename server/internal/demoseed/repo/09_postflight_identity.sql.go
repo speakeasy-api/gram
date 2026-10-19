@@ -358,6 +358,7 @@ JOIN directory_groups dg ON dg.id = drm.directory_group_id
   AND dg.organization_id = drm.organization_id
 WHERE drm.organization_id = $1::text AND drm.deleted IS FALSE
   AND dg.name = 'Infra'
+  AND dg.deleted IS FALSE AND dg.workos_deleted IS FALSE
 `
 
 func (q *Queries) PostflightIDInfraGroupMappedRoles(ctx context.Context, orgID string) (int64, error) {

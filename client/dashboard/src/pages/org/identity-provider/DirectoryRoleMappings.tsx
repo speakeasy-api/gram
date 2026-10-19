@@ -703,7 +703,14 @@ function RolePicker({
   return (
     <RoleChips
       chips={chips}
-      sourceLabel={row.label}
+      // The attribute add row's draft has no label; name its chips after the
+      // picked attribute value instead.
+      sourceLabel={
+        row.label ||
+        (row.form.sourceKind === "attribute"
+          ? `${row.form.attributeKey ?? ""} = ${row.form.attributeValue ?? ""}`
+          : "")
+      }
       disabled={saving || !!disabledMessage}
       onRemove={(id) => remove.mutate({ request: { id } })}
     >
