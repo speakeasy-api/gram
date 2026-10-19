@@ -1,11 +1,15 @@
 import { RequireScope } from "@/components/require-scope";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
-import { OrganizationGatewayButton } from "@/components/mcp/OrganizationGatewayButton";
+import {
+  TeamGatewayCard,
+  useTeamGatewayEntry,
+} from "@/components/mcp/TeamGatewayCard";
 import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import {
   GatewayTableRow,
   MCPServerTableRow,
+  TeamGatewayTableRow,
   MCPTableRow,
   MCPTableRowSkeleton,
 } from "@/components/mcp/mcp-table-rows";
@@ -70,9 +74,6 @@ export const MCPPage = (): JSX.Element => {
               The servers your agents can reach, what they are built from, and
               the versions those arrive in.
             </Page.Section.Description>
-            <Page.Section.CTA>
-              <OrganizationGatewayButton />
-            </Page.Section.CTA>
           </Page.Section>
           <McpTabs active="servers" />
           <MCPOverview />
@@ -355,6 +356,13 @@ function MCPOverview() {
   // Also shown when the list failed to load: the toolbar carries the retry and
   // "Add new", which are exactly what you need when nothing came back.
   const showFilters = !isLoading && (hasItems || hasRefreshError);
+  // The Team Gateway is the organization's, not one of this project's servers,
+  // so it leads the unfiltered list and steps aside once the list is narrowed.
+  const teamGateway = useTeamGatewayEntry();
+  const showTeamGateway =
+    teamGateway.show &&
+    search === "" &&
+    !hasActiveMcpFilters(mcpFilters.values);
   const showNoMatches =
     !isLoading &&
     (search !== "" || hasActiveMcpFilters(mcpFilters.values)) &&
@@ -462,6 +470,9 @@ function MCPOverview() {
               </>
             ) : (
               <>
+                {showTeamGateway && (
+                  <TeamGatewayCard isOff={teamGateway.isOff} />
+                )}
                 {filteredGateways.map((gateway) => (
                   <GatewayCard key={gateway.id} gateway={gateway} />
                 ))}
@@ -492,6 +503,12 @@ function MCPOverview() {
               </>
             ) : (
               <>
+                {showTeamGateway && (
+                  <TeamGatewayTableRow
+                    url={teamGateway.url}
+                    isOff={teamGateway.isOff}
+                  />
+                )}
                 {filteredGateways.map((gateway) => (
                   <GatewayTableRow
                     key={gateway.id}

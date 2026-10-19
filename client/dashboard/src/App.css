@@ -582,3 +582,25 @@ html.chat-launching::view-transition-new(root) {
     animation: none;
   }
 }
+
+/* The Team Gateway card's frame: the Speakeasy mark's border gradient
+   (SPEAKEASY_RAINBOW in components/icon-dither.tsx), static, with a faint,
+   even, zero-offset halo so the card stays flat. */
+.speakeasy-rainbow-frame {
+  border-image: linear-gradient(
+      90deg,
+      #320f1e,
+      #c83228,
+      #fb873f,
+      #d2dc91,
+      #5a8250,
+      #002314,
+      #00143c,
+      #2873d7,
+      #9bc3ff
+    )
+    1;
+  box-shadow:
+    0 0 8px 0 rgb(200 50 40 / 0.18),
+    0 0 8px 0 rgb(40 115 215 / 0.18);
+}
