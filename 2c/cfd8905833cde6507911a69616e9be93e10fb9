@@ -1,0 +1,30 @@
+server/internal/background/directory_review_sweep.go
+  h_9630b74bdac540 61-62,74-101
+  s_3587bda6d0ddd1::t_a7c2591dca952a 73
+server/internal/background/directory_review_sweep_test.go
+  h_9630b74bdac540 53-54,59,63-64,69,73
+  s_3587bda6d0ddd1::t_e6f7157595f9a2 57-58,60-62,65-68,71-72
+client/dashboard/src/lib/audit-actions.ts
+  h_9630b74bdac540 84-86,566-572
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2ccfd8905833cde6507911a69616e9be93e10fb9",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_3587bda6d0ddd1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00e02b04-5c06-4a73-92ad-6365cab1ea52",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
