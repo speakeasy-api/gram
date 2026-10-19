@@ -1450,6 +1450,18 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "llmAnalysis", pub: llmAnalysis})
 
+	toolCallAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.ToolCallAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for tool call analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "toolCallAnalysis", pub: toolCallAnalysis})
+
+	accountIdentityAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.AccountIdentityAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for account identity analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "accountIdentityAnalysis", pub: accountIdentityAnalysis})
+
 	riskFindings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
@@ -1554,6 +1566,8 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
 		LLMAnalysis:             llmAnalysis,
+		ToolCallAnalysis:        toolCallAnalysis,
+		AccountIdentityAnalysis: accountIdentityAnalysis,
 		RiskFindings:            riskFindings,
 		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,

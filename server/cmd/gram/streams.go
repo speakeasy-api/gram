@@ -76,18 +76,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/roledistribution"
+	"github.com/speakeasy-api/gram/server/internal/scanners/accountidentity"
+	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
+	"github.com/speakeasy-api/gram/server/internal/scanners/toolcall"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/sigint"
 	sigintchrepo "github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 	"github.com/speakeasy-api/gram/server/internal/subscribers"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/usage"
@@ -275,6 +282,11 @@ func newStreamsCommand() *cli.Command {
 			Name:    "site-url",
 			Usage:   "The URL of the dashboard site, used to deep link from growth activity events",
 			EnvVars: []string{"GRAM_SITE_URL"},
+		},
+		&cli.StringFlag{
+			Name:    "server-url",
+			Usage:   "The public URL of the server, trusted as a Speakeasy-hosted MCP host by the shadow MCP scanner",
+			EnvVars: []string{"GRAM_SERVER_URL"},
 		},
 		&cli.StringFlag{
 			Name:    "sigint-openrouter-api-key",
@@ -523,6 +535,30 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("create risk meter publisher: %w", err)
 			}
 			riskRecorder := metering.NewRiskRecorder(riskMeterPub)
+			var serverURL *url.URL
+			if raw := c.String("server-url"); raw != "" {
+				serverURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("parse server url: %w", err)
+				}
+			}
+			shadowMCPClient := shadowmcp.NewClient(logger, replicaDB, cache.NewRedisCacheAdapter(redisClient), serverURL)
+			toolCallHandler := toolcall.NewHandler(
+				logger,
+				shadowmcpscan.NewScanner(
+					logger,
+					shadowMCPClient,
+					shadowMCPClient,
+					telemetryrepo.New(chConn),
+					nil,
+					shadowmcpscan.WithShadowMCPBypass(background.NewShadowMCPPolicyBypassChecker(logger, replicaDB)),
+				),
+				destructivetool.NewScanner(shadowMCPClient),
+				clidestructive.NewScanner(),
+				findingsPub,
+				riskRecorder,
+			)
+			accountIdentityHandler := accountidentity.NewHandler(logger, findingsPub)
 			readingsPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &sigintv1.Reading{}, gcp.WithPubSubPublishSettings(&meterPublishSettings))
 			if err != nil {
 				return fmt.Errorf("create sensor readings publisher: %w", err)
@@ -792,6 +828,8 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.LLMAnalysis{}, &riskv1.LLMAnalyzer{}, llmAnalyzerHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
+				mustReceive(rg, &riskv1.ToolCallAnalysis{}, &riskv1.ToolCallAnalyzer{}, toolCallHandler)
+				mustReceive(rg, &riskv1.AccountIdentityAnalysis{}, &riskv1.AccountIdentityAnalyzer{}, accountIdentityHandler)
 
 				mustReceiveBatch(rg, &telemetryv1.SessionObserved{}, &telemetryv1.SessionObservedCHWriter{}, telemetry.NewSessionObservedHandler(db, sessionLogger), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 

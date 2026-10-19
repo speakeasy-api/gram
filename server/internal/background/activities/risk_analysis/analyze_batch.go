@@ -62,13 +62,11 @@ type AnalyzeBatch struct {
 	promptPolicyPub        gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	llmPub                 gcp.Publisher[*riskv1.LLMAnalysis]
-	// llmAnalyzerEnabled reports whether the streams process has a fine-tuned
-	// risk model to evaluate LLM analysis requests (GRAM_RISK_LLM_URL set).
-	// Without it the flag alone must not divert covered sources away from the
-	// legacy engines: the consumer would ack every request with no findings.
+	toolCallPub            gcp.Publisher[*riskv1.ToolCallAnalysis]
+	accountIdentityPub     gcp.Publisher[*riskv1.AccountIdentityAnalysis]
+	// llmAnalyzerEnabled prevents diverting work to an unconfigured consumer.
 	llmAnalyzerEnabled     bool
 	llmFallbackOnce        sync.Once
-	findingsPub            gcp.Publisher[*riskv1.Finding]
 	riskRecorder           *metering.RiskRecorder
 	customRuleScanner      *customruleanalyzer.Scanner
 	cliDestructiveScanner  *clidestructive.Scanner
@@ -98,7 +96,8 @@ func NewAnalyzeBatch(
 	promptPolicyPub gcp.Publisher[*riskv1.PromptPolicyAnalysis],
 	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
 	llmPub gcp.Publisher[*riskv1.LLMAnalysis],
-	findingsPub gcp.Publisher[*riskv1.Finding],
+	toolCallPub gcp.Publisher[*riskv1.ToolCallAnalysis],
+	accountIdentityPub gcp.Publisher[*riskv1.AccountIdentityAnalysis],
 	customRuleScanner *customruleanalyzer.Scanner,
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
@@ -114,8 +113,11 @@ func NewAnalyzeBatch(
 	if promptInjectionScanner == nil {
 		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 	}
-	if findingsPub == nil {
-		findingsPub = gcp.NewNoopPublisher[*riskv1.Finding]()
+	if toolCallPub == nil {
+		return nil, errors.New("tool call analysis publisher is required")
+	}
+	if accountIdentityPub == nil {
+		return nil, errors.New("account identity analysis publisher is required")
 	}
 	recommended, err := CompileRecommended(celEng)
 	if err != nil {
@@ -150,7 +152,8 @@ func NewAnalyzeBatch(
 		promptPolicyPub:        promptPolicyPub,
 		customRulesPub:         customRulesPub,
 		llmPub:                 llmPub,
-		findingsPub:            findingsPub,
+		toolCallPub:            toolCallPub,
+		accountIdentityPub:     accountIdentityPub,
 		riskRecorder:           riskRecorder,
 		customRuleScanner:      customRuleScanner,
 		cliDestructiveScanner:  clidestructive.NewScanner(),
@@ -318,20 +321,8 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}
 
 	rowsToWrite, findingsCount := a.buildRows(ctx, args, ids, findings)
-	written, err := a.writeResults(ctx, args, rowsToWrite)
-	if err != nil {
+	if _, err := a.writeResults(ctx, args, rowsToWrite); err != nil {
 		return nil, err
-	}
-	// Mirror the stream scanners onto the shared findings topic for sources
-	// that have no stream publisher (ClickHouse would otherwise never see
-	// them). Only after a committed write: a batch dropped because its policy
-	// was deleted mid-analysis must not leak findings into ClickHouse that
-	// Postgres never stored. A publish failure fails the activity — the
-	// redriven batch repeats only idempotent writes, so the retry converges.
-	if written {
-		if err := a.publishBatchOnlyFindings(ctx, args, ids, findings); err != nil {
-			return nil, err
-		}
 	}
 
 	span.SetAttributes(
