@@ -483,6 +483,8 @@ type Assistant struct {
 	// @access: confidential
 	MaxConcurrency int64
 	// @access: confidential
+	RuntimeVersion int16
+	// @access: confidential
 	Status string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz

@@ -1,4 +1,4 @@
-h1:pR2+wUvrS/aikRenpxNb11kGmHni4bcy0drJIuCCVpU=
+h1:WjJxdzKUEUPPvE37QjRqfN/aZH3/BT5AgF2Us3xjVak=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -478,3 +478,4 @@ h1:pR2+wUvrS/aikRenpxNb11kGmHni4bcy0drJIuCCVpU=
 20261019022550_directory-role-set-index-removal.sql h1:5A4vAJ0QNhP3dvYl1WWkexNsJ3EIxOthUPddZW6bbTA=
 20261019113414_gateway_discovery_mode.sql h1:XhLKiv0YoOfS8TEs61T7WIFhbrQoTIToFdr/ftSUO3g=
 20261019133339_workload-device-identity.sql h1:Hz3s6PP+7i6IOvAMDswbfzI/cvU3oGGIUHRvNKlivho=
+20261019194719_assistant_runtime_version.sql h1:+mECYOtOHLbjrZY2N5767nTNk7rTTkta7lYqpHeISTM=
