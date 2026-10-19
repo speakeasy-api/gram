@@ -131,6 +131,48 @@ func (q *Queries) RiskInsertApproval(ctx context.Context, arg RiskInsertApproval
 	return err
 }
 
+const riskInsertApprovalsServer = `-- name: RiskInsertApprovalsServer :exec
+WITH server AS (
+  INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
+  VALUES ($3::uuid, $2::uuid, 'Speakeasy Approvals',
+          'speakeasy-approvals', 'approvals', 'private')
+  RETURNING id
+), endpoint AS (
+  INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)
+  SELECT $4::uuid, $2::uuid, server.id, $5::text
+  FROM server
+)
+INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
+SELECT p.id, server.id, 'speakeasy-approvals'
+FROM server, plugins p
+WHERE p.organization_id = $1::text AND p.project_id = $2::uuid
+  AND p.is_default IS TRUE AND p.deleted IS FALSE
+`
+
+type RiskInsertApprovalsServerParams struct {
+	OrgID        string
+	ProjectID    uuid.UUID
+	ServerID     uuid.UUID
+	EndpointID   uuid.UUID
+	EndpointSlug string
+}
+
+// The project's approvals server, the first-party server agents call
+// request_approval on. Speakeasy creates it with a project's first approval
+// policy (internal/risk/approval/approvalserver): an endpoint at
+// <org>-<project>-approvals and a place in the Default plugin as
+// speakeasy-approvals. The project delete cascades every row.
+func (q *Queries) RiskInsertApprovalsServer(ctx context.Context, arg RiskInsertApprovalsServerParams) error {
+	_, err := q.db.Exec(ctx, riskInsertApprovalsServer,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.ServerID,
+		arg.EndpointID,
+		arg.EndpointSlug,
+	)
+	return err
+}
+
 const riskInsertBypassGrant = `-- name: RiskInsertBypassGrant :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2::text, 'risk_policy:bypass',

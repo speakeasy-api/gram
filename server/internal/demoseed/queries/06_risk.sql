@@ -17,6 +17,28 @@ VALUES (@id, @project_id, @organization_id, @name, 'standard',
         @enabled, @action, 'everyone',
         sqlc.narg(shadow_mcp_disposition)::text, @auto_name, @score, 1);
 
+-- name: RiskInsertApprovalsServer :exec
+-- The project's approvals server, the first-party server agents call
+-- request_approval on. Speakeasy creates it with a project's first approval
+-- policy (internal/risk/approval/approvalserver): an endpoint at
+-- <org>-<project>-approvals and a place in the Default plugin as
+-- speakeasy-approvals. The project delete cascades every row.
+WITH server AS (
+  INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
+  VALUES (@server_id::uuid, @project_id::uuid, 'Speakeasy Approvals',
+          'speakeasy-approvals', 'approvals', 'private')
+  RETURNING id
+), endpoint AS (
+  INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)
+  SELECT @endpoint_id::uuid, @project_id::uuid, server.id, @endpoint_slug::text
+  FROM server
+)
+INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
+SELECT p.id, server.id, 'speakeasy-approvals'
+FROM server, plugins p
+WHERE p.organization_id = @org_id::text AND p.project_id = @project_id::uuid
+  AND p.is_default IS TRUE AND p.deleted IS FALSE;
+
 -- name: RiskInsertApproval :exec
 -- One tool call held by the approval policy, at a point in its life cycle.
 -- Times are relative to now(). The pending request gets the longest window,

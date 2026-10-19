@@ -115,6 +115,9 @@ type IdentityResolver interface {
 }
 
 type Service struct {
+	// builtinBackends serve mcp_servers rows whose builtin_backend names
+	// them, such as the approvals server.
+	builtinBackends         map[string]http.Handler
 	assistantWorkloadTokens AssistantWorkloadTokenIssuer
 	federatedLoginConsumer  FederatedLoginConsumer
 	identityChainer         identityChainer
@@ -537,6 +540,7 @@ func NewService(
 	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
 	service := &Service{
 		assistantWorkloadTokens:   nil,
+		builtinBackends:           map[string]http.Handler{},
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,

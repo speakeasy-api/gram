@@ -1,0 +1,101 @@
+package approvalserver_test
+
+import (
+	"context"
+	"log"
+	"os"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval/approvalserver"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+)
+
+var infra *testenv.Environment
+
+func TestMain(m *testing.M) {
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	if err != nil {
+		log.Fatalf("launch test infrastructure: %v", err)
+	}
+	infra = res
+
+	code := m.Run()
+
+	if err := cleanup(); err != nil {
+		log.Fatalf("cleanup test infrastructure: %v", err)
+	}
+	os.Exit(code)
+}
+
+func newProject(t *testing.T) (*pgxpool.Pool, *contextvalues.AuthContext) {
+	t.Helper()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billing.NewStubClient(logger, tracerProvider))
+	authCtx, ok := contextvalues.GetAuthContext(testenv.InitAuthContext(t, t.Context(), conn, sessionManager))
+	require.True(t, ok)
+	return conn, authCtx
+}
+
+func ensure(t *testing.T, conn *pgxpool.Pool, authCtx *contextvalues.AuthContext) approvalserver.Outcome {
+	t.Helper()
+	tx := testenv.BeginTx(t, t.Context(), conn)
+	outcome, err := approvalserver.Ensure(t.Context(), tx, audit.NewLogger(), authCtx)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+	return outcome
+}
+
+func TestEnsureCreatesTheServerOnceAndAddsItToTheDefaultPlugin(t *testing.T) {
+	t.Parallel()
+	conn, authCtx := newProject(t)
+
+	_, found, err := approvalserver.Find(t.Context(), conn, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.False(t, found)
+
+	first := ensure(t, conn, authCtx)
+	require.True(t, first.Created)
+	require.True(t, first.AddedToDefaultPlugin)
+	require.NotEqual(t, uuid.Nil, first.Server.ID)
+	require.Equal(t, authCtx.OrganizationSlug+"-"+*authCtx.ProjectSlug+"-approvals", first.Server.EndpointSlug)
+
+	found2, ok, err := approvalserver.Find(t.Context(), conn, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, first.Server, found2)
+
+	plugin, err := pluginsrepo.New(conn).GetDefaultPlugin(t.Context(), pluginsrepo.GetDefaultPluginParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	servers, err := pluginsrepo.New(conn).ListPluginServers(t.Context(), plugin.ID)
+	require.NoError(t, err)
+	var member bool
+	for _, server := range servers {
+		if server.McpServerID.Valid && server.McpServerID.UUID == first.Server.ID {
+			member = true
+			require.Equal(t, approval.MCPServerName, server.DisplayName)
+		}
+	}
+	require.True(t, member, "the approvals server joins the Default plugin")
+
+	// Later calls find the server and change nothing, so an admin who removes
+	// it from a plugin is not overruled.
+	second := ensure(t, conn, authCtx)
+	require.False(t, second.Created)
+	require.False(t, second.AddedToDefaultPlugin)
+	require.Equal(t, first.Server, second.Server)
+}

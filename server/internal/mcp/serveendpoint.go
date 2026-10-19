@@ -171,6 +171,12 @@ func (s *Service) serveResolvedMCPEndpoint(
 	s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, mcpServer.ID, uuid.Nil, "")
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
 
+	// A first-party backend authenticates its callers itself and is never
+	// issuer-gated or risk-scanned, so it is dispatched before either.
+	if mcpServer.BuiltinBackend.Valid {
+		return s.serveBuiltinBackend(w, r, mcpServer.BuiltinBackend.String)
+	}
+
 	var prepared *preparedMCPRequest
 	if mcpServer.ToolsetID.Valid {
 		var handled bool

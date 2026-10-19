@@ -37,6 +37,7 @@ var (
 	ErrMemberServerNotInProject      = errors.New("mcp_server_id does not reference a live server in this project")
 	ErrMemberServerHasNoSlug         = errors.New("mcp server has no slug; update the server to generate one before attaching it")
 	ErrMemberServerUnproxied         = errors.New("unproxied mcp servers cannot be meta mcp members")
+	ErrMemberServerBuiltin           = errors.New("a server Speakeasy serves itself, such as the approvals server, cannot be a meta mcp member")
 	ErrMemberServerIsHostedToolset   = errors.New("a hosted toolset's own mcp server cannot be a meta mcp member; add a separate server for the toolset")
 	ErrMemberSharesBackend           = errors.New("another member of this meta mcp server already fronts the same backend")
 	ErrMemberAlreadyPresent          = errors.New("mcp server is already a member of this meta mcp server")
@@ -181,6 +182,11 @@ func (w GatewayWriter) AddMember(ctx context.Context, tx pgx.Tx, actor Actor, me
 	}
 	if server.UnproxiedMcpServerID.Valid {
 		return AddedMember{}, ErrMemberServerUnproxied
+	}
+	// The gateway serves first-party backends in-process, not through the
+	// member dispatch a meta server uses.
+	if server.BuiltinBackend.Valid {
+		return AddedMember{}, ErrMemberServerBuiltin
 	}
 	// A toolset's own hosted server keeps its identity; members are separate servers.
 	if server.ToolsetID.Valid && server.ID == server.ToolsetID.UUID {

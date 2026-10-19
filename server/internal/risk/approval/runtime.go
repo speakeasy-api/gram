@@ -30,6 +30,10 @@ const (
 	// WatchPath is the endpoint the watcher polls with a request token.
 	WatchPath = "/approvals/watch"
 
+	// BuiltinBackend is the mcp_servers.builtin_backend value of a project's
+	// approvals server, which the gateway serves with this runtime.
+	BuiltinBackend = "approvals"
+
 	// MCPServerName is the server name agents see.
 	MCPServerName = "speakeasy-approvals"
 
