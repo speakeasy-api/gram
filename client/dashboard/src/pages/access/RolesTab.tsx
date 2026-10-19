@@ -35,6 +35,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { visiblePermissionCount } from "./roleDialogState";
 import { allMemberRoleIds } from "@/lib/member-roles";
+import { pluralize } from "@/lib/format";
 
 // Single source of truth for the per-role actions: the "⋯" dropdown and the
 // row's right-click context menu both render from this list. Edit always;
@@ -131,6 +132,11 @@ function RoleRow({
       email: m.email,
       photoUrl: m.photoUrl,
     }));
+  // The faces are everyone who holds the role. When a directory mapping gives
+  // it to some of them, say how many hold it directly, since only those
+  // assignments can be changed on the member.
+  const directCount = members.filter((m) => m.roleIds.includes(role.id)).length;
+  const mappedOnly = roleMembers.length - directCount;
 
   // Mirror the row-actions menu via the shared builder. Without org:admin the
   // menu is empty and the row stays unwrapped.
@@ -173,7 +179,19 @@ function RoleRow({
           {role.description}
         </Text>
         <Text variant="body">{visiblePermissionCount(role.grants)}</Text>
-        <MemberFacepile members={roleMembers} />
+        <div className="flex items-center gap-2">
+          <MemberFacepile members={roleMembers} />
+          {mappedOnly > 0 && (
+            <Text
+              muted
+              small
+              className="whitespace-nowrap"
+              title={`${pluralize(roleMembers.length, "member")} in total: ${directCount} assigned directly, ${mappedOnly} only through directory role mappings.`}
+            >
+              {directCount} direct · {mappedOnly} via directory
+            </Text>
+          )}
+        </div>
         <div aria-hidden />
         <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
           <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />

@@ -440,6 +440,23 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo department role mapping: %w", err)
 	}
+	// A group deleted from the directory keeps its mapping, which grants
+	// nothing; the mappings page lists it as a missing source.
+	if err := s.q.RolesInsertDeletedDirectoryGroup(ctx, repo.RolesInsertDeletedDirectoryGroupParams{
+		OrganizationID: org,
+		GroupPrefix:    s.spec.GroupPrefix,
+		Slug:           "legacy-platform",
+		Name:           "Legacy Platform",
+	}); err != nil {
+		return fmt.Errorf("insert demo deleted directory group: %w", err)
+	}
+	if err := s.q.RolesInsertGroupRoleMapping(ctx, repo.RolesInsertGroupRoleMappingParams{
+		OrganizationID: org,
+		GroupName:      "Legacy Platform",
+		RoleSlug:       "analyst",
+	}); err != nil {
+		return fmt.Errorf("insert demo deleted group role mapping: %w", err)
+	}
 	// Contractors arrive through the directory, so Check Access on GitHub can
 	// name the mapping that put a person in the role that blocks them.
 	if err := s.q.RolesInsertAttributeRoleMapping(ctx, repo.RolesInsertAttributeRoleMappingParams{

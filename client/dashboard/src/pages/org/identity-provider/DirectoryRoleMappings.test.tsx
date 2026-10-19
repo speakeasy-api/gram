@@ -80,13 +80,19 @@ vi.mock("@/components/ui/Combobox", () => ({
   Combobox: ({
     items,
     onSelectionChange,
+    disabledMessage,
   }: {
     items: { value: string; label: string }[];
     onSelectionChange: (item: { value: string; label: string }) => void;
+    disabledMessage?: string;
   }) => (
-    <div>
+    <div title={disabledMessage}>
       {items.map((item) => (
-        <button key={item.value} onClick={() => onSelectionChange(item)}>
+        <button
+          key={item.value}
+          disabled={!!disabledMessage}
+          onClick={() => onSelectionChange(item)}
+        >
           Add {item.label}
         </button>
       ))}
@@ -211,6 +217,55 @@ describe("directory source role sets", () => {
       [{ request: { id: "Tools" } }],
     ]);
     expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("lists a deleted group's roles so they can be removed, not added to", () => {
+    mocks.mappings = [
+      {
+        ...mapping("Base"),
+        directoryGroupId: "group-gone",
+        directoryGroupName: "Old Team",
+        sourceStatus: "missing",
+      },
+    ];
+    renderMappings();
+    expect(screen.getByText("Old Team")).toBeDefined();
+    expect(screen.getByText("Deleted from the directory")).toBeDefined();
+    expect(
+      screen.getByText(/1 deleted group still has roles mapped/),
+    ).toBeDefined();
+    // Only the live Engineering row offers roles to add.
+    expect(screen.getAllByRole("button", { name: "Add Support" })).toHaveLength(
+      1,
+    );
+    expect(
+      screen.getByRole("img", { name: /This group was deleted/ }),
+    ).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove Base from Old Team" }),
+    );
+    expect(mocks.remove).toHaveBeenCalledWith({ request: { id: "Base" } });
+  });
+
+  it("marks an attribute value nobody holds as missing", () => {
+    mocks.mappings = [
+      {
+        ...mapping("Base"),
+        sourceKind: "attribute",
+        directoryGroupId: undefined,
+        attributeKey: "department",
+        attributeValue: "Former department",
+        sourceStatus: "missing",
+      },
+    ];
+    renderMappings();
+    fireEvent.click(screen.getByRole("button", { name: /Map by attribute/ }));
+    expect(screen.getByText("No directory user has this value")).toBeDefined();
+    expect(
+      screen.getAllByRole("img", {
+        name: /No directory user has this value now/,
+      }),
+    ).toHaveLength(1);
   });
 
   it("waits for post-mount data before mapping a created role", () => {

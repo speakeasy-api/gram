@@ -300,7 +300,9 @@ The seeded directory is marked active. On the SSO tab, Infra grants both Collabo
 - Verify both role chips appear on Infra.
 - Remove one chip, verify the other stays, then add it again.
 - Create a role from Infra and verify it is added without replacing either existing role.
-- Check Team, Roles and Check Access include both effective roles. Team currently uses a generic directory-mapping marker, not a named group label.
+- Check Team, Roles and Check Access include both effective roles. Hovering a mapped role on Team names the group that grants it, and says "Assigned directly, and also granted by ..." when the member also holds it directly.
+- Legacy Platform is a directory group the directory has deleted. It still has an Analyst mapping, so it is listed after the unmapped groups with "Deleted from the directory", a red warning mark and a disabled add control; the Analyst chip can still be removed. The panel's summary says "1 deleted group still has roles mapped".
+- On Roles, a role held partly through directory mappings shows "N direct · M via directory" beside its faces.
 
 ### [~] Plugins: initial role audiences
 

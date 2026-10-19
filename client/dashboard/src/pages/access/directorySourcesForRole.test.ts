@@ -81,6 +81,51 @@ describe("roleDirectorySources", () => {
     expect(sources[1]?.members).toEqual([]);
   });
 
+  it("puts members on groups by ID when two groups share a name", () => {
+    const members = [
+      member({
+        id: "ava",
+        name: "Ava",
+        groups: ["Data Analytics"],
+        directoryGroups: [{ id: "g-other", name: "Data Analytics" }],
+      }),
+      member({
+        id: "ben",
+        name: "Ben",
+        groups: ["Data Analytics"],
+        directoryGroups: [{ id: "g-data", name: "Data Analytics" }],
+      }),
+    ];
+    const sources = roleDirectorySources(data, members, analyst);
+    expect(sources[0]?.members.map((m) => m.id)).toEqual(["ben"]);
+  });
+
+  it("marks an attribute value the server reports missing", () => {
+    const sources = roleDirectorySources(
+      {
+        ...data,
+        mappings: [
+          mapping({
+            id: "m-gone",
+            sourceKind: "attribute",
+            attributeKey: "department",
+            attributeValue: "Research",
+            sourceStatus: "missing",
+          }),
+        ],
+      },
+      [],
+      analyst,
+    );
+    expect(sources).toMatchObject([
+      {
+        label: "department = Research (no users)",
+        memberCount: 0,
+        missing: true,
+      },
+    ]);
+  });
+
   it("marks a deleted group removed, even if a live group reuses its name", () => {
     const sources = roleDirectorySources(
       {
