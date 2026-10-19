@@ -1,0 +1,36 @@
+.changeset/directory-mapping-keeps-deleted-roles.md
+  h_9630b74bdac540 1-5
+server/internal/demoseed/queries/09_postflight_identity.sql
+  h_9630b74bdac540 423
+  s_bfbb8f4fc4c7f8::t_a630a2dadc3690 422
+server/internal/access/directory_role_mappings.go
+  h_9630b74bdac540 283-287,290,336-339
+  s_bfbb8f4fc4c7f8::t_0fd40ffd2628fa 340
+server/internal/access/directory_role_mappings_test.go
+  h_9630b74bdac540 1065-1106
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.tsx
+  h_9630b74bdac540 706-713
+server/internal/demoseed/repo/09_postflight_identity.sql.go
+  h_9630b74bdac540 361
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "14d0e15b6941f66acb67c9c29a3ec754314a5fe7",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_bfbb8f4fc4c7f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f8ba5bc5-7010-48a8-8e7a-26fc9ef73aea",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
