@@ -1,0 +1,16 @@
+server/cmd/directory-id-backfill/main.go
+  h_9630b74bdac540 30
+server/cmd/directory-id-backfill/README.md
+  h_9630b74bdac540 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "33be9b615bae28c58e0d0944b1d61b1e1566bda7",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
