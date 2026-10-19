@@ -161,8 +161,10 @@ func (s *LifecycleDeleteService) Delete(ctx context.Context, principal Principal
 
 	if !claim.applied {
 		if err := s.deleter(deleteMCPActorContext(ctx, principal, project.ID), mcpID); err != nil {
-			// A concurrent delete may have removed the server since the claim;
-			// the fresh read below decides.
+			// On a resumed delete only, NotFound means the server went away
+			// after resumable read it; the fresh read below decides. A fresh
+			// claim that loses that race reports not_found, and a retry with
+			// the same key then resumes and reports the delete.
 			if !claim.resume || !isOopsCode(err, oops.CodeNotFound) {
 				return DeleteMCPOutput{}, classifyDeleteMCPError(err)
 			}
