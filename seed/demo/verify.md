@@ -140,6 +140,14 @@ and enable the gateway. Return to **MCP**: **Connect all servers** opens
 and a copy button. The gateway response now reports `available: true` with that
 URL. The seeded organization has one organization-wide authorization server.
 
+In **MCP Assignments**, confirm one row per role with stacked server icons under
+**MCP:CONNECT ACCESS**. Expand **Support Desk** to inspect unrestricted and
+read-only access; expand **Contractors** to see its blocked server after allowed
+servers, with red styling and a blocked icon badge. The MCP filter opens a
+searchable list directly. Click a role’s member avatars and select a person to
+open their effective assignments; member search appears only for rosters larger
+than five. Default-project labels and per-row totals stay hidden.
+
 13. **Killswitches on the identity Access tab (local rewritten seed only)** —
     Killswitch management intentionally rejects demo/support sessions. Verify this
     contract in the local organization after `mise run seed`, not through the

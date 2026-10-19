@@ -1,46 +1,117 @@
-import { defineFilters, useFilterState } from "@/components/filters";
+import { Ban } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Page } from "@/components/page-layout";
-import { ProjectIcon } from "@/components/project-icon";
-import { Link } from "react-router";
-import { useRoutes } from "@/routes";
-import { AssignmentServerIcon } from "./AssignmentServerIcon";
+import { defineFilters, useFilterState } from "@/components/filters";
+import { Button } from "@/components/ui/Button";
+import { SelectFilterChip } from "@/components/filters/FilterChip";
+import { getFilterAccents } from "@/components/gradient-colors";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { RoleLink } from "@/components/role-link";
+import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
+import { Text } from "@/components/ui/Text";
+import { Table, type Column } from "@/components/ui/Table";
+import { useTable } from "@/components/ui/Table/context/context";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-  TooltipProvider,
 } from "@/components/ui/Tooltip";
-import { Info, Pencil, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { useTable } from "@/components/ui/Table/context/context";
-import { RoleLink } from "@/components/role-link";
-import { useExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
-import { directorySourceLabel } from "../mcp/access/explainAccess";
-import { Table, type Column } from "@/components/ui/Table";
-import { Text } from "@/components/ui/Text";
+import { AssignmentServerIcon } from "./AssignmentServerIcon";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/Sheet";
+import { MemberFacepile } from "@/components/member-facepile";
+import { RequireScope } from "@/components/require-scope";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { allMemberRoleIds } from "@/lib/member-roles";
-import type { AccessMember } from "@gram/client/models/components/accessmember.js";
-import type { AccessibleMCPServer } from "@gram/client/models/components/accessiblemcpserver.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { RequireScope } from "@/components/require-scope";
-import { ChangeRoleDialog } from "./ChangeRoleDialog";
-import { RemoveAssignmentDialog } from "./RemoveAssignmentDialog";
+import { useSetResourceAudienceMutation } from "@gram/client/react-query/setResourceAudience.js";
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
+import { invalidateAllIdentityAccess } from "@gram/client/react-query/identityAccess.js";
+import { invalidateAllExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
+import type { Role } from "@gram/client/models/components/role.js";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { AccessibleMCPServer } from "@gram/client/models/components/accessiblemcpserver.js";
+import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
+import {
+  buildAccessRows,
+  scopeState,
+  type AccessRow,
+} from "../mcp/access/accessRows";
+import { ownRules, narrowingLabel } from "../mcp/access/serverAudience";
+import { assignmentExclusions } from "./assignmentExclusions";
+import { ServerAssignment } from "./PersonServerAssignment";
+import { useRoutes } from "@/routes";
+import { Link } from "react-router";
 
 const FILTERS = defineFilters([
   { id: "server", label: "MCP server", kind: "select", pinned: true },
-  { id: "role", label: "Role", kind: "select", pinned: true },
-  { id: "department", label: "Department", kind: "select", pinned: true },
 ]);
+type ServerAccess = {
+  server: AccessibleMCPServer;
+  entries: ResourceAudienceEntry[];
+  rows: AccessRow[];
+};
+type RoleServer = ServerAccess & { row: AccessRow };
+type AccessAction = "remove" | "block" | "unblock";
 
-type AssignmentRow = { member: AccessMember; servers: AccessibleMCPServer[] };
+function isServerBlocked(row: AccessRow): boolean {
+  return !scopeState(row, "use").granted && row.cells.use.blocks.length > 0;
+}
+function serverAccessLabel(row: AccessRow): string {
+  return isServerBlocked(row) ? "Blocked" : scopeState(row, "use").value;
+}
+function RoleServerIcon({
+  server,
+  row,
+  className,
+  compact = false,
+}: {
+  server: AccessibleMCPServer;
+  row: AccessRow;
+  className?: string;
+  compact?: boolean;
+}): JSX.Element {
+  return (
+    <span className="relative inline-flex shrink-0">
+      <AssignmentServerIcon
+        server={server}
+        className={cn(
+          className,
+          isServerBlocked(row) &&
+            "bg-(--color-feedback-red-200) text-(--color-feedback-red-900) [&_[data-slot=avatar-fallback]]:bg-(--color-feedback-red-200) [&_[data-slot=avatar-fallback]]:text-(--color-feedback-red-900)",
+        )}
+      />
+      {isServerBlocked(row) && (
+        <Ban
+          aria-hidden="true"
+          className={cn(
+            "bg-card text-destructive pointer-events-none absolute z-20 rounded-full",
+            compact
+              ? "right-0.5 bottom-0.5 size-3"
+              : "-right-0.5 -bottom-0.5 size-3.5",
+          )}
+        />
+      )}
+    </span>
+  );
+}
+type RoleAssignment = {
+  role: Role;
+  servers: RoleServer[];
+  members: AccessMember[];
+};
 
-/** Shared organization-wide review, independent of the selected project. */
+/** Fetch each server once, independent of the number of roles or members. */
 export function MCPAssignments({
   onReady,
 }: {
@@ -48,554 +119,810 @@ export function MCPAssignments({
 }): JSX.Element {
   const organization = useOrganization();
   const sdk = useSdkClient();
-  const members = useMembers(undefined, undefined, { throwOnError: false });
   const roles = useRoles(undefined, undefined, { throwOnError: false });
-  const [editingMember, setEditingMember] = useState<AccessMember | null>(null);
+  const members = useMembers(undefined, undefined, { throwOnError: false });
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("servers");
-  const [direction, setDirection] = useState<"asc" | "desc">("desc");
-  const { values, setValue, clearValue, clearAll } = useFilterState(FILTERS);
-  // A refetch timestamp is not a membership change. Access editors also read
-  // members, so keying by that timestamp would unmount them as soon as opened.
-  const assignments = useQuery<AssignmentRow[]>({
-    queryKey: [
-      "mcpAssignments",
-      organization.id,
-      "connect",
-      members.data?.members
-        .map((member) => ({
-          id: member.id,
-          name: member.name,
-          email: member.email,
-          roles: allMemberRoleIds(member).sort(),
-          directRoles: member.roleIds?.toSorted(),
-          directoryRoles: member.directoryRoleIds?.toSorted(),
-          department: member.department,
-          groups: member.groups?.toSorted(),
-        }))
-        .sort((a, b) => a.id.localeCompare(b.id)),
-    ],
-    placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[1] === organization.id ? previous : undefined,
-    enabled: members.isSuccess,
-    throwOnError: false,
-    queryFn: async ({ signal }): Promise<AssignmentRow[]> => {
-      const people = members.data?.members ?? [];
-      const result: AssignmentRow[] = [];
-      // Bound request concurrency even for large directories. An incomplete
-      // result must never look like a completed access review.
-      for (let i = 0; i < people.length; i += 6) {
+  const [checkingUser, setCheckingUser] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<AccessMember>();
+  const { values, setValue } = useFilterState(FILTERS);
+  const assignments = useQuery({
+    queryKey: ["mcpAssignments", organization.id, "roles"],
+    queryFn: async ({ signal }): Promise<ServerAccess[]> => {
+      const inventory = await sdk.mcpServers.listForOrg({}, undefined, {
+        signal,
+      });
+      const servers = inventory.mcpServers.filter(
+        (server) => server.visibility !== "disabled",
+      );
+      const result: ServerAccess[] = [];
+      for (let i = 0; i < servers.length; i += 6) {
         signal.throwIfAborted();
-        const batch = await Promise.all(
-          people.slice(i, i + 6).map(async (member) => {
-            const access = await sdk.access.listIdentityAccess(
-              { userId: member.id },
-              undefined,
-              { signal },
-            );
-            const servers: AccessibleMCPServer[] = [];
-            // Identity access includes view/manage-only servers; connect has
-            // its own exclusions and must be resolved independently.
-            for (const server of access.servers) {
-              const explanation = await sdk.access.explainResourceAccess(
-                {
-                  resourceKind: "mcp",
-                  resourceId: server.id,
-                  userId: member.id,
-                },
+        result.push(
+          ...(await Promise.all(
+            servers.slice(i, i + 6).map(async (server) => {
+              const audience = await sdk.access.listResourceAudience(
+                { resourceKind: "mcp", resourceId: server.id },
                 undefined,
                 { signal },
               );
-              if (
-                explanation.levels.some(
-                  (level) => level.level === "use" && level.allowed,
-                )
-              )
-                servers.push(server);
-            }
-            return { member, servers };
-          }),
+              return {
+                server: {
+                  id: server.id,
+                  name: server.name || "Unnamed server",
+                  slug: server.slug || server.id,
+                  projectId: server.projectId,
+                  projectSlug:
+                    organization.projects?.find(
+                      (project) => project.id === server.projectId,
+                    )?.slug ?? "default",
+                },
+                entries: audience.entries,
+                rows: buildAccessRows(audience.entries),
+              };
+            }),
+          )),
         );
-        result.push(...batch);
       }
-      return result;
+      return result.sort((a, b) => a.server.name.localeCompare(b.server.name));
     },
+    throwOnError: false,
   });
   const ready =
-    members.isSuccess &&
     roles.isSuccess &&
+    members.isSuccess &&
     assignments.isSuccess &&
-    !members.isFetching &&
     !roles.isFetching &&
-    !assignments.isFetching &&
-    !assignments.isPlaceholderData;
+    !members.isFetching &&
+    !assignments.isFetching;
   useEffect(() => {
     onReady?.(ready);
     return () => onReady?.(false);
   }, [onReady, ready]);
-
-  const serverOptions = useMemo(() => {
-    const servers = new Map(
-      (assignments.data ?? [])
-        .flatMap((row) => row.servers)
-        .map((server) => [server.id, server]),
-    );
-    return [...servers.values()]
-      .map((server) => ({
-        value: server.id,
-        label: `${server.name || "Unnamed server"} (${server.projectSlug === "default" ? "Default project" : `Project: ${server.projectSlug}`})`,
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [assignments.data]);
-  const rows = useMemo(
+  const roleRows = useMemo(
     () =>
-      (assignments.data ?? [])
-        .filter(({ member, servers }) => {
-          const query = search.trim().toLowerCase();
-          return (
-            (!query ||
-              `${member.name} ${member.email}`.toLowerCase().includes(query)) &&
-            (!values.server ||
-              servers.some((server) => server.id === values.server)) &&
-            (!values.role || allMemberRoleIds(member).includes(values.role)) &&
-            (!values.department || member.department === values.department)
-          );
-        })
-        .sort(
-          (a, b) =>
-            (sortBy === "name"
-              ? direction === "desc"
-                ? b.member.name.localeCompare(a.member.name)
-                : a.member.name.localeCompare(b.member.name)
-              : direction === "desc"
-                ? b.servers.length - a.servers.length
-                : a.servers.length - b.servers.length) ||
-            a.member.name.localeCompare(b.member.name),
-        ),
-    [assignments.data, search, values, direction, sortBy],
-  );
-
-  const columns: Column<AssignmentRow>[] = [
-    {
-      key: "person",
-      header: "Person",
-      width: "260px",
-      render: ({ member }) => (
-        <div className="min-w-0">
-          <Text className="truncate font-medium">
-            {member.name || member.email}
-          </Text>
-          <Text small muted className="truncate">
-            {member.email}
-          </Text>
-        </div>
-      ),
-    },
-    {
-      key: "servers",
-      header: "MCP servers",
-      width: "2fr",
-      render: ({ servers }) => (
-        <div className="flex items-center gap-3">
-          <span className="tabular-nums">{servers.length}</span>
-          <div className="flex -space-x-2">
-            {servers.slice(0, 8).map((server) => (
-              <Tooltip
-                key={server.id}
-                delayDuration={0}
-                disableHoverableContent
-              >
-                <TooltipTrigger asChild>
-                  <span
-                    tabIndex={0}
-                    aria-label={server.name || "Unnamed server"}
-                    className="relative rounded-full focus:z-10 hover:z-10"
-                  >
-                    <AssignmentServerIcon
-                      server={server}
-                      className="border-background border-2"
-                    />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <span className="flex items-center gap-2">
-                    <ProjectIcon
-                      project={{
-                        id: server.projectId,
-                        name:
-                          organization.projects?.find(
-                            (project) => project.id === server.projectId,
-                          )?.name ||
-                          (server.projectSlug === "default"
-                            ? "Default"
-                            : server.projectSlug),
-                      }}
-                      className="size-5 text-[10px]"
-                    />
-                    {server.name || "Unnamed server"}
-                  </span>
-                </TooltipContent>
-              </Tooltip>
-            ))}
-            {servers.length > 8 && (
-              <span className="bg-muted flex size-8 items-center justify-center rounded-full text-xs">
-                +{servers.length - 8}
-              </span>
-            )}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: "roles",
-      header: "Roles",
-      width: "2fr",
-      render: ({ member }) => (
-        <div className="flex flex-wrap gap-1.5 text-sm">
-          {allMemberRoleIds(member).map((id) => (
-            <span key={id} className="bg-muted px-2 py-1">
-              {roles.data?.roles.find((role) => role.id === id)?.name ||
-                "Role unavailable"}
-            </span>
-          ))}
-        </div>
-      ),
-    },
-    {
-      key: "editRoles",
-      header: <span className="sr-only">Edit roles</span>,
-      width: "56px",
-      render: ({ member }) => (
-        <ExpandedRowOnly memberId={member.id}>
-          <RequireScope scope="org:admin" level="component">
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  aria-label={`Edit roles for ${member.name || member.email}`}
-                  disabled={organization.scimEnabled}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setEditingMember(member);
-                  }}
-                >
-                  <Button.LeftIcon>
-                    <Pencil className="size-4" />
-                  </Button.LeftIcon>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {organization.scimEnabled
-                  ? "Roles are managed by your identity provider"
-                  : "Edit roles"}
-              </TooltipContent>
-            </Tooltip>
-          </RequireScope>
-        </ExpandedRowOnly>
-      ),
-    },
-  ];
-  const failed = members.isError || assignments.isError || roles.isError;
-  return (
-    <TooltipProvider>
-      <div className="space-y-5">
-        <Text muted small>
-          See which MCP servers each person can connect to across all projects
-          (mcp:connect). View-only and manage-only access is excluded. Expand a
-          person to see where their connection access comes from or remove it.
-        </Text>
-        <Page.Toolbar>
-          <Page.Toolbar.Search
-            value={search}
-            onChange={setSearch}
-            placeholder="Search people by name or email"
-          />
-          <Page.Toolbar.Filters
-            schema={FILTERS}
-            values={values}
-            onChange={(id, value) => {
-              if (
-                (id === "server" || id === "role" || id === "department") &&
-                (typeof value === "string" || value === null)
-              )
-                setValue(id, value);
-            }}
-            onClear={(id) => {
-              if (id === "server" || id === "role" || id === "department")
-                clearValue(id);
-            }}
-            onClearAll={clearAll}
-            optionsById={{
-              server: serverOptions,
-              role: (roles.data?.roles ?? []).map((role) => ({
-                value: role.id,
-                label: role.name,
-              })),
-              department: [
-                ...new Set(
-                  (members.data?.members ?? []).flatMap((member) =>
-                    member.department ? [member.department] : [],
-                  ),
-                ),
-              ]
-                .sort()
-                .map((value) => ({ value, label: value })),
-            }}
-          />
-          <Page.Toolbar.SortBy
-            value={sortBy}
-            onChange={setSortBy}
-            options={[
-              { value: "servers", label: "Servers assigned" },
-              { value: "name", label: "Name" },
-            ]}
-            direction={direction}
-            onDirectionChange={setDirection}
-          />
-          <Page.Toolbar.Actions>
-            <Text small muted>
-              {assignments.isSuccess
-                ? `${rows.length} people`
-                : assignments.isError
-                  ? "Review unavailable"
-                  : "Loading people…"}
-            </Text>
-          </Page.Toolbar.Actions>
-          <Page.Toolbar.Refresh
-            onRefresh={() =>
-              void Promise.all([
-                members.refetch(),
-                roles.refetch(),
-                assignments.refetch(),
-              ])
-            }
-            isRefreshing={members.isFetching || assignments.isFetching}
-          />
-        </Page.Toolbar>
-        {failed ? (
-          <div role="alert" className="space-y-3">
-            <Text>
-              Couldn’t load the complete assignment review. This review requires
-              permission to view every assigned MCP server. Check your access
-              and retry before enabling the gateway.
-            </Text>
-            <Button
-              variant="secondary"
-              onClick={() =>
-                void Promise.all([
-                  members.refetch(),
-                  roles.refetch(),
-                  assignments.refetch(),
-                ])
-              }
-            >
-              Retry
-            </Button>
-          </div>
-        ) : !assignments.data ? (
-          <SkeletonTable />
-        ) : (
-          <Table
-            columns={columns}
-            data={rows}
-            rowKey={(row) => row.member.id}
-            noResultsMessage="No people match these filters. Clear the filters to review everyone."
-            renderExpandedContent={(row) => <ExpandedPerson row={row} />}
-          />
-        )}
-        {editingMember && (
-          <ChangeRoleDialog
-            member={editingMember}
-            onOpenChange={(open) => {
-              if (!open) setEditingMember(null);
-            }}
-          />
-        )}
-      </div>
-    </TooltipProvider>
-  );
-}
-
-function ExpandedPerson({ row }: { row: AssignmentRow }): JSX.Element | null {
-  const { expandedRowKeys } = useTable();
-  return expandedRowKeys.has(row.member.id) ? (
-    <PersonAssignments row={row} />
-  ) : null;
-}
-
-function PersonAssignments({ row }: { row: AssignmentRow }): JSX.Element {
-  return (
-    <div className="border-border bg-muted/40 space-y-3 border-b px-5 py-4">
-      {row.servers.length === 0 && (
-        <Text small>This person has no MCP server assignments.</Text>
-      )}
-      {row.servers.map((server) => (
-        <ServerAssignment key={server.id} server={server} member={row.member} />
-      ))}
-    </div>
-  );
-}
-
-function ServerAssignment({
-  server,
-  member,
-}: {
-  server: AccessibleMCPServer;
-  member: AccessMember;
-}): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const organization = useOrganization();
-  const project = organization.projects?.find(
-    (project) => project.id === server.projectId,
-  );
-  const projectName =
-    project?.name ||
-    (server.projectSlug === "default" ? "Default" : server.projectSlug);
-  const projectLabel =
-    server.projectSlug === "default"
-      ? "Default project"
-      : `Project: ${projectName}`;
-  const routes = useRoutes({ projectSlug: server.projectSlug });
-  const serverHref = routes.mcp.x.overview.href(server.slug || server.id);
-  const explanation = useExplainResourceAccess(
-    { resourceKind: "mcp", resourceId: server.id, userId: member.id },
-    undefined,
-    { throwOnError: false },
-  );
-  const sources = [
-    ...new Map(
-      (
-        explanation.data?.levels.find((level) => level.level === "use")
-          ?.rules ?? []
-      )
+      (roles.data?.roles ?? [])
+        .map((role) => ({
+          role,
+          servers: (assignments.data ?? [])
+            .flatMap((access): RoleServer[] => {
+              const row = access.rows.find(
+                (row) => row.principalUrn === role.principalUrn,
+              );
+              return row &&
+                (scopeState(row, "use").granted || isServerBlocked(row))
+                ? [{ ...access, row }]
+                : [];
+            })
+            .sort(
+              (a, b) =>
+                Number(isServerBlocked(a.row)) - Number(isServerBlocked(b.row)),
+            ),
+          members: (members.data?.members ?? []).filter((member) =>
+            allMemberRoleIds(member).includes(role.id),
+          ),
+        }))
         .filter(
-          (rule) => rule.effect === "allows" || rule.effect === "overrides",
+          ({ role, servers }) =>
+            role.name.toLowerCase().includes(search.trim().toLowerCase()) &&
+            (!values.server ||
+              servers.some(({ server }) => server.id === values.server)),
         )
-        .map((rule) => [rule.principalUrn, rule]),
-    ).values(),
-  ];
+        .sort((a, b) => a.role.name.localeCompare(b.role.name)),
+    [roles.data, members.data, assignments.data, search, values.server],
+  );
+  const failed = roles.isError || members.isError || assignments.isError;
+  const refresh = () =>
+    void Promise.all([
+      roles.refetch(),
+      members.refetch(),
+      assignments.refetch(),
+    ]);
   return (
-    <div className="border-border border-b last:border-b-0">
-      <div className="flex items-center gap-3 py-2">
-        <div className="relative mr-2 shrink-0">
-          <AssignmentServerIcon server={server} />
-          <Tooltip delayDuration={0}>
-            <TooltipTrigger asChild>
-              <span
-                tabIndex={0}
-                aria-label={projectLabel}
-                className="absolute -right-2 -bottom-2 inline-flex border-2 border-background"
-              >
-                <ProjectIcon
-                  project={{ id: server.projectId, name: projectName }}
-                  className="size-4 text-[9px]"
-                />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>{projectLabel}</TooltipContent>
-          </Tooltip>
-        </div>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <Link
-            to={serverHref}
-            className="truncate text-sm font-medium hover:underline"
-            aria-label={`Open ${server.name || "MCP server"}`}
-          >
-            {server.name || "Unnamed server"}
-          </Link>
-        </div>
-        <div className="ml-auto max-w-[55%] text-right text-sm">
-          <Text small muted className="text-xs">
-            Assigned through
+    <div className="space-y-5">
+      <Text small muted>
+        Review MCP access and blocks for each role. Check a person’s access to
+        see how their roles, direct assignments, and restrictions combine.
+      </Text>
+      <Page.Toolbar>
+        <Page.Toolbar.Search
+          value={search}
+          onChange={setSearch}
+          placeholder="Search roles…"
+        />
+        <Page.Toolbar.Leading>
+          <SelectFilterChip
+            dim={FILTERS[0]}
+            value={values.server ?? null}
+            options={(assignments.data ?? []).map(({ server }) => ({
+              value: server.id,
+              label:
+                server.projectSlug === "default"
+                  ? server.name
+                  : `${server.name} · ${server.projectSlug}`,
+            }))}
+            color={getFilterAccents(["server"]).server}
+            onChange={(value) => setValue("server", value)}
+          />
+        </Page.Toolbar.Leading>
+
+        <Page.Toolbar.Actions>
+          <Text small muted>
+            {roleRows.length} roles
           </Text>
-          {explanation.isError ? (
-            <button
-              className="underline"
-              onClick={() => void explanation.refetch()}
-            >
-              Retry loading sources
-            </button>
-          ) : explanation.isLoading ? (
-            <Text small muted>
-              Loading…
-            </Text>
-          ) : (
-            <div className="font-medium">
-              {sources.length
-                ? sources.map((rule, index) => (
-                    <span key={rule.principalUrn}>
-                      {index > 0 && ", "}
-                      {rule.kind === "role" ? (
-                        <RoleLink principalUrn={rule.principalUrn}>
-                          {rule.displayName}
-                        </RoleLink>
-                      ) : rule.kind === "user" ? (
-                        "Direct assignment"
-                      ) : (
-                        rule.displayName
-                      )}
-                      {directorySourceLabel(rule) && (
-                        <Tooltip delayDuration={0}>
-                          <TooltipTrigger asChild>
-                            <span
-                              tabIndex={0}
-                              aria-label={`Directory mapping for ${rule.displayName}`}
-                              className="text-muted-foreground ml-1 inline-flex align-middle"
-                            >
-                              <Info className="size-3" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {directorySourceLabel(rule)}
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </span>
-                  ))
-                : explanation.data?.visibility === "public"
-                  ? "Public server"
-                  : "View or manage permission"}
-            </div>
-          )}
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setSelectedMember(undefined);
+              setCheckingUser(true);
+            }}
+          >
+            <Button.Text>Check user access</Button.Text>
+          </Button>
+        </Page.Toolbar.Actions>
+        <Page.Toolbar.Refresh
+          onRefresh={refresh}
+          isRefreshing={
+            roles.isFetching || members.isFetching || assignments.isFetching
+          }
+        />
+      </Page.Toolbar>
+      {failed ? (
+        <div role="alert" className="space-y-3">
+          <Text>
+            Couldn’t load the complete assignment review. Check your access and
+            retry before enabling the gateway.
+          </Text>
+          <Button variant="secondary" onClick={refresh}>
+            <Button.Text>Retry</Button.Text>
+          </Button>
         </div>
-        <RequireScope scope="org:admin" level="component">
-          <Tooltip delayDuration={0}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="tertiary"
-                size="sm"
-                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                aria-label={`Remove access to ${server.name} for ${member.name}`}
-                onClick={() => setOpen(true)}
-              >
-                <Button.LeftIcon>
-                  <Trash2 className="size-4" />
-                </Button.LeftIcon>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Remove access</TooltipContent>
-          </Tooltip>
-        </RequireScope>
-      </div>
-      {open && (
-        <RemoveAssignmentDialog
-          server={server}
-          member={member}
-          onClose={() => setOpen(false)}
+      ) : !assignments.data || !members.data || !roles.data ? (
+        <SkeletonTable />
+      ) : (
+        <Table
+          columns={roleColumns((member) => {
+            setSelectedMember(member);
+            setCheckingUser(true);
+          })}
+          data={roleRows}
+          rowKey={({ role }) => role.id}
+          noResultsMessage="No roles match these filters."
+          renderExpandedContent={(row) => (
+            <ExpandedRole
+              assignment={row}
+              selectedServer={values.server ?? undefined}
+            />
+          )}
+        />
+      )}
+      {checkingUser && (
+        <UserAccess
+          members={members.data?.members ?? []}
+          initialMember={selectedMember}
+          onClose={() => setCheckingUser(false)}
         />
       )}
     </div>
   );
 }
 
-function ExpandedRowOnly({
-  memberId,
-  children,
+function roleColumns(
+  onSelectMember: (member: AccessMember) => void,
+): Column<RoleAssignment>[] {
+  return [
+    {
+      key: "role",
+      header: "Role",
+      width: "1fr",
+      render: ({ role }) => (
+        <Text className="truncate font-medium">{role.name}</Text>
+      ),
+    },
+    {
+      key: "servers",
+      header: "MCP:CONNECT ACCESS",
+      width: "2fr",
+      render: ({ servers }) => <RoleServerIcons servers={servers} />,
+    },
+    {
+      key: "members",
+      header: "Members",
+      width: "1fr",
+      render: ({ members }) => (
+        <MemberFacepile
+          members={members}
+          maxFaces={3}
+          memberActionLabel="View assignments"
+          onMemberSelect={(picked) => {
+            const member = members.find((member) => member.id === picked.id);
+            if (member) onSelectMember(member);
+          }}
+        />
+      ),
+    },
+  ];
+}
+
+function RoleServerIcons({ servers }: { servers: RoleServer[] }): JSX.Element {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex -space-x-2">
+        {servers.slice(0, 8).map(({ server, row }) => (
+          <Tooltip key={server.id}>
+            <TooltipTrigger asChild>
+              <span
+                tabIndex={0}
+                aria-label={`${server.name}: ${serverAccessLabel(row)}`}
+                className="relative focus:z-10 hover:z-10"
+              >
+                <RoleServerIcon
+                  server={server}
+                  row={row}
+                  className="border-card border-2"
+                  compact
+                />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {server.name}
+              {server.projectSlug !== "default" &&
+                ` · ${server.projectSlug}`} ·{" "}
+              {serverAccessLabel(row)}
+            </TooltipContent>
+          </Tooltip>
+        ))}
+        {servers.length > 8 && (
+          <span className="bg-muted relative flex h-8 shrink-0 items-center justify-center px-2 text-xs whitespace-nowrap">
+            +{servers.length - 8} more
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ExpandedRole({
+  assignment,
+  selectedServer,
 }: {
-  memberId: string;
-  children: ReactNode;
+  assignment: RoleAssignment;
+  selectedServer?: string;
 }): JSX.Element | null {
   const { expandedRowKeys } = useTable();
-  return expandedRowKeys.has(memberId) ? <>{children}</> : null;
+  return expandedRowKeys.has(assignment.role.id) ? (
+    <RoleAssignments
+      role={assignment.role}
+      servers={assignment.servers}
+      selectedServer={selectedServer}
+    />
+  ) : null;
+}
+
+function RoleAssignments({
+  role,
+  servers,
+  selectedServer,
+}: {
+  role: Role;
+  servers: RoleServer[];
+  selectedServer?: string;
+}): JSX.Element {
+  const [limit, setLimit] = useState(10);
+  const [search, setSearch] = useState("");
+  const filtered = servers.filter(
+    ({ server }) =>
+      (!selectedServer || server.id === selectedServer) &&
+      `${server.name} ${server.projectSlug}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+  );
+  return (
+    <div className="border-border bg-muted/40 border-b px-5 py-2">
+      {servers.length >= 10 && !selectedServer && (
+        <div className="mb-2 max-w-sm">
+          <Page.Toolbar>
+            <Page.Toolbar.Search
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
+                setLimit(10);
+              }}
+              placeholder="Search servers…"
+            />
+          </Page.Toolbar>
+        </div>
+      )}
+      {!role.isSystem &&
+        servers.some(({ row }) =>
+          row.cells.use.grants.some(
+            (grant) => grant.appliesTo === "all_resources",
+          ),
+        ) && (
+          <Text small muted className="py-2">
+            A role-wide rule grants access across servers.{" "}
+            <RoleLink roleId={role.id}>Edit role</RoleLink> to change that rule.
+          </Text>
+        )}
+      {filtered.slice(0, limit).map((access) => (
+        <RoleServerAssignment
+          key={access.server.id}
+          access={access}
+          role={role}
+        />
+      ))}
+      {!filtered.length && (
+        <Text small muted>
+          {servers.length
+            ? "No MCP servers match."
+            : "This role does not grant connection access to any MCP servers."}
+        </Text>
+      )}
+      {filtered.length > limit && (
+        <Button variant="tertiary" onClick={() => setLimit(limit + 10)}>
+          Show 10 more
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function RoleServerAssignment({
+  access,
+  role,
+}: {
+  access: RoleServer;
+  role: Role;
+}): JSX.Element {
+  const { server, row } = access;
+  const routes = useRoutes({ projectSlug: server.projectSlug });
+  const [action, setAction] = useState<AccessAction>();
+  const blocked = isServerBlocked(row);
+  const unblockingAllowed =
+    blocked &&
+    row.cells.use.blocks.every(
+      (entry) =>
+        entry.appliesTo === "resource" &&
+        entry.principalUrn === role.principalUrn,
+    );
+  const removable =
+    !role.isSystem &&
+    row.cells.use.grants.length > 0 &&
+    row.cells.use.grants.every(
+      (grant) =>
+        grant.appliesTo === "resource" &&
+        grant.principalUrn === role.principalUrn,
+    );
+  const restrictions = [
+    ...new Set([
+      ...row.cells.use.grants
+        .filter((entry) => entry.tools?.length || entry.dispositions?.length)
+        .map((entry) => `Allows ${narrowingLabel(entry)}`),
+      ...row.cells.use.blocks.map((entry) => `Blocks ${narrowingLabel(entry)}`),
+    ]),
+  ];
+  return (
+    <div
+      className={cn(
+        "border-border flex flex-wrap items-center gap-3 border-b py-2 last:border-b-0",
+        blocked && "bg-destructive/5 text-destructive",
+      )}
+    >
+      <RoleServerIcon server={server} row={row} />
+      <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3">
+        <Link
+          className="break-words text-sm font-medium hover:underline"
+          to={routes.mcp.x.overview.href(server.slug)}
+        >
+          {server.name || "Unnamed server"}
+        </Link>
+        {server.projectSlug !== "default" && (
+          <Text small muted>
+            {server.projectSlug}
+          </Text>
+        )}
+      </div>
+      {restrictions.length > 0 ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              tabIndex={0}
+              className="text-sm underline decoration-dotted underline-offset-4"
+            >
+              {serverAccessLabel(row)}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            {restrictions.map((label) => (
+              <div key={label}>{label}</div>
+            ))}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <Text small>{serverAccessLabel(row)}</Text>
+      )}
+      <RequireScope scope="org:admin" level="component">
+        <MoreActions
+          triggerAriaLabel={`Access actions for ${role.name} on ${server.name}`}
+          actions={[
+            {
+              label: "Remove access",
+              disabled: !removable,
+              description: removable
+                ? "Remove this role’s grant. Access from other roles still works."
+                : role.isSystem
+                  ? "Built-in role permissions cannot be edited."
+                  : "Granted by a rule covering multiple servers. Edit the role to change that rule.",
+              onClick: () => setAction("remove"),
+            },
+            {
+              label: blocked ? "Unblock access" : "Block access",
+              disabled: blocked && !unblockingAllowed,
+              destructive: !blocked,
+              description: blocked
+                ? unblockingAllowed
+                  ? "Remove this block. Existing grants decide access again."
+                  : "A role-wide rule blocks access. Edit the role to change that rule."
+                : "Deny access for this role, even when another role grants it.",
+              onClick: () => setAction(blocked ? "unblock" : "block"),
+            },
+          ]}
+        />
+      </RequireScope>
+      {action && (
+        <ChangeRoleServerAccess
+          server={server}
+          role={role}
+          action={action}
+          onClose={() => setAction(undefined)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Platform MCP inspection already covers roles and people. Its role mutations
+// accept allows only; exclusions keep their explicit confirmation here.
+function ChangeRoleServerAccess({
+  server,
+  role,
+  action,
+  onClose,
+}: {
+  server: AccessibleMCPServer;
+  role: Role;
+  action: AccessAction;
+  onClose: () => void;
+}): JSX.Element {
+  const sdk = useSdkClient();
+  const queryClient = useQueryClient();
+  const organization = useOrganization();
+  const audience = useQuery({
+    queryKey: ["mcpAssignments", organization.id, "block", server.id],
+    queryFn: () =>
+      sdk.access.listResourceAudience({
+        resourceKind: "mcp",
+        resourceId: server.id,
+      }),
+    staleTime: 0,
+    throwOnError: false,
+  });
+  const mutation = useSetResourceAudienceMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAllRoles(queryClient),
+        invalidateAllResourceAudience(queryClient),
+        invalidateAllIdentityAccess(queryClient),
+        invalidateAllExplainResourceAccess(queryClient),
+        queryClient.invalidateQueries({ queryKey: ["mcpAssignments"] }),
+      ]);
+      onClose();
+    },
+  });
+  const currentRow = buildAccessRows(audience.data?.entries ?? []).find(
+    (row) => row.principalUrn === role.principalUrn,
+  );
+  const canRemove =
+    !role.isSystem &&
+    !!currentRow?.cells.use.grants.length &&
+    currentRow.cells.use.grants.every(
+      (grant) =>
+        grant.appliesTo === "resource" &&
+        grant.principalUrn === role.principalUrn,
+    );
+  const removing = action === "remove";
+  const unblocking = action === "unblock";
+  const canUnblock =
+    !!currentRow?.cells.use.blocks.length &&
+    currentRow.cells.use.blocks.every(
+      (entry) =>
+        entry.appliesTo === "resource" &&
+        entry.principalUrn === role.principalUrn,
+    );
+  const confirmLabel = {
+    remove: "Remove access",
+    block: "Block access",
+    unblock: "Unblock access",
+  }[action];
+  const title = {
+    remove: `Remove ${role.name} access to ${server.name}?`,
+    block: `Block ${role.name} from ${server.name}?`,
+    unblock: `Unblock ${role.name} on ${server.name}?`,
+  }[action];
+  const description = {
+    remove:
+      "Remove this role’s permissions for this server. Access granted through other roles or directly to a person still works. Role membership stays unchanged.",
+    block:
+      "Block connection access for people and agents holding this role, even when another role grants it. A person’s direct assignment to this server can override this block. Role membership stays unchanged.",
+    unblock:
+      "Remove this role’s connection block for this server. Access will be determined by existing roles and direct grants; this does not add a new grant.",
+  }[action];
+  return (
+    <ConfirmDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={title}
+      description={description}
+      confirmLabel={confirmLabel}
+      confirmVariant={unblocking ? "primary" : "destructive-primary"}
+      isPending={mutation.isPending}
+      confirmDisabled={
+        !audience.data ||
+        audience.isFetching ||
+        audience.isError ||
+        (removing && !canRemove) ||
+        (unblocking && !canUnblock)
+      }
+      error={
+        audience.isError ? (
+          <Button variant="secondary" onClick={() => void audience.refetch()}>
+            <Button.Text>Retry loading access</Button.Text>
+          </Button>
+        ) : mutation.error ? (
+          <div className="space-y-2">
+            <Text>Couldn’t save the change. Reload access and try again.</Text>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                mutation.reset();
+                void audience.refetch();
+              }}
+            >
+              <Button.Text>Reload access</Button.Text>
+            </Button>
+          </div>
+        ) : undefined
+      }
+      onConfirm={() => {
+        if (
+          audience.data &&
+          !audience.isFetching &&
+          (!removing || canRemove) &&
+          (!unblocking || canUnblock)
+        )
+          mutation.mutate({
+            request: {
+              setResourceAudienceForm: {
+                resourceKind: "mcp",
+                resourceId: server.id,
+                expectedVersion: audience.data.version,
+                entries:
+                  removing || unblocking
+                    ? ownRules(audience.data.entries)
+                        .filter(
+                          (entry) =>
+                            entry.principalUrn !== role.principalUrn ||
+                            !(unblocking
+                              ? entry.level === "blocked"
+                              : ["use", "view", "manage"].includes(
+                                  entry.level,
+                                )),
+                        )
+                        .map(
+                          ({ principalUrn, level, tools, dispositions }) => ({
+                            principalUrn,
+                            level,
+                            tools,
+                            dispositions,
+                          }),
+                        )
+                    : assignmentExclusions(audience.data.entries, [
+                        role.principalUrn,
+                      ]),
+              },
+            },
+          });
+      }}
+    />
+  );
+}
+
+function UserAccess({
+  members,
+  initialMember,
+  onClose,
+}: {
+  members: AccessMember[];
+  initialMember?: AccessMember;
+  onClose: () => void;
+}): JSX.Element {
+  const sdk = useSdkClient();
+  const organization = useOrganization();
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<AccessMember | undefined>(
+    initialMember,
+  );
+  const [serverSearch, setServerSearch] = useState("");
+  const [serverLimit, setServerLimit] = useState(10);
+  const roles = useRoles(undefined, undefined, { throwOnError: false });
+  const matchingMembers = members.filter((member) =>
+    `${member.name} ${member.email}`
+      .toLowerCase()
+      .includes(search.toLowerCase()),
+  );
+  const access = useQuery({
+    queryKey: ["mcpAssignments", organization.id, "user", selected?.id],
+    enabled: !!selected,
+    queryFn: async ({ signal }) => {
+      if (!selected) return [];
+      const result = await sdk.access.listIdentityAccess(
+        { userId: selected.id },
+        undefined,
+        { signal },
+      );
+      const servers: AccessibleMCPServer[] = [];
+      for (let i = 0; i < result.servers.length; i += 6) {
+        const batch = await Promise.all(
+          result.servers.slice(i, i + 6).map(async (server) => {
+            const explanation = await sdk.access.explainResourceAccess(
+              {
+                resourceKind: "mcp",
+                resourceId: server.id,
+                userId: selected.id,
+              },
+              undefined,
+              { signal },
+            );
+            return explanation.levels.some(
+              (level) => level.level === "use" && level.allowed,
+            )
+              ? server
+              : null;
+          }),
+        );
+        servers.push(
+          ...batch.filter(
+            (server): server is AccessibleMCPServer => server !== null,
+          ),
+        );
+      }
+      return servers;
+    },
+    throwOnError: false,
+  });
+  const matchingServers = (access.data ?? []).filter((server) =>
+    `${server.name} ${server.projectSlug}`
+      .toLowerCase()
+      .includes(serverSearch.toLowerCase()),
+  );
+  return (
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+        <SheetHeader>
+          <SheetTitle>Check user access</SheetTitle>
+        </SheetHeader>
+        <div className="space-y-4 p-5">
+          <Page.Toolbar>
+            <Page.Toolbar.Search
+              value={search}
+              onChange={setSearch}
+              placeholder="Find a person by name or email…"
+            />
+          </Page.Toolbar>
+          {search.trim() &&
+            matchingMembers.slice(0, 20).map((member) => (
+              <Button
+                key={member.id}
+                variant="tertiary"
+                onClick={() => {
+                  setSelected(member);
+                  setSearch("");
+                  setServerSearch("");
+                  setServerLimit(10);
+                }}
+              >
+                <Button.Text>
+                  {member.name || member.email} · {member.email}
+                </Button.Text>
+              </Button>
+            ))}
+          {search.trim() && matchingMembers.length === 0 && (
+            <Text muted>No people match this search.</Text>
+          )}
+          {search.trim() && matchingMembers.length > 20 && (
+            <Text small muted>
+              Showing the first 20 matches. Refine your search to find a person.
+            </Text>
+          )}
+          {selected ? (
+            <>
+              <Text className="font-medium">
+                {selected.name || selected.email}
+              </Text>
+              <Text small muted>
+                {(roles.data?.roles ?? [])
+                  .filter((role) =>
+                    allMemberRoleIds(selected).includes(role.id),
+                  )
+                  .map((role) => role.name)
+                  .join(", ")}
+              </Text>
+              <Page.Toolbar>
+                <Page.Toolbar.Search
+                  value={serverSearch}
+                  onChange={(value) => {
+                    setServerSearch(value);
+                    setServerLimit(10);
+                  }}
+                  placeholder="Search this person’s MCPs…"
+                />
+              </Page.Toolbar>
+              <Text small muted>
+                Connection access after combining all roles, direct assignments,
+                and blocks.
+              </Text>
+              {access.isError ? (
+                <div role="alert">
+                  <Text>Couldn’t resolve this person’s access.</Text>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void access.refetch()}
+                  >
+                    <Button.Text>Retry</Button.Text>
+                  </Button>
+                </div>
+              ) : access.isPending ? (
+                <SkeletonTable />
+              ) : access.data?.length ? (
+                matchingServers
+                  .slice(0, serverLimit)
+                  .map((server) => (
+                    <ServerAssignment
+                      key={server.id}
+                      server={server}
+                      member={selected}
+                    />
+                  ))
+              ) : (
+                <Text>No MCP connection access.</Text>
+              )}
+              {access.isSuccess &&
+                access.data.length > 0 &&
+                matchingServers.length === 0 && (
+                  <Text muted>No MCP servers match this search.</Text>
+                )}
+              {matchingServers.length > serverLimit && (
+                <Button
+                  variant="tertiary"
+                  onClick={() => setServerLimit(serverLimit + 10)}
+                >
+                  <Button.Text>Show 10 more MCPs</Button.Text>
+                </Button>
+              )}
+            </>
+          ) : (
+            <Text muted>
+              Find a person to inspect their effective MCP access.
+            </Text>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
 }

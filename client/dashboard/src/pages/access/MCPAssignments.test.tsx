@@ -1,193 +1,447 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const state = vi.hoisted(() => ({
-  failed: false,
+  audience: vi.fn(),
+  inventory: vi.fn(),
+  identity: vi.fn(),
   explain: vi.fn(),
-  editor: vi.fn(),
+  mutate: vi.fn(),
+  manyRoles: false,
 }));
-const server = (id: string) => ({
-  id,
-  name: `Server ${id}`,
-  projectId: "project",
-  projectSlug: "default",
-  slug: id,
-});
-const member = (id: string, name: string) => ({
-  id,
-  name,
-  email: `${id}@example.test`,
-  roleIds: [],
+const role = {
+  id: "engineer",
+  name: "Engineering",
+  principalUrn: "role:organization:engineer",
+  memberCount: 1,
+  agentIds: [],
+};
+const member = {
+  id: "lee",
+  name: "Lee",
+  email: "lee@example.test",
+  roleIds: ["engineer"],
   directoryRoleIds: [],
-  principalUrn: `user:${id}`,
-  joinedAt: new Date(),
-});
-const rows = [
-  { member: member("lee", "Lee"), servers: [server("a")] },
-  { member: member("morgan", "Morgan"), servers: [server("a"), server("b")] },
-  { member: member("sam", "Sam"), servers: [] },
-];
-vi.mock("@/routes", () => ({
-  useRoutes: ({ projectSlug }: { projectSlug: string }) => ({
-    mcp: {
-      x: {
-        overview: {
-          href: (slug: string) =>
-            `/test-org/projects/${projectSlug}/mcp/x/${slug}/overview`,
-        },
-      },
+  principalUrn: "user:lee",
+};
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({
+    id: "org",
+    projects: [{ id: "project", slug: "default" }],
+  }),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    mcpServers: { listForOrg: state.inventory },
+    access: {
+      listResourceAudience: state.audience,
+      listIdentityAccess: state.identity,
+      explainResourceAccess: state.explain,
     },
   }),
 }));
-vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ id: "test-org", scimEnabled: false }),
-}));
-vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
-  useGetMcpMetadata: () => ({ data: undefined }),
-}));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
-vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
-vi.mock("@/components/role-link", () => ({
-  RoleLink: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
-vi.mock("./ChangeRoleDialog", () => ({
-  ChangeRoleDialog: () => <div>Role editor</div>,
-}));
-vi.mock("./RemoveAssignmentDialog", () => ({
-  RemoveAssignmentDialog: () => {
-    state.editor();
-    return <div>Removal dialog</div>;
-  },
-}));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: () => ({
-    data: { members: rows.map((row) => row.member) },
-    dataUpdatedAt: 1,
+    data: { members: [member] },
     isSuccess: true,
     refetch: vi.fn(),
   }),
 }));
 vi.mock("@gram/client/react-query/roles.js", () => ({
-  useRoles: () => ({ data: { roles: [] }, isSuccess: true, refetch: vi.fn() }),
-}));
-vi.mock("@tanstack/react-query", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
-  useQuery: () => ({
-    data: rows,
-    isSuccess: !state.failed,
-    isError: state.failed,
-    isFetching: false,
+  useRoles: () => ({
+    data: {
+      roles: [
+        ...(state.manyRoles
+          ? Array.from({ length: 48 }, (_, i) => ({
+              ...role,
+              id: `role-${i}`,
+              name: `Role ${i}`,
+              principalUrn: role.principalUrn,
+            }))
+          : []),
+        role,
+        {
+          ...role,
+          id: "empty",
+          name: "Unassigned",
+          principalUrn: "role:organization:empty",
+        },
+      ],
+    },
+    isSuccess: true,
     refetch: vi.fn(),
   }),
 }));
-vi.mock("@gram/client/react-query/explainResourceAccess.js", () => ({
-  useExplainResourceAccess: (request: unknown) => {
-    state.explain(request);
-    return {
-      data: {
-        levels: [
+vi.mock("@gram/client/react-query/setResourceAudience.js", () => ({
+  useSetResourceAudienceMutation: () => ({ mutate: state.mutate }),
+}));
+vi.mock("@/components/member-facepile", () => ({
+  MemberFacepile: ({
+    members,
+    onMemberSelect,
+  }: {
+    members: { id: string; name: string }[];
+    onMemberSelect?: (member: { id: string; name: string }) => void;
+  }) =>
+    members.length ? (
+      <button
+        onClick={(event) => {
+          event.stopPropagation();
+          onMemberSelect?.(members[0]!);
+        }}
+      >
+        Pick {members[0]!.name}
+      </button>
+    ) : null,
+}));
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    mcp: { x: { overview: { href: (slug: string) => `/servers/${slug}` } } },
+  }),
+}));
+vi.mock("./PersonServerAssignment", () => ({
+  ServerAssignment: ({ server }: { server: { name: string } }) => (
+    <div>{server.name}</div>
+  ),
+}));
+vi.mock("./AssignmentServerIcon", () => ({
+  AssignmentServerIcon: ({ server }: { server: { name: string } }) => (
+    <span data-testid="server-icon">{server.name}</span>
+  ),
+}));
+import { MCPAssignments } from "./MCPAssignments";
+function mount(onReady: (ready: boolean) => void = vi.fn()) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <TooltipProvider>
+        <MemoryRouter>
+          <MCPAssignments onReady={onReady} />
+        </MemoryRouter>
+      </TooltipProvider>
+    </QueryClientProvider>,
+  );
+  return { client, onReady };
+}
+afterEach(cleanup);
+beforeEach(() => {
+  vi.clearAllMocks();
+  state.manyRoles = false;
+  state.inventory.mockResolvedValue({
+    mcpServers: Array.from({ length: 50 }, (_, i) => ({
+      id: `server-${i}`,
+      name: `Server ${String(i).padStart(2, "0")}`,
+      slug: `server-${i}`,
+      projectId: "project",
+      visibility: "private",
+    })),
+  });
+  state.audience.mockResolvedValue({
+    version: "v1",
+    entries: [
+      {
+        principalUrn: role.principalUrn,
+        kind: "role",
+        displayName: role.name,
+        level: "use",
+        appliesTo: "resource",
+        dispositions: ["read_only"],
+        memberIds: [member.id],
+      },
+    ],
+  });
+  state.identity.mockResolvedValue({
+    servers: [
+      { id: "allowed", name: "Allowed server" },
+      { id: "denied", name: "Denied server" },
+    ],
+  });
+  state.explain.mockImplementation(
+    async ({ resourceId }: { resourceId: string }) => ({
+      levels: [{ level: "use", allowed: resourceId === "allowed" }],
+    }),
+  );
+});
+it("shows compact icon stacks at 50 servers and expands ten at a time", async () => {
+  const { onReady } = mount();
+  await screen.findByText("Engineering");
+  expect(screen.queryAllByRole("link")).toHaveLength(0);
+  expect(screen.getAllByTestId("server-icon")).toHaveLength(8);
+  expect(screen.getByText("+42 more")).toBeTruthy();
+  expect(screen.getByText("Unassigned")).toBeTruthy();
+  expect(state.audience).toHaveBeenCalledTimes(50);
+  expect(state.identity).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText("Engineering"));
+  expect(screen.getAllByRole("link")).toHaveLength(10);
+  fireEvent.click(screen.getByRole("button", { name: "Show 10 more" }));
+  expect(screen.getAllByRole("link")).toHaveLength(20);
+  await waitFor(() => expect(onReady).toHaveBeenLastCalledWith(true));
+});
+it("fails a complete review when one server cannot be loaded", async () => {
+  state.audience.mockRejectedValue(new Error("Forbidden"));
+  const { onReady } = mount();
+  await screen.findByRole("alert");
+  expect(onReady).not.toHaveBeenCalledWith(true);
+  expect(screen.queryByText("Engineering")).toBeNull();
+});
+it("resolves only the selected user and excludes denied connection access", async () => {
+  mount();
+  await screen.findByText("Engineering");
+  fireEvent.click(screen.getByRole("button", { name: "Check user access" }));
+  fireEvent.change(
+    screen.getByPlaceholderText("Find a person by name or email…"),
+    { target: { value: "Lee" } },
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Lee · lee@example.test" }),
+  );
+  await screen.findByText("Allowed server");
+  expect(screen.queryByText("Denied server")).toBeNull();
+  expect(state.identity).toHaveBeenCalledTimes(1);
+});
+it("confirms a precise role block against a fresh audience version", async () => {
+  mount();
+  await screen.findByText("Engineering");
+  fireEvent.click(screen.getByText("Engineering"));
+  await userEvent.click(
+    screen.getByRole("button", {
+      name: "Access actions for Engineering on Server 00",
+    }),
+  );
+  await userEvent.click(
+    await screen.findByRole("menuitem", { name: /Block access/ }),
+  );
+  await screen.findByRole("heading", {
+    name: "Block Engineering from Server 00?",
+  });
+  const confirm = screen
+    .getAllByRole("button", { name: "Block access" })
+    .at(-1)!;
+  await waitFor(() => expect(confirm.hasAttribute("disabled")).toBe(false));
+  fireEvent.click(confirm);
+  expect(state.mutate).toHaveBeenCalledWith({
+    request: {
+      setResourceAudienceForm: {
+        resourceKind: "mcp",
+        resourceId: "server-0",
+        expectedVersion: "v1",
+        entries: expect.arrayContaining([
+          expect.objectContaining({
+            principalUrn: role.principalUrn,
+            level: "blocked",
+          }),
+        ]),
+      },
+    },
+  });
+});
+
+it("keeps a 50-role overview bounded without repeating server requests", async () => {
+  state.manyRoles = true;
+  mount();
+  await screen.findByText("50 roles");
+  await screen.findByText("Engineering");
+  expect(screen.queryAllByRole("link")).toHaveLength(0);
+  expect(screen.getAllByTestId("server-icon")).toHaveLength(49 * 8);
+  expect(state.audience).toHaveBeenCalledTimes(50);
+  expect(state.identity).not.toHaveBeenCalled();
+});
+
+it("removes only this role’s grants without creating a block or removing other roles", async () => {
+  const other = {
+    principalUrn: "role:organization:other",
+    kind: "role",
+    displayName: "Other",
+    level: "use",
+    appliesTo: "resource",
+  };
+  state.audience.mockResolvedValue({
+    version: "v2",
+    entries: [
+      {
+        ...other,
+        principalUrn: role.principalUrn,
+        displayName: role.name,
+        level: "manage",
+      },
+      other,
+    ],
+  });
+  mount();
+  await screen.findByText("Engineering");
+  fireEvent.click(screen.getByText("Engineering"));
+  expect(screen.getAllByText("All tools")).toHaveLength(10);
+  expect(screen.queryByText("Allows all tools across all servers")).toBeNull();
+  await userEvent.click(
+    screen.getByRole("button", {
+      name: "Access actions for Engineering on Server 00",
+    }),
+  );
+  await userEvent.click(
+    await screen.findByRole("menuitem", { name: /Remove access/ }),
+  );
+  const confirm = await screen.findByRole("button", { name: "Remove access" });
+  await waitFor(() => expect(confirm.hasAttribute("disabled")).toBe(false));
+  fireEvent.click(confirm);
+  expect(state.mutate).toHaveBeenCalledWith({
+    request: {
+      setResourceAudienceForm: {
+        resourceKind: "mcp",
+        resourceId: "server-0",
+        expectedVersion: "v2",
+        entries: [
           {
+            principalUrn: other.principalUrn,
             level: "use",
-            rules: [
-              {
-                principalUrn: "role:global:reader",
-                displayName: "Reader",
-                kind: "role",
-                effect: "allows",
-              },
-            ],
+            tools: undefined,
+            dispositions: undefined,
           },
         ],
       },
-    };
-  },
-}));
-import { MCPAssignments } from "./MCPAssignments";
-afterEach(cleanup);
-beforeEach(() => {
-  state.failed = false;
-  vi.clearAllMocks();
-});
-
-it("starts with most servers assigned and includes people with no assignments", () => {
-  const ready = vi.fn<(ready: boolean) => void>();
-  render(
-    <MemoryRouter>
-      <MCPAssignments onReady={ready} />
-    </MemoryRouter>,
-  );
-  const people = screen
-    .getAllByRole("row")
-    .slice(1)
-    .map((row) => row.textContent);
-  expect(people[0]).toContain("Morgan");
-  expect(people[1]).toContain("Lee");
-  expect(people[2]).toContain("Sam");
-  expect(ready).toHaveBeenLastCalledWith(true);
-});
-
-it("loads sources only for an expanded person and defers editing controls", () => {
-  render(
-    <MemoryRouter>
-      <MCPAssignments />
-    </MemoryRouter>,
-  );
-  expect(state.explain).not.toHaveBeenCalled();
-  expect(state.editor).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("row", { name: /Morgan/ }));
-  expect(state.explain).toHaveBeenCalledWith({
-    resourceKind: "mcp",
-    resourceId: "a",
-    userId: "morgan",
+    },
   });
-  expect(screen.getAllByText("Reader")).toHaveLength(2);
-  expect(state.editor).not.toHaveBeenCalled();
-  const serverLink = screen.getByRole("link", { name: "Open Server a" });
-  expect(serverLink.getAttribute("href")).toBe(
-    "/test-org/projects/default/mcp/x/a/overview",
-  );
-  expect(serverLink.textContent).toBe("Server a");
-  expect(serverLink.querySelector("[data-slot=avatar]")).toBeNull();
-  expect(screen.getAllByLabelText("Default project")).toHaveLength(2);
 });
 
-it("refuses a complete review when assignments failed even if cached rows exist", () => {
-  state.failed = true;
-  const ready = vi.fn<(ready: boolean) => void>();
-  render(
-    <MemoryRouter>
-      <MCPAssignments onReady={ready} />
-    </MemoryRouter>,
-  );
-  expect(screen.getByRole("alert").textContent).toContain(
-    "complete assignment review",
-  );
-  expect(screen.queryByRole("table")).toBeNull();
-  expect(ready).toHaveBeenLastCalledWith(false);
+it("hides server search for fewer than ten servers", async () => {
+  state.inventory.mockResolvedValue({
+    mcpServers: Array.from({ length: 9 }, (_, i) => ({
+      id: `server-${i}`,
+      name: `Server ${i}`,
+      slug: `server-${i}`,
+      projectId: "project",
+      visibility: "private",
+    })),
+  });
+  mount();
+  fireEvent.click(await screen.findByText("Engineering"));
+  expect(screen.queryByPlaceholderText("Search servers…")).toBeNull();
 });
 
-it("shows the role editor only on expanded rows", () => {
-  render(
-    <MemoryRouter>
-      <MCPAssignments />
-    </MemoryRouter>,
+it("opens the MCP selector directly without a filter drawer", async () => {
+  mount();
+  await screen.findByText("Engineering");
+  await userEvent.click(
+    screen.getByRole("button", { name: /MCP server filter:/ }),
   );
-  expect(screen.getByRole("columnheader", { name: "Roles" })).toBeDefined();
-  expect(screen.queryByRole("columnheader", { name: "Department" })).toBeNull();
-  expect(
-    screen.queryByRole("button", { name: "Edit roles for Morgan" }),
-  ).toBeNull();
-  fireEvent.click(screen.getByRole("row", { name: /Morgan/ }));
-  fireEvent.click(
-    screen.getByRole("button", { name: "Edit roles for Morgan" }),
+  expect(await screen.findByPlaceholderText("Search mcp server…")).toBeTruthy();
+  await userEvent.click(screen.getByRole("option", { name: "Server 00" }));
+  expect(screen.queryByText("Unassigned")).toBeNull();
+  fireEvent.click(screen.getByText("Engineering"));
+  expect(screen.getAllByRole("link")).toHaveLength(1);
+});
+
+it("shows blocked servers even when the role has no grant, and unblocks without granting access", async () => {
+  state.audience.mockResolvedValue({
+    version: "v3",
+    entries: [
+      {
+        principalUrn: role.principalUrn,
+        kind: "role",
+        displayName: role.name,
+        level: "blocked",
+        appliesTo: "resource",
+      },
+    ],
+  });
+  mount();
+  await screen.findByLabelText("Server 00: Blocked");
+  expect(screen.getByLabelText("Server 00: Blocked")).toBeTruthy();
+  fireEvent.click(screen.getByText("Engineering"));
+  expect(screen.getAllByText("Blocked")).toHaveLength(10);
+  expect(screen.queryByText("Default project")).toBeNull();
+  await userEvent.click(
+    screen.getByRole("button", {
+      name: "Access actions for Engineering on Server 00",
+    }),
   );
-  expect(screen.getByText("Role editor")).toBeDefined();
-  fireEvent.click(screen.getByRole("row", { name: /Morgan/ }));
+  await userEvent.click(
+    await screen.findByRole("menuitem", { name: /Unblock access/ }),
+  );
+  const confirm = await screen.findByRole("button", { name: "Unblock access" });
+  await waitFor(() => expect(confirm.hasAttribute("disabled")).toBe(false));
+  fireEvent.click(confirm);
+  expect(state.mutate).toHaveBeenCalledWith({
+    request: {
+      setResourceAudienceForm: {
+        resourceKind: "mcp",
+        resourceId: "server-0",
+        expectedVersion: "v3",
+        entries: [],
+      },
+    },
+  });
+});
+
+it("lists allowed servers before blocked servers", async () => {
+  state.inventory.mockResolvedValue({
+    mcpServers: [
+      {
+        id: "blocked",
+        name: "A blocked",
+        slug: "blocked",
+        projectId: "project",
+        visibility: "private",
+      },
+      {
+        id: "allowed",
+        name: "Z allowed",
+        slug: "allowed",
+        projectId: "project",
+        visibility: "private",
+      },
+    ],
+  });
+  state.audience.mockImplementation(
+    async ({ resourceId }: { resourceId: string }) => ({
+      version: "v1",
+      entries: [
+        {
+          principalUrn: role.principalUrn,
+          kind: "role",
+          displayName: role.name,
+          level: resourceId === "blocked" ? "blocked" : "use",
+          appliesTo: "resource",
+        },
+      ],
+    }),
+  );
+  mount();
+  fireEvent.click(await screen.findByText("Engineering"));
+  expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual([
+    "Z allowed",
+    "A blocked",
+  ]);
+});
+
+it("opens effective access with a member selected from a role roster", async () => {
+  mount();
+  await screen.findByText("Engineering");
+  expect(screen.queryByText("View members")).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Pick Lee" }));
+  await screen.findByRole("heading", { name: "Check user access" });
+  await screen.findByText("Allowed server");
+  expect(state.identity).toHaveBeenCalledWith(
+    { userId: "lee" },
+    undefined,
+    expect.anything(),
+  );
   expect(
-    screen.queryByRole("button", { name: "Edit roles for Morgan" }),
+    screen.queryByPlaceholderText("Search MCPs in Engineering…"),
   ).toBeNull();
 });
