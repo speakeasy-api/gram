@@ -111,6 +111,7 @@ import {
   type ShadowMCPDecisionConflict,
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
+import { ApprovalPolicySummary } from "./ApprovalPolicySummary";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import { PolicyScopeModeCards } from "./PolicyScopeModeCards";
@@ -153,6 +154,7 @@ import {
   allCategories,
   categoriesToPayload,
   categoryLevelDetectors,
+  detectionPolicyAction,
   mcpCompatibleAction,
   normalizeCategoriesForMode,
   parseApprovedEmailDomains,
@@ -291,6 +293,9 @@ export function PolicyEditorFor({
 }: {
   policy: RiskPolicy;
 }): JSX.Element {
+  if (policy.action === "require_approval") {
+    return <ApprovalPolicySummary policy={policy} />;
+  }
   if (!supportsPolicyEditing(policy))
     return (
       <Stack gap={6}>
@@ -468,9 +473,11 @@ function PromptPolicyEditor({
     policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
   );
   const [action, setAction] = useState<PolicyAction>(() => {
-    const initial = requireKnownEnumValue(
-      RiskPolicyAction,
-      policy?.action ?? draft?.action ?? "flag",
+    const initial = detectionPolicyAction(
+      requireKnownEnumValue(
+        RiskPolicyAction,
+        policy?.action ?? draft?.action ?? "flag",
+      ),
     );
     return mcpScope.mode === "mcp" ? mcpCompatibleAction(initial) : initial;
   });
