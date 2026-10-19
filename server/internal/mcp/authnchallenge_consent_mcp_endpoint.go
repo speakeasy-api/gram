@@ -179,6 +179,9 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 
 	draft, err := s.loadConsentInventoryDraft(ctx, endpoint, stateID, attempt)
 	if err != nil {
+		if errors.Is(err, errConsentConfigurationChanged) {
+			return oops.E(oops.CodeFailedPrecondition, err, "server configuration changed; reload this page to review access").LogWarn(ctx, logger)
+		}
 		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
 	}
 

@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -168,4 +169,36 @@ func TestRevokeUserSessionConsent_SiblingProjectNotFound(t *testing.T) {
 	})
 	require.NoError(t, err, "sibling project's consent must survive the caller's revoke")
 	require.False(t, live.Deleted)
+}
+
+func TestRevokeUserSessionConsent_ClientRevokedWhileWaiting(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		Slug: "consent-client-race", AuthnChallengeMode: "chain", SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	client, err := seedUserSessionClient(t, ctx, ti.conn, uuid.MustParse(issuer.ID), "consent-client-race")
+	require.NoError(t, err)
+	consent, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, urn.NewUserSubject("consent-race-user"))
+	require.NoError(t, err)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	txRepo := repo.New(tx)
+	_, err = txRepo.LockUserSessionConsentClient(ctx, repo.LockUserSessionConsentClientParams{
+		UserSessionClientID: client.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	done := make(chan error, 1)
+	go func() {
+		done <- ti.service.RevokeUserSessionConsent(ctx, &gen.RevokeUserSessionConsentPayload{ID: consent.ID.String()})
+	}()
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), "%LockUserSessionConsentClient%")
+	_, err = txRepo.RevokeUserSessionClient(ctx, repo.RevokeUserSessionClientParams{
+		ID: client.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	requireOopsCode(t, <-done, oops.CodeNotFound)
 }

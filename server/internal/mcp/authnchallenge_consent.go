@@ -662,9 +662,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		consentRemoteFingerprint(endpoint, cards) != "" {
 		eligible, eligibilityErr := s.consentToolPickerEligible(ctx, endpoint)
 		lockedDown, lockdownErr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
+		if eligibilityErr != nil {
+			logger.WarnContext(ctx, "saved consent eligibility unavailable", attr.SlogError(eligibilityErr))
+		}
 		if eligible && eligibilityErr == nil && lockdownErr == nil && !lockedDown {
 			if _, lookupErr := usersessions_repo.New(s.db).GetUserSessionConsentResource(ctx, consentResourceParams(endpoint, challengeState, clientRowID)); lookupErr == nil {
 				return renderConsentReuse(w, endpoint, challengeState)
+			} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
+				logger.WarnContext(ctx, "saved consent lookup unavailable", attr.SlogError(lookupErr))
 			}
 		}
 	}

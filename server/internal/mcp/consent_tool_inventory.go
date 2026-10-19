@@ -52,6 +52,9 @@ const (
 // failure: approval cannot bind without it.
 var errConsentInventoryUnavailable = errors.New("consent tool inventory store unavailable")
 
+// errConsentConfigurationChanged requires a fresh page and discovery attempt.
+var errConsentConfigurationChanged = errors.New("server configuration changed; reload consent")
+
 // consentInventoryTool is one captured tool: name plus the known annotation
 // values whose raw hints are explicitly true.
 type consentInventoryTool struct {
@@ -135,7 +138,7 @@ func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *Resol
 	cached, err := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, attempt))
 	if err == nil {
 		if cached.BackendHash != backendHash {
-			return consentToolInventory{}, fmt.Errorf("server configuration changed; reload consent")
+			return consentToolInventory{}, errConsentConfigurationChanged
 		}
 		return cached, nil
 	}

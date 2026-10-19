@@ -35,7 +35,7 @@ export interface ConsentToolsAppProps {
 
 type ConsentPhase =
   | { name: "loading" }
-  | { name: "error"; conflict: boolean; message: string }
+  | { name: "error"; conflict: boolean; message: string; reload?: boolean }
   | { name: "deferred" }
   | { name: "ready"; inventory: ConsentInventory };
 
@@ -90,6 +90,15 @@ const SHORT_GROUP_LABELS: Record<ToolAnnotation, string> = {
 
 function errorPhase(err: unknown, canDefer: boolean): ConsentPhase {
   const status = err instanceof StreamableHTTPError ? err.code : undefined;
+  if (status === 412) {
+    return {
+      name: "error",
+      conflict: false,
+      message:
+        "This server’s configuration changed. Reload this page to review access.",
+      reload: true,
+    };
+  }
   if (status === 409 && canDefer) {
     return { name: "deferred" };
   }
@@ -307,10 +316,13 @@ export function ConsentToolsApp({
         )}
         <button
           type="button"
-          onClick={() => setAttemptID(crypto.randomUUID())}
+          onClick={() => {
+            if (phase.reload) window.location.reload();
+            else setAttemptID(crypto.randomUUID());
+          }}
           className="text-primary hover:underline"
         >
-          Retry
+          {phase.reload ? "Reload page" : "Retry"}
         </button>
       </div>
     );

@@ -128,6 +128,9 @@ func (s *Service) RevokeUserSessionConsent(ctx context.Context, payload *gen.Rev
 	if _, err := txRepo.LockUserSessionConsentClient(ctx, repo.LockUserSessionConsentClientParams{
 		UserSessionClientID: selected.UserSessionClientID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
 	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user session consent not found").LogWarn(ctx, logger)
+		}
 		return oops.E(oops.CodeUnexpected, err, "lock consent for withdrawal").LogError(ctx, logger)
 	}
 	// Re-read after waiting: a concurrent withdrawal must remain not-found.

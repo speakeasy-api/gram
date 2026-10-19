@@ -340,17 +340,12 @@ func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *Resol
 		if err != nil {
 			return "", fmt.Errorf("read consent remote backend: %w", err)
 		}
-		headers, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ListHeaders(ctx, remote.ID, false)
+		headerFingerprint, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ConfigurationFingerprint(ctx, remote.ID)
 		if err != nil {
 			return "", fmt.Errorf("read consent backend headers: %w", err)
 		}
-		permissions := make([]string, 0, len(headers))
-		for _, header := range headers {
-			permissions = append(permissions, consentEvidenceHash([]any{header.Name, header.Value, header.ValueFromRequestHeader, header.IsRequired}))
-		}
-		slices.Sort(permissions)
 		evidence["url"] = remote.Url
-		evidence["headers"] = permissions
+		evidence["headers"] = headerFingerprint
 	}
 	return consentEvidenceHash(evidence), nil
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,6 +73,28 @@ func TestConsentRemoteFingerprintRequiresEveryConnection(t *testing.T) {
 	require.NotEqual(t, consentRemoteFingerprint(endpoint, complete), consentRemoteFingerprint(endpoint, changed))
 }
 
+func TestConsentRemoteFingerprintBindsIssuerAndResource(t *testing.T) {
+	t.Parallel()
+	baseline := ResolvedMcpEndpoint{UserSessionIssuerID: uuid.New(), UpstreamResource: "https://upstream.example.com/mcp"}
+	cards := []remoteSessionCard{{consentPermissionsHash: "read", consentReuseReady: true}}
+	original := consentRemoteFingerprint(&baseline, cards)
+	require.NotEmpty(t, original)
+	for _, tc := range []struct {
+		name   string
+		mutate func(*ResolvedMcpEndpoint)
+	}{
+		{name: "issuer", mutate: func(e *ResolvedMcpEndpoint) { e.UserSessionIssuerID = uuid.New() }},
+		{name: "resource", mutate: func(e *ResolvedMcpEndpoint) { e.UpstreamResource = "https://other.example.com/mcp" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			changed := baseline
+			tc.mutate(&changed)
+			require.NotEqual(t, original, consentRemoteFingerprint(&changed, cards))
+		})
+	}
+}
+
 func TestConsentBrowserProofCannotBeTransferredBetweenFlows(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -89,4 +112,18 @@ func TestConsentBrowserProofCannotBeTransferredBetweenFlows(t *testing.T) {
 	require.False(t, consentBrowserMatches(req, state, now.Add(state.TTL()+time.Second)))
 	state.FlowID = "second"
 	require.False(t, consentBrowserMatches(req, state, now))
+}
+
+func TestRenderConsentReuse(t *testing.T) {
+	t.Parallel()
+	endpoint := &ResolvedMcpEndpoint{RouteBase: "mcp", Slug: "example"}
+	state := AuthnChallengeState{ID: "preview-state", CSRFToken: "preview-csrf"}
+	w := httptest.NewRecorder()
+	require.NoError(t, renderConsentReuse(w, endpoint, state))
+	require.Contains(t, w.Body.String(), "Checking sign-in status...")
+	require.Contains(t, w.Body.String(), "Review access")
+	require.NotContains(t, w.Body.String(), "Give Access")
+	require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
+	require.Equal(t, "no-referrer", w.Header().Get("Referrer-Policy"))
+	require.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
 }
