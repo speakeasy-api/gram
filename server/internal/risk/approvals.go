@@ -27,10 +27,24 @@ const deletedPolicyName = "Deleted policy"
 // approvalViewer is what decides which approval requests a caller sees and
 // which they can decide.
 type approvalViewer struct {
-	userID     string
-	isAdmin    bool
+	userID string
+
+	// isAdmin is true only for a caller whose org admin grant RBAC actually
+	// checked. A legacy API key skips RBAC, so it is never an admin here.
+	isAdmin bool
+
+	// hasSession is true for a signed-in person, the only kind of caller who
+	// may decide.
+	hasSession bool
+
 	principals []string
-	policies   map[uuid.UUID]policycore.Policy
+
+	// policies holds the project's require_approval policies.
+	policies map[uuid.UUID]policycore.Policy
+
+	// policyNames names every project policy, so a request whose policy has
+	// changed action still shows its name.
+	policyNames map[uuid.UUID]string
 }
 
 func (v approvalViewer) canApprove(policyID uuid.UUID) bool {
@@ -61,9 +75,9 @@ func (v approvalViewer) visiblePolicyIDs() []uuid.UUID {
 }
 
 func (s *Service) approvalViewer(ctx context.Context, authCtx *contextvalues.AuthContext) (approvalViewer, error) {
-	isAdmin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil})
+	isAdmin, err := s.enforcedOrgAdmin(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return approvalViewer{}, oops.E(oops.CodeUnexpected, err, "check admin access").LogError(ctx, s.logger)
+		return approvalViewer{}, err
 	}
 	principals, err := s.approvals.ApproverPrincipals(ctx, authCtx.ActiveOrganizationID, authCtx.UserID)
 	if err != nil {
@@ -74,13 +88,40 @@ func (s *Service) approvalViewer(ctx context.Context, authCtx *contextvalues.Aut
 		return approvalViewer{}, oops.E(oops.CodeUnexpected, err, "list risk policies").LogError(ctx, s.logger)
 	}
 	policies := make(map[uuid.UUID]policycore.Policy, len(rows))
+	policyNames := make(map[uuid.UUID]string, len(rows))
 	for _, row := range rows {
+		policyNames[row.ID] = row.Name
 		if row.Action != policycore.ActionRequireApproval {
 			continue
 		}
 		policies[row.ID] = policycore.Project(row, nil)
 	}
-	return approvalViewer{userID: authCtx.UserID, isAdmin: isAdmin, principals: principals, policies: policies}, nil
+	return approvalViewer{
+		userID:      authCtx.UserID,
+		isAdmin:     isAdmin,
+		hasSession:  authCtx.SessionID != nil && authCtx.UserID != "",
+		principals:  principals,
+		policies:    policies,
+		policyNames: policyNames,
+	}, nil
+}
+
+// enforcedOrgAdmin reports whether RBAC checked the caller's org admin grant.
+// Evaluate answers true when RBAC is not enforced at all, as for a legacy API
+// key, and that must not widen what the caller sees.
+func (s *Service) enforcedOrgAdmin(ctx context.Context, organizationID string) (bool, error) {
+	enforced, err := s.authz.ShouldEnforce(ctx)
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "check admin access").LogError(ctx, s.logger)
+	}
+	if !enforced {
+		return false, nil
+	}
+	isAdmin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil})
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "check admin access").LogError(ctx, s.logger)
+	}
+	return isAdmin, nil
 }
 
 func (s *Service) requireApprovalsReader(ctx context.Context) (*contextvalues.AuthContext, error) {
@@ -208,8 +249,8 @@ func (s *Service) DecideRiskPolicyApproval(ctx context.Context, payload *gen.Dec
 func (s *Service) riskPolicyApprovalView(viewer approvalViewer, row approvalrepo.RiskPolicyApproval) *gen.RiskPolicyApproval {
 	status := s.approvals.EffectiveStatus(row)
 	policyName := deletedPolicyName
-	if policy, ok := viewer.policies[row.RiskPolicyID]; ok {
-		policyName = policy.Name
+	if name, ok := viewer.policyNames[row.RiskPolicyID]; ok {
+		policyName = name
 	}
 	// Keep numbers as stored, so approvers see the exact value the call used.
 	preview := map[string]any{}
@@ -236,7 +277,7 @@ func (s *Service) riskPolicyApprovalView(viewer approvalViewer, row approvalrepo
 		DecidedByUrn:     conv.FromPGText[string](row.DecidedByUrn),
 		DecidedVia:       conv.FromPGText[string](row.DecidedVia),
 		DecisionNote:     conv.FromPGText[string](row.DecisionNote),
-		CanDecide:        status == approval.StatusPending && viewer.canApprove(row.RiskPolicyID) && !viewer.isRequester(row),
+		CanDecide:        viewer.hasSession && status == approval.StatusPending && viewer.canApprove(row.RiskPolicyID) && !viewer.isRequester(row),
 		RequestedAt:      timestampString(row.RequestedAt),
 		DecidedAt:        timestampString(row.DecidedAt),
 		ExpiresAt:        timestampString(row.ExpiresAt),

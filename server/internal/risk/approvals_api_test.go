@@ -177,13 +177,66 @@ func TestDecideApprovalNeedsSignedInPerson(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, listed.Approvals, 1)
 
-	keyAuth := *authCtx
-	keyAuth.SessionID = nil
-	keyAuth.APIKeyID = uuid.NewString()
-	_, err = ti.service.DecideRiskPolicyApproval(contextvalues.SetAuthContext(ctx, &keyAuth), &gen.DecideRiskPolicyApprovalPayload{ID: listed.Approvals[0].ID, Decision: "approve", Note: nil})
-	require.Error(t, err)
+	// No session: RBAC does not apply, so only the explicit person check
+	// stands between this caller and a decision.
+	noSession := *authCtx
+	noSession.SessionID = nil
+	noSessionCtx := contextvalues.SetAuthContext(ctx, &noSession)
+	_, err = ti.service.DecideRiskPolicyApproval(noSessionCtx, &gen.DecideRiskPolicyApprovalPayload{ID: listed.Approvals[0].ID, Decision: "approve", Note: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	// The same caller is not offered a decision it cannot make.
+	offered, err := ti.service.ListRiskPolicyApprovals(noSessionCtx, &gen.ListRiskPolicyApprovalsPayload{Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, offered.Approvals, 1)
+	require.False(t, offered.Approvals[0].CanDecide)
 
 	still, err := ti.service.GetRiskPolicyApproval(ctx, &gen.GetRiskPolicyApprovalPayload{ID: listed.Approvals[0].ID})
 	require.NoError(t, err)
 	require.Equal(t, "pending", still.Status)
+}
+
+func TestApprovalRequestsWithoutRBACAreNotAdminWide(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ti.flags.SetFlag(feature.FlagToolApprovals, authCtx.ActiveOrganizationID, true)
+	mine := createApprovalPolicy(t, ctx, ti, "Mine", "user:"+authCtx.UserID)
+	theirs := createApprovalPolicy(t, ctx, ti, "Theirs", approverRole(t, ctx, ti, "security-team"))
+	pendingApproval(t, ctx, ti, mine.ID, `{"a":1}`)
+	pendingApproval(t, ctx, ti, theirs.ID, `{"b":2}`)
+
+	// A caller RBAC does not check (no session) sees only what it approves,
+	// never every request as an admin would.
+	unchecked := *authCtx
+	unchecked.SessionID = nil
+	listed, err := ti.service.ListRiskPolicyApprovals(contextvalues.SetAuthContext(ctx, &unchecked), &gen.ListRiskPolicyApprovalsPayload{Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, listed.Approvals, 1)
+	require.Equal(t, mine.ID, listed.Approvals[0].PolicyID)
+}
+
+func TestApprovalRequestsKeepPolicyNameAfterActionChange(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ti.flags.SetFlag(feature.FlagToolApprovals, authCtx.ActiveOrganizationID, true)
+	policy := createApprovalPolicy(t, ctx, ti, "Approve posts", "user:"+authCtx.UserID)
+	pendingApproval(t, ctx, ti, policy.ID, `{}`)
+
+	_, err := ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:      policy.ID,
+		Name:    policy.Name,
+		Action:  new("flag"),
+		Sources: []string{"destructive_tool"},
+	})
+	require.NoError(t, err)
+
+	listed, err := ti.service.ListRiskPolicyApprovals(ctx, &gen.ListRiskPolicyApprovalsPayload{Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, listed.Approvals, 1)
+	require.Equal(t, "Approve posts", listed.Approvals[0].PolicyName)
+	require.False(t, listed.Approvals[0].CanDecide, "a policy that no longer requires approval has no approvers")
 }

@@ -88,7 +88,7 @@ func ScopeKind(raw []byte) string {
 // call was held no longer requires approval, so its requests are not found.
 func (s *Service) policyName(ctx context.Context, db riskrepo.DBTX, row repo.RiskPolicyApproval) (string, error) {
 	policy, err := riskrepo.New(db).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: row.RiskPolicyID, ProjectID: row.ProjectID})
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && policy.OrganizationID != row.OrganizationID) {
 		return "", ErrNotFound
 	}
 	if err != nil {

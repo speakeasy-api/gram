@@ -131,3 +131,29 @@ func TestCreateRequireApprovalPolicyNeedsFlag(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
+
+func TestUpdateToRequireApprovalNeedsFlag(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	flagPolicy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:     new("Scoped flag"),
+		Action:   "flag",
+		Sources:  []string{"destructive_tool"},
+		McpScope: approvalScope(),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:             flagPolicy.ID,
+		Name:           flagPolicy.Name,
+		Action:         new("require_approval"),
+		Sources:        []string{},
+		ApprovalConfig: &types.RiskPolicyApprovalConfig{Approvers: []string{"user:" + authCtx.UserID}},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}

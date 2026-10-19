@@ -537,7 +537,7 @@ func (s *Service) Decide(ctx context.Context, input DecideInput) (repo.RiskPolic
 	}
 
 	policyRow, err := riskrepo.New(s.db).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: row.RiskPolicyID, ProjectID: row.ProjectID})
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && policyRow.OrganizationID != input.OrganizationID) {
 		return repo.RiskPolicyApproval{}, ErrNotFound
 	}
 	if err != nil {

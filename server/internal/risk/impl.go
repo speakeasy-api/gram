@@ -4115,10 +4115,6 @@ func promptPolicyNameFromBase(base string, existing []string) string {
 	}
 }
 
-// promptPoliciesEnabled reports whether the prompt-based policy MVP is enabled
-// for the org. The flag is targeted by PostHog group (org/project slug) the
-// same way the dashboard evaluates it, so we forward the groups built from the
-// auth context. A nil provider or a failed lookup degrades to disabled.
 // toolApprovalsEnabled reports whether the organization may create
 // require_approval policies. Errors fail closed.
 func (s *Service) toolApprovalsEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
@@ -4136,6 +4132,10 @@ func (s *Service) toolApprovalsEnabled(ctx context.Context, authCtx *contextvalu
 	return evaluation == feature.EvaluationEnabled
 }
 
+// promptPoliciesEnabled reports whether the prompt-based policy MVP is enabled
+// for the org. The flag is targeted by PostHog group (org/project slug) the
+// same way the dashboard evaluates it, so we forward the groups built from the
+// auth context. A nil provider or a failed lookup degrades to disabled.
 func (s *Service) promptPoliciesEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
 	if s.flags == nil {
 		return false
