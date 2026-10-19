@@ -296,6 +296,10 @@ func TestListMcpServers_OmitsWrappersOfDeletedToolsets(t *testing.T) {
 	require.Contains(t, byID, remote.ID.String())
 	require.NotContains(t, byID, ghost.ID.String())
 
+	forOrg := listSummaryServers(t, ctx, ti, true)
+	require.Contains(t, forOrg, liveServer.ID.String())
+	require.NotContains(t, forOrg, ghost.ID.String())
+
 	filtered, err := ti.service.ListMcpServers(ctx, &gen.ListMcpServersPayload{ToolsetID: conv.PtrEmpty(deleted.ID.String())})
 	require.NoError(t, err)
 	require.Empty(t, filtered.McpServers)

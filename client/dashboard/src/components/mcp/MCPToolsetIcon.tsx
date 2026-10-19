@@ -1,4 +1,5 @@
 import { useCatalogIconMap } from "../sources/sources-hooks";
+import { primaryExternalMcpSlug } from "../sources/external-mcp-oauth";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useMemo } from "react";
@@ -14,12 +15,9 @@ export function MCPToolsetIcon({
   className?: string;
   fallbackClassName?: string;
 }): JSX.Element {
-  const externalMcpSlug = toolset.toolUrns
-    ?.find((urn) => urn.includes(":externalmcp:"))
-    ?.split(":")[2];
   return (
     <ExternalMcpIcon
-      externalMcpSlug={externalMcpSlug}
+      externalMcpSlug={primaryExternalMcpSlug(toolset.toolUrns)}
       alt={toolset.name}
       className={className}
       fallbackClassName={fallbackClassName}

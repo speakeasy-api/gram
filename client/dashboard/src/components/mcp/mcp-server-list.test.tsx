@@ -33,7 +33,10 @@ vi.mock("@/routes", () => ({
           href: (slug: string) => `/mcp/${slug}/authentication`,
         },
       },
-      x: { overview: { href: (slug: string) => `/mcp/x/${slug}` } },
+      x: {
+        overview: { href: (slug: string) => `/mcp/x/${slug}` },
+        settings: { href: (slug: string) => `/mcp/x/${slug}/settings` },
+      },
     },
   }),
 }));
@@ -165,6 +168,15 @@ describe("hosted wrappers", () => {
     expect(screen.getByText("Support (staging)")).toBeTruthy();
     expect(screen.getByRole("link").getAttribute("href")).toBe(
       "/mcp/x/wrapper-2",
+    );
+  });
+
+  it("sends a non-canonical wrapper waiting on OAuth to its own settings", () => {
+    mocks.oauthStatus = "required-unconfigured";
+    renderCards([extra("wrapper-2", "Support (staging)")]);
+    expect(screen.getByText("Set up")).toBeTruthy();
+    expect(screen.getByRole("link").getAttribute("href")).toBe(
+      "/mcp/x/wrapper-2/settings",
     );
   });
 

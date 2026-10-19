@@ -74,6 +74,7 @@ export function MCPServerCard({
             <ExternalMcpIcon
               externalMcpSlug={toolset?.externalMcpSlugs[0]}
               alt={name}
+              className="h-8 w-8"
             />
           ) : (
             <SourceMcpIcon
@@ -94,7 +95,11 @@ export function MCPServerCard({
           </Text>
           {installSourceTooltip && (
             <SimpleTooltip tooltip={installSourceTooltip}>
-              <span aria-label={installSourceTooltip} className="p-1">
+              <span
+                role="img"
+                aria-label={installSourceTooltip}
+                className="p-1"
+              >
                 <Package className="text-muted-foreground group-hover:text-foreground h-4 w-4" />
               </span>
             </SimpleTooltip>

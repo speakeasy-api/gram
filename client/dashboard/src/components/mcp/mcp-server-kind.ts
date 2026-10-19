@@ -72,7 +72,10 @@ export function mcpServerHref(
 ): string {
   const toolsetSlug = canonicalToolset(server)?.slug;
   if (!toolsetSlug) {
-    return routes.mcp.x.overview.href(mcpServerRouteParam(server));
+    const param = mcpServerRouteParam(server);
+    return oauthStatus === "required-unconfigured"
+      ? routes.mcp.x.settings.href(param)
+      : routes.mcp.x.overview.href(param);
   }
   return oauthStatus === "required-unconfigured"
     ? routes.mcp.details.authentication.href(toolsetSlug)

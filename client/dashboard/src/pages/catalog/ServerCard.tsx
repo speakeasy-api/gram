@@ -21,13 +21,7 @@ interface ServerCardProps {
 }
 
 /**
- * Server card matching the MCPServerCard design pattern.
- *
- * Features:
- * - Pattern illustration header with logo overlay
- * - Tool count badge
- * - Official badge
- * - Monthly users count
+ * Catalog server card matching the MCPServerCard design pattern.
  */
 export function ServerCard({
   server,

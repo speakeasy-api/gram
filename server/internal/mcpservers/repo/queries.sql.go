@@ -953,6 +953,14 @@ JOIN projects AS p ON p.id = m.project_id
 WHERE p.organization_id = $1
   AND m.deleted IS FALSE
   AND p.deleted IS FALSE
+  -- Same live-toolset rule as ListMCPServersByProjectID.
+  AND (
+    m.toolset_id IS NULL
+    OR EXISTS (
+      SELECT 1 FROM toolsets t
+      WHERE t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+    )
+  )
 ORDER BY m.created_at DESC
 `
 
