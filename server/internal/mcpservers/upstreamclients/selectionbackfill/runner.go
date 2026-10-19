@@ -127,7 +127,8 @@ type Report struct {
 	// Written counts choices this run recorded.
 	Written int64 `json:"written"`
 
-	// Gaps lists every undecided pair. Cutover is blocked until it is empty.
+	// Gaps lists every pair without a choice: after the run with Apply,
+	// otherwise as predicted. Cutover is blocked until it is empty.
 	Gaps []Gap `json:"gaps"`
 }
 
@@ -166,11 +167,12 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			return report, nil
 		}
 		for _, credential := range credentials {
-			coverage, err := q.ListUpstreamClientSelectionCoverage(ctx, ListUpstreamClientSelectionCoverageParams{
+			coverageParams := ListUpstreamClientSelectionCoverageParams{
 				UserSessionIssuerID: credential.UserSessionIssuerID,
 				CredentialKind:      upstreamclients.CredentialKindUserSession,
 				CredentialID:        credential.CredentialID,
-			})
+			}
+			coverage, err := q.ListUpstreamClientSelectionCoverage(ctx, coverageParams)
 			if err != nil {
 				return report, fmt.Errorf("read coverage for credential %s: %w", credential.CredentialID, err)
 			}
@@ -178,7 +180,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			for _, row := range coverage {
 				outcome := Classify(row)
 				report.Pairs[outcome]++
-				if !outcome.Decided() {
+				if !opts.Apply && !outcome.Decided() {
 					covered = false
 					report.Gaps = append(report.Gaps, Gap{CredentialID: credential.CredentialID, MCPServerID: row.McpServerID, Outcome: outcome})
 				}
@@ -194,6 +196,19 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 					return report, fmt.Errorf("record selections for credential %s: %w", credential.CredentialID, err)
 				}
 				report.Written += written
+				// Coverage after a write is what was stored, not what was
+				// predicted: evidence may change between the read and the
+				// write, which then records nothing for the pair.
+				persisted, err := q.ListUpstreamClientSelectionCoverage(ctx, coverageParams)
+				if err != nil {
+					return report, fmt.Errorf("reread coverage for credential %s: %w", credential.CredentialID, err)
+				}
+				for _, row := range persisted {
+					if !row.Selected {
+						covered = false
+						report.Gaps = append(report.Gaps, Gap{CredentialID: credential.CredentialID, MCPServerID: row.McpServerID, Outcome: Classify(row)})
+					}
+				}
 			}
 			report.Credentials++
 			if covered {

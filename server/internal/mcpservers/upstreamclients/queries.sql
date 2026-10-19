@@ -89,8 +89,10 @@ ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO 
 -- issuer named in user_session_issuer_ids, or for a server whose own issuer
 -- is named there, since that issuer derives the server's authorization
 -- server. It writes nothing when several of the issuer's clients match, when
--- a grant under the issuer routes the server to another client, or when a
--- row was ever recorded for the pair, so an explicit detach is kept.
+-- a grant the issuer offers for the server's remote upstream routes it to
+-- another client (a grant minted through the issuer, or one for a client the
+-- issuer binds, whichever issuer minted it; a tunnel's claimed resource
+-- proves nothing), or when an explicit detach was recorded for the pair.
 WITH fronted AS (
     SELECT gateway.user_session_issuer_id AS issuer_id, member.mcp_server_id AS server_id
     FROM meta_mcp_servers AS gateway
@@ -152,10 +154,8 @@ JOIN remote_session_clients AS c
       OR (c.project_id IS NULL AND c.organization_id IS NULL))
 LEFT JOIN remote_mcp_servers AS r
   ON r.id = s.remote_mcp_server_id
+ AND r.project_id = s.project_id
  AND r.deleted IS FALSE
-LEFT JOIN tunneled_mcp_servers AS t
-  ON t.id = s.tunneled_mcp_server_id
- AND t.deleted IS FALSE
 WHERE (f.issuer_id = ANY(@user_session_issuer_ids::uuid[]) OR s.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[]))
   AND NOT EXISTS (
     SELECT 1
@@ -170,11 +170,19 @@ WHERE (f.issuer_id = ANY(@user_session_issuer_ids::uuid[]) OR s.user_session_iss
   AND NOT EXISTS (
     SELECT 1
     FROM remote_sessions AS rs
-    WHERE rs.user_session_issuer_id = f.issuer_id
-      AND rs.remote_session_client_id <> c.id
+    WHERE rs.remote_session_client_id <> c.id
       AND rs.deleted IS FALSE
-      AND COALESCE(r.url, t.resource_identifier, '') <> ''
-      AND rtrim(rs.resource, '/') = rtrim(COALESCE(r.url, t.resource_identifier), '/')
+      AND r.url IS NOT NULL
+      AND rtrim(rs.resource, '/') = rtrim(r.url, '/')
+      AND (
+        rs.user_session_issuer_id = f.issuer_id
+        OR EXISTS (
+          SELECT 1
+          FROM remote_session_client_user_session_issuers AS grant_link
+          WHERE grant_link.remote_session_client_id = rs.remote_session_client_id
+            AND grant_link.user_session_issuer_id = f.issuer_id
+        )
+      )
   )
   AND NOT EXISTS (
     SELECT 1
@@ -189,11 +197,12 @@ ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO 
 -- the client is deleted, or the client is bound neither to the server's own
 -- user session issuer nor to the live issuer of a gateway fronting the server
 -- (a gateway it is a member of, or its organization's only organization-level
--- issuer for the organization gateway).
-UPDATE mcp_server_remote_session_clients AS a
-SET deleted_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-FROM mcp_servers AS s
+-- issuer for the organization gateway). Rows are deleted outright rather
+-- than soft-deleted: a soft-deleted row records an explicit detach, which
+-- capture and the backfill keep, and automatic cleanup must not read as one,
+-- so a server that regains its binding or rejoins a gateway is captured again.
+DELETE FROM mcp_server_remote_session_clients AS a
+USING mcp_servers AS s
 WHERE a.mcp_server_id = s.id
   AND a.project_id = @project_id::uuid
   AND a.organization_id = @organization_id::text
@@ -251,11 +260,9 @@ WHERE a.mcp_server_id = s.id
 -- The client-keyed form of PruneUnservableAssociations, for a change to one
 -- client's bindings that reaches servers in several of the organization's
 -- projects: an organization issuer losing the client, or the client being
--- deleted.
-UPDATE mcp_server_remote_session_clients AS a
-SET deleted_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-FROM mcp_servers AS s
+-- deleted. Deletes outright for the same reason.
+DELETE FROM mcp_server_remote_session_clients AS a
+USING mcp_servers AS s
 WHERE a.mcp_server_id = s.id
   AND a.remote_session_client_id = @remote_session_client_id::uuid
   AND a.organization_id = @organization_id::text
@@ -312,11 +319,10 @@ WHERE a.mcp_server_id = s.id
 -- name: RemoveGlobalClientAssociations :execrows
 -- Removes every association of a deleted platform-global client, in every
 -- organization. Only the platform-administered global client deletion calls
--- it, and it touches nothing but that one client's rows.
-UPDATE mcp_server_remote_session_clients AS a
-SET deleted_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-FROM remote_session_clients AS c
+-- it, and it touches nothing but that one client's rows. Deletes outright,
+-- like the prunes.
+DELETE FROM mcp_server_remote_session_clients AS a
+USING remote_session_clients AS c
 WHERE c.id = a.remote_session_client_id
   AND c.project_id IS NULL
   AND c.organization_id IS NULL
@@ -362,7 +368,8 @@ ORDER BY a.created_at, a.remote_session_client_id;
 
 -- name: DetachMCPServerRemoteSessionClient :execrows
 -- Removes one server's association. The client and its other associations
--- are untouched.
+-- are untouched. The row is soft-deleted so capture and the backfill keep the
+-- explicit detach.
 UPDATE mcp_server_remote_session_clients
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
