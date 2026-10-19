@@ -10,17 +10,17 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-func TestResolveURLPrecedence(t *testing.T) { //nolint:paralleltest // sets environment variables
+func TestResolveURLPrecedence(t *testing.T) {
 	tests := []struct {
 		name, profileURL, envURL, legacyURL, flagURL, want string
 	}{
-		{name: "default", want: "https://ai.speakeasy.com"},
-		{name: "canonical profile", profileURL: "https://ai.speakeasy.com", want: "https://ai.speakeasy.com"},
-		{name: "legacy profile preserved", profileURL: "https://app.getgram.ai", want: "https://app.getgram.ai"},
-		{name: "local profile preserved", profileURL: "http://localhost:8080/api", want: "http://localhost:8080/api"},
-		{name: "environment beats profile", profileURL: "https://ai.speakeasy.com", envURL: "http://localhost:9090/api", want: "http://localhost:9090/api"},
-		{name: "legacy environment beats profile", profileURL: "https://ai.speakeasy.com", legacyURL: "http://localhost:9091/api", want: "http://localhost:9091/api"},
-		{name: "flag beats environment", envURL: "https://ai.speakeasy.com", flagURL: "http://localhost:9092/api", want: "http://localhost:9092/api"},
+		{name: "default", profileURL: "", envURL: "", legacyURL: "", flagURL: "", want: "https://ai.speakeasy.com"},
+		{name: "canonical profile", profileURL: "https://ai.speakeasy.com", envURL: "", legacyURL: "", flagURL: "", want: "https://ai.speakeasy.com"},
+		{name: "legacy profile preserved", profileURL: "https://app.getgram.ai", envURL: "", legacyURL: "", flagURL: "", want: "https://app.getgram.ai"},
+		{name: "local profile preserved", profileURL: "http://localhost:8080/api", envURL: "", legacyURL: "", flagURL: "", want: "http://localhost:8080/api"},
+		{name: "environment beats profile", profileURL: "https://ai.speakeasy.com", envURL: "http://localhost:9090/api", legacyURL: "", flagURL: "", want: "http://localhost:9090/api"},
+		{name: "legacy environment beats profile", profileURL: "https://ai.speakeasy.com", envURL: "", legacyURL: "http://localhost:9091/api", flagURL: "", want: "http://localhost:9091/api"},
+		{name: "flag beats environment", profileURL: "", envURL: "https://ai.speakeasy.com", legacyURL: "", flagURL: "http://localhost:9092/api", want: "http://localhost:9092/api"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -32,7 +32,10 @@ func TestResolveURLPrecedence(t *testing.T) { //nolint:paralleltest // sets envi
 			if tt.legacyURL == "" {
 				require.NoError(t, os.Unsetenv("GRAM_API_URL"))
 			}
-			_, err := flags.ApplyLegacyEnv(os.LookupEnv, os.Setenv)
+			_, err := flags.ApplyLegacyEnv(os.LookupEnv, func(key, value string) error {
+				t.Setenv(key, value)
+				return nil
+			})
 			require.NoError(t, err)
 			app := &cli.App{
 				Flags: []cli.Flag{flags.APIEndpoint()},
@@ -40,7 +43,8 @@ func TestResolveURLPrecedence(t *testing.T) { //nolint:paralleltest // sets envi
 					require.Equal(t, "https://ai.speakeasy.com", flags.APIEndpoint().Value)
 					var prof *profile.Profile
 					if tt.profileURL != "" {
-						prof = &profile.Profile{APIUrl: tt.profileURL}
+						prof = new(profile.Profile)
+						prof.APIUrl = tt.profileURL
 					}
 					got, err := ResolveURL(c, prof)
 					require.NoError(t, err)
