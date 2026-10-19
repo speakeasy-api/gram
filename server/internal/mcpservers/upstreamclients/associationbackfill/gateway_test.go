@@ -434,3 +434,31 @@ func TestRunSkipsAGatewayWriteWhoseDecisionChanged(t *testing.T) {
 	require.Zero(t, n)
 	require.Empty(t, f.associations(member))
 }
+
+// A grant is one subject's credential for one client, so a grant minted
+// through a sibling issuer for a client the gateway binds is evidence too.
+func TestRunCountsGrantsMintedThroughAnotherIssuer(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+	siblingIssuer := f.userIssuer()
+	member := f.server(f.userIssuer(), "https://member.example.com/mcp")
+	client, _ := f.gatewayClient(gatewayIssuer)
+	f.grant(siblingIssuer, client, "https://member.example.com/mcp")
+
+	derivedMember := f.server(f.userIssuer(), "https://derived-member.example.com/mcp")
+	_, remoteIssuer := f.gatewayClient(gatewayIssuer)
+	f.derive(derivedMember, remoteIssuer)
+	otherClient, _ := f.gatewayClient(gatewayIssuer)
+	f.grant(siblingIssuer, otherClient, "https://derived-member.example.com/mcp")
+
+	f.gateway(gatewayIssuer, member, derivedMember)
+
+	report := f.run(true)
+	require.Equal(t, GatewayOutcomeGrant, gatewayResultFor(t, report, member).Outcome)
+	require.Equal(t, []uuid.UUID{client}, f.associations(member))
+	require.Equal(t, GatewayOutcomeConflict, gatewayResultFor(t, report, derivedMember).Outcome)
+
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
+	require.Empty(t, f.associations(derivedMember), "the sibling grant routes the member to another client, so capture writes nothing")
+}

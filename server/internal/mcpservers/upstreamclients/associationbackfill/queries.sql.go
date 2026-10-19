@@ -30,8 +30,7 @@ evidence AS (
            (target.remote_url IS NOT NULL AND EXISTS (
              SELECT 1
              FROM remote_sessions AS rs
-             WHERE rs.user_session_issuer_id = $1::uuid
-               AND rs.remote_session_client_id = ec.id
+             WHERE rs.remote_session_client_id = ec.id
                AND rs.deleted IS FALSE
                AND rtrim(rs.resource, '/') = rtrim(target.remote_url, '/')
            )) AS grant_match,
@@ -360,8 +359,7 @@ SELECT f.issuer_id::uuid AS issuer_id,
        EXISTS (
          SELECT 1
          FROM remote_sessions AS rs
-         WHERE rs.user_session_issuer_id = f.issuer_id
-           AND rs.remote_session_client_id = c.id
+         WHERE rs.remote_session_client_id = c.id
            AND rs.deleted IS FALSE
            AND r.url IS NOT NULL
            AND rtrim(rs.resource, '/') = rtrim(r.url, '/')
@@ -434,9 +432,11 @@ type ListGatewayAssociationCandidatesRow struct {
 // an organization's only organization-level issuer fronts every server of
 // the organization, as the organization gateway does.
 //
-// grant_match reports that the client holds a live grant under the issuer
-// whose RFC 8707 resource is the server's remote upstream URL, the
-// comparison request routing makes. A tunnel's resource identifier is only
+// grant_match reports that the client, bound to the issuer, holds a live
+// grant whose RFC 8707 resource is the server's remote upstream URL, the
+// comparison request routing makes. The issuer a grant was minted through is
+// provenance only: a grant is one subject's credential for one client, and
+// the gateway offers it whichever issuer minted it. A tunnel's resource identifier is only
 // what the tunnel claims, independent of where it dials, so it proves no
 // client: request routing matches tunnels by derived issuer alone, and so
 // does this. derived_match reports that the client's authorization server is
