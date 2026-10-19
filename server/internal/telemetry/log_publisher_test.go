@@ -65,7 +65,7 @@ func newShadowTestLogger(t *testing.T, ctx context.Context, ti *testInstance, pu
 }
 
 // fetchLog reads back exactly one telemetry_logs row for the given tool.
-// Only for synchronous writes; async writes use getLog, which polls.
+// Only for synchronous writes; acknowledged async writes read back directly via getLog.
 func fetchLog(t *testing.T, ctx context.Context, client *repo.Queries, projectID, urn string, timestamp time.Time) repo.TelemetryLog {
 	t.Helper()
 

@@ -1,12 +1,16 @@
 package glint
 
 // no-query-skip-async-insert-wait forbids turning off wait_for_async_insert in
-// per-query ClickHouse settings. clickhouse-go sends query settings after the
+// ClickHouse query settings. clickhouse-go sends query settings after the
 // connection's, so a per-query 0 overrides the test connection's 1 and makes a
 // test's read race the async insert queue — a race SYSTEM FLUSH ASYNC INSERT
 // QUEUE cannot close, because the server's background flusher can dequeue a
 // batch just before the flush looks. Fire-and-forget belongs on the server
 // connection (server/cmd/gram/deps.go); queries set only async_insert=1.
+//
+// Any clickhouse.Settings value counts as query settings — a literal or an
+// index assignment, wherever it is later passed — except the Settings field of
+// clickhouse.Options, which configures the connection.
 
 import (
 	"go/ast"
@@ -23,7 +27,10 @@ const (
 	noQuerySkipAsyncInsertWaitDefaultMessage = "set wait_for_async_insert on the connection, not per query: production connections set 0 and the test connection sets 1 so tests read their own writes"
 )
 
-const clickhousePkgPath = "github.com/ClickHouse/clickhouse-go/v2"
+const (
+	clickhousePkgPath      = "github.com/ClickHouse/clickhouse-go/v2"
+	waitForAsyncInsertName = "wait_for_async_insert"
+)
 
 type noQuerySkipAsyncInsertWaitSettings struct {
 	Disabled bool `json:"disabled"`
@@ -40,24 +47,54 @@ func newNoQuerySkipAsyncInsertWaitAnalyzer(_ noQuerySkipAsyncInsertWaitSettings)
 
 func runNoQuerySkipAsyncInsertWait(pass *analysis.Pass) (any, error) {
 	ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+	// Connection settings literals, recorded when their clickhouse.Options
+	// literal or field assignment is visited; Preorder reaches the parent first.
+	connection := make(map[*ast.CompositeLit]bool)
 
-	ins.Preorder([]ast.Node{(*ast.CallExpr)(nil)}, func(node ast.Node) {
-		call := node.(*ast.CallExpr)
-		if !isClickhouseWithSettings(pass, call) {
-			return
-		}
-		for _, arg := range call.Args {
-			lit, ok := ast.Unparen(arg).(*ast.CompositeLit)
-			if !ok {
-				continue
+	ins.Preorder([]ast.Node{(*ast.CompositeLit)(nil), (*ast.AssignStmt)(nil)}, func(node ast.Node) {
+		switch n := node.(type) {
+		case *ast.CompositeLit:
+			typ := pass.TypesInfo.TypeOf(n)
+			if isClickhouseNamed(typ, "Options") {
+				for _, elt := range n.Elts {
+					kv, ok := elt.(*ast.KeyValueExpr)
+					if !ok {
+						continue
+					}
+					if key, ok := kv.Key.(*ast.Ident); ok && key.Name == "Settings" {
+						if lit, ok := ast.Unparen(kv.Value).(*ast.CompositeLit); ok {
+							connection[lit] = true
+						}
+					}
+				}
+				return
 			}
-			for _, elt := range lit.Elts {
+			if !isClickhouseNamed(typ, "Settings") || connection[n] {
+				return
+			}
+			for _, elt := range n.Elts {
 				kv, ok := elt.(*ast.KeyValueExpr)
-				if !ok {
+				if ok && isConstString(pass, kv.Key, waitForAsyncInsertName) && isConstZero(pass, kv.Value) {
+					pass.ReportRangef(kv, "%s", noQuerySkipAsyncInsertWaitDefaultMessage)
+				}
+			}
+		case *ast.AssignStmt:
+			for i, lhs := range n.Lhs {
+				if isOptionsSettingsField(pass, lhs) && i < len(n.Rhs) {
+					if lit, ok := ast.Unparen(n.Rhs[i]).(*ast.CompositeLit); ok {
+						connection[lit] = true
+					}
 					continue
 				}
-				if isConstString(pass, kv.Key, "wait_for_async_insert") && isConstZero(pass, kv.Value) {
-					pass.ReportRangef(kv, "%s", noQuerySkipAsyncInsertWaitDefaultMessage)
+				index, ok := lhs.(*ast.IndexExpr)
+				if !ok || i >= len(n.Rhs) || len(n.Lhs) != len(n.Rhs) {
+					continue
+				}
+				if !isClickhouseNamed(pass.TypesInfo.TypeOf(index.X), "Settings") || isOptionsSettingsField(pass, index.X) {
+					continue
+				}
+				if isConstString(pass, index.Index, waitForAsyncInsertName) && isConstZero(pass, n.Rhs[i]) {
+					pass.ReportRangef(n, "%s", noQuerySkipAsyncInsertWaitDefaultMessage)
 				}
 			}
 		}
@@ -66,16 +103,30 @@ func runNoQuerySkipAsyncInsertWait(pass *analysis.Pass) (any, error) {
 	return nil, nil
 }
 
-func isClickhouseWithSettings(pass *analysis.Pass, call *ast.CallExpr) bool {
-	sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
-	if !ok {
+// isClickhouseNamed reports whether typ is the named clickhouse-go type name.
+func isClickhouseNamed(typ types.Type, name string) bool {
+	if ptr, ok := typ.(*types.Pointer); ok {
+		typ = ptr.Elem()
+	}
+	named, ok := typ.(*types.Named)
+	if !ok || named.Obj().Pkg() == nil {
 		return false
 	}
-	fn, ok := pass.TypesInfo.Uses[sel.Sel].(*types.Func)
-	if !ok || fn.Pkg() == nil {
+	return named.Obj().Pkg().Path() == clickhousePkgPath && named.Obj().Name() == name
+}
+
+// isOptionsSettingsField reports whether expr selects the Settings field of a
+// clickhouse.Options value, i.e. connection settings.
+func isOptionsSettingsField(pass *analysis.Pass, expr ast.Expr) bool {
+	sel, ok := ast.Unparen(expr).(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "Settings" {
 		return false
 	}
-	return fn.Pkg().Path() == clickhousePkgPath && fn.Name() == "WithSettings"
+	selection, ok := pass.TypesInfo.Selections[sel]
+	if !ok || selection.Kind() != types.FieldVal {
+		return false
+	}
+	return isClickhouseNamed(selection.Recv(), "Options")
 }
 
 func isConstString(pass *analysis.Pass, expr ast.Expr, want string) bool {
@@ -86,6 +137,8 @@ func isConstString(pass *analysis.Pass, expr ast.Expr, want string) bool {
 	return constant.StringVal(tv.Value) == want
 }
 
+// isConstZero reports whether expr is a constant that ClickHouse reads as an
+// off setting: numeric zero, false, or their string spellings.
 func isConstZero(pass *analysis.Pass, expr ast.Expr) bool {
 	tv, ok := pass.TypesInfo.Types[expr]
 	if !ok || tv.Value == nil {
@@ -96,6 +149,9 @@ func isConstZero(pass *analysis.Pass, expr ast.Expr) bool {
 		return constant.Sign(tv.Value) == 0
 	case constant.Bool:
 		return !constant.BoolVal(tv.Value)
+	case constant.String:
+		s := constant.StringVal(tv.Value)
+		return s == "0" || s == "false"
 	default:
 		return false
 	}

@@ -1378,9 +1378,9 @@ func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// The retained rows are direct aggregate inserts (visible immediately), so
-	// the totals below can only converge once BOTH observed rows materialized
-	// AND the exclusion holds — it cannot pass vacuously.
+	// The retained rows are direct aggregate inserts, visible as soon as they
+	// return, so the totals below check both that the observed rows
+	// materialized and that the exclusion holds — they cannot pass vacuously.
 	result, resErr := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
 		SessionToken: nil,
 		From:         from,
