@@ -25,6 +25,13 @@
 //
 //	go run ./ci/cmd/shard -i 5/5 -isolate example.com/mod/slow ./server
 //
+// On a pull request, -changed narrows the run to the packages whose tests can
+// reach the changed files (see affected.go) before they are sharded. It takes a
+// file of repository-relative paths, one per line, such as the output of 'git
+// diff --name-only'. A change it cannot trace to a package keeps every package:
+//
+//	go run ./ci/cmd/shard -i 1/4 -changed changed-files.txt ./server
+//
 // The timings subcommand builds a timings file from the JUnit reports that CI
 // uploads for each shard:
 //
@@ -93,6 +100,7 @@ func run(argv []string, stdout, stderr io.Writer) error {
 	tags := fs.String("tags", "", "comma-separated build tags to pass to 'go list'")
 	isolateList := fs.String("isolate", "", "comma-separated import paths that each get a shard of their own, taking the last shards")
 	timingsPath := fs.String("timings", "", "timings file to weight packages by (default: the checked-in ci/cmd/shard/timings.txt)")
+	changedFiles := fs.String("changed", "", "file of changed repository-relative paths, one per line; only packages whose tests reach them are sharded")
 
 	if err := fs.Parse(argv); err != nil {
 		fs.SetOutput(stderr)
@@ -124,6 +132,22 @@ func run(argv []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
+	if *changedFiles != "" {
+		listedCount := len(pkgs)
+
+		var full string
+		pkgs, full, err = keepAffected(pkgs, *tags, patterns, *changedFiles, stderr)
+		if err != nil {
+			return err
+		}
+
+		if full != "" {
+			fmt.Fprintf(stderr, "affected: testing every package because %s\n", full)
+		} else {
+			fmt.Fprintf(stderr, "affected: %d of %d test packages reach the changed files\n", len(pkgs), listedCount)
+		}
+	}
+
 	timings, err := loadTimings(*timingsPath)
 	if err != nil {
 		return err
@@ -134,6 +158,14 @@ func run(argv []string, stdout, stderr io.Writer) error {
 	var isolated []string
 	if *isolateList != "" {
 		isolated = strings.Split(*isolateList, ",")
+	}
+
+	// An isolated package that no change reaches is not in the run. Its shard
+	// takes a share of the rest instead of sitting empty.
+	if *changedFiles != "" {
+		isolated = slices.DeleteFunc(isolated, func(name string) bool {
+			return !slices.ContainsFunc(pkgs, func(p pkg) bool { return p.ImportPath == name })
+		})
 	}
 
 	selected, err := pick(pkgs, isolated, index, total)

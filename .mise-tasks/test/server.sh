@@ -9,6 +9,7 @@ open_html=false
 shard=""
 shard_isolate=""
 rerun_fails=""
+changed_files=""
 args=()
 
 for arg in "$@"; do
@@ -27,6 +28,9 @@ for arg in "$@"; do
       shift ;;
     --rerun-fails=*)
       rerun_fails="${arg#--rerun-fails=}"
+      shift ;;
+    --changed-files=*)
+      changed_files="${arg#--changed-files=}"
       shift ;;
     *)
       args+=("$arg") ;;
@@ -65,6 +69,14 @@ fi
 # tests, so CI can spread the suite over several runners. See ci/cmd/shard for
 # how packages are distributed. --shard-isolate=<import path>[,...] gives each
 # listed package a shard of its own, taking the last shards.
+# --changed-files=<file> (a list of repository-relative paths, one per line)
+# narrows the packages to those whose tests reach the changed files before they
+# are sharded; the shard tool falls back to every package for changes it cannot
+# trace to a package.
+if [ -n "$changed_files" ] && [ -z "$shard" ]; then
+  shard="1/1"
+fi
+
 if [ -n "$shard" ] || [ -n "$rerun_fails" ]; then
   # Only package patterns are sharded. Everything else reaches 'go test' in the
   # order it was given, including values that follow a flag — the 'TestFoo' in
@@ -101,8 +113,13 @@ if [ -n "$shard" ] || [ -n "$rerun_fails" ]; then
   packages=("${patterns[@]}")
 
   if [ -n "$shard" ]; then
+    changed_flags=()
+    if [ -n "$changed_files" ]; then
+      changed_flags=(-changed "$changed_files")
+    fi
+
     shard_packages=$(go run -buildvcs=false github.com/speakeasy-api/gram/ci/cmd/shard \
-      -i "$shard" -isolate "$shard_isolate" "${tags[@]}" "${patterns[@]}") || exit $?
+      -i "$shard" -isolate "$shard_isolate" "${changed_flags[@]}" "${tags[@]}" "${patterns[@]}") || exit $?
 
     packages=()
     while IFS= read -r line; do

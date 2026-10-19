@@ -1643,6 +1643,40 @@ jobs:
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+        with:
+          # A pull request checks out the merge of its head into its base; the
+          # second commit is that merge's base parent, which the changed-files
+          # step below diffs against.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 1 }}
+
+      - name: List changed files
+        # A pull request tests only the packages whose tests reach its changed
+        # files (see ci/cmd/shard/affected.go); changes the shard tool cannot
+        # trace to a package still test everything. The merge queue, main and
+        # pull requests labelled ci:full always test every package, so
+        # anything the selection misses is caught before it merges. Only paths
+        # in the server filter count: the rest never gate this job anyway.
+        id: changed
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full')
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git rev-parse --quiet --verify 'HEAD^2' >/dev/null; then
+            echo "HEAD is not a pull request merge commit; testing every package."
+            exit 0
+          fi
+          pathspecs=()
+          while IFS= read -r path; do
+            pathspecs+=(":(glob)${path}")
+          done < <(python3 -c 'import yaml; print("\n".join(yaml.safe_load(open(".github/filters.yaml"))["server"]))')
+          file="${RUNNER_TEMP}/changed-files.txt"
+          # --no-renames lists both sides of a rename, so the package a file
+          # moved out of counts as changed too.
+          git diff --name-only --no-renames 'HEAD^1' HEAD -- "${pathspecs[@]}" > "$file"
+          echo "Changed files:"
+          cat "$file"
+          echo "args=--changed-files=${file}" >> "$GITHUB_OUTPUT"
+          echo "shard-args=-changed=${file}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Mise
         uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
@@ -1662,13 +1696,14 @@ jobs:
       - name: Install discovery wire-test dependencies on its shard
         shell: bash
         run: |
-          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL}" -tags=inv.debug ./...)
+          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL}" ${SHARD_CHANGED_ARGS} -tags=inv.debug ./...)
           if grep -qx 'github.com/speakeasy-api/gram/server/internal/mcpregistry' <<< "$packages"; then
             aube install --frozen-lockfile --filter . --filter 'dashboard...'
           fi
         env:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
+          SHARD_CHANGED_ARGS: ${{ steps.changed.outputs.shard-args }}
 
       - name: Test
         id: test
@@ -1682,10 +1717,11 @@ jobs:
         # other branches) a failure fails the job as before: those runs mix
         # flakes with the branch's own breakage.
         continue-on-error: ${{ github.event_name == 'merge_group' || github.ref == 'refs/heads/main' }}
-        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} -p=2 -race -tags=inv.debug ./...
+        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} ${CHANGED_ARGS} -p=2 -race -tags=inv.debug ./...
         env:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
+          CHANGED_ARGS: ${{ steps.changed.outputs.args }}
           # Alongside junit-report.xml, gotestsum writes only the pass, skip,
           # and fail events of 'go test -json' (no output lines) to this file,
           # relative to server/. Each event carries its time and elapsed.
