@@ -197,8 +197,8 @@ function useServedOverMcp(): ServedOverMcp {
     if (!plugins) return undefined;
     return new Map(plugins.map((plugin) => [plugin.id, plugin]));
   }, [plugins]);
+  const toolsets = toolsetsQuery.data?.toolsets;
   const toolsetsById = useMemo(() => {
-    const toolsets = toolsetsQuery.data?.toolsets;
     if (!toolsets) return undefined;
     return new Map(
       toolsets.map((toolset) => [
@@ -206,14 +206,11 @@ function useServedOverMcp(): ServedOverMcp {
         { slug: toolset.slug, name: toolset.name },
       ]),
     );
-  }, [toolsetsQuery.data?.toolsets]);
+  }, [toolsets]);
   const hostedIndex = useMemo(() => {
-    if (!toolsetsById) return undefined;
-    return hostedServerIndex(
-      serversQuery.data?.mcpServers,
-      toolsetsById.keys(),
-    );
-  }, [serversQuery.data?.mcpServers, toolsetsById]);
+    if (!toolsets) return undefined;
+    return hostedServerIndex(serversQuery.data?.mcpServers, toolsets);
+  }, [serversQuery.data?.mcpServers, toolsets]);
   return {
     enabled: enabled && canReadPlugins,
     failed: !!error && !plugins,

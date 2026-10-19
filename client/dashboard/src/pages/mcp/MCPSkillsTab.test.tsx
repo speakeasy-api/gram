@@ -114,9 +114,6 @@ vi.mock("@/routes", () => ({
     },
   }),
 }));
-vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
-  useDrainInfiniteQuery: () => undefined,
-}));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
 vi.mock("@gram/client/react-query/plugins.js", () => ({
   usePlugins: () => state.plugins,
@@ -203,14 +200,16 @@ function distributionsResult(
   distributions: ReturnType<typeof distribution>[],
   overrides: Record<string, unknown> = {},
 ) {
-  return {
+  const result = {
     data: { pages: [{ result: { distributions } }] },
     hasNextPage: false,
-    error: null,
+    isFetchingNextPage: false,
+    error: null as unknown,
     fetchNextPage: state.fetchNextPage,
     refetch: state.refetchDistributions,
     ...overrides,
   };
+  return { ...result, isError: !!result.error };
 }
 
 afterEach(cleanup);
@@ -302,6 +301,27 @@ describe("MCPSkillsTab", () => {
     expect(screen.queryByText("No plugin includes this server yet")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(state.servers.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches every distributions page so membership covers the project", () => {
+    state.distributions.mockReturnValue(
+      distributionsResult([distribution("1", "plugin-a")], {
+        hasNextPage: true,
+      }),
+    );
+    renderTab();
+    expect(state.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops fetching pages while one is in flight", () => {
+    state.distributions.mockReturnValue(
+      distributionsResult([distribution("1", "plugin-a")], {
+        hasNextPage: true,
+        isFetchingNextPage: true,
+      }),
+    );
+    renderTab();
+    expect(state.fetchNextPage).not.toHaveBeenCalled();
   });
 
   it("offers a retry when a later distributions page fails", () => {

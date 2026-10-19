@@ -130,7 +130,8 @@ export function MCPSkillsTab({
   const isServerIndexLoading =
     canReadServers && !serversQuery.data && serversQuery.isLoading;
   const hostedIndex = useMemo(
-    () => hostedServerIndex(serversQuery.data?.mcpServers, [toolset.id]),
+    () =>
+      hostedServerIndex(serversQuery.data?.mcpServers, [{ id: toolset.id }]),
     [serversQuery.data?.mcpServers, toolset.id],
   );
   const servingPlugins = useMemo(

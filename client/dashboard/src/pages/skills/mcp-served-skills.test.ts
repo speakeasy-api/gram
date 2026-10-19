@@ -24,13 +24,27 @@ const mcpServers = [
 
 describe("hostedServerIndex", () => {
   it("maps every hosted server and toolset id to its toolset", () => {
-    const index = hostedServerIndex(mcpServers, ["toolset-c"]);
+    const index = hostedServerIndex(mcpServers, [{ id: "toolset-c" }]);
     expect([...index.entries()]).toEqual([
       ["toolset-c", "toolset-c"],
       [toolsetId, toolsetId],
       ["wrapper-2", toolsetId],
       ["wrapper-b", "toolset-b"],
+      ["remote-1", null],
     ]);
+  });
+
+  it("marks a toolset with MCP off as serving nothing unless another wrapper fronts it", () => {
+    const index = hostedServerIndex(
+      [...mcpServers, { id: "toolset-c", toolsetId: "toolset-c" }],
+      [
+        { id: toolsetId, mcpEnabled: false },
+        { id: "toolset-c", mcpEnabled: false },
+      ],
+    );
+    // wrapper-2 still serves toolset-a, so its toolset stays reachable.
+    expect(index.get(toolsetId)).toBe(toolsetId);
+    expect(index.get("toolset-c")).toBeNull();
   });
 
   it("is empty without servers or toolsets", () => {
@@ -45,6 +59,12 @@ describe("hostedPluginServerToolsetId", () => {
     expect(
       hostedPluginServerToolsetId({ mcpServerId: "wrapper-2" }, index),
     ).toBe(toolsetId);
+  });
+
+  it("has nothing for a listed server that serves no skills", () => {
+    expect(
+      hostedPluginServerToolsetId({ mcpServerId: "remote-1" }, index),
+    ).toBeUndefined();
   });
 
   it("takes an unindexed id as a canonical wrapper", () => {
@@ -153,7 +173,7 @@ describe("hostedPluginServers", () => {
   it("also keeps wrapper-keyed servers the index resolves", () => {
     const byToolsets = hostedPluginServers(
       servers,
-      hostedServerIndex(undefined, [toolsetId, "toolset-b"]),
+      hostedServerIndex(undefined, [{ id: toolsetId }, { id: "toolset-b" }]),
     );
     expect(ids(byToolsets.servers)).toEqual(["s1", "s2"]);
     expect(ids(byToolsets.unresolved)).toEqual(["s3"]);
@@ -165,7 +185,23 @@ describe("hostedPluginServers", () => {
       hostedServerIndex(mcpServers),
     );
     expect(ids(byServers.servers)).toEqual(["s1", "s4"]);
-    expect(ids(byServers.unresolved)).toEqual(["s2", "s3"]);
+    expect(ids(byServers.unresolved)).toEqual(["s2"]);
+  });
+
+  it("drops a listed remote server rather than counting it as hidden", () => {
+    const result = hostedPluginServers(
+      [{ id: "s3", displayName: "Remote", mcpServerId: "remote-1" }],
+      hostedServerIndex(mcpServers),
+    );
+    expect(result).toEqual({ servers: [], unresolved: [] });
+  });
+
+  it("drops a toolset-keyed server whose toolset has MCP off", () => {
+    const result = hostedPluginServers(
+      [{ id: "s6", displayName: "Off", toolsetId: "toolset-c" }],
+      hostedServerIndex(undefined, [{ id: "toolset-c", mcpEnabled: false }]),
+    );
+    expect(result).toEqual({ servers: [], unresolved: [] });
   });
 
   it("does not take an unindexed id as remote", () => {
@@ -237,9 +273,11 @@ describe("groupServedSkillsByPlugin", () => {
         { id: "plugin-c", name: "C" },
       ],
     );
-    expect(groups.map((g) => [g.key, g.items.map((d) => d.id)])).toEqual([
-      ["plugin-a", ["d1", "d3"]],
-      ["plugin-c", []],
+    expect(
+      groups.map((g) => [g.key, g.plugin, g.items.map((d) => d.id)]),
+    ).toEqual([
+      ["plugin-a", { id: "plugin-a", name: "A" }, ["d1", "d3"]],
+      ["plugin-c", { id: "plugin-c", name: "C" }, []],
     ]);
   });
 });
