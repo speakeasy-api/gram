@@ -4,6 +4,9 @@ info:
   title: Dashboard SDK policy
   version: 0.0.0
 actions:
+  # Keep the legacy HTTP route for already-open tabs, not for new SDK callers.
+  - target: $.paths["/rpc/access.setDirectoryRoleMapping"]
+    remove: true
   # Keep established Dashboard model names while sourcing their contracts from Goa.
   - target: $.components.schemas.SetOrganizationFeatureRequestBody
     update:

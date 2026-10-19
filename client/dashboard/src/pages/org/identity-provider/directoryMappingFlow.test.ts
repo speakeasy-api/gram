@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "vitest";
-
 import {
   availableRoleName,
   completeCreateRoleFlow,
@@ -9,6 +8,8 @@ import {
   startCreateRoleFlow,
   suggestedRoleName,
 } from "./directoryMappingFlow";
+
+import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
 
 afterEach(() => {
   window.sessionStorage.clear();
@@ -41,7 +42,8 @@ describe("create role round trip", () => {
     expect(pending?.form).toEqual({
       sourceKind: "group",
       directoryGroupId: "group-1",
-      roleUrn: "role:organization:1",
+      roleUrns: ["role:organization:1"],
+      expectedRoleUrns: [],
     });
 
     const done = finishCreateRoleFlow(back, pending!.key);
@@ -59,6 +61,44 @@ describe("create role round trip", () => {
     expect(
       completeCreateRoleFlow(crafted, "role:global:admin").toString(),
     ).toBe("");
+  });
+
+  it("guards the replacement with the source's current roles", () => {
+    const back = completeCreateRoleFlow(
+      startCreateRoleFlow(
+        {
+          sourceKind: "attribute",
+          attributeKey: "department",
+          attributeValue: "Sales",
+        },
+        "Sales",
+      ),
+      "role:organization:new",
+    );
+    const mapping = (
+      roleUrn: string,
+      attributeValue: string,
+    ): DirectoryRoleMapping => ({
+      id: roleUrn,
+      sourceKind: "attribute",
+      attributeKey: "department",
+      attributeValue,
+      roleUrn,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    expect(
+      pendingMappingFromParams(back, [
+        mapping("role:organization:old", "Sales"),
+        mapping("role:organization:other", "Engineering"),
+      ])?.form,
+    ).toEqual({
+      sourceKind: "attribute",
+      attributeKey: "department",
+      attributeValue: "Sales",
+      roleUrns: ["role:organization:new"],
+      expectedRoleUrns: ["role:organization:old"],
+    });
   });
 
   it("does not map before the editor records a created role", () => {

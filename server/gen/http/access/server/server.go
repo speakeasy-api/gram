@@ -27,6 +27,7 @@ type Server struct {
 	ListDirectoryRoleMappings            http.Handler
 	SyncDirectoryGroups                  http.Handler
 	SetDirectoryRoleMapping              http.Handler
+	SetDirectoryRoleMappings             http.Handler
 	DeleteDirectoryRoleMapping           http.Handler
 	ListScopes                           http.Handler
 	ListMembers                          http.Handler
@@ -88,6 +89,7 @@ func New(
 			{"ListDirectoryRoleMappings", "GET", "/rpc/access.listDirectoryRoleMappings"},
 			{"SyncDirectoryGroups", "POST", "/rpc/access.syncDirectoryGroups"},
 			{"SetDirectoryRoleMapping", "POST", "/rpc/access.setDirectoryRoleMapping"},
+			{"SetDirectoryRoleMappings", "POST", "/rpc/access.setDirectoryRoleMappings"},
 			{"DeleteDirectoryRoleMapping", "DELETE", "/rpc/access.deleteDirectoryRoleMapping"},
 			{"ListScopes", "GET", "/rpc/access.listScopes"},
 			{"ListMembers", "GET", "/rpc/access.listMembers"},
@@ -121,6 +123,7 @@ func New(
 		ListDirectoryRoleMappings:            NewListDirectoryRoleMappingsHandler(e.ListDirectoryRoleMappings, mux, decoder, encoder, errhandler, formatter),
 		SyncDirectoryGroups:                  NewSyncDirectoryGroupsHandler(e.SyncDirectoryGroups, mux, decoder, encoder, errhandler, formatter),
 		SetDirectoryRoleMapping:              NewSetDirectoryRoleMappingHandler(e.SetDirectoryRoleMapping, mux, decoder, encoder, errhandler, formatter),
+		SetDirectoryRoleMappings:             NewSetDirectoryRoleMappingsHandler(e.SetDirectoryRoleMappings, mux, decoder, encoder, errhandler, formatter),
 		DeleteDirectoryRoleMapping:           NewDeleteDirectoryRoleMappingHandler(e.DeleteDirectoryRoleMapping, mux, decoder, encoder, errhandler, formatter),
 		ListScopes:                           NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
 		ListMembers:                          NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
@@ -161,6 +164,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListDirectoryRoleMappings = m(s.ListDirectoryRoleMappings)
 	s.SyncDirectoryGroups = m(s.SyncDirectoryGroups)
 	s.SetDirectoryRoleMapping = m(s.SetDirectoryRoleMapping)
+	s.SetDirectoryRoleMappings = m(s.SetDirectoryRoleMappings)
 	s.DeleteDirectoryRoleMapping = m(s.DeleteDirectoryRoleMapping)
 	s.ListScopes = m(s.ListScopes)
 	s.ListMembers = m(s.ListMembers)
@@ -200,6 +204,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListDirectoryRoleMappingsHandler(mux, h.ListDirectoryRoleMappings)
 	MountSyncDirectoryGroupsHandler(mux, h.SyncDirectoryGroups)
 	MountSetDirectoryRoleMappingHandler(mux, h.SetDirectoryRoleMapping)
+	MountSetDirectoryRoleMappingsHandler(mux, h.SetDirectoryRoleMappings)
 	MountDeleteDirectoryRoleMappingHandler(mux, h.DeleteDirectoryRoleMapping)
 	MountListScopesHandler(mux, h.ListScopes)
 	MountListMembersHandler(mux, h.ListMembers)
@@ -634,6 +639,60 @@ func NewSetDirectoryRoleMappingHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setDirectoryRoleMapping")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetDirectoryRoleMappingsHandler configures the mux to serve the
+// "access" service "setDirectoryRoleMappings" endpoint.
+func MountSetDirectoryRoleMappingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.setDirectoryRoleMappings", f)
+}
+
+// NewSetDirectoryRoleMappingsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "setDirectoryRoleMappings"
+// endpoint.
+func NewSetDirectoryRoleMappingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetDirectoryRoleMappingsRequest(mux, decoder)
+		encodeResponse = EncodeSetDirectoryRoleMappingsResponse(encoder)
+		encodeError    = EncodeSetDirectoryRoleMappingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setDirectoryRoleMappings")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { accessSetDirectoryRoleMapping } from "../funcs/accessSetDirectoryRoleMapping.js";
+import { accessSetDirectoryRoleMappings } from "../funcs/accessSetDirectoryRoleMappings.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { DirectoryRoleMapping } from "../models/components/directoryrolemapping.js";
@@ -24,22 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  SetDirectoryRoleMappingRequest,
-  SetDirectoryRoleMappingSecurity,
-} from "../models/operations/setdirectoryrolemapping.js";
+  SetDirectoryRoleMappingsRequest,
+  SetDirectoryRoleMappingsSecurity,
+} from "../models/operations/setdirectoryrolemappings.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SetDirectoryRoleMappingMutationVariables = {
-  request: SetDirectoryRoleMappingRequest;
-  security?: SetDirectoryRoleMappingSecurity | undefined;
+export type SetDirectoryRoleMappingsMutationVariables = {
+  request: SetDirectoryRoleMappingsRequest;
+  security?: SetDirectoryRoleMappingsSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type SetDirectoryRoleMappingMutationData = DirectoryRoleMapping;
+export type SetDirectoryRoleMappingsMutationData = Array<DirectoryRoleMapping>;
 
-export type SetDirectoryRoleMappingMutationError =
+export type SetDirectoryRoleMappingsMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,49 +51,49 @@ export type SetDirectoryRoleMappingMutationError =
   | SDKValidationError;
 
 /**
- * setDirectoryRoleMapping access
+ * setDirectoryRoleMappings access
  *
  * @remarks
- * Map a directory group or attribute value to a role, replacing any role it was mapped to before.
+ * Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.
  */
-export function useSetDirectoryRoleMappingMutation(
+export function useSetDirectoryRoleMappingsMutation(
   options?: MutationHookOptions<
-    SetDirectoryRoleMappingMutationData,
-    SetDirectoryRoleMappingMutationError,
-    SetDirectoryRoleMappingMutationVariables
+    SetDirectoryRoleMappingsMutationData,
+    SetDirectoryRoleMappingsMutationError,
+    SetDirectoryRoleMappingsMutationVariables
   >,
 ): UseMutationResult<
-  SetDirectoryRoleMappingMutationData,
-  SetDirectoryRoleMappingMutationError,
-  SetDirectoryRoleMappingMutationVariables
+  SetDirectoryRoleMappingsMutationData,
+  SetDirectoryRoleMappingsMutationError,
+  SetDirectoryRoleMappingsMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSetDirectoryRoleMappingMutation(client, options),
+    ...buildSetDirectoryRoleMappingsMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySetDirectoryRoleMapping(): MutationKey {
-  return ["@gram/client", "access", "setDirectoryRoleMapping"];
+export function mutationKeySetDirectoryRoleMappings(): MutationKey {
+  return ["@gram/client", "access", "setDirectoryRoleMappings"];
 }
 
-export function buildSetDirectoryRoleMappingMutation(
+export function buildSetDirectoryRoleMappingsMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SetDirectoryRoleMappingMutationVariables,
-  ) => Promise<SetDirectoryRoleMappingMutationData>;
+    variables: SetDirectoryRoleMappingsMutationVariables,
+  ) => Promise<SetDirectoryRoleMappingsMutationData>;
 } {
   return {
-    mutationKey: mutationKeySetDirectoryRoleMapping(),
-    mutationFn: function setDirectoryRoleMappingMutationFn({
+    mutationKey: mutationKeySetDirectoryRoleMappings(),
+    mutationFn: function setDirectoryRoleMappingsMutationFn({
       request,
       security,
       options,
-    }): Promise<SetDirectoryRoleMappingMutationData> {
+    }): Promise<SetDirectoryRoleMappingsMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,7 +106,7 @@ export function buildSetDirectoryRoleMappingMutation(
           ),
         },
       };
-      return unwrapAsync(accessSetDirectoryRoleMapping(
+      return unwrapAsync(accessSetDirectoryRoleMappings(
         client$,
         request,
         security,

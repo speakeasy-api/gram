@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -18,6 +19,10 @@ import (
 // either. Support sessions keep the prepared-grant path: their grants are
 // minted per operator action and are the audited thing.
 func (s *Service) requireLiveOrgAdmin(ctx context.Context, ac *contextvalues.AuthContext) error {
+	return s.requireLiveOrgAdminWithDBTX(ctx, ac, s.db)
+}
+
+func (s *Service) requireLiveOrgAdminWithDBTX(ctx context.Context, ac *contextvalues.AuthContext, db repo.DBTX) error {
 	if contextvalues.IsSupportSession(ctx) {
 		return s.authz.Require(ctx, authz.Check{
 			Scope:        authz.ScopeOrgAdmin,
@@ -26,7 +31,7 @@ func (s *Service) requireLiveOrgAdmin(ctx context.Context, ac *contextvalues.Aut
 			Dimensions:   nil,
 		})
 	}
-	if err := s.authz.RequireUserOrganizationScope(ctx, ac.ActiveOrganizationID, ac.UserID, authz.ScopeOrgAdmin); err != nil {
+	if err := s.authz.RequireUserOrganizationScopeWithDBTX(ctx, db, ac.ActiveOrganizationID, ac.UserID, authz.ScopeOrgAdmin); err != nil {
 		return fmt.Errorf("authorize organization administrator: %w", err)
 	}
 	return nil
