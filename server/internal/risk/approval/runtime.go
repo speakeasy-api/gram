@@ -202,7 +202,7 @@ Wait for the decision with the watcher below, then retry the blocked call with e
 2. Save the script below as approval-watch.sh.
 3. Run it: bash approval-watch.sh %s "%s" %d %d
    In Claude Code, run it with the Monitor tool so its output wakes you. Elsewhere, run it in a background terminal and check its output.
-   It prints APPROVED, DENIED or EXPIRED and exits. On DENIED, EXPIRED or WATCH FAILED, do not retry; tell the user.
+   It prints APPROVED, DENIED or EXPIRED and exits. On DENIED, EXPIRED, WATCH FAILED or WATCH TIMEOUT, do not retry; tell the user.
 
 approval-watch.sh:
 %s`, status, tokenFile, row.Token, tokenFile, r.service.WatchURL(), tokenFile, watchIntervalSeconds, r.watchChecks(row), watchScript)

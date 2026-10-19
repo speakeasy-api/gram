@@ -4019,8 +4019,12 @@ func (s *Service) validateApprovers(ctx context.Context, organizationID string, 
 		if err != nil {
 			return oops.E(oops.CodeInvalid, err, "invalid approver %q", approver)
 		}
-		if err := authz.ValidatePrincipal(ctx, s.db, organizationID, principal); err != nil {
+		err = authz.ValidatePrincipal(ctx, s.db, organizationID, principal)
+		if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
 			return oops.E(oops.CodeInvalid, err, "approver %q is not a user or role in this organization", approver)
+		}
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check approver %q", approver).LogError(ctx, s.logger)
 		}
 	}
 	return nil

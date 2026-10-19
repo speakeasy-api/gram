@@ -284,4 +284,28 @@ func TestWatchScriptStopsOnBadInput(t *testing.T) {
 	out, code = runWatcher(t, "http://approvals.example.test/approvals/watch", unknownFile)
 	require.Equal(t, 2, code, out)
 	require.Contains(t, out, "non-HTTPS URL")
+
+	// A local-looking prefix with credentials would send the token elsewhere.
+	out, code = runWatcher(t, "http://localhost:80@approvals.example.test/approvals/watch", unknownFile)
+	require.Equal(t, 2, code, out)
+	require.Contains(t, out, "credentials")
+}
+
+func TestWatchScriptIgnoresErrorResponses(t *testing.T) {
+	t.Parallel()
+	// An error response must never read as a decision, whatever its body says.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"status":"approved"}`))
+	}))
+	t.Cleanup(server.Close)
+	token, err := NewToken()
+	require.NoError(t, err)
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(tokenFile, []byte(token), 0o600))
+
+	out, code := runWatcher(t, server.URL, tokenFile)
+	require.Equal(t, 1, code, out)
+	require.NotContains(t, out, "APPROVED")
+	require.Contains(t, out, "WATCH TIMEOUT")
 }

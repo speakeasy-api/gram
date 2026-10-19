@@ -630,7 +630,7 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 	if current.Action == policycore.ActionRequireApproval {
 		// Approval policies carry an approver list this tool cannot edit, so
 		// any change here could leave it inconsistent with the action.
-		return policycore.UpdateMutation{}, nil, &RiskMutationError{Code: "invalid_request", Message: "Tool approval policies are edited in the dashboard, not through this tool.", Cause: ErrRiskMutationInvalid}
+		return policycore.UpdateMutation{}, nil, &RiskMutationError{Code: "invalid_request", Message: "Tool approval policies are read-only through this tool.", Cause: ErrRiskMutationInvalid}
 	}
 	params := riskrepo.UpdateRiskPolicyParams{
 		ID: current.ID, ProjectID: project.ID, Name: current.Name, Sources: slices.Clone(current.Sources), PresidioEntities: slices.Clone(current.PresidioEntities), AnalyzerConfig: slices.Clone(current.AnalyzerConfig), McpScope: slices.Clone(current.McpScope), ApprovalConfig: slices.Clone(current.ApprovalConfig),

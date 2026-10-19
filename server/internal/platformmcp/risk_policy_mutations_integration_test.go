@@ -650,7 +650,7 @@ func TestRiskPolicyUpdateRefusesApprovalPolicies(t *testing.T) {
 	})
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
-	require.Contains(t, refusal.Payload, "edited in the dashboard")
+	require.Contains(t, refusal.Payload, "read-only through this tool")
 
 	stored, err := queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
 	require.NoError(t, err)

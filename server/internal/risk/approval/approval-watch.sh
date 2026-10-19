@@ -17,9 +17,27 @@ interval="${3:-3}"
 # 24 hours at the default interval: the longest window a request can have.
 checks="${4:-28800}"
 
-case "$url" in
-  https://*) ;;
-  http://localhost:* | http://localhost/* | http://127.0.0.1:* | http://127.0.0.1/*) ;;
+# The host is everything between the scheme and the first slash. Credentials
+# in a URL (user@host) are refused outright: they can make an allowed-looking
+# prefix send the token to another host.
+scheme="${url%%://*}"
+rest="${url#*://}"
+authority="${rest%%/*}"
+host="${authority%:*}"
+case "$authority" in
+  *@*)
+    echo "WATCH FAILED: refusing a watch URL with credentials in it; tell the user"
+    exit 2
+    ;;
+esac
+case "$scheme" in
+  https) ;;
+  http)
+    if [ "$host" != "localhost" ] && [ "$host" != "127.0.0.1" ]; then
+      echo "WATCH FAILED: refusing to send the token to a non-HTTPS URL; tell the user"
+      exit 2
+    fi
+    ;;
   *)
     echo "WATCH FAILED: refusing to send the token to a non-HTTPS URL; tell the user"
     exit 2
@@ -51,7 +69,12 @@ while [ "$n" -lt "$checks" ]; do
       exit 1
       ;;
   esac
-  status="$(printf '%s' "$body" | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([a-z_]*\)".*/\1/p')"
+  # Only a 200 carries a status to trust; anything else is a transient
+  # failure, so keep waiting rather than read an error body as a decision.
+  status=""
+  if [ "$code" = "200" ]; then
+    status="$(printf '%s' "$body" | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([a-z_]*\)".*/\1/p')"
+  fi
   if [ -z "$status" ]; then
     status="unreachable"
   fi
