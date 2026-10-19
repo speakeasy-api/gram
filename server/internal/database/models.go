@@ -554,6 +554,65 @@ type AssistantDashboardMessage struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type AssistantInferenceCredential struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	AssistantID uuid.UUID
+	// @access: confidential
+	RuntimeID uuid.UUID
+	// @access: opaque-restricted
+	TokenHash []byte
+	// @access: opaque-restricted
+	IdentityJson []byte
+	// @access: opaque-restricted
+	PolicyJson []byte
+	// @access: confidential
+	PolicyVersion int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+}
+
+type AssistantKitGatewayCredential struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	AssistantID uuid.NullUUID
+	// @access: confidential
+	RuntimeID uuid.NullUUID
+	// @access: secret-restricted
+	TokenCiphertext string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type AssistantKitSession struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	AssistantID uuid.NullUUID
+	// @access: confidential
+	RuntimeID uuid.NullUUID
+	// @access: confidential
+	AssistantThreadID uuid.NullUUID
+	// @access: confidential
+	AcpSessionID string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+}
+
 type AssistantMcpOauthClient struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -7317,6 +7376,10 @@ type UserSession struct {
 type UserSessionClient struct {
 	// @access: confidential
 	ID uuid.UUID
+	// @access: confidential
+	AssistantTriggerWorkloadBindingID uuid.NullUUID
+	// @access: confidential
+	AssistantRuntimeID uuid.NullUUID
 	// @access: confidential
 	ProjectID uuid.NullUUID
 	// @access: confidential

@@ -4107,6 +4107,10 @@ WHERE classification = 'project_default_idp' AND deleted IS FALSE;
 -- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
 CREATE TABLE IF NOT EXISTS user_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- An explicit independent workload registration, pinned to one binding incarnation.
+  assistant_trigger_workload_binding_id uuid,
+  -- Immutable runtime incarnation for independently provisioned Kit clients.
+  assistant_runtime_id uuid,
   project_id uuid,
   organization_id TEXT,
   user_session_issuer_id uuid NOT NULL,
@@ -5854,7 +5858,7 @@ WHERE deleted IS FALSE AND ended IS FALSE AND runtime_version = 1;
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_runtimes_v2_one_per_assistant
 ON assistant_runtimes (project_id, assistant_id)
-WHERE runtime_version = 2 AND deleted IS FALSE AND ended IS FALSE;
+WHERE runtime_version IN (2, 3) AND deleted IS FALSE AND ended IS FALSE;
 
 CREATE INDEX IF NOT EXISTS assistant_runtimes_project_id_assistant_id_state_idx
 ON assistant_runtimes (project_id, assistant_id, state)
@@ -14841,3 +14845,91 @@ ON sigint_sensor_signals (project_id, sensor_id);
 
 CREATE INDEX IF NOT EXISTS sigint_sensor_signals_signal_reference_idx
 ON sigint_sensor_signals (project_id, signal_id);
+
+-- The referenced binding is declared after inbound OAuth clients.
+ALTER TABLE user_session_clients ADD CONSTRAINT user_session_clients_assistant_workload_binding_fkey
+  FOREIGN KEY (assistant_trigger_workload_binding_id) REFERENCES trigger_workload_bindings (id) ON DELETE SET NULL;
+COMMENT ON COLUMN user_session_clients.assistant_trigger_workload_binding_id IS '@access: confidential';
+CREATE INDEX IF NOT EXISTS user_session_clients_assistant_workload_binding_idx
+  ON user_session_clients (assistant_trigger_workload_binding_id)
+  WHERE assistant_trigger_workload_binding_id IS NOT NULL AND deleted IS FALSE;
+
+-- Startup credentials are inference-only and fenced by the persisted runtime generation.
+CREATE TABLE assistant_inference_credentials (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  assistant_id uuid NOT NULL REFERENCES assistants(id) ON DELETE CASCADE,
+  runtime_id uuid NOT NULL REFERENCES assistant_runtimes(id) ON DELETE CASCADE,
+  token_hash bytea NOT NULL UNIQUE CHECK (octet_length(token_hash) = 32),
+  identity_json jsonb NOT NULL,
+  policy_json jsonb NOT NULL,
+  policy_version integer NOT NULL CHECK (policy_version > 0),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  expires_at timestamptz NOT NULL CHECK (expires_at > created_at AND expires_at <= created_at + interval '30 days'),
+  revoked_at timestamptz
+);
+CREATE INDEX assistant_inference_credentials_runtime_idx ON assistant_inference_credentials (project_id, runtime_id);
+
+COMMENT ON COLUMN assistant_inference_credentials.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_inference_credentials.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_inference_credentials.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_inference_credentials.runtime_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_inference_credentials.token_hash IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistant_inference_credentials.identity_json IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistant_inference_credentials.policy_json IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistant_inference_credentials.policy_version IS '@access: confidential';
+COMMENT ON COLUMN assistant_inference_credentials.created_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_inference_credentials.expires_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_inference_credentials.revoked_at IS '@access: confidential';
+
+ALTER TABLE user_session_clients ADD CONSTRAINT user_session_clients_assistant_runtime_fkey
+  FOREIGN KEY (assistant_runtime_id) REFERENCES assistant_runtimes (id) ON DELETE SET NULL;
+COMMENT ON COLUMN user_session_clients.assistant_runtime_id IS '@access: confidential';
+CREATE INDEX IF NOT EXISTS user_session_clients_assistant_runtime_idx
+  ON user_session_clients (assistant_runtime_id)
+  WHERE assistant_runtime_id IS NOT NULL AND deleted IS FALSE;
+
+-- Opaque ACP sessions are scoped to an immutable runtime generation and thread.
+-- Orphaned references are retained but cannot pass the live-authority joins.
+CREATE TABLE assistant_kit_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid REFERENCES projects(id) ON DELETE SET NULL,
+  assistant_id uuid REFERENCES assistants(id) ON DELETE SET NULL,
+  runtime_id uuid REFERENCES assistant_runtimes(id) ON DELETE SET NULL,
+  assistant_thread_id uuid REFERENCES assistant_threads(id) ON DELETE SET NULL,
+  acp_session_id TEXT NOT NULL CHECK (acp_session_id <> ''),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT assistant_kit_sessions_pkey PRIMARY KEY (id)
+);
+CREATE UNIQUE INDEX assistant_kit_sessions_runtime_thread_key
+  ON assistant_kit_sessions (runtime_id, assistant_thread_id);
+CREATE UNIQUE INDEX assistant_kit_sessions_runtime_session_key
+  ON assistant_kit_sessions (runtime_id, acp_session_id);
+COMMENT ON COLUMN assistant_kit_sessions.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_sessions.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_sessions.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_sessions.runtime_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_sessions.assistant_thread_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_sessions.acp_session_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_sessions.created_at IS '@access: confidential';
+
+-- Gateway reconnection secrets are encrypted, never runtime backend metadata.
+CREATE TABLE assistant_kit_gateway_credentials (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid REFERENCES projects(id) ON DELETE SET NULL,
+  assistant_id uuid REFERENCES assistants(id) ON DELETE SET NULL,
+  runtime_id uuid REFERENCES assistant_runtimes(id) ON DELETE SET NULL,
+  token_ciphertext TEXT NOT NULL CHECK (token_ciphertext <> ''),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT assistant_kit_gateway_credentials_pkey PRIMARY KEY (id)
+);
+CREATE UNIQUE INDEX assistant_kit_gateway_credentials_runtime_key
+  ON assistant_kit_gateway_credentials (runtime_id);
+COMMENT ON COLUMN assistant_kit_gateway_credentials.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_gateway_credentials.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_gateway_credentials.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_gateway_credentials.runtime_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_gateway_credentials.token_ciphertext IS '@access: secret-restricted';
+COMMENT ON COLUMN assistant_kit_gateway_credentials.created_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_gateway_credentials.updated_at IS '@access: confidential';

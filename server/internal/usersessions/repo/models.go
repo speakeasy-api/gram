@@ -59,6 +59,10 @@ type UserSessionClient struct {
 	// @access: confidential
 	ID uuid.UUID
 	// @access: confidential
+	AssistantTriggerWorkloadBindingID uuid.NullUUID
+	// @access: confidential
+	AssistantRuntimeID uuid.NullUUID
+	// @access: confidential
 	ProjectID uuid.NullUUID
 	// @access: confidential
 	OrganizationID pgtype.Text
