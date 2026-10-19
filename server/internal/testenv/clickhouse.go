@@ -75,8 +75,13 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 				Password: "gram",
 			},
 			Settings: clickhouse.Settings{
-				"async_insert":          0,
-				"wait_for_async_insert": 0,
+				"async_insert": 0,
+				// Inserts that opt into async_insert per query leave the wait
+				// to the connection, which is fire-and-forget in production.
+				// Waiting here acks each insert only once its rows, and the
+				// materialized views they feed, are committed, so tests read
+				// their own writes without flushing or polling.
+				"wait_for_async_insert": 1,
 			},
 		})
 		if err != nil {
@@ -112,9 +117,11 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 	}
 }
 
-// FlushClickHouseAsyncInserts synchronously drains ClickHouse's async insert
-// queue. Some write paths use server-side async fire-and-forget inserts, so
-// rows only become visible to queries after a buffer flush.
+// FlushClickHouseAsyncInserts drains ClickHouse's async insert queue. It is
+// not a read-your-writes barrier: the server's background flusher can take an
+// entry off the queue just before the flush looks, and schedule it just after
+// the flush stops waiting. Inserts through the test connection already wait
+// for their own commit (wait_for_async_insert=1), so tests should not need it.
 func FlushClickHouseAsyncInserts(t *testing.T, conn clickhouse.Conn) {
 	t.Helper()
 

@@ -264,6 +264,10 @@ func openClickhouseClient(ctx context.Context, logger *slog.Logger, opts clickho
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
+			// Async inserts (async_insert=1 per query) are fire-and-forget:
+			// they ack once queued rather than once committed. Tests set 1 on
+			// their connection to read their own writes.
+			"wait_for_async_insert": 0,
 		},
 		MaxOpenConns: opts.maxOpenConns,
 		MaxIdleConns: opts.maxIdleConns,

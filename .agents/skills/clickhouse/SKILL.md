@@ -142,7 +142,7 @@ When asked to add a new ClickHouse query to the telemetry package:
 - Use the target package's existing ClickHouse fixture pattern (`testenv.Launch` or `testenv.NewTestClickhouse`) and a real ClickHouse container.
 - For `async_insert=0`, read directly after the insert.
 - For `async_insert=1, wait_for_async_insert=1`, read directly after the insert returns.
-- For `async_insert=1, wait_for_async_insert=0`, call `testenv.FlushClickHouseAsyncInserts(t, conn)` after the application issues the write and before reading. Synchronize any application goroutine first; do not use `time.Sleep` or polling to wait for the async queue.
+- For fire-and-forget writes, set only `async_insert=1` on the query and leave `wait_for_async_insert` to the connection: production sets 0, and the test connection sets 1, so tests read directly after the insert returns. Never pin `wait_for_async_insert=0` per query; it overrides the test connection and makes reads race the async queue. `testenv.FlushClickHouseAsyncInserts` is not a per-write barrier, and `time.Sleep` or polling only hides the race.
 - Do not use `clickhouse.WithAsync(false)` to request synchronous insertion: it enables fire-and-forget async inserts. Omit async options or set `async_insert=0` explicitly.
 - Use table-driven tests with descriptive `it`-prefix names and helper functions for test data insertion.
 
