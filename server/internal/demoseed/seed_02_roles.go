@@ -421,15 +421,16 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 		}
 	}
 
-	// Directory role mappings: one of each source kind, so the mapping page
-	// shows a group row and an attribute row, each granting a custom role on
-	// top of what its members already hold.
-	if err := s.q.RolesInsertGroupRoleMapping(ctx, repo.RolesInsertGroupRoleMappingParams{
-		OrganizationID: org,
-		GroupName:      "Infra",
-		RoleSlug:       "collaborator",
-	}); err != nil {
-		return fmt.Errorf("insert demo group role mapping: %w", err)
+	// Directory role mappings: Infra grants two roles from one source, alongside
+	// attribute mappings, on top of what members already hold directly.
+	for _, slug := range []string{"collaborator", "analyst"} {
+		if err := s.q.RolesInsertGroupRoleMapping(ctx, repo.RolesInsertGroupRoleMappingParams{
+			OrganizationID: org,
+			GroupName:      "Infra",
+			RoleSlug:       slug,
+		}); err != nil {
+			return fmt.Errorf("insert demo group role mapping %s: %w", slug, err)
+		}
 	}
 	if err := s.q.RolesInsertAttributeRoleMapping(ctx, repo.RolesInsertAttributeRoleMappingParams{
 		OrganizationID: org,

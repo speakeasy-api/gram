@@ -31,8 +31,8 @@ function recordingClient() {
 }
 
 describe("directory mapping SDK contract", () => {
-  it.each(["selection", "create-role return"])(
-    "sends singleton %s as a guarded set write and surfaces conflicts",
+  it.each(["chip edit", "create-role return"])(
+    "sends a %s as a guarded set write and surfaces conflicts",
     async (flow) => {
       const { client, requests } = recordingClient();
       const source = {
@@ -43,8 +43,12 @@ describe("directory mapping SDK contract", () => {
       const roleUrn = "role:global:admin";
       const previous = "role:organization:previous";
       const form =
-        flow === "selection"
-          ? { ...source, roleUrns: [roleUrn], expectedRoleUrns: [previous] }
+        flow === "chip edit"
+          ? {
+              ...source,
+              roleUrns: [previous, roleUrn],
+              expectedRoleUrns: [previous],
+            }
           : pendingMappingFromParams(
               completeCreateRoleFlow(
                 startCreateRoleFlow(source, "Engineering"),
@@ -73,7 +77,7 @@ describe("directory mapping SDK contract", () => {
         source_kind: "attribute",
         attribute_key: "department",
         attribute_value: "Engineering",
-        role_urns: [roleUrn],
+        role_urns: [previous, roleUrn],
         expected_role_urns: [previous],
       });
     },

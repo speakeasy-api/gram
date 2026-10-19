@@ -114,8 +114,8 @@ export function completeCreateRoleFlow(
 
 /**
  * The mapping to save on return, once the editor recorded a created role. The
- * new role replaces the source's current role, guarded by the roles mapped now
- * so a source another tab changed is refused rather than overwritten.
+ * new role is added to the source's current roles, guarded by the roles mapped
+ * now so a source another tab changed is refused rather than overwritten.
  */
 export function pendingMappingFromParams(
   params: URLSearchParams,
@@ -124,12 +124,13 @@ export function pendingMappingFromParams(
   const key = params.get(FLOW_PARAM);
   const record = key ? readRecord(key) : undefined;
   if (!key || !record?.roleUrn) return undefined;
+  const existingRoles = sourceRoleUrns(mappings, record.source);
   return {
     key,
     form: {
       ...record.source,
-      roleUrns: [record.roleUrn],
-      expectedRoleUrns: sourceRoleUrns(mappings, record.source),
+      expectedRoleUrns: existingRoles,
+      roleUrns: [...new Set([...existingRoles, record.roleUrn])],
     },
   };
 }

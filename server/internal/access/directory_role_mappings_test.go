@@ -1062,6 +1062,48 @@ func TestService_DirectoryRoleMapping_SkipsDeletedRole(t *testing.T) {
 	require.NotContains(t, principals, builder, "a mapping to a deleted role grants nothing")
 }
 
+func TestService_SetDirectoryRoleMappings_KeepsMappedDeletedRole(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_reviewer", "Reviewer", "reviewer", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	reviewer := seededRolePrincipal(t, ctx, ti.conn, orgID, "reviewer").String()
+	groupID := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Engineering").String()
+	otherGroupID := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Support").String()
+
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID, RoleUrns: []string{builder},
+	})
+	require.NoError(t, err)
+	_, err = repo.New(ti.conn).MarkOrganizationRoleDeletedLocally(ctx, repo.MarkOrganizationRoleDeletedLocallyParams{
+		OrganizationID: orgID,
+		WorkosSlug:     "builder",
+	})
+	require.NoError(t, err)
+
+	// Adding a role keeps the existing row for the deleted role unchanged.
+	saved, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID,
+		ExpectedRoleUrns: []string{builder}, RoleUrns: []string{builder, reviewer},
+	})
+	require.NoError(t, err)
+	savedRoles := make([]string, 0, len(saved))
+	for _, mapping := range saved {
+		savedRoles = append(savedRoles, mapping.RoleUrn)
+	}
+	require.ElementsMatch(t, []string{builder, reviewer}, savedRoles)
+
+	// The deleted role still cannot be added to a source that does not map it.
+	_, err = ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &otherGroupID, RoleUrns: []string{builder},
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
 func TestService_DirectoryRoleMapping_EmailFallbackIgnoresProfileLinkedToAnotherUser(t *testing.T) {
 	t.Parallel()
 
