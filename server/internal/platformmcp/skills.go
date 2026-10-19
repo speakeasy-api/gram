@@ -152,11 +152,13 @@ type SkillSummary struct {
 type SkillVersionSummary struct {
 	ID              string `json:"id"`
 	CanonicalSHA256 string `json:"canonical_sha256"`
-	// ServedDigest is the digest an agent sees for this version when it loads
-	// the skill over a hosted MCP server: the SHA-256 of the exact SKILL.md
-	// bytes as "sha256:<hex>". Only valid versions are ever served, so it is
-	// absent on an invalid one.
-	ServedDigest     string   `json:"served_digest,omitempty" jsonschema:"digest agents see for this version when they load the skill over a hosted MCP server, as sha256:<hex> of the exact SKILL.md bytes; match it against agent logs to tell which version an agent read; absent on invalid versions, which are never served"`
+	// ServedDigest is the digest an agent sees for this version when a hosted
+	// MCP server serves it: the SHA-256 of the exact SKILL.md bytes as
+	// "sha256:<hex>". Only valid versions are ever served, so it is absent on
+	// an invalid one. Servers also skip a version whose frontmatter name is not
+	// the skill's current name (after a rename, say), so its presence does not
+	// prove the version is served; it identifies the bytes when it is.
+	ServedDigest     string   `json:"served_digest,omitempty" jsonschema:"digest agents see for this version when a hosted MCP server serves it, as sha256:<hex> of the exact SKILL.md bytes; match it against agent logs to tell which version an agent read; absent on invalid versions, which are never served; a version whose frontmatter name differs from the skill's current name (for example after a rename) is not served either, so a digest here does not by itself mean the version is served"`
 	SpecValid        bool     `json:"spec_valid"`
 	ValidationErrors []string `json:"validation_errors,omitempty"`
 	CreatedAt        string   `json:"created_at"`
