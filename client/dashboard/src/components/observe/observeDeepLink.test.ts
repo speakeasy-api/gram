@@ -184,6 +184,15 @@ describe("buildObserveHref", () => {
     );
   });
 
+  it("narrows to skills whenever a channel is picked", () => {
+    const current = new URLSearchParams({ hookTypes: "hosted_mcp_server" });
+    const href = buildObserveHref(LOGS, current, { loadedVia: "mcp" });
+
+    expect(new URLSearchParams(href.split("?")[1]).get("hookTypes")).toBe(
+      "skill",
+    );
+  });
+
   it("returns the bare path when nothing is applied", () => {
     expect(buildObserveHref(LOGS, new URLSearchParams())).toBe(LOGS);
   });

@@ -134,6 +134,8 @@ export function RankedList({
 
           const content = (
             <>
+              {/* Segmented rows skip the rank ramp: their fill strength already
+                  tells the parts apart, so order reads from bar length alone. */}
               {row.segments ? (
                 <span
                   aria-hidden

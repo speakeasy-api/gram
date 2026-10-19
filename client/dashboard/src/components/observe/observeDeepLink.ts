@@ -138,7 +138,12 @@ export function buildObserveHref(
         value: scope.toolName,
       });
     }
-    if (scope.loadedVia) merged = withLoadedVia(merged, scope.loadedVia);
+    if (scope.loadedVia) {
+      merged = withLoadedVia(merged, scope.loadedVia);
+      // The channel means nothing for a tool call: without the type, "MCP"
+      // would let every hosted tool call through.
+      params.set("hookTypes", "skill");
+    }
     const serialized = serializeFilters(merged);
     if (serialized) params.set("af", serialized);
   }

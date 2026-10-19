@@ -272,15 +272,23 @@ export function InsightsGrid({
       }),
     }));
 
-  const skillSplit = skillChannels
-    ? splitSkillLoads(
-        skills.map((target) => ({
-          targetId: target.targetId,
-          eventCount: Number(target.eventCount),
-        })),
-        skillChannels.hookCounts,
-      )
-    : undefined;
+  // The split is a refinement of the totals: until the hook-only read lands,
+  // or if it fails, the cards fall back to the single total rather than
+  // blanking what the primary read already answered.
+  const skillLoadTotal = skills.reduce(
+    (sum, target) => sum + Number(target.eventCount),
+    0,
+  );
+  const skillSplit =
+    skillChannels && !skillChannels.pending && !skillChannels.error
+      ? splitSkillLoads(
+          skills.map((target) => ({
+            targetId: target.targetId,
+            eventCount: Number(target.eventCount),
+          })),
+          skillChannels.hookCounts,
+        )
+      : undefined;
 
   const skillRows: RankedRow[] = skills.map((target) => {
     const split = skillSplit?.bySkill.get(target.targetId);
@@ -298,10 +306,6 @@ export function InsightsGrid({
         : undefined,
     };
   });
-  const skillChannelsPending =
-    status.targets.pending || (skillChannels?.pending ?? false);
-  const skillChannelsError =
-    status.targets.error || (skillChannels?.error ?? false);
 
   const clientRows: RankedRow[] = clients.map((client) => ({
     id: `client:${client.clientKey}`,
@@ -344,7 +348,7 @@ export function InsightsGrid({
       <div
         className={cn(
           "grid grid-cols-2 gap-4",
-          skillSplit ? "lg:grid-cols-5" : "lg:grid-cols-4",
+          skillChannels ? "lg:grid-cols-5" : "lg:grid-cols-4",
         )}
       >
         <InsightCard
@@ -405,13 +409,17 @@ export function InsightsGrid({
           <InsightCard
             title="Skill loads"
             href={logsLink({ targetTypes: ["skill"] })}
-            loading={skillChannelsPending}
-            error={skillChannelsError}
+            loading={status.targets.pending}
+            error={status.targets.error}
           >
             <MetricSpark
-              value={(skillSplit?.totals.total ?? 0).toLocaleString()}
+              value={skillLoadTotal.toLocaleString()}
               series={[]}
-              caption={`${(skillSplit?.totals.mcp ?? 0).toLocaleString()} over MCP · ${(skillSplit?.totals.hook ?? 0).toLocaleString()} from hooks`}
+              caption={
+                skillSplit
+                  ? `${skillSplit.totals.mcp.toLocaleString()} over MCP · ${skillSplit.totals.hook.toLocaleString()} from hooks`
+                  : undefined
+              }
             />
           </InsightCard>
         )}
@@ -486,10 +494,10 @@ export function InsightsGrid({
         <InsightCard
           title="Most used skills"
           href={logsLink({ targetTypes: ["skill"] })}
-          loading={skillChannelsPending}
-          error={skillChannelsError}
+          loading={status.targets.pending}
+          error={status.targets.error}
         >
-          {skillChannels && skillRows.length > 0 && (
+          {skillSplit && skillRows.length > 0 && (
             <div className="text-muted-foreground -mt-1 flex items-center gap-3 text-xs">
               {(["mcp", "hook"] as const).map((channel) => {
                 const swatch = (

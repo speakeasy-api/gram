@@ -321,6 +321,7 @@ export function InsightsToolsContent(): JSX.Element {
   const { refetch: refetchTargetTimeSeries } = targetTimeSeriesQuery;
   const { refetch: refetchClients } = clientsQuery;
   const { refetch: refetchTargetToolBreakdown } = targetToolBreakdownQuery;
+  const { refetch: refetchSkillHookTargets } = skillHookTargetsQuery;
 
   const isAnyFetching =
     totalsFetching ||
@@ -328,7 +329,8 @@ export function InsightsToolsContent(): JSX.Element {
     usersQuery.isFetching ||
     targetTimeSeriesQuery.isFetching ||
     clientsQuery.isFetching ||
-    targetToolBreakdownQuery.isFetching;
+    targetToolBreakdownQuery.isFetching ||
+    skillHookTargetsQuery.isFetching;
 
   const { data: filterOptionsData } = useQuery({
     queryKey: [
@@ -386,6 +388,7 @@ export function InsightsToolsContent(): JSX.Element {
     void refetchTargetTimeSeries();
     void refetchClients();
     void refetchTargetToolBreakdown();
+    void refetchSkillHookTargets();
   }, [
     refetchTotals,
     refetchTargets,
@@ -393,6 +396,7 @@ export function InsightsToolsContent(): JSX.Element {
     refetchTargetTimeSeries,
     refetchClients,
     refetchTargetToolBreakdown,
+    refetchSkillHookTargets,
   ]);
 
   const isLogsDisabled = isLogsLogsDisabled;
