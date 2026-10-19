@@ -81,7 +81,9 @@ function TeamGatewayContent({
       }
       primaryAction={
         isOn !== undefined && !features.isLoading ? (
-          <label className="flex items-center gap-3">
+          // Not a <label>: label activation would forward clicks on the text
+          // to the switch past RequireScope's pointer-events guard.
+          <div className="flex items-center gap-3">
             <Text small muted as="span">
               {isOn ? "Enabled" : "Off"}
             </Text>
@@ -90,7 +92,7 @@ function TeamGatewayContent({
               setOn={setOn}
               isPending={isPending}
             />
-          </label>
+          </div>
         ) : undefined
       }
     >
@@ -141,7 +143,9 @@ function GatewayBody({
     );
   }
 
-  if (isOn === false) {
+  // The gateway's own "turned off" counts too, so a setting read that lags
+  // behind it doesn't leave an unexplained "Not available".
+  if (isOn === false || gateway.data.unavailableReason === "turned_off") {
     return (
       <Alert variant="warning">
         <AlertDescription>

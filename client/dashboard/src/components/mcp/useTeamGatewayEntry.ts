@@ -19,7 +19,9 @@ export function useTeamGatewayEntry(): {
     throwOnError: false,
   });
   const isOff = data?.unavailableReason === "turned_off";
+  // The page needs org:read, so the entry does too.
   const show =
-    !!data?.available || (isOff && hasScope("org:admin", organization.id));
+    hasScope("org:read", organization.id) &&
+    (!!data?.available || (isOff && hasScope("org:admin", organization.id)));
   return { show, isOff, url: data?.available ? data.url : undefined };
 }

@@ -260,15 +260,14 @@ export function useIconDither({
       // separate fills would cost far more than the maths.
       const colors = palette && palette.length > 0 ? palette : [ink];
       const paths = colors.map(() => new Path2D());
+      const bandOf = Array.from({ length: cols }, (_, col) =>
+        Math.min(colors.length - 1, Math.floor((col / cols) * colors.length)),
+      );
       for (let row = 0; row < rows; row++) {
         const thresholds = BAYER[row % 4]!;
         for (let col = 0; col < cols; col++) {
           if (density(col, row, t, sea) * level > thresholds[col % 4]!) {
-            const band = Math.min(
-              colors.length - 1,
-              Math.floor((col / cols) * colors.length),
-            );
-            paths[band]!.rect(col * CELL, row * CELL, DOT, DOT);
+            paths[bandOf[col]!]!.rect(col * CELL, row * CELL, DOT, DOT);
           }
         }
       }
