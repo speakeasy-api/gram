@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # The local seed is the demo org seed retargeted at the dev-idp's default org
-# (see server/internal/demoseed/spec.go): the same SQL, the same code path
+# (see server/internal/demoseed/spec.go): the same Go seed, the same code path
 # production runs daily, but writable and with you adopted into it as an admin.
 # It also seeds the shared demo org itself, untargeted, so /explore-demo shows
 # the same data locally as it does in production. You are not a member there —

@@ -15,10 +15,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // policyRow is a saved provider: an external remote session issuer or the
@@ -63,6 +65,18 @@ func setPolicy(t *testing.T, f devIDPFixture, organizationID string, rows ...pol
 	}
 }
 
+// useSpeakeasySignIn makes req's endpoint use Speakeasy's own sign-in, the
+// only sign-in Speakeasy can vouch from, by clearing its trusted issuer.
+func useSpeakeasySignIn(t *testing.T, db usersessionsrepo.DBTX, req Request) {
+	t.Helper()
+	_, err := usersessionsrepo.New(db).UpdateOrganizationUserSessionIssuer(t.Context(), usersessionsrepo.UpdateOrganizationUserSessionIssuerParams{
+		Slug: pgtype.Text{}, AuthnChallengeMode: pgtype.Text{}, SessionDuration: pgtype.Interval{}, ClientIDMetadataAdmissionMode: pgtype.Text{},
+		TrustedRemoteSessionIssuerID: pgtype.Text{String: "", Valid: true}, TrustedRemoteSessionClientID: pgtype.Text{String: "", Valid: true},
+		ID: req.UserSessionIssuerID, OrganizationID: req.OrganizationID,
+	})
+	require.NoError(t, err)
+}
+
 // useSpeakeasySource makes the Speakeasy provider serve through src.
 func useSpeakeasySource(f devIDPFixture, src tokenSource) {
 	f.chainer.sources[remotesessions.EMAProviderSpeakeasy] = func(remotesessions.EMAProvider) tokenSource { return src }
@@ -75,6 +89,9 @@ type failingSource struct {
 	reuseOutcome     Outcome
 	issueOutcome     Outcome
 	issued           int
+
+	// authorized counts the attempts that reached the source at all.
+	authorized int
 }
 
 func (*failingSource) kind() remotesessions.EMAProviderKind {
@@ -84,6 +101,7 @@ func (*failingSource) kind() remotesessions.EMAProviderKind {
 func (*failingSource) available() bool { return true }
 
 func (s *failingSource) authorize(context.Context, *slog.Logger, Request, *selection) Outcome {
+	s.authorized++
 	return s.authorizeOutcome
 }
 
@@ -117,23 +135,38 @@ func (s flakySource) issue(ctx context.Context, logger *slog.Logger, req Request
 func useFlakyExternal(f devIDPFixture, transient int) *int {
 	issued := new(int)
 	f.chainer.sources[remotesessions.EMAProviderExternal] = func(p remotesessions.EMAProvider) tokenSource {
-		return flakySource{tokenSource: externalSource{c: f.chainer, issuer: p.RemoteSessionIssuerID}, transient: transient, issued: issued}
+		return flakySource{tokenSource: externalSource{g: &f.chainer.Governor, c: f.chainer, issuer: p.RemoteSessionIssuerID}, transient: transient, issued: issued}
 	}
 	return issued
 }
 
-func TestProviders_DefaultIsTheEndpointsExternalIssuer(t *testing.T) {
+func TestProviders_DefaultIsTheEndpointsExternalIssuerAlone(t *testing.T) {
 	t.Parallel()
 	f := newDevIDPFixture(t, devIDPOptions{})
 	seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
+	src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: success, issued: 0}
+	useSpeakeasySource(f, src)
 
 	order, ok, _ := f.chainer.ProviderOrder(t.Context(), f.req)
 	require.True(t, ok)
 	require.True(t, order.IsDefault)
-	require.Equal(t, []remotesessions.EMAProvider{{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}}, order.Providers, "Speakeasy serves only an order that names it")
+	require.Equal(t, []remotesessions.EMAProvider{
+		{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""},
+	}, order.Providers, "the derived default keeps the endpoint's trusted external issuer alone")
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 	require.Equal(t, remotesessions.EMAProviderExternal, outcome.Provider)
+	require.Zero(t, src.issued, "Speakeasy is not tried while the external issuer serves")
+}
+
+func TestProviders_DefaultWithoutSpeakeasyIssuerIsExternalOnly(t *testing.T) {
+	t.Parallel()
+	f := newDevIDPFixture(t, devIDPOptions{})
+
+	order, ok, _ := f.chainer.ProviderOrder(t.Context(), f.req)
+	require.True(t, ok)
+	require.True(t, order.IsDefault)
+	require.Equal(t, []remotesessions.EMAProvider{{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}}, order.Providers)
 }
 
 func TestProviders_DefaultDoesNotAddSpeakeasyWhenItCanSign(t *testing.T) {
@@ -144,8 +177,25 @@ func TestProviders_DefaultDoesNotAddSpeakeasyWhenItCanSign(t *testing.T) {
 
 	order, ok, _ := f.chainer.ProviderOrder(t.Context(), f.req)
 	require.True(t, ok)
-	require.Len(t, order.Providers, 1)
-	require.Equal(t, remotesessions.EMAProviderExternal, order.Providers[0].Kind)
+	require.True(t, order.IsDefault)
+	require.Equal(t, []remotesessions.EMAProvider{{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: "", LastAcceptedAt: nil}}, order.Providers,
+		"setting up the Speakeasy issuer never adds an authority behind an endpoint's trusted external issuer")
+}
+
+func TestProviders_DefaultNeverRetriesAnExternalDenialWithSpeakeasy(t *testing.T) {
+	t.Parallel()
+	f := newDevIDPFixture(t, devIDPOptions{})
+	seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
+	denied := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageExchange, ReasonAccessDenied, ConfidenceInferred, false), issued: 0}
+	f.chainer.sources[remotesessions.EMAProviderExternal] = func(remotesessions.EMAProvider) tokenSource { return denied }
+	src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: success, issued: 0}
+	useSpeakeasySource(f, src)
+
+	_, outcome := f.chainer.Acquire(t.Context(), f.req)
+	require.False(t, outcome.Succeeded(), "outcome: %+v", outcome)
+	require.Equal(t, ReasonAccessDenied, outcome.Reason)
+	require.Equal(t, 1, denied.issued)
+	require.Zero(t, src.issued, "with no saved order the identity provider's denial stands")
 }
 
 func TestProviders_ManagementReadMatchesRuntime(t *testing.T) {
@@ -179,6 +229,7 @@ func TestProviders_ManagementReadMatchesRuntime(t *testing.T) {
 func TestProviders_AnOrderWithoutExternalNeverUsesIt(t *testing.T) {
 	t.Parallel()
 	f := newDevIDPFixture(t, devIDPOptions{})
+	useSpeakeasySignIn(t, f.db, f.req)
 	src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageExchange, ReasonAccessDenied, ConfidenceInferred, false), issued: 0}
 	useSpeakeasySource(f, src)
 	setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
@@ -189,6 +240,25 @@ func TestProviders_AnOrderWithoutExternalNeverUsesIt(t *testing.T) {
 	require.Equal(t, remotesessions.EMAProviderSpeakeasy, outcome.Provider)
 	require.Equal(t, 1, src.issued)
 	require.Equal(t, requests, f.idp.Requests(), "the external issuer is never contacted")
+}
+
+func TestProviders_SpeakeasyNeverVouchesOnAFederatedSignIn(t *testing.T) {
+	t.Parallel()
+	f := newDevIDPFixture(t, devIDPOptions{})
+	reauth := newOutcome(StageAuthorization, ReasonReauthenticationRequired, ConfidenceVerified, false)
+	src := &failingSource{authorizeOutcome: reauth, reuseOutcome: reauth, issueOutcome: success, issued: 0}
+	useSpeakeasySource(f, src)
+	setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
+	requests := f.idp.Requests()
+
+	_, serves := f.chainer.Serves(t.Context(), f.req)
+	require.False(t, serves)
+	token, outcome := f.chainer.Acquire(t.Context(), f.req)
+	require.Empty(t, token.Value())
+	require.Equal(t, ReasonProviderUnavailable, outcome.Reason, "signing in again can never give Speakeasy a sign-in to vouch from")
+	require.Equal(t, remotesessions.EMAProviderNotTrustedByEndpoint, outcome.Unavailable)
+	require.Zero(t, src.authorized, "the Speakeasy source is never invoked")
+	require.Equal(t, requests, f.idp.Requests(), "no provider is contacted")
 }
 
 func TestProviders_TransientFailureIsRetriedThenSucceeds(t *testing.T) {
@@ -203,33 +273,21 @@ func TestProviders_TransientFailureIsRetriedThenSucceeds(t *testing.T) {
 	require.Equal(t, 2, *issued, "one transient failure is retried against the same provider")
 }
 
-func TestProviders_FailuresFallThroughToTheNextTrustedProvider(t *testing.T) {
+func TestProviders_SpeakeasyAheadOfTheSignInsIssuerIsSkipped(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name   string
-		source *failingSource
-		issues int
-	}{
-		{name: "authorization", source: &failingSource{authorizeOutcome: newOutcome(StageAuthorization, ReasonConfigurationRequired, ConfidenceVerified, false), reuseOutcome: success, issueOutcome: success, issued: 0}, issues: 0},
-		{name: "ineligible identity", source: &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageExchange, ReasonIneligibleIdentity, ConfidenceVerified, false), issued: 0}, issues: 1},
-		{name: "unavailable at runtime", source: &failingSource{authorizeOutcome: unavailableBecause(remotesessions.EMAProviderSigningPaused), reuseOutcome: success, issueOutcome: success, issued: 0}, issues: 0},
-		{name: "policy denial", source: &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageExchange, ReasonAccessDenied, ConfidenceInferred, false), issued: 0}, issues: 1},
-		{name: "invalid grant", source: &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageRedemption, ReasonInvalidGrant, ConfidenceUnknown, false), issued: 0}, issues: 1},
-		{name: "retry budget exhausted", source: &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageExchange, ReasonTransientFailure, ConfidenceInferred, true), issued: 0}, issues: maxProviderAttempts},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			f := newDevIDPFixture(t, devIDPOptions{})
-			useSpeakeasySource(f, tc.source)
-			setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)), external(f.trustedIssuerID))
+	f := newDevIDPFixture(t, devIDPOptions{})
+	src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: success, issued: 0}
+	useSpeakeasySource(f, src)
+	setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)), external(f.trustedIssuerID))
 
-			token, outcome := f.chainer.Acquire(t.Context(), f.req)
-			require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
-			require.NotEmpty(t, token.Value())
-			require.Equal(t, remotesessions.EMAProviderExternal, outcome.Provider, "the next trusted provider serves")
-			require.Equal(t, tc.issues, tc.source.issued, "only transient failures are retried")
-		})
-	}
+	order, ok, _ := f.chainer.ProviderOrder(t.Context(), f.req)
+	require.True(t, ok)
+	require.Equal(t, remotesessions.EMAProviderNotTrustedByEndpoint, order.Providers[0].Unavailable)
+	token, outcome := f.chainer.Acquire(t.Context(), f.req)
+	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
+	require.NotEmpty(t, token.Value())
+	require.Equal(t, remotesessions.EMAProviderExternal, outcome.Provider, "the sign-in's own issuer serves")
+	require.Zero(t, src.authorized, "Speakeasy is never tried on a federated sign-in")
 }
 
 func TestProviders_FirstProviderThatSucceedsServes(t *testing.T) {
@@ -254,7 +312,7 @@ func TestProviders_UntrustedProviderIsSkipped(t *testing.T) {
 		if p.RemoteSessionIssuerID != f.trustedIssuerID {
 			return untrusted
 		}
-		return flakySource{tokenSource: externalSource{c: f.chainer, issuer: p.RemoteSessionIssuerID}, transient: 0, issued: issued}
+		return flakySource{tokenSource: externalSource{g: &f.chainer.Governor, c: f.chainer, issuer: p.RemoteSessionIssuerID}, transient: 0, issued: issued}
 	}
 	setPolicy(t, f, f.req.OrganizationID, external(f.resourceIssuerID), external(f.trustedIssuerID))
 
@@ -286,12 +344,12 @@ func TestProviders_AllProvidersFailReportsEachReason(t *testing.T) {
 	require.Equal(t, []ProviderFailure{
 		{Provider: remotesessions.EMAProviderExternal, Reason: ReasonProviderUnavailable, Unavailable: remotesessions.EMAProviderNotTrustedByEndpoint},
 		{Provider: remotesessions.EMAProviderExternal, Reason: ReasonAccessDenied, Unavailable: ""},
-		{Provider: remotesessions.EMAProviderSpeakeasy, Reason: ReasonInvalidGrant, Unavailable: ""},
+		{Provider: remotesessions.EMAProviderSpeakeasy, Reason: ReasonProviderUnavailable, Unavailable: remotesessions.EMAProviderNotTrustedByEndpoint},
 	}, outcome.Failures, "every provider's reason is reported")
-	require.Equal(t, 1, src.issued)
+	require.Zero(t, src.authorized)
 }
 
-func TestProviders_AllProvidersFailPrefersReauthentication(t *testing.T) {
+func TestProviders_SkippedSpeakeasyNeverAsksToSignInAgain(t *testing.T) {
 	t.Parallel()
 	f := newDevIDPFixture(t, devIDPOptions{unassigned: true})
 	reauth := newOutcome(StageAuthorization, ReasonReauthenticationRequired, ConfidenceVerified, false)
@@ -301,50 +359,42 @@ func TestProviders_AllProvidersFailPrefersReauthentication(t *testing.T) {
 
 	token, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.Empty(t, token.Value())
-	require.Equal(t, ReasonReauthenticationRequired, outcome.Reason, "the later reconnect challenge beats the earlier denial")
-	require.Equal(t, remotesessions.EMAProviderSpeakeasy, outcome.Provider)
+	require.Equal(t, ReasonAccessDenied, outcome.Reason, "the sign-in's issuer explains the failure; Speakeasy never asks for a sign-in it cannot use")
+	require.Equal(t, remotesessions.EMAProviderExternal, outcome.Provider)
 	require.Equal(t, []ProviderFailure{
 		{Provider: remotesessions.EMAProviderExternal, Reason: ReasonAccessDenied, Unavailable: ""},
-		{Provider: remotesessions.EMAProviderSpeakeasy, Reason: ReasonReauthenticationRequired, Unavailable: ""},
+		{Provider: remotesessions.EMAProviderSpeakeasy, Reason: ReasonProviderUnavailable, Unavailable: remotesessions.EMAProviderNotTrustedByEndpoint},
 	}, outcome.Failures, "every provider's reason is reported")
-	require.Zero(t, src.issued)
-}
-
-// publishedKeySource is a failingSource whose signing key was published at
-// publishedAt.
-type publishedKeySource struct {
-	*failingSource
-	publishedAt time.Time
-}
-
-func (s publishedKeySource) authorize(ctx context.Context, logger *slog.Logger, req Request, sel *selection) Outcome {
-	sel.internalKeyPublishedAt = s.publishedAt
-	return s.failingSource.authorize(ctx, logger, req, sel)
+	require.Zero(t, src.authorized)
 }
 
 func TestProviders_RecentKeyRedemptionFailureIsNotCached(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name        string
-		publishedAt time.Time
-		issues      int
+		name     string
+		sinceKey time.Duration
+		issues   int32
 	}{
-		{name: "recent key", publishedAt: time.Now(), issues: 2},
-		{name: "key past the vendor refresh window", publishedAt: time.Now().Add(-recentKeyWindow - time.Minute), issues: 1},
+		{name: "recent key", sinceKey: time.Minute, issues: 2},
+		{name: "key past the vendor refresh window", sinceKey: recentKeyWindow + time.Minute, issues: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			f := newDevIDPFixture(t, devIDPOptions{})
-			src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageRedemption, ReasonInvalidGrant, ConfidenceUnknown, false), issued: 0}
-			useSpeakeasySource(f, publishedKeySource{failingSource: src, publishedAt: tc.publishedAt})
-			setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
+			lf := newSpeakeasyLiveFixture(t)
+			lf.rejectRedemption.Store(new(oautherr.CodeInvalidGrant))
+			lf.chainer.now = func() time.Time { return lf.status.ActiveKey.CreatedAt.Time.Add(tc.sinceKey) }
+			grant := lf.newGrant(t, lf.signIn.ID)
 
-			_, first := f.chainer.Acquire(t.Context(), f.req)
+			_, first := lf.chainer.Acquire(t.Context(), grant)
+			lf.checkExchange()
 			require.Equal(t, ReasonInvalidGrant, first.Reason)
-			_, second := f.chainer.Acquire(t.Context(), f.req)
+			_, second := lf.chainer.Acquire(t.Context(), grant)
+			if tc.issues == 2 {
+				lf.checkExchange()
+			}
 			require.Equal(t, ReasonInvalidGrant, second.Reason)
 			require.Equal(t, tc.issues == 1, second.Cached)
-			require.Equal(t, tc.issues, src.issued)
+			require.Equal(t, tc.issues, lf.calls.Load())
 		})
 	}
 }
@@ -358,6 +408,7 @@ func TestProviders_AnOrderWithNoServingProviderIsNotServed(t *testing.T) {
 	}{
 		{name: "speakeasy cannot sign yet", reasons: []remotesessions.EMAProviderUnavailableReason{remotesessions.EMAProviderSigningUnavailable}, setup: func(t *testing.T, f devIDPFixture) {
 			t.Helper()
+			useSpeakeasySignIn(t, f.db, f.req)
 			setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
 		}},
 		{name: "disabled speakeasy issuer", reasons: []remotesessions.EMAProviderUnavailableReason{remotesessions.EMAProviderDisabled}, setup: func(t *testing.T, f devIDPFixture) {
@@ -367,7 +418,7 @@ func TestProviders_AnOrderWithNoServingProviderIsNotServed(t *testing.T) {
 			_, err := testrepo.New(f.db).DisableInternalSessionIssuerFixture(t.Context(), testrepo.DisableInternalSessionIssuerFixtureParams{OrganizationID: f.req.OrganizationID, ID: issuer})
 			require.NoError(t, err)
 		}},
-		{name: "only issuers the endpoint does not trust", reasons: []remotesessions.EMAProviderUnavailableReason{remotesessions.EMAProviderNotTrustedByEndpoint, remotesessions.EMAProviderSigningUnavailable}, setup: func(t *testing.T, f devIDPFixture) {
+		{name: "only providers the endpoint's sign-in does not go through", reasons: []remotesessions.EMAProviderUnavailableReason{remotesessions.EMAProviderNotTrustedByEndpoint, remotesessions.EMAProviderNotTrustedByEndpoint}, setup: func(t *testing.T, f devIDPFixture) {
 			t.Helper()
 			setPolicy(t, f, f.req.OrganizationID, external(f.resourceIssuerID), speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
 		}},
@@ -448,7 +499,7 @@ func TestProviders_OrderChangedMidAttemptDiscardsTheToken(t *testing.T) {
 	internalIssuer := seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
 	f.chainer.sources[remotesessions.EMAProviderExternal] = func(p remotesessions.EMAProvider) tokenSource {
 		return interceptingSource{
-			tokenSource: externalSource{c: f.chainer, issuer: p.RemoteSessionIssuerID},
+			tokenSource: externalSource{g: &f.chainer.Governor, c: f.chainer, issuer: p.RemoteSessionIssuerID},
 			afterIssue:  func() { setPolicy(t, f, f.req.OrganizationID, speakeasy(internalIssuer)) },
 		}
 	}

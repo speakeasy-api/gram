@@ -92,3 +92,29 @@ func TestReadingProviderProvenanceRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestReadingPreservesStringAttributeSnapshots(t *testing.T) {
+	t.Parallel()
+	m := message()
+	snapshot := &conversationv1.MessageEvent_IngestionContext{}
+	snapshot.SetAttributes(map[string]string{"department": "example-team", "empty": ""})
+	m.SetIngestion(snapshot)
+	event := (&conversationInput{message: m, stored: storedMessage(m)}).Event()
+	snapshot.GetAttributes()["department"] = "changed"
+	require.Equal(t, "example-team", event.Attributes["department"])
+	sensor, ready := compileSensor(sensors()[0])
+	require.True(t, ready)
+	answers := make(map[classifier.QuestionKey]classifier.QuestionOutcome)
+	for _, q := range sensor.questions {
+		answers[q.Key] = classifier.QuestionOutcome{Key: q.Key, Answer: &classifier.Answer{Noul: &classifier.NoulAnswer{Probability: 0.5}}}
+	}
+	r, err := reading(event, sensor, answers, "attempt", "time", classifier.Result{})
+	require.NoError(t, err)
+	event.Attributes["department"] = "changed-again"
+	require.Equal(t, "example-team", r.GetAttributes()["department"])
+	data, err := proto.Marshal(r)
+	require.NoError(t, err)
+	decoded := &sigintv1.Reading{}
+	require.NoError(t, proto.Unmarshal(data, decoded))
+	require.Equal(t, map[string]string{"department": "example-team", "empty": ""}, decoded.GetAttributes())
+}

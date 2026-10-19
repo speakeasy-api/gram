@@ -116,6 +116,33 @@ COMMENT ON COLUMN organization_metadata.disabled_at IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
 
+-- Signup records a pending application; activation fills both redemption fields.
+-- Organization-level billing history intentionally survives organization deletion.
+CREATE TABLE IF NOT EXISTS organization_promotion_applications (
+  redeemed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  organization_id TEXT REFERENCES organization_metadata(id) ON DELETE SET NULL,
+  stripe_promotion_code_id TEXT NOT NULL,
+  stripe_subscription_id TEXT,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  CONSTRAINT organization_promotion_applications_redemption_pair CHECK ((redeemed_at IS NULL) = (stripe_subscription_id IS NULL))
+);
+
+COMMENT ON COLUMN organization_promotion_applications.redeemed_at IS '@access: confidential';
+COMMENT ON COLUMN organization_promotion_applications.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_promotion_applications.updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_promotion_applications.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_promotion_applications.stripe_promotion_code_id IS '@access: restricted';
+COMMENT ON COLUMN organization_promotion_applications.stripe_subscription_id IS '@access: restricted';
+COMMENT ON COLUMN organization_promotion_applications.id IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_promotion_applications_org_promo_uidx
+  ON organization_promotion_applications (organization_id, stripe_promotion_code_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_promotion_applications_pending_org_uidx
+  ON organization_promotion_applications (organization_id) WHERE redeemed_at IS NULL;
+
 -- One enterprise-trial lifecycle per organization. Lifecycle operations update
 -- the row in place. Unrelated to organization_metadata.free_trial_*, another
 -- concept.
@@ -4288,6 +4315,53 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_session_consents_subject_client_set_key
 ON user_session_consents (subject_urn, user_session_client_id, remote_set_hash)
 WHERE deleted IS FALSE;
 
+-- Approval evidence is specific to a resource; the parent consent supplies
+-- the subject, OAuth client and issuer tenancy. Parent liveness is required
+-- when reading evidence, including after issuer moves or deletion.
+CREATE TABLE IF NOT EXISTS user_session_consent_resources (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid,
+  user_session_consent_id uuid,
+  resource text NOT NULL,
+  inventory_hash text NOT NULL,
+  remote_set_hash text NOT NULL,
+  tool_selection jsonb,
+  session_duration_hours integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+  CONSTRAINT user_session_consent_resources_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_consent_resources_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT user_session_consent_resources_user_session_consent_id_fkey FOREIGN KEY (user_session_consent_id) REFERENCES user_session_consents (id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN user_session_consent_resources.id IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.project_id IS 'Target resource project, independent of issuer tenancy.
+@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.user_session_consent_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.resource IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.inventory_hash IS 'Versioned fingerprint of the complete approved tool inventory.
+@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.remote_set_hash IS 'Fingerprint of the approved upstream clients, resources and requested permissions.
+@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.tool_selection IS '@access: opaque-restricted';
+COMMENT ON COLUMN user_session_consent_resources.session_duration_hours IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.created_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.updated_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_consent_resources_consent_resource_key
+ON user_session_consent_resources (user_session_consent_id, resource)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS user_session_consent_resources_project_id_idx
+ON user_session_consent_resources (project_id);
+
+CREATE INDEX IF NOT EXISTS user_session_consent_resources_user_session_consent_id_idx
+ON user_session_consent_resources (user_session_consent_id);
+
 -- One row per WorkOS session established by a Speakeasy sign-in, from the
 -- dashboard login or an MCP authorization. MCP grants (user_sessions) record
 -- the sign-in that created them, so revoking a sign-in revokes its grants.
@@ -4601,6 +4675,11 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   -- absent from the registration UI.
   allow_wildcard_admission boolean NOT NULL DEFAULT true,
 
+  -- Where assertions' signing keys come from. NULL is the remote jwks_uri;
+  -- 'device_keys' verifies each assertion against the key registered for its
+  -- own subject in workload_device_keys, so one device cannot sign as another.
+  key_source TEXT,
+
   -- The last discovery document captured for this issuer, verbatim. The typed
   -- columns above model only what Gram acts on; the rest of a document is kept
   -- because a platform preset needs claims_supported to tell an operator what
@@ -4628,6 +4707,7 @@ COMMENT ON COLUMN workload_issuers.description IS '@access: opaque-restricted';
 COMMENT ON COLUMN workload_issuers.tags IS '@access: opaque-confidential';
 COMMENT ON COLUMN workload_issuers.issuer IS '@access: restricted';
 COMMENT ON COLUMN workload_issuers.jwks_uri IS '@access: restricted';
+COMMENT ON COLUMN workload_issuers.key_source IS '@access: confidential';
 COMMENT ON COLUMN workload_issuers.allow_wildcard_admission IS '@access: confidential';
 COMMENT ON COLUMN workload_issuers.metadata IS '@access: opaque-restricted';
 COMMENT ON COLUMN workload_issuers.created_at IS '@access: confidential';
@@ -7429,8 +7509,9 @@ WHERE user_id IS NOT NULL;
 -- are added to a user's principals at access-check time, on top of the roles
 -- WorkOS assigns, and are never written back to WorkOS. `source_kind` is
 -- 'group' (directory_group_id set) or 'attribute' (attribute_key and
--- attribute_value set). Each group or attribute value maps to one role. The
--- group reference is pinned to the mapping's organization by a composite FK.
+-- attribute_value set). Each group or attribute value grants a set of roles,
+-- with one live row per source and role. The group reference is pinned to the
+-- mapping's organization by a composite FK.
 -- Directory sync soft-deletes groups, and a mapping to a soft-deleted group
 -- stops matching; the FK cascade only fires when the organization is removed.
 CREATE TABLE IF NOT EXISTS directory_role_mappings (
@@ -7471,12 +7552,12 @@ COMMENT ON COLUMN directory_role_mappings.updated_at IS '@access: confidential';
 COMMENT ON COLUMN directory_role_mappings.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN directory_role_mappings.deleted IS '@access: confidential';
 
-CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_group_key
-ON directory_role_mappings (organization_id, directory_group_id)
+CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_group_role_key
+ON directory_role_mappings (organization_id, directory_group_id, role_urn)
 WHERE deleted IS FALSE AND directory_group_id IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_attribute_key
-ON directory_role_mappings (organization_id, attribute_key, attribute_value)
+CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_attribute_role_key
+ON directory_role_mappings (organization_id, attribute_key, attribute_value, role_urn)
 WHERE deleted IS FALSE AND attribute_key IS NOT NULL;
 
 -- agent_role_assignments stores which roles each agent principal holds within an org.
@@ -7594,6 +7675,121 @@ ON workload_agent_assignments (organization_id, agent_id);
 -- Supports the workload issuer foreign-key cascade for the same reason.
 CREATE INDEX IF NOT EXISTS workload_agent_assignments_workload_issuer_idx
 ON workload_agent_assignments (organization_id, workload_issuer_id);
+
+-- A single-use credential an administrator hands to one headless box so it can
+-- enroll as a workload with no platform identity of its own. Redeeming it
+-- registers the box's public key, admits the box, and assigns it this agent.
+CREATE TABLE IF NOT EXISTS workload_device_join_tokens (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- SHA-256 of the token. The token itself is shown once, at creation.
+  token_hash TEXT NOT NULL CHECK (token_hash <> ''),
+
+  -- The agent the enrolled device inherits its policy from.
+  agent_id uuid NOT NULL,
+
+  -- Recorded as the actor of the enrollment this token authorizes.
+  created_by_user_id TEXT NOT NULL,
+
+  expires_at timestamptz NOT NULL,
+
+  -- Set when the token is redeemed. A token is good for one device only.
+  consumed_at timestamptz,
+  -- The device subject the token enrolled, for tracing an enrollment back to
+  -- the token that authorized it.
+  consumed_by_subject TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT workload_device_join_tokens_pkey PRIMARY KEY (id),
+  CONSTRAINT workload_device_join_tokens_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT workload_device_join_tokens_agent_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN workload_device_join_tokens.id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.organization_id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.token_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN workload_device_join_tokens.agent_id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.expires_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.consumed_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.consumed_by_subject IS '@access: restricted';
+COMMENT ON COLUMN workload_device_join_tokens.created_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.updated_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.deleted IS '@access: confidential';
+
+-- Redemption looks a token up by its hash, before the organization is known.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_device_join_tokens_token_hash_key
+ON workload_device_join_tokens (token_hash);
+
+-- Supports the agent foreign-key cascade.
+CREATE INDEX IF NOT EXISTS workload_device_join_tokens_agent_idx
+ON workload_device_join_tokens (organization_id, agent_id);
+
+-- The public key an enrolled device signs its workload assertions with. An
+-- assertion from a 'device_keys' issuer is verified against the key registered
+-- here for its own subject, which is what binds a key to one device.
+CREATE TABLE IF NOT EXISTS workload_device_keys (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  workload_issuer_id uuid NOT NULL,
+
+  -- The device's workload subject, device:<uuid>.
+  subject TEXT NOT NULL CHECK (subject <> ''),
+
+  -- The public JWK, stored with its kid set to thumbprint.
+  public_jwk JSONB NOT NULL,
+  -- RFC 7638 SHA-256 thumbprint, base64url. Assertions must name it as kid.
+  thumbprint TEXT NOT NULL CHECK (thumbprint <> ''),
+
+  -- What the device reported about itself at enrollment, for an administrator
+  -- telling enrolled boxes apart. Self-reported, never used for authorization.
+  hostname TEXT,
+  serial TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT workload_device_keys_pkey PRIMARY KEY (id),
+  CONSTRAINT workload_device_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT workload_device_keys_workload_issuer_fkey FOREIGN KEY (organization_id, workload_issuer_id) REFERENCES workload_issuers (organization_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN workload_device_keys.id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.organization_id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.workload_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.subject IS '@access: restricted';
+COMMENT ON COLUMN workload_device_keys.public_jwk IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.thumbprint IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.hostname IS '@access: confidential-pii';
+COMMENT ON COLUMN workload_device_keys.serial IS '@access: confidential-pii';
+COMMENT ON COLUMN workload_device_keys.created_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.updated_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.deleted IS '@access: confidential';
+
+-- One live key per device: verification reads exactly this row.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_device_keys_subject_key
+ON workload_device_keys (organization_id, workload_issuer_id, subject)
+WHERE deleted IS FALSE;
+
+-- One live device per key: a key registered for two subjects would let its
+-- private key sign as either.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_device_keys_thumbprint_key
+ON workload_device_keys (organization_id, workload_issuer_id, thumbprint)
+WHERE deleted IS FALSE;
+
+-- Supports the workload issuer foreign-key cascade.
+CREATE INDEX IF NOT EXISTS workload_device_keys_workload_issuer_idx
+ON workload_device_keys (organization_id, workload_issuer_id);
+
 
 -- Binding history is retained even when live resources are hard-deleted. Original
 -- association keys and tenant keys are immutable in the service; nullable refs are
@@ -9300,6 +9496,8 @@ CREATE TABLE IF NOT EXISTS meta_mcp_servers (
   -- instructions instead, so an unset row keeps the drill-down guidance every
   -- gateway needs. Length is validated in application code.
   instructions TEXT,
+  -- Supported modes are validated in application code.
+  discovery_mode TEXT NOT NULL DEFAULT 'progressive',
   -- Values are validated in application code. Defaults to the closed state so
   -- existing rows require an authenticated caller.
   visibility TEXT NOT NULL DEFAULT 'private',
@@ -9323,6 +9521,7 @@ COMMENT ON COLUMN meta_mcp_servers.project_id IS '@access: confidential';
 COMMENT ON COLUMN meta_mcp_servers.user_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN meta_mcp_servers.name IS '@access: confidential';
 COMMENT ON COLUMN meta_mcp_servers.instructions IS '@access: opaque-restricted';
+COMMENT ON COLUMN meta_mcp_servers.discovery_mode IS '@access: confidential';
 COMMENT ON COLUMN meta_mcp_servers.visibility IS '@access: confidential';
 COMMENT ON COLUMN meta_mcp_servers.network_access_mode IS '@access: confidential';
 COMMENT ON COLUMN meta_mcp_servers.created_at IS '@access: confidential';
@@ -14219,6 +14418,28 @@ COMMENT ON COLUMN onboarding_playbooks.deleted_at IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS onboarding_playbooks_default_key ON onboarding_playbooks (use_case_id) WHERE is_default AND organization_id IS NULL AND deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS onboarding_playbooks_use_case_id_idx ON onboarding_playbooks (use_case_id);
 CREATE INDEX IF NOT EXISTS onboarding_playbooks_organization_id_idx ON onboarding_playbooks (organization_id) WHERE organization_id IS NOT NULL;
+
+-- Shared staff configuration for explicitly supported signup promotions.
+CREATE TABLE IF NOT EXISTS signup_offers (
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  name TEXT NOT NULL,
+  stripe_promotion_code_id TEXT NOT NULL,
+  signup_flow TEXT NOT NULL,
+  id UUID PRIMARY KEY DEFAULT generate_uuidv7(),
+  enabled BOOLEAN NOT NULL DEFAULT false
+);
+
+COMMENT ON COLUMN signup_offers.created_at IS '@access: confidential';
+COMMENT ON COLUMN signup_offers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN signup_offers.name IS '@access: opaque-confidential';
+COMMENT ON COLUMN signup_offers.stripe_promotion_code_id IS '@access: restricted';
+COMMENT ON COLUMN signup_offers.signup_flow IS '@access: confidential';
+COMMENT ON COLUMN signup_offers.id IS '@access: confidential';
+COMMENT ON COLUMN signup_offers.enabled IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS signup_offers_stripe_promotion_code_id_uidx
+  ON signup_offers (stripe_promotion_code_id);
 
 -- The top-level steps of a playbook in walking order. Cards under a group
 -- come with the group and are never listed on their own.

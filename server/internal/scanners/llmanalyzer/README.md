@@ -83,15 +83,19 @@ PostHog); anything else — off, absent, unrecognized, provider error — is `of
   holding enforcement back. Without a configured analyzer the comparison lane
   is skipped
   (`risk.llm.policy_evaluations{scan_mode=async,outcome=shadow_skipped}`).
-- **Realtime** (`ScanForEnforcement`): one `enforcereply.DispatchRequest`
-  carries the legacy lanes exactly as under `off` (gitleaks / Presidio lanes
-  only when `risk-enforcement-pubsub` is on, otherwise those engines run
-  in-process) **and** the LLM lane with `execution_path = realtime_shadow`;
-  the scan waits for every lane, so hook latency includes the model call (up
-  to the 20 s lane budget). `scanPolicy` enforces from the legacy results
-  alone and, per covered policy, compares the LLM lane's findings for the
-  policy's sources — after the same scope, exclusion and disabled-rule
-  filters — with the legacy outcome on
+- **Realtime** (`ScanForEnforcement`): the legacy lanes travel in one
+  `enforcereply.DispatchRequest` exactly as under `off` (gitleaks / Presidio
+  lanes only when `risk-enforcement-pubsub` is on, otherwise those engines run
+  in-process), and the LLM lane is dispatched **separately and detached** with
+  `execution_path = realtime_shadow`: the scan enforces as soon as the legacy
+  path answers and never waits for the model, so hook latency is that of the
+  legacy path. The lane runs on a cancellation-detached context bounded by the
+  lane budget plus headroom, tracked by the scanner so `Shutdown` drains it
+  (`AwaitRealtimeRecords` waits for it in tests). `scanPolicy` enforces from
+  the legacy results alone and hands back, per covered policy, the inputs of
+  its comparison; once the lane answers, `recordComparisons` compares the
+  lane's findings for the policy's sources — after the same scope, exclusion
+  and disabled-rule filters — with the legacy outcome on
   `risk.llm.shadow_comparison{gram.risk.policy_id, gram.risk.scan_mode=sync, gram.outcome}`.
   Only the policy's in-scope sources with a realtime legacy engine (gitleaks,
   Presidio, prompt injection) are compared; a destructive-only policy records
@@ -111,8 +115,9 @@ PostHog); anything else — off, absent, unrecognized, provider error — is `of
 - Shadow scans are metered like enforcing ones (`gram.risk.scan.llm_analyzer`
   readings carry the shadow execution path in their operation id).
 - In the `llm` mode a policy with a compared source (prompt injection) is
-  still compared for that source alone, from the same awaited lane reply the
-  enforced sources read.
+  still compared for that source alone: when the policy set also enforces
+  from the lane the comparison reads the awaited reply, otherwise the lane is
+  dispatched detached exactly as under `shadow`.
 
 ### Cutover order
 
@@ -227,9 +232,11 @@ scanPolicy: FindingsForSource(llmFindings, source) per covered source
 - In the `llm` mode a single `LLMEnforcement` is published per hook event,
   regardless of `risk-enforcement-pubsub`; the gitleaks and Presidio lanes are
   not dispatched for that org and no in-process engine runs for covered
-  sources. In the `shadow` mode the same `LLMEnforcement` travels in the one
-  request that also carries the legacy lanes, and `scanPolicy` only compares
-  its findings (see "Engine modes").
+  sources. In the `shadow` mode the legacy lanes travel in their own request
+  exactly as under `off`, and the `LLMEnforcement` is dispatched separately
+  and detached (`execution_path = realtime_shadow`): enforcement never waits
+  for it, and its findings are only compared once it answers (see "Engine
+  modes").
 - The consumer drops requests older than 30 s (`DefaultMaxRequestAge`) without
   analysis, and acks model failures and Redis write failures. Only requests it
   cannot decode return an error, so the DLQ holds malformed payloads.
@@ -263,10 +270,9 @@ scanners.PublishFindings ─► Finding topic ─► FindingCHWriter ─► Clic
 ```
 
 - Findings are **ClickHouse-only**. No `risk_results` rows are written for
-  covered sources, so the org must also have `risk-overview-from-clickhouse`
-  enabled.
-- The handler bypasses `AsyncShadowGate` (requests only reach the lane for
-  orgs in the `llm` or `shadow` mode). It acks analyzer failures with nothing
+  covered sources.
+- The handler runs requests selected upstream for organizations in the `llm`
+  or `shadow` mode. It acks analyzer failures with nothing
   published and nacks only when the findings publish fails. A batch whose LLM
   publish fails fails the activity: in the `llm` mode nothing else scans those
   sources for the org, and in the `shadow` mode the retry keeps both engines'
@@ -448,8 +454,6 @@ model) fails streams startup with `create risk llm client: …`.
   Evaluated in the API server (sync) and the worker (async) through
   `policyflags.ProjectFlagMode`; reads as `off` when the flag is off, absent,
   unrecognized or the provider errors.
-- The org must also have `risk-overview-from-clickhouse` on, or async
-  findings are missing from the overview.
 - The `gram-risk-v1-llm-*` topics and subscriptions must exist in the
   environment (`infra/gen/kcc.yaml`, see `docs/pubsub-topology.md`).
 
@@ -471,12 +475,12 @@ the dispatcher's `lane`, which is scanner + policy) and
 | `risk.llm.parse_failures`                 | counter   | org, slug, mode, model                                                                                                                                                                                                                | streams        |
 | `risk.llm.policy_evaluations`             | counter   | org, `gram.risk.policy_id`, mode, `gram.outcome` ∈ `clean` \| `matched` \| `dead_letter` (sync, llm and shadow modes) or `published` \| `fallback_legacy` \| `shadow_published` \| `shadow_skipped` \| `shadow_publish_error` (async) | server, worker |
 | `risk.llm.shadow_comparison`              | counter   | org, `gram.risk.policy_id`, mode=`sync`, `gram.outcome` ∈ `agree_clean` \| `agree_match` \| `llm_only` \| `legacy_only` \| `llm_unavailable` \| `legacy_unavailable` \| `input_truncated` (shadow mode only)                          | server         |
-| `risk.llm.policy_duration` (s)            | histogram | same as policy_evaluations, sync only; includes the wait for the reply                                                                                                                                                                | server         |
+| `risk.llm.policy_duration` (s)            | histogram | same as policy_evaluations, sync only; the lane's own latency for compared-only policies; the evaluation after the awaited reply for policies that enforce from the lane, whether or not they also compare                            | server         |
 | `risk.enforcement.llm.requests`           | counter   | mode=`sync`, `gram.outcome` ∈ `ok` \| `error` \| `dead_letter` (reply status)                                                                                                                                                         | streams        |
 | `risk.enforcement.llm.stale_dropped`      | counter   | mode=`sync`                                                                                                                                                                                                                           | streams        |
 | `risk.enforcement.llm.reply_write_errors` | counter   | mode=`sync`                                                                                                                                                                                                                           | streams        |
 | `risk.enforcement.pubsub_degraded`        | counter   | `lane` = `ENFORCEMENT_SCANNER_LLM_ANALYZER`, `reason`, `gram.risk.enforcement.fail_mode` ∈ `closed` (llm) \| `shadow` (shared with legacy lanes, which use `open`)                                                                    | server         |
-| `risk.async_scan.handler_messages`        | counter   | org, `scanner` = `llm_analyzer`, `engine` = `real`, `gram.outcome` ∈ `ok` \| `scan_error` \| `publish_error` \| `disabled` \| `shadow_published`, `gate_reason` = `not_gated` (shared)                                                | streams        |
+| `risk.async_scan.handler_messages`        | counter   | org, `scanner` = `llm_analyzer`, `engine` = `real`, `gram.outcome` ∈ `ok` \| `scan_error` \| `publish_error` \| `disabled` \| `shadow_published`, `selection_reason` = `upstream_selected` (shared)                                   | streams        |
 
 A parse failure counts as `success` on `risk.llm.requests` (the HTTP call
 succeeded) and increments `risk.llm.parse_failures`.
@@ -565,9 +569,8 @@ lives in streams. All three need the same environment.
 2. **Flag.** Local flags come from a CSV named by
    `GRAM_LOCAL_FEATURE_FLAGS_CSV` (unset by default, so no local flag is on).
    `server/flags.csv` already carries `gram-risk-llm-analyzer` with the
-   `shadow` variant (fourth column) plus `risk-overview-from-clickhouse` for
-   the local dev org (the id the other risk flag rows use) and the demo org;
-   change the variant to `llm` to exercise the replacing mode. To use it, add
+   `shadow` variant (fourth column) for the local dev org (the id the other
+   risk flag rows use) and the demo org; change the variant to `llm` to exercise the replacing mode. To use it, add
    to `mise.local.toml`:
 
    ```toml
@@ -578,8 +581,7 @@ lives in streams. All three need the same environment.
    For a custom set, copy `server/flags.local.csv.example` to
    `server/flags.local.csv`, uncomment the `gram-risk-llm-analyzer` row with
    your organization id (`select id, slug from organization_metadata;`) and
-   the variant you want, add a `risk-overview-from-clickhouse` row, and point
-   the env var at that file.
+   the variant you want, and point the env var at that file.
    The path must stay under `server/`. A row without the fourth column keeps
    the boolean contract and resolves to `llm` (the transition rule).
 

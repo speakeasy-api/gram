@@ -299,7 +299,6 @@ func TestFeature_RequiresPlatformAdmin(t *testing.T) {
 		productfeatures.FeatureHooksBrowserLogin,
 		productfeatures.FeatureHooksFailOpen,
 		productfeatures.FeatureSkillCaptureMetadataOnly,
-		productfeatures.FeatureConsentToolFiltering,
 		productfeatures.FeaturePlatformMCP,
 		productfeatures.FeatureOrganizationGatewayDisabled,
 	}

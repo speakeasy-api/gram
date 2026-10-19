@@ -281,7 +281,7 @@ func (d *Dataset) validate(lookups map[string]struct{}) error {
 	if d.TimeExpr == "" {
 		return fmt.Errorf("catalog: dataset %q has no time expression", d.Name)
 	}
-	if d.Source.Key == "" {
+	if d.Source.Key == "" || d.Source.Table == nil {
 		return fmt.Errorf("catalog: dataset %q has no source query", d.Name)
 	}
 	if len(d.Fields) == 0 {

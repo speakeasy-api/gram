@@ -3142,6 +3142,7 @@ WHERE m.id = @mcp_server_id
 -- One exact organization/project-scoped target and its connection dependencies.
 -- Deliberately returns no upstream URL, credentials, or provider resource data.
 SELECT
+    CASE WHEN @target_kind::text = 'gateway' THEN COALESCE(gateway.discovery_mode, 'progressive') ELSE '' END::text AS discovery_mode,
     CASE WHEN @target_kind::text = 'gateway' THEN gateway.name ELSE COALESCE(server.name, server.slug, '') END::text AS name,
     CASE WHEN @target_kind::text = 'gateway' THEN gateway.visibility ELSE server.visibility END::text AS visibility,
     COALESCE(
@@ -3628,6 +3629,10 @@ LIMIT 2;
 -- name: SearchPlatformMCPAccessMembers :many
 -- Count distinct members and return only a bounded page from the same snapshot.
 -- Active local role assignments follow the access roster's WorkOS identity join.
+-- A member whose whole normalized email equals the query sorts first, so a
+-- small result page always carries the exact match the caller asked for.
+-- Emails are unique only case-sensitively, so exact_email_matches counts every
+-- member the normalized query names, including any cut off by the page limit.
 WITH member_roles AS (
   SELECT ora.workos_user_id,
     array_agg(DISTINCT COALESCE(r.id::text, g.id::text)) AS role_ids,
@@ -3641,7 +3646,8 @@ WITH member_roles AS (
     AND COALESCE(r.id, g.id) IS NOT NULL
   GROUP BY ora.workos_user_id
 ), matching AS (
-  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids
+  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids,
+    (@query::text <> '' AND lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))) = @query::text) AS exact_email_match
   FROM organization_user_relationships rel
   JOIN users u ON u.id = rel.user_id AND u.deleted_at IS NULL
   LEFT JOIN member_roles m ON m.workos_user_id = u.workos_id
@@ -3653,9 +3659,11 @@ WITH member_roles AS (
       OR EXISTS (SELECT 1 FROM unnest(m.role_names) AS role_name
         WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), @query::text) > 0))
 )
-SELECT id, display_name, email, role_ids, count(*) OVER ()::bigint AS total_matches
+SELECT id, display_name, email, role_ids, exact_email_match,
+  count(*) FILTER (WHERE exact_email_match) OVER ()::bigint AS exact_email_matches,
+  count(*) OVER ()::bigint AS total_matches
 FROM matching
-ORDER BY email, id
+ORDER BY exact_email_match DESC, email, id
 LIMIT @result_limit;
 
 -- name: GetPlatformMCPPluginForUpdate :one

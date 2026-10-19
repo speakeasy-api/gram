@@ -762,7 +762,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 // of LoadResolvedMcpEndpointBySlug for slugs with no mcp_endpoint →
 // mcp_server row yet (issuer-gated toolset-backed servers predating the
 // toolsets → mcp_servers migration).
-func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug, routeBase string) (*ResolvedMcpEndpoint, error) {
+func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug, routeBase string, entryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
 	var customDomainID uuid.NullUUID
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
@@ -774,7 +774,7 @@ func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpS
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
-	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackOAuth, mcpSlug, toolset, wrapperID)
+	s.recordToolsetSlugFallback(ctx, s.logger, entryPoint, mcpSlug, toolset, wrapperID)
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}

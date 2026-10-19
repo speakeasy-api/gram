@@ -31,7 +31,7 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 		return nil, nil, fmt.Errorf("wait for docker: %w", err)
 	}
 
-	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:26.4.5.143-distroless@sha256:d7c4cf5575c3d0d49cf1beb7ce8d938d64f707789d9fa3fa538c7d3f898b0649",
+	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:26.6.8.7-distroless@sha256:31f67400c46f94f7d9236728f369faa125067f13f98fa2ad620ee190fe70eed5",
 		clickhousecontainer.WithUsername("gram"),
 		clickhousecontainer.WithPassword("gram"),
 		clickhousecontainer.WithInitScripts(filepath.Join(root, "server", "clickhouse", "schema.sql")),
@@ -46,7 +46,7 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 			wait.ForExec([]string{"clickhouse-client", "--host", clickhouseTestHostname, "--user", "gram", "--password", "gram", "--query", "SELECT 1"}),
 		),
 		WithPublishedPortWait("9000/tcp"),
-		WithoutPublishedPorts(),
+		WithLoopbackPorts(),
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 	)
 	if err != nil {

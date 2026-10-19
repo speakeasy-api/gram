@@ -141,8 +141,12 @@ type Service struct {
 	// canonical host, to the base URL rendered for requests on them. Set by
 	// SetPlatformHosts; nil means the server URL is the only platform host.
 	platformHosts map[string]string
-	siteURL       *url.URL
-	posthog       *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	// openAIAppsChallengeToken is served at /.well-known/openai-apps-challenge
+	// on the platform hosts. Empty serves not found. Set by
+	// SetOpenAIAppsChallengeToken.
+	openAIAppsChallengeToken string
+	siteURL                  *url.URL
+	posthog                  *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	// features resolves flag-controlled behavior (the managed assistant's
 	// Platform MCP toolset variant). Wired from the environment-aware
 	// provider: the posthog client in production, the CSV-backed in-memory
@@ -524,6 +528,7 @@ func NewService(
 		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil},
 		authenticationHostBaseURL: "",
 		platformHosts:             nil,
+		openAIAppsChallengeToken:  "",
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,
@@ -839,14 +844,25 @@ func (s *Service) HandleClientJSONWebKeySet(w http.ResponseWriter, r *http.Reque
 	return s.remoteChallengeMgr.HandleClientJSONWebKeySet(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
 
+// SetOpenAIAppsChallengeToken records the token served at
+// /.well-known/openai-apps-challenge on the platform hosts. Empty serves not
+// found there.
+func (s *Service) SetOpenAIAppsChallengeToken(token string) {
+	s.openAIAppsChallengeToken = token
+}
+
 // HandleOpenAIAppsChallenge serves the domain-verification token configured
-// for the custom domain resolved by middleware. The platform host has no
-// custom-domain context and intentionally returns not found.
+// for the custom domain resolved by middleware. On a platform host it serves
+// the deployment-wide token, or not found when none is configured.
 func (s *Service) HandleOpenAIAppsChallenge(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	domainCtx := customdomains.FromContext(ctx)
 	if domainCtx == nil {
-		return oops.E(oops.CodeNotFound, nil, "OpenAI apps challenge token not found").LogInfo(ctx, s.logger)
+		origin, ok := requestorigin.FromContext(ctx)
+		if !ok || origin.Surface != requestorigin.SurfacePlatform || s.openAIAppsChallengeToken == "" {
+			return oops.E(oops.CodeNotFound, nil, "OpenAI apps challenge token not found").LogInfo(ctx, s.logger)
+		}
+		return writeOpenAIAppsChallengeToken(w, s.openAIAppsChallengeToken)
 	}
 
 	domain, err := customdomains_repo.New(s.db).GetCustomDomainByID(ctx, domainCtx.DomainID)
@@ -860,8 +876,12 @@ func (s *Service) HandleOpenAIAppsChallenge(w http.ResponseWriter, r *http.Reque
 		return oops.E(oops.CodeNotFound, nil, "OpenAI apps challenge token not found").LogInfo(ctx, s.logger)
 	}
 
+	return writeOpenAIAppsChallengeToken(w, domain.OpenaiAppsChallengeToken.String)
+}
+
+func writeOpenAIAppsChallengeToken(w http.ResponseWriter, token string) error {
 	w.Header().Set("Content-Type", "text/plain")
-	if _, err := w.Write([]byte(domain.OpenaiAppsChallengeToken.String)); err != nil {
+	if _, err := w.Write([]byte(token)); err != nil {
 		return fmt.Errorf("write OpenAI apps challenge token: %w", err)
 	}
 	return nil
@@ -1254,7 +1274,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		}
 		ctx = newCtx
 		pendingIssuerGate = authentication
-		callerToolSelection = gateToolSelection
+		if gateToolSelection != nil {
+			callerToolSelection = gateToolSelection.Selection
+		}
 	}
 
 	isHostedToolsCall := req.Method == mcpversions.MethodToolsCall && cfg.mcpServerID != nil

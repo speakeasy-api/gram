@@ -52,6 +52,7 @@ Failed runs exit nonzero; rows commit one toolset at a time, and an `-apply` run
 ## Post-run checks
 
 - The `mcp.toolset_slug_fallback` counter drops for traffic to the covered toolsets.
+- The AIM-7 removal gate requires zero new increments to `mcp.toolset_slug_fallback` summed over every `gram.mcp.entry_point` value, and to `mcp.legacy_audience_accepted`, for at least the longest access-token lifetime (720h): entry points such as `shared_resource` and `org_gateway_probe` were split out of `oauth`, so no single tag covers all traffic.
 - Plugin publication logs no `mcp_server_ambiguous` or "ambiguous toolset MCP serving wrapper".
 
 ## Dependent move (`-move-dependents`)

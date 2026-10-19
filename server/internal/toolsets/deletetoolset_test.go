@@ -327,7 +327,7 @@ func TestToolsetsService_DeleteToolset_DetachesFromAssistants(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reloaded.MCPServers, 1)
 	name := "updated assistant"
-	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, []*types.AssistantToolsetRef{{ToolsetSlug: reloaded.MCPServers[0].ToolsetSlug.String}}, nil, nil, nil, nil)
+	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, []*types.AssistantToolsetRef{{ToolsetSlug: reloaded.MCPServers[0].ToolsetSlug.String}}, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, name, updated.Name)
 }

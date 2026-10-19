@@ -42,21 +42,29 @@ const (
 	LegacyFallbackWellKnownProtectedResource LegacyFallbackEntryPoint = "well_known_protected_resource"
 	// LegacyFallbackWellKnownAuthorizationServer: RFC 8414 metadata route.
 	LegacyFallbackWellKnownAuthorizationServer LegacyFallbackEntryPoint = "well_known_authorization_server"
-	// LegacyFallbackOAuth: the issuer-gated OAuth handler family resolving via
-	// LoadResolvedMcpEndpointBySlug (authorize, token, register, revoke,
-	// consent).
+	// LegacyFallbackOAuth: the per-endpoint issuer-gated OAuth handlers
+	// resolving via LoadResolvedMcpEndpointBySlug (authorize, token, register,
+	// revoke, consent). Shared authorization server traffic counts under
+	// LegacyFallbackSharedResource.
 	LegacyFallbackOAuth LegacyFallbackEntryPoint = "oauth"
 	// LegacyFallbackInstallPage: the install-page resolver in mcpmetadata.
 	LegacyFallbackInstallPage LegacyFallbackEntryPoint = "install_page"
 	// LegacyFallbackChallengeResume: cached authorization-challenge state
 	// resuming through the strict-platform toolset lookup.
 	LegacyFallbackChallengeResume LegacyFallbackEntryPoint = "challenge_resume"
+	// LegacyFallbackSharedResource: a shared authorization server resolving
+	// the RFC 8707 resource of an authorize or token request.
+	LegacyFallbackSharedResource LegacyFallbackEntryPoint = "shared_resource"
+	// LegacyFallbackOrgGatewayProbe: the /mcp/gateway/{name} routes probing
+	// whether an endpoint whose slug is "gateway" shadows the organization
+	// gateway.
+	LegacyFallbackOrgGatewayProbe LegacyFallbackEntryPoint = "org_gateway_probe"
 )
 
 // LegacyFallbackCounter owns the two migration merge-gate instruments for the
 // toolsets → mcp_servers cutover (AIS-633). A nil *LegacyFallbackCounter is
-// valid: metric recording becomes a no-op, but RecordToolsetSlugFallback
-// still emits attribution logs when a logger is supplied.
+// valid: metric recording becomes a no-op, but the Record methods still emit
+// attribution logs when a logger is supplied.
 type LegacyFallbackCounter struct {
 	slugFallback     metric.Int64Counter
 	audienceAccepted metric.Int64Counter
@@ -143,12 +151,42 @@ func (c *LegacyFallbackCounter) RecordToolsetSlugFallback(ctx context.Context, l
 	c.slugFallback.Add(ctx, 1, metric.WithAttributes(attr.McpEntryPoint(hit.EntryPoint)))
 }
 
-// RecordLegacyAudienceAccepted counts one bearer accepted via the legacy
-// toolset-URN audience, dimensioned by the issuer whose sessions still carry
-// it.
-func (c *LegacyFallbackCounter) RecordLegacyAudienceAccepted(ctx context.Context, issuerID string) {
+// LegacyAudienceAccepted attributes one bearer accepted via the legacy
+// toolset-URN audience; logged, never a metric dimension.
+type LegacyAudienceAccepted struct {
+	IssuerID         uuid.UUID
+	Slug             string
+	ToolsetID        uuid.NullUUID
+	McpServerID      uuid.NullUUID
+	ProjectID        uuid.UUID
+	CustomDomainHost bool
+}
+
+// RecordLegacyAudienceAccepted logs and counts one bearer accepted via the
+// legacy toolset-URN audience, dimensioned by the issuer whose sessions still
+// carry it.
+func (c *LegacyFallbackCounter) RecordLegacyAudienceAccepted(ctx context.Context, logger *slog.Logger, hit LegacyAudienceAccepted) {
+	if logger != nil {
+		requestHost := FallbackRequestHostPlatform
+		if hit.CustomDomainHost {
+			requestHost = FallbackRequestHostCustomDomain
+		}
+		attrs := []slog.Attr{
+			attr.SlogUserSessionIssuerID(hit.IssuerID.String()),
+			attr.SlogToolsetMCPSlug(hit.Slug),
+			attr.SlogProjectID(hit.ProjectID.String()),
+			attr.SlogMcpFallbackRequestHost(requestHost),
+		}
+		if hit.ToolsetID.Valid {
+			attrs = append(attrs, attr.SlogToolsetID(hit.ToolsetID.UUID.String()))
+		}
+		if hit.McpServerID.Valid {
+			attrs = append(attrs, attr.SlogMcpServerID(hit.McpServerID.UUID.String()))
+		}
+		logger.LogAttrs(ctx, slog.LevelInfo, "mcp bearer accepted via legacy toolset audience", attrs...)
+	}
 	if c == nil || c.audienceAccepted == nil {
 		return
 	}
-	c.audienceAccepted.Add(ctx, 1, metric.WithAttributes(attr.UserSessionIssuerID(issuerID)))
+	c.audienceAccepted.Add(ctx, 1, metric.WithAttributes(attr.UserSessionIssuerID(hit.IssuerID.String())))
 }

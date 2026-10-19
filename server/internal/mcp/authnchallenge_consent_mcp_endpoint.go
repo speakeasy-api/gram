@@ -108,12 +108,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return err
 	}
 
-	// The transport exists only while the organization's admin opt-in is
-	// enabled; an unavailable checker reads as off. 404 matches how the
-	// island's absence hides the surface entirely.
-	if !s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
-		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
-	}
+	// 404 matches how the island's absence hides the surface entirely.
 	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
 	if err != nil {
 		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)

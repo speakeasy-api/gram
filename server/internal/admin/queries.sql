@@ -507,7 +507,7 @@ SELECT EXISTS (
 -- name: AdminListProjectMcpServerRows :many
 -- One row per live endpoint, and one with no endpoint columns for a server that
 -- has none. custom_domain is null for an endpoint whose domain cannot serve it;
--- the caller skips those and picks the address with mcpendpoints.PrimaryEndpoint.
+-- the caller skips those and picks the address with endpointaddr.PrimaryEndpoint.
 SELECT
     m.id,
     m.name,
@@ -668,6 +668,12 @@ WHERE billing_metadata.organization_id = organization_metadata.id
   AND billing_metadata.stripe_customer_id = sqlc.arg('stripe_customer_id')::text
   AND billing_metadata.stripe_subscription_id IS NULL
   AND organization_metadata.gram_account_type = 'payg'
+  -- A redeemed partner's retained anchor is immutable accounting provenance.
+  AND NOT EXISTS (
+    SELECT 1 FROM organization_promotion_applications application
+    WHERE application.organization_id = billing_metadata.organization_id
+      AND application.redeemed_at IS NOT NULL
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM billing_metadata AS other
@@ -945,7 +951,7 @@ ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK 
 -- wrapper's calls. A live canonical wrapper (id = toolset id) owns the slug
 -- outright: it counts as one, and any other wrapper of that toolset as two.
 -- url_slug is the slug in the /mcp/<slug> path clients call: the primary live
--- endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
+-- endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
 -- a domain root has no such path), else the server's own slug, else the
 -- toolset's mcp_slug when no other wrapper shares that toolset.
 SELECT
@@ -1165,3 +1171,16 @@ FROM organizations
 WHERE (account_type = 'enterprise' AND trial_state NOT IN ('running', 'ending_soon'))
    OR (account_type IN ('pro', 'payg') AND trial_state = 'none')
 ORDER BY lower(name) ASC, id ASC;
+
+-- name: ListSignupOffers :many
+SELECT * FROM signup_offers ORDER BY created_at DESC, id DESC;
+
+-- name: CreateSignupOffer :one
+INSERT INTO signup_offers (name, stripe_promotion_code_id, signup_flow)
+VALUES (@name, @stripe_promotion_code_id, @signup_flow)
+RETURNING *;
+
+-- name: UpdateSignupOffer :one
+UPDATE signup_offers SET name = @name, stripe_promotion_code_id = @stripe_promotion_code_id,
+ signup_flow = @signup_flow, enabled = @enabled, updated_at = clock_timestamp()
+WHERE id = @id RETURNING *;

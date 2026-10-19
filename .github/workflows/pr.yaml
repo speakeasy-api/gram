@@ -272,7 +272,7 @@ jobs:
 
       - name: Check for existing Go module cache
         id: lookup
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
         with:
           lookup-only: true
 
@@ -351,7 +351,7 @@ jobs:
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
 
       - name: Tag preview image
-        uses: $/.github/workflows/composite/tag-preview-images
+        uses: ./.github/workflows/composite/tag-preview-images # zizmor: ignore[self-repository]
         with:
           registry: ${{ env.REGISTRY }}
           image-owner: ${{ env.DOCKER_REPOSITORY_OWNER }}
@@ -466,7 +466,7 @@ jobs:
           exit 1
       - name: Build and Push Registry image to GCR
         id: build
-        uses: $/.github/workflows/composite/build-push
+        uses: ./.github/workflows/composite/build-push # zizmor: ignore[self-repository]
         with:
           hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -528,7 +528,7 @@ jobs:
           exit 1
       - name: Build and Push Registry image to GCR
         id: build
-        uses: $/.github/workflows/composite/build-push
+        uses: ./.github/workflows/composite/build-push # zizmor: ignore[self-repository]
         with:
           hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -859,7 +859,7 @@ jobs:
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     services:
       clickhouse:
-        image: clickhouse/clickhouse-server:26.4.5.143-distroless@sha256:d7c4cf5575c3d0d49cf1beb7ce8d938d64f707789d9fa3fa538c7d3f898b0649
+        image: clickhouse/clickhouse-server:26.6.8.7-distroless@sha256:31f67400c46f94f7d9236728f369faa125067f13f98fa2ad620ee190fe70eed5
         env:
           CLICKHOUSE_DB: gram
           CLICKHOUSE_USER: gram
@@ -1231,7 +1231,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Compute runtime image content hash
         id: assistant-runtime-hash
@@ -1295,7 +1295,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Test CI tooling
         run: mise run test:ci
@@ -1361,7 +1361,7 @@ jobs:
         run: mise run github
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Cache uv
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1482,7 +1482,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Build
         run: mise run build:cli --readonly
@@ -1530,7 +1530,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Build
         run: mise run build:hooks --readonly
@@ -1565,7 +1565,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Test
         run: mise run test:glint
@@ -1597,7 +1597,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Install Go tools
         run: go install tool
@@ -1654,7 +1654,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Install Go deps
         run: mise run install:go
@@ -1673,19 +1673,43 @@ jobs:
       - name: Test
         id: test
         # Each package can launch Postgres, Redis, and ClickHouse concurrently.
-        # Bound package concurrency so eight race-enabled binaries plus their
-        # containers do not compete for this runner's eight CPUs during startup.
-        # Keep within-package parallelism and race detection; do not retry failures.
+        # Bound package concurrency so the test binaries plus their containers
+        # do not compete for this runner's eight CPUs during startup. Keep
+        # within-package parallelism; do not retry failures.
+        # Race detection runs only in the merge queue and on main: it slows
+        # every package down, and PR runs get faster feedback without it.
         # In the merge queue and on main, a failure here is judged by the
         # flaky-test gate below, which fails the job unless every failing test
         # is tracked as flaky in Linear. Elsewhere (PR branches, manual runs on
         # other branches) a failure fails the job as before: those runs mix
         # flakes with the branch's own breakage.
         continue-on-error: ${{ github.event_name == 'merge_group' || github.ref == 'refs/heads/main' }}
-        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} -p=2 -race -tags=inv.debug ./...
+        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} -p=2 ${RACE_FLAG:+"$RACE_FLAG"} -tags=inv.debug ./...
         env:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
+          RACE_FLAG: ${{ (github.event_name == 'merge_group' || github.ref == 'refs/heads/main') && '-race' || '' }}
+          # Alongside junit-report.xml, gotestsum writes only the pass, skip,
+          # and fail events of 'go test -json' (no output lines) to this file,
+          # relative to server/. Each event carries its time and elapsed.
+          GOTESTSUM_JSONFILE_TIMING_EVENTS: test-timings.json
+
+      - name: Upload test timings
+        # Uploaded even when tests fail or the job is cancelled, so slow and
+        # failing runs can be ranked too. Re-running a job replaces its shard's
+        # artifact. Read with 'gotestsum tool slowest --jsonfile
+        # test-timings.json'; 'mise run ci:shard-timings' turns the JUnit
+        # reports of recent main runs into ci/cmd/shard/timings.txt.
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: server-test-timings-shard-${{ matrix.shard }}
+          path: |
+            server/junit-report.xml
+            server/test-timings.json
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 30
 
       - name: Let tracked flaky tests through
         # Passes only when every failure is an open flaky-test ticket (see
@@ -1726,7 +1750,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Install Go deps
         run: mise run install:go
@@ -1835,7 +1859,7 @@ jobs:
       # CDN bucket.
       - name: Build and Push Admin Dashboard image to GCR
         id: build-admin-dashboard
-        uses: $/.github/workflows/composite/build-push
+        uses: ./.github/workflows/composite/build-push # zizmor: ignore[self-repository]
         with:
           hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -1850,7 +1874,7 @@ jobs:
 
       - name: Build and Push Registry image to GCR
         id: build
-        uses: $/.github/workflows/composite/build-push
+        uses: ./.github/workflows/composite/build-push # zizmor: ignore[self-repository]
         with:
           hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -2088,7 +2112,7 @@ jobs:
       # The hooks-go target's compile step resolves the root Go module's
       # dependencies, including test dependencies.
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Test generated artifact conflict resolution
         run: mise run test:gen-resolve
@@ -2138,7 +2162,7 @@ jobs:
         run: mise run github
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

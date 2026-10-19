@@ -544,6 +544,7 @@ type MessageEvent_IngestionContext struct {
 	xxx_hidden_AccountType       *string                `protobuf:"bytes,8,opt,name=account_type,json=accountType"`
 	xxx_hidden_BillingMode       *string                `protobuf:"bytes,9,opt,name=billing_mode,json=billingMode"`
 	xxx_hidden_Replayed          bool                   `protobuf:"varint,10,opt,name=replayed"`
+	xxx_hidden_Attributes        map[string]string      `protobuf:"bytes,11,rep,name=attributes" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
 	XXX_presence                 [1]uint32
 	unknownFields                protoimpl.UnknownFields
@@ -672,54 +673,65 @@ func (x *MessageEvent_IngestionContext) GetReplayed() bool {
 	return false
 }
 
+func (x *MessageEvent_IngestionContext) GetAttributes() map[string]string {
+	if x != nil {
+		return x.xxx_hidden_Attributes
+	}
+	return nil
+}
+
 func (x *MessageEvent_IngestionContext) SetSource(v string) {
 	x.xxx_hidden_Source = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 11)
 }
 
 func (x *MessageEvent_IngestionContext) SetBillingUserId(v string) {
 	x.xxx_hidden_BillingUserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 11)
 }
 
 func (x *MessageEvent_IngestionContext) SetAssistantId(v string) {
 	x.xxx_hidden_AssistantId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 11)
 }
 
 func (x *MessageEvent_IngestionContext) SetObservedUserEmail(v string) {
 	x.xxx_hidden_ObservedUserEmail = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 11)
 }
 
 func (x *MessageEvent_IngestionContext) SetProvider(v string) {
 	x.xxx_hidden_Provider = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 11)
 }
 
 func (x *MessageEvent_IngestionContext) SetHookSource(v string) {
 	x.xxx_hidden_HookSource = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 11)
 }
 
 func (x *MessageEvent_IngestionContext) SetHostname(v string) {
 	x.xxx_hidden_Hostname = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 11)
 }
 
 func (x *MessageEvent_IngestionContext) SetAccountType(v string) {
 	x.xxx_hidden_AccountType = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 11)
 }
 
 func (x *MessageEvent_IngestionContext) SetBillingMode(v string) {
 	x.xxx_hidden_BillingMode = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 11)
 }
 
 func (x *MessageEvent_IngestionContext) SetReplayed(v bool) {
 	x.xxx_hidden_Replayed = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 11)
+}
+
+func (x *MessageEvent_IngestionContext) SetAttributes(v map[string]string) {
+	x.xxx_hidden_Attributes = v
 }
 
 func (x *MessageEvent_IngestionContext) HasSource() bool {
@@ -870,6 +882,9 @@ type MessageEvent_IngestionContext_builder struct {
 	BillingMode *string
 	// Historical source import/replay marker, not Pub/Sub redelivery.
 	Replayed *bool
+	// Customer-defined string labels observed by ingestion. Consumers preserve
+	// this snapshot rather than resolving labels from current configuration.
+	Attributes map[string]string
 }
 
 func (b0 MessageEvent_IngestionContext_builder) Build() *MessageEvent_IngestionContext {
@@ -877,45 +892,46 @@ func (b0 MessageEvent_IngestionContext_builder) Build() *MessageEvent_IngestionC
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Source != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 11)
 		x.xxx_hidden_Source = b.Source
 	}
 	if b.BillingUserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 11)
 		x.xxx_hidden_BillingUserId = b.BillingUserId
 	}
 	if b.AssistantId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 11)
 		x.xxx_hidden_AssistantId = b.AssistantId
 	}
 	if b.ObservedUserEmail != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 11)
 		x.xxx_hidden_ObservedUserEmail = b.ObservedUserEmail
 	}
 	if b.Provider != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 11)
 		x.xxx_hidden_Provider = b.Provider
 	}
 	if b.HookSource != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 11)
 		x.xxx_hidden_HookSource = b.HookSource
 	}
 	if b.Hostname != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 11)
 		x.xxx_hidden_Hostname = b.Hostname
 	}
 	if b.AccountType != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 11)
 		x.xxx_hidden_AccountType = b.AccountType
 	}
 	if b.BillingMode != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 11)
 		x.xxx_hidden_BillingMode = b.BillingMode
 	}
 	if b.Replayed != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 11)
 		x.xxx_hidden_Replayed = *b.Replayed
 	}
+	x.xxx_hidden_Attributes = b.Attributes
 	return m0
 }
 
@@ -923,7 +939,7 @@ var File_gram_conversation_v1_message_event_proto protoreflect.FileDescriptor
 
 const file_gram_conversation_v1_message_event_proto_rawDesc = "" +
 	"\n" +
-	"(gram/conversation/v1/message_event.proto\x12\x14gram.conversation.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xbf\b\n" +
+	"(gram/conversation/v1/message_event.proto\x12\x14gram.conversation.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xe3\t\n" +
 	"\fMessageEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12;\n" +
 	"\x04type\x18\x02 \x01(\x0e2'.gram.conversation.v1.MessageEvent.TypeR\x04type\x12'\n" +
@@ -939,7 +955,7 @@ const file_gram_conversation_v1_message_event_proto_rawDesc = "" +
 	"\x12message_created_at\x18\t \x01(\tR\x10messageCreatedAt\x12Q\n" +
 	"\tingestion\x18\n" +
 	" \x01(\v23.gram.conversation.v1.MessageEvent.IngestionContextR\tingestion\x12%\n" +
-	"\x0eattachment_ids\x18\v \x03(\tR\rattachmentIds\x1a\xe0\x02\n" +
+	"\x0eattachment_ids\x18\v \x03(\tR\rattachmentIds\x1a\x84\x04\n" +
 	"\x10IngestionContext\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12&\n" +
 	"\x0fbilling_user_id\x18\x02 \x01(\tR\rbillingUserId\x12!\n" +
@@ -952,7 +968,13 @@ const file_gram_conversation_v1_message_event_proto_rawDesc = "" +
 	"\faccount_type\x18\b \x01(\tR\vaccountType\x12!\n" +
 	"\fbilling_mode\x18\t \x01(\tR\vbillingMode\x12\x1a\n" +
 	"\breplayed\x18\n" +
-	" \x01(\bR\breplayed\"h\n" +
+	" \x01(\bR\breplayed\x12c\n" +
+	"\n" +
+	"attributes\x18\v \x03(\v2C.gram.conversation.v1.MessageEvent.IngestionContext.AttributesEntryR\n" +
+	"attributes\x1a=\n" +
+	"\x0fAttributesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"h\n" +
 	"\x04Type\x12\x14\n" +
 	"\x10TYPE_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fTYPE_CREATED\x10\x01\x12\x1c\n" +
@@ -968,22 +990,24 @@ const file_gram_conversation_v1_message_event_proto_rawDesc = "" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\x8c\x15BMZKgithub.com/speakeasy-api/gram/infra/gen/gram/conversation/v1;conversationv1b\beditionsp\xe9\a"
 
 var file_gram_conversation_v1_message_event_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_gram_conversation_v1_message_event_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_gram_conversation_v1_message_event_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_gram_conversation_v1_message_event_proto_goTypes = []any{
 	(MessageEvent_Type)(0),                // 0: gram.conversation.v1.MessageEvent.Type
 	(MessageEvent_Role)(0),                // 1: gram.conversation.v1.MessageEvent.Role
 	(*MessageEvent)(nil),                  // 2: gram.conversation.v1.MessageEvent
 	(*MessageEvent_IngestionContext)(nil), // 3: gram.conversation.v1.MessageEvent.IngestionContext
+	nil,                                   // 4: gram.conversation.v1.MessageEvent.IngestionContext.AttributesEntry
 }
 var file_gram_conversation_v1_message_event_proto_depIdxs = []int32{
 	0, // 0: gram.conversation.v1.MessageEvent.type:type_name -> gram.conversation.v1.MessageEvent.Type
 	1, // 1: gram.conversation.v1.MessageEvent.role:type_name -> gram.conversation.v1.MessageEvent.Role
 	3, // 2: gram.conversation.v1.MessageEvent.ingestion:type_name -> gram.conversation.v1.MessageEvent.IngestionContext
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	4, // 3: gram.conversation.v1.MessageEvent.IngestionContext.attributes:type_name -> gram.conversation.v1.MessageEvent.IngestionContext.AttributesEntry
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_gram_conversation_v1_message_event_proto_init() }
@@ -997,7 +1021,7 @@ func file_gram_conversation_v1_message_event_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gram_conversation_v1_message_event_proto_rawDesc), len(file_gram_conversation_v1_message_event_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

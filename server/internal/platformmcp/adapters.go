@@ -383,6 +383,7 @@ type PostgresReader struct {
 	reviewRequestBudget       OperationBudget
 	reviewLinks               ShadowMCPReviewLinker
 	toolExposure              *MCPToolExposureService
+	gateways                  *GatewayService
 	projectLifecycle          *ProjectLifecycleService
 	analytics                 *AnalyticsService
 	widgets                   *WidgetService
@@ -421,6 +422,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		reviewLinks:               nil,
 		toolExposure:              nil,
+		gateways:                  nil,
 		projectLifecycle:          nil,
 		analytics:                 nil,
 		widgets:                   nil,
@@ -441,6 +443,15 @@ func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader
 func (r *PostgresReader) WithToolExposure(service *MCPToolExposureService) *PostgresReader {
 	if r != nil {
 		r.toolExposure = service
+	}
+	return r
+}
+
+// WithGateways composes gateway creation and membership changes. Without it
+// the tools stay in the catalogue as stable refusals rather than disappearing.
+func (r *PostgresReader) WithGateways(service *GatewayService) *PostgresReader {
+	if r != nil {
+		r.gateways = service
 	}
 	return r
 }

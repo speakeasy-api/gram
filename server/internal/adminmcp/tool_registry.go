@@ -145,7 +145,7 @@ func registerRegistryTools(server *mcp.Server, reader RegistryReader) {
 		projection := registryProjection{}
 		ok := false
 		if len(entry.DataJSON) <= maxRegistryDataJSON {
-			projection, ok = projectRegistryRecord([]byte(entry.DataJSON))
+			projection, ok = projectRegistryRecord([]byte(entry.DataJSON), maxRegistryPage)
 		}
 		out.Found = true
 		out.ProjectionAvailable = ok
@@ -209,7 +209,10 @@ type registryProjection struct {
 	Transports  []RegistryTransportSummary
 }
 
-func projectRegistryRecord(raw []byte) (registryProjection, bool) {
+// projectRegistryRecord projects a record with at most maxTransports packages
+// and at most maxTransports remotes. Reads pass the page bound; creation is
+// already bounded by its input size.
+func projectRegistryRecord(raw []byte, maxTransports int) (registryProjection, bool) {
 	var record struct {
 		Server struct {
 			Name        string `json:"name"`
@@ -226,7 +229,7 @@ func projectRegistryRecord(raw []byte) (registryProjection, bool) {
 		} `json:"server"`
 		Meta map[string]json.RawMessage `json:"_meta"`
 	}
-	if !json.Valid(raw) || json.Unmarshal(raw, &record) != nil || strings.TrimSpace(record.Server.Name) == "" || strings.TrimSpace(record.Server.Description) == "" || strings.TrimSpace(record.Server.Version) == "" || len(record.Server.Packages) > maxRegistryPage || len(record.Server.Remotes) > maxRegistryPage {
+	if !json.Valid(raw) || json.Unmarshal(raw, &record) != nil || strings.TrimSpace(record.Server.Name) == "" || strings.TrimSpace(record.Server.Description) == "" || strings.TrimSpace(record.Server.Version) == "" || len(record.Server.Packages) > maxTransports || len(record.Server.Remotes) > maxTransports {
 		return registryProjection{}, false
 	}
 	counts := map[string]int{}

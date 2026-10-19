@@ -102,9 +102,6 @@ type ProductFeatures struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled bool
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled bool
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -260,9 +257,6 @@ func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeature
 	if vres.RemoteSessionAutoRefreshEnforcedEnabled != nil {
 		res.RemoteSessionAutoRefreshEnforcedEnabled = *vres.RemoteSessionAutoRefreshEnforcedEnabled
 	}
-	if vres.ConsentToolFilteringEnabled != nil {
-		res.ConsentToolFilteringEnabled = *vres.ConsentToolFilteringEnabled
-	}
 	if vres.SessionPortabilityEnabled != nil {
 		res.SessionPortabilityEnabled = *vres.SessionPortabilityEnabled
 	}
@@ -301,7 +295,6 @@ func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeatures
 		CustomerManagedEncryptionKeysEnabled:    &res.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         &res.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: &res.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             &res.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,

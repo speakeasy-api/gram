@@ -50,7 +50,7 @@ func (c *Chainer) cachedToken(ctx context.Context, logger *slog.Logger, req Requ
 		return none, false
 	}
 	if !row.Usable {
-		if err := q.RetireEMACredential(context.WithoutCancel(ctx), repo.RetireEMACredentialParams{ID: row.ID, OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, ExpectedUpdatedAt: row.UpdatedAt}); err != nil {
+		if _, err := q.RetireEMACredential(context.WithoutCancel(ctx), repo.RetireEMACredentialParams{ID: row.ID, OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, ExpectedUpdatedAt: row.UpdatedAt}); err != nil {
 			logger.WarnContext(ctx, "retire stale identity chaining credential", attr.SlogError(err))
 		}
 		return none, false
@@ -83,7 +83,7 @@ type publishedSlot struct {
 func (c *Chainer) retire(ctx context.Context, logger *slog.Logger, req Request, slot publishedSlot) {
 	retireCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
 	defer cancel()
-	if err := repo.New(c.db).RetireEMACredential(retireCtx, repo.RetireEMACredentialParams{
+	if _, err := repo.New(c.db).RetireEMACredential(retireCtx, repo.RetireEMACredentialParams{
 		ID: slot.id, OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, ExpectedUpdatedAt: slot.updatedAt,
 	}); err != nil {
 		logger.WarnContext(ctx, "retire identity chaining credential after a failed recheck", attr.SlogError(err))
@@ -113,34 +113,17 @@ func (c *Chainer) publishSlot(ctx context.Context, logger *slog.Logger, req Requ
 		return none, fmt.Errorf("begin chained credential publish: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	if err := c.lockPublishFence(ctx, tx, logger, req, sel); err != nil {
+		return none, err
+	}
 	q := repo.New(tx)
-	if err := q.LockEMAProvidersShared(ctx, req.OrganizationID); err != nil {
-		return none, fmt.Errorf("lock ema provider order: %w", err)
-	}
-	if outcome := c.stillServesWith(ctx, q, logger, req, sel); !outcome.Succeeded() {
-		if outcome.Reason == ReasonStaleConfiguration {
-			return none, errStale
-		}
-		return none, fmt.Errorf("check ema provider order: %s", outcome.Reason)
-	}
-	// Preparation locks the binding row before changing it; sharing that
-	// lock here means the publish either sees the change or finishes first.
-	if _, err := q.LockEMABindingForPublish(ctx, repo.LockEMABindingForPublishParams{ID: sel.bindingID, OrganizationID: req.OrganizationID, ProjectID: req.ProjectID, Generation: sel.generation}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return none, errStale
-		}
-		return none, fmt.Errorf("lock ema binding: %w", err)
-	}
 	if sel.provider.Kind == remotesessions.EMAProviderSpeakeasy {
-		if err := c.checkSpeakeasyPublish(ctx, tx, req, sel); err != nil {
-			return none, err
-		}
 		slot, err = upsertSpeakeasyCredential(ctx, tx, repo.UpsertSpeakeasyEMACredentialParams{
 			OrganizationID: req.OrganizationID, ProjectID: req.ProjectID, UserSessionIssuerID: req.UserSessionIssuerID,
 			RemoteSessionIssuerID: sel.remoteIssuerID, RemoteSessionClientID: sel.clientID, Resource: sel.resource,
 			SubjectUrn: urn.NewUserSubject(req.UserID).String(), BindingID: sel.bindingID, BindingGeneration: sel.generation,
 			InternalSessionIssuerID: sel.provider.InternalSessionIssuerID, InternalSessionIssuerUpdatedAt: conv.ToPGTimestamptz(sel.internalIssuerVersion),
-			InternalSessionIssuerKeyID: sel.internalKeyID, SignInID: sel.signInID, UserSessionID: sel.userSessionID,
+			InternalSessionIssuerKeyID: sel.internalKeyID, SignInID: sel.signInID, UserSessionID: grantSlot(req, sel),
 			RequestedScopes: storedScopes(sel.scopes), GrantedScopes: storedScopes(cred.grantedScopes), AccessTokenEncrypted: encrypted,
 			AccessExpiresAt: conv.ToPGTimestamptz(cred.expiresAt), DownstreamRefreshTokenObserved: cred.refreshObserved,
 		})
@@ -178,6 +161,36 @@ func (c *Chainer) publishSlot(ctx context.Context, logger *slog.Logger, req Requ
 	return slot, nil
 }
 
+// lockPublishFence takes the shared locks a credential write holds, in
+// lifecycle order, and rechecks the provenance sel was acquired under: its
+// provider's place in the vendor's EMA order, the binding's ready generation
+// and, for Speakeasy, the sign-in and issuer key. errStale means the write
+// must not happen.
+func (c *Chainer) lockPublishFence(ctx context.Context, tx pgx.Tx, logger *slog.Logger, req Request, sel selection) error {
+	q := repo.New(tx)
+	if err := q.LockEMAProvidersShared(ctx, req.OrganizationID); err != nil {
+		return fmt.Errorf("lock ema provider order: %w", err)
+	}
+	if outcome := c.stillServesWith(ctx, q, logger, req, sel); !outcome.Succeeded() {
+		if outcome.Reason == ReasonStaleConfiguration {
+			return errStale
+		}
+		return fmt.Errorf("check ema provider order: %s", outcome.Reason)
+	}
+	// Preparation locks the binding row before changing it; sharing that
+	// lock here means the write either sees the change or finishes first.
+	if _, err := q.LockEMABindingForPublish(ctx, repo.LockEMABindingForPublishParams{ID: sel.bindingID, OrganizationID: req.OrganizationID, ProjectID: req.ProjectID, Generation: sel.generation}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errStale
+		}
+		return fmt.Errorf("lock ema binding: %w", err)
+	}
+	if sel.provider.Kind == remotesessions.EMAProviderSpeakeasy {
+		return c.checkSpeakeasyPublish(ctx, tx, req, sel)
+	}
+	return nil
+}
+
 // legacySubjectKey allows one live credential per subject regardless of
 // provider or grant. Drop the fallback below with the index.
 const legacySubjectKey = "remote_session_ema_credentials_subject_key"
@@ -187,6 +200,14 @@ const legacySubjectKey = "remote_session_ema_credentials_subject_key"
 // is retired and the write retried, matching the old replace-on-publish.
 func upsertSpeakeasyCredential(ctx context.Context, tx pgx.Tx, params repo.UpsertSpeakeasyEMACredentialParams) (publishedSlot, error) {
 	var none publishedSlot
+	if !params.UserSessionID.Valid {
+		if err := repo.New(tx).RetireSpeakeasyConsentEMACredentials(ctx, repo.RetireSpeakeasyConsentEMACredentialsParams{
+			OrganizationID: params.OrganizationID, ProjectID: params.ProjectID, UserSessionIssuerID: params.UserSessionIssuerID,
+			RemoteSessionClientID: params.RemoteSessionClientID, Resource: params.Resource, SubjectUrn: params.SubjectUrn, SignInID: params.SignInID,
+		}); err != nil {
+			return none, fmt.Errorf("retire earlier consent EMA credentials: %w", err)
+		}
+	}
 	sp, err := tx.Begin(ctx)
 	if err != nil {
 		return none, fmt.Errorf("begin Speakeasy credential savepoint: %w", err)
@@ -205,6 +226,12 @@ func upsertSpeakeasyCredential(ctx context.Context, tx pgx.Tx, params repo.Upser
 	if err := sp.Rollback(ctx); err != nil {
 		return none, fmt.Errorf("roll back Speakeasy credential savepoint: %w", err)
 	}
+	if !params.UserSessionID.Valid {
+		// This sign-in's earlier consent credentials are already retired, so
+		// the slot holds a grant's, another provider's or another sign-in's
+		// pending consent credential. A consent check never evicts those.
+		return none, errConsentNotStored
+	}
 	q := repo.New(tx)
 	if err := q.RetireLegacyEMACredentialSlot(ctx, repo.RetireLegacyEMACredentialSlotParams{
 		OrganizationID: params.OrganizationID, ProjectID: params.ProjectID, UserSessionIssuerID: params.UserSessionIssuerID,
@@ -217,6 +244,15 @@ func upsertSpeakeasyCredential(ctx context.Context, tx pgx.Tx, params repo.Upser
 		return none, fmt.Errorf("publish Speakeasy EMA credential after retiring legacy slot: %w", err)
 	}
 	return publishedSlot{id: row.ID, updatedAt: row.UpdatedAt}, nil
+}
+
+// grantSlot is the credential's MCP grant; NULL only for a consent request,
+// whose credential is minted before the grant exists.
+func grantSlot(req Request, sel selection) uuid.NullUUID {
+	if req.consent() {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: sel.userSessionID, Valid: true}
 }
 
 // storedScopes keeps NOT NULL array columns non-NULL for empty scope sets.
@@ -236,14 +272,28 @@ func readCredential(ctx context.Context, q *repo.Queries, req Request, sel selec
 		}
 		return row, nil
 	}
-	r, err := q.GetSpeakeasyEMACredentialForUse(ctx, repo.GetSpeakeasyEMACredentialForUseParams{
+	params := repo.GetSpeakeasyEMACredentialForUseParams{
 		OrganizationID: req.OrganizationID, ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true},
 		UserSessionIssuerID: uuid.NullUUID{UUID: req.UserSessionIssuerID, Valid: true}, RemoteSessionIssuerID: sel.remoteIssuerID,
 		RemoteSessionClientID: uuid.NullUUID{UUID: sel.clientID, Valid: true}, Resource: sel.resource, SubjectUrn: urn.NewUserSubject(req.UserID).String(),
 		BindingID: sel.bindingID, BindingGeneration: sel.generation, RequestedScopes: storedScopes(sel.scopes), UsableAfter: conv.ToPGTimestamptz(now.Add(accessExpirySkew)),
 		InternalSessionIssuerID: sel.provider.InternalSessionIssuerID, InternalSessionIssuerUpdatedAt: conv.ToPGTimestamptz(sel.internalIssuerVersion),
 		InternalSessionIssuerKeyID: sel.internalKeyID, SignInID: sel.signInID, UserSessionID: sel.userSessionID,
-	})
+	}
+	if req.consent() {
+		r, err := q.GetSpeakeasyConsentEMACredentialForUse(ctx, repo.GetSpeakeasyConsentEMACredentialForUseParams{
+			RemoteSessionIssuerID: params.RemoteSessionIssuerID, BindingID: params.BindingID, BindingGeneration: params.BindingGeneration,
+			RequestedScopes: params.RequestedScopes, InternalSessionIssuerID: params.InternalSessionIssuerID,
+			InternalSessionIssuerUpdatedAt: params.InternalSessionIssuerUpdatedAt, InternalSessionIssuerKeyID: params.InternalSessionIssuerKeyID,
+			SignInID: req.consentSignInID, UsableAfter: params.UsableAfter, OrganizationID: params.OrganizationID, ProjectID: params.ProjectID,
+			UserSessionIssuerID: params.UserSessionIssuerID, RemoteSessionClientID: params.RemoteSessionClientID, Resource: params.Resource, SubjectUrn: params.SubjectUrn,
+		})
+		if err != nil {
+			return repo.GetEMACredentialForUseRow(r), fmt.Errorf("read Speakeasy consent EMA credential: %w", err)
+		}
+		return repo.GetEMACredentialForUseRow(r), nil
+	}
+	r, err := q.GetSpeakeasyEMACredentialForUse(ctx, params)
 	if err != nil {
 		return repo.GetEMACredentialForUseRow(r), fmt.Errorf("read Speakeasy EMA credential: %w", err)
 	}

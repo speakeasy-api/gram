@@ -7,6 +7,7 @@ import (
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
+	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
 )
 
 // ErrInvalidInput marks source content that cannot succeed on redelivery.
@@ -20,6 +21,9 @@ const maxContentBytes = 16 << 20
 // Event carries tenant scope, stable source identity, and observed attribution.
 // Adapters must not infer billing attribution from actor or account identity.
 type Event struct {
+	// Evaluation identifies the trigger, manual run and immutable request time.
+	Evaluation readings.Context
+
 	// OrganizationID owns the event and the sensor definitions.
 	OrganizationID string
 
@@ -46,6 +50,9 @@ type Event struct {
 
 	// Replayed marks historical ingestion, not transport redelivery.
 	Replayed *bool
+
+	// Attributes preserves customer-defined string labels from the source event.
+	Attributes map[string]string
 }
 
 // Input adapts a source event into immutable metadata and classifier content.

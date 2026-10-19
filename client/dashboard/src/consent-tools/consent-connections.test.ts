@@ -592,7 +592,7 @@ describe("identity chaining checks", () => {
       const clientID = (init.body as URLSearchParams).get("client_id");
       return clientID === "client-a"
         ? reply({ status: "rejected", message: "Refused." })
-        : reply({ status: "ready", message: "Ready" });
+        : reply({ status: "connected", message: "Connected" });
     });
     const rejected = chainedPage();
     await waitFor(() => {
@@ -600,7 +600,7 @@ describe("identity chaining checks", () => {
         "rejected",
       );
       expect(chainCheck("client-b").getAttribute("data-chain-check")).toBe(
-        "ready",
+        "connected",
       );
     });
     expect(
@@ -609,12 +609,14 @@ describe("identity chaining checks", () => {
     expect(rejected).toHaveBeenCalled();
   });
 
-  it("does not signal when chained services are ready", async () => {
-    fetchMock.mockResolvedValue(reply({ status: "ready", message: "Ready" }));
+  it("does not signal when chained services connect", async () => {
+    fetchMock.mockResolvedValue(
+      reply({ status: "connected", message: "Connected" }),
+    );
     const rejected = chainedPage();
     await waitFor(() =>
       expect(chainCheck("client-b").getAttribute("data-chain-check")).toBe(
-        "ready",
+        "connected",
       ),
     );
     expect(

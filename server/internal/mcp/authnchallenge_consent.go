@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -105,9 +106,14 @@ const consentFormMaxBytes = 1 << 20 // 1 MiB
 
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
-	ClientName   string
-	MCPSlug      string
-	MCPRouteBase string
+	// ShowDiscoveryMode exposes optional gateway connection settings.
+	ShowDiscoveryMode bool
+	// PrefillDiscoveryMode is the mode this subject chose on its previous
+	// connection; empty selects the gateway default.
+	PrefillDiscoveryMode metamcp.DiscoveryMode
+	ClientName           string
+	MCPSlug              string
+	MCPRouteBase         string
 	// SharedConsentPath is the consent page path on the issuer's shared
 	// authorization server when it is serving the request. Empty when the
 	// endpoint's own authorization server is, whose consent page lives under
@@ -407,16 +413,6 @@ func (p autoRefreshPolicy) IsEnforced() bool {
 	return p == autoRefreshEnforced
 }
 
-// consentToolFilteringEnabled reports the organization admin's durable opt-in
-// from the consent_tool_filtering product feature managed on MCP Connections.
-// An unavailable checker degrades to off.
-func (s *Service) consentToolFilteringEnabled(ctx context.Context, _ *slog.Logger, organizationID string) bool {
-	if s.platformFeatureChecker == nil {
-		return false
-	}
-	return s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureConsentToolFiltering))
-}
-
 // resolveAutoRefreshPolicy reports the organization's automatic-refresh policy.
 // Enforcement wins over the opt-in so an organization that turns on both still
 // gets the stricter behavior, and an unavailable feature checker degrades to
@@ -700,7 +696,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// approve-button enabling, so unavailable checks must hide it rather than
 	// prevent unrestricted approval.
 	showToolsIsland := false
-	if !challengeState.FirstParty && s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
+	if !challengeState.FirstParty {
 		var eligibilityErr error
 		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
 		if eligibilityErr != nil {
@@ -728,6 +724,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		)
 	}
 	inventoryDeferred := consentInventoryDeferred(cards, prefillAttr != "")
+	showDiscoveryMode := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
+	var prefillDiscoveryMode metamcp.DiscoveryMode
+	if showDiscoveryMode {
+		prefillDiscoveryMode = s.consentDiscoveryModePrefill(ctx, endpoint, *challengeState.Subject, clientRowID)
+	}
 
 	data := consentTemplateData{
 		ClientName:              clientName,
@@ -750,6 +751,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		AutoRefreshOn:           autoRefreshOn,
 		AutoRefreshHasSessions:  autoRefreshHasSessions,
 		ShowToolsIsland:         showToolsIsland,
+		ShowDiscoveryMode:       showDiscoveryMode,
+		PrefillDiscoveryMode:    prefillDiscoveryMode,
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
@@ -849,6 +852,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 		}
 		s.evictConsentToolInventory(ctx, stateID)
+		s.retireDeniedConsentCredentials(ctx, logger, endpoint, challengeState)
 		denyURL, err := buildClientRedirect(clientRedirectParams{
 			RedirectURI:      challengeState.RedirectURI,
 			Issuer:           issuer,
@@ -951,6 +955,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 	}
 
+	toolPolicy, err := s.consentGatewayPolicy(ctx, endpoint, challengeState, selectedAgentID, r.PostForm.Get("discovery_mode"), toolSelection)
+	if err != nil {
+		return err
+	}
+
 	// Resolve the user_session_clients row id for the consent FK.
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 	if err != nil {
@@ -1031,6 +1040,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	if agentAuthorization != nil {
 		code = agentAuthorizationCodePrefix + code
+	} else if toolPolicy != nil {
+		code = gatewayAuthorizationCodePrefix + code
 	}
 
 	// The POST may arrive through a global continuation surface. Preserve the
@@ -1051,6 +1062,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
 		ToolSelection:               toolSelection,
 		SignInID:                    nil,
+		GatewayPolicy:               toolPolicy,
 		CreatedAt:                   time.Now(),
 	}
 	// Only a human subject's own session is linked to its sign-in.

@@ -49,6 +49,10 @@ describe("formatPlatform", () => {
     expect(formatPlatform("microsoft-copilot")).toBe("Microsoft Copilot");
   });
 
+  it("preserves a literal prefix in an arbitrary harness name", () => {
+    expect(formatPlatform("ahp-harness:kit")).toBe("Ahp Harness:kit");
+  });
+
   it("title-cases unknown delimited sources", () => {
     expect(formatPlatform("new_agent-client")).toBe("New Agent Client");
   });
