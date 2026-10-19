@@ -311,7 +311,7 @@ func BuildAdmitSubjectPayload(workloadIdentitiesAdmitSubjectBody string, workloa
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesAdmitSubjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"hooks_project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"https://example.com/foo\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"https://example.com/foo\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer", body.Issuer, goa.FormatURI))
 		if !(body.MatchKind == "exact" || body.MatchKind == "wildcard") {
@@ -323,9 +323,6 @@ func BuildAdmitSubjectPayload(workloadIdentitiesAdmitSubjectBody string, workloa
 			}
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
-		if body.HooksProjectID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.hooks_project_id", *body.HooksProjectID, goa.FormatUUID))
-		}
 		if err != nil {
 			return nil, err
 		}
@@ -349,13 +346,12 @@ func BuildAdmitSubjectPayload(workloadIdentitiesAdmitSubjectBody string, workloa
 		}
 	}
 	v := &workloadidentities.AdmitSubjectPayload{
-		Issuer:         body.Issuer,
-		Subject:        body.Subject,
-		MatchKind:      body.MatchKind,
-		Name:           body.Name,
-		AgentID:        body.AgentID,
-		ProjectScoped:  body.ProjectScoped,
-		HooksProjectID: body.HooksProjectID,
+		Issuer:        body.Issuer,
+		Subject:       body.Subject,
+		MatchKind:     body.MatchKind,
+		Name:          body.Name,
+		AgentID:       body.AgentID,
+		ProjectScoped: body.ProjectScoped,
 	}
 	{
 		var zero string
@@ -390,7 +386,7 @@ func BuildUpdateSubjectPayload(workloadIdentitiesUpdateSubjectBody string, workl
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesUpdateSubjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"hooks_project_id\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.AgentID != nil {
@@ -419,10 +415,9 @@ func BuildUpdateSubjectPayload(workloadIdentitiesUpdateSubjectBody string, workl
 		}
 	}
 	v := &workloadidentities.UpdateSubjectPayload{
-		ID:             body.ID,
-		Name:           body.Name,
-		AgentID:        body.AgentID,
-		HooksProjectID: body.HooksProjectID,
+		ID:      body.ID,
+		Name:    body.Name,
+		AgentID: body.AgentID,
 	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))
@@ -484,10 +479,9 @@ func BuildCreateDeviceJoinTokenPayload(workloadIdentitiesCreateDeviceJoinTokenBo
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesCreateDeviceJoinTokenBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expires_in_seconds\": 61,\n      \"hooks_project_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expires_in_seconds\": 61\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.hooks_project_id", body.HooksProjectID, goa.FormatUUID))
 		if body.ExpiresInSeconds < 60 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_in_seconds", body.ExpiresInSeconds, 60, true))
 		}
@@ -518,7 +512,6 @@ func BuildCreateDeviceJoinTokenPayload(workloadIdentitiesCreateDeviceJoinTokenBo
 	}
 	v := &workloadidentities.CreateDeviceJoinTokenPayload{
 		AgentID:          body.AgentID,
-		HooksProjectID:   body.HooksProjectID,
 		ExpiresInSeconds: body.ExpiresInSeconds,
 	}
 	{

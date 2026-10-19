@@ -18,14 +18,6 @@ export type WorkloadDeviceRegistration = {
    */
   deviceSubject: string;
   /**
-   * The project the device may send hooks to.
-   */
-  hooksProjectId: string;
-  /**
-   * That project's slug, which the device sends as Gram-Project on hooks requests.
-   */
-  hooksProjectSlug: string;
-  /**
    * The issuer its assertions carry as iss.
    */
   issuer: string;
@@ -43,8 +35,6 @@ export const WorkloadDeviceRegistration$inboundSchema: z.ZodMiniType<
   z.object({
     agent_id: z.string(),
     device_subject: z.string(),
-    hooks_project_id: z.string(),
-    hooks_project_slug: z.string(),
     issuer: z.string(),
     organization_id: z.string(),
   }),
@@ -52,8 +42,6 @@ export const WorkloadDeviceRegistration$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "agent_id": "agentId",
       "device_subject": "deviceSubject",
-      "hooks_project_id": "hooksProjectId",
-      "hooks_project_slug": "hooksProjectSlug",
       "organization_id": "organizationId",
     });
   }),

@@ -106,8 +106,6 @@ function admission(
     id: `admission-${workloadIssuerId}-${index}`,
     organizationId: "example-org",
     projectId: "",
-    hooksProjectId: "",
-    hooksProjectSlug: "",
     workloadIssuerId,
     issuer: platform.issuer,
     issuerName: platform.name,

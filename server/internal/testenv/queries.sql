@@ -1024,13 +1024,6 @@ INSERT INTO projects (id, name, slug, organization_id)
 VALUES (@id, @name, @slug, @organization_id)
 RETURNING id;
 
--- name: HardDeleteProjectFixture :execrows
--- Projects are soft-deleted in the product; this exercises the foreign-key
--- actions that only a hard delete fires.
-DELETE FROM projects
-WHERE organization_id = @organization_id
-  AND id = @id;
-
 -- name: CreateToolsetFixture :one
 INSERT INTO toolsets (id, organization_id, project_id, name, slug)
 VALUES (@id, @organization_id, @project_id, @name, @slug)

@@ -88,10 +88,6 @@ type AdmitSubjectRequestBody struct {
 	// organization. Requires a caller that names a project; a dashboard session
 	// does not. Defaults to false.
 	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
-	// The project the workload may send hooks to, which bounds the hooks grant its
-	// device-agent tokens carry. Must be a project in the caller's organization.
-	// Omitted, the workload sends no hooks.
-	HooksProjectID *string `form:"hooks_project_id,omitempty" json:"hooks_project_id,omitempty" xml:"hooks_project_id,omitempty"`
 }
 
 // UpdateSubjectRequestBody is the type of the "workloadIdentities" service
@@ -109,9 +105,6 @@ type UpdateSubjectRequestBody struct {
 	// The agent whose policy the admitted workload inherits. Shared with any
 	// admission of the same subject under the same issuer at the other tier.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The project the workload may send hooks to: a project id in the caller's
-	// organization, or blank to stop it sending hooks.
-	HooksProjectID *string `form:"hooks_project_id,omitempty" json:"hooks_project_id,omitempty" xml:"hooks_project_id,omitempty"`
 }
 
 // CreateDeviceJoinTokenRequestBody is the type of the "workloadIdentities"
@@ -119,10 +112,6 @@ type UpdateSubjectRequestBody struct {
 type CreateDeviceJoinTokenRequestBody struct {
 	// The agent the enrolled device inherits its policy from.
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
-	// The project the enrolled device may send hooks to. Recorded on its
-	// admission, it bounds the hooks grant the device's tokens carry. Must be a
-	// project in the caller's organization.
-	HooksProjectID string `form:"hooks_project_id" json:"hooks_project_id" xml:"hooks_project_id"`
 	// How long the token stays redeemable. Defaults to one hour.
 	ExpiresInSeconds int `form:"expires_in_seconds" json:"expires_in_seconds" xml:"expires_in_seconds"`
 }
@@ -252,11 +241,6 @@ type RegisterDeviceResponseBody struct {
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The organization the device enrolled in.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The project the device may send hooks to.
-	HooksProjectID *string `form:"hooks_project_id,omitempty" json:"hooks_project_id,omitempty" xml:"hooks_project_id,omitempty"`
-	// That project's slug, which the device sends as Gram-Project on hooks
-	// requests.
-	HooksProjectSlug *string `form:"hooks_project_slug,omitempty" json:"hooks_project_slug,omitempty" xml:"hooks_project_slug,omitempty"`
 }
 
 // ListUnauthorizedResponseBody is the type of the "workloadIdentities" service
@@ -2569,10 +2553,6 @@ type WorkloadAdmissionResponseBody struct {
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assigned agent's name; empty when the assignment is missing.
 	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
-	// The project this workload may send hooks to; empty when it sends none.
-	HooksProjectID *string `form:"hooks_project_id,omitempty" json:"hooks_project_id,omitempty" xml:"hooks_project_id,omitempty"`
-	// That project's slug; empty when it sends none or the project was deleted.
-	HooksProjectSlug *string `form:"hooks_project_slug,omitempty" json:"hooks_project_slug,omitempty" xml:"hooks_project_slug,omitempty"`
 	// False when this is a wildcard rule under an issuer that no longer permits
 	// wildcard matching. Such a rule is inert: it is stored, listed, and matches
 	// nothing.
@@ -2809,13 +2789,12 @@ func NewUpdateIssuerRequestBody(p *workloadidentities.UpdateIssuerPayload) *Upda
 // the "admitSubject" endpoint of the "workloadIdentities" service.
 func NewAdmitSubjectRequestBody(p *workloadidentities.AdmitSubjectPayload) *AdmitSubjectRequestBody {
 	body := &AdmitSubjectRequestBody{
-		Issuer:         p.Issuer,
-		Subject:        p.Subject,
-		MatchKind:      p.MatchKind,
-		Name:           p.Name,
-		AgentID:        p.AgentID,
-		ProjectScoped:  p.ProjectScoped,
-		HooksProjectID: p.HooksProjectID,
+		Issuer:        p.Issuer,
+		Subject:       p.Subject,
+		MatchKind:     p.MatchKind,
+		Name:          p.Name,
+		AgentID:       p.AgentID,
+		ProjectScoped: p.ProjectScoped,
 	}
 	{
 		var zero string
@@ -2842,10 +2821,9 @@ func NewAdmitSubjectRequestBody(p *workloadidentities.AdmitSubjectPayload) *Admi
 // the "updateSubject" endpoint of the "workloadIdentities" service.
 func NewUpdateSubjectRequestBody(p *workloadidentities.UpdateSubjectPayload) *UpdateSubjectRequestBody {
 	body := &UpdateSubjectRequestBody{
-		ID:             p.ID,
-		Name:           p.Name,
-		AgentID:        p.AgentID,
-		HooksProjectID: p.HooksProjectID,
+		ID:      p.ID,
+		Name:    p.Name,
+		AgentID: p.AgentID,
 	}
 	if p.Tags != nil {
 		body.Tags = make([]string, len(p.Tags))
@@ -2862,7 +2840,6 @@ func NewUpdateSubjectRequestBody(p *workloadidentities.UpdateSubjectPayload) *Up
 func NewCreateDeviceJoinTokenRequestBody(p *workloadidentities.CreateDeviceJoinTokenPayload) *CreateDeviceJoinTokenRequestBody {
 	body := &CreateDeviceJoinTokenRequestBody{
 		AgentID:          p.AgentID,
-		HooksProjectID:   p.HooksProjectID,
 		ExpiresInSeconds: p.ExpiresInSeconds,
 	}
 	{
@@ -4771,12 +4748,10 @@ func NewCreateDeviceJoinTokenGatewayError(body *CreateDeviceJoinTokenGatewayErro
 // service "registerDevice" endpoint result from a HTTP "OK" response.
 func NewRegisterDeviceWorkloadDeviceRegistrationOK(body *RegisterDeviceResponseBody) *workloadidentities.WorkloadDeviceRegistration {
 	v := &workloadidentities.WorkloadDeviceRegistration{
-		DeviceSubject:    *body.DeviceSubject,
-		Issuer:           *body.Issuer,
-		AgentID:          *body.AgentID,
-		OrganizationID:   *body.OrganizationID,
-		HooksProjectID:   *body.HooksProjectID,
-		HooksProjectSlug: *body.HooksProjectSlug,
+		DeviceSubject:  *body.DeviceSubject,
+		Issuer:         *body.Issuer,
+		AgentID:        *body.AgentID,
+		OrganizationID: *body.OrganizationID,
 	}
 
 	return v
@@ -5213,17 +5188,8 @@ func ValidateRegisterDeviceResponseBody(body *RegisterDeviceResponseBody) (err e
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
-	if body.HooksProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_project_id", "body"))
-	}
-	if body.HooksProjectSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_project_slug", "body"))
-	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
-	}
-	if body.HooksProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.hooks_project_id", *body.HooksProjectID, goa.FormatUUID))
 	}
 	return
 }
@@ -8195,12 +8161,6 @@ func ValidateWorkloadAdmissionResponseBody(body *WorkloadAdmissionResponseBody) 
 	}
 	if body.AgentName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_name", "body"))
-	}
-	if body.HooksProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_project_id", "body"))
-	}
-	if body.HooksProjectSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_project_slug", "body"))
 	}
 	if body.WildcardActive == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("wildcard_active", "body"))

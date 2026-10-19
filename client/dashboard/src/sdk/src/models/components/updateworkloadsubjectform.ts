@@ -14,10 +14,6 @@ export type UpdateWorkloadSubjectForm = {
    */
   agentId?: string | undefined;
   /**
-   * The project the workload may send hooks to: a project id in the caller's organization, or blank to stop it sending hooks.
-   */
-  hooksProjectId?: string | undefined;
-  /**
    * The admission id.
    */
   id: string;
@@ -34,7 +30,6 @@ export type UpdateWorkloadSubjectForm = {
 /** @internal */
 export type UpdateWorkloadSubjectForm$Outbound = {
   agent_id?: string | undefined;
-  hooks_project_id?: string | undefined;
   id: string;
   name?: string | undefined;
   tags?: Array<string> | undefined;
@@ -47,7 +42,6 @@ export const UpdateWorkloadSubjectForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     agentId: z.optional(z.string()),
-    hooksProjectId: z.optional(z.string()),
     id: z.string(),
     name: z.optional(z.string()),
     tags: z.optional(z.array(z.string())),
@@ -55,7 +49,6 @@ export const UpdateWorkloadSubjectForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       agentId: "agent_id",
-      hooksProjectId: "hooks_project_id",
     });
   }),
 );

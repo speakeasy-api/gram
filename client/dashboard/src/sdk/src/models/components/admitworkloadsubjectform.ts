@@ -29,10 +29,6 @@ export type AdmitWorkloadSubjectForm = {
    */
   agentId: string;
   /**
-   * The project the workload may send hooks to, which bounds the hooks grant its device-agent tokens carry. Must be a project in the caller's organization. Omitted, the workload sends no hooks.
-   */
-  hooksProjectId?: string | undefined;
-  /**
    * The issuer identifier of an already-trusted issuer, resolved within the caller's organization. Naming one the caller cannot see is a not-found, not a permission error.
    */
   issuer: string;
@@ -66,7 +62,6 @@ export const AdmitWorkloadSubjectFormMatchKind$outboundSchema: z.ZodMiniEnum<
 /** @internal */
 export type AdmitWorkloadSubjectForm$Outbound = {
   agent_id: string;
-  hooks_project_id?: string | undefined;
   issuer: string;
   match_kind: string;
   name?: string | undefined;
@@ -82,7 +77,6 @@ export const AdmitWorkloadSubjectForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     agentId: z.string(),
-    hooksProjectId: z.optional(z.string()),
     issuer: z.string(),
     matchKind: z._default(
       AdmitWorkloadSubjectFormMatchKind$outboundSchema,
@@ -96,7 +90,6 @@ export const AdmitWorkloadSubjectForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       agentId: "agent_id",
-      hooksProjectId: "hooks_project_id",
       matchKind: "match_kind",
       projectScoped: "project_scoped",
     });

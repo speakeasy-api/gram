@@ -2359,27 +2359,6 @@ func (q *Queries) GetUserSessionMigrationTombstonesFixture(ctx context.Context, 
 	return i, err
 }
 
-const hardDeleteProjectFixture = `-- name: HardDeleteProjectFixture :execrows
-DELETE FROM projects
-WHERE organization_id = $1
-  AND id = $2
-`
-
-type HardDeleteProjectFixtureParams struct {
-	OrganizationID string
-	ID             uuid.UUID
-}
-
-// Projects are soft-deleted in the product; this exercises the foreign-key
-// actions that only a hard delete fires.
-func (q *Queries) HardDeleteProjectFixture(ctx context.Context, arg HardDeleteProjectFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, hardDeleteProjectFixture, arg.OrganizationID, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const insertAttachmentFixture = `-- name: InsertAttachmentFixture :execrows
 INSERT INTO principal_remote_session_bindings
  (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, attached_by_subject_id, grant_generation)

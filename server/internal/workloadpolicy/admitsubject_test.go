@@ -30,7 +30,6 @@ func admit(t *testing.T, ctx context.Context, ti *testInstance, subject string, 
 		Tags:             nil,
 		AgentID:          agentID.String(),
 		ProjectScoped:    false,
-		HooksProjectID:   nil,
 	})
 	if err != nil {
 		// Wrapped so wrapcheck is satisfied; every assertion on this error uses
@@ -198,7 +197,6 @@ func TestAdmitSubject_RefusesTwoIssuersSharingAURLAtOneTier(t *testing.T) {
 		Tags:             nil,
 		AgentID:          agentID.String(),
 		ProjectScoped:    true,
-		HooksProjectID:   nil,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.Contains(t, err.Error(), "same tier")
@@ -218,7 +216,6 @@ func admitWithTags(t *testing.T, ctx context.Context, ti *testInstance, agentID 
 		Tags:             tags,
 		AgentID:          agentID.String(),
 		ProjectScoped:    false,
-		HooksProjectID:   nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("admit subject: %w", err)

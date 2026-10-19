@@ -286,15 +286,12 @@ var _ = Service("workloadIdentities", func() {
 			Attribute("agent_id", String, "The agent the enrolled device inherits its policy from.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("hooks_project_id", String, "The project the enrolled device may send hooks to. Recorded on its admission, it bounds the hooks grant the device's tokens carry. Must be a project in the caller's organization.", func() {
-				Format(FormatUUID)
-			})
 			Attribute("expires_in_seconds", Int, "How long the token stays redeemable. Defaults to one hour.", func() {
 				Minimum(60)
 				Maximum(86400)
 				Default(3600)
 			})
-			Required("agent_id", "hooks_project_id")
+			Required("agent_id")
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -362,11 +359,7 @@ var WorkloadDeviceRegistration = Type("WorkloadDeviceRegistration", func() {
 		Format(FormatUUID)
 	})
 	Attribute("organization_id", String, "The organization the device enrolled in.")
-	Attribute("hooks_project_id", String, "The project the device may send hooks to.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("hooks_project_slug", String, "That project's slug, which the device sends as Gram-Project on hooks requests.")
-	Required("device_subject", "issuer", "agent_id", "organization_id", "hooks_project_id", "hooks_project_slug")
+	Required("device_subject", "issuer", "agent_id", "organization_id")
 })
 
 var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
@@ -441,9 +434,6 @@ var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	Attribute("project_scoped", Boolean, "Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.", func() {
 		Default(false)
 	})
-	Attribute("hooks_project_id", String, "The project the workload may send hooks to, which bounds the hooks grant its device-agent tokens carry. Must be a project in the caller's organization. Omitted, the workload sends no hooks.", func() {
-		Format(FormatUUID)
-	})
 
 	Required("issuer", "subject", "agent_id")
 })
@@ -463,7 +453,6 @@ var UpdateWorkloadSubjectForm = Type("UpdateWorkloadSubjectForm", func() {
 	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits. Shared with any admission of the same subject under the same issuer at the other tier.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("hooks_project_id", String, "The project the workload may send hooks to: a project id in the caller's organization, or blank to stop it sending hooks.")
 
 	Required("id")
 })
@@ -519,8 +508,6 @@ var WorkloadAdmission = Type("WorkloadAdmission", func() {
 		Format(FormatUUID)
 	})
 	Attribute("agent_name", String, "The assigned agent's name; empty when the assignment is missing.")
-	Attribute("hooks_project_id", String, "The project this workload may send hooks to; empty when it sends none.")
-	Attribute("hooks_project_slug", String, "That project's slug; empty when it sends none or the project was deleted.")
 	Attribute("wildcard_active", Boolean, "False when this is a wildcard rule under an issuer that no longer permits wildcard matching. Such a rule is inert: it is stored, listed, and matches nothing.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
@@ -529,7 +516,7 @@ var WorkloadAdmission = Type("WorkloadAdmission", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "project_id", "workload_issuer_id", "issuer", "issuer_name", "subject", "match_kind", "name", "tags", "agent_id", "agent_name", "hooks_project_id", "hooks_project_slug", "wildcard_active", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "workload_issuer_id", "issuer", "issuer_name", "subject", "match_kind", "name", "tags", "agent_id", "agent_name", "wildcard_active", "created_at", "updated_at")
 })
 
 var WorkloadIdentityPolicy = Type("WorkloadIdentityPolicy", func() {

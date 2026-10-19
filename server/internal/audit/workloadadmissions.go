@@ -41,10 +41,6 @@ type WorkloadAdmissionSnapshot struct {
 	Tags []string `json:"tags"`
 
 	AssignedAgentID string `json:"assigned_agent_id"`
-
-	// HooksProjectID is the project the workload may send hooks to; empty when
-	// it sends none.
-	HooksProjectID string `json:"hooks_project_id"`
 	// Tier is "organization" or "project". A subject can be admitted at both
 	// independently, and withdrawing one leaves the other in force, so an entry
 	// that does not say which tier it describes cannot be acted on.

@@ -81192,10 +81192,6 @@ components:
           type: string
           description: The agent whose policy the admitted workload inherits.
           format: uuid
-        hooks_project_id:
-          type: string
-          description: The project the workload may send hooks to, which bounds the hooks grant its device-agent tokens carry. Must be a project in the caller's organization. Omitted, the workload sends no hooks.
-          format: uuid
         issuer:
           type: string
           description: The issuer identifier of an already-trusted issuer, resolved within the caller's organization. Naming one the caller cannot see is a not-found, not a permission error.
@@ -84643,13 +84639,8 @@ components:
           format: int64
           minimum: 60
           maximum: 86400
-        hooks_project_id:
-          type: string
-          description: The project the enrolled device may send hooks to. Recorded on its admission, it bounds the hooks grant the device's tokens carry. Must be a project in the caller's organization.
-          format: uuid
       required:
         - agent_id
-        - hooks_project_id
     CreateDomainRequestBody:
       type: object
       properties:
@@ -111619,9 +111610,6 @@ components:
           type: string
           description: The agent whose policy the admitted workload inherits. Shared with any admission of the same subject under the same issuer at the other tier.
           format: uuid
-        hooks_project_id:
-          type: string
-          description: 'The project the workload may send hooks to: a project id in the caller''s organization, or blank to stop it sending hooks.'
         id:
           type: string
           description: The admission id.
@@ -113051,12 +113039,6 @@ components:
         created_at:
           type: string
           format: date-time
-        hooks_project_id:
-          type: string
-          description: The project this workload may send hooks to; empty when it sends none.
-        hooks_project_slug:
-          type: string
-          description: That project's slug; empty when it sends none or the project was deleted.
         id:
           type: string
           description: The admission id.
@@ -113114,8 +113096,6 @@ components:
         - tags
         - agent_id
         - agent_name
-        - hooks_project_id
-        - hooks_project_slug
         - wildcard_active
         - created_at
         - updated_at
@@ -113159,13 +113139,6 @@ components:
         device_subject:
           type: string
           description: The device's workload subject, device:<uuid>. Its assertions carry this as sub.
-        hooks_project_id:
-          type: string
-          description: The project the device may send hooks to.
-          format: uuid
-        hooks_project_slug:
-          type: string
-          description: That project's slug, which the device sends as Gram-Project on hooks requests.
         issuer:
           type: string
           description: The issuer its assertions carry as iss.
@@ -113177,8 +113150,6 @@ components:
         - issuer
         - agent_id
         - organization_id
-        - hooks_project_id
-        - hooks_project_slug
     WorkloadForm:
       type: object
       properties:

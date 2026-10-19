@@ -6,10 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
@@ -22,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
@@ -42,7 +39,6 @@ func admitLabelled(t *testing.T, ctx context.Context, ti *testInstance, agentID 
 		Tags:             []string{"production", "slack"},
 		AgentID:          agentID.String(),
 		ProjectScoped:    false,
-		HooksProjectID:   nil,
 	})
 	require.NoError(t, err)
 
@@ -58,7 +54,6 @@ func updateSubjectPayload(id string) *gen.UpdateSubjectPayload {
 		Name:             nil,
 		Tags:             nil,
 		AgentID:          nil,
-		HooksProjectID:   nil,
 	}
 }
 
@@ -305,7 +300,6 @@ func TestUpdateSubject_ReassigningOneTierReassignsTheSharedAssignment(t *testing
 		Tags:             nil,
 		AgentID:          firstAgent.String(),
 		ProjectScoped:    true,
-		HooksProjectID:   nil,
 	})
 	require.NoError(t, err)
 
@@ -601,154 +595,4 @@ func TestUpdateSubject_RollsBackWhenTheAuditEntryFails(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, original, onlyAdmission(t, policy))
 	require.Equal(t, firstAgent, resolvedAgent(t, ctx, ti, original))
-}
-
-func TestAdmitAndUpdateSubject_BindTheHooksProject(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-
-	registerAnthropic(t, ctx, ti, true)
-	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
-
-	// Without one, the workload sends no hooks.
-	original := admitLabelled(t, ctx, ti, agentID)
-	require.Empty(t, original.HooksProjectID)
-	require.Empty(t, original.HooksProjectSlug)
-
-	payload := updateSubjectPayload(original.ID)
-	payload.HooksProjectID = new(ti.projectID.String())
-	policy, err := ti.service.UpdateSubject(ctx, payload)
-	require.NoError(t, err)
-	bound := onlyAdmission(t, policy)
-	require.Equal(t, ti.projectID.String(), bound.HooksProjectID)
-	require.NotEmpty(t, bound.HooksProjectSlug)
-
-	// An edit that omits it leaves it alone.
-	payload = updateSubjectPayload(original.ID)
-	payload.Name = new("Renamed")
-	policy, err = ti.service.UpdateSubject(ctx, payload)
-	require.NoError(t, err)
-	require.Equal(t, ti.projectID.String(), onlyAdmission(t, policy).HooksProjectID)
-
-	// Another organization's live project, or none at all, is not found.
-	for _, other := range []string{foreignProject(t, ctx, ti).String(), uuid.NewString()} {
-		payload = updateSubjectPayload(original.ID)
-		payload.HooksProjectID = new(other)
-		_, err = ti.service.UpdateSubject(ctx, payload)
-		requireOopsCode(t, err, oops.CodeNotFound)
-	}
-
-	// Blank clears it.
-	payload = updateSubjectPayload(original.ID)
-	payload.HooksProjectID = new("  ")
-	policy, err = ti.service.UpdateSubject(ctx, payload)
-	require.NoError(t, err)
-	require.Empty(t, onlyAdmission(t, policy).HooksProjectID)
-}
-
-func TestAdmitSubject_DeletingTheHooksProjectKeepsTheAdmission(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-
-	registerAnthropic(t, ctx, ti, true)
-	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
-
-	hooksProjectID, err := testrepo.New(ti.conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
-		ID:             uuid.New(),
-		Name:           "Hooks project",
-		Slug:           "hooks-" + uuid.NewString()[:8],
-		OrganizationID: ti.orgID,
-	})
-	require.NoError(t, err)
-
-	policy, err := ti.service.AdmitSubject(ctx, &gen.AdmitSubjectPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		Issuer:           anthropicIssuer,
-		Subject:          channelOne,
-		MatchKind:        string(workloadidentity.MatchKindExact),
-		Name:             nil,
-		Tags:             nil,
-		AgentID:          agentID.String(),
-		ProjectScoped:    false,
-		HooksProjectID:   new(hooksProjectID.String()),
-	})
-	require.NoError(t, err)
-	admitted := onlyAdmission(t, policy)
-	require.Equal(t, hooksProjectID.String(), admitted.HooksProjectID)
-
-	deleted, err := testrepo.New(ti.conn).HardDeleteProjectFixture(ctx, testrepo.HardDeleteProjectFixtureParams{
-		OrganizationID: ti.orgID,
-		ID:             hooksProjectID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), deleted)
-
-	// Losing the project must not revoke the workload: the admission stays,
-	// with no hooks project.
-	after, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
-	require.NoError(t, err)
-	remaining := onlyAdmission(t, after)
-	require.Equal(t, admitted.ID, remaining.ID)
-	require.Empty(t, remaining.HooksProjectID)
-}
-
-func TestAdmitSubject_WithAHooksProject(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-
-	registerAnthropic(t, ctx, ti, true)
-	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
-
-	admitPayload := func(hooksProjectID string) *gen.AdmitSubjectPayload {
-		return &gen.AdmitSubjectPayload{
-			SessionToken:     nil,
-			ApikeyToken:      nil,
-			ProjectSlugInput: nil,
-			Issuer:           anthropicIssuer,
-			Subject:          channelOne,
-			MatchKind:        string(workloadidentity.MatchKindExact),
-			Name:             nil,
-			Tags:             nil,
-			AgentID:          agentID.String(),
-			ProjectScoped:    false,
-			HooksProjectID:   new(hooksProjectID),
-		}
-	}
-
-	_, err := ti.service.AdmitSubject(ctx, admitPayload(uuid.NewString()))
-	requireOopsCode(t, err, oops.CodeNotFound)
-
-	policy, err := ti.service.AdmitSubject(ctx, admitPayload(ti.projectID.String()))
-	require.NoError(t, err)
-	require.Equal(t, ti.projectID.String(), onlyAdmission(t, policy).HooksProjectID)
-}
-
-// foreignProject seeds a live project in a second organization, so a test can
-// show that another tenant's real project is refused, not only an unknown id.
-func foreignProject(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID {
-	t.Helper()
-	q := testrepo.New(ti.conn)
-	orgID := "org_foreign_" + uuid.NewString()[:8]
-	require.NoError(t, q.CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
-		ID:                 orgID,
-		Name:               orgID,
-		Slug:               orgID,
-		GramAccountType:    "free",
-		WorkosID:           pgtype.Text{String: "", Valid: false},
-		Whitelisted:        false,
-		FreeTrialStartedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
-		FreeTrialEndsAt:    pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
-		DisabledAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		CreatedAt:          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-	}))
-	projectID, err := q.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
-		ID:             uuid.New(),
-		Name:           "Foreign project",
-		Slug:           "foreign-" + uuid.NewString()[:8],
-		OrganizationID: orgID,
-	})
-	require.NoError(t, err)
-	return projectID
 }

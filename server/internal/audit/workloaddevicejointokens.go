@@ -25,9 +25,6 @@ type WorkloadDeviceJoinTokenSnapshot struct {
 	AgentID   string `json:"agent_id"`
 	ExpiresAt string `json:"expires_at"`
 
-	// HooksProjectID is the project the enrolled device may send hooks to.
-	HooksProjectID string `json:"hooks_project_id"`
-
 	// DeviceSubject is the device the token enrolled; empty until redeemed.
 	DeviceSubject string `json:"device_subject"`
 	// Hostname is what the device reported at enrollment; empty when none.

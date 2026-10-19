@@ -92,7 +92,6 @@ func TestCatalogPlatform_RegistersAndAdmitsThroughTheAPI(t *testing.T) {
 		Tags:             []string{"slack"},
 		AgentID:          newAgent(t, ctx, ti, "Claude Tag agent").String(),
 		ProjectScoped:    false,
-		HooksProjectID:   nil,
 	})
 	require.NoError(t, err)
 

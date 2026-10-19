@@ -42,8 +42,6 @@ type WorkloadDeviceJoinToken struct {
 	// @access: confidential
 	AgentID uuid.UUID
 	// @access: confidential
-	HooksProjectID uuid.UUID
-	// @access: confidential
 	CreatedByUserID string
 	// @access: confidential
 	ExpiresAt pgtype.Timestamptz
