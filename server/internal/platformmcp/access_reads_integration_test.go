@@ -15,6 +15,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -89,6 +90,64 @@ func TestAccessReadServiceSuppressesSmallMemberSearchAndReturnsMaskedLargeCohort
 	require.Equal(t, NewSubjectCount(5), byRoleName.TotalMatches)
 }
 
+func TestAccessReadServiceReturnsExactEmailMatchFromSmallMemberSearch(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_members_exact")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, "member-exact", "member@example.test")
+	// Sorts before the exact match and also contains the query as a substring.
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, "member-prefixed", "amember@example.test")
+
+	exact, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "  Member@Example.TEST ", Limit: 1})
+	require.NoError(t, err)
+	require.False(t, exact.Suppressed)
+	require.True(t, exact.ExactEmailMatch)
+	require.False(t, exact.Truncated)
+	require.Equal(t, NewSubjectCount(1), exact.TotalMatches)
+	require.Len(t, exact.Members, 1)
+	require.NotContains(t, exact.Members[0].MaskedIdentity, "example.test")
+	decoded, err := service.references.Decode(exact.Members[0].Reference, principal, subjectKindAccessMember, service.now())
+	require.NoError(t, err)
+	require.Equal(t, "member-exact", decoded)
+
+	partial, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "member@"})
+	require.NoError(t, err)
+	require.True(t, partial.Suppressed)
+	require.False(t, partial.ExactEmailMatch)
+	require.Empty(t, partial.Members)
+
+	unknown, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "nobody@example.test"})
+	require.NoError(t, err)
+	require.Equal(t, NewSubjectCount(0), unknown.TotalMatches)
+	require.Empty(t, unknown.Members)
+}
+
+func TestAccessReadServiceSuppressesAmbiguousExactEmailMatch(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_members_ambiguous")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+
+	// User emails are unique only case-sensitively, so both normalize to the query.
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, "member-lower", "member@example.test")
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, "member-upper", "Member@example.test")
+
+	ambiguous, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "member@example.test", Limit: 1})
+	require.NoError(t, err)
+	require.True(t, ambiguous.Suppressed)
+	require.False(t, ambiguous.ExactEmailMatch)
+	require.Empty(t, ambiguous.Members)
+	require.Empty(t, ambiguous.ExpiresAt)
+}
+
 func TestGetMCPAccessUsesFrontingServerIDAndStoredToolMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -137,6 +196,83 @@ func TestGetMCPAccessUsesFrontingServerIDAndStoredToolMetadata(t *testing.T) {
 	require.Equal(t, []string{"list_tasks"}, output.Roles[0].AllowedKnownTools)
 }
 
+func TestGetMemberMCPAccessEvaluatesLiveRoleGrantsAcrossInventory(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_member_access")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+
+	rows, err := platformrepo.New(conn).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
+		OrganizationID: principal.OrganizationID, SkipAuthorizationFilter: true, ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	target := rows[0]
+
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, principal.UserID, "self-access@example.test")
+	selfAccess, err := service.ListMyMCPAccess(ctx, principal)
+	require.NoError(t, err)
+	selfReference, err := service.references.Encode(principal, subjectKindAccessMember, principal.UserID, service.now())
+	require.NoError(t, err)
+	referencedSelfAccess, err := service.GetMemberMCPAccess(ctx, principal, GetMemberMCPAccessInput{MemberReference: selfReference})
+	require.NoError(t, err)
+	require.Equal(t, referencedSelfAccess, selfAccess, "self access must use the caller directly without changing evaluation semantics")
+	require.NotEmpty(t, selfAccess.Servers)
+
+	memberID := "member-access-table"
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, memberID, "member-access@example.test")
+	role := seedAccessRole(t, ctx, conn, principal.OrganizationID, "table-readers", "Table readers")
+	_, err = accessrepo.New(conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID: principal.OrganizationID, WorkosUserID: "workos-" + memberID, UserID: conv.ToPGText(memberID),
+		WorkosMembershipID: conv.ToPGText("membership-" + memberID), WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID: conv.ToPGTextEmpty(""), WorkosRoleSlug: "table-readers",
+	})
+	require.NoError(t, err)
+
+	connect := authz.NewSelector(authz.ScopeMCPConnect, target.McpServerID.String())
+	connect[authz.SelectorKeyTool] = "list_tasks"
+	connectJSON, err := connect.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: principal.OrganizationID, PrincipalUrn: role, Scope: string(authz.ScopeMCPConnect), Selectors: connectJSON,
+	})
+	require.NoError(t, err)
+	viewJSON, err := authz.NewSelector(authz.ScopeMCPRead, target.McpServerID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: principal.OrganizationID, PrincipalUrn: role, Scope: string(authz.ScopeMCPRead), Selectors: viewJSON,
+	})
+	require.NoError(t, err)
+
+	reference, err := service.references.Encode(principal, subjectKindAccessMember, memberID, service.now())
+	require.NoError(t, err)
+	output, err := service.GetMemberMCPAccess(ctx, principal, GetMemberMCPAccessInput{MemberReference: reference})
+	require.NoError(t, err)
+	require.False(t, output.Truncated)
+	var actual *MemberMCPAccessRow
+	for i := range output.Servers {
+		if output.Servers[i].MCPID == target.McpServerID.String() {
+			actual = &output.Servers[i]
+		}
+	}
+	require.NotNil(t, actual)
+	require.Equal(t, project.ID.String(), actual.ProjectID)
+	require.Equal(t, "rbac", actual.AuthorizationMode)
+	// mcp:read expands to connect, so the broad view grant also gives all-tool
+	// connection access despite the additional narrowed connect grant.
+	require.Equal(t, "all_tools", actual.ConnectionAccess)
+	require.True(t, actual.CanConnect)
+	require.Equal(t, "all", actual.ToolAccess)
+	require.True(t, actual.CanView)
+	require.False(t, actual.CanManage)
+
+	_, err = service.GetMemberMCPAccess(ctx, principal, GetMemberMCPAccessInput{MemberReference: "not-a-reference"})
+	require.ErrorIs(t, err, ErrAccessReferenceNotFound)
+}
+
 func seedAccessMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID, email string) {
 	t.Helper()
 	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{ID: userID, Email: email, DisplayName: userID, PhotoUrl: pgtype.Text{}, Admin: false})
@@ -159,4 +295,73 @@ func seedAccessRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organ
 	principal, err := urn.ParsePrincipal(row.RoleUrn)
 	require.NoError(t, err)
 	return principal
+}
+
+func TestListRolesNamesDirectorySourcesAndWithholdsSmallCounts(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_role_sources")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+
+	analysts := seedAccessRole(t, ctx, conn, principal.OrganizationID, "analysts", "Analysts")
+	seedAccessRole(t, ctx, conn, principal.OrganizationID, "operators", "Operators")
+	org := principal.OrganizationID
+
+	now := conv.ToPGTimestamptz(time.Now().UTC())
+	directory := directoryrepo.New(conn)
+	groupID, err := directory.UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
+		OrganizationID: org, WorkosDirectoryGroupID: "grp-data", Name: "Data Analytics", Attributes: []byte("{}"),
+		WorkosCreatedAt: now, WorkosUpdatedAt: now, WorkosLastEventID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	// Six people in the group, two of them in Research: the group's count is
+	// shown, the attribute's is withheld as a small cohort.
+	for i := range 6 {
+		department := "Finance"
+		if i < 2 {
+			department = "Research"
+		}
+		workosUserID := fmt.Sprintf("dir-user-%d", i)
+		userID, err := directory.UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
+			OrganizationID: org, UserID: pgtype.Text{}, WorkosDirectoryUserID: workosUserID,
+			Email:           conv.ToPGText(fmt.Sprintf("person%d@example.test", i)),
+			Attributes:      fmt.Appendf(nil, `{"department_name": %q}`, department),
+			WorkosCreatedAt: now, WorkosUpdatedAt: now, WorkosLastEventID: pgtype.Text{}, RestoreDeleted: false,
+		})
+		require.NoError(t, err)
+		_, err = directory.OpenDirectoryUserGroupMembership(ctx, directoryrepo.OpenDirectoryUserGroupMembershipParams{
+			DirectoryUserID: userID, DirectoryGroupID: groupID,
+			WorkosDirectoryUserID: workosUserID, WorkosDirectoryGroupID: "grp-data", WorkosCreatedAt: now,
+		})
+		require.NoError(t, err)
+	}
+	mappings := accessrepo.New(conn)
+	_, err = mappings.InsertDirectoryGroupRoleMapping(ctx, accessrepo.InsertDirectoryGroupRoleMappingParams{
+		OrganizationID: org, DirectoryGroupID: uuid.NullUUID{UUID: groupID, Valid: true}, RoleUrn: analysts.String(),
+	})
+	require.NoError(t, err)
+	_, err = mappings.InsertDirectoryAttributeRoleMapping(ctx, accessrepo.InsertDirectoryAttributeRoleMappingParams{
+		OrganizationID: org, AttributeKey: conv.ToPGText("department_name"), AttributeValue: conv.ToPGText("Research"), RoleUrn: analysts.String(),
+	})
+	require.NoError(t, err)
+
+	roles, err := service.ListRoles(ctx, principal)
+	require.NoError(t, err)
+	byName := map[string]AccessRole{}
+	for _, role := range roles.Roles {
+		byName[role.Name] = role
+	}
+
+	require.Equal(t, []AccessRoleDirectorySource{
+		{Kind: "group", Group: "Data Analytics", AttributeKey: "", AttributeValue: "", Removed: false, MatchedUsers: NewSubjectCount(6)},
+		{Kind: "attribute", Group: "", AttributeKey: "department_name", AttributeValue: "Research", Removed: false, MatchedUsers: NewSubjectCount(2)},
+	}, byName["Analysts"].DirectorySources)
+	require.True(t, byName["Analysts"].DirectorySources[1].MatchedUsers.Suppressed())
+
+	// A role nothing is mapped to says so with an empty list, not a missing one.
+	require.NotNil(t, byName["Operators"].DirectorySources)
+	require.Empty(t, byName["Operators"].DirectorySources)
 }

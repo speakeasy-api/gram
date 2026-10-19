@@ -22,6 +22,7 @@ import {
 import {
   type DecideAccessTarget,
   DecideAccessSheet,
+  POLICIES_UNAVAILABLE_REASON,
 } from "@/components/mcp-approvals/DecideAccessSheet";
 import {
   MoreToggle,
@@ -368,11 +369,7 @@ function DetailActionButtons({
         onClick={onOpenDecide}
         variant={pendingReview ? "primary" : "secondary"}
         size="sm"
-        title={
-          policiesUnavailable
-            ? "Policy data could not be loaded — deciding now would not be enforced"
-            : undefined
-        }
+        title={policiesUnavailable ? POLICIES_UNAVAILABLE_REASON : undefined}
       >
         <Button.Text>
           {pendingReview ? "Review Request" : "Decide Access"}

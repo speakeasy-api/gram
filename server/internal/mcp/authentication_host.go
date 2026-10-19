@@ -33,13 +33,15 @@ import (
 // those routes serve nothing.
 //
 // A shared authorization server whose issuer is on the authentication host is
-// served there alone, and only its metadata, token, and revocation endpoints.
-// A shared authorization server on another host is not served here.
+// served there alone, browser sign-in included. A shared authorization server
+// on another host is not served here.
 //
 // MCP traffic and protected-resource metadata are not served, so the host
 // can never become an API host by accident; every such path answers 404.
-// Resolution runs without a custom-domain context, so only endpoints
-// addressable on the platform host are reachable through it.
+// Per-endpoint routes resolve without a custom-domain context, so only
+// endpoints addressable on the platform host are reachable through them. A
+// shared authorization server resolves the resource each request names,
+// wherever it lives.
 //
 // An AuthenticationHost with no configured host routes nothing: its
 // middleware passes every request through untouched.
@@ -154,8 +156,9 @@ func (h *AuthenticationHost) Handle(method, pattern string, handler http.Handler
 	h.router.Method(method, pattern, handler)
 }
 
-// AttachAuthenticationHost mounts the /mcp authorization server routes and the
-// shared authorization server routes the host serves on the authentication
+// AttachAuthenticationHost mounts the /mcp and organization gateway
+// authorization server routes and the shared authorization server routes the
+// host serves on the authentication
 // host, and lets service announce it for issuers that opt in. It is a no-op
 // when the host is disabled.
 //
@@ -185,10 +188,9 @@ func AttachAuthenticationHost(host *AuthenticationHost, service *Service) {
 	handle(http.MethodPost, PublicServerRoute+"/token", service.HandleToken)
 	handle(http.MethodPost, PublicServerRoute+"/revoke", service.HandleRevoke)
 	for _, route := range service.sharedAuthorizationServerRoutes() {
-		if route.onAuthenticationHost {
-			handle(route.method, route.path, route.handler)
-		}
+		handle(route.method, route.path, route.handler)
 	}
+	attachOrganizationGatewayAuthenticationHost(host, service)
 }
 
 // RecordAuthenticationHost records the authentication host on service without
@@ -253,11 +255,11 @@ func (s *Service) issuerURL(endpoint *ResolvedMcpEndpoint, resourceBaseURL strin
 	return issuer, nil
 }
 
-// servesAuthorizationServerMetadata reports whether the request arrived on
-// the host the endpoint's issuer names. RFC 8414 §3.3 requires the issuer in
-// a metadata document to match the URL it was retrieved from, so the document
-// is served on that host alone.
-func (s *Service) servesAuthorizationServerMetadata(ctx context.Context, endpoint *ResolvedMcpEndpoint, resourceBaseURL string) bool {
+// arrivedAtAuthorizationServer reports whether the request arrived on the
+// host the endpoint's issuer names. RFC 8414 §3.3 requires the issuer in a
+// metadata document to match the URL it was retrieved from, so the document
+// is served on that host alone, and a browser flow starts there.
+func (s *Service) arrivedAtAuthorizationServer(ctx context.Context, endpoint *ResolvedMcpEndpoint, resourceBaseURL string) bool {
 	arrivedAt := resourceBaseURL
 	if baseURL, ok := authenticationHostBaseURL(ctx); ok {
 		arrivedAt = baseURL
@@ -305,21 +307,72 @@ func (s *Service) consentURL(endpoint *ResolvedMcpEndpoint, perEndpointBaseURL, 
 	return endpoint.ConsentURL(perEndpointBaseURL, stateID)
 }
 
+// challengeAuthorizationServerBaseURL is the origin of the authorization
+// server serving the challenge's flow: the shared authorization server's when
+// it minted the challenge, otherwise the endpoint's own for the resource
+// origin the challenge was minted under. The flow's consent page, and the
+// browser binding it checks, live on this origin, which the authentication
+// host makes differ from the resource origin.
+func (s *Service) challengeAuthorizationServerBaseURL(endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) string {
+	if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
+		return shared.origin()
+	}
+	return s.authorizationServerBaseURL(endpoint, state.mintOriginOr(s.serverURL.String()))
+}
+
+// challengeConsentURL is the consent page URL of the challenge state, on the
+// origin of the authorization server serving its flow.
+func (s *Service) challengeConsentURL(endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (string, error) {
+	return s.consentURL(endpoint, s.challengeAuthorizationServerBaseURL(endpoint, state), state.ID)
+}
+
+// remoteLoginConsentURL is the consent page an upstream login started from
+// the challenge state's consent page returns to, or "" when that is the
+// per-endpoint consent page on the resource origin. Remote sessions rebuild
+// that one from the slug and revalidate the origin as they do, so it is named
+// only when the consent page is elsewhere: on a shared authorization server,
+// or on the authentication host.
+func (s *Service) remoteLoginConsentURL(endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (string, error) {
+	if endpoint.servingSharedAuthorizationServer() == nil && s.challengeAuthorizationServerBaseURL(endpoint, state) == state.mintOriginOr(s.serverURL.String()) {
+		return "", nil
+	}
+	return s.challengeConsentURL(endpoint, state)
+}
+
+// redirectToAuthorizationServer sends a browser flow that started on a host
+// other than its authorization server's to the same request there, and
+// reports whether it did. The flow binds the browser with a cookie on the host
+// it starts on, which the consent page on the authorization server's host
+// checks, so the two must be the same host. Only a per-endpoint authorization
+// server of an issuer that opts in to the authentication host is addressable
+// elsewhere: its routes also serve on the MCP host, where the dashboard and
+// clients holding older metadata start flows.
+func (s *Service) redirectToAuthorizationServer(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) bool {
+	// The redirect only ever targets the authentication host, so a request
+	// already there never redirects, however its base URLs compare.
+	if OnAuthenticationHost(r.Context()) || endpoint.servingSharedAuthorizationServer() != nil {
+		return false
+	}
+	resourceBaseURL := s.BaseURLForRequest(r)
+	if s.arrivedAtAuthorizationServer(r.Context(), endpoint, resourceBaseURL) {
+		return false
+	}
+	target := strings.TrimSuffix(s.authorizationServerBaseURL(endpoint, resourceBaseURL), "/") + r.URL.RequestURI()
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, target, http.StatusFound)
+	return true
+}
+
 // protectedResourceAuthorizationServer is the authorization server the
 // endpoint's RFC 9728 protected resource metadata names when its resource is
 // served under resourceBaseURL: the issuer's shared authorization server when
 // it has one, otherwise the endpoint's own. Requests over a private network
 // ingress keep the endpoint's own authorization server on the private origin,
 // which the shared authorization server does not serve.
-//
-// A shared authorization server on the authentication host accepts only the
-// workload grant, which platforms are pointed at directly, so the endpoint's
-// own authorization server stays the one MCP clients discover for browser
-// sign-in.
 func (s *Service) protectedResourceAuthorizationServer(ctx context.Context, endpoint *ResolvedMcpEndpoint, resourceBaseURL string) (string, error) {
 	origin, ok := requestorigin.FromContext(ctx)
 	private := ok && origin.Surface == requestorigin.SurfacePrivateNetwork
-	if shared := endpoint.sharedAuthorizationServer; shared != nil && !private && !shared.onAuthenticationHost {
+	if shared := endpoint.sharedAuthorizationServer; shared != nil && !private {
 		return shared.issuer, nil
 	}
 	return s.issuerURL(endpoint, resourceBaseURL)

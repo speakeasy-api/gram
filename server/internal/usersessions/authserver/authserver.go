@@ -5,6 +5,7 @@
 package authserver
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 
@@ -48,6 +49,20 @@ func IssuerInSharedMode(issuer repo.UserSessionIssuer) bool {
 	return Mode(issuer.AuthorizationServerMode) == ModeShared
 }
 
+var (
+	// ErrNotShared reports an issuer that is not in shared mode, so it has no
+	// shared authorization server.
+	ErrNotShared = errors.New("user session issuer is not in shared mode")
+
+	// ErrPinnedIssuerURLInvalid reports a shared-mode issuer whose pinned issuer
+	// URL is not its own shared authorization server's.
+	ErrPinnedIssuerURLInvalid = errors.New("pinned issuer URL is not the issuer's shared authorization server")
+
+	// ErrHostNotServed reports a shared-mode issuer whose authorization server
+	// would be on a host the deployment does not mount the shared routes on.
+	ErrHostNotServed = errors.New("shared authorization server host is not served by this deployment")
+)
+
 // Hosts are the deployment's hosts that decide where
 // a shared authorization server is served. The MCP service, which serves the
 // authorization servers, and the management API, which shows their endpoints,
@@ -73,22 +88,29 @@ type Hosts struct {
 // An issuer naming a server this deployment does not serve is refused, so its
 // MCP servers keep their per-endpoint authorization servers rather than
 // pointing clients at a 404: a pinned issuer URL whose path is not the
-// issuer's own, and one on a host the shared routes are not mounted on.
+// issuer's own (ErrPinnedIssuerURLInvalid), and one on a host the shared routes
+// are not mounted on (ErrHostNotServed). An issuer not in shared mode returns
+// ErrNotShared.
 func (h Hosts) SharedIssuerURL(issuer repo.UserSessionIssuer) (string, error) {
 	if !IssuerInSharedMode(issuer) {
-		return "", fmt.Errorf("user session issuer %s is not in shared mode", issuer.ID)
+		return "", fmt.Errorf("user session issuer %s: %w", issuer.ID, ErrNotShared)
 	}
 	path := SharedPath(issuer.ID)
 	origin := ""
-	if issuer.PinnedIssuerUrl.Valid && issuer.PinnedIssuerUrl.String != "" {
+	if IssuerURLPinned(issuer) {
 		pinned, err := url.Parse(issuer.PinnedIssuerUrl.String)
 		if err != nil {
-			return "", fmt.Errorf("parse pinned issuer URL: %w", err)
+			return "", fmt.Errorf("invalid pinned issuer URL: %w: %w", ErrPinnedIssuerURLInvalid, err)
 		}
 		if pinned.RawQuery != "" || pinned.Fragment != "" || pinned.Path != path {
-			return "", fmt.Errorf("pinned issuer URL %q is not this issuer's shared authorization server", issuer.PinnedIssuerUrl.String)
+			return "", fmt.Errorf("pinned issuer URL %q: %w", issuer.PinnedIssuerUrl.String, ErrPinnedIssuerURLInvalid)
 		}
 		origin = requestorigin.URLOrigin(issuer.PinnedIssuerUrl.String)
+		if origin == "" {
+			// Without a scheme and host the pin names no server, rather than
+			// one the deployment does not serve.
+			return "", fmt.Errorf("pinned issuer URL %q has no origin: %w", issuer.PinnedIssuerUrl.String, ErrPinnedIssuerURLInvalid)
+		}
 	} else {
 		base := h.ServerURL
 		if issuer.UseAuthenticationHost && h.AuthenticationHostBaseURL != "" {
@@ -97,9 +119,69 @@ func (h Hosts) SharedIssuerURL(issuer repo.UserSessionIssuer) (string, error) {
 		origin = requestorigin.URLOrigin(base)
 	}
 	if !h.ServesSharedOn(origin) {
-		return "", fmt.Errorf("shared authorization server issuer origin %q is not served by this deployment", origin)
+		return "", fmt.Errorf("shared authorization server issuer origin %q: %w", origin, ErrHostNotServed)
 	}
 	return origin + path, nil
+}
+
+// IssuerURLPinned reports whether a shared-mode issuer's authorization server
+// issuer URL is pinned, so it stays the same when the deployment's hosts
+// change. An unpinned issuer's URL is derived from the hosts on every read. A
+// pin left on an issuer not in shared mode pins nothing.
+func IssuerURLPinned(issuer repo.UserSessionIssuer) bool {
+	return IssuerInSharedMode(issuer) && issuer.PinnedIssuerUrl.Valid && issuer.PinnedIssuerUrl.String != ""
+}
+
+// SharedAuthorizationServer is where an issuer's shared authorization server
+// is served: the values an operator configures another platform with.
+type SharedAuthorizationServer struct {
+	// IssuerURL is the authorization server's RFC 8414 issuer identifier.
+	IssuerURL string
+
+	// TokenEndpoint is the authorization server's token endpoint.
+	TokenEndpoint string
+}
+
+// SharedAuthorizationServer derives an issuer's shared authorization server.
+// It fails as SharedIssuerURL does, for the same issuers.
+func (h Hosts) SharedAuthorizationServer(issuer repo.UserSessionIssuer) (SharedAuthorizationServer, error) {
+	issuerURL, err := h.SharedIssuerURL(issuer)
+	if err != nil {
+		return SharedAuthorizationServer{}, err
+	}
+	tokenEndpoint, err := SharedTokenEndpoint(issuerURL)
+	if err != nil {
+		return SharedAuthorizationServer{}, err
+	}
+	return SharedAuthorizationServer{IssuerURL: issuerURL, TokenEndpoint: tokenEndpoint}, nil
+}
+
+// AuthenticationHostAvailable reports whether the deployment has an
+// authentication host to announce authorization servers on.
+func (h Hosts) AuthenticationHostAvailable() bool {
+	return h.AuthenticationHostBaseURL != ""
+}
+
+// SharedIssuerURLOn is the issuer identifier an issuer's shared authorization
+// server takes on the authentication host, or otherwise on the server URL: the
+// URL to pin when moving a pinned issuer between the two.
+func (h Hosts) SharedIssuerURLOn(issuerID uuid.UUID, onAuthenticationHost bool) string {
+	base := h.ServerURL
+	if onAuthenticationHost && h.AuthenticationHostBaseURL != "" {
+		base = h.AuthenticationHostBaseURL
+	}
+	return requestorigin.URLOrigin(base) + SharedPath(issuerID)
+}
+
+// PerServerOrigin is where an issuer in endpoint mode announces its MCP
+// servers' own authorization servers: the authentication host when the issuer
+// opts in to one the deployment has, and otherwise the server URL. MCP servers
+// on a custom domain keep their domain either way.
+func (h Hosts) PerServerOrigin(useAuthenticationHost bool) string {
+	if useAuthenticationHost && h.AuthenticationHostBaseURL != "" {
+		return requestorigin.URLOrigin(h.AuthenticationHostBaseURL)
+	}
+	return requestorigin.URLOrigin(h.ServerURL)
 }
 
 // SharedTokenEndpoint is the token endpoint of the shared authorization

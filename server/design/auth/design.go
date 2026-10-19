@@ -65,6 +65,7 @@ var _ = Service("auth", func() {
 
 		Payload(func() {
 			Attribute("redirect", String, "Optional URL to redirect to after successful authentication")
+			Attribute("partner_code", String, "Optional partner signup code.", func() { MaxLength(80) })
 			Attribute("org_name", String, "Optional organization name. When set, the organization is created for a new user during the auth callback.")
 			Attribute("email", String, "Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.")
 			Attribute("support_handoff", String, "Opaque, one-time organization support handoff. Never included in OAuth state.")
@@ -79,6 +80,7 @@ var _ = Service("auth", func() {
 			GET("/rpc/auth.login")
 			Param("redirect")
 			Param("org_name")
+			Param("partner_code")
 			// A top-level browser navigation reaches this endpoint and carries
 			// no custom headers, so `email` has to be a query param. The
 			// request logging middleware redacts it from logged URLs.
@@ -180,12 +182,41 @@ var _ = Service("auth", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Logout"}`)
 	})
 
+	Method("logoutEverywhere", func() {
+		Description("Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(func() {
+			Attribute("session_cookie", String, "Empty string to clear the session")
+			Attribute("revoked_sign_ins", Int, "Number of sign-ins revoked.")
+			Attribute("revoked_sessions", Int, "Number of MCP grants revoked.")
+			Required("session_cookie", "revoked_sign_ins", "revoked_sessions")
+		})
+
+		HTTP(func() {
+			POST("/rpc/auth.logoutEverywhere")
+			security.SessionHeader()
+
+			Response(StatusOK, func() {
+				security.DeleteSessionCookie()
+			})
+		})
+
+		Meta("openapi:operationId", "logoutEverywhere")
+		Meta("openapi:extension:x-speakeasy-name-override", "logoutEverywhere")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LogoutEverywhere"}`)
+	})
+
 	Method("register", func() {
 		Description("Register a new org for a user with their session information.")
 
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("org_name", String, "The name of the org to register")
+			Attribute("partner_code", String, "Optional partner signup code.", func() { MaxLength(80) })
 			Required("org_name")
 		})
 
@@ -227,6 +258,7 @@ var _ = Service("auth", func() {
 			})
 			Attribute("gram_account_type", String)
 			Attribute("has_active_subscription", Boolean, "Whether the organization has an active billing subscription")
+			Attribute("accepted_signup_offer_flow", String, "Display-only signup offer variant for an accepted promotion; not billing eligibility")
 			Attribute("whitelisted", Boolean, "Whether the organization is whitelisted to access the platform")
 			Attribute("trial", Trial, func() {
 				Meta("struct:tag:json", "trial")

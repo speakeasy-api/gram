@@ -129,8 +129,8 @@ func TestEditDashboardLayoutAppliesOperationsAsOne(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	bar := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
-	number := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+	bar := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
+	number := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 	created, err := ti.service.CreateDashboard(ctx, createPayload("Usage"))
 	require.NoError(t, err)
 	read, err := ti.service.ReadDashboard(ctx, created.ID)
@@ -157,7 +157,7 @@ func TestEditDashboardLayoutAppliesOperationsAsOne(t *testing.T) {
 
 	detail, err := ti.service.ReadDashboard(ctx, created.ID)
 	require.NoError(t, err)
-	require.Equal(t, dashboards.CardWidget{Name: "Sessions by user", Dataset: "sessions", ChartType: "bar"}, detail.Widgets[bar.ID.String()])
+	require.Equal(t, dashboards.CardWidget{Name: "Tool calls by user", Dataset: "tool_calls", ChartType: "bar"}, detail.Widgets[bar.ID.String()])
 
 	// The two cards trade places in one call: each move alone would overlap
 	// the other card, but the final layout does not.
@@ -189,7 +189,7 @@ func TestEditDashboardLayoutRefusesBrokenLayouts(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	bar := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
+	bar := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 	created, err := ti.service.CreateDashboard(ctx, createPayload("Usage"))
 	require.NoError(t, err)
 	card := addCard(t, ctx, ti, created.ID, bar.ID)

@@ -279,6 +279,19 @@ func (q *Queries) CountChatSessionLinksByKindFixture(ctx context.Context, arg Co
 	return count, err
 }
 
+const countDatabasesWithPrefixFixture = `-- name: CountDatabasesWithPrefixFixture :one
+SELECT count(*)::bigint AS databases FROM pg_catalog.pg_database
+WHERE starts_with(datname, $1::text)
+`
+
+// Databases whose name starts with a prefix, so a test can show clones are dropped.
+func (q *Queries) CountDatabasesWithPrefixFixture(ctx context.Context, prefix string) (int64, error) {
+	row := q.db.QueryRow(ctx, countDatabasesWithPrefixFixture, prefix)
+	var databases int64
+	err := row.Scan(&databases)
+	return databases, err
+}
+
 const countDemoSeedAPIKeysFixture = `-- name: CountDemoSeedAPIKeysFixture :one
 SELECT count(*) FROM api_keys WHERE organization_id = $1
 `
@@ -402,6 +415,20 @@ WHERE attributes->>'event_type' = $1::text
 // itself is transport-agnostic.
 func (q *Queries) CountOutboxEntriesByEventType(ctx context.Context, eventType string) (int64, error) {
 	row := q.db.QueryRow(ctx, countOutboxEntriesByEventType, eventType)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPendingSignInRevocationDeliveries = `-- name: CountPendingSignInRevocationDeliveries :one
+SELECT count(*)
+FROM sign_in_revocation_deliveries
+WHERE organization_id = $1
+  AND delivered_at IS NULL
+`
+
+func (q *Queries) CountPendingSignInRevocationDeliveries(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingSignInRevocationDeliveries, organizationID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -569,6 +596,20 @@ func (q *Queries) CountSkillScanRecords(ctx context.Context, arg CountSkillScanR
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const countWaitingAdvisoryLocksFixture = `-- name: CountWaitingAdvisoryLocksFixture :one
+SELECT count(*)::bigint AS waiting FROM pg_catalog.pg_locks
+WHERE locktype = 'advisory' AND NOT granted
+  AND database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+`
+
+// Advisory lock requests still waiting, so a test can tell a writer blocked.
+func (q *Queries) CountWaitingAdvisoryLocksFixture(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countWaitingAdvisoryLocksFixture)
+	var waiting int64
+	err := row.Scan(&waiting)
+	return waiting, err
 }
 
 const createAttachmentAgentFixture = `-- name: CreateAttachmentAgentFixture :execrows
@@ -1199,6 +1240,25 @@ WHERE device_integration_config_id = $1
 func (q *Queries) DisableDeviceIntegrationSchedulesFixture(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, disableDeviceIntegrationSchedulesFixture, deviceIntegrationConfigID)
 	return err
+}
+
+const disableInternalSessionIssuerFixture = `-- name: DisableInternalSessionIssuerFixture :execrows
+UPDATE internal_session_issuers
+SET disabled_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1 AND id = $2 AND deleted IS FALSE
+`
+
+type DisableInternalSessionIssuerFixtureParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) DisableInternalSessionIssuerFixture(ctx context.Context, arg DisableInternalSessionIssuerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, disableInternalSessionIssuerFixture, arg.OrganizationID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const disableOpenRouterAdminDisableAuditFailureFixture = `-- name: DisableOpenRouterAdminDisableAuditFailureFixture :exec
@@ -3568,6 +3628,53 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 	return items, nil
 }
 
+const listSignInRevocationDeliveriesFixture = `-- name: ListSignInRevocationDeliveriesFixture :many
+SELECT id, kind, target, attempts, effective_at, next_attempt_at, claimed_until, delivered_at
+FROM sign_in_revocation_deliveries
+WHERE organization_id = $1
+ORDER BY created_at, id
+`
+
+type ListSignInRevocationDeliveriesFixtureRow struct {
+	ID            uuid.UUID
+	Kind          string
+	Target        string
+	Attempts      int32
+	EffectiveAt   pgtype.Timestamptz
+	NextAttemptAt pgtype.Timestamptz
+	ClaimedUntil  pgtype.Timestamptz
+	DeliveredAt   pgtype.Timestamptz
+}
+
+func (q *Queries) ListSignInRevocationDeliveriesFixture(ctx context.Context, organizationID string) ([]ListSignInRevocationDeliveriesFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listSignInRevocationDeliveriesFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSignInRevocationDeliveriesFixtureRow
+	for rows.Next() {
+		var i ListSignInRevocationDeliveriesFixtureRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Target,
+			&i.Attempts,
+			&i.EffectiveAt,
+			&i.NextAttemptAt,
+			&i.ClaimedUntil,
+			&i.DeliveredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockExternalOAuthMetadataNowaitFixture = `-- name: LockExternalOAuthMetadataNowaitFixture :one
 SELECT id FROM external_oauth_server_metadata WHERE id = $1 AND project_id = $2 FOR UPDATE NOWAIT
 `
@@ -3754,6 +3861,20 @@ func (q *Queries) MakeAttachmentIssuerGlobalFixture(ctx context.Context, id uuid
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const makeSignInRevocationDeliveriesDueFixture = `-- name: MakeSignInRevocationDeliveriesDueFixture :exec
+UPDATE sign_in_revocation_deliveries
+SET next_attempt_at = NULL,
+    claimed_until = NULL
+WHERE organization_id = $1
+  AND delivered_at IS NULL
+`
+
+// Skips the backoff so a test can retry failed deliveries at once.
+func (q *Queries) MakeSignInRevocationDeliveriesDueFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, makeSignInRevocationDeliveriesDueFixture, organizationID)
+	return err
 }
 
 const movePreparationFixtureClientProject = `-- name: MovePreparationFixtureClientProject :execrows
@@ -4689,6 +4810,66 @@ func (q *Queries) SeedDelegationLoaderOrganizationFixture(ctx context.Context, a
 	return err
 }
 
+const seedInternalSessionIssuerFixture = `-- name: SeedInternalSessionIssuerFixture :one
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id)
+VALUES ($1, $2, $3)
+RETURNING id
+`
+
+type SeedInternalSessionIssuerFixtureParams struct {
+	OrganizationID  string
+	Issuer          string
+	JsonWebKeySetID uuid.UUID
+}
+
+// An organization's Speakeasy issuer over an existing key set, for tests that
+// reference the issuer row without signing.
+func (q *Queries) SeedInternalSessionIssuerFixture(ctx context.Context, arg SeedInternalSessionIssuerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedInternalSessionIssuerFixture, arg.OrganizationID, arg.Issuer, arg.JsonWebKeySetID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedInternalSessionIssuerSignInMethodsFixture = `-- name: SeedInternalSessionIssuerSignInMethodsFixture :exec
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES ($1, 'gcp_iam', $5 || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT $1, credential.id, 'gcp_kms', 'RS256', $5 || '-key' FROM credential
+    RETURNING id
+), key_set AS (
+    INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+    SELECT $1, key.id, $5 FROM key
+    RETURNING id
+)
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id, allowed_sign_in_methods, allowed_microsoft_tenant_ids)
+SELECT $1, $2, key_set.id, $3::text[], $4::text[] FROM key_set
+`
+
+type SeedInternalSessionIssuerSignInMethodsFixtureParams struct {
+	OrganizationID            string
+	Issuer                    string
+	AllowedSignInMethods      []string
+	AllowedMicrosoftTenantIds []string
+	Name                      pgtype.Text
+}
+
+// Plants an organization's internal session issuer limited to the given
+// sign-in tiers, skipping the KMS provisioning the real enable performs.
+func (q *Queries) SeedInternalSessionIssuerSignInMethodsFixture(ctx context.Context, arg SeedInternalSessionIssuerSignInMethodsFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedInternalSessionIssuerSignInMethodsFixture,
+		arg.OrganizationID,
+		arg.Issuer,
+		arg.AllowedSignInMethods,
+		arg.AllowedMicrosoftTenantIds,
+		arg.Name,
+	)
+	return err
+}
+
 const seedJsonWebKeySetFixture = `-- name: SeedJsonWebKeySetFixture :one
 WITH credential AS (
     INSERT INTO external_credentials (organization_id, provider, name)
@@ -5252,6 +5433,28 @@ func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionT
 	return err
 }
 
+const setGcpIamCredentialServiceAccountFixture = `-- name: SetGcpIamCredentialServiceAccountFixture :exec
+UPDATE gcp_iam_credentials AS gic SET impersonate_service_account = $1::text
+FROM external_credentials AS ec
+WHERE gic.external_credential_id = $2
+  AND ec.id = gic.external_credential_id
+  AND ec.organization_id IS NOT DISTINCT FROM $3::text
+  AND ec.project_id IS NULL
+`
+
+type SetGcpIamCredentialServiceAccountFixtureParams struct {
+	ImpersonateServiceAccount pgtype.Text
+	ExternalCredentialID      uuid.UUID
+	OrganizationID            pgtype.Text
+}
+
+// Test-only re-point of a credential's impersonated account in its tier,
+// tombstones included: a NULL organization_id names the platform tier.
+func (q *Queries) SetGcpIamCredentialServiceAccountFixture(ctx context.Context, arg SetGcpIamCredentialServiceAccountFixtureParams) error {
+	_, err := q.db.Exec(ctx, setGcpIamCredentialServiceAccountFixture, arg.ImpersonateServiceAccount, arg.ExternalCredentialID, arg.OrganizationID)
+	return err
+}
+
 const setLocalLockTimeoutFixture = `-- name: SetLocalLockTimeoutFixture :one
 SELECT set_config('lock_timeout', $1::text, true)
 `
@@ -5547,6 +5750,22 @@ type SetOrgWebhookConfigParams struct {
 // Sets the Svix app ID and webhooks_enabled flag on an organization.
 func (q *Queries) SetOrgWebhookConfig(ctx context.Context, arg SetOrgWebhookConfigParams) error {
 	_, err := q.db.Exec(ctx, setOrgWebhookConfig, arg.SvixAppID, arg.WebhooksEnabled, arg.OrganizationID)
+	return err
+}
+
+const setOrganizationVerifiedDomainsFixture = `-- name: SetOrganizationVerifiedDomainsFixture :exec
+UPDATE organization_metadata
+SET verified_domains = $1::text[]
+WHERE id = $2
+`
+
+type SetOrganizationVerifiedDomainsFixtureParams struct {
+	VerifiedDomains []string
+	ID              string
+}
+
+func (q *Queries) SetOrganizationVerifiedDomainsFixture(ctx context.Context, arg SetOrganizationVerifiedDomainsFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationVerifiedDomainsFixture, arg.VerifiedDomains, arg.ID)
 	return err
 }
 
@@ -6123,6 +6342,25 @@ func (q *Queries) SoftDeleteAttachmentSourceFixture(ctx context.Context, id uuid
 	return result.RowsAffected(), nil
 }
 
+const softDeleteExternalCredentialFixture = `-- name: SoftDeleteExternalCredentialFixture :exec
+UPDATE external_credentials SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id IS NOT DISTINCT FROM $2::text
+  AND project_id IS NULL
+`
+
+type SoftDeleteExternalCredentialFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Test-only soft delete of an external credential in its tier: a NULL
+// organization_id names the platform tier.
+func (q *Queries) SoftDeleteExternalCredentialFixture(ctx context.Context, arg SoftDeleteExternalCredentialFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteExternalCredentialFixture, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const softDeleteNetworkIngressFixture = `-- name: SoftDeleteNetworkIngressFixture :exec
 UPDATE network_ingresses
 SET deleted_at = clock_timestamp()
@@ -6367,6 +6605,17 @@ func (q *Queries) SuspendAttachmentAgentFixture(ctx context.Context, arg Suspend
 	return result.RowsAffected(), nil
 }
 
+const tombstoneInternalSessionIssuerFixture = `-- name: TombstoneInternalSessionIssuerFixture :exec
+UPDATE internal_session_issuers SET deleted_at = clock_timestamp()
+WHERE organization_id = $1::text
+`
+
+// Test-only tombstone of an organization's internal session issuer.
+func (q *Queries) TombstoneInternalSessionIssuerFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, tombstoneInternalSessionIssuerFixture, organizationID)
+	return err
+}
+
 const transferAttachmentToReplacementOwnerFixture = `-- name: TransferAttachmentToReplacementOwnerFixture :execrows
 UPDATE agents SET owner_user_id = 'replacement-owner' WHERE id = $1 AND organization_id = $2
 `
@@ -6468,4 +6717,25 @@ type UpdateRiskResultCreatedAtParams struct {
 func (q *Queries) UpdateRiskResultCreatedAt(ctx context.Context, arg UpdateRiskResultCreatedAtParams) error {
 	_, err := q.db.Exec(ctx, updateRiskResultCreatedAt, arg.CreatedAt, arg.ID)
 	return err
+}
+
+const withdrawJsonWebKeyKeepingUpdatedAtFixture = `-- name: WithdrawJsonWebKeyKeepingUpdatedAtFixture :execrows
+UPDATE json_web_keys
+SET deleted_at = updated_at
+WHERE organization_id = $1 AND kid = $2 AND deleted IS FALSE
+`
+
+type WithdrawJsonWebKeyKeepingUpdatedAtFixtureParams struct {
+	OrganizationID string
+	Kid            string
+}
+
+// Soft-deletes one key without moving its updated_at, so a test can show a
+// cache notices a key change that leaves every timestamp unchanged.
+func (q *Queries) WithdrawJsonWebKeyKeepingUpdatedAtFixture(ctx context.Context, arg WithdrawJsonWebKeyKeepingUpdatedAtFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, withdrawJsonWebKeyKeepingUpdatedAtFixture, arg.OrganizationID, arg.Kid)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

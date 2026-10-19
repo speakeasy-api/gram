@@ -57,7 +57,7 @@ func describeMetaServer(meta *metamcprepo.MetaMcpServer) serverDescription {
 		hints = cacheHintsCallerVarying
 	}
 	return serverDescription{
-		capabilities: map[string]json.RawMessage{"tools": json.RawMessage("{}")},
+		capabilities: map[string]json.RawMessage{"tools": json.RawMessage("{}"), "resources": json.RawMessage("{}")},
 		identity:     serverInfoMetaServer,
 		instructions: metamcp.ResolveInstructions(conv.FromPGText[string](meta.Instructions)),
 		cacheHints:   hints,

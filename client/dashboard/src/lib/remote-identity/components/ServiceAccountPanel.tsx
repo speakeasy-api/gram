@@ -5,11 +5,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/HoverCard";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
@@ -22,7 +17,7 @@ import {
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Info, KeyRound, Settings } from "lucide-react";
+import { ChevronDown, KeyRound, Settings } from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import type { AgentCredentialFields } from "../drafts/useCredentialDraft";
@@ -120,7 +115,7 @@ export function ServiceAccountPanel({
                 value: "client-secret",
                 title: "Client Secret",
                 description:
-                  "Paste a client ID and secret from the identity provider.",
+                  "Paste a client ID and secret from the authorization server.",
               },
               {
                 value: "signing-key",
@@ -223,7 +218,7 @@ function OAuthClientFields({
   clientHref: (issuerId: string, clientId: string) => string;
 }): JSX.Element {
   const bound = draft.showingBound(format) ? draft.boundClient : undefined;
-  const providerName = draft.issuer?.name ?? "the identity provider";
+  const providerName = draft.issuer?.name ?? "the authorization server";
   // The client being created reads the provider and these fields, so they
   // hold still until the request settles.
   const locked =
@@ -322,14 +317,14 @@ function ProviderRow({
               disabled={disabled || draft.issuersLoading}
             >
               <SelectTrigger
-                aria-label="Identity provider"
+                aria-label="Authorization server"
                 className="h-auto w-auto gap-1.5 border-0 p-0 text-base font-medium shadow-none"
               >
                 <SelectValue
                   placeholder={
                     draft.issuersLoading
-                      ? "Loading identity providers…"
-                      : "Choose an identity provider"
+                      ? "Loading authorization servers…"
+                      : "Choose an authorization server"
                   }
                 />
               </SelectTrigger>
@@ -375,13 +370,13 @@ function ProviderRow({
       </div>
       {!issuer && !draft.issuersLoading ? (
         <Text muted small>
-          A service account needs the provider&apos;s token endpoint. Missing
-          one?{" "}
+          A service account needs the authorization server&apos;s token
+          endpoint. Missing one?{" "}
           <Link
             to={providersHref}
             className="hover:text-foreground underline underline-offset-2"
           >
-            Add an identity provider
+            Add an authorization server
           </Link>
           .
         </Text>
@@ -423,7 +418,7 @@ function ClientSecretFields({
   draft: ServiceAccountClientDraft;
   disabled: boolean;
 }): JSX.Element {
-  const providerName = draft.issuer?.name ?? "the identity provider";
+  const providerName = draft.issuer?.name ?? "the authorization server";
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
@@ -477,73 +472,6 @@ function SigningKeySteps({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1.5">
-        <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
-          Client ID
-          <HoverCard openDelay={150}>
-            <HoverCardTrigger asChild>
-              <button
-                type="button"
-                aria-label="How the client ID options differ"
-                className="hover:text-foreground inline-flex"
-              >
-                <Info aria-hidden="true" className="size-3.5" />
-              </button>
-            </HoverCardTrigger>
-            <HoverCardContent
-              align="start"
-              className="flex w-96 flex-col gap-3"
-            >
-              <div className="flex flex-col gap-1">
-                <Text small className="font-medium">
-                  Provider-created
-                </Text>
-                <Text muted small>
-                  You create an app in {providerName}, and {providerName} issues
-                  its client ID. Paste that ID here and pick a key set from your
-                  KMS. Speakeasy gives you a key set URL to add to the app.
-                </Text>
-              </div>
-              <div className="flex flex-col gap-1">
-                <Text small className="font-medium">
-                  Speakeasy-created
-                </Text>
-                <Text muted small>
-                  Speakeasy creates the client and publishes a client ID
-                  metadata document describing it, including where its public
-                  keys live. Needs a provider that supports it.
-                </Text>
-              </div>
-            </HoverCardContent>
-          </HoverCard>
-        </span>
-        <RadioCardGroup
-          aria-label="Client ID"
-          size="sm"
-          showIndicator={false}
-          orientation="horizontal"
-          value="provider"
-          disabled={disabled || created !== null}
-          className="grid-cols-1 sm:grid-cols-2"
-        >
-          <RadioCard value="provider" title="Provider-created">
-            Create the app in {providerName} first.
-          </RadioCard>
-          <RadioCard
-            value="speakeasy"
-            disabled
-            title={
-              <span className="flex flex-wrap items-center gap-2">
-                Speakeasy-created
-                <AvailabilityBadge />
-              </span>
-            }
-          >
-            Generate the client in Speakeasy and load it via CIMD.
-          </RadioCard>
-        </RadioCardGroup>
-      </div>
-
       <ol aria-label="Signing key setup" className="bg-card border">
         <li className="flex gap-3 border-b px-4 py-3.5">
           <StepMarker index={1} done={false} />
@@ -608,7 +536,8 @@ function SigningKeySteps({
                       </Text>
                     ) : !draft.issuerUsable ? (
                       <Text muted small>
-                        Choose an identity provider with a token endpoint first.
+                        Choose an authorization server with a token endpoint
+                        first.
                       </Text>
                     ) : null}
                   </div>
@@ -735,7 +664,7 @@ function AdvancedFields({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="issuer">
-                  Identity provider URL (default)
+                  Authorization server URL (default)
                 </SelectItem>
                 <SelectItem value="token_endpoint">
                   Token endpoint URL

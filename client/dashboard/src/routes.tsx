@@ -93,6 +93,7 @@ import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
+import OrgGateway from "./pages/org/OrgGateway";
 import HeadlessMode from "./pages/org/HeadlessMode";
 import PlatformMCPRedirect from "./pages/org/PlatformMCPRedirect";
 import OrgSkills from "./pages/org/OrgSkills";
@@ -111,6 +112,11 @@ import {
   EncryptionKeysRoot,
 } from "./pages/org/encryption-keys/EncryptionKeys";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
+import UserSessionIssuerDetail from "./pages/user-session-issuers/UserSessionIssuerDetail";
+import {
+  UserSessionIssuersPage,
+  UserSessionIssuersRoot,
+} from "./pages/user-session-issuers/UserSessionIssuers";
 import {
   RemoteIdentityProvidersPage,
   RemoteIdentityProvidersRoot,
@@ -138,28 +144,17 @@ import { RoleEditorPage } from "./pages/access/RoleEditorPage";
 import RequestAccess from "./pages/access/RequestAccess";
 import Settings from "./pages/settings/Settings";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
-import SecurityOverview, {
-  RiskOverviewRoot,
-} from "./pages/security/SecurityOverview";
+import RiskOverviewRedirect from "./pages/security/RiskOverviewRedirect";
 import Watchdog from "./pages/security/watchdog/Watchdog";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
 import {
-  ShadowAIIndexRedirect,
   ShadowAIRoot,
-  ShadowMCPLegacyRedirect,
+  ShadowAISectionRedirect,
+  ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
-import ShadowAIHarnesses from "./pages/shadow-ai/ShadowAIHarnesses";
-import ShadowAIAssistants from "./pages/shadow-ai/ShadowAIAssistants";
-import ShadowAIModels from "./pages/shadow-ai/ShadowAIModels";
 import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
-import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
-import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
-import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
-import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
-import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
-import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
 import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
@@ -693,14 +688,14 @@ const ROUTE_STRUCTURE = {
   },
 
   remoteIdentityProviders: {
-    title: "Remote Identity Providers",
+    title: "Authorization Servers",
     url: "remote-identity-providers",
     icon: "key-round",
     component: RemoteIdentityProvidersRoot,
     indexComponent: RemoteIdentityProvidersPage,
     subPages: {
       issuerDetail: {
-        title: "Remote Identity Provider",
+        title: "Authorization Server",
         url: ":issuerId",
         component: RemoteIdentityProviderDetail,
         subPages: {
@@ -890,39 +885,13 @@ const ROUTE_STRUCTURE = {
     icon: "radar",
     component: Watchdog,
   },
-  riskOverview: {
+  // Retired page: old links and bookmarks, including its drill-downs, land on
+  // Watchdog.
+  legacyRiskOverview: {
     title: "Risk Overview",
-    url: "risk-overview",
-    icon: "shield",
-    component: RiskOverviewRoot,
-    indexComponent: SecurityOverview,
-    subPages: {
-      usersIndex: {
-        title: "Users",
-        url: "users",
-        component: RiskOverviewUsersIndex,
-      },
-      userDetail: {
-        title: "User",
-        url: "users/:externalUserId",
-        component: RiskOverviewUserDetail,
-      },
-      categoriesIndex: {
-        title: "Categories",
-        url: "categories",
-        component: RiskOverviewCategoriesIndex,
-      },
-      rulesIndex: {
-        title: "Rules",
-        url: "rules",
-        component: RiskOverviewRulesIndex,
-      },
-      categoryDetail: {
-        title: "Category",
-        url: "categories/:category",
-        component: RiskOverviewCategoryDetail,
-      },
-    },
+    url: "risk-overview/*",
+    legacyRedirect: true,
+    component: RiskOverviewRedirect,
   },
   // Legacy URL: Detection Rules lives as a Guardrails tab now; the
   // component redirects there (carrying ?rule= deep links along). Kept out of
@@ -959,30 +928,27 @@ const ROUTE_STRUCTURE = {
     icon: "flag",
     component: RiskEventsPage,
   },
-  // Shadow MCP is a subset of Shadow AI, not a sibling: a shadow MCP server
-  // is reached by some AI tool, and one admin answers "what are people
-  // running?" and "what is it talking to?" in the same sitting. The two tabs
-  // are routed rather than toggled so either half survives being linked.
+  // Shadow AI lives in Guardrails (the Shadow AI policy and its targets tab)
+  // and is not in the nav. Its section URLs stay because tickets, bookmarks
+  // and block messages link to them: every index page redirects to
+  // Guardrails, and the tool and server detail pages beneath keep rendering.
   //
   // Project-level placement with organization-scoped reads behind it, the
   // same shape as identities above and for the same reason.
   shadowAI: {
-    // "Shadow AI" in the nav, matching the URL segment, which is also what
-    // the redirects below and the links already in tickets point at.
     title: "Shadow AI",
     url: "shadow-ai",
     icon: "shield",
     component: ShadowAIRoot,
-    indexComponent: ShadowAIIndexRedirect,
+    indexComponent: ShadowAISectionRedirect,
     subPages: {
-      // Each tool tab opens a row onto the people running that tool. The
-      // detail is nested under its tab, as the server detail is under MCPs,
-      // so the breadcrumb says which tab a pasted link came from.
+      // A tool's detail is nested under its category, as the server detail
+      // is under MCPs, so the breadcrumb says which kind a pasted link is.
       harnesses: {
         title: "Harnesses",
         url: "harnesses",
         component: ShadowAIRoot,
-        indexComponent: ShadowAIHarnesses,
+        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             title: "Shadow AI Tool",
@@ -995,7 +961,7 @@ const ROUTE_STRUCTURE = {
         title: "Assistants",
         url: "assistants",
         component: ShadowAIRoot,
-        indexComponent: ShadowAIAssistants,
+        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             title: "Shadow AI Tool",
@@ -1008,7 +974,7 @@ const ROUTE_STRUCTURE = {
         title: "Models",
         url: "models",
         component: ShadowAIRoot,
-        indexComponent: ShadowAIModels,
+        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             title: "Shadow AI Tool",
@@ -1020,8 +986,10 @@ const ROUTE_STRUCTURE = {
       mcps: {
         title: "MCPs",
         url: "mcps",
-        component: ShadowMCPRoot,
-        indexComponent: ShadowMCP,
+        component: ShadowAIRoot,
+        // The MCPs index was the approvals queue; it lands on the MCP
+        // approvals tab of Guardrails rather than the policies list.
+        indexComponent: ShadowMCPIndexRedirect,
         subPages: {
           detail: {
             title: "Shadow MCP Server",
@@ -1041,7 +1009,7 @@ const ROUTE_STRUCTURE = {
     title: "Shadow MCP",
     url: "shadow-mcp",
     component: ShadowAIRoot,
-    indexComponent: ShadowMCPLegacyRedirect,
+    indexComponent: ShadowMCPIndexRedirect,
     subPages: {
       detail: {
         title: "Shadow MCP Server",
@@ -1092,8 +1060,9 @@ const ROUTE_STRUCTURE = {
             title: "Plugin Overview",
             url: "overview",
           },
+          // Keep existing server links working after merging servers into overview.
           servers: {
-            title: "Plugin MCP Servers",
+            title: "Plugin Overview",
             url: "servers",
           },
           skills: {
@@ -1366,6 +1335,12 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "file-text",
     component: OrgLogs,
   },
+  gateway: {
+    title: "Gateway",
+    url: "gateway",
+    icon: "network",
+    component: OrgGateway,
+  },
   legacyData: {
     title: "Event Feed",
     url: "data",
@@ -1412,6 +1387,22 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "webhook",
     stage: "beta",
     component: OrgWebhooks,
+  },
+  // Rolled out behind gram-user-session-issuer-dashboard, which the root
+  // checks; the sidebar hides the entry while it is off.
+  userSessionIssuers: {
+    title: "Speakeasy Authorization Servers",
+    url: "user-session-issuers",
+    icon: "key-round",
+    component: UserSessionIssuersRoot,
+    indexComponent: UserSessionIssuersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Speakeasy Authorization Server",
+        url: ":issuerId",
+        component: UserSessionIssuerDetail,
+      },
+    },
   },
   externalServices: {
     title: "External Services",
@@ -1547,7 +1538,7 @@ const ORG_ROUTE_STRUCTURE = {
     component: ProjectIdentityRedirect,
   },
   legacyRemoteIdentityProviders: {
-    title: "Remote Identity Providers",
+    title: "Authorization Servers",
     url: "remote-identity-providers/*",
     legacyRedirect: true,
     component: ProjectIdentityRedirect,

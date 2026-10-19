@@ -102,6 +102,7 @@ async function $do(
   const query = encodeFormQuery({
     "email": payload?.email,
     "org_name": payload?.org_name,
+    "partner_code": payload?.partner_code,
     "redirect": payload?.redirect,
     "support_handoff": payload?.support_handoff,
   });

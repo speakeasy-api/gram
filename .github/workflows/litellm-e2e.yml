@@ -6,8 +6,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   litellm-e2e:
+    name: litellm-e2e
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 40
     steps:
@@ -24,7 +29,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: ./.github/workflows/composite/go-mod-cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       - name: Install Go dependencies
         run: mise run install:go

@@ -32,18 +32,22 @@ func authorizeGlobalOperation(ctx context.Context, logger *slog.Logger) (globalA
 func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 	return &Service{
-		bindingAuthorizer: nil,
-		auth:              nil,
-		sessions:          nil,
-		authz:             nil,
-		environments:      nil,
-		auditLogger:       nil,
+		bindingAuthorizer:         nil,
+		speakeasySigningAvailable: false,
+		speakeasyReadiness:        nil,
+		featureFlags:              nil,
+		auth:                      nil,
+		sessions:                  nil,
+		authz:                     nil,
+		environments:              nil,
+		auditLogger:               nil,
 		// Global operations never register a client or build its callback.
 		origins:               CallbackOrigins{Outbound: nil, Registration: nil},
 		identity:              nil,
 		refresher:             nil,
 		registrationTelemetry: nil,
 		rotator:               nil,
+		resources:             nil,
 		productFeatures:       nil,
 		logger:                logger,
 		tracer:                tp.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),

@@ -140,6 +140,9 @@ type Field struct {
 	// Lookup names the lookup every read of this dimension folds Expr through;
 	// empty reads it as reported.
 	Lookup string
+	// Typeahead is the agent_events column a dimension's values are listed
+	// from, read off Source.Observations. Empty lists them from Source.Rows.
+	Typeahead string
 }
 
 // Dataset is a logical entity at a declared grain. It owns a source query,
@@ -158,8 +161,7 @@ type Dataset struct {
 	// row's event time, used for bucketing and for ordering row lists.
 	TimeExpr string
 	Fields   []Field
-	// Source builds the dataset's source query for one tenancy and window.
-	Source SourceQuery
+	Source   Source
 }
 
 // MaxTimeRangeDays is the longest window this dataset can answer honestly:
@@ -279,7 +281,7 @@ func (d *Dataset) validate(lookups map[string]struct{}) error {
 	if d.TimeExpr == "" {
 		return fmt.Errorf("catalog: dataset %q has no time expression", d.Name)
 	}
-	if d.Source == nil {
+	if d.Source.Key == "" || d.Source.Table == nil {
 		return fmt.Errorf("catalog: dataset %q has no source query", d.Name)
 	}
 	if len(d.Fields) == 0 {

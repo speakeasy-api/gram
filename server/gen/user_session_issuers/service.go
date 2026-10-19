@@ -26,6 +26,15 @@ type Service interface {
 	ListUserSessionIssuers(context.Context, *ListUserSessionIssuersPayload) (res *ListUserSessionIssuersResult, err error)
 	// Get a user_session_issuer by id or by slug. Provide exactly one.
 	GetUserSessionIssuer(context.Context, *GetUserSessionIssuerPayload) (res *types.UserSessionIssuer, err error)
+	// Preview what attaching a user_session_issuer to an existing MCP server,
+	// toolset, or meta MCP server changes for its clients, before calling the
+	// matching update. Name exactly one of mcp_server_id, toolset_id, or
+	// meta_mcp_server_id; omit user_session_issuer_id to preview detaching the
+	// current issuer. Clients and sessions belong to an issuer, so any change of
+	// issuer requires the server's clients to authorize again. Advisory only: the
+	// update does not require it. Requires the mcp:write access the matching
+	// update requires.
+	GetAttachImpact(context.Context, *GetAttachImpactPayload) (res *UserSessionIssuerAttachImpact, err error)
 	// Soft-delete a user_session_issuer. Cascades to dependent user_sessions,
 	// user_session_consents, and remote_session_clients.
 	DeleteUserSessionIssuer(context.Context, *DeleteUserSessionIssuerPayload) (err error)
@@ -51,7 +60,7 @@ const ServiceName = "userSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"createUserSessionIssuer", "updateUserSessionIssuer", "listUserSessionIssuers", "getUserSessionIssuer", "deleteUserSessionIssuer"}
+var MethodNames = [6]string{"createUserSessionIssuer", "updateUserSessionIssuer", "listUserSessionIssuers", "getUserSessionIssuer", "getAttachImpact", "deleteUserSessionIssuer"}
 
 // CreateUserSessionIssuerPayload is the payload type of the userSessionIssuers
 // service createUserSessionIssuer method.
@@ -76,6 +85,22 @@ type DeleteUserSessionIssuerPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// GetAttachImpactPayload is the payload type of the userSessionIssuers service
+// getAttachImpact method.
+type GetAttachImpactPayload struct {
+	// The MCP server the issuer would be attached to.
+	McpServerID *string
+	// The toolset the issuer would be attached to.
+	ToolsetID *string
+	// The meta MCP server the issuer would be attached to.
+	MetaMcpServerID *string
+	// The issuer to attach. Omit to preview detaching the current issuer.
+	UserSessionIssuerID *string
+	SessionToken        *string
+	ApikeyToken         *string
+	ProjectSlugInput    *string
 }
 
 // GetUserSessionIssuerPayload is the payload type of the userSessionIssuers
@@ -133,6 +158,25 @@ type UpdateUserSessionIssuerPayload struct {
 	// 'open' admits any spec-valid document; 'disabled' admits none and stops
 	// advertising CIMD support. Omit to leave unchanged.
 	ClientIDMetadataAdmissionMode *string
+}
+
+// UserSessionIssuerAttachImpact is the result type of the userSessionIssuers
+// service getAttachImpact method.
+type UserSessionIssuerAttachImpact struct {
+	// The issuer the server uses now. Absent when it has none.
+	CurrentIssuer *types.UserSessionIssuer
+	// The issuer that would be attached. Absent when previewing a detach.
+	CandidateIssuer *types.UserSessionIssuer
+	// True when the server has an issuer and the change replaces or removes it.
+	// Its clients' registrations and sessions belong to the current issuer, so
+	// every client must register and authorize again.
+	ReauthorizationRequired bool
+	// True when the authorization server the server advertises to clients changes:
+	// its own per-server authorization server, a shared authorization server's
+	// issuer URL, or none. Anything configured with the current authorization
+	// server, such as an identity provider or a federated platform, must be
+	// updated.
+	AuthorizationServerChanges bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

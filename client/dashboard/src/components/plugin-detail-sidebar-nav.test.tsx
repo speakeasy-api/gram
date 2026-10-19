@@ -158,7 +158,8 @@ describe("organization plugin sidebar", () => {
           .getByRole("link", { name: "Back to all plugins" })
           .getAttribute("href"),
       ).toBe("/plugins");
-      for (const title of ["Overview", "MCP Servers", "Skills"]) {
+      expect(screen.queryByRole("link", { name: "MCP Servers" })).toBeNull();
+      for (const title of ["Overview", "Skills"]) {
         expect(screen.getByRole("link", { name: title })).toBeTruthy();
       }
       for (const title of ["Settings", "Assignments"]) {

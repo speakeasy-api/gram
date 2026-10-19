@@ -626,3 +626,44 @@ func TestReconcileFailedKeyGeneration_BoundsPendingWait(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Empty(t, fake.disabledVersions(), "pending versions must not be disabled")
 }
+
+// stateVersionRing refuses state updates the way KMS does for a version that
+// can't be disabled, and reports state on read.
+type stateVersionRing struct {
+	*fakeKeyRing
+	state kmspb.CryptoKeyVersion_CryptoKeyVersionState
+}
+
+func (f *stateVersionRing) UpdateCryptoKeyVersion(_ context.Context, _ *kmspb.UpdateCryptoKeyVersionRequest) (*kmspb.CryptoKeyVersion, error) {
+	return nil, status.Error(codes.FailedPrecondition, "version is not in a state that can be disabled") //nolint:wrapcheck // Fake KMS server.
+}
+
+func (f *stateVersionRing) GetCryptoKeyVersion(_ context.Context, req *kmspb.GetCryptoKeyVersionRequest) (*kmspb.CryptoKeyVersion, error) {
+	return &kmspb.CryptoKeyVersion{Name: req.GetName(), State: f.state}, nil
+}
+
+func TestDisableKeyVersion_TreatsUnusableVersionsAsDisabled(t *testing.T) {
+	t.Parallel()
+	versionName := testKeyRing + "/cryptoKeys/okta-dis/cryptoKeyVersions/1"
+	for _, state := range []kmspb.CryptoKeyVersion_CryptoKeyVersionState{kmspb.CryptoKeyVersion_DISABLED, kmspb.CryptoKeyVersion_DESTROY_SCHEDULED, kmspb.CryptoKeyVersion_DESTROYED} {
+		ring := &stateVersionRing{fakeKeyRing: newFakeKeyRing(), state: state}
+		require.NoError(t, newFakeProvisioningClient(t, ring, ring.fakeKeyRing).DisableKeyVersion(t.Context(), versionName), state.String())
+	}
+	ring := &stateVersionRing{fakeKeyRing: newFakeKeyRing(), state: kmspb.CryptoKeyVersion_ENABLED}
+	require.Error(t, newFakeProvisioningClient(t, ring, ring.fakeKeyRing).DisableKeyVersion(t.Context(), versionName))
+}
+
+// Service account emails are case-insensitive, so a grant made under one
+// casing is revoked under another.
+func TestRevokeSignerVerifier_IgnoresServiceAccountCase(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeKeyRing()
+	client := newFakeProvisioningClient(t, fake, fake)
+	keyName := testKeyRing + "/cryptoKeys/okta-case"
+
+	require.NoError(t, client.GrantSignerVerifier(t.Context(), keyName, "Signer@Speakeasy-Signing.iam.gserviceaccount.com"))
+	require.Equal(t, []string{"serviceAccount:signer@speakeasy-signing.iam.gserviceaccount.com"}, fake.members(keyName, string(SignerVerifierRole)))
+	require.NoError(t, client.RevokeSignerVerifier(t.Context(), keyName, "SIGNER@speakeasy-signing.iam.gserviceaccount.com"))
+	require.Nil(t, fake.members(keyName, string(SignerVerifierRole)))
+}

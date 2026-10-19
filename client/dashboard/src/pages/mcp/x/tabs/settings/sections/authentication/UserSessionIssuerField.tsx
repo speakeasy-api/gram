@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AuthRow, RowSave } from "./AuthRow";
 import type { AuthTarget } from "./authTarget";
+import { ChangeIssuerConfirmDialog } from "./ChangeIssuerConfirmDialog";
 
 export function UserSessionIssuerField({
   target,
@@ -27,6 +28,7 @@ export function UserSessionIssuerField({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [draftIssuerId, setDraftIssuerId] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const currentIssuerId = target.userSessionIssuerId ?? "";
   const selectedIssuerId = draftIssuerId ?? currentIssuerId;
   const selectedIssuer = issuers.find(
@@ -46,6 +48,7 @@ export function UserSessionIssuerField({
     },
     onSuccess: async () => {
       setDraftIssuerId(null);
+      setConfirmOpen(false);
       await Promise.all([
         target.invalidate(queryClient),
         invalidateAllUserSessionIssuer(queryClient, { refetchType: "all" }),
@@ -101,7 +104,9 @@ export function UserSessionIssuerField({
       hint="Chooses the authorization policy shared by clients connecting to this server."
     >
       {control}
-      {update.isError ? <FieldError>{update.error.message}</FieldError> : null}
+      {update.isError && !confirmOpen ? (
+        <FieldError>{update.error.message}</FieldError>
+      ) : null}
       <RowSave visible={dirty}>
         <RequireScope
           scope="mcp:write"
@@ -114,7 +119,11 @@ export function UserSessionIssuerField({
               size="md"
               disabled={disabled || update.isPending || !draftIssuerId}
               onClick={() => {
-                if (draftIssuerId) update.mutate(draftIssuerId);
+                if (!draftIssuerId) return;
+                // Every change disturbs connected clients: replacing an issuer
+                // signs them out, and a first one starts requiring sign-in.
+                update.reset();
+                setConfirmOpen(true);
               }}
             >
               {update.isPending ? (
@@ -127,6 +136,18 @@ export function UserSessionIssuerField({
           )}
         </RequireScope>
       </RowSave>
+      {selectedIssuer && dirty ? (
+        <ChangeIssuerConfirmDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          target={target}
+          replacing={!!currentIssuerId}
+          candidate={selectedIssuer}
+          onConfirm={() => update.mutate(selectedIssuer.id)}
+          isPending={update.isPending}
+          error={update.error}
+        />
+      ) : null}
     </AuthRow>
   );
 }

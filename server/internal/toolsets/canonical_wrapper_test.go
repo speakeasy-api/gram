@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -395,7 +396,9 @@ func TestCanonicalWrapperSyncAcceptsAgentPrincipal(t *testing.T) {
 func makeLegacy(t *testing.T, ctx context.Context, ti *testInstance, toolset *types.Toolset) {
 	t.Helper()
 	id := uuid.MustParse(toolset.ID)
-	_, err := ti.conn.Exec(ctx, `DELETE FROM mcp_endpoints WHERE mcp_server_id = $1`, id) //nolint:glint // notestingrawsql: legacy wrapper fixture
+	_, err := ti.conn.Exec(ctx, `UPDATE plugin_servers SET toolset_id = mcp_server_id, mcp_server_id = NULL WHERE mcp_server_id = $1`, id) //nolint:glint // notestingrawsql: legacy wrapper fixture
+	require.NoError(t, err)
+	_, err = ti.conn.Exec(ctx, `DELETE FROM mcp_endpoints WHERE mcp_server_id = $1`, id) //nolint:glint // notestingrawsql: legacy wrapper fixture
 	require.NoError(t, err)
 	_, err = ti.conn.Exec(ctx, `DELETE FROM mcp_servers WHERE id = $1`, id) //nolint:glint // notestingrawsql: legacy wrapper fixture
 	require.NoError(t, err)
@@ -592,4 +595,63 @@ func TestCanonicalWrapperSkippedWhenOwnFreshIDServerHoldsSlugAndDomainRoot(t *te
 	afterEndpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: member.ID})
 	require.NoError(t, err)
 	require.Equal(t, memberEndpoints, afterEndpoints)
+}
+
+// switchCanonicalBackend repoints the toolset's canonical wrapper at another
+// backend, keeping its id, as the external MCP migration does.
+func switchCanonicalBackend(t *testing.T, ctx context.Context, ti *testInstance, server mcpserversrepo.McpServer, remoteID, toolsetID uuid.NullUUID) mcpserversrepo.McpServer {
+	t.Helper()
+	switched, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		Name: server.Name, Slug: server.Slug, EnvironmentID: server.EnvironmentID, UserSessionIssuerID: server.UserSessionIssuerID,
+		RemoteMcpServerID: remoteID, TunneledMcpServerID: uuid.NullUUID{}, ToolsetID: toolsetID,
+		UnproxiedMcpServerID: uuid.NullUUID{}, ToolVariationsGroupID: uuid.NullUUID{}, Visibility: server.Visibility,
+		NetworkAccessModeSet: false, NetworkAccessMode: pgtype.Text{}, ID: server.ID, ProjectID: server.ProjectID,
+	})
+	require.NoError(t, err)
+	return switched
+}
+
+func TestDeleteToolsetLeavesServerMovedToRemoteBackend(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Moved To Remote")
+	before := requireCanonicalMatches(t, ctx, ti, toolset)
+
+	remote, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID: uuid.New(), ProjectID: *authCtx.ProjectID, Name: conv.ToPGText("Moved To Remote"), Slug: conv.ToPGText("moved-to-remote-" + uuid.NewString()[:8]),
+		TransportType: "streamable-http", Url: "https://mcp.example.com/mcp",
+	})
+	require.NoError(t, err)
+	switched := switchCanonicalBackend(t, ctx, ti, before.server, uuid.NullUUID{UUID: remote.ID, Valid: true}, uuid.NullUUID{})
+
+	require.NoError(t, ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: toolset.Slug, SessionToken: nil, ProjectSlugInput: nil}))
+
+	// The toolset is gone; the server that kept its id, and its address, are not.
+	_, err = toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: uuid.MustParse(toolset.ID), ProjectID: *authCtx.ProjectID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	after, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: switched.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, switched, after)
+	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: switched.ID})
+	require.NoError(t, err)
+	require.Equal(t, before.endpoints, endpoints)
+	kept, err := remotemcprepo.New(ti.conn).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: remote.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, remote, kept)
+}
+
+func TestDeleteToolsetConflictsWhenItsIDServerBelongsToAnotherToolset(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Claimed Identity")
+	other := createMinimalPrivateToolset(t, ctx, ti, "Claimed Identity Owner")
+	before := requireCanonicalMatches(t, ctx, ti, toolset)
+	switchCanonicalBackend(t, ctx, ti, before.server, uuid.NullUUID{}, uuid.NullUUID{UUID: uuid.MustParse(other.ID), Valid: true})
+
+	err := ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: toolset.Slug, SessionToken: nil, ProjectSlugInput: nil})
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeConflict, shareable.Code)
 }

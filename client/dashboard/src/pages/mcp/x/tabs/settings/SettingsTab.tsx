@@ -7,6 +7,7 @@ import {
   ServerUrlSection,
 } from "./sections/ServerUrlSection";
 
+import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -88,6 +89,7 @@ export function SettingsTab({
   const hasSourceSections =
     !!mcpServer.remoteMcpServerId || !!mcpServer.tunneledMcpServerId;
   const remoteMcpServerId = mcpServer.remoteMcpServerId;
+  const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
 
   // The source rows behind this server. Each section edits the source
   // directly, so they are fetched once here rather than per section.
@@ -144,7 +146,7 @@ export function SettingsTab({
             remote server needs. Upstream headers live inside its Custom
             Headers disclosure; they are governed by the identity choice, not
             a peer of it. */}
-        <AuthenticationSection mcpServer={mcpServer} />
+        <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
         <ServerUrlSection
           backend={{ mcpServerId: mcpServer.id }}
           endpoints={endpoints}
@@ -152,7 +154,7 @@ export function SettingsTab({
           mcpServer={mcpServer}
         />
         <NetworkAccessSection mcpServer={mcpServer} endpoints={endpoints} />
-        <RemoteMcpSessionsSection mcpServer={mcpServer} />
+        <RemoteMcpSessionsSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
         <ToolFilteringSection mcpServer={mcpServer} />
         <DangerZoneSection
           mcpServer={mcpServer}
@@ -182,7 +184,7 @@ export function SettingsTab({
           <NetworkAccessSection mcpServer={mcpServer} endpoints={endpoints} />
         </>
       )}
-      <AuthenticationSection mcpServer={mcpServer} />
+      <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
       {tunneledMcpServer ? (
         <Fragment key={tunneledMcpServer.id}>
           <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />

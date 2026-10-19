@@ -240,7 +240,16 @@ export function SensorsTab(): JSX.Element {
       key: "mode",
       header: "Mode",
       width: "160px",
-      render: (sensor) => <Text small>{MODE_LABELS[sensor.mode]}</Text>,
+      render: (sensor) => (
+        <div>
+          <Text small>{MODE_LABELS[sensor.mode]}</Text>
+          <Text small muted>
+            {sensor.inputStrategy === "sliding_window"
+              ? `Up to ${sensor.windowSize} messages`
+              : "Current message only"}
+          </Text>
+        </div>
+      ),
     },
     {
       key: "signals",

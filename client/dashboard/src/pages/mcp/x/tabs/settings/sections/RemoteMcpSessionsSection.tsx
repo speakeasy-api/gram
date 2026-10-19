@@ -4,16 +4,20 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useMcpServerAuthTarget } from "./authentication/authTarget";
 import { UserIdentitySessionControls } from "./authentication/UserIdentitySessionControls";
+import { SharedAuthorizationServerField } from "./authentication/SharedAuthorizationServerField";
 import { UserSessionIssuerField } from "./authentication/UserSessionIssuerField";
 import { useSelectableUserSessionIssuers } from "./authentication/useSelectableUserSessionIssuers";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 
 export function RemoteMcpSessionsSection({
   mcpServer,
+  mcpUrl,
 }: {
   mcpServer: McpServer;
+  /** The URL clients connect to; undefined while it is unknown. */
+  mcpUrl?: string;
 }): JSX.Element {
-  const target = useMcpServerAuthTarget(mcpServer);
+  const target = useMcpServerAuthTarget(mcpServer, mcpUrl);
   const selectableIssuers = useSelectableUserSessionIssuers(target);
   const userSessionIssuerId = mcpServer.userSessionIssuerId ?? undefined;
   const issuerQuery = useUserSessionIssuer(
@@ -71,6 +75,12 @@ export function RemoteMcpSessionsSection({
             isLoading={selectableIssuers.isLoading}
             isError={selectableIssuers.isError}
           />
+          {issuerQuery.data ? (
+            <SharedAuthorizationServerField
+              userSessionIssuer={issuerQuery.data}
+              mcpUrl={mcpUrl}
+            />
+          ) : null}
           {sessionControls}
         </div>
       </SettingsSection.Panel>

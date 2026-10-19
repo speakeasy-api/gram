@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
@@ -293,6 +294,12 @@ func (s *Service) readUserSessionIssuer(ctx context.Context, queries *repo.Queri
 		stored := string(mode)
 		admissionMode = &stored
 	}
+	// The column is not constrained; any value but 'shared' serves
+	// per-endpoint authorization servers.
+	authorizationServerMode := authserver.ModeEndpoint
+	if authserver.Mode(row.AuthorizationServerMode) == authserver.ModeShared {
+		authorizationServerMode = authserver.ModeShared
+	}
 	var trusted *gen.AdminMcpServerHealthTrustedRemoteSession
 	if row.TrustedRemoteSessionIssuerID.Valid && row.TrustedRemoteSessionClientID.Valid {
 		trusted = &gen.AdminMcpServerHealthTrustedRemoteSession{
@@ -336,6 +343,8 @@ func (s *Service) readUserSessionIssuer(ctx context.Context, queries *repo.Queri
 		AttachmentScope:               scope,
 		ClientIDMetadataAdmissionMode: admissionMode,
 		UseAuthenticationHost:         row.UseAuthenticationHost,
+		AuthorizationServerMode:       string(authorizationServerMode),
+		IssuerURLPinned:               row.IssuerUrlPinned,
 		TrustedRemoteSession:          trusted,
 		OtherServersUsingIssuer:       otherServers,
 		CreatedAt:                     row.CreatedAt.Time.UTC().Format(time.RFC3339),

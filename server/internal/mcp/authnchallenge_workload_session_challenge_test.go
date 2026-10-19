@@ -38,7 +38,7 @@ type workloadChallengeFixture struct {
 func newWorkloadChallengeFixture(t *testing.T, ctx context.Context, ti *testInstance) workloadChallengeFixture {
 	t.Helper()
 
-	fx := newAgentConsentFixture(t, ctx, ti)
+	fx := newWorkloadConsentFixture(t, ctx, ti)
 	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
 
@@ -171,7 +171,7 @@ func TestServePublic_WorkloadToolDeniedByAgentPolicyIsNotInvalidToken(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	fx := newAgentConsentFixture(t, ctx, ti)
+	fx := newWorkloadConsentFixture(t, ctx, ti)
 	addHTTPTools(t, ctx, ti, fx.toolset.ID, fx.target.ProjectID, fx.orgID, "deploy", "rollback")
 
 	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
@@ -211,7 +211,7 @@ func TestServePublic_ExpiredHumanSessionChallengeIsUnchanged(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	fx := newAgentConsentFixture(t, ctx, ti)
+	fx := newWorkloadConsentFixture(t, ctx, ti)
 	session := seedWorkloadSession(t, ctx, ti, fx, urn.NewUserSubject(fx.userID))
 	expired := mintSessionBearerExpiringAt(t, ti, fx, session, time.Now().Add(-time.Minute))
 	slug := fx.toolset.McpSlug.String

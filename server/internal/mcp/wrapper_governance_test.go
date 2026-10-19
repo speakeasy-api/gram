@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -22,14 +23,18 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	goahttp "goa.design/goa/v3/http"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -455,4 +460,66 @@ func TestLegacyFallback_DisabledCanonicalWrapper(t *testing.T) {
 		require.ErrorAs(t, err, &shareable)
 		require.Equal(t, oops.CodeNotFound, shareable.Code)
 	}
+}
+
+// A shared authorization server resolving a resource through the legacy
+// toolset slug is counted under its own entry point, not the oauth one.
+func TestSharedAuthorizationServer_FallbackCountedAsSharedResource(t *testing.T) {
+	t.Parallel()
+
+	idpURL, err := url.Parse("https://idp.example.com/authorize")
+	require.NoError(t, err)
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)),
+		&mockIdentityResolver{buildAuthURLResult: idpURL, hasAccessOK: true},
+		mcp.TunnelPublicConfig{
+			SessionTTL:         0,
+			LiveSessionCap:     0,
+			InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+			RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+			MaxRequestLifetime: 0,
+		}, nil)
+	authCtx := requireProjectAuthContext(t, ctx)
+
+	slug := "wg-shared-" + uuid.NewString()[:8]
+	_, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
+	clientID := "wg-shared-client-" + uuid.NewString()[:8]
+	insertUserSessionClient(t, ctx, ti.conn, issuer.ID, clientID)
+	setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
+
+	q := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {clientID},
+		"redirect_uri":          {"http://example.com/cb"},
+		"code_challenge":        {pkceChallenge(pkceVerifier(t))},
+		"code_challenge_method": {"S256"},
+		"resource":              {ti.serverURL.JoinPath("mcp", slug).String()},
+	}
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleSharedAuthorize(w, sharedRequest(ctx, http.MethodGet, "/oauth/usi/"+issuer.ID.String()+"/authorize?"+q.Encode(), issuer.ID.String(), nil)))
+	require.Equal(t, http.StatusFound, w.Code, w.Body.String())
+
+	points := collectCounterPoints(t, reader, mcpmetrics.InstrumentToolsetSlugFallback)
+	require.Equal(t, int64(1), points[attribute.NewSet(attr.McpEntryPoint(mcpmetrics.LegacyFallbackSharedResource))])
+	require.Zero(t, points[attribute.NewSet(attr.McpEntryPoint(mcpmetrics.LegacyFallbackOAuth))])
+}
+
+// The organization gateway's shadowed-endpoint probe counts under its own
+// entry point; the endpoint route it then serves still counts as oauth.
+func TestOrganizationGatewayRoutes_ShadowProbeFallbackCountedSeparately(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	authCtx := requireProjectAuthContext(t, ctx)
+	createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, "gateway")
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service, nil)
+
+	w := postRegistration(t, router, "/mcp/gateway/register")
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	points := collectCounterPoints(t, reader, mcpmetrics.InstrumentToolsetSlugFallback)
+	require.Equal(t, int64(1), points[attribute.NewSet(attr.McpEntryPoint(mcpmetrics.LegacyFallbackOrgGatewayProbe))])
+	require.Equal(t, int64(1), points[attribute.NewSet(attr.McpEntryPoint(mcpmetrics.LegacyFallbackOAuth))])
 }

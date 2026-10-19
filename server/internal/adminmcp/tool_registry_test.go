@@ -220,7 +220,7 @@ func TestRegistryDetailRetainsSafeSummaryForOversizedStoredRecords(t *testing.T)
 func TestRegistryProjectionBoundsAndSafeCategories(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("x", maxRegistryText+10)
-	projection, ok := projectRegistryRecord([]byte(`{"server":{"name":"` + long + `","description":"line\nbreak","version":"v","remotes":[{"type":"sse"}]}}`))
+	projection, ok := projectRegistryRecord([]byte(`{"server":{"name":"`+long+`","description":"line\nbreak","version":"v","remotes":[{"type":"sse"}]}}`), maxRegistryPage)
 	require.True(t, ok)
 	require.LessOrEqual(t, len(projection.Name), maxRegistryText)
 	require.Equal(t, "line\nbreak", projection.Description)

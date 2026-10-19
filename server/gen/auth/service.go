@@ -27,6 +27,10 @@ type Service interface {
 	EnterDemo(context.Context, *EnterDemoPayload) (res *EnterDemoResult, err error)
 	// Logs out the current user by clearing their session.
 	Logout(context.Context, *LogoutPayload) (res *LogoutResult, err error)
+	// Signs the caller out everywhere: ends every dashboard and identity provider
+	// session, revokes their sign-ins in every organization, and revokes every MCP
+	// grant made from them.
+	LogoutEverywhere(context.Context, *LogoutEverywherePayload) (res *LogoutEverywhereResult, err error)
 	// Register a new org for a user with their session information.
 	Register(context.Context, *RegisterPayload) (err error)
 	// Provides information about the current authentication status.
@@ -75,7 +79,7 @@ const ServiceName = "auth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"callback", "login", "switchScopes", "enterDemo", "logout", "register", "info", "transferOut", "transferIn"}
+var MethodNames = [10]string{"callback", "login", "switchScopes", "enterDemo", "logout", "logoutEverywhere", "register", "info", "transferOut", "transferIn"}
 
 // CallbackPayload is the payload type of the auth service callback method.
 type CallbackPayload struct {
@@ -136,6 +140,9 @@ type InfoResult struct {
 	GramAccountType                string
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription bool
+	// Display-only signup offer variant for an accepted promotion; not billing
+	// eligibility
+	AcceptedSignupOfferFlow *string
 	// Whether the organization is whitelisted to access the platform
 	Whitelisted   bool
 	Trial         *Trial `json:"trial"`
@@ -150,6 +157,8 @@ type InfoResult struct {
 type LoginPayload struct {
 	// Optional URL to redirect to after successful authentication
 	Redirect *string
+	// Optional partner signup code.
+	PartnerCode *string
 	// Optional organization name. When set, the organization is created for a new
 	// user during the auth callback.
 	OrgName *string
@@ -164,6 +173,23 @@ type LoginPayload struct {
 type LoginResult struct {
 	// The URL to redirect to after authentication
 	Location string
+}
+
+// LogoutEverywherePayload is the payload type of the auth service
+// logoutEverywhere method.
+type LogoutEverywherePayload struct {
+	SessionToken *string
+}
+
+// LogoutEverywhereResult is the result type of the auth service
+// logoutEverywhere method.
+type LogoutEverywhereResult struct {
+	// Empty string to clear the session
+	SessionCookie string
+	// Number of sign-ins revoked.
+	RevokedSignIns int
+	// Number of MCP grants revoked.
+	RevokedSessions int
 }
 
 // LogoutPayload is the payload type of the auth service logout method.
@@ -204,6 +230,8 @@ type RegisterPayload struct {
 	SessionToken *string
 	// The name of the org to register
 	OrgName string
+	// Optional partner signup code.
+	PartnerCode *string
 }
 
 // SwitchScopesPayload is the payload type of the auth service switchScopes

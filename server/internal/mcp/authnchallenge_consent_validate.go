@@ -99,12 +99,27 @@ func (s *Service) probeRemoteSession(
 	subject := *challengeState.Subject
 	logger = logger.With(attr.SlogRemoteSessionClientID(client.ID.String()))
 
-	tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	tokenProjectIDs, err := s.clientTokenProjectIDs(ctx, endpoint, client)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for validation").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "resolve upstream token projects for validation").LogError(ctx, logger)
 	}
-	entry, usable := tokens[client.RemoteSessionIssuerID]
-	if !usable || entry.RemoteSessionClientID != client.ID {
+	var (
+		tokens         map[uuid.UUID]remotesessions.UpstreamToken
+		entry          remotesessions.UpstreamToken
+		tokenProjectID uuid.UUID
+		usable         bool
+	)
+	for _, projectID := range tokenProjectIDs {
+		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		if rerr != nil {
+			return oops.E(oops.CodeUnexpected, rerr, "resolve upstream tokens for validation").LogError(ctx, logger)
+		}
+		if candidate, ok := resolved[client.RemoteSessionIssuerID]; ok && candidate.RemoteSessionClientID == client.ID {
+			tokens, entry, tokenProjectID, usable = resolved, candidate, projectID, true
+			break
+		}
+	}
+	if !usable {
 		return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "Connect this service before verifying it.").LogWarn(ctx, logger)
 	}
 	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
@@ -142,7 +157,7 @@ func (s *Service) probeRemoteSession(
 		Subject:        subject,
 		ClientID:       client.ID,
 		UpdatedAt:      entry.RemoteSessionUpdatedAt,
-		ProjectID:      endpoint.ProjectID,
+		ProjectID:      tokenProjectID,
 		OrganizationID: endpoint.OrganizationID,
 	}
 	// The issuer's own interfaces run beside the probe, under their own budget;
@@ -159,7 +174,7 @@ func (s *Service) probeRemoteSession(
 	probedAt := time.Now()
 	verdict, reason := s.probeUpstream(probeCtx, logger, target.build, target.name)
 	<-enriched
-	ownResource := s.newResourceDisplayOwner(endpoint).ownsOrFallsBack(ctx, logger, client)
+	ownResource := s.newResourceDisplayOwner(endpoint, challengeState).ownsOrFallsBack(ctx, logger, client)
 	issuerDisplay, _ := issuerCardBranding(client, ownResource, s.serverURL)
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
 	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)), attr.SlogOAuthValidationTrigger(string(trigger)))
@@ -227,7 +242,7 @@ func (s *Service) metaValidationTarget(
 	subject urn.SessionSubject,
 ) (context.Context, validationTarget, error) {
 	var none validationTarget
-	rows, claimed, err := s.claimingMetaMembers(ctx, endpoint, client.RemoteSessionIssuerID)
+	rows, claimed, err := s.claimingMetaMembers(ctx, endpoint, client)
 	if err != nil {
 		return ctx, none, fmt.Errorf("resolve claiming meta MCP members: %w", err)
 	}
@@ -252,7 +267,7 @@ func (s *Service) metaValidationTarget(
 		return ctx, none, errRemoteSessionUnroutable
 	}
 
-	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+	ctx, members, err := s.resolveEndpointMemberSnapshot(ctx, logger, endpoint)
 	if err != nil {
 		return ctx, none, fmt.Errorf("resolve meta MCP member snapshot: %w", err)
 	}
@@ -277,12 +292,17 @@ func (s *Service) metaValidationTarget(
 	gate := metaGateContext{
 		projectID:    endpoint.ProjectID,
 		metaServerID: endpoint.MetaMcpServerID.UUID,
-		// Consent probes a stored gateway; agent keys reach no consent page.
-		agentID:        uuid.Nil,
-		organizationID: endpoint.OrganizationID,
-		tokens:         selectedTokens,
+		// Agent keys reach no consent page.
+		agentID:             uuid.Nil,
+		organizationGateway: endpoint.IsOrganizationGateway(),
+		organizationID:      endpoint.OrganizationID,
+		// The probe routes exactly the grant being validated, whatever the
+		// gateway kind.
+		tokens:        selectedTokens,
+		projectTokens: nil,
 		// Consent probes never acquire credentials by identity chaining.
 		userSessionIssuerID: uuid.Nil,
+		connectRoot:         "",
 		chainUpstream:       nil,
 		toolSelection:       nil,
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
@@ -292,6 +312,8 @@ func (s *Service) metaValidationTarget(
 		externalUserID:      "",
 		apiKeyID:            "",
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
+		// Consent probes never call connection_status.
+		connectURL: "",
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:

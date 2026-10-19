@@ -63,11 +63,13 @@ type GetMcpMetadataResponseBody struct {
 type SetMcpMetadataResponseBody struct {
 	// The ID of the metadata record
 	ID string `form:"id" json:"id" xml:"id"`
-	// The toolset associated with this install page metadata. Mutually exclusive
-	// with mcp_server_id.
+	// The toolset associated with this install page metadata. Also set with
+	// mcp_server_id, to the same id, for a hosted MCP server with a live canonical
+	// MCP server.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// The MCP server associated with this install page metadata. Mutually
-	// exclusive with toolset_id.
+	// The MCP server associated with this install page metadata. Also set with
+	// toolset_id, to the same id, for a hosted MCP server with a live canonical
+	// MCP server.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// The asset ID for the MCP install page logo
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
@@ -678,11 +680,13 @@ type ExportMcpMetadataGatewayErrorResponseBody struct {
 type McpMetadataResponseBody struct {
 	// The ID of the metadata record
 	ID string `form:"id" json:"id" xml:"id"`
-	// The toolset associated with this install page metadata. Mutually exclusive
-	// with mcp_server_id.
+	// The toolset associated with this install page metadata. Also set with
+	// mcp_server_id, to the same id, for a hosted MCP server with a live canonical
+	// MCP server.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// The MCP server associated with this install page metadata. Mutually
-	// exclusive with toolset_id.
+	// The MCP server associated with this install page metadata. Also set with
+	// toolset_id, to the same id, for a hosted MCP server with a live canonical
+	// MCP server.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// The asset ID for the MCP install page logo
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`

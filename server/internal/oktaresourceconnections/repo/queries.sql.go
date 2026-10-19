@@ -886,6 +886,7 @@ SELECT
   , rpr.challenge_scopes
   , rpr.scopes_supported
   , rpr.metadata_fetched_at
+  , COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
 FROM remote_protected_resources AS rpr
 JOIN projects AS p
   ON p.id = rpr.project_id
@@ -909,6 +910,7 @@ type ListRemoteProtectedResourceScopesRow struct {
 	ChallengeScopes    []string
 	ScopesSupported    []string
 	MetadataFetchedAt  pgtype.Timestamptz
+	DocumentResource   string
 }
 
 // What the cached protected resource rows say about scopes, for any of the
@@ -929,6 +931,7 @@ func (q *Queries) ListRemoteProtectedResourceScopes(ctx context.Context, arg Lis
 			&i.ChallengeScopes,
 			&i.ScopesSupported,
 			&i.MetadataFetchedAt,
+			&i.DocumentResource,
 		); err != nil {
 			return nil, err
 		}

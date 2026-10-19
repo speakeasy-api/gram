@@ -19,6 +19,7 @@ import {
   PlugZapIcon,
   ListChecksIcon,
   ChartColumnStackedIcon,
+  ArrowRightLeftIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -72,6 +73,12 @@ export const ADMIN_NAV_GROUPS = [
         icon: Grid2X2Icon,
       },
       {
+        to: "/signup-offers",
+        label: "Signup offers",
+        keywords: "signup stripe promotion tailscale partner gateway",
+        icon: BookOpenIcon,
+      },
+      {
         to: "/onboarding-steps",
         label: "Steps",
         keywords: "onboarding steps setup wizard cards groups playbooks",
@@ -88,6 +95,12 @@ export const ADMIN_NAV_GROUPS = [
         label: "Remote Session Issuers",
         keywords: "oauth identity providers issuers",
         icon: KeyRoundIcon,
+      },
+      {
+        to: "/external-mcp-migration",
+        label: "External MCP migration",
+        keywords: "external mcp attachments remote servers migrate cutover",
+        icon: ArrowRightLeftIcon,
       },
       {
         to: "/mcp-setup",

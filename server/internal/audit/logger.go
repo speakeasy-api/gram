@@ -12,10 +12,23 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-type Logger struct{}
+type Logger struct {
+	skipOutbox bool
+}
 
-func NewLogger() *Logger {
-	return &Logger{}
+type LoggerOption func(*Logger)
+
+// WithoutOutbox records audit rows without publishing webhook events, for operator backfills.
+func WithoutOutbox() LoggerOption {
+	return func(l *Logger) { l.skipOutbox = true }
+}
+
+func NewLogger(opts ...LoggerOption) *Logger {
+	l := &Logger{skipOutbox: false}
+	for _, opt := range opts {
+		opt(l)
+	}
+	return l
 }
 
 type auditEntry struct {
@@ -46,6 +59,9 @@ func (l *Logger) log(ctx context.Context, dbtx repo.DBTX, entry auditEntry) erro
 		return fmt.Errorf("log %s: %w", entry.Params.Action, err)
 	}
 
+	if l.skipOutbox {
+		return nil
+	}
 	if err := appendToOutbox(ctx, dbtx, entry, row); err != nil {
 		return err
 	}

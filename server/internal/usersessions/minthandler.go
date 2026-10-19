@@ -18,13 +18,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
-	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -150,6 +151,10 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	}
 
 	now := time.Now()
+	signInID, err := s.dashboardSignIn(ctx, authCtx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnavailable, err, "link sign-in").LogError(ctx, s.logger)
+	}
 	if _, err := repo.New(s.db).CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: target.issuerID,
 		// No registration row. The refresh-token sentinel is what the session
@@ -169,9 +174,18 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
 		ToolSelection:    nil,
 		// Dashboard sessions are issuer-scoped, never bound to one resource.
-		Resource: pgtype.Text{String: "", Valid: false},
+		Resource:     pgtype.Text{String: "", Valid: false},
+		SignInID:     signInID,
+		SignInUserID: conv.ToPGText(authCtx.UserID),
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			revoked, lookupErr := s.signInRevoked(ctx, authCtx.ActiveOrganizationID, signInID)
+			switch {
+			case lookupErr != nil:
+				return nil, oops.E(oops.CodeUnavailable, lookupErr, "check sign-in after refused mint").LogError(ctx, s.logger)
+			case revoked:
+				return nil, oops.E(oops.CodeUnauthorized, err, "sign-in was revoked, sign in again").LogError(ctx, s.logger)
+			}
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, s.logger)
@@ -303,7 +317,7 @@ func (s *Service) wrapperMintTarget(ctx context.Context, server *mcpserversrepo.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	issuerURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
+	issuerURL, err := endpointaddr.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
 	}
@@ -331,7 +345,7 @@ func (s *Service) serverMintIssuerURL(ctx context.Context, server *mcpserversrep
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	issuerURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
+	issuerURL, err := endpointaddr.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
 	}
@@ -409,4 +423,44 @@ func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDS
 		resourceID: metaServer.ID.String(),
 		logAttr:    attr.SlogMetaMcpServerID(metaServer.ID.String()),
 	}, nil
+}
+
+// signInRevoked reports whether a refused mint was refused for its sign-in,
+// so an issuer miss is not reported as a revocation. Only a missing sign-in
+// reads as not revoked; any other lookup failure is returned.
+func (s *Service) signInRevoked(ctx context.Context, organizationID string, signInID uuid.NullUUID) (bool, error) {
+	if !signInID.Valid {
+		return false, nil
+	}
+	row, err := repo.New(s.db).LockSignInForGrant(ctx, repo.LockSignInForGrantParams{ID: signInID.UUID, OrganizationID: organizationID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("look up sign-in: %w", err)
+	}
+	return row.Fenced || (row.RevokedAt.Valid && row.RevokeReason.String != string(signins.RevokeReasonSignOut)), nil
+}
+
+// dashboardSignIn is the caller's sign-in in its active organization,
+// revoked or not, so the guarded insert refuses a revoked one. While
+// enforcement is on a failed lookup fails the mint rather than leave it
+// unlinked.
+func (s *Service) dashboardSignIn(ctx context.Context, authCtx *contextvalues.AuthContext) (uuid.NullUUID, error) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if s.sessions == nil || authCtx.SessionID == nil || *authCtx.SessionID == "" || !s.sessions.SignInEnforced(ctx, authCtx.ActiveOrganizationID) {
+		return none, nil
+	}
+	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		return none, fmt.Errorf("load dashboard session: %w", err)
+	}
+	if session.UserID != authCtx.UserID || session.ImpersonatorEmail != "" || session.SupportOrganizationID != "" {
+		return none, nil
+	}
+	id, err := signins.SignInForSession(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.UserID, session.WorkOSSessionID)
+	if err != nil {
+		return none, fmt.Errorf("look up sign-in: %w", err)
+	}
+	return id, nil
 }

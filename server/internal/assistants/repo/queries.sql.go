@@ -107,6 +107,7 @@ WHERE id = (
     AND r.state IN ($4, $1)
     AND r.deleted IS FALSE
     AND r.ended IS FALSE
+    AND r.backend = ANY($5::text[])
   ORDER BY r.runtime_version DESC, r.created_at DESC
   LIMIT 1
 )
@@ -118,10 +119,11 @@ RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_me
 `
 
 type BeginExpireAssistantRuntimeParams struct {
-	ExpiringState string
-	ThreadID      uuid.UUID
-	ProjectID     uuid.UUID
-	ActiveState   string
+	ExpiringState        string
+	ThreadID             uuid.UUID
+	ProjectID            uuid.UUID
+	ActiveState          string
+	IdleExpiringBackends []string
 }
 
 type BeginExpireAssistantRuntimeRow struct {
@@ -140,6 +142,9 @@ type BeginExpireAssistantRuntimeRow struct {
 // ErrNoRows means another actor (Stop, reaper, manual API) already finalized
 // the row; callers must not then call Stop.
 //
+// Only rows on an idle-expiring backend match; thread workflows on any other
+// backend exit the expiry loop and leave the runtime up.
+//
 // v2 (single-VM-per-assistant) rows pin assistant_thread_id to the admitting
 // thread, but every thread workflow under the assistant runs its own warm
 // timer and calls expire with its own thread id. Resolve the row via
@@ -152,8 +157,70 @@ func (q *Queries) BeginExpireAssistantRuntime(ctx context.Context, arg BeginExpi
 		arg.ThreadID,
 		arg.ProjectID,
 		arg.ActiveState,
+		arg.IdleExpiringBackends,
 	)
 	var i BeginExpireAssistantRuntimeRow
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantThreadID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.Backend,
+		&i.BackendMetadataJson,
+		&i.State,
+		&i.WarmUntil,
+	)
+	return i, err
+}
+
+const beginExpireIdleAssistantRuntime = `-- name: BeginExpireIdleAssistantRuntime :one
+UPDATE assistant_runtimes
+SET
+  state = $1,
+  updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+  AND ended IS FALSE
+  AND (
+    state = $4
+    OR (state = $1 AND updated_at < $5)
+  )
+RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+`
+
+type BeginExpireIdleAssistantRuntimeParams struct {
+	ExpiringState  string
+	RuntimeID      uuid.UUID
+	ProjectID      uuid.UUID
+	ActiveState    string
+	ExpiringBefore pgtype.Timestamptz
+}
+
+type BeginExpireIdleAssistantRuntimeRow struct {
+	ID                  uuid.UUID
+	AssistantThreadID   uuid.UUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	Backend             string
+	BackendMetadataJson []byte
+	State               string
+	WarmUntil           pgtype.Timestamptz
+}
+
+// Runtime-id counterpart of BeginExpireAssistantRuntime for the reaper's idle
+// sweep. Takes `active` rows, and `expiring` rows untouched since
+// @expiring_before so a stalled expire is retried rather than left holding the
+// v2 unique index. ErrNoRows means another actor moved the row first.
+func (q *Queries) BeginExpireIdleAssistantRuntime(ctx context.Context, arg BeginExpireIdleAssistantRuntimeParams) (BeginExpireIdleAssistantRuntimeRow, error) {
+	row := q.db.QueryRow(ctx, beginExpireIdleAssistantRuntime,
+		arg.ExpiringState,
+		arg.RuntimeID,
+		arg.ProjectID,
+		arg.ActiveState,
+		arg.ExpiringBefore,
+	)
+	var i BeginExpireIdleAssistantRuntimeRow
 	err := row.Scan(
 		&i.ID,
 		&i.AssistantThreadID,
@@ -928,11 +995,9 @@ type EnableMCPForToolsetsParams struct {
 	ProjectID  uuid.UUID
 }
 
-// Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
-// toolset attached to an assistant must be MCP-reachable for the runtime's
-// startup config to build; we enable on attach so users don't have to do it
-// separately. mcp_slug is required for an MCP-reachable toolset, so we skip
-// rows that lack one.
+// Flips mcp_enabled to TRUE for the listed toolsets in a project. Newly
+// attached toolsets are enabled so users don't have to do it separately; the
+// caller picks them by ResolveToolsetsForWrite's enables_mcp under its lock.
 func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForToolsetsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, enableMCPForToolsets, arg.ToolsetIds, arg.ProjectID)
 	if err != nil {
@@ -1902,8 +1967,8 @@ type ListAssistantRuntimesForReapRow struct {
 }
 
 // Returns every runtime row for an assistant that still carries backend
-// metadata, regardless of soft-delete state. A stopped row whose Fly app
-// was not collected leaves its app_name in metadata and would otherwise
+// metadata, regardless of soft-delete state. A stopped row whose resources
+// were not collected retains backend metadata and would otherwise
 // be invisible to deleted-aware queries.
 func (q *Queries) ListAssistantRuntimesForReap(ctx context.Context, arg ListAssistantRuntimesForReapParams) ([]ListAssistantRuntimesForReapRow, error) {
 	rows, err := q.db.Query(ctx, listAssistantRuntimesForReap, arg.AssistantID, arg.ProjectID)
@@ -2016,6 +2081,46 @@ type ListAttachmentTargetIDsParams struct {
 // can authorize them first. Read-only: the write locks them itself.
 func (q *Queries) ListAttachmentTargetIDs(ctx context.Context, arg ListAttachmentTargetIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listAttachmentTargetIDs, arg.ProjectID, arg.ToolsetSlugs, arg.McpServerSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCanonicalWrapperIDs = `-- name: ListCanonicalWrapperIDs :many
+SELECT ms.id
+FROM mcp_servers ms
+JOIN toolsets t ON t.id = ms.id AND t.project_id = ms.project_id
+WHERE ms.project_id = $1
+  AND ms.id = ANY($2::UUID[])
+  AND ms.toolset_id = ms.id
+  AND ms.deleted IS FALSE
+  AND ms.visibility <> 'disabled'
+  AND t.mcp_enabled IS TRUE
+  AND t.mcp_slug IS NOT NULL
+  AND t.deleted IS FALSE
+`
+
+type ListCanonicalWrapperIDsParams struct {
+	ProjectID  uuid.UUID
+	ToolsetIds []uuid.UUID
+}
+
+// Dialable toolsets with a live canonical wrapper (same id): the attachments the dependent move re-keys.
+func (q *Queries) ListCanonicalWrapperIDs(ctx context.Context, arg ListCanonicalWrapperIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listCanonicalWrapperIDs, arg.ProjectID, arg.ToolsetIds)
 	if err != nil {
 		return nil, err
 	}
@@ -2181,6 +2286,85 @@ func (q *Queries) ListColdPendingThreadsForAdmit(ctx context.Context, arg ListCo
 	return items, nil
 }
 
+const listIdleAssistantRuntimes = `-- name: ListIdleAssistantRuntimes :many
+SELECT r.id, r.project_id, a.warm_ttl_seconds
+FROM assistant_runtimes r
+JOIN assistants a
+  ON a.id = r.assistant_id
+ AND a.project_id = r.project_id
+ AND a.deleted IS FALSE
+WHERE r.runtime_version = 2
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.backend = ANY($1::text[])
+  AND (
+    (r.state = $2 AND r.warm_until < $3)
+    OR (r.state = $4 AND r.updated_at < $5)
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_thread_events e
+    WHERE e.assistant_id = r.assistant_id
+      AND e.project_id = r.project_id
+      AND e.deleted IS FALSE
+      AND e.status = $6
+  )
+ORDER BY r.updated_at ASC
+LIMIT $7
+`
+
+type ListIdleAssistantRuntimesParams struct {
+	IdleExpiringBackends []string
+	ActiveState          string
+	WarmUntilBefore      pgtype.Timestamptz
+	ExpiringState        string
+	ExpiringBefore       pgtype.Timestamptz
+	ProcessingStatus     string
+	MaxRows              int32
+}
+
+type ListIdleAssistantRuntimesRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	WarmTtlSeconds int64
+}
+
+// Idle-sweep candidates on an idle-expiring backend:
+//   - `active` v2 rows whose warm window lapsed before @warm_until_before, with
+//     no thread workflow left to expire them.
+//   - `expiring` rows untouched since @expiring_before, whose expire gave up
+//     before stopping the backend.
+//
+// Assistants with a turn in flight are skipped: warm_until only advances when
+// a turn ends, so a long turn can outlive its window.
+func (q *Queries) ListIdleAssistantRuntimes(ctx context.Context, arg ListIdleAssistantRuntimesParams) ([]ListIdleAssistantRuntimesRow, error) {
+	rows, err := q.db.Query(ctx, listIdleAssistantRuntimes,
+		arg.IdleExpiringBackends,
+		arg.ActiveState,
+		arg.WarmUntilBefore,
+		arg.ExpiringState,
+		arg.ExpiringBefore,
+		arg.ProcessingStatus,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdleAssistantRuntimesRow
+	for rows.Next() {
+		var i ListIdleAssistantRuntimesRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.WarmTtlSeconds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInactiveAssistantRuntimesForReap = `-- name: ListInactiveAssistantRuntimesForReap :many
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
@@ -2325,7 +2509,7 @@ type ListStoppedRuntimesForReapRow struct {
 // indefinitely. The NOT EXISTS guard restricts the candidate to the most
 // recent non-reaped row per thread: ReserveAssistantRuntime copies the latest
 // non-empty metadata into each new row, so a stale older sibling can share
-// `machine_id` with the current owner — destroying it would yank the live
+// resource metadata with the current owner — destroying it would yank the live
 // machine out from under a fresher row that is still inside its own TTL.
 func (q *Queries) ListStoppedRuntimesForReap(ctx context.Context, arg ListStoppedRuntimesForReapParams) ([]ListStoppedRuntimesForReapRow, error) {
 	rows, err := q.db.Query(ctx, listStoppedRuntimesForReap,
@@ -3107,7 +3291,6 @@ func (q *Queries) LookupActiveAssistantRuntimeV2(ctx context.Context, arg Lookup
 const markAssistantRuntimeMachineReaped = `-- name: MarkAssistantRuntimeMachineReaped :execrows
 UPDATE assistant_runtimes
 SET state = $1,
-    backend_metadata_json = backend_metadata_json - 'machine_id' - 'last_boot_id',
     updated_at = clock_timestamp(),
     ended_at = COALESCE(ended_at, clock_timestamp()),
     deleted_at = COALESCE(deleted_at, clock_timestamp())
@@ -3124,12 +3307,10 @@ type MarkAssistantRuntimeMachineReapedParams struct {
 	FailedState  string
 }
 
-// Per-thread reap: strips the machine slot from backend metadata while
-// preserving app-level fields (app_name, app_id, app_url, app_ip, region) so
-// the next admit for the same thread cold-launches into the same Fly app and
-// keeps its allocated IP and secrets. Filters by current state so a row that
-// raced into starting/active between selection and update is left alone — the
-// 0-rows return signals the caller to skip the destructive backend call.
+// Per-thread reap: marks the stopped resource reaped while retaining backend
+// metadata for full cleanup (e.g. local workspace volumes). Filters by current
+// state so a row that raced into starting/active between selection and
+// update is left alone.
 func (q *Queries) MarkAssistantRuntimeMachineReaped(ctx context.Context, arg MarkAssistantRuntimeMachineReapedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markAssistantRuntimeMachineReaped,
 		arg.ReapedState,
@@ -3161,7 +3342,7 @@ type MarkAssistantRuntimeReapedParams struct {
 	ProjectID   uuid.UUID
 }
 
-// Records that the backend resource (e.g. Fly app) for this runtime has
+// Records that the backend resource (e.g. sandbox claim) for this runtime has
 // been torn down. Clearing backend_metadata_json removes it from the reap
 // candidate set so the janitor stops re-scanning it.
 func (q *Queries) MarkAssistantRuntimeReaped(ctx context.Context, arg MarkAssistantRuntimeReapedParams) error {
@@ -3178,23 +3359,30 @@ SET
 WHERE deleted IS FALSE
   AND (
     (state = $2 AND updated_at < $3)
-    OR (state = $4 AND updated_at < $5)
+    OR (
+      state = $4
+      AND updated_at < $5
+      AND (runtime_version <> 2 OR backend <> ALL($6::text[]))
+    )
   )
 RETURNING assistant_id
 `
 
 type ReapStuckAssistantRuntimesParams struct {
-	StoppedState   string
-	StartingState  string
-	StartingCutoff pgtype.Timestamptz
-	ExpiringState  string
-	ExpiringCutoff pgtype.Timestamptz
+	StoppedState         string
+	StartingState        string
+	StartingCutoff       pgtype.Timestamptz
+	ExpiringState        string
+	ExpiringCutoff       pgtype.Timestamptz
+	IdleExpiringBackends []string
 }
 
 // Short-horizon reaper for rows the happy-path can no longer move — crash
-// recovery only. Idle runtimes are deliberately not collected: a VM with no
-// traffic stays up until its assistant is deleted. Both branches cover rows
-// stranded by a dead process, and the next admit recreates the runtime:
+// recovery only. Idle runtimes are collected separately through
+// ListIdleAssistantRuntimes, which must poll the runner before stopping. Both
+// branches cover rows stranded by a dead process, and the next admit
+// recreates the runtime. Stuck `expiring` v2 rows on an idle-expiring backend
+// are left to the idle sweep, which stops the backend before retiring them:
 //   - 'starting' rows that never transitioned to active within the startup
 //     grace window (server crashed mid-boot).
 //   - 'expiring' rows older than the ExpireThreadRuntime activity's full
@@ -3209,6 +3397,7 @@ func (q *Queries) ReapStuckAssistantRuntimes(ctx context.Context, arg ReapStuckA
 		arg.StartingCutoff,
 		arg.ExpiringState,
 		arg.ExpiringCutoff,
+		arg.IdleExpiringBackends,
 	)
 	if err != nil {
 		return nil, err
@@ -3720,7 +3909,7 @@ func (q *Queries) ResolveThreadProjectID(ctx context.Context, threadID uuid.UUID
 }
 
 const resolveToolsetsForWrite = `-- name: ResolveToolsetsForWrite :many
-SELECT t.id, t.slug
+SELECT t.id, t.slug, (t.mcp_enabled IS FALSE AND t.mcp_slug IS NOT NULL)::bool AS enables_mcp
 FROM toolsets t
 WHERE t.project_id = $1
   AND t.deleted IS FALSE
@@ -3747,8 +3936,9 @@ type ResolveToolsetsForWriteParams struct {
 }
 
 type ResolveToolsetsForWriteRow struct {
-	ID   uuid.UUID
-	Slug string
+	ID         uuid.UUID
+	Slug       string
+	EnablesMcp bool
 }
 
 // Also locks the toolsets behind canonical wrappers named by slug, so server
@@ -3764,7 +3954,7 @@ func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolse
 	var items []ResolveToolsetsForWriteRow
 	for rows.Next() {
 		var i ResolveToolsetsForWriteRow
-		if err := rows.Scan(&i.ID, &i.Slug); err != nil {
+		if err := rows.Scan(&i.ID, &i.Slug, &i.EnablesMcp); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -3942,6 +4132,34 @@ func (q *Queries) SetAssistantRuntimeActive(ctx context.Context, arg SetAssistan
 	_, err := q.db.Exec(ctx, setAssistantRuntimeActive,
 		arg.ActiveState,
 		arg.WarmUntil,
+		arg.RuntimeID,
+		arg.ProjectID,
+	)
+	return err
+}
+
+const setAssistantRuntimeStateForTest = `-- name: SetAssistantRuntimeStateForTest :exec
+UPDATE assistant_runtimes
+SET
+  state = $1,
+  updated_at = $2
+WHERE id = $3
+  AND project_id = $4
+`
+
+type SetAssistantRuntimeStateForTestParams struct {
+	State     string
+	UpdatedAt pgtype.Timestamptz
+	RuntimeID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test fixture: forces a runtime row into a state with a chosen updated_at so
+// tests can simulate an expire that stalled long ago.
+func (q *Queries) SetAssistantRuntimeStateForTest(ctx context.Context, arg SetAssistantRuntimeStateForTestParams) error {
+	_, err := q.db.Exec(ctx, setAssistantRuntimeStateForTest,
+		arg.State,
+		arg.UpdatedAt,
 		arg.RuntimeID,
 		arg.ProjectID,
 	)

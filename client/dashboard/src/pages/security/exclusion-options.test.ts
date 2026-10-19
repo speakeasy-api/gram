@@ -118,7 +118,7 @@ describe("exclusionOptions source titles", () => {
     ["prompt_injection", "Anything detected by prompt injection detection"],
     ["llm_judge", "Anything detected by prompt policies"],
     ["llm_analyzer", "Anything detected by the risk model"],
-    ["shadow_mcp", "Anything detected by Shadow MCP"],
+    ["shadow_mcp", "Anything detected by Shadow AI"],
   ])("titles the %s option without the raw source", (source, title) => {
     const option = sourceOption(source);
     expect(option?.title).toBe(title);

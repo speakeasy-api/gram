@@ -10,11 +10,16 @@ export type RegisterRequestBody = {
    * The name of the org to register
    */
   orgName: string;
+  /**
+   * Optional partner signup code.
+   */
+  partnerCode?: string | undefined;
 };
 
 /** @internal */
 export type RegisterRequestBody$Outbound = {
   org_name: string;
+  partner_code?: string | undefined;
 };
 
 /** @internal */
@@ -24,10 +29,12 @@ export const RegisterRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     orgName: z.string(),
+    partnerCode: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       orgName: "org_name",
+      partnerCode: "partner_code",
     });
   }),
 );

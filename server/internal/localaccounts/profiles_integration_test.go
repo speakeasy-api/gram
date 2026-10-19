@@ -81,8 +81,8 @@ func TestProfilesMarkerDetachesOnOwnerDelete(t *testing.T) {
 	stub := billing.NewStubClientWithLocalProfiles(testenv.NewLogger(t), testenv.NewTracerProvider(t), db)
 	tier, active, err := stub.GetCustomerTier(t.Context(), org)
 	require.NoError(t, err)
-	require.Equal(t, billing.TierPro, *tier)
-	require.True(t, active)
+	require.Nil(t, tier)
+	require.False(t, active)
 }
 
 func TestProfilesDryRunWithoutMarkerAndGuardRollback(t *testing.T) {

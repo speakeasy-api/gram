@@ -318,7 +318,7 @@ export function IdentityChainingField({
       >
         {candidates.length === 0 ? (
           <Text muted small>
-            Link a client for this server’s identity provider first.
+            Link a client for this server’s authorization server first.
           </Text>
         ) : (
           <>
@@ -401,8 +401,8 @@ export function IdentityChainingField({
             {publicClient && selected && (
               <Text muted small className="block">
                 Client {selected.clientId} is a public client. Identity chaining
-                needs a confidential client that authenticates to the provider’s
-                token endpoint.
+                needs a confidential client that authenticates to the
+                authorization server’s token endpoint.
               </Text>
             )}
             {!publicClient &&
@@ -433,7 +433,7 @@ export function IdentityChainingField({
                       <Text small>
                         {cimd
                           ? "Publish these grants in the client's metadata document: "
-                          : `Declare that client ${selected.clientId} is registered with the provider for these grants, and record them on it: `}
+                          : `Declare that client ${selected.clientId} is registered with the authorization server for these grants, and record them on it: `}
                         {grantDeclaration.grants.join(", ")}
                       </Text>
                     </label>

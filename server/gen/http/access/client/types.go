@@ -61,8 +61,28 @@ type SetDirectoryRoleMappingRequestBody struct {
 	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
 	// Attribute value to match. Required when source_kind is attribute.
 	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
-	// Principal URN of the role to grant, from Role.principal_urn.
+	// Role principal URN to grant.
 	RoleUrn string `form:"role_urn" json:"role_urn" xml:"role_urn"`
+}
+
+// SetDirectoryRoleMappingsRequestBody is the type of the "access" service
+// "setDirectoryRoleMappings" endpoint HTTP request body.
+type SetDirectoryRoleMappingsRequestBody struct {
+	// What the mapping matches.
+	SourceKind string `form:"source_kind" json:"source_kind" xml:"source_kind"`
+	// Directory group to map. Required when source_kind is group.
+	DirectoryGroupID *string `form:"directory_group_id,omitempty" json:"directory_group_id,omitempty" xml:"directory_group_id,omitempty"`
+	// Attribute key to match. Required when source_kind is attribute.
+	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
+	// Attribute value to match. Required when source_kind is attribute.
+	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+	// Optional compare-and-set precondition. The normalized current role set must
+	// match or the request returns conflict without changes. Omit for
+	// unconditional replacement; an empty array requires an unmapped source.
+	ExpectedRoleUrns []string `form:"expected_role_urns,omitempty" json:"expected_role_urns,omitempty" xml:"expected_role_urns,omitempty"`
+	// The complete set of role principal URNs to grant, from Role.principal_urn.
+	// Empty removes every mapping for the source.
+	RoleUrns []string `form:"role_urns" json:"role_urns" xml:"role_urns"`
 }
 
 // UpdateMemberRolesRequestBody is the type of the "access" service
@@ -1977,6 +1997,196 @@ type SetDirectoryRoleMappingUnexpectedResponseBody struct {
 // service "setDirectoryRoleMapping" endpoint HTTP response body for the
 // "gateway_error" error.
 type SetDirectoryRoleMappingGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDirectoryRoleMappingsUnauthorizedResponseBody is the type of the "access"
+// service "setDirectoryRoleMappings" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetDirectoryRoleMappingsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDirectoryRoleMappingsForbiddenResponseBody is the type of the "access"
+// service "setDirectoryRoleMappings" endpoint HTTP response body for the
+// "forbidden" error.
+type SetDirectoryRoleMappingsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDirectoryRoleMappingsBadRequestResponseBody is the type of the "access"
+// service "setDirectoryRoleMappings" endpoint HTTP response body for the
+// "bad_request" error.
+type SetDirectoryRoleMappingsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDirectoryRoleMappingsNotFoundResponseBody is the type of the "access"
+// service "setDirectoryRoleMappings" endpoint HTTP response body for the
+// "not_found" error.
+type SetDirectoryRoleMappingsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDirectoryRoleMappingsConflictResponseBody is the type of the "access"
+// service "setDirectoryRoleMappings" endpoint HTTP response body for the
+// "conflict" error.
+type SetDirectoryRoleMappingsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDirectoryRoleMappingsUnsupportedMediaResponseBody is the type of the
+// "access" service "setDirectoryRoleMappings" endpoint HTTP response body for
+// the "unsupported_media" error.
+type SetDirectoryRoleMappingsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDirectoryRoleMappingsInvalidResponseBody is the type of the "access"
+// service "setDirectoryRoleMappings" endpoint HTTP response body for the
+// "invalid" error.
+type SetDirectoryRoleMappingsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDirectoryRoleMappingsInvariantViolationResponseBody is the type of the
+// "access" service "setDirectoryRoleMappings" endpoint HTTP response body for
+// the "invariant_violation" error.
+type SetDirectoryRoleMappingsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDirectoryRoleMappingsUnexpectedResponseBody is the type of the "access"
+// service "setDirectoryRoleMappings" endpoint HTTP response body for the
+// "unexpected" error.
+type SetDirectoryRoleMappingsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDirectoryRoleMappingsGatewayErrorResponseBody is the type of the "access"
+// service "setDirectoryRoleMappings" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetDirectoryRoleMappingsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6574,6 +6784,26 @@ type DirectoryRoleMappingResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// DirectoryRoleMappingResponse is used to define fields on response body types.
+type DirectoryRoleMappingResponse struct {
+	// Unique mapping identifier.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// What the mapping matches: a directory group or an attribute value.
+	SourceKind *string `form:"source_kind,omitempty" json:"source_kind,omitempty" xml:"source_kind,omitempty"`
+	// The mapped directory group. Set when source_kind is group.
+	DirectoryGroupID *string `form:"directory_group_id,omitempty" json:"directory_group_id,omitempty" xml:"directory_group_id,omitempty"`
+	// Display name of the mapped directory group.
+	DirectoryGroupName *string `form:"directory_group_name,omitempty" json:"directory_group_name,omitempty" xml:"directory_group_name,omitempty"`
+	// The directory attribute key. Set when source_kind is attribute.
+	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
+	// The directory attribute value. Set when source_kind is attribute.
+	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+	// Principal URN of the role granted to matching members.
+	RoleUrn   *string `form:"role_urn,omitempty" json:"role_urn,omitempty" xml:"role_urn,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // ScopeDefinitionResponseBody is used to define fields on response body types.
 type ScopeDefinitionResponseBody struct {
 	// Unique scope identifier.
@@ -7202,6 +7432,32 @@ func NewSetDirectoryRoleMappingRequestBody(p *access.SetDirectoryRoleMappingPayl
 		AttributeKey:     p.AttributeKey,
 		AttributeValue:   p.AttributeValue,
 		RoleUrn:          p.RoleUrn,
+	}
+	return body
+}
+
+// NewSetDirectoryRoleMappingsRequestBody builds the HTTP request body from the
+// payload of the "setDirectoryRoleMappings" endpoint of the "access" service.
+func NewSetDirectoryRoleMappingsRequestBody(p *access.SetDirectoryRoleMappingsPayload) *SetDirectoryRoleMappingsRequestBody {
+	body := &SetDirectoryRoleMappingsRequestBody{
+		SourceKind:       p.SourceKind,
+		DirectoryGroupID: p.DirectoryGroupID,
+		AttributeKey:     p.AttributeKey,
+		AttributeValue:   p.AttributeValue,
+	}
+	if p.ExpectedRoleUrns != nil {
+		body.ExpectedRoleUrns = make([]string, len(p.ExpectedRoleUrns))
+		for i, val := range p.ExpectedRoleUrns {
+			body.ExpectedRoleUrns[i] = val
+		}
+	}
+	if p.RoleUrns != nil {
+		body.RoleUrns = make([]string, len(p.RoleUrns))
+		for i, val := range p.RoleUrns {
+			body.RoleUrns[i] = val
+		}
+	} else {
+		body.RoleUrns = []string{}
 	}
 	return body
 }
@@ -8677,6 +8933,171 @@ func NewSetDirectoryRoleMappingUnexpected(body *SetDirectoryRoleMappingUnexpecte
 // NewSetDirectoryRoleMappingGatewayError builds a access service
 // setDirectoryRoleMapping endpoint gateway_error error.
 func NewSetDirectoryRoleMappingGatewayError(body *SetDirectoryRoleMappingGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDirectoryRoleMappingsDirectoryRoleMappingOK builds a "access" service
+// "setDirectoryRoleMappings" endpoint result from a HTTP "OK" response.
+func NewSetDirectoryRoleMappingsDirectoryRoleMappingOK(body []*DirectoryRoleMappingResponse) []*access.DirectoryRoleMapping {
+	v := make([]*access.DirectoryRoleMapping, len(body))
+	for i, val := range body {
+		if val == nil {
+			v[i] = nil
+			continue
+		}
+		v[i] = unmarshalDirectoryRoleMappingResponseToAccessDirectoryRoleMapping(val)
+	}
+
+	return v
+}
+
+// NewSetDirectoryRoleMappingsUnauthorized builds a access service
+// setDirectoryRoleMappings endpoint unauthorized error.
+func NewSetDirectoryRoleMappingsUnauthorized(body *SetDirectoryRoleMappingsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDirectoryRoleMappingsForbidden builds a access service
+// setDirectoryRoleMappings endpoint forbidden error.
+func NewSetDirectoryRoleMappingsForbidden(body *SetDirectoryRoleMappingsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDirectoryRoleMappingsBadRequest builds a access service
+// setDirectoryRoleMappings endpoint bad_request error.
+func NewSetDirectoryRoleMappingsBadRequest(body *SetDirectoryRoleMappingsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDirectoryRoleMappingsNotFound builds a access service
+// setDirectoryRoleMappings endpoint not_found error.
+func NewSetDirectoryRoleMappingsNotFound(body *SetDirectoryRoleMappingsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDirectoryRoleMappingsConflict builds a access service
+// setDirectoryRoleMappings endpoint conflict error.
+func NewSetDirectoryRoleMappingsConflict(body *SetDirectoryRoleMappingsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDirectoryRoleMappingsUnsupportedMedia builds a access service
+// setDirectoryRoleMappings endpoint unsupported_media error.
+func NewSetDirectoryRoleMappingsUnsupportedMedia(body *SetDirectoryRoleMappingsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDirectoryRoleMappingsInvalid builds a access service
+// setDirectoryRoleMappings endpoint invalid error.
+func NewSetDirectoryRoleMappingsInvalid(body *SetDirectoryRoleMappingsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDirectoryRoleMappingsInvariantViolation builds a access service
+// setDirectoryRoleMappings endpoint invariant_violation error.
+func NewSetDirectoryRoleMappingsInvariantViolation(body *SetDirectoryRoleMappingsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDirectoryRoleMappingsUnexpected builds a access service
+// setDirectoryRoleMappings endpoint unexpected error.
+func NewSetDirectoryRoleMappingsUnexpected(body *SetDirectoryRoleMappingsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDirectoryRoleMappingsGatewayError builds a access service
+// setDirectoryRoleMappings endpoint gateway_error error.
+func NewSetDirectoryRoleMappingsGatewayError(body *SetDirectoryRoleMappingsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -11052,7 +11473,7 @@ func NewSetAIToolDecisionResultOK(body *SetAIToolDecisionResponseBody) *access.S
 	v := &access.SetAIToolDecisionResult{
 		TargetID: *body.TargetID,
 	}
-	v.Access = unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary(body.Access)
+	v.Access = unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(body.Access)
 
 	return v
 }
@@ -15376,6 +15797,248 @@ func ValidateSetDirectoryRoleMappingUnexpectedResponseBody(body *SetDirectoryRol
 // ValidateSetDirectoryRoleMappingGatewayErrorResponseBody runs the validations
 // defined on setDirectoryRoleMapping_gateway_error_response_body
 func ValidateSetDirectoryRoleMappingGatewayErrorResponseBody(body *SetDirectoryRoleMappingGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDirectoryRoleMappingsUnauthorizedResponseBody runs the
+// validations defined on setDirectoryRoleMappings_unauthorized_response_body
+func ValidateSetDirectoryRoleMappingsUnauthorizedResponseBody(body *SetDirectoryRoleMappingsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDirectoryRoleMappingsForbiddenResponseBody runs the validations
+// defined on setDirectoryRoleMappings_forbidden_response_body
+func ValidateSetDirectoryRoleMappingsForbiddenResponseBody(body *SetDirectoryRoleMappingsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDirectoryRoleMappingsBadRequestResponseBody runs the validations
+// defined on setDirectoryRoleMappings_bad_request_response_body
+func ValidateSetDirectoryRoleMappingsBadRequestResponseBody(body *SetDirectoryRoleMappingsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDirectoryRoleMappingsNotFoundResponseBody runs the validations
+// defined on setDirectoryRoleMappings_not_found_response_body
+func ValidateSetDirectoryRoleMappingsNotFoundResponseBody(body *SetDirectoryRoleMappingsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDirectoryRoleMappingsConflictResponseBody runs the validations
+// defined on setDirectoryRoleMappings_conflict_response_body
+func ValidateSetDirectoryRoleMappingsConflictResponseBody(body *SetDirectoryRoleMappingsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDirectoryRoleMappingsUnsupportedMediaResponseBody runs the
+// validations defined on
+// setDirectoryRoleMappings_unsupported_media_response_body
+func ValidateSetDirectoryRoleMappingsUnsupportedMediaResponseBody(body *SetDirectoryRoleMappingsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDirectoryRoleMappingsInvalidResponseBody runs the validations
+// defined on setDirectoryRoleMappings_invalid_response_body
+func ValidateSetDirectoryRoleMappingsInvalidResponseBody(body *SetDirectoryRoleMappingsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDirectoryRoleMappingsInvariantViolationResponseBody runs the
+// validations defined on
+// setDirectoryRoleMappings_invariant_violation_response_body
+func ValidateSetDirectoryRoleMappingsInvariantViolationResponseBody(body *SetDirectoryRoleMappingsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDirectoryRoleMappingsUnexpectedResponseBody runs the validations
+// defined on setDirectoryRoleMappings_unexpected_response_body
+func ValidateSetDirectoryRoleMappingsUnexpectedResponseBody(body *SetDirectoryRoleMappingsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDirectoryRoleMappingsGatewayErrorResponseBody runs the
+// validations defined on setDirectoryRoleMappings_gateway_error_response_body
+func ValidateSetDirectoryRoleMappingsGatewayErrorResponseBody(body *SetDirectoryRoleMappingsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -21253,8 +21916,8 @@ func ValidateRoleGrantResponseBody(body *RoleGrantResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -21295,8 +21958,8 @@ func ValidateSelectorResponseBody(body *SelectorResponseBody) (err error) {
 // ValidateRoleGrantRequestBody runs the validations defined on
 // RoleGrantRequestBody
 func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
-	if !(body.Scope == "org:read" || body.Scope == "org:blocked_read" || body.Scope == "org:admin" || body.Scope == "org:blocked_admin" || body.Scope == "project:read" || body.Scope == "project:blocked_read" || body.Scope == "project:write" || body.Scope == "project:blocked_write" || body.Scope == "mcp:read" || body.Scope == "mcp:blocked_read" || body.Scope == "mcp:write" || body.Scope == "mcp:blocked_write" || body.Scope == "mcp:connect" || body.Scope == "mcp:blocked_connect" || body.Scope == "environment:read" || body.Scope == "environment:blocked_read" || body.Scope == "environment:write" || body.Scope == "environment:blocked_write" || body.Scope == "skill:read" || body.Scope == "skill:blocked_read" || body.Scope == "skill:write" || body.Scope == "skill:blocked_write" || body.Scope == "assistant:read" || body.Scope == "assistant:blocked_read" || body.Scope == "assistant:write" || body.Scope == "assistant:blocked_write" || body.Scope == "plugin:write" || body.Scope == "plugin:blocked_write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "risk_policy:block" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:blocked_read" || body.Scope == "workload:write" || body.Scope == "workload:blocked_write" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+	if !(body.Scope == "org:read" || body.Scope == "org:blocked_read" || body.Scope == "org:admin" || body.Scope == "org:blocked_admin" || body.Scope == "project:read" || body.Scope == "project:blocked_read" || body.Scope == "project:write" || body.Scope == "project:blocked_write" || body.Scope == "mcp:read" || body.Scope == "mcp:blocked_read" || body.Scope == "mcp:write" || body.Scope == "mcp:blocked_write" || body.Scope == "mcp:connect" || body.Scope == "mcp:blocked_connect" || body.Scope == "environment:read" || body.Scope == "environment:blocked_read" || body.Scope == "environment:write" || body.Scope == "environment:blocked_write" || body.Scope == "skill:read" || body.Scope == "skill:blocked_read" || body.Scope == "skill:write" || body.Scope == "skill:blocked_write" || body.Scope == "assistant:read" || body.Scope == "assistant:blocked_read" || body.Scope == "assistant:write" || body.Scope == "assistant:blocked_write" || body.Scope == "plugin:write" || body.Scope == "plugin:blocked_write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "risk_policy:block" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "log:read" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:blocked_read" || body.Scope == "workload:write" || body.Scope == "workload:blocked_write" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
 	}
 	for _, e := range body.Selectors {
 		if e != nil {
@@ -21396,6 +22059,44 @@ func ValidateDirectoryRoleMappingResponseBody(body *DirectoryRoleMappingResponse
 	return
 }
 
+// ValidateDirectoryRoleMappingResponse runs the validations defined on
+// DirectoryRoleMappingResponse
+func ValidateDirectoryRoleMappingResponse(body *DirectoryRoleMappingResponse) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.SourceKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_kind", "body"))
+	}
+	if body.RoleUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_urn", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SourceKind != nil {
+		if !(*body.SourceKind == "group" || *body.SourceKind == "attribute") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_kind", *body.SourceKind, []any{"group", "attribute"}))
+		}
+	}
+	if body.DirectoryGroupID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.directory_group_id", *body.DirectoryGroupID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateScopeDefinitionResponseBody runs the validations defined on
 // ScopeDefinitionResponseBody
 func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err error) {
@@ -21415,8 +22116,8 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_eligible", "body"))
 	}
 	if body.Slug != nil {
-		if !(*body.Slug == "org:read" || *body.Slug == "org:blocked_read" || *body.Slug == "org:admin" || *body.Slug == "org:blocked_admin" || *body.Slug == "project:read" || *body.Slug == "project:blocked_read" || *body.Slug == "project:write" || *body.Slug == "project:blocked_write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:blocked_read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:blocked_write" || *body.Slug == "mcp:connect" || *body.Slug == "mcp:blocked_connect" || *body.Slug == "environment:read" || *body.Slug == "environment:blocked_read" || *body.Slug == "environment:write" || *body.Slug == "environment:blocked_write" || *body.Slug == "skill:read" || *body.Slug == "skill:blocked_read" || *body.Slug == "skill:write" || *body.Slug == "skill:blocked_write" || *body.Slug == "assistant:read" || *body.Slug == "assistant:blocked_read" || *body.Slug == "assistant:write" || *body.Slug == "assistant:blocked_write" || *body.Slug == "plugin:write" || *body.Slug == "plugin:blocked_write" || *body.Slug == "risk_policy:evaluate" || *body.Slug == "risk_policy:bypass" || *body.Slug == "risk_policy:block" || *body.Slug == "chat:read" || *body.Slug == "chat:write" || *body.Slug == "agent:read" || *body.Slug == "agent:write" || *body.Slug == "agent:authorize" || *body.Slug == "agent:transfer" || *body.Slug == "workload:read" || *body.Slug == "workload:blocked_read" || *body.Slug == "workload:write" || *body.Slug == "workload:blocked_write" || *body.Slug == "org:device_agent_sync" || *body.Slug == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(*body.Slug == "org:read" || *body.Slug == "org:blocked_read" || *body.Slug == "org:admin" || *body.Slug == "org:blocked_admin" || *body.Slug == "project:read" || *body.Slug == "project:blocked_read" || *body.Slug == "project:write" || *body.Slug == "project:blocked_write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:blocked_read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:blocked_write" || *body.Slug == "mcp:connect" || *body.Slug == "mcp:blocked_connect" || *body.Slug == "environment:read" || *body.Slug == "environment:blocked_read" || *body.Slug == "environment:write" || *body.Slug == "environment:blocked_write" || *body.Slug == "skill:read" || *body.Slug == "skill:blocked_read" || *body.Slug == "skill:write" || *body.Slug == "skill:blocked_write" || *body.Slug == "assistant:read" || *body.Slug == "assistant:blocked_read" || *body.Slug == "assistant:write" || *body.Slug == "assistant:blocked_write" || *body.Slug == "plugin:write" || *body.Slug == "plugin:blocked_write" || *body.Slug == "risk_policy:evaluate" || *body.Slug == "risk_policy:bypass" || *body.Slug == "risk_policy:block" || *body.Slug == "chat:read" || *body.Slug == "chat:write" || *body.Slug == "log:read" || *body.Slug == "agent:read" || *body.Slug == "agent:write" || *body.Slug == "agent:authorize" || *body.Slug == "agent:transfer" || *body.Slug == "workload:read" || *body.Slug == "workload:blocked_read" || *body.Slug == "workload:write" || *body.Slug == "workload:blocked_write" || *body.Slug == "org:device_agent_sync" || *body.Slug == "org:hooks_ingest") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
 		}
 	}
 	if body.ResourceType != nil {
@@ -21474,13 +22175,13 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
 		}
 	}
 	for _, e := range body.SubScopes {
-		if !(e == "org:read" || e == "org:blocked_read" || e == "org:admin" || e == "org:blocked_admin" || e == "project:read" || e == "project:blocked_read" || e == "project:write" || e == "project:blocked_write" || e == "mcp:read" || e == "mcp:blocked_read" || e == "mcp:write" || e == "mcp:blocked_write" || e == "mcp:connect" || e == "mcp:blocked_connect" || e == "environment:read" || e == "environment:blocked_read" || e == "environment:write" || e == "environment:blocked_write" || e == "skill:read" || e == "skill:blocked_read" || e == "skill:write" || e == "skill:blocked_write" || e == "assistant:read" || e == "assistant:blocked_read" || e == "assistant:write" || e == "assistant:blocked_write" || e == "plugin:write" || e == "plugin:blocked_write" || e == "risk_policy:evaluate" || e == "risk_policy:bypass" || e == "risk_policy:block" || e == "chat:read" || e == "chat:write" || e == "agent:read" || e == "agent:write" || e == "agent:authorize" || e == "agent:transfer" || e == "workload:read" || e == "workload:blocked_read" || e == "workload:write" || e == "workload:blocked_write" || e == "org:device_agent_sync" || e == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(e == "org:read" || e == "org:blocked_read" || e == "org:admin" || e == "org:blocked_admin" || e == "project:read" || e == "project:blocked_read" || e == "project:write" || e == "project:blocked_write" || e == "mcp:read" || e == "mcp:blocked_read" || e == "mcp:write" || e == "mcp:blocked_write" || e == "mcp:connect" || e == "mcp:blocked_connect" || e == "environment:read" || e == "environment:blocked_read" || e == "environment:write" || e == "environment:blocked_write" || e == "skill:read" || e == "skill:blocked_read" || e == "skill:write" || e == "skill:blocked_write" || e == "assistant:read" || e == "assistant:blocked_read" || e == "assistant:write" || e == "assistant:blocked_write" || e == "plugin:write" || e == "plugin:blocked_write" || e == "risk_policy:evaluate" || e == "risk_policy:bypass" || e == "risk_policy:block" || e == "chat:read" || e == "chat:write" || e == "log:read" || e == "agent:read" || e == "agent:write" || e == "agent:authorize" || e == "agent:transfer" || e == "workload:read" || e == "workload:blocked_read" || e == "workload:write" || e == "workload:blocked_write" || e == "org:device_agent_sync" || e == "org:hooks_ingest") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
 		}
 	}
 	for _, e := range body.Selectors {

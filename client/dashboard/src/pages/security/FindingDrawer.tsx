@@ -507,8 +507,10 @@ function FindingDetail({
           )}
           {kind === "shadow" && (
             <Button asChild variant="secondary">
-              <Link to={routes.shadowAI.mcps.href()}>
-                Open Shadow MCP inventory
+              {/* The Shadow MCP inventory is the Shadow AI policy's server
+                  list under Guardrails rather than a page of its own. */}
+              <Link to={routes.policyCenter.href()}>
+                Open Shadow AI in Guardrails
                 <ArrowRight className="size-4" />
               </Link>
             </Button>

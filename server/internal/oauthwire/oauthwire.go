@@ -82,6 +82,16 @@ const (
 	TokenTypeBearer = "Bearer"
 )
 
+// Authorization response parameters shared with the requesting client.
+const (
+	// ParamState binds the authorization response to the client's request
+	// (RFC 6749 §4.1.1, §4.1.2).
+	ParamState = "state"
+
+	// ParamError identifies an OAuth error response (RFC 6749 §4.1.2.1).
+	ParamError = "error"
+)
+
 // Client authentication parameters as they appear in a token or revocation
 // request body.
 const (

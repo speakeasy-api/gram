@@ -35,6 +35,10 @@ type Client struct {
 	// Logout Doer is the HTTP client used to make requests to the logout endpoint.
 	LogoutDoer goahttp.Doer
 
+	// LogoutEverywhere Doer is the HTTP client used to make requests to the
+	// logoutEverywhere endpoint.
+	LogoutEverywhereDoer goahttp.Doer
+
 	// Register Doer is the HTTP client used to make requests to the register
 	// endpoint.
 	RegisterDoer goahttp.Doer
@@ -70,20 +74,21 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CallbackDoer:        doer,
-		LoginDoer:           doer,
-		SwitchScopesDoer:    doer,
-		EnterDemoDoer:       doer,
-		LogoutDoer:          doer,
-		RegisterDoer:        doer,
-		InfoDoer:            doer,
-		TransferOutDoer:     doer,
-		TransferInDoer:      doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CallbackDoer:         doer,
+		LoginDoer:            doer,
+		SwitchScopesDoer:     doer,
+		EnterDemoDoer:        doer,
+		LogoutDoer:           doer,
+		LogoutEverywhereDoer: doer,
+		RegisterDoer:         doer,
+		InfoDoer:             doer,
+		TransferOutDoer:      doer,
+		TransferInDoer:       doer,
+		RestoreResponseBody:  restoreBody,
+		scheme:               scheme,
+		host:                 host,
+		decoder:              dec,
+		encoder:              enc,
 	}
 }
 
@@ -202,6 +207,30 @@ func (c *Client) Logout() goa.Endpoint {
 		resp, err := c.LogoutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("auth", "logout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// LogoutEverywhere returns an endpoint that makes HTTP requests to the auth
+// service logoutEverywhere server.
+func (c *Client) LogoutEverywhere() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeLogoutEverywhereRequest(c.encoder)
+		decodeResponse = DecodeLogoutEverywhereResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildLogoutEverywhereRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.LogoutEverywhereDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("auth", "logoutEverywhere", err)
 		}
 		return decodeResponse(resp)
 	}

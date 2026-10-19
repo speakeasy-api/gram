@@ -48,15 +48,18 @@ type UpdateToolsetRequestBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// List of resource URNs to include in the toolset
 	ResourceUrns []string `form:"resource_urns,omitempty" json:"resource_urns,omitempty" xml:"resource_urns,omitempty"`
-	// Whether the toolset is enabled for MCP
+	// Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
-	// The slug of the MCP to use for the toolset
+	// Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The slug of the
+	// MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
+	// Deprecated: use mcpServers.update. Whether the toolset is public in MCP
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Where the hosted MCP is accessible: public_only, dual, or private_only
+	// Deprecated: use mcpServers.update. Where the hosted MCP is accessible:
+	// public_only, dual, or private_only
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
-	// The ID of the custom domain to use for the toolset
+	// Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the
+	// custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`

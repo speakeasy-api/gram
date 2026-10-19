@@ -104,6 +104,19 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 func newTestPluginsServiceWithLockTimeout(t *testing.T, lockTimeout time.Duration) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestPluginsServiceWithOptions(t, lockTimeout, nil)
+}
+
+// newServerKeyPluginsService writes hosted entries with the server-key rollout on (phase B).
+func newServerKeyPluginsService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, true)
+	return newTestPluginsServiceWithOptions(t, 0, flags)
+}
+
+func newTestPluginsServiceWithOptions(t *testing.T, lockTimeout time.Duration, features feature.Provider) (context.Context, *testInstance) {
+	t.Helper()
 
 	ctx := context.Background()
 
@@ -136,7 +149,7 @@ func newTestPluginsServiceWithLockTimeout(t *testing.T, lockTimeout time.Duratio
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil, nil)
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", features, nil)
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -107,7 +107,7 @@ SET
   , mcp_enabled = COALESCE(@mcp_enabled, mcp_enabled)
   , tool_selection_mode = COALESCE(@tool_selection_mode, tool_selection_mode)
   , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: DeleteToolset :one
@@ -297,6 +297,7 @@ SET
   , updated_at = clock_timestamp()
 WHERE slug = @slug
   AND project_id = @project_id
+  AND deleted IS FALSE
   AND external_oauth_server_id IS NULL
 RETURNING *;
 
@@ -305,15 +306,34 @@ UPDATE toolsets
 SET
     user_session_issuer_id = @user_session_issuer_id
   , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
+
+-- name: LockHostedToolsetsByUserSessionIssuer :many
+-- Live toolsets on the issuer that own a live canonical wrapper, locked in id order.
+SELECT toolsets.*
+FROM toolsets
+JOIN projects
+  ON projects.id = toolsets.project_id
+ AND projects.organization_id = @organization_id::text
+ AND projects.deleted IS FALSE
+JOIN mcp_servers
+  ON mcp_servers.id = toolsets.id
+ AND mcp_servers.toolset_id = toolsets.id
+ AND mcp_servers.project_id = toolsets.project_id
+ AND mcp_servers.deleted IS FALSE
+WHERE toolsets.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND toolsets.organization_id = @organization_id::text
+  AND toolsets.deleted IS FALSE
+ORDER BY toolsets.id
+FOR UPDATE OF toolsets;
 
 -- name: UpdateToolsetToolVariationsGroup :one
 UPDATE toolsets
 SET
     tool_variations_group_id = @tool_variations_group_id
   , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: ClearToolsetOAuthServers :one
@@ -322,7 +342,7 @@ SET
     external_oauth_server_id = NULL
   , oauth_proxy_server_id = NULL
   , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: GetPromptTemplateUrnsByNames :many
@@ -425,3 +445,8 @@ WHERE t.project_id = @project_id
 -- name: DeleteAssistantToolsetsByToolset :exec
 DELETE FROM assistant_toolsets
 WHERE toolset_id = @toolset_id AND project_id = @project_id;
+
+-- name: GetToolsetByIDIncludingDeletedFixture :one
+SELECT *
+FROM toolsets
+WHERE id = @id AND project_id = @project_id;

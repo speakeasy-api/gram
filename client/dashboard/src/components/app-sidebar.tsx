@@ -262,20 +262,11 @@ export function AppSidebar({
             label="Security and Policy"
             Icon={(p) => <Icon {...p} name="shield" />}
             items={[
-              // Watchdog supersedes Risk Overview: exactly one of the two
-              // shows, mirroring useProjectNavRoutes. Risk Events sits below
-              // the landing surface in both modes.
               ...(isRiskWatchdogEnabled
                 ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
-                : [
-                    {
-                      item: routes.riskOverview,
-                      ...accessFor(routes.riskOverview),
-                    },
-                  ]),
+                : []),
               { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              { item: routes.shadowAI, ...accessFor(routes.shadowAI) },
             ]}
           />
 

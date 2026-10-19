@@ -1668,6 +1668,29 @@ UPDATE user_session_issuers SET trusted_remote_session_issuer_id = @issuer_id WH
 UPDATE organization_metadata SET disabled_at = clock_timestamp()
 WHERE id = @organization_id::text;
 
+-- name: TombstoneInternalSessionIssuerFixture :exec
+-- Test-only tombstone of an organization's internal session issuer.
+UPDATE internal_session_issuers SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id::text;
+
+-- name: SoftDeleteExternalCredentialFixture :exec
+-- Test-only soft delete of an external credential in its tier: a NULL
+-- organization_id names the platform tier.
+UPDATE external_credentials SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+  AND project_id IS NULL;
+
+-- name: SetGcpIamCredentialServiceAccountFixture :exec
+-- Test-only re-point of a credential's impersonated account in its tier,
+-- tombstones included: a NULL organization_id names the platform tier.
+UPDATE gcp_iam_credentials AS gic SET impersonate_service_account = sqlc.narg(impersonate_service_account)::text
+FROM external_credentials AS ec
+WHERE gic.external_credential_id = @external_credential_id
+  AND ec.id = gic.external_credential_id
+  AND ec.organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+  AND ec.project_id IS NULL;
+
 -- name: RevokeDelegationUserIssuersFixture :exec
 -- Test-only revocation of organization-scoped delegation authority.
 UPDATE user_session_issuers SET deleted_at = clock_timestamp()
@@ -1960,6 +1983,36 @@ WHERE id = @id
   AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
   AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text;
 
+-- name: SetOrganizationVerifiedDomainsFixture :exec
+UPDATE organization_metadata
+SET verified_domains = @verified_domains::text[]
+WHERE id = @id;
+
+-- name: SeedInternalSessionIssuerFixture :one
+-- An organization's Speakeasy issuer over an existing key set, for tests that
+-- reference the issuer row without signing.
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id)
+VALUES (@organization_id, @issuer, @json_web_key_set_id)
+RETURNING id;
+
+-- name: DisableInternalSessionIssuerFixture :execrows
+UPDATE internal_session_issuers
+SET disabled_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id AND id = @id AND deleted IS FALSE;
+
+-- name: WithdrawJsonWebKeyKeepingUpdatedAtFixture :execrows
+-- Soft-deletes one key without moving its updated_at, so a test can show a
+-- cache notices a key change that leaves every timestamp unchanged.
+UPDATE json_web_keys
+SET deleted_at = updated_at
+WHERE organization_id = @organization_id AND kid = @kid AND deleted IS FALSE;
+
+-- name: CountWaitingAdvisoryLocksFixture :one
+-- Advisory lock requests still waiting, so a test can tell a writer blocked.
+SELECT count(*)::bigint AS waiting FROM pg_catalog.pg_locks
+WHERE locktype = 'advisory' AND NOT granted
+  AND database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database());
+
 -- name: CountMcpMetadataForBackendIDFixture :one
 SELECT count(*)
 FROM mcp_metadata
@@ -1977,3 +2030,47 @@ UPDATE mcp_metadata
 SET header_display_names = @header_display_names
 WHERE id = @id
   AND project_id = @project_id;
+
+-- name: CountPendingSignInRevocationDeliveries :one
+SELECT count(*)
+FROM sign_in_revocation_deliveries
+WHERE organization_id = @organization_id
+  AND delivered_at IS NULL;
+
+-- name: SeedInternalSessionIssuerSignInMethodsFixture :exec
+-- Plants an organization's internal session issuer limited to the given
+-- sign-in tiers, skipping the KMS provisioning the real enable performs.
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES (@organization_id, 'gcp_iam', @name || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT @organization_id, credential.id, 'gcp_kms', 'RS256', @name || '-key' FROM credential
+    RETURNING id
+), key_set AS (
+    INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+    SELECT @organization_id, key.id, @name FROM key
+    RETURNING id
+)
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id, allowed_sign_in_methods, allowed_microsoft_tenant_ids)
+SELECT @organization_id, @issuer, key_set.id, sqlc.narg(allowed_sign_in_methods)::text[], sqlc.narg(allowed_microsoft_tenant_ids)::text[] FROM key_set;
+
+-- name: MakeSignInRevocationDeliveriesDueFixture :exec
+-- Skips the backoff so a test can retry failed deliveries at once.
+UPDATE sign_in_revocation_deliveries
+SET next_attempt_at = NULL,
+    claimed_until = NULL
+WHERE organization_id = @organization_id
+  AND delivered_at IS NULL;
+
+-- name: ListSignInRevocationDeliveriesFixture :many
+SELECT id, kind, target, attempts, effective_at, next_attempt_at, claimed_until, delivered_at
+FROM sign_in_revocation_deliveries
+WHERE organization_id = @organization_id
+ORDER BY created_at, id;
+
+-- name: CountDatabasesWithPrefixFixture :one
+-- Databases whose name starts with a prefix, so a test can show clones are dropped.
+SELECT count(*)::bigint AS databases FROM pg_catalog.pg_database
+WHERE starts_with(datname, @prefix::text);
