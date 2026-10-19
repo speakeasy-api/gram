@@ -5,7 +5,7 @@ package email
 // of the wizard entry point for their organization.
 type EnterpriseAdminOnboarding struct {
 	// SetupLink is the absolute URL the recipient clicks to begin the
-	// onboarding wizard (e.g. https://ai.speakeasy.com/<org-slug>/setup).
+	// onboarding wizard (e.g. https://app.getgram.ai/<org-slug>/setup).
 	SetupLink string
 }
 

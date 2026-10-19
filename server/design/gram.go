@@ -106,7 +106,7 @@ var _ = API("gram", func() {
 	Server("gram", func() {
 		Host("production", func() {
 			Description("Speakeasy production API base URL")
-			URI("https://ai.speakeasy.com")
+			URI("https://app.getgram.ai")
 		})
 	})
 })

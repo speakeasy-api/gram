@@ -16,10 +16,7 @@ func TestIsGramHostedMCPURL_CanonicalHosts(t *testing.T) {
 		url  string
 		want bool
 	}{
-		{"canonical Speakeasy host", "https://ai.speakeasy.com/mcp/team-foo", true},
-		{"canonical Speakeasy host uppercase", "https://AI.SPEAKEASY.COM/mcp/team-foo", true},
-		{"canonical host lookalike rejected", "https://ai.speakeasy.com.evil.example/mcp/team-foo", false},
-		{"legacy app host", "https://app.getgram.ai/mcp/team-foo", true},
+		{"canonical app host", "https://app.getgram.ai/mcp/team-foo", true},
 		{"canonical app host uppercase", "https://APP.GETGRAM.AI/mcp/team-foo", true},
 		{"canonical app host over http", "http://app.getgram.ai/mcp/team-foo", true},
 		{"canonical chat host", "https://chat.speakeasy.com/mcp/linear", true},

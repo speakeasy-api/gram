@@ -1,6 +1,6 @@
 ---
 name: gram-demo-seed
-description: Use when adding a new feature or changing an existing one that surfaces data in the dashboard — the demo org (ai.speakeasy.com/explore-demo) must show it — and when editing or extending the demo org seed or the local dev seed — server/internal/demoseed/ (seed_*.go, ch_*.go, queries/*.sql), demoseed.Spec, RunLocalFixtures, gram demo-seed, mise run seed, mise run seed:demo, seed/demo/ docs, TestDemoSeedSafety, the demo-seed-safety CI job, org_gram_demo_workspace, dec0de00 uuids — or when that CI check fails with "touched another tenant's rows", "reseed is not cleaning up or not idempotent", "hardcodes the demo identifier", or a demo seed pre/postflight exception.
+description: Use when adding a new feature or changing an existing one that surfaces data in the dashboard — the demo org (app.getgram.ai/explore-demo) must show it — and when editing or extending the demo org seed or the local dev seed — server/internal/demoseed/ (seed_*.go, ch_*.go, queries/*.sql), demoseed.Spec, RunLocalFixtures, gram demo-seed, mise run seed, mise run seed:demo, seed/demo/ docs, TestDemoSeedSafety, the demo-seed-safety CI job, org_gram_demo_workspace, dec0de00 uuids — or when that CI check fails with "touched another tenant's rows", "reseed is not cleaning up or not idempotent", "hardcodes the demo identifier", or a demo seed pre/postflight exception.
 ---
 
 # Extending the demo org seed
@@ -17,7 +17,7 @@ and what the test will reject.
 
 ## When the seed must change
 
-The demo org (`ai.speakeasy.com/explore-demo`) is how customers explore Speakeasy before
+The demo org (`app.getgram.ai/explore-demo`) is how customers explore Speakeasy before
 their own org is set up, and the same seed provisions every developer's local
 org. So a feature that ships without seed data shows an empty page to both.
 

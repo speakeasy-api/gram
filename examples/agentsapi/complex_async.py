@@ -9,7 +9,7 @@ import requests
 verbose = "-v" in sys.argv
 
 # Configuration
-server_url = "https://ai.speakeasy.com"
+server_url = "https://app.getgram.ai"
 org_slug = ""
 
 url = f"{server_url}/rpc/agents.response"

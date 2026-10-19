@@ -1482,7 +1482,7 @@ func TestResolveAuthIgnoresGenericGramAPIKey(t *testing.T) {
 // TestInsecureServerURL pins the plaintext-endpoint policy: only exact
 // loopback hosts may use http.
 func TestInsecureServerURL(t *testing.T) {
-	require.False(t, insecureServerURL("https://ai.speakeasy.com"))
+	require.False(t, insecureServerURL("https://app.getgram.ai"))
 	require.False(t, insecureServerURL("http://127.0.0.1:8080"))
 	require.False(t, insecureServerURL("http://localhost/ingest"))
 	require.False(t, insecureServerURL("http://[::1]:3000"))

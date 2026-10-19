@@ -10,7 +10,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AuthTransferInRequest = {
   /**
-   * Start mode: the platform host that holds the session to move here (e.g. ai.speakeasy.com)
+   * Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)
    */
   sourceHost?: string | undefined;
   /**

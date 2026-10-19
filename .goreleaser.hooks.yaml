@@ -53,7 +53,7 @@ brews:
     repository:
       owner: speakeasy-api
       name: homebrew-tap
-    homepage: https://ai.speakeasy.com
+    homepage: https://app.getgram.ai
     description: Speakeasy observability hooks for coding agents
     license: Apache-2.0
     test: |
@@ -63,7 +63,7 @@ brews:
     repository:
       owner: speakeasy-api
       name: homebrew-tap
-    homepage: https://ai.speakeasy.com
+    homepage: https://app.getgram.ai
     description: Speakeasy observability hooks for coding agents
     license: Apache-2.0
     test: |

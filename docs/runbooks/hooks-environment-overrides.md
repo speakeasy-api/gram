@@ -30,7 +30,7 @@ path stays in use until the new file exists.
 
 | Variable                                    | Purpose                                                                                                                           |
 | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `SPEAKEASY_AI_HOOKS_SERVER_URL`             | Speakeasy API base the events are posted to. Defaults to `https://ai.speakeasy.com`.                                              |
+| `SPEAKEASY_AI_HOOKS_SERVER_URL`             | Speakeasy API base the events are posted to. Defaults to `https://app.getgram.ai`.                                                |
 | `SPEAKEASY_AI_HOOKS_SITE_URL`               | Dashboard origin browser sign-in opens, for deployments that serve the dashboard off the API domain (local dev).                  |
 | `SPEAKEASY_AI_HOOKS_PROJECT_SLUG`           | Project the events route to.                                                                                                      |
 | `SPEAKEASY_AI_HOOKS_ORG_ID`                 | Organization the cached credential is scoped to.                                                                                  |
@@ -71,7 +71,7 @@ timing line, plus a line for any skip, fail-open, or auth retry. Each drain run
 appends one summary line:
 
 ```
-event=PreToolUse type=tool.requested server=https://ai.speakeasy.com authfile=/home/dev/.config/speakeasy-ai/hooks-auth.env status=200 denied=false
+event=PreToolUse type=tool.requested server=https://app.getgram.ai authfile=/home/dev/.config/speakeasy-ai/hooks-auth.env status=200 denied=false
 gate event=PreToolUse elapsed_ms=84 block=false
 drain: replayed=3 dropped=0 expired=0 skipped=0 remaining=0 aborted=false
 ```

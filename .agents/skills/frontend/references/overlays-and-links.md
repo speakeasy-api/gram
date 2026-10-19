@@ -45,7 +45,7 @@ Use the right primitive for the link type — mixing them causes full-page reloa
 </Link>
 ```
 
-Never hardcode org/project slugs in an `href` (e.g. `https://ai.speakeasy.com/<org-slug>/projects/<project-slug>/plugins`). The route helpers resolve the current `:orgSlug` / `:projectSlug` from the URL, so the same call works for every tenant.
+Never hardcode org/project slugs in an `href` (e.g. `https://app.getgram.ai/speakeasy-team/projects/default/plugins`). The route helpers resolve the current `:orgSlug` / `:projectSlug` from the URL, so the same call works for every tenant.
 
 **External links (anywhere outside the dashboard):** Use a plain `<a>` with `target="_blank"` and `rel="noopener noreferrer"`. This matches the existing pattern (`AddServerDialog.tsx`, `CatalogDetail.tsx`) and the security attributes are mandatory — `noopener` blocks `window.opener` access; `noreferrer` strips the Referer header.
 

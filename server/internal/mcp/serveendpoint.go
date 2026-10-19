@@ -107,7 +107,7 @@ func attributeMCPBandwidthServer(ctx context.Context, mcpServer *mcpserversrepo.
 // live inventories. The install page (ServeInstallPage / HandleGetServer's
 // inline browser path), consent HTML, and OAuth metadata routes are
 // intentionally left ungated: private-MCP install and consent pages must keep
-// working on the platform host (ai.speakeasy.com), where the dashboard session
+// working on the platform host (app.getgram.ai), where the dashboard session
 // cookie lives, even when the org's custom domain has an allowlist.
 func (s *Service) enforceCustomDomainLockdown(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) error {
 	lockedDown, err := s.customDomainLockdownApplies(ctx, logger, projectID)

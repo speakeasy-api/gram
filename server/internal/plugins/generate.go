@@ -32,7 +32,7 @@ type ServerEnvConfig struct {
 type PluginServerInfo struct {
 	DisplayName string
 	Policy      string
-	// Resolved MCP URL (e.g. https://ai.speakeasy.com/mcp/{slug}).
+	// Resolved MCP URL (e.g. https://app.getgram.ai/mcp/{slug}).
 	MCPURL string
 	// IsPublic indicates whether the toolset is publicly accessible (no Speakeasy API key needed).
 	IsPublic bool
@@ -78,7 +78,7 @@ type GenerateConfig struct {
 	// dashboard refuses to mint a hooks key when the active session org
 	// differs, so a plugin from org A cannot cache a key for org B.
 	OrgID string
-	// Base server URL (e.g. https://ai.speakeasy.com).
+	// Base server URL (e.g. https://app.getgram.ai).
 	ServerURL string
 	// APIKey is the plaintext consumer-scoped Speakeasy API key to inject into
 	// MCP server configs. If empty, configs will use placeholder variables.
@@ -139,8 +139,6 @@ type GenerateConfig struct {
 // publish emits: a Codex-only or manifest-only generator change has to
 // surface here or it would never roll out to connected repos. Org-derived
 // fields are fixed sentinels so only generator changes register, never data.
-// The legacy ServerURL is frozen fingerprint input, not a production default;
-// changing it would falsely signal a hooks generator change.
 func PublishedHooksFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
 		OrgName:          "Hooks Check",
@@ -196,7 +194,7 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		OrgName:          "",
 		OrgEmail:         "",
 		OrgID:            "",
-		ServerURL:        "https://ai.speakeasy.com",
+		ServerURL:        "https://app.getgram.ai",
 		APIKey:           "",
 		HooksAPIKey:      "",
 		ProjectSlug:      "",

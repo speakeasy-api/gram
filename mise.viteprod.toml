@@ -3,7 +3,7 @@
 
 [env]
 ## Both the Speakeasy server and dashboard (client) are accessed on
-## https://ai.speakeasy.com.
+## https://app.getgram.ai.
 GRAM_SERVER_URL = false
 ## Unset on purpose: one image serves every environment, so any value here
 ## would send the dev admin dashboard into production data. Disables the link.

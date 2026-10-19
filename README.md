@@ -17,7 +17,7 @@
   <a href="#running-locally"><strong>Running locally</strong></a> ·
   <a href="#tech-stack"><strong>Tech Stack</strong></a> ·
   <a href="./CONTRIBUTING.md"><strong>Contributing</strong></a> ·
-  <a href="https://ai.speakeasy.com/"><strong>Login</strong></a> ·
+  <a href="https://app.getgram.ai/"><strong>Login</strong></a> ·
   <a href="https://roadmap.speakeasy.com/"><strong>Roadmap</strong></a>
 </p>
 
@@ -25,7 +25,7 @@
 
 This repository is the open source stack behind Speakeasy's AI control plane. Secure and centrally manage MCPs, Skills, and Assistants your whole company to access, with fine-grained permissions, threat detection, and full observability of token use and costs. Every tool call, permission change, and access event logged and searchable. SOC 2 Type II and ISO 27001 certified.
 
-To get started on the hosted platform you can [Sign up](https://ai.speakeasy.com/), or check out the [Quickstart guide](https://www.getgram.ai/docs/introduction).
+To get started on the hosted platform you can [Sign up](https://app.getgram.ai/), or check out the [Quickstart guide](https://www.getgram.ai/docs/introduction).
 
 ### Supports popular AI providers
 
@@ -103,7 +103,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and detailed cont
 - [Temporal](https://temporal.io/) — workflow engine.
 - [Polar](https://polar.sh/) — usage-based billing.
 - [OpenRouter](https://openrouter.ai/) — LLM gateway.
-- [Speakeasy](https://www.speakeasy.com/) — generated SDKs. Spec hosted [here](https://ai.speakeasy.com/openapi.yaml).
+- [Speakeasy](https://www.speakeasy.com/) — generated SDKs. Spec hosted [here](https://app.getgram.ai/openapi.yaml).
 
 ## Contributors
 

@@ -17,7 +17,6 @@ import (
 // Exact host matching keeps third-party subdomains from being treated as
 // trusted Speakeasy-hosted MCP servers.
 var gramHostedMCPHosts = []string{
-	"ai.speakeasy.com",
 	"app.getgram.ai",
 	"chat.speakeasy.com",
 }

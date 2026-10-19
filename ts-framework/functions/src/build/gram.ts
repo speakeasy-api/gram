@@ -345,7 +345,7 @@ function logCLIOutput(logger: Logger, line: string) {
   }
 }
 
-const DASHBOARD_URL = "https://ai.speakeasy.com";
+const DASHBOARD_URL = "https://app.getgram.ai";
 
 /**
  * Where someone lands after their function deploys.

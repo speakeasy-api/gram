@@ -19,7 +19,7 @@ func newRenderPlatformMCPCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "server-url",
-				Value: "https://ai.speakeasy.com",
+				Value: "https://app.getgram.ai",
 				Usage: "Speakeasy deployment the rendered package points at",
 			},
 			&cli.StringFlag{

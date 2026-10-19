@@ -22,7 +22,7 @@ concurrency:
 env:
   TARGET_REPO: speakeasy-api/marketplace
   TARGET_BRANCH: main
-  SERVER_URL: https://ai.speakeasy.com
+  SERVER_URL: https://app.getgram.ai
 
 jobs:
   publish:

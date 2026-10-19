@@ -243,7 +243,7 @@ func (s *sink) TestConnection(ctx context.Context, creds providers.Credentials, 
 // property 'externalUrl'". There is no per-device dashboard deep link
 // available in the snapshot (no org slug), so every record carries the same
 // product URL; uniqueId, not this field, is the dedup key.
-const externalURL = "https://ai.speakeasy.com"
+const externalURL = "https://app.getgram.ai"
 
 // coverageResource is one device in the pushed full-state set. Base fields
 // (uniqueId, displayName, externalUrl) sit at the top level per Vanta's

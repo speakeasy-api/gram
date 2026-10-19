@@ -209,7 +209,7 @@ func TestPushCoverageFullStateReplace(t *testing.T) {
 	first := fake.resources[0]
 	require.Equal(t, "dev-0001", first["uniqueId"])
 	require.Equal(t, "mac-0001", first["displayName"])
-	require.Equal(t, "https://ai.speakeasy.com", first["externalUrl"], "Vanta's base schema requires externalUrl on every resource")
+	require.Equal(t, "https://app.getgram.ai", first["externalUrl"], "Vanta's base schema requires externalUrl on every resource")
 	props, ok := first["customProperties"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "SER0001", props["serial_number"])
@@ -394,7 +394,7 @@ func TestUnassignedDeviceResource(t *testing.T) {
 	require.True(t, ok)
 	require.Empty(t, props["assigned_user_email"])
 	require.Equal(t, false, props["agent_active"])
-	require.Equal(t, "https://ai.speakeasy.com", resource["externalUrl"])
+	require.Equal(t, "https://app.getgram.ai", resource["externalUrl"])
 	lastSeen, present := props["agent_last_seen_at"]
 	require.True(t, present, "the property is always present — Vanta's console cannot mark it optional, so an omitted field is rejected")
 	require.Empty(t, lastSeen, "a never-seen agent sends an empty string — honestly unknown, not a fabricated timestamp")

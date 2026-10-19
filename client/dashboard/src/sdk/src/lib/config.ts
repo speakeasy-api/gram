@@ -11,7 +11,7 @@ import { Params, pathToFunc } from "./url.js";
  * Contains the list of servers available to the SDK
  */
 export const ServerList = [
-  "https://ai.speakeasy.com",
+  "https://app.getgram.ai",
 ] as const;
 
 export type SDKOptions = {

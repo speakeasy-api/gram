@@ -8,28 +8,25 @@ describe("demoProjectPageHref", () => {
       "my-project",
     );
     expect(href).toBe(
-      "https://ai.speakeasy.com/explore-demo?redirect=%2Facme-demo%2Fprojects%2Fdefault%2Fcosts",
+      "https://app.getgram.ai/explore-demo?redirect=%2Facme-demo%2Fprojects%2Fdefault%2Fcosts",
     );
   });
 
   it("falls back to the demo project landing page when no page path is matched", () => {
     const href = demoProjectPageHref("/example/logs");
     expect(href).toBe(
-      `https://ai.speakeasy.com/explore-demo?redirect=${encodeURIComponent(DEMO_LANDING_PATH)}`,
+      `https://app.getgram.ai/explore-demo?redirect=${encodeURIComponent(DEMO_LANDING_PATH)}`,
     );
   });
 
-  it.each(["https://ai.speakeasy.com", "https://app.getgram.ai"])(
-    "stays on %s so the host-only session is kept",
-    (currentOrigin) => {
-      const href = demoProjectPageHref(
-        "/example/logs",
-        undefined,
-        currentOrigin,
-      );
-      expect(href).toBe(
-        `/explore-demo?redirect=${encodeURIComponent(DEMO_LANDING_PATH)}`,
-      );
-    },
-  );
+  it("stays on a prod host so the host-only session is kept", () => {
+    const href = demoProjectPageHref(
+      "/example/logs",
+      undefined,
+      "https://ai.speakeasy.com",
+    );
+    expect(href).toBe(
+      `/explore-demo?redirect=${encodeURIComponent(DEMO_LANDING_PATH)}`,
+    );
+  });
 });

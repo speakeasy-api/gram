@@ -332,7 +332,7 @@ var _ = Service("auth", func() {
 		NoSecurity()
 
 		Payload(func() {
-			Attribute("source_host", String, "Start mode: the platform host that holds the session to move here (e.g. ai.speakeasy.com)")
+			Attribute("source_host", String, "Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)")
 			Attribute("code", String, "Callback mode: the opaque one-time transfer code from the source host's transferOut endpoint")
 			Attribute("redirect", String, "Optional URL path to land on once the session is established on this host")
 		})
