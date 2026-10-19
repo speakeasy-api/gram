@@ -107,10 +107,10 @@ function DeleteRemoteIdentityProviderDialogBody({
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
       ]);
-      toast.success("Identity provider removed from this server");
+      toast.success("Authorization server removed from this server");
       onClose();
     } catch (err) {
-      console.error("Delete identity provider failed", err);
+      console.error("Delete authorization server failed", err);
       setError(
         err instanceof Error && err.message
           ? err.message
@@ -124,11 +124,11 @@ function DeleteRemoteIdentityProviderDialogBody({
   return (
     <>
       <Dialog.Header>
-        <Dialog.Title>Remove Remote Identity Provider</Dialog.Title>
+        <Dialog.Title>Remove Authorization Server</Dialog.Title>
         <Dialog.Description>
-          This removes the identity provider's association with this MCP server.
-          The provider configuration stays in the project and can be re-attached
-          later or used by other servers.
+          This removes the authorization server's association with this MCP
+          server. The authorization server configuration stays in the project
+          and can be re-attached later or used by other servers.
         </Dialog.Description>
       </Dialog.Header>
 
@@ -146,7 +146,7 @@ function DeleteRemoteIdentityProviderDialogBody({
 
       <Alert variant="warning" dismissible={false}>
         Removing {issuer.issuer} from this server cannot be undone — any active
-        user sessions issued via this identity provider will need to
+        user sessions issued via this authorization server will need to
         re-authenticate.
       </Alert>
 

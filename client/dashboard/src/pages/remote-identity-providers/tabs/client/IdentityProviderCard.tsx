@@ -71,7 +71,7 @@ export function IdentityProviderCard({
                     issuerId,
                   )}
                 >
-                  View identity provider
+                  View authorization server
                 </Link>
               </TextLink>
             </div>
