@@ -14,13 +14,13 @@ Two surfaces serve skills.
 
 A skill is served as a single file. Its entry has exactly one resource:
 
-| Field                 | Value                                                                                                                   |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `uri`                 | `skill://<name>/SKILL.md`, where `<name>` is the skill's canonical name                                                 |
-| `resources[0].uri`    | the same URI                                                                                                            |
-| `resources[0].digest` | `sha256:<hex>` over the raw bytes of the served version (`skill_versions.raw_sha256`)                                   |
-| `resources[0].size`   | the length of those bytes                                                                                               |
-| `frontmatter`         | the version's YAML frontmatter rendered verbatim as JSON: `name`, `description`, and every other field the author wrote |
+| Field                 | Value                                                                                                                                                     |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `uri`                 | `skill://<name>/SKILL.md`, where `<name>` is the skill's canonical name                                                                                   |
+| `resources[0].uri`    | the same URI                                                                                                                                              |
+| `resources[0].digest` | `sha256:<hex>` over the served bytes: the version's `skill_versions.raw_sha256` on a hosted endpoint, a hash of the embedded file on the platform toolset |
+| `resources[0].size`   | the length of those bytes                                                                                                                                 |
+| `frontmatter`         | the version's YAML frontmatter rendered verbatim as JSON: `name`, `description`, and every other field the author wrote                                   |
 
 The frontmatter is never curated. `allowed-tools`, `license`, `metadata` and any future field appear only when the author wrote them. The extension requires the frontmatter `name` to equal the URI's final segment. Validation trims the name before checking it, so a version whose author quoted a padded name (`name: "refunds "`) is stored valid under the trimmed name while its frontmatter keeps the padding; such a version is never served (the resolver skips it with an error log, and the platform catalog refuses to build), so every served entry's frontmatter `name`, canonical name and URI segment agree.
 
