@@ -1243,3 +1243,18 @@ func TestListSkillDistributionsToolIsAReadForMembers(t *testing.T) {
 	}
 	require.Fail(t, "list_skill_distributions is not registered")
 }
+
+func TestSkillVersionSummaryReportsTheDigestAgentsSeeOnlyForServableVersions(t *testing.T) {
+	t.Parallel()
+
+	raw := strings.Repeat("AB", 32)
+	valid := buildSkillVersionSummary(&types.SkillVersion{ID: testSkillVersionID, SpecValid: true, RawSha256: raw}, false)
+	require.Equal(t, "sha256:"+strings.ToLower(raw), valid.ServedDigest)
+
+	invalid := buildSkillVersionSummary(&types.SkillVersion{ID: testSkillVersionID, SpecValid: false, RawSha256: raw}, false)
+	require.Empty(t, invalid.ServedDigest)
+
+	encoded, err := json.Marshal(invalid)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "served_digest")
+}
