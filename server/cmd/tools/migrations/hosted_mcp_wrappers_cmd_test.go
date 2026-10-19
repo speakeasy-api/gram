@@ -60,6 +60,12 @@ func TestParseHostedMCPWrappersFlagsRejectsBadInput(t *testing.T) {
 	require.ErrorContains(t, err, "nonnegative")
 	_, err = parseHostedMCPWrappersFlags([]string{"-readers-cut-over"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "only applies to -move-dependents")
+	_, err = parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-move-dependents"}, hostedMCPWrappersGetenv, io.Discard)
+	require.ErrorContains(t, err, "separate phases")
+	_, err = parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-apply"}, hostedMCPWrappersGetenv, io.Discard)
+	require.ErrorContains(t, err, "-cleanup-orphans -apply requires -report")
+	_, err = parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-readers-cut-over"}, hostedMCPWrappersGetenv, io.Discard)
+	require.ErrorContains(t, err, "only applies to -move-dependents")
 	_, err = parseHostedMCPWrappersFlags([]string{"extra"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "positional")
 }
@@ -127,6 +133,32 @@ func TestRunHostedMCPWrappersMoveApplyRefusesAnExistingJournal(t *testing.T) {
 	require.Equal(t, "previous batch\n", string(got))
 	_, err = os.Stat(report)
 	require.ErrorIs(t, err, os.ErrNotExist, "the refused run leaves no report behind")
+}
+
+func TestParseHostedMCPWrappersFlagsCleanupOrphansJournalsOnApply(t *testing.T) {
+	t.Parallel()
+
+	dry, err := parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-report=/tmp/r.json"}, hostedMCPWrappersGetenv, io.Discard)
+	require.NoError(t, err)
+	require.True(t, dry.options.CleanupOrphans)
+	require.Empty(t, dry.journalPath)
+	applied, err := parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-apply", "-report=/tmp/r.json"}, hostedMCPWrappersGetenv, io.Discard)
+	require.NoError(t, err)
+	require.Equal(t, "/tmp/r.json.journal.jsonl", applied.journalPath)
+	require.False(t, applied.options.Publication.Enabled)
+
+	emitEnv := func(key string) string {
+		if key == "GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED" {
+			return "true"
+		}
+		return hostedMCPWrappersGetenv(key)
+	}
+	fromEnv, err := parseHostedMCPWrappersFlags([]string{"-cleanup-orphans"}, emitEnv, io.Discard)
+	require.NoError(t, err)
+	require.True(t, fromEnv.options.Publication.Enabled)
+	overridden, err := parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-plugin-publication-emit=false"}, emitEnv, io.Discard)
+	require.NoError(t, err)
+	require.False(t, overridden.options.Publication.Enabled)
 }
 
 func TestFileJournalAppendsOneLinePerRecord(t *testing.T) {
