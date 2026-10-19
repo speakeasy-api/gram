@@ -68,9 +68,14 @@ export function ServerAssignment({
         Connection access unavailable.
       </Text>
     );
-  const status = levelStatus(level, explanation.visibility);
+  const rules = level.rules;
+  const publicRoleBlock =
+    explanation.visibility === "public" &&
+    rules.some((rule) => rule.effect === "blocks");
+  const status = publicRoleBlock
+    ? { tone: "blocked", label: "Blocked by role" }
+    : levelStatus(level, explanation.visibility);
   const blocked = status.tone === "blocked";
-  const rules = explanation.visibility === "public" ? [] : level.rules;
   const sources = uniqueSources(rules, ["allows", "overrides", "blocked"]);
   const blockers = uniqueSources(rules, ["blocks"]);
   const limits = uniqueSources(rules, ["limits"]);
@@ -145,6 +150,11 @@ export function ServerAssignment({
             sources.length === 0 &&
             "Public server"}
         </p>
+        {publicRoleBlock && (
+          <Text small muted>
+            The public endpoint remains accessible without authentication.
+          </Text>
+        )}
         {overridden.length > 0 && !blocked && (
           <Text small muted>
             Direct assignment overrides the block from{" "}

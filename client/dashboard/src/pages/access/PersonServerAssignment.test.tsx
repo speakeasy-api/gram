@@ -108,3 +108,40 @@ it("explains a direct grant overriding a role block", () => {
   );
   expect(screen.queryByText("Blocked", { exact: true })).toBeNull();
 });
+
+it("shows role blocks on public servers without implying public access is prevented", () => {
+  render(
+    <MemoryRouter>
+      <ServerAssignment
+        server={server}
+        explanation={{
+          visibility: "public",
+          levels: [
+            {
+              level: "use",
+              allowed: false,
+              toolAccess: "none",
+              rules: [
+                rule({
+                  displayName: "Analyst",
+                  effect: "blocked",
+                  principalUrn: "role:organization:analyst",
+                }),
+                rule({ effect: "blocks", level: "blocked" }),
+              ],
+            },
+          ],
+        }}
+      />
+    </MemoryRouter>,
+  );
+  expect(screen.getByText("Blocked by role")).toBeTruthy();
+  expect(screen.getByText(/Assigned through/).textContent).toBe(
+    "Assigned through Analyst, but blocked by Admin",
+  );
+  expect(
+    screen.getByText(
+      "The public endpoint remains accessible without authentication.",
+    ),
+  ).toBeTruthy();
+});
