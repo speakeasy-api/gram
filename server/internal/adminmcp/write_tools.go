@@ -6,15 +6,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -35,6 +38,26 @@ type ProposalOutput struct {
 	Replay      bool            `json:"replay"`
 	ResultCode  string          `json:"result_code,omitempty"`
 	Result      json.RawMessage `json:"result,omitempty"`
+}
+
+// proposalOutputSchema is ProposalOutput's schema with Preview and Result typed
+// as JSON objects. Inferred from the Go type, json.RawMessage reads as []byte,
+// and the SDK then rejects every object preview after the proposal is already
+// stored. An empty schema is no better: it serializes as the boolean schema
+// true, which MCP clients reject as a property schema. Every preview and
+// receipt is an encoded struct, so "object" is exact.
+var proposalOutputSchema = func() *jsonschema.Schema {
+	schema, err := jsonschema.For[ProposalOutput](&jsonschema.ForOptions{TypeSchemas: map[reflect.Type]*jsonschema.Schema{reflect.TypeFor[json.RawMessage](): {Type: "object"}}})
+	if err != nil {
+		panic(fmt.Sprintf("infer proposal output schema: %v", err))
+	}
+	return schema
+}()
+
+// addProposalTool registers a tool that returns ProposalOutput.
+func addProposalTool[In any](server *mcp.Server, tool *mcp.Tool, handler mcp.ToolHandlerFor[In, ProposalOutput]) {
+	tool.OutputSchema = proposalOutputSchema
+	mcp.AddTool(server, tool, handler)
 }
 
 func proposalOutput(proposal Proposal, replay bool, baseURL string) ProposalOutput {
@@ -120,6 +143,16 @@ type writeTools struct {
 	writes  WriteConfig
 	baseURL string
 	writers map[WriteOperation]operationWriter
+	// uploads backs the direct upload_platform_image write; nil without asset storage.
+	uploads PlatformImageUploader
+}
+
+// implements reports whether op has a shipped implementation on this server.
+func (t *writeTools) implements(op WriteOperation) bool {
+	if op == OperationUploadPlatformImage {
+		return t.uploads != nil
+	}
+	return t.writers[op] != nil
 }
 
 func newWriteTools(store *proposalStore, writes WriteConfig, baseURL string, writers map[WriteOperation]operationWriter) *writeTools {
@@ -206,23 +239,33 @@ func registerWriteTools(server *mcp.Server, tools *writeTools) {
 			writer.registerPrepare(server)
 		}
 	}
-	mcp.AddTool(server, &mcp.Tool{Name: "execute_admin_proposal", Title: "Execute Approved Staff Proposal", Description: "Execute an exact stored staff change once, after it was separately approved in the admin site. Takes only its proposal ID, no target or replacement arguments. A committed receipt replays without writing again."}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProposalIDInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	addProposalTool(server, &mcp.Tool{Name: "execute_admin_proposal", Title: "Execute Approved Staff Proposal", Description: "Execute an exact stored staff change once, after it was separately approved in the admin site. Takes only its proposal ID, no target or replacement arguments. A committed receipt replays without writing again."}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProposalIDInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := tools.execute(ctx, input)
 		return nil, out, err
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "get_admin_proposal_status", Title: "Get Staff Proposal Status", Description: "Read the bounded status or committed receipt for an exact proposal owned by this staff subject and OAuth client. Does not change or approve a proposal.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProposalIDInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	addProposalTool(server, &mcp.Tool{Name: "get_admin_proposal_status", Title: "Get Staff Proposal Status", Description: "Read the bounded status or committed receipt for an exact proposal owned by this staff subject and OAuth client. Does not change or approve a proposal.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProposalIDInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := tools.status(ctx, input)
 		return nil, out, err
 	})
 }
 
+// WriteDependencies are the domain services that implemented writes call.
+type WriteDependencies struct {
+	Features *productfeatures.Client
+	Registry *mcpregistry.Service
+	// ImageUploads is nil when the admin server has no asset storage, which
+	// leaves upload_platform_image unimplemented.
+	ImageUploads PlatformImageUploader
+}
+
 // AttachWrites registers the implemented write operations. Switching on an
 // operation that has no implementation is a startup error, so a misconfigured
 // server cannot expose an unreviewed write.
-func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures.Client, writes WriteConfig) error {
-	if runtime == nil || oauth == nil || oauth.Approval == nil || features == nil {
+func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, writes WriteConfig) error {
+	if runtime == nil || oauth == nil || oauth.Approval == nil || deps.Features == nil || deps.Registry == nil {
 		return errors.New("staff write tools are not configured")
 	}
+	features, registry := deps.Features, deps.Registry
 	auditLogger := audit.NewLogger()
 	store := oauth.Approval.store
 	tools := newWriteTools(store, writes, oauth.Resource(), map[WriteOperation]operationWriter{ //nolint:exhaustive // Only implemented operations are listed.
@@ -234,9 +277,11 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures
 		OperationEnableOrganization:                   &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationEnableOrganization},
 		OperationDisableOrganization:                  &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationDisableOrganization},
 		OperationUpdateSupportMatrix:                  &supportMatrixWriter{store: store, writes: writes, baseURL: oauth.Resource()},
+		OperationCreateRegistryEntry:                  &registryEntryWriter{store: store, registry: registry, writes: writes, baseURL: oauth.Resource()},
 	})
+	tools.uploads = deps.ImageUploads
 	for _, op := range writes.EnabledOperations() {
-		if tools.writers[op] == nil {
+		if !tools.implements(op) {
 			return fmt.Errorf("admin MCP write operation %q is not implemented", op)
 		}
 	}
@@ -247,5 +292,8 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures
 	oauth.Approval.operations = approvals
 	runtime.writes = tools
 	registerWriteTools(runtime.server, tools)
+	if tools.uploads != nil && writes.OperationEnabled(OperationUploadPlatformImage) {
+		registerImageUploadTool(runtime.server, tools.uploads, writes)
+	}
 	return nil
 }

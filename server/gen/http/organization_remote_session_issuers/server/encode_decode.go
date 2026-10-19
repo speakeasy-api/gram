@@ -2449,6 +2449,199 @@ func EncodeSetEMAProvidersError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
+// EncodeListEMAServicesResponse returns an encoder for responses returned by
+// the organizationRemoteSessionIssuers listEMAServices endpoint.
+func EncodeListEMAServicesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*organizationremotesessionissuers.ListEMAServicesResult)
+		enc := encoder(ctx, w)
+		body := NewListEMAServicesResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListEMAServicesRequest returns a decoder for requests sent to the
+// organizationRemoteSessionIssuers listEMAServices endpoint.
+func DecodeListEMAServicesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*organizationremotesessionissuers.ListEMAServicesPayload, error) {
+	return func(r *http.Request) (*organizationremotesessionissuers.ListEMAServicesPayload, error) {
+		var payload *organizationremotesessionissuers.ListEMAServicesPayload
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewListEMAServicesPayload(sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListEMAServicesError returns an encoder for errors returned by the
+// listEMAServices organizationRemoteSessionIssuers endpoint.
+func EncodeListEMAServicesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListEMAServicesUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListEMAServicesForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListEMAServicesBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListEMAServicesNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListEMAServicesConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListEMAServicesUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListEMAServicesInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListEMAServicesInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListEMAServicesUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListEMAServicesGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeFetchIssuerMetadataResponse returns an encoder for responses returned
 // by the organizationRemoteSessionIssuers fetchIssuerMetadata endpoint.
 func EncodeFetchIssuerMetadataResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -2935,6 +3128,7 @@ func marshalTypesEMAProviderToEMAProviderResponseBody(v *types.EMAProvider) *EMA
 		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
 		InternalSessionIssuerID: v.InternalSessionIssuerID,
 		UnavailableReason:       v.UnavailableReason,
+		LastAcceptedAt:          v.LastAcceptedAt,
 	}
 
 	return res
@@ -3120,6 +3314,57 @@ func unmarshalEMAProviderInputRequestBodyToTypesEMAProviderInput(v *EMAProviderI
 	res := &types.EMAProviderInput{
 		Kind:                  *v.Kind,
 		RemoteSessionIssuerID: v.RemoteSessionIssuerID,
+	}
+
+	return res
+}
+
+// marshalOrganizationremotesessionissuersEMAServiceToEMAServiceResponseBody
+// builds a value of type *EMAServiceResponseBody from a value of type
+// *organizationremotesessionissuers.EMAService.
+func marshalOrganizationremotesessionissuersEMAServiceToEMAServiceResponseBody(v *organizationremotesessionissuers.EMAService) *EMAServiceResponseBody {
+	res := &EMAServiceResponseBody{
+		VendorIssuer:          v.VendorIssuer,
+		Name:                  v.Name,
+		RemoteSessionIssuerID: v.RemoteSessionIssuerID,
+		ServerCount:           v.ServerCount,
+		ReadyServerCount:      v.ReadyServerCount,
+		HiddenServerCount:     v.HiddenServerCount,
+	}
+	if v.EmaProviders != nil {
+		res.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(v.EmaProviders)
+	}
+	if v.Servers != nil {
+		res.Servers = make([]*EMAServiceServerResponseBody, len(v.Servers))
+		for i, val := range v.Servers {
+			if val == nil {
+				res.Servers[i] = nil
+				continue
+			}
+			res.Servers[i] = marshalOrganizationremotesessionissuersEMAServiceServerToEMAServiceServerResponseBody(val)
+		}
+	} else {
+		res.Servers = []*EMAServiceServerResponseBody{}
+	}
+
+	return res
+}
+
+// marshalOrganizationremotesessionissuersEMAServiceServerToEMAServiceServerResponseBody
+// builds a value of type *EMAServiceServerResponseBody from a value of type
+// *organizationremotesessionissuers.EMAServiceServer.
+func marshalOrganizationremotesessionissuersEMAServiceServerToEMAServiceServerResponseBody(v *organizationremotesessionissuers.EMAServiceServer) *EMAServiceServerResponseBody {
+	res := &EMAServiceServerResponseBody{
+		ID:               v.ID,
+		Name:             v.Name,
+		Slug:             v.Slug,
+		ProjectID:        v.ProjectID,
+		ProjectSlug:      v.ProjectSlug,
+		ProjectName:      v.ProjectName,
+		Status:           v.Status,
+		LastAcceptedAt:   v.LastAcceptedAt,
+		SignInIssuerID:   v.SignInIssuerID,
+		SignInIssuerName: v.SignInIssuerName,
 	}
 
 	return res

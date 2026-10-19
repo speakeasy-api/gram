@@ -19,11 +19,15 @@ func testOutcome(t *testing.T, reading *sigintv1.Reading, at time.Time, status s
 	event := sigintv1.Outcome_Event_builder{Kind: new(reading.GetEvent().GetKind()), Id: new(reading.GetEvent().GetId()), OccurredAt: new(reading.GetEvent().GetOccurredAt())}.Build()
 	o := sigintv1.Outcome_builder{
 		Id: new(reading.GetId()), EvaluationAttemptId: new(uuid.NewString()),
+		TriggerKind: new(reading.GetTriggerKind()), EvaluationRequestedAt: new(reading.GetEvaluationRequestedAt()),
 		OrganizationId: new(reading.GetOrganizationId()), ProjectId: new(reading.GetProjectId()),
 		Event: event, SensorId: new(reading.GetSensorId()), SensorSlug: new(reading.GetSensorSlug()),
 		EvaluatedAt: new(at.Format(time.RFC3339Nano)), DefinitionHash: new(reading.GetDefinitionHash()),
 		Status: new(status), Attributes: map[string]string{"department": "engineering"},
 	}.Build()
+	if reading.HasRunId() {
+		o.SetRunId(reading.GetRunId())
+	}
 	if reason != "" {
 		o.SetFailureReason(reason)
 	}
@@ -128,6 +132,12 @@ func TestParseOutcomeRejectsPoison(t *testing.T) {
 		{"invalid identity", func(o *sigintv1.Outcome) { o.SetId("not-a-uuid") }},
 		{"missing organization", func(o *sigintv1.Outcome) { o.SetOrganizationId("") }},
 		{"invalid evaluation time", func(o *sigintv1.Outcome) { o.SetEvaluatedAt("yesterday") }},
+		{"missing trigger", func(o *sigintv1.Outcome) { o.ClearTriggerKind() }},
+		{"unknown trigger", func(o *sigintv1.Outcome) { o.SetTriggerKind("scheduled") }},
+		{"streaming run", func(o *sigintv1.Outcome) { o.SetRunId(uuid.NewString()) }},
+		{"missing manual run", func(o *sigintv1.Outcome) { o.SetTriggerKind("manual") }},
+		{"missing request time", func(o *sigintv1.Outcome) { o.ClearEvaluationRequestedAt() }},
+		{"invalid request time", func(o *sigintv1.Outcome) { o.SetEvaluationRequestedAt("yesterday") }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

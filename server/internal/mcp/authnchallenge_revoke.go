@@ -39,8 +39,7 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 }
 
 // ServeRevoke implements RFC 7009 token revocation. Post-resolution entry
-// point shared by /mcp's HandleRevoke (toolset-keyed) and /x/mcp's
-// mcp_endpoint-keyed route registration.
+// point called by HandleRevoke after slug resolution.
 //
 // Per RFC 7009 §2.2: the response is HTTP 200 unconditionally on success or
 // when the token is unknown / already revoked / was never valid -- the spec
