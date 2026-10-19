@@ -60,29 +60,18 @@ var (
 	registerDeviceTokenRate = ratelimit.PerMinute(20).WithBurst(10)
 )
 
-// deviceAgentScopes are what an enrolled device needs from its agent's policy:
-// polling plugin policy and sending hooks. Without them the device enrolls and
-// then every request it makes is refused.
-var deviceAgentScopes = []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest}
-
-// requireDeviceAgentGrants refuses a join token for an agent whose live policy
-// lacks the device-agent scopes, naming each one missing. The hooks check names
-// no project, so a grant bounded to any one project satisfies it: which
-// project a hook may reach is decided per request, against the project the
-// hook names.
-func (s *Service) requireDeviceAgentGrants(ctx context.Context, organizationID string, agentID uuid.UUID) error {
+// requireDeviceEnrollmentGrant refuses a join token for an agent whose live
+// policy lacks org:device_agent_sync, without which an enrolled device could
+// not even poll its policy. Enrollment needs nothing else: hooks access is
+// checked per request against the project each hook names, so an agent with
+// no hooks grant can still enroll devices that only use MCP.
+func (s *Service) requireDeviceEnrollmentGrant(ctx context.Context, organizationID string, agentID uuid.UUID) error {
 	grants, err := runtimepolicy.LoadAgentPolicy(ctx, s.db, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading agent policy").LogError(ctx, s.logger)
 	}
-	var missing []string
-	for _, scope := range deviceAgentScopes {
-		if !authz.GrantsSatisfy(grants, authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}) {
-			missing = append(missing, string(scope))
-		}
-	}
-	if len(missing) > 0 {
-		return oops.E(oops.CodeFailedPrecondition, nil, "the agent's policy must grant %s on the organization before a device can enroll under it", strings.Join(missing, " and "))
+	if !authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}) {
+		return oops.E(oops.CodeFailedPrecondition, nil, "the agent's policy must grant %s on the organization before a device can enroll under it", authz.ScopeOrgDeviceAgentSync)
 	}
 	return nil
 }
@@ -128,7 +117,7 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 		}
 	}
 
-	if err := s.requireDeviceAgentGrants(ctx, t.organizationID, agent.ID); err != nil {
+	if err := s.requireDeviceEnrollmentGrant(ctx, t.organizationID, agent.ID); err != nil {
 		return nil, err
 	}
 
@@ -243,10 +232,10 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 		}
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	// Re-checked too: grants removed since the token was issued would enroll a
-	// device every request of which is refused. Failing here rolls back the
-	// redemption, so the token is not spent.
-	if err := s.requireDeviceAgentGrants(ctx, org, agent.ID); err != nil {
+	// Re-checked too: a grant removed since the token was issued would enroll
+	// a device that cannot poll. Failing here rolls back the redemption, so the
+	// token is not spent.
+	if err := s.requireDeviceEnrollmentGrant(ctx, org, agent.ID); err != nil {
 		return nil, err
 	}
 

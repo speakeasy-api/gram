@@ -108,14 +108,13 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 // newAgent creates an agent in the caller's organization. Admission assigns one,
 // and a subject admitted without an agent is a state this API refuses to create.
-// newAgent creates an agent whose policy grants what an enrolled device needs.
+// newAgent creates an agent whose policy grants what enrolling a device needs:
+// org:device_agent_sync, and no hooks grant.
 func newAgent(t *testing.T, ctx context.Context, ti *testInstance, name string) uuid.UUID {
 	t.Helper()
 
 	agentID := newAgentWithoutDeviceGrants(t, ctx, ti, name)
-	for _, scope := range []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest} {
-		seedAgentGrant(t, ctx, ti, agentID, scope)
-	}
+	seedAgentGrant(t, ctx, ti, agentID, authz.ScopeOrgDeviceAgentSync)
 	return agentID
 }
 
