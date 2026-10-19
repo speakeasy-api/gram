@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	gramMCP "github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -42,7 +43,6 @@ func TestPrincipalCredentialAuthenticatesAsItsAgent(t *testing.T) {
 	token, _, err := ti.principalCredentials.Mint(principalcredential.Credential{
 		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
 		Principal: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), AuthorizerUserID: ac.UserID,
-		Grants: []authz.Grant{connect},
 	})
 	require.NoError(t, err)
 
@@ -68,8 +68,22 @@ func TestPrincipalCredentialAuthenticatesAsItsAgent(t *testing.T) {
 	foreign.ToolsetID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	rejected := httptest.NewRecorder()
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), rejected, token, ti.serverURL.String(), &foreign)
-	require.Error(t, err, "the credential's grants bound the resources it reaches")
+	require.Error(t, err, "the agent's and the authorizer's live grants bound the resources it reaches")
 	require.NotEmpty(t, rejected.Header().Get("WWW-Authenticate"))
+
+	removed, err := accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(t.Context(), accessrepo.DeletePrincipalGrantByIdentityParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), Scope: string(authz.ScopeMCPConnect), Selectors: selector})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), removed)
+	revoked := httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), revoked, token, ti.serverURL.String(), endpoint)
+	var denied *oops.ShareableError
+	require.ErrorAs(t, err, &denied, "a grant the authorizer loses stops the already-issued credential")
+	require.Equal(t, oops.CodeUnauthorized, denied.Code)
+	require.NotEmpty(t, revoked.Header().Get("WWW-Authenticate"))
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), Scope: string(authz.ScopeMCPConnect), Selectors: selector})
+	require.NoError(t, err)
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, ti.serverURL.String(), endpoint)
+	require.NoError(t, err, "restoring the grant re-admits the same credential, so the refusal came from the revoked grant")
 
 	_, err = agents.SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: ac.ActiveOrganizationID, ID: agent.ID})
 	require.NoError(t, err)
