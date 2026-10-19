@@ -198,6 +198,71 @@ func (s *Service) enabledPolicyIDs(ctx context.Context, projectID uuid.UUID, pol
 	return ids, nil
 }
 
+func (s *Service) listRiskResultsByChatFromClickHouse(ctx context.Context, authCtx *contextvalues.AuthContext, cursor uuid.NullUUID, pageSize int) (*gen.ListRiskResultsByChatResult, error) {
+	projectID := *authCtx.ProjectID
+	policyIDs, err := s.enabledPolicyIDs(ctx, projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve enabled risk policies").LogError(ctx, s.logger)
+	}
+	if len(policyIDs) == 0 {
+		return &gen.ListRiskResultsByChatResult{Chats: []*types.RiskChatSummary{}, NextCursor: nil}, nil
+	}
+
+	cursorChatID := ""
+	if cursor.Valid {
+		cursorChatID = cursor.UUID.String()
+	}
+	rows, err := s.findingsCH.GroupRiskFindingsByChat(ctx, chrepo.GroupRiskFindingsByChatParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID.String(),
+		PolicyIDs:      policyIDs,
+		CursorChatID:   cursorChatID,
+		Limit:          uint64(conv.SafeInt32(pageSize)) + 1, // #nosec G115 -- non-negative by construction.
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat from clickhouse").LogError(ctx, s.logger)
+	}
+
+	chatIDs := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		id, err := uuid.Parse(row.ChatID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "parse clickhouse risk chat id").LogError(ctx, s.logger)
+		}
+		chatIDs = append(chatIDs, id)
+	}
+	titles := make(map[uuid.UUID]*string, len(chatIDs))
+	if len(chatIDs) > 0 {
+		titleRows, err := s.repo.ListChatTitlesByIDs(ctx, repo.ListChatTitlesByIDsParams{
+			ProjectID: projectID,
+			Ids:       chatIDs,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "enrich risk chat titles", attr.SlogError(err))
+		}
+		for _, row := range titleRows {
+			titles[row.ID] = conv.FromPGText[string](row.Title)
+		}
+	}
+
+	chats := make([]*types.RiskChatSummary, 0, len(rows))
+	for i, row := range rows {
+		chats = append(chats, &types.RiskChatSummary{
+			ChatID:         chatIDs[i].String(),
+			ChatTitle:      titles[chatIDs[i]],
+			UserID:         conv.PtrEmpty(row.ExternalUserID),
+			FindingsCount:  safeCount(row.FindingsCount),
+			LatestDetected: row.LatestDetected.Format(time.RFC3339),
+		})
+	}
+	var nextCursor *string
+	if len(chats) > pageSize {
+		nextCursor = &chats[pageSize].ChatID
+		chats = chats[:pageSize]
+	}
+	return &gen.ListRiskResultsByChatResult{Chats: chats, NextCursor: nextCursor}, nil
+}
+
 // listDisplayEnrichment batch-fetches the page's chat titles (by chat id),
 // latest tool-call block ids (by chat message id), and MCP users' current
 // emails from Postgres. Best-effort: a failed lookup logs and leaves the

@@ -2,6 +2,7 @@ package risk_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -11,6 +12,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -184,4 +188,64 @@ func TestListRiskResultsByChat_IncludesContentPartFindings(t *testing.T) {
 		counts[chat.ChatID] = chat.FindingsCount
 	}
 	require.Equal(t, map[string]int64{mixedChat.String(): 2, attachmentChat.String(): 1}, counts)
+}
+
+func TestListRiskResultsByChat_ClickHouseCountsOnlyLiveEnabledPolicyFindings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	organizationID := authCtx.ActiveOrganizationID
+	ti.flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, organizationID, true)
+
+	enabled, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("ByChat ClickHouse Enabled")})
+	require.NoError(t, err)
+	disabled, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("ByChat ClickHouse Disabled"), Enabled: new(false)})
+	require.NoError(t, err)
+	deleted, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("ByChat ClickHouse Deleted")})
+	require.NoError(t, err)
+	require.NoError(t, ti.service.DeleteRiskPolicy(ctx, &gen.DeleteRiskPolicyPayload{ID: deleted.ID}))
+
+	chatID, messageID := seedChatWithUser(t, ti, projectID, organizationID, "alice@example.com")
+	seedRiskResult(t, ti, projectID, organizationID, uuid.MustParse(enabled.ID), 1, messageID, true)
+
+	at := time.Now().UTC()
+	finding := func(policyID string) chrepo.RiskFindingRow {
+		return chListFinding(t, projectID, organizationID, chatID, messageID, policyID, at, at, "gitleaks", "secret.generic", "alice@example.com", "", "", "")
+	}
+	liveOne := finding(enabled.ID)
+	liveTwo := finding(enabled.ID)
+	dismissed := finding(enabled.ID)
+	dismissed.FalsePositiveAt = new(at)
+	excluded := finding(enabled.ID)
+	excluded.ExcludedAt = new(at)
+	shadow := finding(enabled.ID)
+	shadow.Shadow = true
+	deadLetter := finding(enabled.ID)
+	deadLetter.DeadLetterReason = "scanner failed"
+	disabledFinding := finding(disabled.ID)
+	deletedFinding := finding(deleted.ID)
+
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
+		liveOne,
+		liveTwo,
+		dismissed,
+		excluded,
+		shadow,
+		deadLetter,
+		disabledFinding,
+		deletedFinding,
+	}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.ListRiskResultsByChat(ctx, &gen.ListRiskResultsByChatPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, chatID.String(), result.Chats[0].ChatID)
+	require.Equal(t, int64(2), result.Chats[0].FindingsCount)
+	require.Equal(t, "test chat", *result.Chats[0].ChatTitle)
+	require.Equal(t, "alice@example.com", *result.Chats[0].UserID)
 }

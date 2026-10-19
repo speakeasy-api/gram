@@ -179,7 +179,7 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 	accessReads := NewAccessReadService(logger, pool, budget, key)
 	accessRoleMutations, err := NewAccessRoleMutationService(accessReads, flags, budget, key, access.NewRoleManager(logger, pool, workos.NewStubClient(), auditLogger, publication, nil))
 	require.NoError(t, err)
-	sessionRecall := NewSessionRecallService(logger, pool, platformrepo.New(pool), auditLogger, func(context.Context, string) (bool, error) { return true, nil }, budget)
+	sessionRecall := NewSessionRecallService(logger, pool, platformrepo.New(pool), auditLogger, func(context.Context, string) (bool, error) { return true, nil }, nil, nil, nil, budget)
 	controls, err := NewRiskMutationControls(pool, flags, slugs, budget, key)
 	require.NoError(t, err)
 	riskMutations, err := NewRiskMutationHandlers(pool, controls,
