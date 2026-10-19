@@ -28,6 +28,7 @@ import { useQueries } from "@tanstack/react-query";
 import { ChevronDown, Info, Loader2, Network, Server, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
+import { pluralize } from "@/lib/format";
 
 type AnnotationFields = Partial<Record<ToolAnnotation, boolean>>;
 
@@ -753,10 +754,23 @@ function FocusedServerPane({
       : ruleTools;
   const followingAnnotationRule =
     selection.kind === "rule" && toolAnnotations.length > 0;
+  // A policy can name tools Speakeasy has not discovered on the server yet,
+  // for example on a remote server whose tools were never loaded. Counting
+  // them against the discovered tools would read as "1 of 0".
+  const discoveredNames = new Set(server.tools.map((tool) => tool.name));
+  const undiscoveredCount = selectedTools.filter(
+    (name) => !discoveredNames.has(name),
+  ).length;
+  const customNote =
+    undiscoveredCount === 0
+      ? `Custom · ${selectedTools.length} of ${server.tools.length}`
+      : server.tools.length === 0
+        ? `Custom · ${pluralize(undiscoveredCount, "tool")}, not discovered yet`
+        : `Custom · ${selectedTools.length - undiscoveredCount} of ${server.tools.length}, plus ${undiscoveredCount} not discovered yet`;
   const note = !selected
     ? "Not in scope"
     : custom
-      ? `Custom · ${selectedTools.length} of ${server.tools.length}`
+      ? customNote
       : wildcard
         ? "All tools, unconditionally — including ones added later"
         : toolAnnotations.length === 0
@@ -776,7 +790,7 @@ function FocusedServerPane({
           <p className="text-muted-foreground text-xs">
             {server.kind === "gateway"
               ? `${server.memberCount ?? gatewayMembers.length} member servers`
-              : `${server.tools.length} tools`}
+              : `${pluralize(server.tools.length, "tool")} discovered`}
           </p>
         </div>
         {selected ? (

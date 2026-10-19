@@ -506,16 +506,6 @@ function UseCaseTable({
           </Button>
         ) : null}
         <ShadowAIScratchOption onPick={() => onScratch("shadow-ai")} />
-        {approvalsEnabled ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="tertiary"
-            onClick={() => onScratch("approval")}
-          >
-            Tool approval
-          </Button>
-        ) : null}
       </div>
     </div>
   );
