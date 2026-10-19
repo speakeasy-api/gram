@@ -35,6 +35,7 @@ func canonicalEvidenceFieldProjection(field string) (string, bool) {
 	if !ok {
 		return field, false
 	}
+	value, withheld := omitEvidenceAttachments(value, 1)
 	data, err := json.Marshal(value)
 	if err != nil {
 		return "[WITHHELD]", true
@@ -77,7 +78,7 @@ func canonicalEvidenceFieldProjection(field string) (string, bool) {
 	if !appendLeaves(value, 1) {
 		return "[WITHHELD]", true
 	}
-	return out.String(), false
+	return out.String(), withheld
 }
 
 // UseNumber preserves identifier-sized integers and keeps valid large numbers
@@ -93,4 +94,77 @@ func decodeEvidenceJSON(text string) (any, bool) {
 		return nil, false
 	}
 	return value, true
+}
+
+// Attachment bodies and locators are omitted even when captured inline. Text
+// parts beside them remain searchable; no attachment retrieval is attempted.
+func evidenceAttachmentPart(value map[string]any) bool {
+	kind, _ := value["type"].(string)
+	var payloadKeys []string
+	switch kind {
+	case "image":
+		payloadKeys = []string{"source", "data", "url"}
+	case "image_url":
+		payloadKeys = []string{"image_url"}
+	case "input_image":
+		payloadKeys = []string{"image_url", "file_id"}
+	case "image_file":
+		payloadKeys = []string{"image_file", "file_id"}
+	case "file", "input_file":
+		payloadKeys = []string{"file", "file_id", "file_data", "file_url"}
+	case "document":
+		payloadKeys = []string{"source"}
+	case "audio":
+		payloadKeys = []string{"source", "data", "url"}
+	case "input_audio":
+		payloadKeys = []string{"input_audio"}
+	case "video":
+		payloadKeys = []string{"source", "data", "video_url"}
+	default:
+		return false
+	}
+	// A type label alone can describe ordinary tool arguments, such as a file
+	// deletion. Require a content-part body or attachment locator as well.
+	for _, key := range payloadKeys {
+		if _, exists := value[key]; exists {
+			return true
+		}
+	}
+	return false
+}
+
+func omitEvidenceAttachments(value any, depth int) (any, bool) {
+	if depth > chatEvidenceMaxDepth {
+		return "[WITHHELD]", true
+	}
+	withheld := false
+	switch typed := value.(type) {
+	case map[string]any:
+		if evidenceAttachmentPart(typed) {
+			return "[WITHHELD_ATTACHMENT]", true
+		}
+		for key, item := range typed {
+			safe, hidden := omitEvidenceAttachments(item, depth+1)
+			typed[key] = safe
+			withheld = withheld || hidden
+		}
+	case []any:
+		for i, item := range typed {
+			safe, hidden := omitEvidenceAttachments(item, depth+1)
+			typed[i] = safe
+			withheld = withheld || hidden
+		}
+	case string:
+		if nested, ok := decodeEvidenceJSON(typed); ok {
+			safe, hidden := omitEvidenceAttachments(nested, depth+1)
+			if hidden {
+				data, err := json.Marshal(safe)
+				if err != nil {
+					return "[WITHHELD]", true
+				}
+				return string(data), true
+			}
+		}
+	}
+	return value, withheld
 }

@@ -7529,16 +7529,20 @@ func (q *Queries) PlatformMCPOperationReceiptInputClaimed(ctx context.Context, a
 const readPlatformChatEvidence = `-- name: ReadPlatformChatEvidence :many
 WITH anchor AS (
     SELECT cm.seq FROM chat_messages cm
-    WHERE ($1::uuid IS NULL OR cm.id = $1) AND cm.chat_id = $2 AND cm.project_id = $3
+    JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id AND c.deleted IS FALSE
+    JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+    WHERE c.organization_id = $1 AND p.organization_id = $1
+      AND ($2::uuid IS NULL OR cm.id = $2)
+      AND cm.chat_id = $3 AND cm.project_id = $4
     ORDER BY cm.seq DESC LIMIT 1
 ), preceding AS (
     SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
-     WHERE cm.chat_id = $2 AND cm.project_id = $3 AND cm.seq < a.seq
-     ORDER BY cm.seq DESC LIMIT $4::integer
+     WHERE cm.chat_id = $3 AND cm.project_id = $4 AND cm.seq < a.seq
+     ORDER BY cm.seq DESC LIMIT $5::integer
 ), following AS (
     SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
-     WHERE cm.chat_id = $2 AND cm.project_id = $3 AND cm.seq >= a.seq
-     ORDER BY cm.seq ASC LIMIT $5::integer
+     WHERE cm.chat_id = $3 AND cm.project_id = $4 AND cm.seq >= a.seq
+     ORDER BY cm.seq ASC LIMIT $6::integer
 ), neighbors AS (SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM preceding UNION ALL SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM following)
 SELECT id, seq, created_at, role, generation,
        CASE WHEN octet_length(content) <= 131072 THEN content ELSE '' END::text AS content,
@@ -7551,6 +7555,7 @@ FROM neighbors ORDER BY seq
 `
 
 type ReadPlatformChatEvidenceParams struct {
+	OrganizationID string
 	MessageID      uuid.NullUUID
 	ChatID         uuid.UUID
 	ProjectID      uuid.NullUUID
@@ -7577,6 +7582,7 @@ type ReadPlatformChatEvidenceRow struct {
 // remain available as historical evidence, and are explicitly labelled.
 func (q *Queries) ReadPlatformChatEvidence(ctx context.Context, arg ReadPlatformChatEvidenceParams) ([]ReadPlatformChatEvidenceRow, error) {
 	rows, err := q.db.Query(ctx, readPlatformChatEvidence,
+		arg.OrganizationID,
 		arg.MessageID,
 		arg.ChatID,
 		arg.ProjectID,
@@ -9013,150 +9019,6 @@ func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg Search
 		return nil, err
 	}
 	return items, nil
-}
-
-const seedPlatformChatEvidenceDirectoryFixture = `-- name: SeedPlatformChatEvidenceDirectoryFixture :exec
-WITH person AS (
- INSERT INTO users(id,email,display_name)
- SELECT $4::text,'fixture@example.test','Fixture user'
- WHERE $4::text<>'' ON CONFLICT(id) DO NOTHING
-), relationship AS (
- INSERT INTO organization_user_relationships(organization_id,user_id)
- SELECT $1::text,$4::text
- WHERE $4::text<>'' ON CONFLICT(organization_id,user_id) DO NOTHING
-), connection AS (
- INSERT INTO slack_directory_connections(organization_id,slack_team_id)
- VALUES($1::text,$2::text)
-), membership AS (
- INSERT INTO slack_directory_memberships(organization_id,slack_team_id,slack_user_id,display_name,last_seen_at)
- VALUES($1::text,$2::text,$3::text,$5::text,$6::timestamptz)
-)
-INSERT INTO slack_identity_mappings(organization_id,slack_team_id,slack_user_id,user_id)
-SELECT $1::text,$2::text,$3::text,$4::text
-WHERE $4::text<>''
-`
-
-type SeedPlatformChatEvidenceDirectoryFixtureParams struct {
-	OrganizationID string
-	TeamID         string
-	ProviderUserID string
-	MappedUserID   string
-	DisplayName    string
-	ObservedAt     pgtype.Timestamptz
-}
-
-// Synthetic directory/mapping state, without credentials or provider requests.
-func (q *Queries) SeedPlatformChatEvidenceDirectoryFixture(ctx context.Context, arg SeedPlatformChatEvidenceDirectoryFixtureParams) error {
-	_, err := q.db.Exec(ctx, seedPlatformChatEvidenceDirectoryFixture,
-		arg.OrganizationID,
-		arg.TeamID,
-		arg.ProviderUserID,
-		arg.MappedUserID,
-		arg.DisplayName,
-		arg.ObservedAt,
-	)
-	return err
-}
-
-const seedPlatformChatEvidenceParticipantBatchFixture = `-- name: SeedPlatformChatEvidenceParticipantBatchFixture :exec
-WITH messages AS (
- INSERT INTO chat_messages(chat_id,project_id,role,content,created_at)
- SELECT $2::uuid,$1::uuid,'user','attribution_fixture',$4::timestamptz
- FROM generate_series(1,$5::integer) RETURNING id
-)
-INSERT INTO chat_message_participants(project_id,chat_id,message_id,provider,provider_user_id)
-SELECT $1::uuid,$2::uuid,m.id,'fixture','EXAMPLE' || n::text
-FROM messages m CROSS JOIN generate_series(0,$3::integer-1) n
-`
-
-type SeedPlatformChatEvidenceParticipantBatchFixtureParams struct {
-	ProjectID        uuid.UUID
-	ChatID           uuid.UUID
-	ParticipantCount int32
-	At               pgtype.Timestamptz
-	MessageCount     int32
-}
-
-// A dense synthetic attribution page proves bounded work and continuation.
-func (q *Queries) SeedPlatformChatEvidenceParticipantBatchFixture(ctx context.Context, arg SeedPlatformChatEvidenceParticipantBatchFixtureParams) error {
-	_, err := q.db.Exec(ctx, seedPlatformChatEvidenceParticipantBatchFixture,
-		arg.ProjectID,
-		arg.ChatID,
-		arg.ParticipantCount,
-		arg.At,
-		arg.MessageCount,
-	)
-	return err
-}
-
-const seedPlatformChatEvidenceParticipantFixture = `-- name: SeedPlatformChatEvidenceParticipantFixture :exec
-INSERT INTO chat_message_participants(project_id,chat_id,message_id,provider,provider_user_id,provider_team_id,user_id,display_name)
-VALUES($1::uuid,$2::uuid,$3::uuid,
- $4::text,$5::text,
- nullif($6::text,''),nullif($7::text,''),nullif($8::text,''))
-`
-
-type SeedPlatformChatEvidenceParticipantFixtureParams struct {
-	ProjectID      uuid.UUID
-	ChatID         uuid.UUID
-	MessageID      uuid.UUID
-	Provider       string
-	ProviderUserID string
-	ProviderTeamID string
-	UserID         string
-	DisplayName    string
-}
-
-// Synthetic participant snapshots for transcript authorization/attribution tests.
-func (q *Queries) SeedPlatformChatEvidenceParticipantFixture(ctx context.Context, arg SeedPlatformChatEvidenceParticipantFixtureParams) error {
-	_, err := q.db.Exec(ctx, seedPlatformChatEvidenceParticipantFixture,
-		arg.ProjectID,
-		arg.ChatID,
-		arg.MessageID,
-		arg.Provider,
-		arg.ProviderUserID,
-		arg.ProviderTeamID,
-		arg.UserID,
-		arg.DisplayName,
-	)
-	return err
-}
-
-const setPlatformChatEvidenceDirectoryStateFixture = `-- name: SetPlatformChatEvidenceDirectoryStateFixture :exec
-WITH membership AS (
- UPDATE slack_directory_memberships SET mapping_conflict_reason=CASE WHEN $1::text='conflict' THEN 'fixture_conflict' END
- WHERE organization_id=$3::text
-), person AS (
- UPDATE users SET deleted_at=CASE WHEN $1::text='deleted_user' THEN clock_timestamp() END
- WHERE id=$4::text
-), relationship AS (
- UPDATE organization_user_relationships SET deleted_at=CASE WHEN $1::text='deleted_membership' THEN clock_timestamp() END
- WHERE organization_id=$3::text AND user_id=$4::text
-), mapping AS (
- UPDATE slack_identity_mappings SET revoked_at=CASE WHEN $1::text='revoked_mapping' THEN clock_timestamp() END
- WHERE organization_id=$3::text
-)
-UPDATE slack_directory_connections SET disconnected_at=CASE WHEN $1::text='disconnected'
- AND ($2::text='' OR slack_team_id=$2) THEN clock_timestamp() END
-WHERE organization_id=$3::text
-`
-
-type SetPlatformChatEvidenceDirectoryStateFixtureParams struct {
-	State          string
-	TeamID         string
-	OrganizationID string
-	UserID         string
-}
-
-// Independently exercise invalidation states and restore the synthetic fixture.
-func (q *Queries) SetPlatformChatEvidenceDirectoryStateFixture(ctx context.Context, arg SetPlatformChatEvidenceDirectoryStateFixtureParams) error {
-	_, err := q.db.Exec(ctx, setPlatformChatEvidenceDirectoryStateFixture,
-		arg.State,
-		arg.TeamID,
-		arg.OrganizationID,
-		arg.UserID,
-	)
-	return err
 }
 
 const updatePlatformMCPCatalogRegistrationComponents = `-- name: UpdatePlatformMCPCatalogRegistrationComponents :one

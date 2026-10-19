@@ -254,7 +254,7 @@ func (s *ChatSearchService) loadEvidenceAttributions(ctx context.Context, org st
 }
 
 var slackEvidenceUserID = regexp.MustCompile(`^[UW][A-Z0-9]{8,32}$`)
-var slackEvidenceEventID = regexp.MustCompile(`^[a-zA-Z0-9-]+:Ev[A-Z0-9]{8,32}$`)
+var slackEvidenceEventID = regexp.MustCompile(`^(?:[a-zA-Z0-9-]+:)?Ev[A-Z0-9]{1,64}$`)
 
 // Only the Slack adapter's leading, bounded header is recognized. Assistant
 // prose, nested quotes, other adapters and arbitrary JSON timestamps are not.

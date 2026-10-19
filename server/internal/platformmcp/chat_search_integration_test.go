@@ -17,8 +17,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -525,4 +527,36 @@ func TestChatEvidenceSearchesNestedBrowserActions(t *testing.T) {
 	require.NotContains(t, read.Messages[0].Text, "fixture-nested-credential")
 	require.Contains(t, read.Messages[0].Text, "[REDACTED]")
 	require.False(t, read.Messages[0].Withheld)
+}
+
+func TestChatEvidenceReadQueryEnforcesTenantAndDeletion(t *testing.T) {
+	t.Parallel()
+	f := newChatEvidenceFixture(t)
+	ctx := f.context(t.Context())
+	chat := seedRecallChat(t, ctx, f.db, f.project.ID, f.principal.OrganizationID, "user_fixture_owner", "read-query-guard", "Fixture", uuid.NullUUID{})
+	anchor := seedRecallMessage(t, ctx, f.db, chat, f.project.ID, recallMessageSeed{role: "user", content: "private_fixture_text", at: f.base})
+	input := platformrepo.ReadPlatformChatEvidenceParams{OrganizationID: f.principal.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.project.ID, Valid: true}, ChatID: chat, MessageID: uuid.NullUUID{UUID: anchor, Valid: true}, ContextSize: 0, FollowingLimit: 1}
+	query := platformrepo.New(f.db)
+	rows, err := query.ReadPlatformChatEvidence(ctx, input)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	input.OrganizationID = "organization_fixture_other"
+	rows, err = query.ReadPlatformChatEvidence(ctx, input)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+	input.OrganizationID = f.principal.OrganizationID
+	_, err = chatrepo.New(f.db).SoftDeleteChat(ctx, chatrepo.SoftDeleteChatParams{ID: chat, ProjectID: f.project.ID})
+	require.NoError(t, err)
+	rows, err = query.ReadPlatformChatEvidence(ctx, input)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+	liveChat := seedRecallChat(t, ctx, f.db, f.project.ID, f.principal.OrganizationID, "user_fixture_owner", "deleted-project-query-guard", "Fixture", uuid.NullUUID{})
+	seedRecallMessage(t, ctx, f.db, liveChat, f.project.ID, recallMessageSeed{role: "user", content: "private_fixture_text", at: f.base})
+	input.ChatID = liveChat
+	input.MessageID = uuid.NullUUID{}
+	_, err = projectsrepo.New(f.db).DeleteProject(ctx, f.project.ID)
+	require.NoError(t, err)
+	rows, err = query.ReadPlatformChatEvidence(ctx, input)
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }

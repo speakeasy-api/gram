@@ -197,7 +197,7 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 	}
 	from, fromErr := time.Parse(time.RFC3339Nano, input.From)
 	to, toErr := time.Parse(time.RFC3339Nano, input.To)
-	if fromErr != nil || toErr != nil || !to.After(from) || to.Sub(from) > 31*24*time.Hour || len(input.Query) > 256 || !validEvidenceFilter(input.Query, 256) || !validEvidenceFilter(input.OwnerUserID, 128) || !validEvidenceFilter(input.Source, 128) || !validParticipantFilter(input.Participant) || len(input.Cursor) > 4096 || input.Limit < 0 || input.Limit > 20 || len(input.ChatIDs) > 50 {
+	if fromErr != nil || toErr != nil || !to.After(from) || to.Sub(from) > 31*24*time.Hour || !validEvidenceFilter(input.Query, 256) || !validEvidenceFilter(input.OwnerUserID, 128) || !validEvidenceFilter(input.Source, 128) || !validParticipantFilter(input.Participant) || len(input.Cursor) > 4096 || input.Limit < 0 || input.Limit > 20 || len(input.ChatIDs) > 50 {
 		return zero, errChatEvidenceInvalid
 	}
 	chatIDs := make([]uuid.UUID, 0, len(input.ChatIDs))
@@ -395,7 +395,7 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 }
 
 func validEvidenceFilter(value string, limit int) bool {
-	return len(value) <= limit && utf8.ValidString(value) && !strings.ContainsRune(value, 0)
+	return utf8.RuneCountInString(value) <= limit && utf8.ValidString(value) && !strings.ContainsRune(value, 0)
 }
 func evidenceMatches(text, query string) bool {
 	return strings.Contains(strings.ToLower(text), strings.ToLower(query))
@@ -461,7 +461,7 @@ func (s *ChatSearchService) Read(ctx context.Context, principal Principal, input
 	if err := s.recordAccess(ctx, principal, project.ID, chatID, session.UserID.String); err != nil {
 		return zero, err
 	}
-	rows, err := queries.ReadPlatformChatEvidence(ctx, platformrepo.ReadPlatformChatEvidenceParams{ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}, ChatID: chatID, MessageID: messageID, ContextSize: int32(size), FollowingLimit: int32(size + 1)})
+	rows, err := queries.ReadPlatformChatEvidence(ctx, platformrepo.ReadPlatformChatEvidenceParams{OrganizationID: principal.OrganizationID, ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}, ChatID: chatID, MessageID: messageID, ContextSize: int32(size), FollowingLimit: int32(size + 1)})
 	if err != nil {
 		return zero, fmt.Errorf("read captured chat evidence: %w", err)
 	}
@@ -537,23 +537,35 @@ func (s *ChatSearchService) evidenceText(ctx context.Context, content string, to
 		if i > 0 {
 			_, field, _ = strings.Cut(field, ": ")
 		}
-		text, err := s.redact(ctx, field, 0)
+		text, hidden, err := s.redactWithCoverage(ctx, field, 0)
 		if err != nil {
 			return "", false, err
 		}
-		withheld = withheld || strings.Contains(text, "[WITHHELD]")
-		text = canonicalEvidenceField(text)
+		text, projectionHidden := canonicalEvidenceFieldProjection(text)
+		withheld = withheld || hidden || projectionHidden
 		if i > 0 {
 			text = "captured payload: " + text
 		}
 		safe = append(safe, text)
 	}
 	result := strings.Join(safe, "\n")
-	return result, withheld || strings.Contains(result, "[WITHHELD]"), nil
+	return result, withheld, nil
 }
 
 func (s *ChatSearchService) redact(ctx context.Context, text string, depth int) (string, error) {
+	safe, _, err := s.redactWithCoverage(ctx, text, depth)
+	return safe, err
+}
+
+func (s *ChatSearchService) redactWithCoverage(ctx context.Context, text string, depth int) (string, bool, error) {
+	withheld := false
+	safe, err := s.redactTracked(ctx, text, depth, &withheld)
+	return safe, withheld, err
+}
+
+func (s *ChatSearchService) redactTracked(ctx context.Context, text string, depth int, withheld *bool) (string, error) {
 	if len(text) > 131072 || depth > chatEvidenceMaxDepth || !utf8.ValidString(text) {
+		*withheld = true
 		return "[WITHHELD]", nil
 	}
 	if text == "" {
@@ -561,7 +573,7 @@ func (s *ChatSearchService) redact(ctx context.Context, text string, depth int) 
 	}
 	value, isJSON := decodeEvidenceJSON(text)
 	if isJSON {
-		safe, err := s.redactJSON(ctx, value, depth+1)
+		safe, err := s.redactJSON(ctx, value, depth+1, withheld)
 		if err != nil {
 			return "", err
 		}
@@ -571,10 +583,10 @@ func (s *ChatSearchService) redact(ctx context.Context, text string, depth int) 
 		}
 		return string(data), nil
 	}
-	return s.redactPlainText(ctx, text)
+	return s.redactPlainText(ctx, text, withheld)
 }
 
-func (s *ChatSearchService) redactPlainText(ctx context.Context, text string) (string, error) {
+func (s *ChatSearchService) redactPlainText(ctx context.Context, text string, withheld *bool) (string, error) {
 	result, err := s.scanner.Scan(ctx, text)
 	if err != nil || !result.Completed {
 		return "", ErrUnavailable
@@ -582,6 +594,7 @@ func (s *ChatSearchService) redactPlainText(ctx context.Context, text string) (s
 	masked := make([]bool, len(text))
 	for _, finding := range result.Findings {
 		if finding.StartPos < 0 || finding.EndPos > len(text) || finding.EndPos <= finding.StartPos {
+			*withheld = true
 			return "[WITHHELD]", nil
 		}
 		for i := finding.StartPos; i < finding.EndPos; i++ {
@@ -600,19 +613,23 @@ func (s *ChatSearchService) redactPlainText(ctx context.Context, text string) (s
 			i++
 		}
 	}
-	text = out.String()
-	return text, nil
+	return out.String(), nil
 }
 
-func (s *ChatSearchService) redactJSON(ctx context.Context, value any, depth int) (any, error) {
+func (s *ChatSearchService) redactJSON(ctx context.Context, value any, depth int, withheld *bool) (any, error) {
 	if depth > chatEvidenceMaxDepth {
+		*withheld = true
 		return "[WITHHELD]", nil
 	}
 	switch typed := value.(type) {
 	case map[string]any:
+		if evidenceAttachmentPart(typed) {
+			*withheld = true
+			return "[WITHHELD_ATTACHMENT]", nil
+		}
 		sanitized := make(map[string]any, len(typed))
 		for key, item := range typed {
-			safeKey, err := s.redactPlainText(ctx, key)
+			safeKey, err := s.redactPlainText(ctx, key, withheld)
 			if err != nil {
 				return nil, err
 			}
@@ -624,11 +641,16 @@ func (s *ChatSearchService) redactJSON(ctx context.Context, value any, depth int
 					break
 				}
 			}
+			// Numeric usage counters are evidence, while string values under
+			// the same keys still receive credential handling.
+			if _, numeric := item.(json.Number); numeric && evidenceTokenCounter(normalized) {
+				sensitive = false
+			}
 			if sensitive {
 				sanitized[safeKey] = "[REDACTED]"
 				continue
 			}
-			safe, err := s.redactJSON(ctx, item, depth+1)
+			safe, err := s.redactJSON(ctx, item, depth+1, withheld)
 			if err != nil {
 				return nil, err
 			}
@@ -637,16 +659,25 @@ func (s *ChatSearchService) redactJSON(ctx context.Context, value any, depth int
 		return sanitized, nil
 	case []any:
 		for i, item := range typed {
-			safe, err := s.redactJSON(ctx, item, depth+1)
+			safe, err := s.redactJSON(ctx, item, depth+1, withheld)
 			if err != nil {
 				return nil, err
 			}
 			typed[i] = safe
 		}
 	case string:
-		return s.redact(ctx, typed, depth)
+		return s.redactTracked(ctx, typed, depth, withheld)
 	}
 	return value, nil
+}
+
+func evidenceTokenCounter(key string) bool {
+	switch key {
+	case "maxtokens", "maxcompletiontokens", "prompttokens", "completiontokens", "totaltokens", "inputtokens", "outputtokens", "cachedtokens", "cachereadinputtokens", "cachecreationinputtokens":
+		return true
+	default:
+		return false
+	}
 }
 
 // evidenceSnippet budgets the JSON-encoded string, including escaped control
