@@ -89,9 +89,10 @@ ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO 
 -- issuer named in user_session_issuer_ids, or for a server whose own issuer
 -- is named there, since that issuer derives the server's authorization
 -- server. It writes nothing when several of the issuer's clients match, when
--- a grant under the issuer for the server's remote upstream routes it to
--- another client (a tunnel's claimed resource proves nothing), or when an
--- explicit detach was recorded for the pair.
+-- a grant the issuer offers for the server's remote upstream routes it to
+-- another client (a grant minted through the issuer, or one for a client the
+-- issuer binds, whichever issuer minted it; a tunnel's claimed resource
+-- proves nothing), or when an explicit detach was recorded for the pair.
 WITH fronted AS (
     SELECT gateway.user_session_issuer_id AS issuer_id, member.mcp_server_id AS server_id
     FROM meta_mcp_servers AS gateway
@@ -169,11 +170,19 @@ WHERE (f.issuer_id = ANY(@user_session_issuer_ids::uuid[]) OR s.user_session_iss
   AND NOT EXISTS (
     SELECT 1
     FROM remote_sessions AS rs
-    WHERE rs.user_session_issuer_id = f.issuer_id
-      AND rs.remote_session_client_id <> c.id
+    WHERE rs.remote_session_client_id <> c.id
       AND rs.deleted IS FALSE
       AND r.url IS NOT NULL
       AND rtrim(rs.resource, '/') = rtrim(r.url, '/')
+      AND (
+        rs.user_session_issuer_id = f.issuer_id
+        OR EXISTS (
+          SELECT 1
+          FROM remote_session_client_user_session_issuers AS grant_link
+          WHERE grant_link.remote_session_client_id = rs.remote_session_client_id
+            AND grant_link.user_session_issuer_id = f.issuer_id
+        )
+      )
   )
   AND NOT EXISTS (
     SELECT 1
