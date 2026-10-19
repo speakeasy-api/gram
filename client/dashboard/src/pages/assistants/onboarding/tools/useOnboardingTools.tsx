@@ -320,6 +320,7 @@ async function upsertEnvEntries(
     );
   }
   deps.draft.invalidateAll();
+  deps.draft.invalidateEnvironmentEntries();
 }
 
 type UpdateAssistantArgs = {
