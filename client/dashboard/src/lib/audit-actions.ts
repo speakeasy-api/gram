@@ -832,7 +832,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "remote-session-issuer:delete":
       return "deleted remote session issuer";
     case "remote-session-issuer:update_ema_providers":
-      return "changed the EMA provider order for";
+      return "changed the enabled identity providers for";
     case "remote-session-issuer:migrate":
       return "migrated remote session issuer";
 

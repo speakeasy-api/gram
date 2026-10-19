@@ -4,6 +4,8 @@ export const FEATURE_FLAGS = {
   deploymentsPage: "gram-deployments-page",
   deviceAgent: "gram-device-agent",
   deviceIntegrations: "gram-device-integrations",
+  // UI-only mirror of the backend `ema-providers` rollout, which the API enforces.
+  emaProviders: "ema-providers",
   experimentalChat: "gram-experimental-chat",
   explore: "gram-explore",
   functions: "gram-functions",
