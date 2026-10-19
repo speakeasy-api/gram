@@ -25,7 +25,7 @@ func nextPostgresCloneSuffix() string {
 // from a SQL init script. A reference to the container is returned as well as
 // a function to create test databases from the template. All clone databases
 // are automatically dropped when the test ends using t.Cleanup hooks.
-func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCloneFunc, error) {
+func NewTestPostgres(ctx context.Context) (_ *postgres.PostgresContainer, _ PostgresDBCloneFunc, err error) {
 	root, err := FindRepoRoot(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("locate Postgres test schema: %w", err)
@@ -39,7 +39,7 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 	// pool's connections. It is closed before the container stops.
 	var maintenance *pgxpool.Pool
 	closeMaintenance := testcontainers.ContainerLifecycleHooks{
-		PreTerminates: []testcontainers.ContainerHook{
+		PreStops: []testcontainers.ContainerHook{
 			func(context.Context, testcontainers.Container) error {
 				if maintenance != nil {
 					maintenance.Close()
@@ -54,8 +54,8 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 		PreStarts:      nil,
 		PostStarts:     nil,
 		PostReadies:    nil,
-		PreStops:       nil,
 		PostStops:      nil,
+		PreTerminates:  nil,
 		PostTerminates: nil,
 	}
 
@@ -81,6 +81,13 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 	if err != nil {
 		return nil, nil, fmt.Errorf("start postgres container: %w", err)
 	}
+	// The caller receives the container only on success, so terminate it if
+	// any later step fails. Its PreStop hook closes the maintenance pool.
+	defer func() {
+		if err != nil {
+			_ = container.Terminate(context.WithoutCancel(ctx))
+		}
+	}()
 
 	uri, err := postgresURI(ctx, container)
 	if err != nil {
@@ -93,9 +100,6 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 	}
 
 	if _, err := maintenance.Exec(ctx, "ALTER DATABASE gotestdb WITH is_template = true;"); err != nil {
-		// The caller never receives the container, so its terminate hook
-		// cannot close the pool.
-		maintenance.Close()
 		return nil, nil, fmt.Errorf("mark template database: %w", err)
 	}
 
@@ -113,10 +117,9 @@ func postgresURI(ctx context.Context, container *postgres.PostgresContainer) (st
 }
 
 func newPostgresCloneFunc(uri string, maintenance *pgxpool.Pool) PostgresDBCloneFunc {
-	// Clones of one template run one at a time. PostgreSQL refuses CREATE
-	// DATABASE ... TEMPLATE while another session is connected to the
-	// template, and the lock keeps clones from overlapping on it. It covers
-	// only the CREATE statement: drops and test pools never touch the template.
+	// Clones of one template run one at a time as a precaution. Clones never
+	// connect to the template and CREATE DATABASE takes only a share lock on
+	// it, so the lock may be unnecessary. It covers only the CREATE statement.
 	var cloneMu sync.Mutex
 
 	return func(t *testing.T, name string) (*pgxpool.Pool, error) {
@@ -144,7 +147,7 @@ func newPostgresCloneFunc(uri string, maintenance *pgxpool.Pool) PostgresDBClone
 
 			pool.Close()
 
-			if _, err := maintenance.Exec(timeoutCtx, fmt.Sprintf("DROP DATABASE %s;", cloneName)); err != nil {
+			if _, err := maintenance.Exec(timeoutCtx, fmt.Sprintf("DROP DATABASE %s WITH (FORCE);", cloneName)); err != nil {
 				panic(fmt.Errorf("drop test database: exec: %w", err))
 			}
 		})

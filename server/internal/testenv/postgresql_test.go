@@ -51,8 +51,7 @@ func TestPostgresConcurrentClonesAreDropped(t *testing.T) {
 		require.Zero(t, remaining, "clone databases are dropped when their test ends")
 	})
 
-	// Every clone and drop shares the maintenance pool, and clones of the
-	// template must still serialize with each other.
+	// Every clone and drop shares the maintenance pool.
 	for i := range 8 {
 		t.Run(fmt.Sprintf("clone_%d", i), func(t *testing.T) {
 			t.Parallel()
