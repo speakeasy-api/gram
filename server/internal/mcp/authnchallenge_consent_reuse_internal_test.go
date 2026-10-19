@@ -122,7 +122,7 @@ func TestRenderConsentReuse(t *testing.T) {
 	require.NoError(t, renderConsentReuse(w, endpoint, state))
 	require.Contains(t, w.Body.String(), "Checking sign-in status...")
 	require.Contains(t, w.Body.String(), "Review access")
-	require.NotContains(t, w.Body.String(), "Give Access")
+	require.NotContains(t, w.Body.String(), "Give access")
 	require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 	require.Equal(t, "no-referrer", w.Header().Get("Referrer-Policy"))
 	require.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))

@@ -79,3 +79,27 @@ func TestHeaderConfigurationFingerprintDetectsChanges(t *testing.T) {
 		})
 	}
 }
+
+func TestHeaderConfigurationFingerprintDetectsRequestHeaderChange(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+		p.ValueFromRequestHeader = new("X-Original-Key")
+	}))
+	require.NoError(t, err)
+
+	headers := remotemcp.NewHeaders(testenv.NewLogger(t), ti.conn, ti.enc)
+	before, err := headers.ConfigurationFingerprint(ctx, uuid.MustParse(server.ID))
+	require.NoError(t, err)
+
+	_, err = headers.UpdateServerHeader(ctx, repo.UpdateServerHeaderParams{
+		ID: uuid.MustParse(header.ID), ProjectID: uuid.MustParse(server.ProjectID), Name: header.Name,
+		ValueFromRequestHeader: conv.ToPGText("X-Replacement-Key"),
+	})
+	require.NoError(t, err)
+
+	after, err := headers.ConfigurationFingerprint(ctx, uuid.MustParse(server.ID))
+	require.NoError(t, err)
+	require.NotEqual(t, before, after)
+}
