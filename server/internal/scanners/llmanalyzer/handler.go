@@ -52,17 +52,15 @@ type Handler struct {
 }
 
 // ScopeTarget is the policy and message a FindingScopeFilter evaluates,
-// mirroring the LLMAnalysis envelope.
+// mirroring the LLMAnalysis envelope: Content is the message's own text and
+// ToolCalls its structured calls, the same split the batch scopes see.
 type ScopeTarget struct {
 	ProjectID         string
 	RiskPolicyID      string
 	RiskPolicyVersion int64
 	Content           string
 	MessageType       string
-	// ToolName and Body carry a single tool request without structured calls.
-	ToolName  string
-	Body      string
-	ToolCalls []ToolCall
+	ToolCalls         []ToolCall
 }
 
 // FindingScopeFilter applies a policy's detection scopes to the model's
@@ -72,32 +70,23 @@ type FindingScopeFilter interface {
 	FilterFindings(ctx context.Context, target ScopeTarget, findings []scanners.Finding) ([]scanners.Finding, error)
 }
 
-// HandlerOption configures NewHandler.
-type HandlerOption func(*Handler)
-
-// WithFindingScopeFilter scopes findings before publishing.
-func WithFindingScopeFilter(filter FindingScopeFilter) HandlerOption {
-	return func(h *Handler) {
-		h.scopeFilter = filter
-	}
-}
-
 // NewHandler builds the async lane handler over analyzer. A disabled analyzer
 // (no model URL configured) makes the handler ack every message untouched.
-func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, analyzer *Analyzer, findingsPub gcp.Publisher[*riskv1.Finding], riskRecorder *metering.RiskRecorder, options ...HandlerOption) *Handler {
-	h := &Handler{
+// scopeFilter prunes the model's findings by the policy's detection scopes
+// before they are published; the batch lane relies on it, so it is required.
+func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, analyzer *Analyzer, findingsPub gcp.Publisher[*riskv1.Finding], riskRecorder *metering.RiskRecorder, scopeFilter FindingScopeFilter) *Handler {
+	if scopeFilter == nil {
+		panic("llmanalyzer.NewHandler: scopeFilter is required")
+	}
+	return &Handler{
 		logger:       logger.With(attr.SlogComponent("llm-analyzer")),
 		findingsPub:  findingsPub,
 		metrics:      scanners.NewAsyncScanHandlerMetrics(meterProvider, logger),
 		analyzer:     analyzer,
 		riskRecorder: riskRecorder,
-		scopeFilter:  nil,
+		scopeFilter:  scopeFilter,
 		disabledOnce: sync.Once{},
 	}
-	for _, option := range options {
-		option(h)
-	}
-	return h
 }
 
 // Handle evaluates one message and publishes its findings. The return value
@@ -162,12 +151,13 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 	}
 	// Scopes prune the model's verdicts after the scan. A lookup failure
 	// publishes unscoped: an extra row beats a silently dropped verdict.
-	if h.scopeFilter != nil && len(result.Findings) > 0 {
+	if len(result.Findings) > 0 {
 		scoped, scopeErr := h.scopeFilter.FilterFindings(ctx, scopeTarget(m), result.Findings)
 		if scopeErr != nil {
 			h.logger.WarnContext(ctx, "llm analyzer detection scopes unavailable; publishing unscoped findings",
 				attr.SlogError(scopeErr),
 				attr.SlogRiskScanRequestID(m.GetRequestId()),
+				attr.SlogOrganizationID(m.GetOrganizationId()),
 				attr.SlogRiskPolicyID(m.GetRiskPolicyId()),
 			)
 		} else {
@@ -256,8 +246,6 @@ func scopeTarget(m *riskv1.LLMAnalysis) ScopeTarget {
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
 		Content:           m.GetContent(),
 		MessageType:       m.GetMessageType(),
-		ToolName:          m.GetToolName(),
-		Body:              m.GetBody(),
 		ToolCalls:         toolCalls,
 	}
 }

@@ -19,8 +19,10 @@ const llmPolicyEvaluationPublished = "published"
 
 // llmPolicyEvaluationShadowPublished is the policy_evaluations outcome
 // recorded once a shadow-mode batch's analysis requests are acknowledged by
-// the topic, one per published message, so the comparison lane's volume can
-// be lined up with the legacy engines' inline scans of the same batch.
+// the topic, one per published message. The lane publishes every covered
+// message while the legacy engines' inline scans of the same batch are
+// prefiltered by detection scopes, so the two volumes diverge by design; the
+// per-finding comparison happens after the consumer applies the scopes.
 const llmPolicyEvaluationShadowPublished = "shadow_published"
 
 // llmPolicyEvaluationShadowSkipped is the policy_evaluations outcome recorded
@@ -73,6 +75,9 @@ func llmCoveredSources(sources sourceSet) []string {
 // published is only recorded once every message was acknowledged, since the
 // activity retry republishes the whole batch otherwise.
 func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string, shadow bool) (failed int, err error) {
+	if len(coveredSources) == 0 {
+		return 0, nil
+	}
 	executionPath := llmAnalyzerStreamExecutionPath
 	outcome := llmPolicyEvaluationPublished
 	if shadow {
@@ -82,11 +87,7 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	requestID := batchScanRequestID(args, "standard")
-	if len(coveredSources) == 0 {
-		return 0, nil
-	}
 	for _, msg := range messages {
-		sources := coveredSources
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		provenance := batchRiskProvenance(args, msg, executionPath, requestID.String())
 		body, toolCalls := llmMessageInput(msg)
@@ -111,14 +112,18 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			PolicyLinkReason:        nil,
 			ExternalConversationId:  nil,
 
-			Content:          new(msg.scanSurface()),
+			// Content is the message's own text; a tool request's arguments
+			// travel only in tool_calls, so the consumer's detection scopes
+			// see the same content/tool_calls split batchMessageView gives
+			// the legacy engines.
+			Content:          &msg.Content,
 			UserId:           &msg.UserID,
 			MessageType:      new(msg.Type),
 			Body:             &body,
 			ToolName:         &provenance.ToolName,
 			ToolCalls:        toolCalls,
 			OrganizationSlug: &orgSlug,
-			Sources:          sources,
+			Sources:          coveredSources,
 			// The streams consumer applies the analyzer's own input caps on
 			// top of batchScanMaxContentBytes and reports those on its span.
 			ContentTruncated: &msg.Truncated,

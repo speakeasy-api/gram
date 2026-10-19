@@ -126,8 +126,14 @@ scopes (realtime `CategoryScope.SourceInScope`, batch `CategoryScopeMasks`)
 before they run. The model is not: every message the policy applies to
 reaches it, with every covered source in the request's `sources`, and the
 streams consumer applies the scopes to the model's findings afterwards
-through `risk.FindingScopeResolver` (`llmanalyzer.FindingScopeFilter`, policy
-`analyzer_config` cached per policy version for a minute). A scope lookup
+through `risk.FindingScopeResolver` (`llmanalyzer.FindingScopeFilter`, a
+required `NewHandler` argument; policy `analyzer_config` cached per policy
+version for a minute). The scopes evaluate the same view the batch gave the
+legacy engines (`risk_analysis.NewMessageView`): the request's `content` is
+the message's own text and a tool request's arguments are reachable only
+through `tool_calls`. Realtime differs by design: `realtimeMessageView` sees a
+tool request's arguments as its content as well, so a `content` scope can
+match arguments in realtime but not in the batch lanes. A scope lookup
 failure publishes the findings unscoped. The realtime lane already filtered
 the lane's verdicts per source after the reply, so nothing changes there.
 Compared-source findings are published with `shadow = 1` in every mode.

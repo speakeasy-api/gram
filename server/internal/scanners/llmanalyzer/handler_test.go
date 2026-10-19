@@ -93,7 +93,14 @@ func newHandler(t *testing.T, stub *llmanalyzer.StubCompleter, findingsPub gcp.P
 		completer = stub
 	}
 	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), completer)
-	return llmanalyzer.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), analyzer, findingsPub, metering.NewRiskRecorder(meterPub))
+	return llmanalyzer.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), analyzer, findingsPub, metering.NewRiskRecorder(meterPub), unscopedFilter{})
+}
+
+// unscopedFilter keeps every finding; tests not about detection scopes use it.
+type unscopedFilter struct{}
+
+func (unscopedFilter) FilterFindings(_ context.Context, _ llmanalyzer.ScopeTarget, findings []scanners.Finding) ([]scanners.Finding, error) {
+	return findings, nil
 }
 
 func TestHandle_PublishesOneFindingPerFlaggedRisk(t *testing.T) {
@@ -383,7 +390,7 @@ func TestHandle_ShadowRequestPublishesMarkedFindings(t *testing.T) {
 	}
 	meterProvider, reader := newEnforceMeterProvider(t)
 	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), stub)
-	h := llmanalyzer.NewHandler(testenv.NewLogger(t), meterProvider, analyzer, pub, metering.NewRiskRecorder(meterPub))
+	h := llmanalyzer.NewHandler(testenv.NewLogger(t), meterProvider, analyzer, pub, metering.NewRiskRecorder(meterPub), unscopedFilter{})
 
 	request := newAnalysis("AKIA0000000000000000")
 	request.SetShadow(true)
@@ -513,7 +520,7 @@ func TestHandle_DetectionScopesPruneFindingsAfterTheScan(t *testing.T) {
 	}
 	filter := &recordingScopeFilter{drop: map[string]bool{llmanalyzer.RulePII: true}, err: nil, target: llmanalyzer.ScopeTarget{}, calls: 0}
 	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), stub)
-	h := llmanalyzer.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), analyzer, pub, metering.NewRiskRecorder(meterPub), llmanalyzer.WithFindingScopeFilter(filter))
+	h := llmanalyzer.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), analyzer, pub, metering.NewRiskRecorder(meterPub), filter)
 
 	analysis := newAnalysis("AKIA0000000000000000 lives at 1 Main St")
 	analysis.SetToolName("mcp__files__write")
@@ -530,7 +537,7 @@ func TestHandle_DetectionScopesPruneFindingsAfterTheScan(t *testing.T) {
 	require.Equal(t, testPolicyID, filter.target.RiskPolicyID)
 	require.Equal(t, int64(3), filter.target.RiskPolicyVersion)
 	require.Equal(t, "tool_request", filter.target.MessageType)
-	require.Equal(t, "mcp__files__write", filter.target.ToolName)
+	require.Equal(t, "AKIA0000000000000000 lives at 1 Main St", filter.target.Content, "the scopes see the envelope's content as the message text")
 	require.Len(t, filter.target.ToolCalls, 1)
 	require.Equal(t, "mcp__files__write", filter.target.ToolCalls[0].Name)
 	require.Len(t, *findings, 1, "the scoped-out verdict is not published")
@@ -554,7 +561,7 @@ func TestHandle_DetectionScopeLookupFailurePublishesUnscoped(t *testing.T) {
 	}
 	filter := &recordingScopeFilter{drop: nil, err: errors.New("policy not found"), target: llmanalyzer.ScopeTarget{}, calls: 0}
 	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), stub)
-	h := llmanalyzer.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), analyzer, pub, metering.NewRiskRecorder(meterPub), llmanalyzer.WithFindingScopeFilter(filter))
+	h := llmanalyzer.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), analyzer, pub, metering.NewRiskRecorder(meterPub), filter)
 
 	require.NoError(t, h.Handle(t.Context(), newAnalysis("AKIA0000000000000000"), gcp.MessageMetadata{}))
 	require.Equal(t, 1, filter.calls)

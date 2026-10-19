@@ -329,17 +329,11 @@ func batchJudgeMessageContent(msg batchMessage) judgemessage.Message {
 }
 
 func batchMessageView(msg batchMessage) MessageView {
-	view := MessageView{Content: msg.Content, Type: msg.Type, Tools: []ToolView{}}
-	if msg.Type != message.ToolRequest {
-		return view
-	}
+	calls := make([]ToolCallInput, 0, len(msg.ToolCalls))
 	for _, c := range msg.ToolCalls {
-		if c.Function.Name == "" && strings.TrimSpace(c.Function.Arguments) == "" {
-			continue
-		}
-		view.Tools = append(view.Tools, NewToolView(c.Function.Name, c.Function.Arguments))
+		calls = append(calls, ToolCallInput{Name: c.Function.Name, Arguments: c.Function.Arguments})
 	}
-	return view
+	return NewMessageView(msg.Content, msg.Type, calls)
 }
 
 // anchorIDStrings returns the scanned unit's anchor as proto-ready pointers:

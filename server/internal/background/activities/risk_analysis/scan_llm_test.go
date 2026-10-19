@@ -307,7 +307,7 @@ func TestAnalyzeBatch_LLMAnalyzer_ToolCallMessageCarriesToolCalls(t *testing.T) 
 	assert.Equal(t, "call_1", req.GetToolCalls()[0].GetId())
 	assert.Equal(t, "Bash", req.GetToolCalls()[0].GetName())
 	assert.Contains(t, req.GetToolCalls()[0].GetArguments(), "rm -rf /tmp/build")
-	assert.Contains(t, req.GetContent(), "rm -rf /tmp/build", "content keeps the legacy scan surface for parity")
+	assert.NotContains(t, req.GetContent(), "rm -rf /tmp/build", "tool arguments reach the consumer's scopes only through tool_calls, as batchMessageView exposes them")
 }
 
 func TestAnalyzeBatch_LLMAnalyzer_PublishFailureFailsActivity(t *testing.T) {

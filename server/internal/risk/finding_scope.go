@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -41,7 +40,9 @@ type FindingScopeResolver struct {
 }
 
 // NewFindingScopeResolver compiles the recommended scopes once; per-policy
-// scopes are cached for a minute, keyed by policy version.
+// scopes are cached for a minute. The request's policy version is part of
+// the cache key only so an edited policy is reloaded at once: the policy's
+// current row is what is loaded, as the batch activity itself does.
 func NewFindingScopeResolver(db repo.DBTX, celEng *celenv.Engine) (*FindingScopeResolver, error) {
 	recommended, err := risk_analysis.CompileRecommended(celEng)
 	if err != nil {
@@ -97,16 +98,15 @@ func (r *FindingScopeResolver) scopeFor(ctx context.Context, projectID, policyID
 	return scope, nil
 }
 
-// scopeMessageView rebuilds the message view the scopes evaluate: content,
-// type and one tool view per call; a single tool request carried as
-// tool_name and body becomes one tool view, as in realtimeMessageView.
+// scopeMessageView rebuilds the message view the batch prefilter gave the
+// legacy engines for the same message (batchMessageView): the message's own
+// text as content and, for a tool request, one tool view per structured
+// call. Tool arguments are reachable only through tool_calls, never through
+// content, so a scope over content cannot match them.
 func scopeMessageView(target llmanalyzer.ScopeTarget) risk_analysis.MessageView {
-	view := risk_analysis.MessageView{Content: target.Content, Type: target.MessageType, Tools: []risk_analysis.ToolView{}}
+	calls := make([]risk_analysis.ToolCallInput, 0, len(target.ToolCalls))
 	for _, call := range target.ToolCalls {
-		view.Tools = append(view.Tools, risk_analysis.NewToolView(call.Name, call.Arguments))
+		calls = append(calls, risk_analysis.ToolCallInput{Name: call.Name, Arguments: call.Arguments})
 	}
-	if len(view.Tools) == 0 && view.Type == message.ToolRequest && target.ToolName != "" {
-		view.Tools = []risk_analysis.ToolView{risk_analysis.NewToolView(target.ToolName, target.Body)}
-	}
-	return view
+	return risk_analysis.NewMessageView(target.Content, target.MessageType, calls)
 }
