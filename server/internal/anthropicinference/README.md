@@ -116,11 +116,12 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   the current turn. Stored messages the checkpoint has not accepted, such as
   those from a delivery the upstream timeout cut off or history invalidated by
   a policy change, are backlog. Backlog is scanned oldest first in the slots the
-  verdict leaves free, for at most one second. A backlog match still denies,
-  but unscanned backlog does not, and the checkpoint advances through whatever
-  cleared, so the next delivery continues from there. Content edited in place
-  before the archive's alignment anchor is therefore enforced only once the
-  backlog reaches it.
+  verdict leaves free, for at most one second. Backlog never denies: a match is
+  logged and accepted, and unscanned backlog is left for the next delivery, so
+  a denial applies to the turn that introduced the content rather than to every
+  later turn of the conversation. An unaccepted final assistant message is not
+  backlog, so retrying a turn denied for its tool call is denied again. Content
+  edited in place before the archive's alignment anchor is not enforced.
 - Each block keeps its native scope: user, assistant, tool request, tool response,
   or prompt attachment. Block, warn, and quarantine matches deny the current
   inference. There is no interactive warning acknowledgement or persistent
@@ -139,8 +140,8 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   identities. Only after every required inference scan is complete and allows is the
   checkpoint eligible to advance. Denials, incomplete/erroring
   scans, and canceled evaluation do not advance it. A denied assistant/tool
-  block is therefore scanned again on retry, even when the latest user result
-  is benign. Enforcement-context changes during evaluation fail closed rather
+  block in the final exchange is therefore scanned again on retry, even when
+  the latest user result is benign. Enforcement-context changes during evaluation fail closed rather
   than accepting mixed configurations. Transaction cleanup is separately bounded.
 - Tool requests are stored in structured `tool_calls` with JSON arguments, and
   results are stored as tool messages linked by call ID. Mixed text/tool messages

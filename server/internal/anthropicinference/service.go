@@ -168,9 +168,13 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	if err := ctx.Err(); err != nil {
 		return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
 	}
-	if match := firstDenial(scans[scope.start:]); match != nil {
+	if match := firstDenial(scans[scope.live:]); match != nil {
 		// Denied content is never accepted, so a retry scans it again.
 		return denyVerdict(conv.Default(conv.PtrValOr(match.UserMessage, ""), "This request was blocked by your organization's security policy.")), nil
+	}
+	if firstDenial(scans[scope.start:scope.live]) != nil {
+		s.logger.InfoContext(ctx, "inference backlog matched a policy without denying",
+			attr.SlogOrganizationID(config.OrganizationID), attr.SlogProjectID(config.ProjectID.String()))
 	}
 	cleanThrough := cleanPrefix(inputs, scans, scope.start, len(messages))
 	verdict := allowVerdict()
@@ -203,10 +207,14 @@ func verdictContext(ctx context.Context) (context.Context, context.CancelFunc) {
 
 // scanRange holds message positions: [start, live) is stored content the
 // checkpoint never accepted (backlog), and [live, end) gates the verdict.
+// Only live content can deny.
 type scanRange struct{ start, live int }
 
 func newScanRange(messages []Message, accepted, fresh int) scanRange {
-	live := min(currentTurnStart(messages), max(accepted, fresh))
+	turn := currentTurnStart(messages)
+	// An unaccepted final assistant message stays live, so retrying a turn
+	// denied for its tool call is denied again.
+	live := min(turn, max(accepted, min(fresh, max(turn-1, 0))))
 	return scanRange{start: min(accepted, live), live: live}
 }
 
@@ -251,7 +259,7 @@ func (s *Service) scanInputs(ctx context.Context, config Config, frame Frame, us
 					scan.complete, scan.result = outcome.Complete, outcome.Result
 				}
 				scans[index] = scan
-				if denies(scan.result) {
+				if !backlog && denies(scan.result) {
 					return errPolicyDenied
 				}
 				return nil

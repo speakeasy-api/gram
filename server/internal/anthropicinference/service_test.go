@@ -116,11 +116,13 @@ func (s *recordingScanner) reset() {
 }
 
 // fakeScanner finishes each input after delay. The stall input only ends with
-// its context, and the fail input returns an error.
+// its context, the fail input returns an error, and the block input matches a
+// blocking policy.
 type fakeScanner struct {
 	delay  time.Duration
 	stall  string
 	fail   string
+	block  string
 	result *risk.ScanResult
 	calls  atomic.Int32
 }
@@ -134,11 +136,16 @@ func (s *fakeScanner) ScanForInferenceEnforcement(ctx context.Context, request r
 	case s.fail != "" && request.Text == s.fail:
 		return nil, errors.New("scanner unavailable")
 	}
+	result := s.result
+	if s.block != "" && request.Text == s.block {
+		result = new(risk.ScanResult)
+		result.Action = "block"
+	}
 	select {
 	case <-ctx.Done():
 		return nil, fmt.Errorf("scan deadline: %w", ctx.Err())
 	case <-wait:
-		return &risk.InferenceScanOutcome{Result: s.result, Complete: true}, nil
+		return &risk.InferenceScanOutcome{Result: result, Complete: true}, nil
 	}
 }
 
@@ -447,19 +454,56 @@ func TestServiceBacklogScannerErrorsDoNotFailTheVerdict(t *testing.T) {
 	})
 }
 
-func TestServiceDeniesBacklogMatch(t *testing.T) {
+func TestServiceBacklogMatchDoesNotDeny(t *testing.T) {
 	t.Parallel()
-	result := new(risk.ScanResult)
-	result.Action = "block"
-	scanner := &recordingScanner{result: result}
 	frame := backlogFrame()
 	store := &deltaStore{memoryStore: memoryStore{}, newStart: 4}
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &fakeScanner{block: "old prompt"}}
+	verdict, err := service.Process(t.Context(), Config{}, frame)
+	require.NoError(t, err)
+	require.Equal(t, "allow", verdict.Action)
+	require.Equal(t, transcriptHashes(frame.Messages), store.accepted)
+}
+
+func TestServiceDenialDoesNotOutliveItsTurn(t *testing.T) {
+	t.Parallel()
+	frame := exampleFrame()
+	frame.Messages = []Message{textMessage("user", "blocked prompt")}
+	store := &deltaStore{memoryStore: memoryStore{}, newStart: 0}
+	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &fakeScanner{block: "blocked prompt"}}
 	verdict, err := service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
 	require.Equal(t, "deny", verdict.Action)
-	require.NotEqual(t, unavailableDenyReason, verdict.DenyReason)
-	require.Empty(t, store.accepted, "denied content is never accepted")
+
+	// The conversation moves on past the denied prompt.
+	for turn := range 3 {
+		frame.Messages = append(frame.Messages, textMessage("assistant", fmt.Sprintf("reply %d", turn)), textMessage("user", fmt.Sprintf("benign prompt %d", turn)))
+		store.newStart = len(frame.Messages) - 2
+		verdict, err := service.Process(t.Context(), Config{}, frame)
+		require.NoError(t, err)
+		require.Equal(t, "allow", verdict.Action, "turn %d", turn)
+	}
+}
+
+func TestServiceStillDeniesRetriedToolCall(t *testing.T) {
+	t.Parallel()
+	frame := exampleFrame()
+	frame.Messages = []Message{
+		textMessage("user", "prompt"),
+		{Role: "assistant", Content: json.RawMessage(`[{"type":"tool_use","id":"call-1","tool_name":"bash","input":{"cmd":"blocked"}}]`)},
+		{Role: "user", Content: json.RawMessage(`[{"type":"tool_result","tool_use_id":"call-1","tool_name":"bash","content":"output"}]`)},
+	}
+	store := &deltaStore{memoryStore: memoryStore{}, newStart: 0}
+	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &fakeScanner{block: `{"cmd":"blocked"}`}}
+	verdict, err := service.Process(t.Context(), Config{}, frame)
+	require.NoError(t, err)
+	require.Equal(t, "deny", verdict.Action)
+
+	// The retry is fully archived, so only the final exchange keeps it denied.
+	store.newStart = len(frame.Messages)
+	verdict, err = service.Process(t.Context(), Config{}, frame)
+	require.NoError(t, err)
+	require.Equal(t, "deny", verdict.Action)
 }
 
 func TestServiceStillDeniesUnscannedCurrentTurn(t *testing.T) {
@@ -549,11 +593,12 @@ func TestNewScanRange(t *testing.T) {
 		start, live     int
 	}{
 		{name: "nothing stored", accepted: 0, fresh: 0, start: 0, live: 0},
-		{name: "all stored, nothing accepted", accepted: 0, fresh: 4, start: 0, live: 4},
+		{name: "all stored, nothing accepted", accepted: 0, fresh: 4, start: 0, live: 3},
 		{name: "accepted through the archive", accepted: 4, fresh: 4, start: 4, live: 4},
 		{name: "new reply before the current turn", accepted: 3, fresh: 3, start: 3, live: 3},
 		{name: "redelivery still scans the current turn", accepted: 5, fresh: 5, start: 4, live: 4},
-		{name: "partial backlog", accepted: 2, fresh: 4, start: 2, live: 4},
+		{name: "partial backlog", accepted: 2, fresh: 4, start: 2, live: 3},
+		{name: "accepted final reply is not rescanned", accepted: 4, fresh: 5, start: 4, live: 4},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
