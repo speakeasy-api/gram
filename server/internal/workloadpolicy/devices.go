@@ -205,12 +205,13 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevicePayload) (*gen.WorkloadDeviceRegistration, error) {
 	// The fleet ceiling is checked first, so traffic past it creates no
 	// per-token bucket. The per-token bucket is keyed on the token's hash.
+	tokenHash := HashDeviceJoinToken(payload.JoinToken)
 	for _, limit := range []struct {
 		limiter *ratelimit.Limiter
 		key     string
 	}{
 		{s.registerLimiter, "all"},
-		{s.registerTokenLimiter, hashDeviceJoinToken(payload.JoinToken)},
+		{s.registerTokenLimiter, tokenHash},
 	} {
 		if limit.limiter == nil {
 			continue
@@ -242,12 +243,12 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 	q := repo.New(dbtx)
 
 	joinToken, err := q.ConsumeWorkloadDeviceJoinToken(ctx, repo.ConsumeWorkloadDeviceJoinTokenParams{
-		TokenHash: hashDeviceJoinToken(payload.JoinToken),
+		TokenHash: tokenHash,
 		Subject:   conv.ToPGText(subject),
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return s.replayedDeviceRegistration(ctx, q, payload.JoinToken, key.thumbprint)
+		return s.replayedDeviceRegistration(ctx, dbtx, tokenHash, key.thumbprint)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error redeeming join token").LogError(ctx, s.logger)
 	}
@@ -366,9 +367,10 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 // replayedDeviceRegistration accepts a spent token only from the device that
 // spent it, with the same key, inside the token's lifetime, so a crash before
 // saving needs no new token. Every other spent token looks unknown.
-func (s *Service) replayedDeviceRegistration(ctx context.Context, q *repo.Queries, joinToken string, thumbprint string) (*gen.WorkloadDeviceRegistration, error) {
+func (s *Service) replayedDeviceRegistration(ctx context.Context, dbtx pgx.Tx, tokenHash string, thumbprint string) (*gen.WorkloadDeviceRegistration, error) {
+	q := repo.New(dbtx)
 	replay, err := q.GetReplayedDeviceRegistration(ctx, repo.GetReplayedDeviceRegistrationParams{
-		TokenHash:  hashDeviceJoinToken(joinToken),
+		TokenHash:  tokenHash,
 		Thumbprint: thumbprint,
 	})
 	switch {
@@ -384,6 +386,11 @@ func (s *Service) replayedDeviceRegistration(ctx context.Context, q *repo.Querie
 			return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
 		}
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	// As on first redemption: a grant removed since then must not be reported
+	// as a working enrollment.
+	if err := s.requireDeviceEnrollmentGrant(ctx, dbtx, replay.OrganizationID, agent.ID); err != nil {
+		return nil, err
 	}
 
 	s.logger.InfoContext(ctx, "device re-presented its enrollment",
@@ -435,7 +442,7 @@ func (s *Service) deviceIssuer(ctx context.Context, dbtx pgx.Tx, org string, act
 		}
 	}
 	if len(issuers) == 0 {
-		return repo.WorkloadIssuer{}, oops.E(oops.CodeConflict, nil, "another trusted issuer is named %q; rename it so devices can enroll", deviceIssuerName).LogError(ctx, s.logger)
+		return repo.WorkloadIssuer{}, oops.E(oops.CodeConflict, nil, "another trusted issuer is named %q; rename it so devices can enroll", deviceIssuerName).LogWarn(ctx, s.logger)
 	}
 	issuer := issuers[0]
 
@@ -473,10 +480,12 @@ func newDeviceJoinToken() (token string, hash string, err error) {
 		return "", "", fmt.Errorf("read random join token: %w", err)
 	}
 	token = deviceJoinTokenPrefix + base64.RawURLEncoding.EncodeToString(buf)
-	return token, hashDeviceJoinToken(token), nil
+	return token, HashDeviceJoinToken(token), nil
 }
 
-func hashDeviceJoinToken(token string) string {
+// HashDeviceJoinToken is the form a join token is stored and rate limited
+// under; the token itself is never kept.
+func HashDeviceJoinToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }

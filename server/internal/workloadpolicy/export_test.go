@@ -7,5 +7,3 @@ import "github.com/speakeasy-api/gram/server/internal/ratelimit"
 func SetRegisterLimitersForTest(s *Service, fleet, token *ratelimit.Limiter) {
 	s.registerLimiter, s.registerTokenLimiter = fleet, token
 }
-
-var HashDeviceJoinTokenForTest = hashDeviceJoinToken

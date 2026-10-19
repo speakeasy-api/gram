@@ -106,8 +106,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-// newAgent creates an agent in the caller's organization. Admission assigns one,
-// and a subject admitted without an agent is a state this API refuses to create.
 // newAgent creates an agent whose policy grants what enrolling a device needs:
 // org:device_agent_sync, and no hooks grant.
 func newAgent(t *testing.T, ctx context.Context, ti *testInstance, name string) uuid.UUID {
