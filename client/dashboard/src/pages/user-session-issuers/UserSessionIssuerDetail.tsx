@@ -32,7 +32,6 @@ import {
   settingValue,
   unavailableReason,
 } from "./issuerDisplay";
-import { MakeOrganizationWideDialog } from "./MakeOrganizationWideDialog";
 import { retryFailedTiers, useIssuerTier } from "./useIssuerTier";
 
 export default function UserSessionIssuerDetail(): JSX.Element {
@@ -65,14 +64,14 @@ function UserSessionIssuerDetailContent(): JSX.Element {
       notFound={
         missing
           ? {
-              title: "Authorization server not found",
+              title: "Sign-in not found",
               description:
                 "It may have been consolidated into another one or removed.",
               backTo: orgRoutes.userSessionIssuers.href(),
             }
           : query.isError && !issuer
             ? {
-                title: "Couldn't load this authorization server",
+                title: "Couldn't load this sign-in",
                 description: "Reload the page to try again.",
                 backTo: orgRoutes.userSessionIssuers.href(),
               }
@@ -115,7 +114,7 @@ function IssuerHero({ issuer }: { issuer: UserSessionIssuer }): JSX.Element {
       <Page.Eyebrow />
       <div className="flex items-center gap-3">
         <Text small muted>
-          Speakeasy authorization server
+          Speakeasy sign-in
         </Text>
         <ScopeBadge
           projectId={issuer.projectId}
@@ -216,8 +215,8 @@ function McpServersSection({
     body = (
       <InlineEmptyState
         icon="server"
-        heading="No MCP servers use this authorization server"
-        description="Choose it in an MCP server's settings to have clients sign in here."
+        heading="No MCP servers use this sign-in yet"
+        description="Next, move MCP servers onto it from each server's settings."
       />
     );
   } else {
@@ -300,8 +299,7 @@ function SettingsSection({
         </InfoField>
       </InfoFieldGrid>
       <Text small muted>
-        Change these in the settings of an MCP server that uses this
-        authorization server.
+        Change these in the settings of an MCP server that uses this sign-in.
       </Text>
     </InfoSection>
   );
@@ -314,7 +312,6 @@ function ActionsSection({
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const navigate = useNavigate();
-  const [promoting, setPromoting] = useState(false);
   const [movingHost, setMovingHost] = useState(false);
   const [consolidating, setConsolidating] = useState(false);
 
@@ -322,15 +319,6 @@ function ActionsSection({
     <RequireScope scope="org:admin" level="section">
       <InfoSection title="Actions">
         <Stack direction="horizontal" gap={2}>
-          {issuer.projectId !== "" && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setPromoting(true)}
-            >
-              <Button.Text>Make organization-wide</Button.Text>
-            </Button>
-          )}
           <Button
             variant="secondary"
             size="sm"
@@ -356,12 +344,6 @@ function ActionsSection({
           <AuthenticationHostDialog
             issuer={issuer}
             onClose={() => setMovingHost(false)}
-          />
-        )}
-        {promoting && (
-          <MakeOrganizationWideDialog
-            issuer={issuer}
-            onClose={() => setPromoting(false)}
           />
         )}
         {consolidating && (

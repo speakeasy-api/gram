@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 import { handleAPIError } from "@/lib/errors";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationGateway } from "@gram/client/models/components/organizationgateway.js";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
@@ -166,14 +168,32 @@ function GatewaySetting({
  * Explains why a gateway that is switched on still isn't served, and where to
  * fix it, so the switch never reads as on for a URL that answers 404.
  */
-function GatewayNotServed({
+export function GatewayNotServed({
   reason,
 }: {
   reason: OrganizationGateway["unavailableReason"];
 }): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
+  // With the sign-ins page rolled out, send people where they can fix it.
+  const signInsPage =
+    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
+    "enabled";
   switch (reason) {
     case "no_organization_issuer":
+      if (signInsPage) {
+        return (
+          <Text small className="text-warning mt-3">
+            Not available yet: it needs an organization-wide sign-in.{" "}
+            <Link
+              to={`${orgRoutes.userSessionIssuers.href()}?create=1`}
+              className="underline"
+            >
+              Create one
+            </Link>
+            .
+          </Text>
+        );
+      }
       return (
         <Text small className="text-warning mt-3">
           Not available yet: it needs an organization-wide sign-in. Set one up
@@ -185,6 +205,21 @@ function GatewayNotServed({
         </Text>
       );
     case "multiple_organization_issuers":
+      if (signInsPage) {
+        return (
+          <Text small className="text-warning mt-3">
+            Not available: the organization has more than one organization-wide
+            sign-in. Keep one on the{" "}
+            <Link
+              to={orgRoutes.userSessionIssuers.href()}
+              className="underline"
+            >
+              Sign-ins
+            </Link>{" "}
+            page with Consolidate into another.
+          </Text>
+        );
+      }
       return (
         <Text small className="text-warning mt-3">
           Not available: the organization has more than one organization-wide

@@ -49,6 +49,14 @@ describe("useIssuerTier", () => {
     expect(query.state.fetchNextPage).not.toHaveBeenCalled();
   });
 
+  it("reports a background refresh as fetching", () => {
+    query.state.hasNextPage = false;
+    query.state.isFetching = true;
+    const { result } = renderHook(() => useIssuerTier("organization"));
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.isFetching).toBe(true);
+  });
+
   it("reports a retry after a failure as loading", () => {
     query.state.hasNextPage = false;
     query.state.isError = true;
@@ -66,6 +74,8 @@ describe("retryFailedTiers", () => {
         items: [],
         isLoading: false,
         isError,
+        isFetching: false,
+        refresh: () => Promise.resolve(),
         retry: () => {
           count++;
         },

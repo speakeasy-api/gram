@@ -9,8 +9,12 @@ export type IssuerTier = {
   isLoading: boolean;
   /** A page failed: the first (nothing to show) or a later one (partial). */
   isError: boolean;
+  /** Any page is being fetched, including a background refresh. */
+  isFetching: boolean;
   /** Loads the tier again after a failure. */
   retry: () => void;
+  /** Reloads the tier, resolving once the reload has finished. */
+  refresh: () => Promise<unknown>;
 };
 
 /**
@@ -48,7 +52,9 @@ export function useIssuerTier(tier: "organization" | "project"): IssuerTier {
     isLoading:
       query.isLoading || draining || (query.isError && query.isFetching),
     isError: query.isError,
+    isFetching: query.isFetching,
     retry: () => void query.refetch(),
+    refresh: () => query.refetch(),
   };
 }
 

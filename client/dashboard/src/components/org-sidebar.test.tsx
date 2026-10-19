@@ -186,7 +186,7 @@ it.each([
   );
 });
 
-it("lists Speakeasy authorization servers under Settings only once rolled out", () => {
+it("lists Speakeasy sign-ins under Settings only once rolled out", () => {
   render(<OrgSidebar />);
   expect(screen.queryByRole("link", { name: "userSessionIssuers" })).toBeNull();
   cleanup();
@@ -196,7 +196,7 @@ it("lists Speakeasy authorization servers under Settings only once rolled out", 
   const link = within(
     screen.getByRole("navigation", { name: "Settings" }),
   ).getByRole("link", { name: "userSessionIssuers" });
-  expect(link.textContent).toBe("Authorization Servers");
+  expect(link.textContent).toBe("Sign-ins");
   expect(link.getAttribute("data-scope")).toBe("org:read org:admin");
 });
 

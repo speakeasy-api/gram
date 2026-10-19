@@ -72,6 +72,18 @@ import {
 import { TrustSignInConfirmDialog } from "./TrustSignInConfirmDialog";
 
 export const OKTA_SIGN_IN_SECTION_ID = "okta-sign-in";
+
+/** Brings the section into view when a link lands on it, once its content has settled. */
+function useScrollToSignInWhenReady(ready: boolean): void {
+  useEffect(() => {
+    if (!ready || window.location.hash !== `#${OKTA_SIGN_IN_SECTION_ID}`) {
+      return;
+    }
+    document
+      .getElementById(OKTA_SIGN_IN_SECTION_ID)
+      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [ready]);
+}
 const CREATE_KEY_SET = "__create__";
 
 function prerequisiteHint(connection: LiveConnection): string | null {
@@ -445,6 +457,7 @@ function OktaSignInBody({
   const blockingError = clientsQuery.error ?? issuersQuery.error;
   const loadError = blockingError ?? setsQuery.error;
   const ready = !loading && blockingError == null;
+  useScrollToSignInWhenReady(ready);
   const setupBlocked =
     !ready ||
     setup.isPending ||
@@ -543,6 +556,9 @@ export function OktaSignInSection({
 }): JSX.Element {
   const hint = prerequisiteHint(connection);
   const { agentId, remoteSessionIssuerId } = connection;
+  const blocked = !!hint || !agentId || !remoteSessionIssuerId;
+  // The body scrolls once its data loads; the blocked view has nothing to wait for.
+  useScrollToSignInWhenReady(blocked);
   return (
     <SettingsSection id={OKTA_SIGN_IN_SECTION_ID}>
       <SettingsSection.Header>
@@ -555,7 +571,7 @@ export function OktaSignInSection({
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
-        {hint || !agentId || !remoteSessionIssuerId ? (
+        {blocked || !agentId || !remoteSessionIssuerId ? (
           <>
             <SettingsSection.Body>
               <Text muted small>

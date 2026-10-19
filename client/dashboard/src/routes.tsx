@@ -1391,14 +1391,14 @@ const ORG_ROUTE_STRUCTURE = {
   // Rolled out behind gram-user-session-issuer-dashboard, which the root
   // checks; the sidebar hides the entry while it is off.
   userSessionIssuers: {
-    title: "Speakeasy Authorization Servers",
+    title: "Speakeasy Sign-ins",
     url: "user-session-issuers",
     icon: "key-round",
     component: UserSessionIssuersRoot,
     indexComponent: UserSessionIssuersPage,
     subPages: {
       issuerDetail: {
-        title: "Speakeasy Authorization Server",
+        title: "Speakeasy Sign-in",
         url: ":issuerId",
         component: UserSessionIssuerDetail,
       },

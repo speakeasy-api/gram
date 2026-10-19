@@ -173,6 +173,35 @@ function setUpButton(): HTMLButtonElement {
 }
 
 describe("OktaSignInSection", () => {
+  describe("a link to #okta-sign-in", () => {
+    const scrollIntoView = vi.fn();
+    beforeEach(() => {
+      scrollIntoView.mockReset();
+      Element.prototype.scrollIntoView = function (options) {
+        scrollIntoView(options);
+      };
+    });
+    afterEach(() => {
+      window.location.hash = "";
+    });
+
+    it("scrolls the section into view once it has loaded", () => {
+      window.location.hash = "#okta-sign-in";
+      state.issuers = { ...loaded([]), isPending: true };
+      const { rerenderSection } = renderSection();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      state.issuers = loaded([issuersPage]);
+      rerenderSection();
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves the page where it is without the anchor", () => {
+      window.location.hash = "#connection";
+      renderSection();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    });
+  });
+
   it("enables setup once clients and issuers load", () => {
     renderSection();
     expect(setUpButton().disabled).toBe(false);

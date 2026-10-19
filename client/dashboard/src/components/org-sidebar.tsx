@@ -209,7 +209,7 @@ export function OrgSidebar({
                         {
                           item: orgRoutes.userSessionIssuers,
                           scope: orgReadOrAdmin,
-                          label: "Authorization Servers",
+                          label: "Sign-ins",
                         },
                       ]
                     : []),

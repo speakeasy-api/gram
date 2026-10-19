@@ -14,19 +14,23 @@ import { Heading } from "@/components/ui/Heading";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useRBAC } from "@/hooks/useRBAC";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { oktaViewHref } from "@/pages/org/identity-provider/tabs";
+import { OKTA_SIGN_IN_SECTION_ID } from "@/pages/org/identity-provider/tabs/setup/OktaSignInSection";
 import { useOrgRoutes } from "@/routes";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { MoreHorizontal } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Navigate, Outlet } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Navigate, Outlet, useNavigate, useSearchParams } from "react-router";
 import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
+import { CreateOrganizationSignInSheet } from "./CreateOrganizationSignInSheet";
 import {
   authorizationServerModeLabel,
   consolidationTargets,
 } from "./issuerDisplay";
-import { MakeOrganizationWideDialog } from "./MakeOrganizationWideDialog";
 import { retryFailedTiers, useIssuerTier } from "./useIssuerTier";
 
 /** Route shell: the whole surface waits on its rollout flag. */
@@ -51,30 +55,64 @@ function UserSessionIssuersOverview(): JSX.Element {
   const projectTier = useIssuerTier("project");
   const [consolidateSource, setConsolidateSource] =
     useState<UserSessionIssuer | null>(null);
-  const [promoteTarget, setPromoteTarget] = useState<UserSessionIssuer | null>(
-    null,
-  );
+  const orgRoutes = useOrgRoutes();
+  const navigate = useNavigate();
+  const organization = useOrganization();
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const isAdmin = !rbacLoading && hasScope("org:admin", organization.id);
+
+  // ?create=1 links straight into creating an organization-wide sign-in.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const creating = isAdmin && searchParams.get("create") === "1";
+  const setCreating = (open: boolean) =>
+    setSearchParams(
+      (params) => {
+        const next = new URLSearchParams(params);
+        if (open) next.set("create", "1");
+        else next.delete("create");
+        return next;
+      },
+      { replace: true },
+    );
+  // Someone who can't create shouldn't keep a link that suggests they can.
+  const strayCreate =
+    !rbacLoading && !isAdmin && searchParams.get("create") === "1";
+  useEffect(() => {
+    if (!strayCreate) return;
+    setSearchParams(
+      (params) => {
+        const next = new URLSearchParams(params);
+        next.delete("create");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [strayCreate, setSearchParams]);
 
   const pool = useMemo(
     () => [...organizationTier.items, ...projectTier.items],
     [organizationTier.items, projectTier.items],
   );
 
-  const actions = {
-    onMakeOrganizationWide: setPromoteTarget,
-    onConsolidate: setConsolidateSource,
-  };
+  const actions = { onConsolidate: setConsolidateSource };
 
   return (
     <>
       <ResourceListPage
-        title="Speakeasy authorization servers"
+        title="Speakeasy sign-ins"
         description="Where people sign in to your MCP servers. Each one decides how sign-in works for every server that uses it."
+        primaryAction={
+          isAdmin ? (
+            <Button onClick={() => setCreating(true)}>
+              <Button.Text>Create organization-wide sign-in</Button.Text>
+            </Button>
+          ) : undefined
+        }
       >
         <Stack gap={4} className="mb-6">
           <div>
             <Heading variant="h4" className="mb-2">
-              Organization-wide authorization servers
+              Organization-wide sign-ins
             </Heading>
             <Text muted small className="max-w-2xl">
               Every project can use these.
@@ -83,8 +121,8 @@ function UserSessionIssuersOverview(): JSX.Element {
           <IssuerTable
             tier={organizationTier}
             showProject={false}
-            emptyHeading="No organization-wide authorization servers"
-            emptyDescription="Make a project's authorization server organization-wide to share it with every project."
+            emptyHeading="No organization-wide sign-ins yet"
+            emptyDescription="Create one to share a sign-in across projects. Enterprise Managed Authorization needs one."
             {...actions}
           />
         </Stack>
@@ -92,7 +130,7 @@ function UserSessionIssuersOverview(): JSX.Element {
         <Stack gap={4} className="mb-6">
           <div>
             <Heading variant="h4" className="mb-2">
-              Project authorization servers
+              Project sign-ins
             </Heading>
             <Text muted small className="max-w-2xl">
               Each serves the MCP servers of one project.
@@ -101,7 +139,7 @@ function UserSessionIssuersOverview(): JSX.Element {
           <IssuerTable
             tier={projectTier}
             showProject
-            emptyHeading="No project authorization servers"
+            emptyHeading="No project sign-ins"
             emptyDescription="Projects get one when they add sign-in to an MCP server."
             {...actions}
           />
@@ -120,10 +158,17 @@ function UserSessionIssuersOverview(): JSX.Element {
         />
       )}
 
-      {promoteTarget && (
-        <MakeOrganizationWideDialog
-          issuer={promoteTarget}
-          onClose={() => setPromoteTarget(null)}
+      {isAdmin && (
+        <CreateOrganizationSignInSheet
+          open={creating}
+          onOpenChange={setCreating}
+          organizationTier={organizationTier}
+          onCreated={(issuer) =>
+            void navigate(
+              orgRoutes.userSessionIssuers.issuerDetail.href(issuer.id),
+            )
+          }
+          oktaSetupHref={`${orgRoutes.identity.href()}${oktaViewHref("setup", OKTA_SIGN_IN_SECTION_ID)}`}
         />
       )}
     </>
@@ -135,14 +180,12 @@ function IssuerTable({
   showProject,
   emptyHeading,
   emptyDescription,
-  onMakeOrganizationWide,
   onConsolidate,
 }: {
   tier: ReturnType<typeof useIssuerTier>;
   showProject: boolean;
   emptyHeading: string;
   emptyDescription: string;
-  onMakeOrganizationWide: (issuer: UserSessionIssuer) => void;
   onConsolidate: (issuer: UserSessionIssuer) => void;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
@@ -154,7 +197,7 @@ function IssuerTable({
     return tier.isError ? (
       <InlineEmptyState
         icon="triangle-alert"
-        heading="Couldn't load authorization servers"
+        heading="Couldn't load sign-ins"
         action={
           <Button variant="secondary" size="sm" onClick={tier.retry}>
             <Button.Text>Retry</Button.Text>
@@ -184,7 +227,7 @@ function IssuerTable({
           <DotRow
             key={issuer.id}
             href={orgRoutes.userSessionIssuers.issuerDetail.href(issuer.id)}
-            ariaLabel={`View authorization server ${issuer.slug}`}
+            ariaLabel={`View sign-in ${issuer.slug}`}
           >
             <td className="px-3 py-3">
               <Text
@@ -215,7 +258,6 @@ function IssuerTable({
             <td className="px-3 py-3 text-right">
               <RowActions
                 issuer={issuer}
-                onMakeOrganizationWide={() => onMakeOrganizationWide(issuer)}
                 onConsolidate={() => onConsolidate(issuer)}
               />
             </td>
@@ -225,7 +267,7 @@ function IssuerTable({
       {tier.isError ? (
         <Stack direction="horizontal" align="center" gap={3} className="py-2">
           <Text small className="text-destructive">
-            Couldn&apos;t load every authorization server.
+            Couldn&apos;t load every sign-in.
           </Text>
           <Button variant="tertiary" size="sm" onClick={tier.retry}>
             <Button.Text>Retry</Button.Text>
@@ -238,19 +280,17 @@ function IssuerTable({
 
 function RowActions({
   issuer,
-  onMakeOrganizationWide,
   onConsolidate,
 }: {
   issuer: UserSessionIssuer;
-  onMakeOrganizationWide: () => void;
   onConsolidate: () => void;
 }): JSX.Element {
   return (
     <div className="relative z-20" onClick={(e) => e.stopPropagation()}>
       <RequireScope scope="org:admin" level="section">
-        {/* Non-modal: making a row organization-wide moves it to the other
-            table and unmounts this menu mid-close, which would leave a modal
-            menu's body pointer lock stuck. */}
+        {/* Non-modal: consolidating removes the row and unmounts this menu
+            mid-close, which would leave a modal menu's body pointer lock
+            stuck. */}
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <Button
@@ -264,11 +304,6 @@ function RowActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {issuer.projectId !== "" && (
-              <DropdownMenuItem onClick={onMakeOrganizationWide}>
-                Make organization-wide
-              </DropdownMenuItem>
-            )}
             <DropdownMenuItem onClick={onConsolidate}>
               Consolidate into another
             </DropdownMenuItem>
