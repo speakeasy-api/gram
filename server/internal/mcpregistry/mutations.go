@@ -46,6 +46,24 @@ func ParseToken(token string) (time.Time, error) {
 }
 
 func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return Entry{}, fmt.Errorf("begin registry create: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	created, err := s.CreateTx(ctx, tx, data)
+	if err != nil {
+		return Entry{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Entry{}, fmt.Errorf("commit registry create: %w", err)
+	}
+	return created, nil
+}
+
+// CreateTx creates a published entry inside the caller's transaction, so the
+// insert commits or rolls back with the caller's other writes.
+func (s *Service) CreateTx(ctx context.Context, tx pgx.Tx, data json.RawMessage) (Entry, error) {
 	if issues := s.validator.Validate(data); len(issues) > 0 {
 		return Entry{}, &InvalidError{Issues: issues}
 	}
@@ -54,11 +72,6 @@ func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, erro
 	if err != nil {
 		return Entry{}, err
 	}
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return Entry{}, fmt.Errorf("begin registry create: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	q := repo.New(tx)
 	if err := checkOktaMappingConflicts(ctx, q, uuid.Nil, data); err != nil {
 		return Entry{}, err
@@ -80,14 +93,24 @@ func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, erro
 	if errors.As(err, &pgerr) && pgerr.Code == pgerrcode.UniqueViolation && pgerr.ConstraintName == "mcp_registry_entries_name_key" {
 		return Entry{}, ErrConflict
 	}
-	created, err := entry(row, err)
-	if err != nil {
-		return Entry{}, err
+	return entry(row, err)
+}
+
+// NameTakenTx reports whether an entry already uses the record's server name.
+func NameTakenTx(ctx context.Context, tx pgx.Tx, data json.RawMessage) (bool, error) {
+	name := recordName(data)
+	if name == "" {
+		return false, nil
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return Entry{}, fmt.Errorf("commit registry create: %w", err)
+	_, err := entry(repo.New(tx).GetEntryByName(ctx, name))
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("look up registry entry name: %w", err)
+	default:
+		return true, nil
 	}
-	return created, nil
 }
 
 func (s *Service) Save(ctx context.Context, id uuid.UUID, token string, data json.RawMessage) (Entry, error) {

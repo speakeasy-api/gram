@@ -53,6 +53,8 @@ const (
 	PluginRepublishOrganizationLimitName          = "platform-mcp-plugin-republish-organization"
 	ProjectMutationConnectionLimitName            = "platform-mcp-project-mutation-connection"
 	ProjectMutationOrganizationLimitName          = "platform-mcp-project-mutation-organization"
+	GatewayMutationConnectionLimitName            = "platform-mcp-gateway-mutation-connection"
+	GatewayMutationOrganizationLimitName          = "platform-mcp-gateway-mutation-organization"
 )
 
 const (
@@ -144,6 +146,13 @@ const (
 	ToolExposureMutationsPerConnectionPerMinute   = 5
 	ToolExposureMutationsPerOrganizationPerMinute = 50
 
+	// GatewayMutationsPer* bound creating gateways and setting their members
+	// on one allowance, so alternating between the two cannot multiply the
+	// write rate. Each allowed call locks the gateway and may republish every
+	// plugin carrying it.
+	GatewayMutationsPerConnectionPerMinute   = 5
+	GatewayMutationsPerOrganizationPerMinute = 50
+
 	// DataExportTogglesPer* bound pausing and resuming data export routes on
 	// their own allowance. Both tools share it, so alternating between them
 	// cannot multiply the permitted write rate. A person handling an incident
@@ -175,10 +184,9 @@ const (
 	DrilldownRowsPerConnectionPerWindow          = 1000
 	DrilldownMetricQueriesPerConnectionPerWindow = 20
 
-	// SessionRecallsPer* bound continue_session. Metered separately and lower
-	// than every other read: each allowed call serves an entire session
-	// transcript as a digest, so this allowance must not be fundable by
-	// spending any other budget.
+	// SessionRecallsPer* bound session recall and captured chat search and reads.
+	// These reads share a separate, lower allowance because they return
+	// transcript content; metadata and aggregate reads cannot fund them.
 	SessionRecallsPerConnectionPerMinute   = 10
 	SessionRecallsPerOrganizationPerMinute = 100
 )
@@ -319,8 +327,8 @@ type OperationBudgets struct {
 	// Diagnostics so exhausting it is not possible by spending the summary
 	// allowance, and so it can be tightened on its own.
 	SensitiveDiagnostics OperationBudget
-	// SensitiveSessionRecall meters continue_session — the only operation that
-	// serves whole-transcript content — on its own low allowance.
+	// SensitiveSessionRecall meters continue_session, search_chats and read_chat
+	// together on a low allowance for transcript content.
 	SensitiveSessionRecall OperationBudget
 	// RiskMutations is shared by policy and exclusion writes. Connection-less
 	// assistant calls consume only its organization bucket.

@@ -11,7 +11,7 @@ reviews:
   enabled: true
   sensitivity: high
   incremental_commits: true
-  check_drafts: false
+  check_drafts: true
   architecture_diagrams: false
   external_contributors_require_manual_review: true
   resolve_threads_when_addressed: true

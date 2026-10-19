@@ -189,6 +189,10 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete remote sessions", func() error {
 			return s.q.OrgDeleteRemoteSessions(ctx, repo.OrgDeleteRemoteSessionsParams{ProjectID: proj, OrgID: org})
 		}},
+		// Cached EMA credentials and the trusted issuer sessions they cite SET
+		// NULL on their parents, so clear them by tenant first.
+		{"delete remote session ema credentials", func() error { return s.q.OrgDeleteRemoteSessionEMACredentials(ctx, org) }},
+		{"delete trusted issuer sessions", func() error { return s.q.OrgDeleteTrustedIssuerSessions(ctx, org) }},
 		// A reseed explicitly resets preparation claims before hard-deleting
 		// their parents. Do not depend on lifecycle triggers or SET NULL owner
 		// references.

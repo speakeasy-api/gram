@@ -920,6 +920,27 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-account-identity-analysis
+    name: gram-risk-v1-account-identity-analysis
+    spec:
+      definition: |
+        edition = "2024";
+        message AccountIdentityAnalysis {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string chat_id = 3;
+          string project_id = 4;
+          string organization_id = 5;
+          string risk_policy_id = 6;
+          int64 risk_policy_version = 7;
+          string created_at = 8;
+          string account_type = 9;
+          string email = 10;
+          repeated string approved_domains = 11;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analysis
     spec:
@@ -1290,6 +1311,7 @@ pubsub:
           string hook_source = 23;
           string policy_link_reason = 26;
           string external_conversation_id = 27;
+          bool run_judge = 28;
           string prior_user_request = 16;
           string recent_untrusted_content = 17;
           message ToolCall {
@@ -1332,9 +1354,50 @@ pubsub:
           string hook_source = 24;
           string policy_link_reason = 25;
           string external_conversation_id = 26;
+          bool run_judge = 27;
           message ToolCall {
             string name = 1;
             string arguments = 2;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-tool-call-analysis
+    name: gram-risk-v1-tool-call-analysis
+    spec:
+      definition: |
+        edition = "2024";
+        message ToolCallAnalysis {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          repeated ToolCall tool_calls = 8;
+          repeated string sources = 9;
+          string content_part_id = 10;
+          string chat_id = 11;
+          string parent_chat_message_id = 12;
+          string origin_risk_policy_id = 13;
+          int64 origin_risk_policy_version = 14;
+          string message_link_reason = 15;
+          string execution_path = 16;
+          string tool_call_id = 17;
+          string tool_name = 18;
+          string hook_source = 19;
+          string user_id = 20;
+          string message_type = 21;
+          string policy_link_reason = 22;
+          string external_conversation_id = 23;
+          message ToolCall {
+            string id = 1;
+            string name = 2;
+            string arguments = 3;
+            string created_at = 4;
+            string sender = 5;
           }
         }
       type: PROTOCOL_BUFFER
@@ -1430,6 +1493,9 @@ pubsub:
           string provider = 22;
           map<string, string> attributes = 23;
           Input input = 24;
+          string trigger_kind = 25;
+          string run_id = 26;
+          string evaluation_requested_at = 27;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1524,6 +1590,9 @@ pubsub:
             bool truncated = 4;
           }
           Input input = 24;
+          string trigger_kind = 25;
+          string run_id = 26;
+          string evaluation_requested_at = 27;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1840,6 +1909,20 @@ pubsub:
         name: gram-plugins-v1-publication-requested
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-account-identity-analyzer
+      topic_proto_message: gram-risk-v1-account-identity-analysis
+    name: gram-risk-v1-account-identity-analyzer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-account-identity-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analyzer
       topic_proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analyzer
@@ -1992,6 +2075,20 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-risk-v1-prompt-policy-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-tool-call-analyzer
+      topic_proto_message: gram-risk-v1-tool-call-analysis
+    name: gram-risk-v1-tool-call-analyzer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-tool-call-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-role-distribution-v1-role-distribution-setup-handler
@@ -2249,6 +2346,16 @@ pubsub:
           name: gram-plugins-v1-publication-requested
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-account-identity-analysis
+    name: gram-risk-v1-account-identity-analysis
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-account-identity-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analysis
     spec:
@@ -2347,6 +2454,16 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-prompt-policy-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-tool-call-analysis
+    name: gram-risk-v1-tool-call-analysis
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-tool-call-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-role-distribution-v1-role-distribution-setup-requested-v1

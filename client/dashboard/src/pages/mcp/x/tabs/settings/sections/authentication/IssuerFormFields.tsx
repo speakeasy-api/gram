@@ -79,8 +79,8 @@ function RedirectURICallout({
         </div>
       </div>
       <Text muted small>
-        Register this as the callback / redirect URI on the upstream provider's
-        OAuth app before pasting credentials below.
+        Register this as the callback / redirect URI on the upstream
+        authorization server's OAuth app before pasting credentials below.
       </Text>
     </Stack>
   );

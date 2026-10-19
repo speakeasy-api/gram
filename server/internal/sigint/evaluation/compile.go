@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
@@ -13,9 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 )
-
-// Keep this namespace stable so repeated evaluations retain their reading ID.
-var readingNamespace = uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:sigint:reading"))
 
 type compiledSensor struct {
 	id          string
@@ -127,6 +125,11 @@ func reading(event Event, sensor compiledSensor, answers map[classifier.Question
 	r.SetEvaluationAttemptId(attempt)
 	r.SetOrganizationId(event.OrganizationID)
 	r.SetProjectId(event.ProjectID)
+	r.SetTriggerKind(string(event.Evaluation.TriggerKind))
+	r.SetEvaluationRequestedAt(event.Evaluation.RequestedAt.UTC().Format(time.RFC3339Nano))
+	if event.Evaluation.RunID != uuid.Nil {
+		r.SetRunId(event.Evaluation.RunID.String())
+	}
 	r.SetSensorId(sensor.id)
 	r.SetSensorSlug(sensor.slug)
 	r.SetEvaluatedAt(at)

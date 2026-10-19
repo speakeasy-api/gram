@@ -55,6 +55,14 @@ func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request,
 
 	slot, err := c.publishSlot(ctx, logger, req, sel, cred)
 	switch {
+	case errors.Is(err, errConsentNotStored):
+		// The consent page only needs the outcome; nothing was stored to
+		// recheck. Remember it, so a reload does not redeem again.
+		acceptedKey := cacheKey("identityChainingConsentAccepted", req, sel)
+		if err := c.locks.Set(context.WithoutCancel(ctx), acceptedKey, true, consentAcceptedTTL); err != nil {
+			logger.WarnContext(ctx, "record identity chaining consent acceptance", attr.SlogCacheKey(acceptedKey), attr.SlogError(err))
+		}
+		return Token{value: cred.accessToken, expiresAt: cred.expiresAt.Add(-accessExpirySkew)}, success, true
 	case errors.Is(err, errStale):
 		return none, newOutcome(StagePersistence, ReasonStaleConfiguration, ConfidenceVerified, true), true
 	case err != nil:

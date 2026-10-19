@@ -174,6 +174,20 @@ func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slo
 	return s.resolveMetaMemberSnapshot(ctx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 }
 
+// resolveGateMemberSnapshot resolves the members a serving request answers
+// from: a derived gateway's from the caller's access, a stored gateway's from
+// its membership rows.
+func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Logger, gate *metaGateContext, metaServerID, projectID uuid.UUID) (context.Context, []metaMember, error) {
+	if gate.agentID == uuid.Nil && !gate.organizationGateway {
+		return s.resolveMetaMemberSnapshot(ctx, logger, metaServerID, projectID)
+	}
+	issuer := uuid.Nil
+	if gate.organizationGateway {
+		issuer = gate.userSessionIssuerID
+	}
+	return s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID, issuer)
+}
+
 // resolveOrganizationMemberSnapshot derives a gateway's members from the
 // caller's own access rather than from stored membership rows: every servable
 // server in the organization is a candidate, and the caller's grants decide
@@ -293,18 +307,22 @@ func servableOnSurface(networkAccessMode pgtype.Text, surface networkaccess.Surf
 	return err == nil && mode.Allows(surface)
 }
 
-// qualifyMemberSlugsByProject prefixes every member slug with its project's.
+// qualifyMemberSlugsByProject prefixes a member slug with its project's only
+// when another member shares it.
 //
 // Slugs are unique per project, not per organization, and a derived gateway can
-// span projects — so two members could answer to the same slug, and the
-// qualified serverslug--toolname contract would resolve to whichever came
-// first. Qualifying every member, rather than only the colliding ones, keeps a
-// member's name stable: an unrelated project adding a server must not rename
-// anything a caller already holds.
+// span projects, so two members could answer to the same slug and the
+// serverslug--toolname contract would resolve to whichever came first. Every
+// member with a shared slug is qualified, so neither silently wins; the rest
+// keep their plain slug, which is what Direct and Code Mode expose as names.
 func qualifyMemberSlugsByProject(members []metaMember) []metaMember {
+	counts := make(map[string]int, len(members))
+	for _, member := range members {
+		counts[member.slug]++
+	}
 	qualified := make([]metaMember, 0, len(members))
 	for _, member := range members {
-		if member.projectSlug != "" {
+		if counts[member.slug] > 1 && member.projectSlug != "" {
 			member.slug = member.projectSlug + "." + member.slug
 		}
 		qualified = append(qualified, member)

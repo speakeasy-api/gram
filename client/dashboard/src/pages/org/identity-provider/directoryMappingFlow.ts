@@ -1,5 +1,6 @@
+import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
 import type { Role } from "@gram/client/models/components/role.js";
-import type { SetDirectoryRoleMappingForm } from "@gram/client/models/components/setdirectoryrolemappingform.js";
+import type { SetDirectoryRoleMappingsForm } from "@gram/client/models/components/setdirectoryrolemappingsform.js";
 
 /**
  * The round trip from a directory role mapping to the role editor and back.
@@ -16,7 +17,27 @@ const DIRECTORY_MAPPING_FLOW = "directory-mapping";
 const FLOW_PARAM = "mapping";
 const STORAGE_PREFIX = "gram.directoryRoleMappingFlow.";
 
-type MappingSource = Omit<SetDirectoryRoleMappingForm, "roleUrn">;
+export type MappingSource = Omit<
+  SetDirectoryRoleMappingsForm,
+  "roleUrns" | "expectedRoleUrns"
+>;
+
+/** Every role currently mapped from `source`, used as the stale-write guard. */
+export function sourceRoleUrns(
+  mappings: DirectoryRoleMapping[],
+  source: MappingSource,
+): string[] {
+  return mappings
+    .filter((mapping) =>
+      source.sourceKind === "group"
+        ? mapping.sourceKind === "group" &&
+          mapping.directoryGroupId === source.directoryGroupId
+        : mapping.sourceKind === "attribute" &&
+          mapping.attributeKey === source.attributeKey &&
+          mapping.attributeValue === source.attributeValue,
+    )
+    .map((mapping) => mapping.roleUrn);
+}
 
 type FlowRecord = {
   source: MappingSource;
@@ -91,14 +112,27 @@ export function completeCreateRoleFlow(
   return new URLSearchParams({ [FLOW_PARAM]: key });
 }
 
-/** The mapping to save on return, once the editor recorded a created role. */
+/**
+ * The mapping to save on return, once the editor recorded a created role. The
+ * new role is added to the source's current roles, guarded by the roles mapped
+ * now so a source another tab changed is refused rather than overwritten.
+ */
 export function pendingMappingFromParams(
   params: URLSearchParams,
-): { key: string; form: SetDirectoryRoleMappingForm } | undefined {
+  mappings: DirectoryRoleMapping[] = [],
+): { key: string; form: SetDirectoryRoleMappingsForm } | undefined {
   const key = params.get(FLOW_PARAM);
   const record = key ? readRecord(key) : undefined;
   if (!key || !record?.roleUrn) return undefined;
-  return { key, form: { ...record.source, roleUrn: record.roleUrn } };
+  const existingRoles = sourceRoleUrns(mappings, record.source);
+  return {
+    key,
+    form: {
+      ...record.source,
+      expectedRoleUrns: existingRoles,
+      roleUrns: [...new Set([...existingRoles, record.roleUrn])],
+    },
+  };
 }
 
 /**

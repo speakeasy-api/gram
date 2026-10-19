@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
@@ -151,6 +152,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 		sessionManager,
 		cacheAdapter,
+		ratelimit.NewRedisStore(redisClient),
 		nil,
 		nil,
 		authzEngine,

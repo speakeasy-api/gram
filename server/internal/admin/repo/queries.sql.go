@@ -415,7 +415,7 @@ type AdminGetMcpServerAuthRow struct {
 // wrapper's calls. A live canonical wrapper (id = toolset id) owns the slug
 // outright: it counts as one, and any other wrapper of that toolset as two.
 // url_slug is the slug in the /mcp/<slug> path clients call: the primary live
-// endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
+// endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
 // a domain root has no such path), else the server's own slug, else the
 // toolset's mcp_slug when no other wrapper shares that toolset.
 func (q *Queries) AdminGetMcpServerAuth(ctx context.Context, arg AdminGetMcpServerAuthParams) (AdminGetMcpServerAuthRow, error) {
@@ -1124,6 +1124,39 @@ func (q *Queries) AdminListOrganizationMembersPage(ctx context.Context, arg Admi
 	return items, nil
 }
 
+const adminListOrganizationNamesByIDs = `-- name: AdminListOrganizationNamesByIDs :many
+SELECT id, name, slug
+FROM organization_metadata
+WHERE id = ANY($1::text[])
+`
+
+type AdminListOrganizationNamesByIDsRow struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// Labels the hook client grids, whose rows carry only organization ids.
+func (q *Queries) AdminListOrganizationNamesByIDs(ctx context.Context, ids []string) ([]AdminListOrganizationNamesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationNamesByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationNamesByIDsRow
+	for rows.Next() {
+		var i AdminListOrganizationNamesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListOrganizations = `-- name: AdminListOrganizations :many
 WITH search AS (
     -- Escaped once here rather than per arm so the name and the slug arm cannot
@@ -1469,7 +1502,7 @@ type AdminListProjectMcpServerRowsRow struct {
 
 // One row per live endpoint, and one with no endpoint columns for a server that
 // has none. custom_domain is null for an endpoint whose domain cannot serve it;
-// the caller skips those and picks the address with mcpendpoints.PrimaryEndpoint.
+// the caller skips those and picks the address with endpointaddr.PrimaryEndpoint.
 func (q *Queries) AdminListProjectMcpServerRows(ctx context.Context, projectID uuid.UUID) ([]AdminListProjectMcpServerRowsRow, error) {
 	rows, err := q.db.Query(ctx, adminListProjectMcpServerRows, projectID)
 	if err != nil {
