@@ -662,7 +662,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	if toolsCallReq != nil {
 		// Attach the tool name to the parent Post span so the existing
 		// `tool_name` materialized column on ClickHouse `telemetry_logs`
-		// populates for /x/mcp traffic without any further plumbing —
+		// populates for proxied traffic without any further plumbing —
 		// matching how /mcp aggregations already work.
 		span.SetAttributes(attr.ToolName(toolsCallReq.Params.Name))
 		if err := p.runToolsCallRequestInterceptors(ctx, toolsCallReq); err != nil {
@@ -691,7 +691,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	resourcesReadReq, _ := resourcesReadRequestFromUserRequest(userReq)
 	if resourcesReadReq != nil {
 		// Attach the resource URI to the parent Post span so the
-		// `gram.resource.uri` attribute on traces populates for /x/mcp
+		// `gram.resource.uri` attribute on traces populates for proxied
 		// resource reads, mirroring how tools/call sets `tool_name`.
 		span.SetAttributes(attr.ResourceURI(resourcesReadReq.Params.URI))
 		if err := p.runResourcesReadRequestInterceptors(ctx, resourcesReadReq); err != nil {

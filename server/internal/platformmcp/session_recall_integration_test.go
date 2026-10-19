@@ -59,6 +59,8 @@ type recallMessageSeed struct {
 	at              time.Time
 	generation      int32
 	toolCalls       string
+	contentRaw      string
+	userID          string
 	source          string
 	analyzed        bool
 	contentAssetURL string
@@ -66,9 +68,12 @@ type recallMessageSeed struct {
 
 func seedRecallMessage(t *testing.T, ctx context.Context, conn *pgxpool.Pool, chatID, projectID uuid.UUID, seed recallMessageSeed) uuid.UUID {
 	t.Helper()
-	var toolCalls []byte
+	var toolCalls, contentRaw []byte
 	if seed.toolCalls != "" {
 		toolCalls = []byte(seed.toolCalls)
+	}
+	if seed.contentRaw != "" {
+		contentRaw = []byte(seed.contentRaw)
 	}
 	analyzedAt := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 	if seed.analyzed {
@@ -81,6 +86,8 @@ func seedRecallMessage(t *testing.T, ctx context.Context, conn *pgxpool.Pool, ch
 		Content:         seed.content,
 		Generation:      seed.generation,
 		ToolCalls:       toolCalls,
+		ContentRaw:      contentRaw,
+		UserID:          conv.ToPGTextEmpty(seed.userID),
 		Source:          conv.ToPGTextEmpty(seed.source),
 		ContentAssetUrl: conv.ToPGTextEmpty(seed.contentAssetURL),
 		RiskAnalyzedAt:  analyzedAt,
@@ -359,7 +366,6 @@ func TestSessionRecallMasksSameSpanWithClickHouseCutover(t *testing.T) {
 		Surface:           scanners.SurfaceContent,
 		EventKind:         chrepo.EventKindFinding,
 	}}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, principal.OrganizationID, false)
 	postgresResult, err := svc.ContinueSession(ctx, principal, ContinueSessionInput{SessionID: sessionID})

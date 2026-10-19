@@ -344,9 +344,9 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
   (@tracker_id::uuid, @project_id::uuid, 'Acme Tracker', 'acme-tracker',
-   NULL, @remote_tracker_id::uuid, @issuer_workforce_id::uuid, 'private'),
+   NULL, @remote_tracker_id::uuid, @issuer_workforce_id::uuid, 'disabled'),
   (@wiki_id::uuid, @project_id::uuid, 'Acme Wiki', 'acme-wiki',
-   NULL, @remote_wiki_id::uuid, @issuer_workforce_id::uuid, 'private');
+   NULL, @remote_wiki_id::uuid, @issuer_workforce_id::uuid, 'disabled');
 
 -- Each service's authorization server accepts ID-JAGs from a confidential client.
 -- name: ServersInsertEMAVendorIssuers :exec

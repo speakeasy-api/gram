@@ -44,7 +44,7 @@ const (
 )
 
 // mintTarget is the issuer-gated audience the JWT is bound to, resolved from
-// either a toolset (/mcp) or a remote MCP server (/x/mcp) before the shared
+// either a toolset or an MCP server before the shared
 // mint+persist tail runs.
 type mintTarget struct {
 	issuerID uuid.UUID
@@ -57,7 +57,7 @@ type mintTarget struct {
 }
 
 // MintUserSession issues a user-session JWT against an issuer-gated audience —
-// either a toolset (/mcp) or a remote MCP server (/x/mcp) — on behalf of the
+// either a toolset or an MCP server — on behalf of the
 // authenticated dashboard user. Exactly one of toolset_id / mcp_server_id must
 // be set. The resulting JWT has the same shape as the one /token would emit
 // after a real OAuth dance, so the runtime gateway validates it through the
@@ -357,7 +357,7 @@ func serverMintTargetAt(server *mcpserversrepo.McpServer, issuerURL string) *min
 }
 
 // serverMintIssuerURL builds the descriptive iss claim from the server's
-// primary endpoint; servers with no endpoint keep the legacy /x/mcp shape.
+// primary endpoint; servers with no endpoint fall back to /mcp/{slug}.
 func (s *Service) serverMintIssuerURL(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (string, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -375,7 +375,7 @@ func (s *Service) serverMintIssuerURL(ctx context.Context, server *mcpserversrep
 	if server.Slug.String == "" {
 		return "", oops.E(oops.CodeInvariantViolation, nil, "issuer-gated mcp server has no addressable endpoint or slug").LogError(ctx, s.logger)
 	}
-	issuerURL, err = url.JoinPath(s.serverURL, "x", "mcp", server.Slug.String)
+	issuerURL, err = url.JoinPath(s.serverURL, "mcp", server.Slug.String)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
 	}

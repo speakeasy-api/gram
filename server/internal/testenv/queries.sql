@@ -806,10 +806,10 @@ RETURNING id;
 
 -- name: SeedCapturedAgentChatMessageFixture :one
 -- Test-only fixture: inserts a captured transcript row with the full recall
--- shape — generation, tool_calls, capture source, asset offload marker, and
--- risk-analysis completion — at a deterministic created_at.
-INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, source, content_asset_url, risk_analyzed_at, created_at)
-VALUES (@chat_id, @project_id, @role, @content, @generation, sqlc.narg(tool_calls), sqlc.narg(source), sqlc.narg(content_asset_url), sqlc.narg(risk_analyzed_at), @created_at)
+-- shape — generation, tool_calls, stored payload, sender, capture source, asset
+-- offload marker, and risk-analysis completion — at a deterministic created_at.
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, content_raw, user_id, source, content_asset_url, risk_analyzed_at, created_at)
+VALUES (@chat_id, @project_id, @role, @content, @generation, sqlc.narg(tool_calls), sqlc.narg(content_raw), sqlc.narg(user_id), sqlc.narg(source), sqlc.narg(content_asset_url), sqlc.narg(risk_analyzed_at), @created_at)
 RETURNING id;
 
 -- name: SeedUserAccountFixture :one
@@ -2077,3 +2077,8 @@ ORDER BY created_at, id;
 -- Databases whose name starts with a prefix, so a test can show clones are dropped.
 SELECT count(*)::bigint AS databases FROM pg_catalog.pg_database
 WHERE starts_with(datname, @prefix::text);
+
+-- name: SeedChatMessageParticipantFixture :exec
+-- Test-only fixture: records one participant snapshot on a captured message.
+INSERT INTO chat_message_participants (project_id, chat_id, message_id, provider, provider_user_id, user_id)
+VALUES (@project_id, @chat_id, @message_id, @provider, @provider_user_id, sqlc.narg(user_id));

@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // chListFinding builds one ClickHouse listing row: an overview-shaped finding
@@ -100,7 +99,6 @@ func TestListRiskResults_MCPServerFilterIncludesUnanchoredAndScopesAllPaths(t *t
 		unanchored, anchored, otherServer, foreignProject, foreignOrg, disabledPolicyRow, dismissedAnchored,
 	}))
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{dismissedCopy}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// The default view includes the disabled policy's row.
 	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{McpServerID: &serverID})
@@ -175,7 +173,6 @@ func TestListRiskResults_DefaultViewKeepsDisabledPolicyHistory(t *testing.T) {
 	deletedRow.RiskPolicyID = deleted.ID
 
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{gatewayOnly, deletedRow}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	require.NoError(t, ti.service.DeleteRiskPolicy(ctx, &gen.DeleteRiskPolicyPayload{ID: deleted.ID}))
 
 	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
@@ -246,8 +243,6 @@ func TestListRiskResults_ClickHousePageOrderingAndRedaction(t *testing.T) {
 		INSERT INTO risk_findings (id, created_at, message_created_at, organization_id, project_id, risk_policy_id, rule_id, source, category, chat_id, false_positive_at)
 		VALUES (?, ?, ?, ?, ?, ?, 'secret.github_pat', 'gitleaks', 'secrets', ?, ?)
 	`, uuid.Must(uuid.NewV7()), base.Add(4*time.Hour), base.Add(110*time.Minute), orgID, projectID.String(), policy.ID, oldChat.String(), base.Add(5*time.Hour)))
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	pageSize := 2
 	page1, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{Limit: &pageSize})
@@ -328,7 +323,6 @@ func TestListRiskResults_ClickHouseLegacyFalsePositiveOnlyRowIsHidden(t *testing
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{legacyFP, converged, open}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
 	require.NoError(t, err)
@@ -382,7 +376,6 @@ func TestListRiskResults_ClickHouseFilters(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{secretAssistant, piiNoAssistant, disabledPolicyRow, dupOld, dupNew, noFp1, noFp2}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	ids := func(result *gen.ListRiskResultsResult) []string {
 		out := make([]string, 0, len(result.Results))
@@ -475,7 +468,6 @@ func TestListRiskResults_ClickHouseUniqueMatchPagination(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{dupNew, other, dupOld}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	pageSize := 1
 	var cursor *string
@@ -534,7 +526,6 @@ func TestListRiskResults_ClickHouseRedeliveryCannotUndoDismissal(t *testing.T) {
 	// The redelivered scanner copy: same id, fresher inserted_at, no
 	// suppression stamps.
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
 	require.NoError(t, err)
@@ -593,7 +584,6 @@ func TestListRiskResults_ClickHouseRetroFlagCopies(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{keep, retroHidden, ingestExcluded, fpLater}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// Retro apply hides retroHidden; retro reversal un-hides ingestExcluded.
 	// Both go through the real append-copy mechanism (synchronous inserts).
@@ -619,7 +609,6 @@ func TestListRiskResults_ClickHouseRetroFlagCopies(t *testing.T) {
 		INSERT INTO risk_findings (id, created_at, message_created_at, organization_id, project_id, risk_policy_id, rule_id, source, category, chat_id, false_positive_at)
 		VALUES (?, ?, ?, ?, ?, ?, 'secret.aws_secret_key', 'gitleaks', 'secrets', ?, ?)
 	`, fpLater.ID, createdAt, fpLater.MessageCreatedAt, orgID, projectID.String(), policy.ID, chatID.String(), createdAt.Add(2*time.Minute)))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
 	require.NoError(t, err)
@@ -636,7 +625,6 @@ func TestListRiskResults_ClickHouseRetroFlagCopies(t *testing.T) {
 	uniqNew := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, createdAt, base.Add(3*time.Hour), "gitleaks", "secret.db_password", "alice@example.com", "<redacted len=8 sha=eeeeeeee>", "fp-uniq", "")
 	uniqOld := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, createdAt, base.Add(1*time.Hour), "gitleaks", "secret.db_password", "alice@example.com", "<redacted len=8 sha=ffffffff>", "fp-uniq", "")
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{uniqNew, uniqOld}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	// Fresh timestamp: the flag copy must sort after the rows inserted above.
 	flagAt := time.Now().UTC()
 	require.NoError(t, chQueries.AppendRetroExclusionApplyByIDs(ctx, scope, exclusionID,
@@ -695,7 +683,6 @@ func TestListRiskResults_ExecutionAndResultFilters(t *testing.T) {
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{request, response, otherExecution, foreignProject, dismissed}))
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{dismissedCopy}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	byExecution, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ExecutionID: &executionID})
 	require.NoError(t, err)

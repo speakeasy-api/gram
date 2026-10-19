@@ -85,9 +85,8 @@ type EndpointRef struct {
 	BaseURL string `json:"base_url,omitempty"`
 
 	// McpServerID, when valid, identifies the mcp_servers row that owns
-	// this challenge. Populated by /x/mcp callers whose endpoint
-	// addresses resolve through mcp_endpoints → mcp_servers; zero for
-	// /mcp callers.
+	// this challenge. Populated when the endpoint resolves through
+	// mcp_endpoints → mcp_servers; zero for legacy toolset-keyed callers.
 	McpServerID uuid.NullUUID `json:"mcp_server_id"`
 
 	// MetaMcpServerID, when valid, identifies the meta_mcp_servers row that
@@ -108,12 +107,11 @@ type EndpointRef struct {
 	// denotes a pre-field legacy cached state.
 	ToolsetID uuid.NullUUID `json:"toolset_id,omitzero"`
 
-	// Path of a toolset-backed endpoint. Set for /mcp and toolset-backed
-	// /x/mcp challenges.
+	// Path of a toolset-backed endpoint.
 	McpSlug string `json:"mcp_slug"`
 
 	// RouteBase is the URL path prefix the challenge was minted under
-	// ("mcp" or "x/mcp"). Empty value is treated as "mcp" by callers for
+	// (e.g. "mcp"). Empty value is treated as "mcp" by callers for
 	// backward compatibility with states minted before this field was
 	// added.
 	RouteBase string `json:"route_base,omitempty"`
@@ -142,6 +140,10 @@ type EndpointRef struct {
 // round-trip through the IDP and land on /connect, short enough that
 // abandoned flows don't pile up.
 type AuthnChallengeState struct {
+	// ConsentBrowserHash binds automatic approval to the browser that started
+	// this shared authorization request, independently of IdP callback cookies.
+	ConsentBrowserHash string `json:"consent_browser_hash,omitempty"`
+
 	Browser    *ChallengeBrowserBinding `json:"browser,omitempty"`
 	Federation *FederatedChallenge      `json:"federation,omitempty"`
 	// Preserve only non-secret login binding and retry budget through consent.
@@ -970,7 +972,7 @@ type issuerGateAuthentication struct {
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
-// the toolset-keyed (/mcp) and mcp_server-keyed (/x/mcp) MCP runtime
+// the toolset-keyed and mcp_server-keyed MCP runtime
 // paths. It validates the bearer token as a user-session JWT and falls back
 // to an assistant-runtime JWT scoped to the endpoint's project or an admitted
 // agent principal API key scoped to the endpoint's tenant. Upstream
@@ -982,12 +984,8 @@ type issuerGateAuthentication struct {
 // On failure it writes a 401 + WWW-Authenticate and returns the CodeUnauthorized
 // error from WriteAuthenticateChallenge. The resource_metadata URL is built
 // from baseURL + endpoint.RouteBase +
-// endpoint.Slug so a /x/mcp request gets pointed at /x/mcp's
-// protected-resource metadata, not /mcp's.
-//
-// /x/mcp uses this to gate requests on mcp_servers.user_session_issuer_id
-// before dispatching to its remote backend or delegating to
-// ServeToolsetResolved with the gate skipped.
+// endpoint.Slug so the request is pointed at its own surface's
+// protected-resource metadata.
 func (s *Service) authenticateIssuerGate(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -1263,9 +1261,8 @@ func oauthAuthorityError(err error) *oops.ShareableError {
 // config today, but any future consumer must either route through here or
 // tolerate an unstamped endpoint, which reads as an unset mode.
 //
-// Exported so /x/mcp's [Service.buildResolvedMcpEndpoint] can include
-// the live-FK check in the same place as the
-// NewResolvedMcpEndpointFromMcpServer construction.
+// Callers run it alongside NewResolvedMcpEndpointFromMcpServer
+// construction.
 func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint) error {
 	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 		ID:             endpoint.UserSessionIssuerID,

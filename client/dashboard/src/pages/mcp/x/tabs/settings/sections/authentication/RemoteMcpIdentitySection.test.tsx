@@ -3142,3 +3142,20 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
   });
 });
+
+describe("identity chaining", () => {
+  it("leaves identity chaining to its own section, even for a sign-in that trusts an identity provider", () => {
+    mocks.userSessionIssuer.mockReturnValue({
+      data: {
+        id: "user-session-issuer-1",
+        projectId: "",
+        trustedRemoteSessionIssuerId: "okta-issuer",
+        trustedRemoteSessionClientId: "okta-client",
+      },
+    });
+    renderIdentity();
+    expect(screen.queryByText(/Enterprise Managed Authorization/)).toBeNull();
+    expect(screen.queryByText(/Identity chaining/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
+  });
+});
