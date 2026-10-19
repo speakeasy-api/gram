@@ -141,6 +141,13 @@ WHERE (f.issuer_id = ANY($3::uuid[]) OR s.user_session_issuer_id = ANY($3::uuid[
       AND rs.deleted IS FALSE
       AND r.url IS NOT NULL
       AND rtrim(rs.resource, '/') = rtrim(r.url, '/')
+      AND EXISTS (
+        SELECT 1
+        FROM user_session_issuers AS minted
+        LEFT JOIN projects AS minted_project ON minted_project.id = minted.project_id
+        WHERE minted.id = rs.user_session_issuer_id
+          AND COALESCE(minted.organization_id, minted_project.organization_id) = p.organization_id
+      )
       AND (
         rs.user_session_issuer_id = f.issuer_id
         OR EXISTS (
