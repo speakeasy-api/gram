@@ -47,7 +47,7 @@ import {
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router";
 import { toast } from "sonner";
 import { mcpDetailTabHref } from "./MCPDetailsRouting";
@@ -66,11 +66,7 @@ export type SkillsTabServer =
 /**
  * The route behind the Skills tab. The tab only exists while skills over MCP
  * is on for the organization; a direct link with the flag off lands on the
- * overview instead of an empty page. The flag is decided before the scope so
- * a reader without skill access is redirected, not walled, while it is off.
- * Served skills are plugin distributions, which skill readers of this project
- * may list (the same gate as the Skills page); adding and removing is gated
- * per control on plugin write.
+ * overview instead of an empty page.
  */
 export function MCPSkillsTabRoute({
   toolset,
@@ -78,6 +74,30 @@ export function MCPSkillsTabRoute({
   toolset: SkillsTabToolset;
 }): JSX.Element {
   const routes = useRoutes();
+  return (
+    <SkillsTabGate
+      fallbackHref={mcpDetailTabHref(routes, toolset.slug, "overview")}
+    >
+      <MCPSkillsTab toolset={toolset} />
+    </SkillsTabGate>
+  );
+}
+
+/**
+ * The gate every Skills tab sits behind, hosted or remote. The flag is decided
+ * before the scope so a reader without skill access is redirected to
+ * fallbackHref, not walled, while it is off. Served skills are plugin
+ * distributions, which skill readers of this project may list (the same gate
+ * as the Skills page); adding and removing is gated per control on plugin
+ * write.
+ */
+export function SkillsTabGate({
+  fallbackHref,
+  children,
+}: {
+  fallbackHref: string;
+  children: ReactNode;
+}): JSX.Element {
   const project = useProject();
   const flag = useFeatureFlag(FEATURE_FLAGS.skillsOverMcp);
   switch (flag.status) {
@@ -89,7 +109,7 @@ export function MCPSkillsTabRoute({
           projectId={project.id}
           level="page"
         >
-          <MCPSkillsTab toolset={toolset} />
+          {children}
         </RequireScope>
       );
     case "loading":
@@ -97,12 +117,7 @@ export function MCPSkillsTabRoute({
     case "disabled":
     case "missing":
     case "error":
-      return (
-        <Navigate
-          to={mcpDetailTabHref(routes, toolset.slug, "overview")}
-          replace
-        />
-      );
+      return <Navigate to={fallbackHref} replace />;
   }
 }
 

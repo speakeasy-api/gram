@@ -524,7 +524,29 @@ describe("ServedSkillsSection for a remote server", () => {
   });
 
   it("lists skills of the plugins that include the server by its row id", () => {
+    // A plugin whose hosted server's toolset id equals the remote row id
+    // must not match: remote membership is by mcp_servers id only.
+    const decoyPlugin = {
+      id: "plugin-decoy",
+      name: "Decoy",
+      assignmentCount: 1,
+      servers: [{ id: "ps-d", displayName: "Decoy", toolsetId: "remote-a" }],
+    };
+    state.plugins = {
+      data: { plugins: [remotePlugin, hostedPlugin, decoyPlugin] },
+      error: null,
+      isLoading: false,
+    };
+    state.distributions.mockReturnValue(
+      distributionsResult([
+        distribution("r", "plugin-r"),
+        distribution("1", "plugin-a"),
+        distribution("d", "plugin-decoy"),
+      ]),
+    );
     renderTab(remote);
+    expect(screen.queryByText("Decoy")).toBeNull();
+    expect(screen.queryByText("Skill d")).toBeNull();
     expect(screen.getByText("Ticketing tools")).toBeDefined();
     expect(screen.getByText("Skill r")).toBeDefined();
     expect(screen.queryByText("Finance tools")).toBeNull();
