@@ -10,7 +10,8 @@ import type { RiskPolicyApproval } from "@gram/client/models/components/riskpoli
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskListApprovals } from "@gram/client/react-query/riskListApprovals.js";
 import { formatDistanceToNow } from "date-fns";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { APPROVAL_STATUS_BADGE, requesterLabel } from "./approval-labels";
 import { ToolApprovalSheet } from "./ToolApprovalSheet";
 
@@ -36,6 +37,35 @@ export function ToolApprovalsTab(): JSX.Element {
   const membersQuery = useMembers();
   const members = membersQuery.data?.members ?? [];
   const approvals = approvalsQuery.data?.approvals ?? [];
+
+  // A Slack card's Open in Speakeasy link names the request: open it. A
+  // request that is already decided is only in the All list.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedID = searchParams.get("request");
+  const loaded = approvalsQuery.data;
+  useEffect(() => {
+    if (!requestedID || selected || !loaded) return;
+    const match = loaded.approvals.find(
+      (approval) => approval.id === requestedID,
+    );
+    if (match) {
+      setSelected(match);
+      return;
+    }
+    if (filter === "pending") setFilter("all");
+  }, [requestedID, selected, loaded, filter]);
+  const closeRequest = () => {
+    setSelected(null);
+    if (!requestedID) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("request");
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   const columns: Column<RiskPolicyApproval>[] = [
     {
@@ -156,7 +186,7 @@ export function ToolApprovalsTab(): JSX.Element {
         approval={selected}
         members={members}
         onOpenChange={(open) => {
-          if (!open) setSelected(null);
+          if (!open) closeRequest();
         }}
       />
     </div>
