@@ -128,6 +128,9 @@ type mintSessionParams struct {
 	CredentialID  uuid.NullUUID
 	Subject       urn.SessionSubject
 	ToolSelection []byte
+	// UpstreamClientPicks is the consent page's upstream client pick per MCP
+	// server, recorded as a new credential's choices.
+	UpstreamClientPicks map[uuid.UUID]uuid.UUID
 }
 
 type mintedSession struct {
@@ -569,6 +572,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Subject:                result.Subject,
 		ToolSelection:          nil,
+		UpstreamClientPicks:    nil,
 	}, logger)
 	if err != nil {
 		return err
@@ -862,6 +866,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Subject:                subject,
 		ToolSelection:          toolSelection,
+		UpstreamClientPicks:    grant.UpstreamClientPicks,
 	}, logger)
 	if err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
@@ -1317,6 +1322,7 @@ func (s *Service) rotateRefreshToken(
 		CredentialID:           uuid.NullUUID{UUID: sessionCredentialID(oldSession), Valid: true},
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
+		UpstreamClientPicks:    nil,
 	}, logger)
 	if err != nil {
 		return true, err
@@ -1798,6 +1804,7 @@ func (s *Service) mintSession(
 		AuthorizationExpiresAt: params.AuthorizationExpiresAt,
 		DesiredSessionDuration: params.DesiredSessionDuration,
 		Replayable:             params.Replayable,
+		UpstreamClientPicks:    params.UpstreamClientPicks,
 	}, logger)
 }
 
@@ -1868,6 +1875,10 @@ type sessionIssuance struct {
 	// Replayable requests a stable high-entropy JTI that can be reused when
 	// re-signing for another origin.
 	Replayable bool
+
+	// UpstreamClientPicks is the consent page's upstream client pick per MCP
+	// server, recorded with a new credential's choices.
+	UpstreamClientPicks map[uuid.UUID]uuid.UUID
 }
 
 // issueSession mints the access token of an issuance and persists its session
@@ -1991,11 +2002,19 @@ func (s *Service) issueSession(
 	}
 	// A rotated session keeps the choices its credential already has.
 	if !issuance.CredentialID.Valid {
+		pickedServers := make([]uuid.UUID, 0, len(issuance.UpstreamClientPicks))
+		pickedClients := make([]uuid.UUID, 0, len(issuance.UpstreamClientPicks))
+		for serverID, clientID := range issuance.UpstreamClientPicks {
+			pickedServers = append(pickedServers, serverID)
+			pickedClients = append(pickedClients, clientID)
+		}
 		if _, err := queries.RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
 			UserSessionIssuerID: issuance.UserSessionIssuerID,
 			CredentialKind:      upstreamclients.CredentialKindUserSession,
 			CredentialID:        session.ID,
 			Source:              upstreamclients.SelectionSourceIssuance,
+			PickedMcpServerIds:  pickedServers,
+			PickedClientIds:     pickedClients,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, logger)
 		}
