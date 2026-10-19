@@ -885,7 +885,7 @@ func TestConsentTemplateOffersIdentityReconnect(t *testing.T) {
 	with := renderCard(true)
 	require.Contains(t, with, "Reconnect to add account details")
 	require.Contains(t, with, "> Reconnect </button>")
-	require.Contains(t, with, "Connected")
+	require.Contains(t, with, "Service connected")
 
 	without := renderCard(false)
 	require.NotContains(t, without, "Reconnect to add account details")
