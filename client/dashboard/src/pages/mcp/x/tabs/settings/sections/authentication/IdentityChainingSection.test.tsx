@@ -326,6 +326,17 @@ describe("IdentityChainingSection", () => {
     ).toBe(null);
   });
 
+  it("stays hidden when Speakeasy's issuer is unavailable even with ema-providers on", () => {
+    state.flags = { oktaConnections: false, emaProviders: true };
+    state.speakeasy = { state: "unavailable" };
+    render(<IdentityChainingSection mcpServer={server} />);
+    expect(
+      screen.queryByRole("heading", {
+        name: "Enterprise Managed Authorization",
+      }),
+    ).toBe(null);
+  });
+
   it("shows when Speakeasy's issuer is offered while ema-providers is off", () => {
     state.flags = { oktaConnections: false, emaProviders: false };
     render(<IdentityChainingSection mcpServer={server} />);

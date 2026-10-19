@@ -126,8 +126,10 @@ export function IdentityChainingSection({
   // Speakeasy vouches once its issuer is offered; ema-providers only gates the provider list.
   const speakeasyOffered =
     !!speakeasyIssuer.data && speakeasyIssuer.data.state !== "unavailable";
+  // The flag only stands in when the issuer state can't be read.
   const speakeasyRollout =
-    emaProvidersFlag.status === "enabled" || speakeasyOffered;
+    speakeasyOffered ||
+    (emaProvidersFlag.status === "enabled" && !speakeasyIssuer.data);
   // Without org:read the issuer query never runs; a binding may still be on.
   const speakeasyUnreadable =
     speakeasyIssuer.isPending && speakeasyIssuer.fetchStatus === "idle";
