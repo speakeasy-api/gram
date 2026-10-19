@@ -53,8 +53,13 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 			}
 			// Past the budget, any failure (including never starting) is the
 			// budget's, not the member's, so it is skipped like a slow member.
-			if ctx.Err() != nil && requestCtx.Err() == nil && (results[i].err != nil || results[i].catalog == nil) {
-				results[i] = memberDescribeResult{catalog: nil, err: &metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug)}}
+			// A canceled request fails the listing instead.
+			if ctx.Err() != nil && (results[i].err != nil || results[i].catalog == nil) {
+				if err := requestCtx.Err(); err != nil {
+					results[i] = memberDescribeResult{catalog: nil, err: err}
+				} else {
+					results[i] = memberDescribeResult{catalog: nil, err: &metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug)}}
+				}
 			}
 			return nil
 		})

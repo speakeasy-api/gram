@@ -330,3 +330,29 @@ func TestGatewayDirectGivesQueuedMembersTheirOwnDeadline(t *testing.T) {
 		require.Contains(t, w.Body.String(), memberSlug+"--ping")
 	}
 }
+
+func TestGatewayDirectCanceledListingFailsWithoutListing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithMetaRuntime(t, testenv.NewMeterProvider(t), mcp.MetaRuntimeConfig{MemberCallTimeout: 5 * time.Second, ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: 0})
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	// The seventh member is still queued behind the concurrency limit when
+	// the request is canceled, so it is never described.
+	slow := func() bool {
+		<-time.After(2 * time.Second)
+		return true
+	}
+	for i := range 7 {
+		memberSlug := fmt.Sprintf("member%d-%s", i, uuid.NewString()[:8])
+		upstream := newListingUpstream(t, []any{map[string]any{"name": "ping", "inputSchema": map[string]any{"type": "object"}}}, slow)
+		seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Member "+memberSlug, memberSlug, int32(i+1), upstream)
+	}
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	requestCtx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+	w, err := servePublicHTTP(t, requestCtx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	if err == nil {
+		require.NotContains(t, w.Body.String(), "--ping")
+	}
+}
