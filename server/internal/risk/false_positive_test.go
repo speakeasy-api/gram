@@ -267,12 +267,17 @@ func TestMarkUnmarkRiskResultsFalsePositive_ClickHouseOnlyMediatedFinding(t *tes
 	before, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{McpServerID: &serverID})
 	require.NoError(t, err)
 	require.Len(t, before.Results, 1)
+	dismissBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
+	require.NoError(t, err)
 
 	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
 		ResultIds: []string{finding.ID.String()},
 		Reason:    new("noise"),
 	})
 	require.NoError(t, err)
+	dismissAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
+	require.NoError(t, err)
+	require.Equal(t, dismissBefore+1, dismissAfter)
 
 	liveAfterMark, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{McpServerID: &serverID})
 	require.NoError(t, err)
@@ -296,11 +301,16 @@ func TestMarkUnmarkRiskResultsFalsePositive_ClickHouseOnlyMediatedFinding(t *tes
 	require.Equal(t, finding.IdentityStamped, *row.IdentityStamped)
 	require.Equal(t, finding.EnforcementOutcome, *row.EnforcementOutcome)
 	require.Equal(t, "noise", *row.SuppressedDetail)
+	restoreBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultRestore)
+	require.NoError(t, err)
 
 	err = ti.service.UnmarkRiskResultsFalsePositive(ctx, &gen.UnmarkRiskResultsFalsePositivePayload{
 		ResultIds: []string{finding.ID.String()},
 	})
 	require.NoError(t, err)
+	restoreAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultRestore)
+	require.NoError(t, err)
+	require.Equal(t, restoreBefore+1, restoreAfter)
 
 	dismissedAfterUndo, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
 	require.NoError(t, err)
@@ -312,6 +322,50 @@ func TestMarkUnmarkRiskResultsFalsePositive_ClickHouseOnlyMediatedFinding(t *tes
 	require.Equal(t, finding.ID.String(), liveAfterUndo.Results[0].ID)
 	require.Equal(t, serverID, *liveAfterUndo.Results[0].McpServerID)
 	require.Equal(t, finding.ExecutionID, *liveAfterUndo.Results[0].ExecutionID)
+}
+
+func TestMarkRiskResultsFalsePositive_ClickHouseTenancy(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	finding := chListFinding(
+		t,
+		uuid.New(),
+		"org_"+uuid.NewString(),
+		uuid.Nil,
+		uuid.Nil,
+		uuid.NewString(),
+		time.Now().UTC(),
+		time.Now().UTC(),
+		"gitleaks",
+		"secret.github_pat",
+		"",
+		"<redacted len=8 sha=aaaaaaaa>",
+		"foreign-fingerprint",
+		"",
+	)
+	queries := chrepo.New(ti.chConn)
+	require.NoError(t, queries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
+	require.NoError(t, err)
+	require.NoError(t, ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{finding.ID.String()},
+	}))
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+
+	states, err := queries.ListFalsePositiveStates(ctx, finding.OrganizationID, finding.ProjectID, []uuid.UUID{finding.ID})
+	require.NoError(t, err)
+	require.Len(t, states, 1)
+	require.False(t, states[0].Dismissed)
 }
 
 func TestMarkRiskResultsFalsePositive_RejectsEmptyIDs(t *testing.T) {
@@ -779,4 +833,27 @@ func TestListDismissedRiskResults_ClickHouseResolvesLatestCopy(t *testing.T) {
 	require.Len(t, dismissed.Results, 1)
 	require.Equal(t, stillDismissedID.String(), dismissed.Results[0].ID)
 	require.Equal(t, int64(1), dismissed.TotalCount)
+}
+
+func TestAppendAutomatedFalsePositiveSuppression_RoundTrip(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	createdAt := time.Now().UTC().Add(-time.Hour)
+	finding := chListFinding(t, projectID, orgID, uuid.New(), uuid.New(), uuid.NewString(), createdAt, createdAt,
+		"presidio", "pii.email", "", "<redacted len=8 sha=aaaaaaaa>", "fingerprint", "")
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	now := chrepo.FormatCHTime(time.Now())
+	require.NoError(t, chQueries.AppendAutomatedFalsePositiveSuppression(ctx, orgID, projectID.String(), now, now, "placeholder email", []uuid.UUID{finding.ID}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	states, err := chQueries.ListFalsePositiveStates(ctx, orgID, projectID.String(), []uuid.UUID{finding.ID})
+	require.NoError(t, err)
+	require.Equal(t, []chrepo.FalsePositiveState{{ID: finding.ID, Dismissed: true, RuleSuppressed: false}}, states)
 }

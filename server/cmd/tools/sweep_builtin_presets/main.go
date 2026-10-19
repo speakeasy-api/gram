@@ -4,13 +4,11 @@
 // credit cards, example API keys/tokens, module hashes, placeholder emails,
 // ...) as false positives so the dashboard hides them.
 //
-// It is the cross-source counterpart to the sweep_false_positives tool (which
-// re-evaluates only Presidio PII findings against presidiofp). It is meant to
-// be run rarely and by hand, against a production database reached through a
-// Cloud SQL Auth Proxy tunnel:
+// It is meant to be run rarely and by hand, against production databases
+// reached through tunnels:
 //
-//	cloud-sql-proxy --port 5432 <instance-connection-name> &
 //	GRAM_DATABASE_URL=postgres://USER:PASS@127.0.0.1:5432/gram \
+//	GRAM_CLICKHOUSE_URL=clickhouse://USER:PASS@HOST:9440/gram?secure=true \
 //	  go run ./server/cmd/tools/sweep_builtin_presets \
 //	  -org org_123 -project <uuid> \
 //	  -from 2024-01-01T00:00:00Z -to 2024-06-01T00:00:00Z \
@@ -18,14 +16,14 @@
 //
 // Safety properties:
 //   - -dry-run defaults to true: a plain run only reports what it would mark.
-//   - Every read and write is scoped by organization_id + project_id + id range
-//     (and optionally policy), and the UPDATE re-checks false_positive_at IS NULL,
-//     so re-runs and resumes are idempotent and cannot touch another tenant.
-//   - false_positive_reason is stamped with the catalog version
-//     ("preset:<version> <reason>") so a future targeted un-stamp can find
-//     exactly the rows this tool wrote.
-//   - Marking is reversible: UPDATE ... SET false_positive_at = NULL,
-//     false_positive_reason = NULL over the same scope undoes a bad sweep.
+//   - Candidates are paged from Postgres risk_results, so findings that exist
+//     only in ClickHouse are not swept.
+//   - Marks are appended to ClickHouse first, then mirrored to Postgres. Every
+//     write is scoped by organization_id + project_id + id and skips findings
+//     already dismissed, so re-runs and resumes are idempotent.
+//   - Marks are reversible through the risk results restore API, which
+//     appends ClickHouse reversal copies and clears the Postgres mirror. A
+//     Postgres UPDATE alone does not undo a sweep.
 //
 // On interruption (Ctrl-C) or error it prints the last processed id so the run
 // can be resumed with -cursor.
@@ -47,6 +45,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/cmd/tools/internal/clickhouseconn"
+	"github.com/speakeasy-api/gram/server/cmd/tools/internal/falsepositivesweep"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/uuidv7"
 )
@@ -57,15 +58,16 @@ const (
 )
 
 type config struct {
-	dbURL     string
-	orgID     string
-	projectID uuid.UUID
-	policyID  uuid.NullUUID
-	from      time.Time
-	to        time.Time
-	cursor    uuid.UUID
-	batchSize int32
-	dryRun    bool
+	dbURL         string
+	clickhouseURL string
+	orgID         string
+	projectID     uuid.UUID
+	policyID      uuid.NullUUID
+	from          time.Time
+	to            time.Time
+	cursor        uuid.UUID
+	batchSize     int32
+	dryRun        bool
 }
 
 type report struct {
@@ -108,7 +110,14 @@ func run() int {
 		return 1
 	}
 
-	rep, runErr := sweep(ctx, pool, cfg, lib)
+	chConn, err := clickhouseconn.Open(ctx, cfg.clickhouseURL)
+	if err != nil {
+		log.Printf("connect ClickHouse: %v", err)
+		return 1
+	}
+	defer func() { _ = chConn.Close() }()
+
+	rep, runErr := sweep(ctx, pool, chrepo.New(chConn), cfg, lib)
 	printReport(cfg, rep, lib)
 
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
@@ -120,25 +129,30 @@ func run() int {
 
 func parseFlags() (config, error) {
 	var (
-		dbURL     = flag.String("db", os.Getenv("GRAM_DATABASE_URL"), "Postgres connection string (defaults to $GRAM_DATABASE_URL)")
-		orgID     = flag.String("org", "", "organization_id to scope the sweep (required)")
-		projectID = flag.String("project", "", "project_id (uuid) to scope the sweep (required)")
-		policyID  = flag.String("policy", "", "optional risk_policy_id (uuid) to scope to one policy; all policies if empty")
-		fromStr   = flag.String("from", "", "lower time bound, RFC3339 (required); findings created at/after this are scanned")
-		toStr     = flag.String("to", "", "upper time bound, RFC3339 (required); findings created before this are scanned")
-		cursorStr = flag.String("cursor", "", "optional id to resume after (exclusive); overrides -from when set")
-		batchSize = flag.Int("batch-size", defaultBatchSize, "rows fetched and updated per page")
-		dryRun    = flag.Bool("dry-run", true, "when true (default) only report; pass -dry-run=false to write")
+		dbURL         = flag.String("db", os.Getenv("GRAM_DATABASE_URL"), "Postgres connection string (defaults to $GRAM_DATABASE_URL)")
+		clickhouseURL = flag.String("clickhouse", os.Getenv("GRAM_CLICKHOUSE_URL"), "ClickHouse connection string (defaults to $GRAM_CLICKHOUSE_URL)")
+		orgID         = flag.String("org", "", "organization_id to scope the sweep (required)")
+		projectID     = flag.String("project", "", "project_id (uuid) to scope the sweep (required)")
+		policyID      = flag.String("policy", "", "optional risk_policy_id (uuid) to scope to one policy; all policies if empty")
+		fromStr       = flag.String("from", "", "lower time bound, RFC3339 (required); findings created at/after this are scanned")
+		toStr         = flag.String("to", "", "upper time bound, RFC3339 (required); findings created before this are scanned")
+		cursorStr     = flag.String("cursor", "", "optional id to resume after (exclusive); overrides -from when set")
+		batchSize     = flag.Int("batch-size", defaultBatchSize, "rows fetched and updated per page")
+		dryRun        = flag.Bool("dry-run", true, "when true (default) only report; pass -dry-run=false to write")
 	)
 	flag.Parse()
 
 	var cfg config
 	cfg.dbURL = *dbURL
+	cfg.clickhouseURL = *clickhouseURL
 	cfg.orgID = *orgID
 	cfg.dryRun = *dryRun
 
 	if cfg.dbURL == "" {
 		return cfg, errors.New("missing -db / $GRAM_DATABASE_URL")
+	}
+	if cfg.clickhouseURL == "" {
+		return cfg, errors.New("missing -clickhouse / $GRAM_CLICKHOUSE_URL")
 	}
 	if cfg.orgID == "" {
 		return cfg, errors.New("missing -org")
@@ -212,17 +226,6 @@ ORDER BY id
 LIMIT $8
 `
 
-// markBatch flags the accumulated false positives. The id/reason pairs arrive
-// as parallel arrays; the false_positive_at IS NULL recheck keeps it idempotent.
-const markBatch = `
-UPDATE risk_results r
-SET false_positive_at = now()
-  , false_positive_reason = t.reason
-FROM unnest($1::uuid[], $2::text[]) AS t(id, reason)
-WHERE r.id = t.id
-  AND r.false_positive_at IS NULL
-`
-
 // likeGlobs turns the catalog's "prefix*" rule-id globs into SQL LIKE patterns
 // (e.g. "secret.stripe_*" -> "secret.stripe_%"). The LIKE clause is only a scan
 // pre-filter: Library.Reason re-checks every fetched row, so a pattern that
@@ -239,7 +242,7 @@ func likeGlobs(globs []string) []string {
 	return out
 }
 
-func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config, lib *presetlib.Library) (report, error) {
+func sweep(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg config, lib *presetlib.Library) (report, error) {
 	var rep report
 	rep.byReason = map[string]int64{}
 	rep.lastCursor = cfg.cursor
@@ -303,14 +306,15 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config, lib *presetlib.L
 		rep.scanned += int64(n)
 		rep.flagged += int64(len(ids))
 
-		if len(ids) > 0 && !cfg.dryRun {
-			tag, err := pool.Exec(ctx, markBatch, ids, reasons)
-			if err != nil {
-				// Do NOT advance rep.lastCursor: this batch's rows were not
-				// stamped, so a resume must re-scan from the previous cursor.
-				return rep, fmt.Errorf("mark batch ending at %s: %w", cursor, err)
+		if len(ids) > 0 {
+			changed, err := falsepositivesweep.Apply(ctx, pool, ch, cfg.orgID, cfg.projectID, ids, reasons, cfg.dryRun)
+			if !cfg.dryRun {
+				// Earlier chunks may have committed before an error.
+				rep.updated += changed
 			}
-			rep.updated += tag.RowsAffected()
+			if err != nil {
+				return rep, fmt.Errorf("apply batch ending at %s: %w", cursor, err)
+			}
 		}
 
 		// Advance the resume cursor only after the batch's write has succeeded

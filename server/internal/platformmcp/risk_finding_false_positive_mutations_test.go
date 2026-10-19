@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
-
-	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 func TestParseRiskFindingIDsValidatesAndDeduplicates(t *testing.T) {
@@ -39,17 +37,17 @@ func TestPartitionRiskFindingOutcomesAssignsEveryIDOnce(t *testing.T) {
 
 	project := ResolvedProject{ID: uuid.New(), Name: "Example", Slug: "example"}
 	changed, already, missing := uuid.New(), uuid.New(), uuid.New()
-	existing := []riskrepo.RiskResult{{ID: changed}, {ID: already}}
+	existing := []uuid.UUID{changed, already}
 	requested := []uuid.UUID{missing, already, changed}
 
-	dismissed := partitionRiskFindingOutcomes(project, requested, existing, []riskrepo.RiskResult{{ID: changed}}, false)
+	dismissed := partitionRiskFindingOutcomes(project, requested, existing, []uuid.UUID{changed}, false)
 	require.Equal(t, riskReceiptProject(project), dismissed.Project)
 	require.Equal(t, []string{changed.String()}, dismissed.ChangedFindingIDs)
 	require.Equal(t, []string{already.String()}, dismissed.AlreadyInRequestedStateFindingIDs)
 	require.Equal(t, []string{missing.String()}, dismissed.NotFoundFindingIDs)
 	require.Equal(t, riskFindingResultCategoryDismissed, dismissed.ResultCategory)
 
-	restored := partitionRiskFindingOutcomes(project, requested, existing, []riskrepo.RiskResult{{ID: changed}}, true)
+	restored := partitionRiskFindingOutcomes(project, requested, existing, []uuid.UUID{changed}, true)
 	require.Equal(t, riskFindingResultCategoryRestored, restored.ResultCategory)
 
 	unchanged := partitionRiskFindingOutcomes(project, requested, existing, nil, false)

@@ -58,9 +58,8 @@ func parseResultIDs(raw []string) ([]uuid.UUID, error) {
 
 // FalsePositiveMutation names one manual dismissal or restore batch inside a
 // project. IDs must already be parsed and deduplicated. Ids that do not exist
-// in the project, or that are already in the requested state, match no row
-// and are skipped; the rows returned by the core are exactly the ones that
-// changed.
+// in the project, or that are already in the requested state, are skipped;
+// the result's ChangedIDs are exactly the findings that changed.
 type FalsePositiveMutation struct {
 	// OrganizationID scopes the audit entries and the ClickHouse mirror.
 	OrganizationID string
@@ -81,21 +80,20 @@ type FalsePositiveMutation struct {
 	ActorDisplayName *string
 }
 
-// FalsePositiveFindingsStore appends dismissal state copies to the findings
-// store. Copies are built from each finding's latest copy, so findings that
-// exist only in ClickHouse are handled too.
+// FalsePositiveFindingsStore mutates authoritative dismissal copies.
 type FalsePositiveFindingsStore interface {
+	ListFalsePositiveStates(ctx context.Context, organizationID, projectID string, ids []uuid.UUID) ([]chrepo.FalsePositiveState, error)
 	AppendFalsePositiveSuppression(ctx context.Context, organizationID, projectID, suppressedAt, insertedAt, reason string, ids []uuid.UUID) error
 	AppendFalsePositiveReversal(ctx context.Context, organizationID, projectID, insertedAt string, ids []uuid.UUID) error
 }
 
-// FalsePositiveCore applies manual false-positive marks and restores inside a
-// caller-owned transaction: per-finding locks, the UPDATE, one audit entry per
-// changed row, and the findings-store append. The append runs before the
-// caller commits, so a failed append rolls the Postgres change back, and a
-// retry repairs an append followed by a failed commit. The risk management
-// API and the Platform MCP share it so both surfaces dismiss and restore
-// findings identically.
+// FalsePositiveMutationResult partitions existing and changed findings.
+type FalsePositiveMutationResult struct {
+	ExistingIDs []uuid.UUID
+	ChangedIDs  []uuid.UUID
+}
+
+// FalsePositiveCore synchronizes authoritative dismissals, mirrors, and audit entries.
 type FalsePositiveCore struct {
 	audit    *audit.Logger
 	findings FalsePositiveFindingsStore
@@ -107,84 +105,129 @@ func NewFalsePositiveCore(auditLogger *audit.Logger, findings FalsePositiveFindi
 	return &FalsePositiveCore{audit: auditLogger, findings: findings}
 }
 
-// MarkInTransaction dismisses the still-active rows among mutation.IDs and
-// returns the rows it changed.
-func (c *FalsePositiveCore) MarkInTransaction(ctx context.Context, dbtx pgx.Tx, mutation FalsePositiveMutation) ([]repo.RiskResult, error) {
+// MarkInTransaction dismisses active ClickHouse findings.
+func (c *FalsePositiveCore) MarkInTransaction(ctx context.Context, dbtx pgx.Tx, mutation FalsePositiveMutation) (FalsePositiveMutationResult, error) {
 	if c.findings == nil {
-		return nil, errFindingsStoreUnavailable
+		return FalsePositiveMutationResult{}, errFindingsStoreUnavailable
 	}
 	queries := repo.New(dbtx)
 	if err := lockFalsePositiveTransitions(ctx, queries, mutation.ProjectID, mutation.IDs); err != nil {
-		return nil, err
+		return FalsePositiveMutationResult{}, err
 	}
 
-	marked, err := queries.MarkRiskResultsFalsePositive(ctx, repo.MarkRiskResultsFalsePositiveParams{
-		ProjectID: mutation.ProjectID,
-		Ids:       mutation.IDs,
-		Reason:    nullableText(payloadReason(mutation.Reason)),
-	})
+	result, mirrorIDs, err := c.resolveMutation(ctx, mutation, false)
 	if err != nil {
-		return nil, fmt.Errorf("mark risk results false positive: %w", err)
+		return FalsePositiveMutationResult{}, err
+	}
+	if len(mirrorIDs) > 0 {
+		if _, err := queries.MarkRiskResultsFalsePositive(ctx, repo.MarkRiskResultsFalsePositiveParams{
+			ProjectID: mutation.ProjectID,
+			Ids:       mirrorIDs,
+			Reason:    nullableText(payloadReason(mutation.Reason)),
+		}); err != nil {
+			return FalsePositiveMutationResult{}, fmt.Errorf("mark risk results false positive: %w", err)
+		}
+	}
+	if len(result.ChangedIDs) == 0 {
+		return result, nil
 	}
 
-	for _, row := range marked {
+	for _, id := range result.ChangedIDs {
 		if err := c.audit.LogRiskResultDismiss(ctx, dbtx, audit.LogRiskResultDismissEvent{
 			OrganizationID:   mutation.OrganizationID,
 			ProjectID:        mutation.ProjectID,
 			Actor:            mutation.Actor,
 			ActorDisplayName: mutation.ActorDisplayName,
 			ActorSlug:        nil,
-			RiskResultID:     row.ID,
+			RiskResultID:     id,
 		}); err != nil {
-			return nil, fmt.Errorf("log risk result dismiss: %w", err)
+			return FalsePositiveMutationResult{}, fmt.Errorf("log risk result dismiss: %w", err)
 		}
 	}
 
 	now := chrepo.FormatCHTime(time.Now().UTC())
-	if err := c.findings.AppendFalsePositiveSuppression(ctx, mutation.OrganizationID, mutation.ProjectID.String(), now, now, payloadReason(mutation.Reason), mutation.IDs); err != nil {
-		return nil, fmt.Errorf("record dismissal in the findings store: %w", err)
+	if err := c.findings.AppendFalsePositiveSuppression(ctx, mutation.OrganizationID, mutation.ProjectID.String(), now, now, payloadReason(mutation.Reason), result.ChangedIDs); err != nil {
+		return FalsePositiveMutationResult{}, fmt.Errorf("record dismissal in the findings store: %w", err)
 	}
 
-	return marked, nil
+	return result, nil
 }
 
-// UnmarkInTransaction restores the dismissed rows among mutation.IDs and
-// returns the rows it changed.
-func (c *FalsePositiveCore) UnmarkInTransaction(ctx context.Context, dbtx pgx.Tx, mutation FalsePositiveMutation) ([]repo.RiskResult, error) {
+// UnmarkInTransaction restores dismissed ClickHouse findings.
+func (c *FalsePositiveCore) UnmarkInTransaction(ctx context.Context, dbtx pgx.Tx, mutation FalsePositiveMutation) (FalsePositiveMutationResult, error) {
 	if c.findings == nil {
-		return nil, errFindingsStoreUnavailable
+		return FalsePositiveMutationResult{}, errFindingsStoreUnavailable
 	}
 	queries := repo.New(dbtx)
 	if err := lockFalsePositiveTransitions(ctx, queries, mutation.ProjectID, mutation.IDs); err != nil {
-		return nil, err
+		return FalsePositiveMutationResult{}, err
 	}
 
-	restored, err := queries.UnmarkRiskResultsFalsePositive(ctx, repo.UnmarkRiskResultsFalsePositiveParams{
-		ProjectID: mutation.ProjectID,
-		Ids:       mutation.IDs,
-	})
+	result, mirrorIDs, err := c.resolveMutation(ctx, mutation, true)
 	if err != nil {
-		return nil, fmt.Errorf("unmark risk results false positive: %w", err)
+		return FalsePositiveMutationResult{}, err
+	}
+	if len(mirrorIDs) > 0 {
+		if _, err := queries.UnmarkRiskResultsFalsePositive(ctx, repo.UnmarkRiskResultsFalsePositiveParams{
+			ProjectID: mutation.ProjectID,
+			Ids:       mirrorIDs,
+		}); err != nil {
+			return FalsePositiveMutationResult{}, fmt.Errorf("unmark risk results false positive: %w", err)
+		}
+	}
+	if len(result.ChangedIDs) == 0 {
+		return result, nil
 	}
 
-	for _, row := range restored {
+	for _, id := range result.ChangedIDs {
 		if err := c.audit.LogRiskResultRestore(ctx, dbtx, audit.LogRiskResultRestoreEvent{
 			OrganizationID:   mutation.OrganizationID,
 			ProjectID:        mutation.ProjectID,
 			Actor:            mutation.Actor,
 			ActorDisplayName: mutation.ActorDisplayName,
 			ActorSlug:        nil,
-			RiskResultID:     row.ID,
+			RiskResultID:     id,
 		}); err != nil {
-			return nil, fmt.Errorf("log risk result restore: %w", err)
+			return FalsePositiveMutationResult{}, fmt.Errorf("log risk result restore: %w", err)
 		}
 	}
 
-	if err := c.findings.AppendFalsePositiveReversal(ctx, mutation.OrganizationID, mutation.ProjectID.String(), chrepo.FormatCHTime(time.Now().UTC()), mutation.IDs); err != nil {
-		return nil, fmt.Errorf("record restore in the findings store: %w", err)
+	if err := c.findings.AppendFalsePositiveReversal(ctx, mutation.OrganizationID, mutation.ProjectID.String(), chrepo.FormatCHTime(time.Now().UTC()), result.ChangedIDs); err != nil {
+		return FalsePositiveMutationResult{}, fmt.Errorf("record restore in the findings store: %w", err)
 	}
 
-	return restored, nil
+	return result, nil
+}
+
+func (c *FalsePositiveCore) resolveMutation(ctx context.Context, mutation FalsePositiveMutation, restore bool) (FalsePositiveMutationResult, []uuid.UUID, error) {
+	states, err := c.findings.ListFalsePositiveStates(ctx, mutation.OrganizationID, mutation.ProjectID.String(), mutation.IDs)
+	if err != nil {
+		return FalsePositiveMutationResult{}, nil, fmt.Errorf("resolve findings from the findings store: %w", err)
+	}
+	byID := make(map[uuid.UUID]chrepo.FalsePositiveState, len(states))
+	for _, state := range states {
+		byID[state.ID] = state
+	}
+
+	result := FalsePositiveMutationResult{
+		ExistingIDs: make([]uuid.UUID, 0, len(states)),
+		ChangedIDs:  make([]uuid.UUID, 0, len(states)),
+	}
+	mirrorIDs := make([]uuid.UUID, 0, len(states))
+	for _, id := range mutation.IDs {
+		state, ok := byID[id]
+		if !ok {
+			continue
+		}
+		result.ExistingIDs = append(result.ExistingIDs, id)
+		if !state.RuleSuppressed {
+			mirrorIDs = append(mirrorIDs, id)
+		}
+		if (!restore && !state.Dismissed) || (restore && state.Dismissed && !state.RuleSuppressed) {
+			result.ChangedIDs = append(result.ChangedIDs, id)
+		}
+	}
+	return result, mirrorIDs, nil
 }
 
 func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen.MarkRiskResultsFalsePositivePayload) error {
