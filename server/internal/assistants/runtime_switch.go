@@ -65,6 +65,15 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 	if change.Version == nil {
 		return nil, nil
 	}
+	// Validation above restricts both inputs to these explicit wire values.
+	desiredVersion := int16(2)
+	if *change.Version == 3 {
+		desiredVersion = 3
+	}
+	expectedVersion := int16(2)
+	if *change.ExpectedVersion == 3 {
+		expectedVersion = 3
+	}
 	current, err := queries.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: projectID, AssistantID: assistantID})
 	if err != nil {
 		return nil, fmt.Errorf("read runtime selection: %w", err)
@@ -103,7 +112,7 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 	if !ok {
 		return nil, errRuntimeSwitchUnavailable
 	}
-	readiness, err := coordinator.PrepareRuntimeSwitch(ctx, assistantRecordFromGetRow(current), runtimes, int16(*change.Version))
+	readiness, err := coordinator.PrepareRuntimeSwitch(ctx, assistantRecordFromGetRow(current), runtimes, desiredVersion)
 	if err != nil {
 		return readiness.Release, fmt.Errorf("prepare runtime switch: %w", err)
 	}
@@ -122,7 +131,7 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 		return readiness.Release, fmt.Errorf("retire runtime bindings: %w", err)
 	}
 	updated, err := queries.SetAssistantDesiredRuntimeVersion(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionParams{
-		ProjectID: projectID, AssistantID: assistantID, RuntimeVersion: int16(*change.Version), ExpectedRuntimeVersion: int16(*change.ExpectedVersion),
+		ProjectID: projectID, AssistantID: assistantID, RuntimeVersion: desiredVersion, ExpectedRuntimeVersion: expectedVersion,
 	})
 	if err != nil {
 		return readiness.Release, fmt.Errorf("persist runtime selection: %w", err)

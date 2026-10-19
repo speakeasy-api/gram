@@ -60,10 +60,10 @@ func NewKitTranscriptProjector(db *pgxpool.Pool, writer *chat.ChatMessageWriter,
 
 func (p *KitTranscriptProjector) guard(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
 	if p.validateSession == nil || b.SessionID == "" || b.RuntimeID == uuid.Nil || b.AssistantID == uuid.Nil || b.ProjectID == uuid.Nil || b.ThreadID == uuid.Nil || b.ChatID == uuid.Nil {
-		return fmt.Errorf("Kit transcript requires persisted session binding")
+		return fmt.Errorf("kit transcript requires persisted session binding")
 	}
 	if err := assistantrepo.New(tx).AcquireAssistantAdvisoryLock(ctx, b.AssistantID.String()); err != nil {
-		return err
+		return fmt.Errorf("acquire assistant transcript lock: %w", err)
 	}
 	_, err := chatrepo.New(tx).ValidateKitTranscriptBinding(ctx, chatrepo.ValidateKitTranscriptBindingParams{ProjectID: b.ProjectID, AssistantID: b.AssistantID, ThreadID: b.ThreadID, ChatID: b.ChatID, RuntimeID: b.RuntimeID})
 	if err != nil {
@@ -94,21 +94,24 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 		Update    json.RawMessage `json:"update"`
 	}
 	if n.Method != "session/update" {
-		return KitTranscriptResult{Ignored: true}, nil
+		var out KitTranscriptResult
+		out.Ignored = true
+		return out, nil
 	}
 	if err := json.Unmarshal(n.Params, &envelope); err != nil {
-		return KitTranscriptResult{}, err
+		return KitTranscriptResult{}, fmt.Errorf("decode kit transcript update: %w", err)
 	}
 	if envelope.SessionID != b.SessionID || (n.SessionID != "" && n.SessionID != b.SessionID) {
-		return KitTranscriptResult{}, fmt.Errorf("Kit transcript session mismatch")
+		return KitTranscriptResult{}, fmt.Errorf("kit transcript session mismatch")
 	}
 	var u kitTranscriptUpdate
 	if err := json.Unmarshal(envelope.Update, &u); err != nil {
-		return KitTranscriptResult{}, err
+		return KitTranscriptResult{}, fmt.Errorf("decode kit transcript update: %w", err)
 	}
-	out := KitTranscriptResult{MessageID: u.MessageID}
+	var out KitTranscriptResult
+	out.MessageID = u.MessageID
 	if p.writer == nil {
-		return out, fmt.Errorf("Kit transcript writer unavailable")
+		return out, fmt.Errorf("kit transcript writer unavailable")
 	}
 	switch u.SessionUpdate {
 	case "user_message", "agent_message", "tool_call_update":
@@ -117,7 +120,7 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 			key = u.ToolCallID
 		}
 		if key == "" {
-			return out, fmt.Errorf("Kit transcript update missing stable ID")
+			return out, fmt.Errorf("kit transcript update missing stable ID")
 		}
 		out.MessageID = key
 		out.Role = "assistant"
@@ -131,7 +134,7 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 			err := p.guarded(ctx, b, func(tx pgx.Tx) error {
 				row, err := chatrepo.New(tx).GetKitProjectionMessage(ctx, chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: b.ProjectID, Valid: true}, ID: echo})
 				if err != nil {
-					return err
+					return fmt.Errorf("get correlated user message: %w", err)
 				}
 				if row.ChatID != b.ChatID || row.Role != "user" {
 					return fmt.Errorf("invalid Kit user echo correlation")
@@ -148,7 +151,10 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 			return write, apply, err
 		})
 		out.Changed, out.Replacement = changed, true
-		return out, err
+		if err != nil {
+			return out, fmt.Errorf("project kit transcript message: %w", err)
+		}
+		return out, nil
 	case "agent_message_chunk":
 		text, _, _, err := kitContent([]json.RawMessage{u.Content})
 		if err != nil {
@@ -156,7 +162,9 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 		}
 		out.SourceText, out.Transient, out.Role = text, true, "assistant"
 		err = p.guarded(ctx, b, func(_ pgx.Tx) error {
-			_, _ = p.stream.Publish(ctx, b.ChatID, chat.TurnFrame{Kind: chat.TurnFrameText, Text: text})
+			var frame chat.TurnFrame
+			frame.Kind, frame.Text = chat.TurnFrameText, text
+			_, _ = p.stream.Publish(ctx, b.ChatID, frame)
 			return nil
 		})
 		return out, err
@@ -165,7 +173,9 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 		// This marks only the dashboard foreground turn. Never use it as a snapshot fence.
 		err := p.guarded(ctx, b, func(_ pgx.Tx) error {
 			if u.State == "idle" {
-				_, _ = p.stream.Publish(ctx, b.ChatID, chat.TurnFrame{Kind: chat.TurnFrameDone})
+				var frame chat.TurnFrame
+				frame.Kind = chat.TurnFrameDone
+				_, _ = p.stream.Publish(ctx, b.ChatID, frame)
 			}
 			return nil
 		})
@@ -179,7 +189,7 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 func (p *KitTranscriptProjector) guarded(ctx context.Context, b KitTranscriptBinding, fn func(pgx.Tx) error) error {
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin transcript transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err := p.guard(ctx, tx, b); err != nil {
@@ -188,7 +198,10 @@ func (p *KitTranscriptProjector) guarded(ctx context.Context, b KitTranscriptBin
 	if err := fn(tx); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transcript transaction: %w", err)
+	}
+	return nil
 }
 
 func translateKitMessage(b KitTranscriptBinding, id uuid.UUID, u kitTranscriptUpdate, raw json.RawMessage, old *chatrepo.ChatMessage) (chat.MessageWrite, bool, string, []string, error) {
@@ -199,8 +212,12 @@ func translateKitMessage(b KitTranscriptBinding, id uuid.UUID, u kitTranscriptUp
 	if u.SessionUpdate == "tool_call_update" {
 		role = "tool"
 	}
-	param := chatrepo.CreateChatMessageParams{ID: id, ProjectID: b.ProjectID, ChatID: b.ChatID, Role: role, Source: pgtype.Text{String: "kit", Valid: true}, MessageID: pgtype.Text{String: id.String(), Valid: true}}
-	write := chat.MessageWrite{Params: param, AssistantID: b.AssistantID, WorkloadSource: metering.WorkloadSourceAssistant}
+	var write chat.MessageWrite
+	write.Params.ID, write.Params.ProjectID, write.Params.ChatID = id, b.ProjectID, b.ChatID
+	write.Params.Role = role
+	write.Params.Source = pgtype.Text{String: "kit", Valid: true}
+	write.Params.MessageID = pgtype.Text{String: id.String(), Valid: true}
+	write.AssistantID, write.WorkloadSource = b.AssistantID, metering.WorkloadSourceAssistant
 	var text string
 	var content []byte
 	var generic []string
@@ -215,14 +232,14 @@ func translateKitMessage(b KitTranscriptBinding, id uuid.UUID, u kitTranscriptUp
 		}
 		patch := map[string]json.RawMessage{}
 		if err := json.Unmarshal(raw, &patch); err != nil {
-			return write, false, "", nil, err
+			return write, false, "", nil, fmt.Errorf("translate kit transcript content: %w", err)
 		}
 		for key, value := range patch {
 			merged[key] = value
 		}
 		encoded, err := json.Marshal(merged)
 		if err != nil {
-			return write, false, "", nil, err
+			return write, false, "", nil, fmt.Errorf("translate kit transcript content: %w", err)
 		}
 		text = string(encoded)
 		content, _ = json.Marshal([]map[string]string{{"type": "text", "text": text}})
@@ -234,13 +251,13 @@ func translateKitMessage(b KitTranscriptBinding, id uuid.UUID, u kitTranscriptUp
 		var blocks []json.RawMessage
 		if len(u.Content) != 0 && string(u.Content) != "null" {
 			if err := json.Unmarshal(u.Content, &blocks); err != nil {
-				return write, false, "", nil, err
+				return write, false, "", nil, fmt.Errorf("translate kit transcript content: %w", err)
 			}
 		}
 		var err error
 		text, content, generic, err = kitContent(blocks)
 		if err != nil {
-			return write, false, "", nil, err
+			return write, false, "", nil, fmt.Errorf("translate kit transcript content: %w", err)
 		}
 	}
 	write.Params.Content, write.Params.ContentRaw = text, content
@@ -265,7 +282,7 @@ func kitContent(blocks []json.RawMessage) (string, []byte, []string, error) {
 			Text string `json:"text"`
 		}
 		if err := json.Unmarshal(raw, &block); err != nil {
-			return "", nil, nil, err
+			return "", nil, nil, fmt.Errorf("decode kit content block: %w", err)
 		}
 		if block.Type == "" {
 			return "", nil, nil, fmt.Errorf("ACP content block missing type")

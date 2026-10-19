@@ -15,7 +15,10 @@ import (
 type AssistantRuntimeWorkloadProvisioner struct{ service *Service }
 
 func NewAssistantRuntimeWorkloadProvisioner(db *pgxpool.Pool, auditLogger *audit.Logger) *AssistantRuntimeWorkloadProvisioner {
-	return &AssistantRuntimeWorkloadProvisioner{service: &Service{db: db, auditLogger: auditLogger}}
+	service := new(Service)
+	service.db = db
+	service.auditLogger = auditLogger
+	return &AssistantRuntimeWorkloadProvisioner{service: service}
 }
 
 func (p *AssistantRuntimeWorkloadProvisioner) Provision(ctx context.Context, runtimeID uuid.UUID, c AssistantRuntimeWorkloadClientConfig) (ProvisionedAssistantWorkloadClient, error) {

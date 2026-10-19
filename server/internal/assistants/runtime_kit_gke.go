@@ -258,7 +258,7 @@ func validateKitResources(resources corev1.ResourceRequirements) error {
 // The snapshot identity remains exact; inference authority is rotated for its row.
 func PrepareKitGKEStartup(ctx context.Context, manager *assistanttokens.Manager, startup KitStartupBootstrapInput, in KitGKEProvisionInput) (KitGKEProvisionInput, error) {
 	if in.Identity.AssistantID != startup.Identity.AssistantID.String() || in.Identity.Lineage != startup.RuntimeID.String() {
-		return KitGKEProvisionInput{}, fmt.Errorf("Kit GKE startup credentials must match assistant and runtime lineage")
+		return KitGKEProvisionInput{}, fmt.Errorf("kit GKE startup credentials must match assistant and runtime lineage")
 	}
 	in.Command, in.Args = KitGatewayCommand(int(in.GuestPort))
 	bootstrap, _, err := PrepareKitStartupBootstrap(ctx, manager, startup)

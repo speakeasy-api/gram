@@ -58,20 +58,20 @@ func (m *Manager) IssueInferenceCredential(ctx context.Context, in InferenceIssu
 	identities := new(assistantidentity.Service)
 	ceiling, err := identities.SnapshotCeiling(ctx, m.db, in.Identity)
 	if err != nil {
-		return InferenceCredential{}, err
+		return InferenceCredential{}, fmt.Errorf("snapshot inference credential ceiling: %w", err)
 	}
 	identity, err := json.Marshal(in.Identity)
 	if err != nil {
-		return InferenceCredential{}, err
+		return InferenceCredential{}, fmt.Errorf("encode inference identity: %w", err)
 	}
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
-		return InferenceCredential{}, err
+		return InferenceCredential{}, fmt.Errorf("generate inference credential secret: %w", err)
 	}
 	token := inferencePrefix + base64.RawURLEncoding.EncodeToString(secret)
 	hash := sha256.Sum256([]byte(token))
 	expires := time.Now().Add(in.Lifetime)
-	id, err := m.tokens.IssueInferenceCredential(ctx, tokenrepo.IssueInferenceCredentialParams{ProjectID: in.Identity.ProjectID, AssistantID: in.Identity.AssistantID, RuntimeID: in.RuntimeID, TokenHash: hash[:], IdentityJson: identity, PolicyJson: ceiling.Policy, PolicyVersion: int32(ceiling.EncodingVersion), ExpiresAt: pgtype.Timestamptz{Time: expires, Valid: true}})
+	id, err := m.tokens.IssueInferenceCredential(ctx, tokenrepo.IssueInferenceCredentialParams{ProjectID: in.Identity.ProjectID, AssistantID: in.Identity.AssistantID, RuntimeID: in.RuntimeID, TokenHash: hash[:], IdentityJson: identity, PolicyJson: ceiling.Policy, PolicyVersion: int32(ceiling.EncodingVersion), ExpiresAt: pgtype.Timestamptz{Time: expires, InfinityModifier: pgtype.Finite, Valid: true}})
 	if err != nil {
 		return InferenceCredential{}, fmt.Errorf("persist inference credential: %w", err)
 	}
@@ -79,7 +79,10 @@ func (m *Manager) IssueInferenceCredential(ctx context.Context, in InferenceIssu
 }
 
 func (m *Manager) RevokeInferenceCredential(ctx context.Context, projectID, credentialID uuid.UUID) error {
-	return m.tokens.RevokeInferenceCredential(ctx, tokenrepo.RevokeInferenceCredentialParams{ProjectID: projectID, ID: credentialID})
+	if err := m.tokens.RevokeInferenceCredential(ctx, tokenrepo.RevokeInferenceCredentialParams{ProjectID: projectID, ID: credentialID}); err != nil {
+		return fmt.Errorf("revoke inference credential: %w", err)
+	}
+	return nil
 }
 
 // AuthorizeInference authenticates only inference routes, including catalog reads.
@@ -106,20 +109,20 @@ func (m *Manager) AuthorizeInference(ctx context.Context, header string) (contex
 	}
 	policy, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(row.PolicyVersion), row.PolicyJson)
 	if err != nil {
-		return ctx, err
+		return ctx, fmt.Errorf("decode inference policy: %w", err)
 	}
 	// Reuse the ordinary workload credential profile and live policy admission.
 	assertion, _, err := m.credentials.Mint(principalcredential.Credential{OrganizationID: identity.OrganizationID, ProjectID: identity.ProjectID, Principal: urn.NewWorkloadPrincipal(identity.IssuerID, identity.Subject), Grants: policy.RuntimeGrants(), AuthorizerUserID: ""})
 	if err != nil {
-		return ctx, err
+		return ctx, fmt.Errorf("mint inference assertion: %w", err)
 	}
 	authed, err := m.credentials.Authenticate(ctx, assertion)
 	if err != nil {
-		return ctx, err
+		return ctx, fmt.Errorf("authenticate inference assertion: %w", err)
 	}
 	authed, err = m.authz.PrepareContext(authed)
 	if err != nil {
-		return ctx, err
+		return ctx, fmt.Errorf("prepare inference authorization: %w", err)
 	}
 	return context.WithValue(authed, inferenceContextKey{}, identity), nil
 }
@@ -143,5 +146,8 @@ func (m *Manager) BindInferenceChat(ctx context.Context, chatID uuid.UUID) (cont
 // generation, including before restore of a retained runtime row. The caller
 // must hold runtime startup admission while revoking and issuing its replacement.
 func (m *Manager) RevokeRuntimeInferenceCredentials(ctx context.Context, projectID, runtimeID uuid.UUID) error {
-	return m.tokens.RevokeRuntimeInferenceCredentials(ctx, tokenrepo.RevokeRuntimeInferenceCredentialsParams{ProjectID: projectID, RuntimeID: runtimeID})
+	if err := m.tokens.RevokeRuntimeInferenceCredentials(ctx, tokenrepo.RevokeRuntimeInferenceCredentialsParams{ProjectID: projectID, RuntimeID: runtimeID}); err != nil {
+		return fmt.Errorf("revoke runtime inference credentials: %w", err)
+	}
+	return nil
 }

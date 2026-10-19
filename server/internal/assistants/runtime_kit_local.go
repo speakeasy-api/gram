@@ -116,7 +116,7 @@ func newKitLocalRuntimeBackend(config KitLocalRuntimeConfig, engine kitLocalEngi
 	}
 	origin := strings.TrimRight(config.ServerURL.String(), "/")
 	if supplied := config.Env["SPEAKEASY_ORIGIN"]; supplied != "" && supplied != origin {
-		return nil, fmt.Errorf("Kit inference origin must match server URL")
+		return nil, fmt.Errorf("kit inference origin must match server URL")
 	}
 	config.Env["SPEAKEASY_ORIGIN"] = origin
 	if config.ServerURL.Scheme == "http" {
@@ -265,7 +265,7 @@ func (k *KitLocalRuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeR
 			return result, fmt.Errorf("build kit bootstrap: %w", err)
 		}
 		if origin, err := kitInferenceOrigin(bootstrap.InferenceJSON); err != nil || origin != k.config.Env["SPEAKEASY_ORIGIN"] {
-			return result, fmt.Errorf("Kit bootstrap inference origin does not match configured origin")
+			return result, fmt.Errorf("kit bootstrap inference origin does not match configured origin")
 		}
 		if err := validateKitLocalBootstrap(bootstrap); err != nil {
 			return result, err
@@ -342,21 +342,32 @@ func (k *KitLocalRuntimeBackend) RunTurn(ctx context.Context, r assistantRuntime
 	if err != nil {
 		return err
 	}
-	return p.RunTurn(ctx, r, turn)
+	if err := p.RunTurn(ctx, r, turn); err != nil {
+		return fmt.Errorf("run kit turn: %w", err)
+	}
+	return nil
 }
 func (k *KitLocalRuntimeBackend) InterruptTurn(ctx context.Context, r assistantRuntimeRecord, thread uuid.UUID) (bool, error) {
 	p, err := k.protocol(ctx, r)
 	if err != nil {
 		return false, err
 	}
-	return p.InterruptTurn(ctx, r, thread)
+	interrupted, err := p.InterruptTurn(ctx, r, thread)
+	if err != nil {
+		return false, fmt.Errorf("interrupt kit turn: %w", err)
+	}
+	return interrupted, nil
 }
 func (k *KitLocalRuntimeBackend) Status(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	p, err := k.protocol(ctx, r)
 	if err != nil {
 		return RuntimeBackendStatus{}, err
 	}
-	return p.Status(ctx, r)
+	status, err := p.Status(ctx, r)
+	if err != nil {
+		return RuntimeBackendStatus{}, fmt.Errorf("get kit status: %w", err)
+	}
+	return status, nil
 }
 func (k *KitLocalRuntimeBackend) RecycleImage(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
 	if err := k.validate(r); err != nil {
@@ -364,7 +375,7 @@ func (k *KitLocalRuntimeBackend) RecycleImage(ctx context.Context, r assistantRu
 	}
 	// No settled-work/authority-retirement contract is available here. Never
 	// silently replace a Kit process or claim that persisted files are a snapshot.
-	return RuntimeBackendRecycleResult{}, nil
+	return RuntimeBackendRecycleResult{Recycled: false, BackendMetadataJSON: nil}, nil
 }
 func (k *KitLocalRuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecord) error {
 	k.mu.Lock()

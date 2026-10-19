@@ -2038,3 +2038,13 @@ WHERE starts_with(datname, @prefix::text);
 -- Test-only fixture: records one participant snapshot on a captured message.
 INSERT INTO chat_message_participants (project_id, chat_id, message_id, provider, provider_user_id, user_id)
 VALUES (@project_id, @chat_id, @message_id, @provider, @provider_user_id, sqlc.narg(user_id));
+-- name: ExpireAssistantInferenceCredentialForTest :exec
+UPDATE assistant_inference_credentials
+SET created_at = clock_timestamp() - interval '2 hours',
+    expires_at = clock_timestamp() - interval '1 hour'
+WHERE project_id = @project_id
+  AND id = @id;
+
+-- name: CountOutboxRows :one
+-- Counts all legacy events in an isolated cloned test database.
+SELECT count(*) FROM outbox;

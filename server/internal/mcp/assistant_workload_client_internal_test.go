@@ -14,12 +14,14 @@ import (
 )
 
 func TestAssistantWorkloadClientAuthentication(t *testing.T) {
+	t.Parallel()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	public, err := json.Marshal(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{Key: &key.PublicKey, KeyID: "workload-test", Algorithm: "ES256", Use: "sig"}}})
 	require.NoError(t, err)
 	for _, method := range []string{"client_secret_basic", "client_secret_post"} {
 		t.Run(method, func(t *testing.T) {
+			t.Parallel()
 			keys, secret, hash, err := assistantWorkloadClientAuthentication(ProvisionAssistantWorkloadClientParams{AuthMethod: method})
 			require.NoError(t, err)
 			require.Nil(t, keys)

@@ -4671,6 +4671,47 @@ func (q *Queries) SetAssistantThreadEventStatus(ctx context.Context, arg SetAssi
 	return err
 }
 
+const setKitRuntimeMetadataFixture = `-- name: SetKitRuntimeMetadataFixture :exec
+UPDATE assistant_runtimes
+SET runtime_version = $1, backend_metadata_json = $2::jsonb
+WHERE project_id = $3 AND id = $4
+`
+
+type SetKitRuntimeMetadataFixtureParams struct {
+	RuntimeVersion int16
+	Metadata       []byte
+	ProjectID      uuid.UUID
+	RuntimeID      uuid.UUID
+}
+
+// Test fixture for replacement authority and legacy metadata inheritance.
+func (q *Queries) SetKitRuntimeMetadataFixture(ctx context.Context, arg SetKitRuntimeMetadataFixtureParams) error {
+	_, err := q.db.Exec(ctx, setKitRuntimeMetadataFixture,
+		arg.RuntimeVersion,
+		arg.Metadata,
+		arg.ProjectID,
+		arg.RuntimeID,
+	)
+	return err
+}
+
+const setKitThreadSourceFixture = `-- name: SetKitThreadSourceFixture :exec
+UPDATE assistant_threads SET source_kind = $1
+WHERE project_id = $2 AND id = $3
+`
+
+type SetKitThreadSourceFixtureParams struct {
+	SourceKind string
+	ProjectID  uuid.UUID
+	ThreadID   uuid.UUID
+}
+
+// Test fixture for authoritative dashboard input correlation.
+func (q *Queries) SetKitThreadSourceFixture(ctx context.Context, arg SetKitThreadSourceFixtureParams) error {
+	_, err := q.db.Exec(ctx, setKitThreadSourceFixture, arg.SourceKind, arg.ProjectID, arg.ThreadID)
+	return err
+}
+
 const softDeleteAssistantThread = `-- name: SoftDeleteAssistantThread :exec
 UPDATE assistant_threads SET deleted_at = clock_timestamp() WHERE id = $1 AND project_id = $2
 `

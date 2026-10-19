@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"testing"
 	"time"
 
@@ -49,8 +50,7 @@ func TestRuntimeSwitchRejectsPendingAndProcessingEvents(t *testing.T) {
 			_, err := assistantrepo.New(conn).ClaimNextPendingEvent(t.Context(), assistantrepo.ClaimNextPendingEventParams{ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending, ProcessingStatus: eventStatusProcessing})
 			require.NoError(t, err)
 		}
-		tx, err := conn.Begin(t.Context())
-		require.NoError(t, err)
+		tx := testenv.BeginTx(t, t.Context(), conn)
 		queries := assistantrepo.New(tx)
 		require.NoError(t, queries.AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))
 		release, err := core.prepareRuntimeSelection(t.Context(), queries, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
@@ -73,8 +73,7 @@ func TestRuntimeSwitchRequiresAuthoritativeBackgroundReadiness(t *testing.T) {
 	} {
 		backend := &switchBackend{stubRuntimeBackend: &stubRuntimeBackend{}, readiness: readiness}
 		core := &ServiceCore{db: conn, runtime: backend}
-		tx, err := conn.Begin(t.Context())
-		require.NoError(t, err)
+		tx := testenv.BeginTx(t, t.Context(), conn)
 		queries := assistantrepo.New(tx)
 		require.NoError(t, queries.AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))
 		release, err := core.prepareRuntimeSelection(t.Context(), queries, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
@@ -103,8 +102,7 @@ func TestRuntimeSwitchRetiresImmutableRowsAndChecksExpectedVersion(t *testing.T)
 	released := false
 	backend := &switchBackend{stubRuntimeBackend: &stubRuntimeBackend{}, readiness: runtimeSwitchReadiness{DestinationReady: true, Settled: true, Release: func() { released = true }}}
 	core := &ServiceCore{db: conn, runtime: backend}
-	tx, err := conn.Begin(t.Context())
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), conn)
 	qtx := assistantrepo.New(tx)
 	require.NoError(t, qtx.AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))
 	release, err := core.prepareRuntimeSelection(t.Context(), qtx, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
@@ -121,8 +119,7 @@ func TestRuntimeSwitchRetiresImmutableRowsAndChecksExpectedVersion(t *testing.T)
 	current, err := queries.GetAssistant(t.Context(), assistantrepo.GetAssistantParams{AssistantID: assistantID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, int16(3), current.RuntimeVersion)
-	tx, err = conn.Begin(t.Context())
-	require.NoError(t, err)
+	tx = testenv.BeginTx(t, t.Context(), conn)
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	qtx = assistantrepo.New(tx)
 	require.NoError(t, qtx.AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))
@@ -135,8 +132,7 @@ func TestRuntimeIngestionWaitsForSwitchFence(t *testing.T) {
 	conn, err := assistantsInfra.CloneTestDatabase(t, "runtime_switch_ingestion")
 	require.NoError(t, err)
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
-	tx, err := conn.Begin(t.Context())
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), conn)
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	require.NoError(t, assistantrepo.New(tx).AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
@@ -184,8 +180,7 @@ func TestRuntimeSwitchRejectsPendingAdmission(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, queries.ReserveAssistantRuntimeV2(t.Context(), assistantrepo.ReserveAssistantRuntimeV2Params{ProjectID: projectID, AssistantID: assistantID, AssistantThreadID: threadID, Backend: runtimeBackendLocal, State: runtimeStateStarting}))
 	core := &ServiceCore{db: conn}
-	tx, err := conn.Begin(t.Context())
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), conn)
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	qtx := assistantrepo.New(tx)
 	require.NoError(t, qtx.AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))
@@ -200,8 +195,7 @@ func TestRuntimeSwitchWaitsForPendingIngestionCommit(t *testing.T) {
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 	_, err = assistantrepo.New(conn).CancelPendingAssistantThreadEvents(t.Context(), assistantrepo.CancelPendingAssistantThreadEventsParams{ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending, CancelledStatus: eventStatusCancelled})
 	require.NoError(t, err)
-	ingest, err := conn.Begin(t.Context())
-	require.NoError(t, err)
+	ingest := testenv.BeginTx(t, t.Context(), conn)
 	defer func() { _ = ingest.Rollback(t.Context()) }()
 	_, err = assistantrepo.New(ingest).InsertAssistantThreadEvent(t.Context(), assistantrepo.InsertAssistantThreadEventParams{
 		ProjectID: projectID, AssistantID: assistantID, AssistantThreadID: threadID,
@@ -211,15 +205,13 @@ func TestRuntimeSwitchWaitsForPendingIngestionCommit(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	contender, err := conn.Begin(t.Context())
-	require.NoError(t, err)
+	contender := testenv.BeginTx(t, t.Context(), conn)
 	err = assistantrepo.New(contender).AcquireAssistantAdvisoryLock(ctx, assistantID.String())
 	require.Error(t, err)
 	require.ErrorIs(t, ctx.Err(), context.DeadlineExceeded)
 	_ = contender.Rollback(t.Context())
 	require.NoError(t, ingest.Commit(t.Context()))
-	contender, err = conn.Begin(t.Context())
-	require.NoError(t, err)
+	contender = testenv.BeginTx(t, t.Context(), conn)
 	defer func() { _ = contender.Rollback(t.Context()) }()
 	queries := assistantrepo.New(contender)
 	require.NoError(t, queries.AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))

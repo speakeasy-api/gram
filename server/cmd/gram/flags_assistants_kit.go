@@ -57,7 +57,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 		}
 	}
 	provisioner := mcp.NewAssistantRuntimeWorkloadProvisioner(db, auditLogger)
-	return core.InstallKitLocalRuntime(assistants.KitLocalCompositionConfig{
+	err = core.InstallKitLocalRuntime(assistants.KitLocalCompositionConfig{
 		Environment: c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
 		Origin: base.Local.ServerURL, AllowInsecureInference: c.Bool("assistant-kit-allow-insecure-inference"),
 		MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: issuerID, RootTriggerID: root, TurnStream: chat.NewTurnStream(redisClient),
@@ -67,23 +67,30 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 			// acquire it again on another connection while rotating startup credentials.
 			tx, err := db.Begin(ctx)
 			if err != nil {
-				return zero, err
+				return zero, fmt.Errorf("configure local kit workload: %w", err)
 			}
 			defer func() { _ = tx.Rollback(ctx) }()
 			if _, err := mcp.RevokeAssistantRuntimeWorkloadClients(ctx, tx, r.OrganizationID, r.ProjectID, r.RuntimeID); err != nil {
-				return zero, err
+				return zero, fmt.Errorf("configure local kit workload: %w", err)
 			}
 			if err := tx.Commit(ctx); err != nil {
-				return zero, err
+				return zero, fmt.Errorf("configure local kit workload: %w", err)
 			}
-			client, err := provisioner.Provision(ctx, r.RuntimeID, mcp.AssistantRuntimeWorkloadClientConfig{UserSessionIssuerID: r.UserSessionIssuerID, TriggerID: r.TriggerID, AuthMethod: "client_secret_basic"})
+			// This opt-in local fixture deliberately uses a generated shared secret.
+			// Production deployments must explicitly choose shared-secret or asymmetric
+			// authentication; this fixture does not mandate either deployment policy.
+			client, err := provisioner.Provision(ctx, r.RuntimeID, mcp.AssistantRuntimeWorkloadClientConfig{UserSessionIssuerID: r.UserSessionIssuerID, TriggerID: r.TriggerID, AuthMethod: "client_secret_basic", Secret: "", JWKS: nil, JWKSURI: ""})
 			if err != nil {
-				return zero, err
+				return zero, fmt.Errorf("configure local kit workload: %w", err)
 			}
 			if client.RuntimeID != r.RuntimeID || client.TriggerID != r.TriggerID {
-				return zero, fmt.Errorf("Kit workload registration returned a mismatched runtime binding")
+				return zero, fmt.Errorf("kit workload registration returned a mismatched runtime binding")
 			}
 			return assistants.KitMCPProvisionResult{ClientID: client.ClientID, Secret: client.Secret}, nil
 		},
 	})
+	if err != nil {
+		return fmt.Errorf("install local kit runtime: %w", err)
+	}
+	return nil
 }

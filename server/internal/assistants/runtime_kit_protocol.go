@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"net/http"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -23,7 +23,7 @@ import (
 type KitRuntimeProtocolConfig struct {
 	Core         *ServiceCore
 	Endpoint     *url.URL
-	HTTPClient   *http.Client
+	HTTPClient   *guardian.HTTPClient
 	Projector    *KitTranscriptProjector
 	CWD          string
 	GatewayToken string
@@ -33,7 +33,7 @@ type KitRuntimeProtocol struct{ config KitRuntimeProtocolConfig }
 var _ runtimeProtocol = (*KitRuntimeProtocol)(nil)
 var _ runtimeSwitchCoordinator = (*KitRuntimeProtocol)(nil)
 
-var ErrKitUpgradeNoticeUnsupported = errors.New("Kit runtime-generated context upgrade notice is not supported by the pinned runtime")
+var ErrKitUpgradeNoticeUnsupported = errors.New("kit runtime-generated context upgrade notice is not supported by the pinned runtime")
 
 func NewKitRuntimeProtocol(c KitRuntimeProtocolConfig) (*KitRuntimeProtocol, error) {
 	if c.Core == nil || c.Projector == nil || c.Endpoint == nil || c.Endpoint.Path != "/acp/v2" || !filepath.IsAbs(c.CWD) {
@@ -65,11 +65,11 @@ func (p *KitRuntimeProtocol) dial(ctx context.Context, r assistantRuntimeRecord)
 	}
 	client, init, err := kitacp.Dial(ctx, p.config.Endpoint.String(), token, p.config.HTTPClient, map[string]any{"protocolVersion": 2, "info": map[string]string{"name": "speakeasy", "version": "1"}, "capabilities": map[string]any{}})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("kit protocol operation: %w", err)
 	}
 	if !kitStatusCapability(init) {
 		closeKitTransport(client)
-		return nil, errors.New("Kit authoritative session status capability unavailable")
+		return nil, errors.New("kit authoritative session status capability unavailable")
 	}
 	return client, nil
 }
@@ -99,12 +99,12 @@ func kitSettled(raw json.RawMessage, session string) (bool, error) {
 
 func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeRecord, req runTurnRequest) (returnErr error) {
 	if req.Model == "" {
-		return errors.New("Kit turn requires the persisted assistant model")
+		return errors.New("kit turn requires the persisted assistant model")
 	}
 	key := kitSessionKey(r, req.ThreadID)
 	session, found, err := p.config.Core.LoadKitRuntimeSession(ctx, key)
 	if err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	if session.ChatID == uuid.Nil {
 		return ErrKitRuntimeBinding
@@ -116,7 +116,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if !found && session.HasPriorTranscript {
 		prior, err := assistantrepo.New(p.config.Core.db).KitProtocolHasPriorMessages(ctx, assistantrepo.KitProtocolHasPriorMessagesParams{ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, ChatID: session.ChatID, CurrentMessageIds: currentIDs})
 		if err != nil {
-			return err
+			return fmt.Errorf("kit protocol operation: %w", err)
 		}
 		if prior {
 			return ErrKitUpgradeNoticeUnsupported
@@ -124,7 +124,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	}
 	prompt, err := kitProtocolPrompt(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	servers := make([]map[string]any, 0, len(req.MCPServers))
 	for _, s := range req.MCPServers {
@@ -136,14 +136,19 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	}
 	c, err := p.dial(ctx, r)
 	if err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	defer closeKitTransport(c)
-	params := map[string]any{"cwd": p.config.CWD, "mcpServers": servers, "_meta": map[string]string{"ai.speakeasy/gram-chat-id": session.ChatID.String()}}
+	params := map[string]any{"cwd": p.config.CWD, "_meta": map[string]string{"ai.speakeasy/gram-chat-id": session.ChatID.String()}}
+	// Omission preserves a resident session's overlay. An explicit empty list
+	// instead requests replacement; filesystem-owned machine MCP needs neither.
+	if req.MCPServers != nil {
+		params["mcpServers"] = servers
+	}
 	if !found {
 		raw, e := c.Call(ctx, "session/new", params, "")
 		if e != nil {
-			return e
+			return fmt.Errorf("kit session operation: %w", e)
 		}
 		var created struct {
 			SessionID string `json:"sessionId"`
@@ -153,16 +158,16 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		}
 		session, err = p.config.Core.StoreKitRuntimeSession(ctx, key, created.SessionID)
 		if err != nil {
-			return err
+			return fmt.Errorf("kit protocol operation: %w", err)
 		}
 	}
 	if err = c.AttachSession(ctx, session.SessionID); err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
-	binding := KitTranscriptBinding{RuntimeID: r.ID, ProjectID: r.ProjectID, AssistantID: r.AssistantID, ThreadID: req.ThreadID, ChatID: session.ChatID, SessionID: session.SessionID}
+	binding := KitTranscriptBinding{RuntimeID: r.ID, ProjectID: r.ProjectID, AssistantID: r.AssistantID, ThreadID: req.ThreadID, ChatID: session.ChatID, SessionID: session.SessionID, UserEchoes: nil}
 	echoes, err := p.loadUserEchoes(ctx, key, session.SessionID)
 	if err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	binding.UserEchoes = echoes
 	var echoMu sync.RWMutex
@@ -191,7 +196,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 					select {
 					case <-ackReady:
 					case <-work.Done():
-						return work.Err()
+						return fmt.Errorf("kit protocol canceled: %w", work.Err())
 					}
 				}
 			}
@@ -216,26 +221,26 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	params["replayFrom"] = map[string]string{"type": "start"}
 	resume, err := c.Call(work, "session/resume", params, session.SessionID)
 	if err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	selection, _, err := kitProtocolModelOption(resume, req.Model)
 	if err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	configured, err := c.Call(work, "session/set_config_option", map[string]string{"sessionId": session.SessionID, "configId": "model", "type": "id", "value": selection}, session.SessionID)
 	if err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	_, current, err := kitProtocolModelOption(configured, req.Model)
 	if err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	if current != selection {
-		return errors.New("Kit did not apply the persisted assistant model")
+		return errors.New("kit did not apply the persisted assistant model")
 	}
 	raw, err := c.Call(work, "session/prompt", map[string]any{"sessionId": session.SessionID, "prompt": prompt}, session.SessionID)
 	if err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	var ack struct {
 		MessageID string `json:"messageId"`
@@ -245,7 +250,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	}
 	if req.CanonicalUserMessageID != uuid.Nil {
 		if req.EventID == uuid.Nil {
-			return errors.New("Kit echo correlation requires event identity")
+			return errors.New("kit echo correlation requires event identity")
 		}
 		echoMu.RLock()
 		existing, known := binding.UserEchoes[ack.MessageID]
@@ -255,7 +260,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		}
 		echo := kitProtocolUserEcho{RuntimeID: r.ID, SessionID: session.SessionID, ACPMessageID: ack.MessageID, MessageID: req.CanonicalUserMessageID}
 		if err := p.storeUserEcho(work, key, req.EventID, echo); err != nil {
-			return err
+			return fmt.Errorf("kit protocol operation: %w", err)
 		}
 		echoMu.Lock()
 		binding.UserEchoes[ack.MessageID] = req.CanonicalUserMessageID
@@ -267,15 +272,15 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	for {
 		select {
 		case <-work.Done():
-			return work.Err()
+			return fmt.Errorf("kit protocol canceled: %w", work.Err())
 		case <-ticker.C:
 			raw, err = c.Call(work, "kit/session/status", map[string]string{"sessionId": session.SessionID}, session.SessionID)
 			if err != nil {
-				return err
+				return fmt.Errorf("kit protocol operation: %w", err)
 			}
 			settled, e := kitSettled(raw, session.SessionID)
 			if e != nil {
-				return e
+				return fmt.Errorf("kit session operation: %w", e)
 			}
 			if settled {
 				// The status reply follows earlier updates on the same session stream.
@@ -284,13 +289,13 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 				select {
 				case flush <- ack:
 				case <-work.Done():
-					return work.Err()
+					return fmt.Errorf("kit protocol canceled: %w", work.Err())
 				}
 				select {
 				case err := <-ack:
 					return err
 				case <-work.Done():
-					return work.Err()
+					return fmt.Errorf("kit protocol canceled: %w", work.Err())
 				}
 			}
 		}
@@ -299,19 +304,25 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 
 func (p *KitRuntimeProtocol) InterruptTurn(ctx context.Context, r assistantRuntimeRecord, thread uuid.UUID) (bool, error) {
 	session, found, err := p.config.Core.LoadKitRuntimeSession(ctx, kitSessionKey(r, thread))
-	if err != nil || !found {
-		return false, err
+	if err != nil {
+		return false, fmt.Errorf("load kit session for interrupt: %w", err)
+	}
+	if !found {
+		return false, nil
 	}
 	c, err := p.dial(ctx, r)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("kit protocol operation: %w", err)
 	}
 	defer closeKitTransport(c)
 	if err = c.AttachSession(ctx, session.SessionID); err != nil {
-		return false, err
+		return false, fmt.Errorf("kit protocol operation: %w", err)
 	}
 	err = c.Cancel(ctx, session.SessionID)
-	return err == nil, err
+	if err != nil {
+		return false, fmt.Errorf("cancel kit turn: %w", err)
+	}
+	return true, nil
 }
 func (p *KitRuntimeProtocol) Status(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	c, err := p.dial(ctx, r)
@@ -320,7 +331,7 @@ func (p *KitRuntimeProtocol) Status(ctx context.Context, r assistantRuntimeRecor
 	}
 	defer closeKitTransport(c)
 	// Gateway reachability is not an idle duration or all-session settlement.
-	return RuntimeBackendStatus{Configured: true}, nil
+	return RuntimeBackendStatus{Configured: true, IdleSeconds: nil}, nil
 }
 
 // PrepareRuntimeSwitch requires the caller's shared assistant admission lock.
@@ -328,7 +339,7 @@ func (p *KitRuntimeProtocol) Status(ctx context.Context, r assistantRuntimeRecor
 // lock. Thus session/new cannot race this observation: an in-flight admission
 // remains an unsettled event until RunTurn finishes, including persistence.
 func (p *KitRuntimeProtocol) PrepareRuntimeSwitch(ctx context.Context, assistant assistantRecord, runtimes []assistantRuntimeRecord, destination int16) (runtimeSwitchReadiness, error) {
-	result := runtimeSwitchReadiness{Release: func() {}}
+	result := runtimeSwitchReadiness{DestinationReady: false, Settled: false, Release: func() {}}
 	// Destination provisioning is checked by the enclosing backend router.
 	if p.config.Core == nil || p.config.Core.db == nil || len(runtimes) != 1 || (destination != 2 && destination != 3) {
 		return result, errRuntimeSwitchUnavailable
@@ -345,7 +356,7 @@ func (p *KitRuntimeProtocol) PrepareRuntimeSwitch(ctx context.Context, assistant
 	}
 	c, err := p.dial(ctx, r)
 	if err != nil {
-		return result, err
+		return result, fmt.Errorf("kit protocol operation: %w", err)
 	}
 	defer closeKitTransport(c)
 	// Discard observation-only notifications: projection would reacquire the
@@ -366,15 +377,15 @@ func (p *KitRuntimeProtocol) PrepareRuntimeSwitch(ctx context.Context, assistant
 	}()
 	for _, session := range sessions {
 		if err = c.AttachSession(ctx, session); err != nil {
-			return result, err
+			return result, fmt.Errorf("kit protocol operation: %w", err)
 		}
 		raw, e := c.Call(ctx, "kit/session/status", map[string]string{"sessionId": session}, session)
 		if e != nil {
-			return result, e
+			return result, fmt.Errorf("observe kit settlement: %w", e)
 		}
 		settled, e := kitSettled(raw, session)
 		if e != nil {
-			return result, e
+			return result, fmt.Errorf("observe kit settlement: %w", e)
 		}
 		if !settled {
 			return result, nil
@@ -396,10 +407,10 @@ func kitConsumeNotifications(ctx context.Context, notifications <-chan kitacp.No
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("kit projection canceled: %w", ctx.Err())
 		case n, ok := <-notifications:
 			if err := apply(n, ok); err != nil {
-				return err
+				return fmt.Errorf("kit protocol operation: %w", err)
 			}
 		case ack := <-flush:
 			draining := true
@@ -408,7 +419,7 @@ func kitConsumeNotifications(ctx context.Context, notifications <-chan kitacp.No
 				case n, ok := <-notifications:
 					if err := apply(n, ok); err != nil {
 						ack <- err
-						return err
+						return fmt.Errorf("kit protocol operation: %w", err)
 					}
 				default:
 					draining = false
@@ -433,7 +444,7 @@ func kitProtocolPrompt(req runTurnRequest) ([]map[string]any, error) {
 			}
 			header, data, ok := strings.Cut(part.ImageURL.URL, ",")
 			if !ok || !strings.HasPrefix(header, "data:image/") || !strings.HasSuffix(header, ";base64") {
-				return nil, errors.New("Kit images require base64 image data URIs")
+				return nil, errors.New("kit images require base64 image data URIs")
 			}
 			if _, err := base64.StdEncoding.DecodeString(data); err != nil {
 				return nil, errors.New("invalid Kit image data")
@@ -456,13 +467,13 @@ type kitProtocolUserEcho struct {
 func (p *KitRuntimeProtocol) loadUserEchoes(ctx context.Context, key kitRuntimeSessionKey, session string) (map[string]uuid.UUID, error) {
 	rows, err := assistantrepo.New(p.config.Core.db).ListKitProtocolUserEchoes(ctx, assistantrepo.ListKitProtocolUserEchoesParams{ProjectID: key.ProjectID, AssistantID: key.AssistantID, ThreadID: key.ThreadID})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("kit protocol operation: %w", err)
 	}
 	result := map[string]uuid.UUID{}
 	for _, raw := range rows {
 		var echoes []kitProtocolUserEcho
 		if err = json.Unmarshal(raw, &echoes); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("kit protocol operation: %w", err)
 		}
 		for _, echo := range echoes {
 			if echo.RuntimeID == key.RuntimeID && echo.SessionID == session && echo.ACPMessageID != "" && echo.MessageID != uuid.Nil {
@@ -479,24 +490,27 @@ func (p *KitRuntimeProtocol) loadUserEchoes(ctx context.Context, key kitRuntimeS
 func (p *KitRuntimeProtocol) storeUserEcho(ctx context.Context, key kitRuntimeSessionKey, eventID uuid.UUID, echo kitProtocolUserEcho) error {
 	tx, queries, err := p.config.Core.beginKitRuntimeTransaction(ctx, key.ProjectID, key.AssistantID, key.RuntimeID)
 	if err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	if _, err = p.config.Core.ValidateKitRuntimeSessionInTx(ctx, tx, key, echo.SessionID); err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	raw, err := json.Marshal([]kitProtocolUserEcho{echo})
 	if err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	affected, err := queries.StoreKitProtocolUserEcho(ctx, assistantrepo.StoreKitProtocolUserEchoParams{Echo: raw, ProjectID: key.ProjectID, AssistantID: key.AssistantID, ThreadID: key.ThreadID, EventID: eventID, MessageID: echo.MessageID})
 	if err != nil {
-		return err
+		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	if affected != 1 {
-		return errors.New("Kit canonical user message correlation unavailable")
+		return errors.New("kit canonical user message correlation unavailable")
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit kit echo correlation: %w", err)
+	}
+	return nil
 }
 
 // Kit ModelSelection::id uses provider:model. Only the Speakeasy provider
@@ -504,7 +518,7 @@ func (p *KitRuntimeProtocol) storeUserEcho(ctx context.Context, key kitRuntimeSe
 // Names are display-only; selection must exist as an exact advertised value.
 func kitProtocolModelOption(raw json.RawMessage, model string) (selection, current string, err error) {
 	if model == "" {
-		return "", "", errors.New("Kit turn requires the persisted assistant model")
+		return "", "", errors.New("kit turn requires the persisted assistant model")
 	}
 	type choice struct {
 		Value   string `json:"value"`
@@ -526,6 +540,7 @@ func kitProtocolModelOption(raw json.RawMessage, model string) (selection, curre
 	selection = "speakeasy:" + model
 	matches := 0
 	configs := 0
+	offered := 0
 	for _, config := range result.ConfigOptions {
 		if config.ID != "model" {
 			continue
@@ -536,10 +551,16 @@ func kitProtocolModelOption(raw json.RawMessage, model string) (selection, curre
 		}
 		current = config.Current
 		for _, option := range config.Options {
+			if strings.HasPrefix(option.Value, "speakeasy:") {
+				offered++
+			}
 			if option.Value == selection {
 				matches++
 			}
 			for _, grouped := range option.Options {
+				if strings.HasPrefix(grouped.Value, "speakeasy:") {
+					offered++
+				}
 				if grouped.Value == selection {
 					matches++
 				}
@@ -547,7 +568,7 @@ func kitProtocolModelOption(raw json.RawMessage, model string) (selection, curre
 		}
 	}
 	if configs != 1 || matches != 1 {
-		return "", "", errors.New("persisted assistant model is not uniquely offered by the Kit Speakeasy catalog")
+		return "", "", fmt.Errorf("persisted assistant model is not uniquely offered by the Kit Speakeasy catalog (model_configs=%d speakeasy_options=%d matches=%d)", configs, offered, matches)
 	}
 	return selection, current, nil
 }

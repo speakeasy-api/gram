@@ -328,8 +328,10 @@ func TestKitLocalDockerInspectRejectsPublicPort(t *testing.T) {
 }
 
 func TestKitLocalReservationMetadataSentinel(t *testing.T) {
+	t.Parallel()
 	for _, raw := range []string{"", "{}", "{ \n\t }"} {
 		t.Run(fmt.Sprintf("empty-%q", raw), func(t *testing.T) {
+			t.Parallel()
 			backend, engine, r, _ := kitLocalFixture(t)
 			r.BackendMetadataJSON = []byte(raw)
 			result, err := backend.Ensure(t.Context(), r)
@@ -345,6 +347,7 @@ func TestKitLocalReservationMetadataSentinel(t *testing.T) {
 	}
 	for _, raw := range []string{"null", "[]", "[{}]", `{"runtime_version":3}`, `{"unknown":true}`, "{"} {
 		t.Run("reject-"+raw, func(t *testing.T) {
+			t.Parallel()
 			backend, engine, r, _ := kitLocalFixture(t)
 			r.BackendMetadataJSON = []byte(raw)
 			_, err := backend.Ensure(t.Context(), r)
@@ -355,11 +358,12 @@ func TestKitLocalReservationMetadataSentinel(t *testing.T) {
 }
 
 func TestKitLocalEnsureAcceptsDatabaseReservation(t *testing.T) {
+	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "kit_reservation_metadata")
 	require.NoError(t, err)
 	assistant, project := seedAssistant(t, db, "kit-reservation-metadata", 1)
 	thread := seedThreadWithEvent(t, db, assistant, "kit-reservation-metadata", "kit-reservation-metadata", eventStatusPending)
-	_, err = db.Exec(t.Context(), `UPDATE assistants SET runtime_version=3 WHERE project_id=$1 AND id=$2`, project, assistant)
+	err = assistantrepo.New(db).SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: project, AssistantID: assistant, RuntimeVersion: 3})
 	require.NoError(t, err)
 	queries := assistantrepo.New(db)
 	require.NoError(t, queries.ReserveAssistantRuntimeV2(t.Context(), assistantrepo.ReserveAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant, AssistantThreadID: thread, Backend: runtimeBackendLocal, State: runtimeStateStarting}))

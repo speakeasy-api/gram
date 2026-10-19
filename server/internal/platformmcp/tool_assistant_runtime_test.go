@@ -109,7 +109,9 @@ func TestAssistantRuntimeRefusalIsBounded(t *testing.T) {
 	result, ok := assistantRuntimeToolResult(oops.E(oops.CodeConflict, nil, "private runtime metadata"))
 	require.True(t, ok)
 	require.True(t, result.IsError)
-	text := result.Content[0].(*mcp.TextContent).Text
+	content, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	text := content.Text
 	require.Contains(t, text, "conflict")
 	require.NotContains(t, text, "private")
 }

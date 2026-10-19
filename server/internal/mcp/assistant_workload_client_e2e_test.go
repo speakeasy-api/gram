@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -21,8 +22,10 @@ import (
 )
 
 func TestAssistantWorkloadClientCredentialsEndToEnd(t *testing.T) {
+	t.Parallel()
 	for _, method := range []string{"client_secret_basic", "private_key_jwt"} {
 		t.Run(method, func(t *testing.T) {
+			t.Parallel()
 			ctx, ti := newTestMCPService(t)
 			fx := newWorkloadConsentFixture(t, ctx, ti)
 			a, err := assistantrepo.New(ti.conn).CreateAssistant(ctx, assistantrepo.CreateAssistantParams{
@@ -35,8 +38,7 @@ func TestAssistantWorkloadClientCredentialsEndToEnd(t *testing.T) {
 			})
 			require.NoError(t, err)
 			identities := assistantidentity.New(ti.serverURL.String(), ti.audit)
-			tx, err := ti.conn.Begin(ctx)
-			require.NoError(t, err)
+			tx := testenv.BeginTx(t, ctx, ti.conn)
 			require.NoError(t, identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: fx.orgID, ProjectID: fx.target.ProjectID, AssistantID: a.ID, ActorUserID: fx.userID}))
 			require.NoError(t, tx.Commit(ctx))
 			seedPrincipalGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.userID), authz.ScopeAssistantWrite, a.ID.String())
@@ -86,7 +88,7 @@ func TestAssistantWorkloadClientCredentialsEndToEnd(t *testing.T) {
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 			require.Equal(t, "mcp:connect", body["scope"])
 			require.NotContains(t, body, "refresh_token")
-			token := body["access_token"].(string)
+			token := workloadResponseString(t, body, "access_token")
 			admittedCtx, _, _, err := ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, ti.serverURL.String(), endpoint)
 			require.NoError(t, err)
 			binding, err := mcp.ResolveAssistantRuntimeWorkloadContext(admittedCtx, ti.conn)
@@ -94,8 +96,8 @@ func TestAssistantWorkloadClientCredentialsEndToEnd(t *testing.T) {
 			require.Equal(t, runtime.ID, binding.RuntimeID)
 			require.Equal(t, client.RegistrationID, binding.ClientRegistrationID)
 			claims := accessTokenClaims(t, w.Body.Bytes())
-			require.True(t, strings.HasPrefix(claims["sub"].(string), "workload:"))
-			session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: fx.target.UserSessionIssuerID, Jti: claims["jti"].(string)})
+			require.True(t, strings.HasPrefix(workloadResponseString(t, claims, "sub"), "workload:"))
+			session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: fx.target.UserSessionIssuerID, Jti: workloadResponseString(t, claims, "jti")})
 			require.NoError(t, err)
 			require.True(t, session.UserSessionClientID.Valid)
 			require.Equal(t, client.RegistrationID, session.UserSessionClientID.UUID)
@@ -108,7 +110,7 @@ func TestAssistantWorkloadClientCredentialsEndToEnd(t *testing.T) {
 			w = exchange("mcp:connect", resource)
 			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-			token = body["access_token"].(string)
+			token = workloadResponseString(t, body, "access_token")
 			_, err = usersessionsrepo.New(ti.conn).RevokeUserSessionClient(ctx, usersessionsrepo.RevokeUserSessionClientParams{ID: client.RegistrationID, ProjectID: fx.target.ProjectID, OrganizationID: fx.orgID})
 			require.NoError(t, err)
 			_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, ti.serverURL.String(), endpoint)
@@ -120,15 +122,14 @@ func TestAssistantWorkloadClientCredentialsEndToEnd(t *testing.T) {
 			w = exchange("mcp:connect", resource)
 			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-			token = body["access_token"].(string)
+			token = workloadResponseString(t, body, "access_token")
 			require.NoError(t, assistantrepo.New(ti.conn).StopAssistantRuntime(ctx, assistantrepo.StopAssistantRuntimeParams{ProjectID: fx.target.ProjectID, RuntimeID: runtime.ID, State: "stopped", StartingState: "starting", ActiveState: "active", ExpiringState: "expiring"}))
 			_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, ti.serverURL.String(), endpoint)
 			require.Error(t, err)
 			require.NotEqual(t, http.StatusOK, exchange("mcp:connect", resource).Code)
 			_, err = ti.service.ProvisionAssistantRuntimeWorkloadClient(t.Context(), runtime.ID, bootstrapConfig)
 			require.Error(t, err)
-			cleanupTx, err := ti.conn.Begin(ctx)
-			require.NoError(t, err)
+			cleanupTx := testenv.BeginTx(t, ctx, ti.conn)
 			revoked, err := mcp.RevokeAssistantRuntimeWorkloadClients(ctx, cleanupTx, fx.orgID, fx.target.ProjectID, runtime.ID)
 			require.NoError(t, err)
 			require.Contains(t, revoked, client.RegistrationID)
@@ -142,4 +143,11 @@ func TestAssistantWorkloadClientCredentialsEndToEnd(t *testing.T) {
 			require.NotEqual(t, http.StatusOK, unbound.Code)
 		})
 	}
+}
+
+func workloadResponseString(t *testing.T, values map[string]any, key string) string {
+	t.Helper()
+	value, ok := values[key].(string)
+	require.True(t, ok, "response field %s must be a string", key)
+	return value
 }

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"io"
 	"mime"
 	"net/http"
@@ -55,9 +56,9 @@ type Notification struct {
 }
 type Client struct {
 	attachMu                    sync.Mutex
-	http                        *http.Client
+	http                        *guardian.HTTPClient
 	endpoint, token, connection string
-	ctx                         context.Context
+	done                        <-chan struct{}
 	cancel                      context.CancelFunc
 	mu                          sync.Mutex
 	next                        uint64
@@ -71,7 +72,7 @@ type Client struct {
 // is a standard v2 initialize payload (protocolVersion, info, capabilities).
 // ctx bounds setup only; CloseTransport owns the resulting transport lifetime.
 // The supplied HTTP client is copied and redirects are always disabled.
-func Dial(ctx context.Context, endpoint, token string, hc *http.Client, params any) (*Client, json.RawMessage, error) {
+func Dial(ctx context.Context, endpoint, token string, hc *guardian.HTTPClient, params any) (*Client, json.RawMessage, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.Path != "/acp/v2" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
 		return nil, nil, errors.New("invalid ACP endpoint: expected exact /acp/v2 URL")
@@ -79,13 +80,13 @@ func Dial(ctx context.Context, endpoint, token string, hc *http.Client, params a
 	if token == "" || strings.ContainsAny(token, "\r\n") {
 		return nil, nil, errors.New("invalid ACP bearer credential")
 	}
-	h := http.Client{}
-	if hc != nil {
-		h = *hc
+	if hc == nil || hc.Transport == nil {
+		return nil, nil, errors.New("ACP requires a guardian-configured HTTP client")
 	}
+	h := *hc
 	h.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	life, cancel := context.WithCancel(context.Background())
-	c := &Client{http: &h, endpoint: endpoint, token: token, ctx: life, cancel: cancel, next: 1, pending: make(map[string]pending), streams: make(map[string]bool), notifications: make(chan Notification, 256)}
+	c := &Client{attachMu: sync.Mutex{}, mu: sync.Mutex{}, connection: "", terminal: nil, http: &h, endpoint: endpoint, token: token, done: life.Done(), cancel: cancel, next: 1, pending: make(map[string]pending), streams: make(map[string]bool), notifications: make(chan Notification, 256)}
 	body, err := marshal("initialize", params, json.RawMessage(`1`))
 	if err != nil {
 		cancel()
@@ -96,7 +97,7 @@ func Dial(ctx context.Context, endpoint, token string, hc *http.Client, params a
 		cancel()
 		return nil, nil, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
 		cancel()
 		return nil, nil, statusError(res.StatusCode)
@@ -131,7 +132,7 @@ func marshal(method string, params any, id json.RawMessage) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("invalid ACP parameters")
 	}
-	b, err := json.Marshal(envelope{JSONRPC: "2.0", Method: method, Params: p, ID: id})
+	b, err := json.Marshal(envelope{JSONRPC: "2.0", Method: method, Params: p, ID: id, Result: nil, Error: nil})
 	if err != nil || len(b) > MaxMessageBytes {
 		return nil, errors.New("ACP request exceeds message limit")
 	}
@@ -150,15 +151,16 @@ func (c *Client) request(ctx context.Context, method, session string, body []byt
 	if session != "" {
 		req.Header.Set("Acp-Session-Id", session)
 	}
-	if method == http.MethodGet {
+	switch method {
+	case http.MethodGet:
 		req.Header.Set("Accept", "text/event-stream")
-	} else if method == http.MethodPost {
+	case http.MethodPost:
 		req.Header.Set("Content-Type", "application/json")
 	}
 	res, err := c.http.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, fmt.Errorf("ACP request canceled: %w", ctx.Err())
 		}
 		return nil, errors.New("ACP HTTP transport failure (outcome may be unknown)")
 	}
@@ -168,7 +170,7 @@ func (c *Client) request(ctx context.Context, method, session string, body []byt
 // Notifications must be drained; buffer exhaustion fails the transport rather
 // than silently dropping updates. The channel is not closed; select on Done too.
 func (c *Client) Notifications() <-chan Notification { return c.notifications }
-func (c *Client) Done() <-chan struct{}              { return c.ctx.Done() }
+func (c *Client) Done() <-chan struct{}              { return c.done }
 func (c *Client) Err() error                         { c.mu.Lock(); defer c.mu.Unlock(); return c.terminal }
 
 // AttachSession opens SSE before resume or prompt, or after session/new.
@@ -193,37 +195,54 @@ func (c *Client) attach(ctx context.Context, session string) error {
 		return nil
 	}
 	c.mu.Unlock()
-	streamCtx, cancel := context.WithCancel(c.ctx)
+	ready := make(chan error, 1)
+	go c.serveStream(ctx, session, ready)
+	return <-ready
+}
+
+// The stream goroutine owns the HTTP response from acquisition through close.
+func (c *Client) serveStream(ctx context.Context, session string, ready chan<- error) {
+	streamCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancel()
+	c.cancelWhenClosed(streamCtx, cancel)
 	stop := context.AfterFunc(ctx, cancel)
 	res, err := c.request(streamCtx, http.MethodGet, session, nil)
 	stopped := stop()
 	if err != nil {
-		cancel()
-		return err
+		ready <- err
+		return
 	}
+	defer func() { _ = res.Body.Close() }()
 	if !stopped || ctx.Err() != nil {
-		cancel()
-		res.Body.Close()
-		return context.Canceled
+		ready <- context.Canceled
+		return
 	}
 	typ, _, _ := mime.ParseMediaType(res.Header.Get("Content-Type"))
 	if res.StatusCode != http.StatusOK || typ != "text/event-stream" {
-		cancel()
-		res.Body.Close()
-		return errors.New("ACP event stream rejected")
+		ready <- errors.New("ACP event stream rejected")
+		return
 	}
 	c.mu.Lock()
 	if c.terminal != nil {
 		err := c.terminal
 		c.mu.Unlock()
-		cancel()
-		res.Body.Close()
-		return err
+		ready <- err
+		return
 	}
 	c.streams[session] = true
 	c.mu.Unlock()
-	go func() { defer cancel(); defer res.Body.Close(); err := c.readSSE(res.Body, session); c.fail(err) }()
-	return nil
+	ready <- nil
+	c.fail(c.readSSE(res.Body, session))
+}
+
+func (c *Client) cancelWhenClosed(ctx context.Context, cancel context.CancelFunc) {
+	go func() {
+		select {
+		case <-c.done:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 }
 
 // Call correlates an ordinary JSON-RPC request with its SSE response. It never
@@ -254,13 +273,12 @@ func (c *Client) Call(ctx context.Context, method string, params any, session st
 	}
 	reqCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stop := context.AfterFunc(c.ctx, cancel)
-	defer stop()
+	c.cancelWhenClosed(reqCtx, cancel)
 	res, err := c.request(reqCtx, http.MethodPost, session, body)
 	if err != nil {
 		return nil, err
 	}
-	res.Body.Close()
+	_ = res.Body.Close()
 	if res.StatusCode != http.StatusAccepted {
 		return nil, statusError(res.StatusCode)
 	}
@@ -268,8 +286,8 @@ func (c *Client) Call(ctx context.Context, method string, params any, session st
 	case r := <-ch:
 		return r.result, r.err
 	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-c.ctx.Done():
+		return nil, fmt.Errorf("ACP request canceled: %w", ctx.Err())
+	case <-c.done:
 		return nil, c.Err()
 	}
 }
@@ -296,7 +314,7 @@ func (c *Client) Cancel(ctx context.Context, session string) error {
 	if err != nil {
 		return err
 	}
-	res.Body.Close()
+	_ = res.Body.Close()
 	if res.StatusCode != http.StatusAccepted {
 		return statusError(res.StatusCode)
 	}
@@ -310,7 +328,7 @@ func (c *Client) CloseTransport(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	res.Body.Close()
+	_ = res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return statusError(res.StatusCode)
 	}
@@ -329,7 +347,7 @@ func (c *Client) fail(err error) {
 	c.cancel()
 	for _, p := range c.pending {
 		select {
-		case p.ch <- reply{err: err}:
+		case p.ch <- reply{err: err, result: nil}:
 		default:
 		}
 	}

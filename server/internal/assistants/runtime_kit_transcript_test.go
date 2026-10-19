@@ -9,13 +9,16 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/assistants/kitacp"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 )
 
 func TestKitTranscriptStableMessageIDs(t *testing.T) {
+	t.Parallel()
 	b := KitTranscriptBinding{RuntimeID: uuid.New(), SessionID: "session"}
 	first := KitTranscriptMessageID(b, "agent_message", "message")
 	require.Equal(t, first, KitTranscriptMessageID(b, "agent_message", "message"))
@@ -28,6 +31,7 @@ func TestKitTranscriptStableMessageIDs(t *testing.T) {
 }
 
 func TestKitTranscriptContentPatchSemantics(t *testing.T) {
+	t.Parallel()
 	b := KitTranscriptBinding{ProjectID: uuid.New(), ChatID: uuid.New(), AssistantID: uuid.New()}
 	id := uuid.New()
 	old := &chatrepo.ChatMessage{Content: "previous"}
@@ -52,6 +56,7 @@ func TestKitTranscriptContentPatchSemantics(t *testing.T) {
 }
 
 func TestKitTranscriptPreservesUnknownContentAndToolPatches(t *testing.T) {
+	t.Parallel()
 	raw := json.RawMessage(`{"type":"_future","payload":{"data":[1,2]}}`)
 	text, content, generic, err := kitContent([]json.RawMessage{raw})
 	require.NoError(t, err)
@@ -71,15 +76,20 @@ func TestKitTranscriptPreservesUnknownContentAndToolPatches(t *testing.T) {
 }
 
 func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
+	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "kit_transcript_projection")
 	require.NoError(t, err)
 	assistant, project := seedAssistant(t, db, "kit-transcript", 1)
 	thread := seedThreadWithEvent(t, db, assistant, "kit-transcript", "kit-transcript", eventStatusPending)
-	var chatID uuid.UUID
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT chat_id FROM assistant_threads WHERE project_id=$1 AND id=$2`, project, thread).Scan(&chatID))
-	runtime := uuid.New()
-	_, err = db.Exec(t.Context(), `INSERT INTO assistant_runtimes(id,project_id,assistant_id,assistant_thread_id,backend,state,runtime_version) VALUES($1,$2,$3,$4,'local','active',3)`, runtime, project, assistant, uuid.Nil)
+	threadRow, err := assistantrepo.New(db).LoadAssistantThreadForBootstrap(t.Context(), assistantrepo.LoadAssistantThreadForBootstrapParams{ProjectID: project, ThreadID: thread})
 	require.NoError(t, err)
+	chatID := threadRow.ChatID
+	queries := assistantrepo.New(db)
+	require.NoError(t, queries.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: project, AssistantID: assistant, RuntimeVersion: 3}))
+	require.NoError(t, queries.ReserveAssistantRuntimeV2(t.Context(), assistantrepo.ReserveAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant, AssistantThreadID: thread, Backend: "local", State: "active"}))
+	runtimeRow, err := queries.GetAssistantRuntimeV2(t.Context(), assistantrepo.GetAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant})
+	require.NoError(t, err)
+	runtime := runtimeRow.ID
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 	b := KitTranscriptBinding{RuntimeID: runtime, ProjectID: project, AssistantID: assistant, ThreadID: thread, ChatID: chatID, SessionID: "session"}
@@ -94,28 +104,34 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	result, err := projector.Handle(t.Context(), b, first)
 	require.NoError(t, err)
 	require.True(t, result.Changed)
-	var initialReadings, initialEvents int64
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM publish_outbox`).Scan(&initialReadings))
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM outbox`).Scan(&initialEvents))
+	initialReadings, err := testrepo.New(db).CountPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	initialEvents, err := testrepo.New(db).CountOutboxRows(t.Context())
+	require.NoError(t, err)
 	require.Positive(t, initialReadings)
 	// Conversation events and storage readings share the publish outbox.
-	var topics int64
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(DISTINCT topic) FROM publish_outbox`).Scan(&topics))
-	require.GreaterOrEqual(t, topics, int64(2))
+	outboxRows, err := testrepo.New(db).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	topics := make(map[string]struct{})
+	for _, row := range outboxRows {
+		topics[row.Topic] = struct{}{}
+	}
+	require.GreaterOrEqual(t, len(topics), 2)
 	result, err = projector.Handle(t.Context(), b, first)
 	require.NoError(t, err)
 	require.False(t, result.Changed)
 	result, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"agent_message","messageId":"reply","content":[{"type":"text","text":"two"}]}`))
 	require.NoError(t, err)
 	require.True(t, result.Changed)
-	var rows, readings, events int64
-	var content string
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*),min(content) FROM chat_messages WHERE project_id=$1 AND chat_id=$2`, project, chatID).Scan(&rows, &content))
-	require.EqualValues(t, 1, rows)
-	require.Equal(t, "two", content)
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM publish_outbox`).Scan(&readings))
+	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ProjectID: project, ChatID: chatID})
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.Equal(t, "two", messages[0].Content)
+	readings, err := testrepo.New(db).CountPublishOutboxRows(t.Context())
+	require.NoError(t, err)
 	require.Equal(t, initialReadings, readings)
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM outbox`).Scan(&events))
+	events, err := testrepo.New(db).CountOutboxRows(t.Context())
+	require.NoError(t, err)
 	require.Equal(t, initialEvents, events)
 	// Dashboard user rows are correlated explicitly, never by matching text.
 	echoID := uuid.New()
@@ -125,7 +141,8 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	result, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"user_message","messageId":"user-echo","content":[{"type":"text","text":"dashboard prompt"}]}`))
 	require.NoError(t, err)
 	require.True(t, result.Ignored)
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM chat_messages WHERE project_id=$1 AND chat_id=$2`, project, chatID).Scan(&rows))
+	rows, err := chatrepo.New(db).CountChatMessages(t.Context(), chatrepo.CountChatMessagesParams{ProjectID: project, ChatID: chatID})
+	require.NoError(t, err)
 	require.EqualValues(t, 2, rows)
 	wrong := b
 	wrong.ChatID = uuid.New()
@@ -142,7 +159,7 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	result, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}`))
 	require.NoError(t, err)
 	require.Equal(t, "idle", result.ForegroundState)
-	_, err = db.Exec(t.Context(), `UPDATE assistant_runtimes SET ended_at=clock_timestamp() WHERE project_id=$1 AND id=$2`, project, runtime)
+	err = queries.RetireAssistantRuntimesForSwitch(t.Context(), assistantrepo.RetireAssistantRuntimesForSwitchParams{ProjectID: project, AssistantID: assistant})
 	require.NoError(t, err)
 	_, err = projector.Handle(t.Context(), b, first)
 	require.Error(t, err, "stale callbacks must not reach persistence")

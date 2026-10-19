@@ -3,8 +3,10 @@ package audit
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -32,11 +34,14 @@ func (l *Logger) LogAssistantWorkloadOAuth(ctx context.Context, tx repo.DBTX, e 
 	}
 	metadata, err := json.Marshal(map[string]string{"runtime_id": e.Runtime.String(), "client_id": e.ClientURN.ID.String(), "assistant_id": e.AssistantURN.ID.String(), "trigger_id": e.TriggerURN.ID.String()})
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal assistant workload OAuth audit metadata: %w", err)
 	}
+	var absent pgtype.Text
 	return l.log(ctx, tx, auditEntry{Params: repo.InsertAuditLogParams{
 		OrganizationID: e.OrganizationID, ProjectID: uuid.NullUUID{UUID: e.ProjectID, Valid: true},
 		ActorID: e.Actor.ID, ActorType: string(e.Actor.Type), Action: action,
 		SubjectID: subjectID.String(), SubjectType: subjectType, Metadata: metadata,
+		ActorDisplayName: absent, ActorSlug: absent, SubjectDisplayName: absent, SubjectSlug: absent,
+		BeforeSnapshot: nil, AfterSnapshot: nil, ActingSurface: absent, ActingClientID: absent,
 	}, OutboxEvent: event})
 }

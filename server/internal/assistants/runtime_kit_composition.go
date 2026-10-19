@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 
@@ -17,6 +16,7 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -45,18 +45,18 @@ type KitLocalCompositionConfig struct {
 
 func validateKitLocalComposition(c KitLocalCompositionConfig) error {
 	if c.Environment != "local" || c.Image == "" || c.ProvisionMCP == nil || c.TurnStream == nil || c.MCPUserSessionIssuerID == uuid.Nil {
-		return errors.New("Kit local composition requires explicit image, resource issuer, provisioning callback and turn stream")
+		return errors.New("kit local composition requires explicit image, resource issuer, provisioning callback and turn stream")
 	}
-	if c.Origin == nil || c.Origin.Host == "" || c.Origin.User != nil || c.Origin.Path != "" || c.Origin.RawQuery != "" || c.Origin.Fragment != "" || (c.Origin.Scheme != "https" && !(c.Origin.Scheme == "http" && c.AllowInsecureInference)) {
-		return errors.New("Kit inference requires an origin and explicit local HTTP opt-in when insecure")
+	if c.Origin == nil || c.Origin.Host == "" || c.Origin.User != nil || c.Origin.Path != "" || c.Origin.RawQuery != "" || c.Origin.Fragment != "" || (c.Origin.Scheme != "https" && (c.Origin.Scheme != "http" || !c.AllowInsecureInference)) {
+		return errors.New("kit inference requires an origin and explicit local HTTP opt-in when insecure")
 	}
 	for _, u := range []*url.URL{c.MCPResource, c.MCPIssuer} {
 		if u == nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-			return errors.New("Kit machine MCP resource and issuer must be explicit HTTPS URLs")
+			return errors.New("kit machine MCP resource and issuer must be explicit HTTPS URLs")
 		}
 	}
 	if !strings.HasPrefix(c.MCPResource.Path, "/mcp/") || strings.Contains(strings.TrimPrefix(c.MCPResource.Path, "/mcp/"), "/") || strings.TrimPrefix(c.MCPResource.Path, "/mcp/") == "" {
-		return errors.New("Kit composition supports an issuer-gated attached /mcp/<slug> resource only")
+		return errors.New("kit composition supports an issuer-gated attached /mcp/<slug> resource only")
 	}
 	return nil
 }
@@ -67,8 +67,8 @@ func (s *ServiceCore) InstallKitLocalRuntime(c KitLocalCompositionConfig) error 
 	if err := validateKitLocalComposition(c); err != nil {
 		return err
 	}
-	if s.chatWriter == nil || s.assistantTokens == nil || s.encryptionClient == nil {
-		return errors.New("Kit requires transcript, inference and encrypted gateway credential services")
+	if s.guardianPolicy == nil || s.chatWriter == nil || s.assistantTokens == nil || s.encryptionClient == nil {
+		return errors.New("kit requires guarded HTTP, transcript, inference and encrypted gateway credential services")
 	}
 	projector := NewKitTranscriptProjector(s.db, s.chatWriter, c.TurnStream, func(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
 		bound, err := s.ValidateKitRuntimeSessionInTx(ctx, tx, kitRuntimeSessionKey{ProjectID: b.ProjectID, AssistantID: b.AssistantID, RuntimeID: b.RuntimeID, ThreadID: b.ThreadID}, b.SessionID)
@@ -80,12 +80,15 @@ func (s *ServiceCore) InstallKitLocalRuntime(c KitLocalCompositionConfig) error 
 		}
 		return nil
 	})
+	// Match the legacy local backend: allow loopback only for this gateway
+	// client, not the global egress policy. Do not enable retries for ACP POSTs.
+	gatewayClient := s.guardianPolicy.PooledClient(guardian.WithAllowedCIDRBlocks(localRuntimeLoopbackCIDRs...))
 	factory := func(ctx context.Context, r assistantRuntimeRecord, endpoint *url.URL) (runtimeProtocol, error) {
 		token, err := s.loadKitGatewayTokenAlreadyLocked(ctx, r)
 		if err != nil {
 			return nil, err
 		}
-		protocol, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: s, Endpoint: endpoint, HTTPClient: &http.Client{}, Projector: projector, CWD: KitWorkspacePath, GatewayToken: token})
+		protocol, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: s, Endpoint: endpoint, HTTPClient: gatewayClient, Projector: projector, CWD: KitWorkspacePath, GatewayToken: token})
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +112,10 @@ func (s *ServiceCore) InstallKitLocalRuntime(c KitLocalCompositionConfig) error 
 				return err
 			}
 			_, err = p.Status(ctx, r)
-			return err
+			if err != nil {
+				return fmt.Errorf("check kit runtime readiness: %w", err)
+			}
+			return nil
 		},
 	})
 	if err != nil {
@@ -144,16 +150,16 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	if trigger == uuid.Nil {
 		roots, err := usersessionsrepo.New(s.db).ListAssistantWorkloadRuntimeRoots(ctx, usersessionsrepo.ListAssistantWorkloadRuntimeRootsParams{ProjectID: r.ProjectID, OrganizationID: assistant.OrganizationID, AssistantID: r.AssistantID})
 		if err != nil {
-			return zero, err
+			return zero, fmt.Errorf("compose local kit runtime: %w", err)
 		}
 		if len(roots) != 1 {
-			return zero, errors.New("Kit startup requires an explicit root trigger when multiple roots exist")
+			return zero, errors.New("kit startup requires an explicit root trigger when multiple roots exist")
 		}
 		trigger = roots[0]
 	}
 	resolved, err := s.identities.Resolve(ctx, s.db, assistant.OrganizationID, r.ProjectID, r.AssistantID, trigger)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("compose local kit runtime: %w", err)
 	}
 	if resolved.State != assistantidentity.Active || resolved.Identity == nil {
 		return zero, assistantidentity.ErrInvalidIdentity
@@ -189,7 +195,7 @@ func kitResourceAttached(a assistantRecord, resource *url.URL) bool {
 }
 func kitCompositionMCP(c KitLocalCompositionConfig, client KitMCPProvisionResult) ([]byte, map[string][]byte, error) {
 	if client.ClientID == "" || client.Secret == "" {
-		return nil, nil, errors.New("Kit MCP provisioning returned no confidential client")
+		return nil, nil, errors.New("kit MCP provisioning returned no confidential client")
 	}
 	const filename = "mcp-workload-secret"
 	data, err := json.Marshal(map[string]any{"mcpServers": map[string]any{"workload": map[string]any{
@@ -198,7 +204,10 @@ func kitCompositionMCP(c KitLocalCompositionConfig, client KitMCPProvisionResult
 			"method": map[string]string{"type": "client_secret", "client_secret_file": "/home/kit/.kit/credentials/" + filename},
 		},
 	}}})
-	return data, map[string][]byte{filename: []byte(client.Secret)}, err
+	if err != nil {
+		return nil, nil, fmt.Errorf("encode kit MCP configuration: %w", err)
+	}
+	return data, map[string][]byte{filename: []byte(client.Secret)}, nil
 }
 
 // These helpers deliberately do not acquire an advisory lock on a second
@@ -208,12 +217,12 @@ func kitCompositionMCP(c KitLocalCompositionConfig, client KitMCPProvisionResult
 func (s *ServiceCore) rotateKitGatewayTokenAlreadyLocked(ctx context.Context, r assistantRuntimeRecord) (string, error) {
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
-		return "", err
+		return "", fmt.Errorf("compose local kit runtime: %w", err)
 	}
 	token := base64.RawURLEncoding.EncodeToString(secret)
 	plain, err := json.Marshal(kitGatewayTokenEnvelope{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeID: r.ID, Token: token})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("compose local kit runtime: %w", err)
 	}
 	encrypted, err := s.encryptionClient.Encrypt(plain)
 	if err != nil {
@@ -234,7 +243,7 @@ func (s *ServiceCore) loadKitGatewayTokenAlreadyLocked(ctx context.Context, r as
 		return "", ErrKitGatewayTokenNotFound
 	}
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("compose local kit runtime: %w", err)
 	}
 	plain, err := s.encryptionClient.Decrypt(ciphertext)
 	if err != nil {

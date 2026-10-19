@@ -1940,7 +1940,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		}
 		ctx, err = s.assistantTokens.BindInferenceChat(ctx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("bind inference chat: %w", err)
 		}
 	}
 
@@ -3594,7 +3594,7 @@ func (s *Service) authorizeCompletion(r *http.Request) (context.Context, *contex
 	if assistanttokens.IsInferenceCredential(r.Header.Get("Authorization")) {
 		ctx, err := s.assistantTokens.AuthorizeInference(r.Context(), r.Header.Get("Authorization"))
 		if err != nil {
-			return ctx, nil, "", err
+			return ctx, nil, "", fmt.Errorf("authorize inference completion: %w", err)
 		}
 		ac, ok := contextvalues.GetAuthContext(ctx)
 		if !ok || ac == nil || ac.ProjectID == nil {

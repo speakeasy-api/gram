@@ -380,6 +380,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 
 	projectID := endpoint.ProjectID
 	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{
+		client: nil, beforeCommit: nil,
 		presented:  presented,
 		credential: credential,
 		projectID:  &projectID,

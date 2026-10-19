@@ -10,11 +10,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants/kitacp"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +27,7 @@ import (
 )
 
 func TestKitProtocolStatusCapability(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, raw string
 		want      bool
@@ -33,11 +38,15 @@ func TestKitProtocolStatusCapability(t *testing.T) {
 		{"wrong type", `{"capabilities":{"_meta":{"kit/session/status":true}}}`, false},
 		{"invalid", `{`, false},
 	} {
-		t.Run(tc.name, func(t *testing.T) { require.Equal(t, tc.want, kitStatusCapability(json.RawMessage(tc.raw))) })
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, kitStatusCapability(json.RawMessage(tc.raw)))
+		})
 	}
 }
 
 func TestKitProtocolSettlementFailsClosed(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, raw        string
 		settled, invalid bool
@@ -49,6 +58,7 @@ func TestKitProtocolSettlementFailsClosed(t *testing.T) {
 		{"wrong session", `{"sessionId":"other","settled":true,"foregroundActive":false,"backgroundActive":false,"pendingBackgroundTerminals":false,"activeSubagents":0}`, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := kitSettled(json.RawMessage(tc.raw), "s")
 			require.Equal(t, tc.settled, got)
 			require.Equal(t, tc.invalid, err != nil)
@@ -57,6 +67,7 @@ func TestKitProtocolSettlementFailsClosed(t *testing.T) {
 }
 
 func TestKitProtocolSwitchCannotAcquireDatabaseLock(t *testing.T) {
+	t.Parallel()
 	// A zero-value adapter deliberately has no database: switch admission must
 	// refuse without attempting the helpers that reacquire the caller's lock.
 	p := &KitRuntimeProtocol{}
@@ -66,11 +77,13 @@ func TestKitProtocolSwitchCannotAcquireDatabaseLock(t *testing.T) {
 	require.False(t, ready.DestinationReady)
 }
 func TestKitProtocolRejectsIncompleteConfig(t *testing.T) {
+	t.Parallel()
 	_, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{})
 	require.Error(t, err)
 }
 
 func TestKitProtocolDrainsQueuedProjection(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	notifications := make(chan kitacp.Notification, 3)
@@ -94,6 +107,7 @@ func TestKitProtocolDrainsQueuedProjection(t *testing.T) {
 // Exercise real HTTP/SSE with the assistant advisory lock held on another
 // connection. Reacquiring that lock in settlement would time out this test.
 func TestKitProtocolSwitchUnderAdmissionLock(t *testing.T) {
+	t.Parallel()
 	core, db, key, _ := kitSessionFixture(t)
 	_, err := core.StoreKitRuntimeSession(t.Context(), key, "session-one")
 	require.NoError(t, err)
@@ -118,7 +132,7 @@ func TestKitProtocolSwitchUnderAdmissionLock(t *testing.T) {
 			}
 			if msg.Method == "initialize" {
 				w.Header().Set("Acp-Connection-Id", "connection")
-				fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}}}}}`, msg.ID)
+				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}}}}}`, msg.ID)
 				return
 			}
 			mu.Lock()
@@ -140,12 +154,12 @@ func TestKitProtocolSwitchUnderAdmissionLock(t *testing.T) {
 			mu.Unlock()
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.WriteHeader(200)
-			w.(http.Flusher).Flush()
+			flushKitTestResponse(t, w)
 			for {
 				select {
 				case data := <-ch:
-					fmt.Fprint(w, data)
-					w.(http.Flusher).Flush()
+					_, _ = fmt.Fprint(w, data)
+					flushKitTestResponse(t, w)
 				case <-r.Context().Done():
 					return
 				}
@@ -157,13 +171,12 @@ func TestKitProtocolSwitchUnderAdmissionLock(t *testing.T) {
 	defer server.Close()
 	endpoint, err := url.Parse(server.URL + "/acp/v2")
 	require.NoError(t, err)
-	p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: core, Endpoint: endpoint, Projector: &KitTranscriptProjector{}, CWD: "/workspace", GatewayToken: "fixture-token"})
+	p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: core, Endpoint: endpoint, Projector: &KitTranscriptProjector{}, CWD: "/workspace", GatewayToken: "fixture-token", HTTPClient: kitProtocolTestHTTPClient(t)})
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	tx, err := db.Begin(ctx)
-	require.NoError(t, err)
-	defer tx.Rollback(context.Background())
+	tx := testenv.BeginTx(t, ctx, db)
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	require.NoError(t, assistantrepo.New(tx).AcquireAssistantAdvisoryLock(ctx, key.AssistantID.String()))
 	r := assistantRuntimeRecord{ID: key.RuntimeID, AssistantID: key.AssistantID, ProjectID: key.ProjectID, RuntimeVersion: 3}
 	ready, err := p.PrepareRuntimeSwitch(ctx, assistantRecord{ID: key.AssistantID, ProjectID: key.ProjectID}, []assistantRuntimeRecord{r}, 2)
@@ -176,10 +189,11 @@ func TestKitProtocolSwitchUnderAdmissionLock(t *testing.T) {
 }
 
 func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
+	t.Parallel()
 	core, db, key, chatID := kitSessionFixture(t)
 	currentID, err := testrepo.New(db).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{ProjectID: uuid.NullUUID{UUID: key.ProjectID, Valid: true}, ChatID: chatID, Role: "user", Content: "hello"})
 	require.NoError(t, err)
-	_, err = db.Exec(t.Context(), `UPDATE assistant_threads SET source_kind='dashboard' WHERE id=$1`, key.ThreadID)
+	err = assistantrepo.New(db).SetKitThreadSourceFixture(t.Context(), assistantrepo.SetKitThreadSourceFixtureParams{ProjectID: key.ProjectID, ThreadID: key.ThreadID, SourceKind: "dashboard"})
 	require.NoError(t, err)
 	source, _ := json.Marshal(map[string]string{"idempotency_key": currentID.String()})
 	eventID, err := assistantrepo.New(db).InsertAssistantThreadEvent(t.Context(), assistantrepo.InsertAssistantThreadEventParams{AssistantThreadID: key.ThreadID, AssistantID: key.AssistantID, ProjectID: key.ProjectID, EventID: uuid.NewString(), CorrelationID: "kit-turn", Status: "processing", NormalizedPayloadJson: []byte(`{}`), SourcePayloadJson: source})
@@ -221,7 +235,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 			}
 			if msg.Method == "initialize" {
 				w.Header().Set("Acp-Connection-Id", "connection")
-				fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}}}}}`, msg.ID)
+				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}}}}}`, msg.ID)
 				return
 			}
 			mu.Lock()
@@ -236,6 +250,9 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 			result := `{}`
 			switch msg.Method {
 			case "session/new", "session/resume":
+				if _, supplied := msg.Params["mcpServers"]; supplied {
+					t.Error("filesystem-owned MCP must not replace the session overlay")
+				}
 				var meta map[string]string
 				_ = json.Unmarshal(msg.Params["_meta"], &meta)
 				if meta["ai.speakeasy/gram-chat-id"] != chatID.String() {
@@ -305,12 +322,12 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 			mu.Unlock()
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.WriteHeader(200)
-			w.(http.Flusher).Flush()
+			flushKitTestResponse(t, w)
 			for {
 				select {
 				case data := <-ch:
-					fmt.Fprint(w, data)
-					w.(http.Flusher).Flush()
+					_, _ = fmt.Fprint(w, data)
+					flushKitTestResponse(t, w)
 				case <-r.Context().Done():
 					return
 				}
@@ -322,7 +339,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	defer server.Close()
 	endpoint, err := url.Parse(server.URL + "/acp/v2")
 	require.NoError(t, err)
-	p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: core, Endpoint: endpoint, Projector: projector, CWD: "/workspace", GatewayToken: "fixture-token"})
+	p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: core, Endpoint: endpoint, Projector: projector, CWD: "/workspace", GatewayToken: "fixture-token", HTTPClient: kitProtocolTestHTTPClient(t)})
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -332,13 +349,19 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	restarted, err := NewKitRuntimeProtocol(p.config)
 	require.NoError(t, err)
 	require.NoError(t, restarted.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
-	var users int
-	require.NoError(t, db.QueryRow(ctx, `SELECT count(*) FROM chat_messages WHERE project_id=$1 AND chat_id=$2 AND role='user'`, key.ProjectID, chatID).Scan(&users))
+	messages, err := chatrepo.New(db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ProjectID: key.ProjectID, ChatID: chatID})
+	require.NoError(t, err)
+	users, finals := 0, 0
+	for _, message := range messages {
+		if message.Role == "user" {
+			users++
+		}
+		if message.Role == "assistant" && strings.Contains(message.Content, "projected final") {
+			finals++
+		}
+	}
 	require.Equal(t, 1, users)
-
-	var count int
-	require.NoError(t, db.QueryRow(ctx, `SELECT count(*) FROM chat_messages WHERE chat_id=$1 AND role='assistant' AND content LIKE '%projected final%'`, chatID).Scan(&count))
-	require.Equal(t, 1, count)
+	require.Equal(t, 1, finals)
 	interrupted, err := p.InterruptTurn(ctx, r, key.ThreadID)
 	require.NoError(t, err)
 	require.True(t, interrupted)
@@ -348,6 +371,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 }
 
 func TestKitProtocolPromptContent(t *testing.T) {
+	t.Parallel()
 	prompt, err := kitProtocolPrompt(runTurnRequest{Prompt: "hello", InputParts: []runtimeContentPart{{Type: "image_url", ImageURL: &runtimeImageURL{URL: "data:image/png;base64,aGVsbG8="}}}})
 	require.NoError(t, err)
 	require.Equal(t, "image", prompt[1]["type"])
@@ -357,6 +381,7 @@ func TestKitProtocolPromptContent(t *testing.T) {
 }
 
 func TestKitProtocolModelSelectionFailsClosed(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, model, raw string
 		valid            bool
@@ -369,6 +394,7 @@ func TestKitProtocolModelSelectionFailsClosed(t *testing.T) {
 		{"malformed", "openai/gpt-4.1-mini", `{`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			selection, _, err := kitProtocolModelOption(json.RawMessage(tc.raw), tc.model)
 			if tc.valid {
 				require.NoError(t, err)
@@ -378,4 +404,18 @@ func TestKitProtocolModelSelectionFailsClosed(t *testing.T) {
 			}
 		})
 	}
+}
+
+func kitProtocolTestHTTPClient(t *testing.T) *guardian.HTTPClient {
+	t.Helper()
+	return guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).Client(guardian.WithAllowedCIDRBlocks("127.0.0.1/32"))
+}
+func flushKitTestResponse(t *testing.T, w http.ResponseWriter) {
+	t.Helper()
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		t.Error("test server requires HTTP flusher")
+		return
+	}
+	flusher.Flush()
 }

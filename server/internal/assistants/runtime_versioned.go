@@ -64,56 +64,84 @@ func (v *versionedRuntimeBackend) Ensure(ctx context.Context, r assistantRuntime
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, err
 	}
-	return b.Ensure(ctx, r)
+	result, err := b.Ensure(ctx, r)
+	if err != nil {
+		return result, fmt.Errorf("ensure selected runtime: %w", err)
+	}
+	return result, nil
 }
 func (v *versionedRuntimeBackend) RecycleImage(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
 	b, err := v.route(r)
 	if err != nil {
 		return RuntimeBackendRecycleResult{}, err
 	}
-	return b.RecycleImage(ctx, r)
+	result, err := b.RecycleImage(ctx, r)
+	if err != nil {
+		return result, fmt.Errorf("recycle selected runtime image: %w", err)
+	}
+	return result, nil
 }
 func (v *versionedRuntimeBackend) RunTurn(ctx context.Context, r assistantRuntimeRecord, turn runTurnRequest) error {
 	b, err := v.route(r)
 	if err != nil {
 		return err
 	}
-	return b.RunTurn(ctx, r, turn)
+	if err := b.RunTurn(ctx, r, turn); err != nil {
+		return fmt.Errorf("run selected runtime turn: %w", err)
+	}
+	return nil
 }
 func (v *versionedRuntimeBackend) InterruptTurn(ctx context.Context, r assistantRuntimeRecord, thread uuid.UUID) (bool, error) {
 	b, err := v.route(r)
 	if err != nil {
 		return false, err
 	}
-	return b.InterruptTurn(ctx, r, thread)
+	result, err := b.InterruptTurn(ctx, r, thread)
+	if err != nil {
+		return result, fmt.Errorf("interrupt selected runtime turn: %w", err)
+	}
+	return result, nil
 }
 func (v *versionedRuntimeBackend) Status(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	b, err := v.route(r)
 	if err != nil {
 		return RuntimeBackendStatus{}, err
 	}
-	return b.Status(ctx, r)
+	result, err := b.Status(ctx, r)
+	if err != nil {
+		return result, fmt.Errorf("read selected runtime status: %w", err)
+	}
+	return result, nil
 }
 func (v *versionedRuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecord) error {
 	b, err := v.route(r)
 	if err != nil {
 		return err
 	}
-	return b.Stop(ctx, r)
+	if err := b.Stop(ctx, r); err != nil {
+		return fmt.Errorf("stop selected runtime: %w", err)
+	}
+	return nil
 }
 func (v *versionedRuntimeBackend) Reap(ctx context.Context, r assistantRuntimeRecord) error {
 	b, err := v.route(r)
 	if err != nil {
 		return err
 	}
-	return b.Reap(ctx, r)
+	if err := b.Reap(ctx, r); err != nil {
+		return fmt.Errorf("reap selected runtime: %w", err)
+	}
+	return nil
 }
 func (v *versionedRuntimeBackend) ReapStoppedMachine(ctx context.Context, r assistantRuntimeRecord) error {
 	b, err := v.route(r)
 	if err != nil {
 		return err
 	}
-	return b.ReapStoppedMachine(ctx, r)
+	if err := b.ReapStoppedMachine(ctx, r); err != nil {
+		return fmt.Errorf("reap stopped selected runtime: %w", err)
+	}
+	return nil
 }
 func (v *versionedRuntimeBackend) RuntimeExists(ctx context.Context, r assistantRuntimeRecord) (bool, error) {
 	b, err := v.route(r)
@@ -126,7 +154,11 @@ func (v *versionedRuntimeBackend) RuntimeExists(ctx context.Context, r assistant
 	if !ok {
 		return true, nil
 	}
-	return probe.RuntimeExists(ctx, r)
+	result, err := probe.RuntimeExists(ctx, r)
+	if err != nil {
+		return result, fmt.Errorf("probe selected runtime: %w", err)
+	}
+	return result, nil
 }
 
 // installKitRuntime is called during service composition before serving work.
@@ -145,7 +177,11 @@ func (s *ServiceCore) installKitRuntime(kit RuntimeBackend) error {
 
 func runtimeBackendForVersion(backend RuntimeBackend, version int16) (string, error) {
 	if selector, ok := backend.(interface{ BackendForVersion(int16) (string, error) }); ok {
-		return selector.BackendForVersion(version)
+		result, err := selector.BackendForVersion(version)
+		if err != nil {
+			return result, fmt.Errorf("select runtime backend: %w", err)
+		}
+		return result, nil
 	}
 	if version == 1 || version == 2 {
 		return backend.Backend(), nil
@@ -156,7 +192,11 @@ func boundRuntimeProtocol(backend RuntimeBackend, r assistantRuntimeRecord) (run
 	if selector, ok := backend.(interface {
 		ProtocolForRuntime(assistantRuntimeRecord) (runtimeProtocol, error)
 	}); ok {
-		return selector.ProtocolForRuntime(r)
+		result, err := selector.ProtocolForRuntime(r)
+		if err != nil {
+			return result, fmt.Errorf("select runtime protocol: %w", err)
+		}
+		return result, nil
 	}
 	return resolveRuntimeProtocol(r.RuntimeVersion, backend, nil)
 }
@@ -175,7 +215,11 @@ func (t *telemetryRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assi
 	if !ok {
 		return runtimeSwitchReadiness{}, errRuntimeSwitchUnavailable
 	}
-	return coordinator.PrepareRuntimeSwitch(ctx, assistant, rows, destination)
+	result, err := coordinator.PrepareRuntimeSwitch(ctx, assistant, rows, destination)
+	if err != nil {
+		return result, fmt.Errorf("prepare runtime switch: %w", err)
+	}
+	return result, nil
 }
 
 func (v *versionedRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assistant assistantRecord, rows []assistantRuntimeRecord, destination int16) (runtimeSwitchReadiness, error) {
@@ -185,7 +229,7 @@ func (v *versionedRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assi
 	}
 	if ready, ok := target.(interface{ RuntimeReadyForAdmission(context.Context) error }); ok {
 		if err := ready.RuntimeReadyForAdmission(ctx); err != nil {
-			return runtimeSwitchReadiness{}, err
+			return runtimeSwitchReadiness{}, fmt.Errorf("check destination runtime readiness: %w", err)
 		}
 	} else if destination == 3 {
 		return runtimeSwitchReadiness{}, errRuntimeSwitchUnavailable
@@ -209,7 +253,7 @@ func (v *versionedRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assi
 			}
 			if err != nil {
 				release()
-				return runtimeSwitchReadiness{}, err
+				return runtimeSwitchReadiness{}, fmt.Errorf("prepare source runtime switch: %w", err)
 			}
 			if !result.Settled || result.Release == nil {
 				release()

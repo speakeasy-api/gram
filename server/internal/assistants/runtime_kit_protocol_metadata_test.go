@@ -9,6 +9,7 @@ import (
 )
 
 func TestKitRuntimeReservationMetadataInheritance(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		prior, desired int16
 		inherit        bool
@@ -16,10 +17,11 @@ func TestKitRuntimeReservationMetadataInheritance(t *testing.T) {
 		{3, 3, false}, {2, 3, false}, {3, 2, false}, {2, 2, true},
 	} {
 		t.Run(fmt.Sprintf("v%d_to_v%d", tc.prior, tc.desired), func(t *testing.T) {
+			t.Parallel()
 			_, db, key, _ := kitSessionFixture(t)
 			queries := assistantrepo.New(db)
 			// Model a previously provisioned runtime with a row-bound resource identity.
-			_, err := db.Exec(t.Context(), `UPDATE assistant_runtimes SET runtime_version=$1, backend_metadata_json=jsonb_build_object('runtime_id',id::text,'resource','previous-runtime') WHERE project_id=$2 AND id=$3`, tc.prior, key.ProjectID, key.RuntimeID)
+			err := queries.SetKitRuntimeMetadataFixture(t.Context(), assistantrepo.SetKitRuntimeMetadataFixtureParams{RuntimeVersion: tc.prior, Metadata: []byte(fmt.Sprintf(`{"runtime_id":%q,"resource":"previous-runtime"}`, key.RuntimeID.String())), ProjectID: key.ProjectID, RuntimeID: key.RuntimeID})
 			require.NoError(t, err)
 			require.NoError(t, queries.RetireAssistantRuntimesForSwitch(t.Context(), assistantrepo.RetireAssistantRuntimesForSwitchParams{ProjectID: key.ProjectID, AssistantID: key.AssistantID}))
 			require.NoError(t, queries.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: tc.desired}))

@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"sync"
 	"testing"
 	"time"
@@ -115,8 +116,7 @@ func TestKitSessionCallbackRequiresExactSessionAndHoldsAuthorityFence(t *testing
 	core, conn, key, chatID := kitSessionFixture(t)
 	_, err := core.StoreKitRuntimeSession(t.Context(), key, "exact-session")
 	require.NoError(t, err)
-	tx, err := conn.Begin(t.Context())
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), conn)
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	_, err = core.ValidateKitRuntimeSessionInTx(t.Context(), tx, key, "another-session")
 	require.ErrorIs(t, err, ErrKitRuntimeBinding)
@@ -125,8 +125,7 @@ func TestKitSessionCallbackRequiresExactSessionAndHoldsAuthorityFence(t *testing
 	require.Equal(t, chatID, binding.ChatID)
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	contender, err := conn.Begin(t.Context())
-	require.NoError(t, err)
+	contender := testenv.BeginTx(t, t.Context(), conn)
 	defer func() { _ = contender.Rollback(t.Context()) }()
 	err = assistantrepo.New(contender).AcquireAssistantAdvisoryLock(ctx, key.AssistantID.String())
 	require.Error(t, err)

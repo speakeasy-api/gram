@@ -25,17 +25,17 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	}
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("begin message projection: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err := guard(ctx, tx); err != nil {
-		return false, err
+		return false, fmt.Errorf("admit message projection: %w", err)
 	}
 	q := repo.New(tx)
 	row, err := q.GetKitProjectionMessage(ctx, repo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ID: messageID})
 	exists := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return false, err
+		return false, fmt.Errorf("load projected message: %w", err)
 	}
 	var previous *repo.ChatMessage
 	if exists {
@@ -43,10 +43,13 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	}
 	write, apply, err := build(previous)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("build message projection: %w", err)
 	}
 	if !apply {
-		return false, tx.Commit(ctx)
+		if err := tx.Commit(ctx); err != nil {
+			return false, fmt.Errorf("commit unchanged message projection: %w", err)
+		}
+		return false, nil
 	}
 	if write.Params.ProjectID != projectID || write.Params.ID != messageID || write.Params.Source.String != "kit" {
 		return false, fmt.Errorf("invalid projection ownership")
@@ -55,12 +58,12 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 		return false, fmt.Errorf("projection cannot replace another producer's message")
 	}
 	if err := requireChatProject(ctx, tx, write.Params.ChatID, projectID); err != nil {
-		return false, err
+		return false, fmt.Errorf("validate projection chat project: %w", err)
 	}
 	now := time.Now().UTC()
 	writes := []MessageWrite{write}
 	if err := stampMessageFields(writes, now); err != nil {
-		return false, err
+		return false, fmt.Errorf("stamp projected message: %w", err)
 	}
 	write = writes[0]
 	var changed int64
@@ -71,25 +74,25 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 		if err == nil && changed > 0 {
 			org, lookupErr := q.GetProjectOrganizationID(ctx, projectID)
 			if lookupErr != nil {
-				return false, lookupErr
+				return false, fmt.Errorf("look up projection organization: %w", lookupErr)
 			}
 			readings, meterErr := w.meterMessages(ctx, w.logger, org, projectID, writes, now)
 			if meterErr != nil {
-				return false, meterErr
+				return false, fmt.Errorf("meter projected message: %w", meterErr)
 			}
 			if err := metering.Enqueue(ctx, tx, readings); err != nil {
-				return false, err
+				return false, fmt.Errorf("enqueue projection metering: %w", err)
 			}
 			if err := w.enqueueMessageEvents(ctx, tx, org, projectID, writes, now); err != nil {
-				return false, err
+				return false, fmt.Errorf("enqueue projection events: %w", err)
 			}
 		}
 	}
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("persist projected message: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return false, err
+		return false, fmt.Errorf("commit message projection: %w", err)
 	}
 	if changed > 0 {
 		w.publishTurnFrames(ctx, nil, []repo.CreateChatMessageParams{write.Params})

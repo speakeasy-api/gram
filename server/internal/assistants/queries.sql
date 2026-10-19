@@ -1965,3 +1965,14 @@ SELECT (e.source_payload_json->'_kit_user_echoes')::jsonb AS echoes
 FROM assistant_thread_events e
 WHERE e.project_id= @project_id AND e.assistant_id= @assistant_id AND e.assistant_thread_id= @thread_id
 AND e.deleted IS FALSE AND e.source_payload_json ? '_kit_user_echoes';
+
+-- name: SetKitRuntimeMetadataFixture :exec
+-- Test fixture for replacement authority and legacy metadata inheritance.
+UPDATE assistant_runtimes
+SET runtime_version = @runtime_version, backend_metadata_json = @metadata::jsonb
+WHERE project_id = @project_id AND id = @runtime_id;
+
+-- name: SetKitThreadSourceFixture :exec
+-- Test fixture for authoritative dashboard input correlation.
+UPDATE assistant_threads SET source_kind = @source_kind
+WHERE project_id = @project_id AND id = @thread_id;

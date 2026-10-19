@@ -62,7 +62,7 @@ func (s *Service) ProvisionAssistantWorkloadClient(ctx context.Context, p Provis
 	}
 	ctx, err := s.authz.PrepareContext(ctx)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("provision assistant workload client: %w", err)
 	}
 	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, p.AssistantID.String(), p.ProjectID.String())); err != nil {
 		return zero, err
@@ -77,7 +77,7 @@ func (s *Service) provisionAssistantWorkloadClient(ctx context.Context, p Provis
 	}
 	runtime, err := usersessions_repo.New(s.db).GetAssistantWorkloadRuntime(ctx, p.RuntimeID)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("provision assistant workload client: %w", err)
 	}
 	if runtime.ProjectID != p.ProjectID || runtime.AssistantID != p.AssistantID || runtime.OrganizationID != p.OrganizationID {
 		return zero, errors.New("runtime tenancy does not match workload registration")
@@ -89,24 +89,24 @@ func (s *Service) provisionAssistantWorkloadClient(ctx context.Context, p Provis
 	identityService := new(assistantidentity.Service)
 	resolved, err := identityService.Resolve(ctx, s.db, p.OrganizationID, p.ProjectID, p.AssistantID, p.TriggerID)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("provision assistant workload client: %w", err)
 	}
 	if resolved.State != assistantidentity.Active || resolved.Identity == nil {
 		return zero, assistantidentity.ErrInvalidIdentity
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("provision assistant workload client: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := usersessions_repo.New(tx)
 	row, err := q.CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
 		UserSessionIssuerID: p.UserSessionIssuerID, ClientID: uuid.NewString(), ClientSecretHash: hash,
 		ClientName: "Assistant workload", RedirectUris: []string{}, TokenEndpointAuthMethod: p.AuthMethod,
-		ClientJwks: inline, ClientJwksUri: conv.ToPGTextEmpty(p.JWKSURI),
+		ClientSecretExpiresAt: pgtype.Timestamptz{}, ClientJwks: inline, ClientJwksUri: conv.ToPGTextEmpty(p.JWKSURI),
 	})
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("provision assistant workload client: %w", err)
 	}
 	if _, err := q.BindAssistantWorkloadClient(ctx, usersessions_repo.BindAssistantWorkloadClientParams{
 		ClientID: row.ID, RuntimeID: p.RuntimeID, OrganizationID: conv.ToPGText(p.OrganizationID), ProjectID: uuid.NullUUID{UUID: p.ProjectID, Valid: true}, AssistantID: p.AssistantID, TriggerID: p.TriggerID,
@@ -114,12 +114,12 @@ func (s *Service) provisionAssistantWorkloadClient(ctx context.Context, p Provis
 		return zero, fmt.Errorf("bind assistant workload client: %w", err)
 	}
 	if err := s.auditLogger.LogAssistantWorkloadOAuth(ctx, tx, audit.LogAssistantWorkloadOAuthEvent{
-		OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, Actor: actor, Runtime: p.RuntimeID, ClientURN: urn.NewUserSessionClient(row.ID), AssistantURN: urn.NewAssistant(p.AssistantID), TriggerURN: urn.NewTriggerInstance(p.TriggerID),
+		SessionURN: urn.UserSession{ID: uuid.Nil}, OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, Actor: actor, Runtime: p.RuntimeID, ClientURN: urn.NewUserSessionClient(row.ID), AssistantURN: urn.NewAssistant(p.AssistantID), TriggerURN: urn.NewTriggerInstance(p.TriggerID),
 	}); err != nil {
-		return zero, err
+		return zero, fmt.Errorf("provision assistant workload client: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return zero, err
+		return zero, fmt.Errorf("provision assistant workload client: %w", err)
 	}
 	return ProvisionedAssistantWorkloadClient{RuntimeID: p.RuntimeID, TriggerID: p.TriggerID, RegistrationID: row.ID, ClientID: row.ClientID, AuthMethod: p.AuthMethod, Secret: secret}, nil
 }
@@ -132,7 +132,10 @@ func assistantWorkloadClientAuthentication(p ProvisionAssistantWorkloadClientPar
 			return nil, "", absent, errors.New("private_key_jwt cannot contain a secret")
 		}
 		inline, err := jwks.ValidateKeySource(p.AuthMethod, p.JWKS, p.JWKSURI)
-		return inline, "", absent, err
+		if err != nil {
+			return nil, "", absent, fmt.Errorf("validate assistant workload signing keys: %w", err)
+		}
+		return inline, "", absent, nil
 	case oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost:
 		if (len(p.JWKS) > 0 && !jwks.IsNull(p.JWKS)) || p.JWKSURI != "" {
 			return nil, "", absent, errors.New("secret authentication cannot contain signing keys")
@@ -142,7 +145,7 @@ func assistantWorkloadClientAuthentication(p ProvisionAssistantWorkloadClientPar
 		if secret == "" {
 			secret, err = generateClientSecret()
 			if err != nil {
-				return nil, "", absent, err
+				return nil, "", absent, fmt.Errorf("generate assistant workload secret: %w", err)
 			}
 		}
 		if len(secret) < 32 || len(secret) > 72 {
@@ -150,7 +153,7 @@ func assistantWorkloadClientAuthentication(p ProvisionAssistantWorkloadClientPar
 		}
 		hashed, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
 		if err != nil {
-			return nil, "", absent, err
+			return nil, "", absent, fmt.Errorf("hash assistant workload secret: %w", err)
 		}
 		return nil, secret, conv.ToPGText(string(hashed)), nil
 	default:
@@ -191,14 +194,14 @@ func (i *registeredAssistantWorkloadIssuer) IssueAssistantWorkloadToken(ctx cont
 	issuance := workloadSessionIssuance(workloadSessionTarget{userSessionIssuerID: r.IssuerID, projectID: r.ProjectID, organizationID: r.OrganizationID, issuer: issuer, audience: r.Resource}, subject, credential)
 	issuance.Resource = r.Resource
 	grant := workloadGrantIssuance{
-		client: r.client, presented: presentedWorkload{issuerID: identity.IssuerID, subject: identity.Subject},
+		client: r.client, presented: presentedWorkload{issuerID: identity.IssuerID, subject: identity.Subject, issuerURL: ""},
 		credential: credential, projectID: &r.ProjectID, endpoint: r.endpoint, session: issuance,
 		beforeCommit: func(ctx context.Context, tx pgx.Tx, minted *mintedSession) error {
 			// Re-read the exact binding before persistence commits. Live use repeats
 			// this check and workload admission, so policy withdrawal cannot be cached.
 			binding, err := usersessions_repo.New(tx).GetAssistantWorkloadClientBinding(ctx, assistantClientBindingParams(r.endpoint, r.ClientRegistrationID))
 			if err != nil {
-				return err
+				return fmt.Errorf("provision assistant workload client: %w", err)
 			}
 			return s.auditLogger.LogAssistantWorkloadOAuth(ctx, tx, audit.LogAssistantWorkloadOAuthEvent{
 				OrganizationID: r.OrganizationID, ProjectID: r.ProjectID, Actor: urn.NewWorkloadPrincipal(identity.IssuerID, identity.Subject),
@@ -220,12 +223,12 @@ func assistantClientBindingParams(endpoint *ResolvedMcpEndpoint, clientID uuid.U
 func (s *Service) loadAssistantWorkloadClientIdentity(ctx context.Context, endpoint *ResolvedMcpEndpoint, clientID uuid.UUID) (*assistantidentity.Identity, error) {
 	row, err := usersessions_repo.New(s.db).GetAssistantWorkloadClientBinding(ctx, assistantClientBindingParams(endpoint, clientID))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("provision assistant workload client: %w", err)
 	}
 	identityService := new(assistantidentity.Service)
 	resolved, err := identityService.Resolve(ctx, s.db, endpoint.OrganizationID, endpoint.ProjectID, row.AssistantID, row.TriggerID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("provision assistant workload client: %w", err)
 	}
 	if resolved.State != assistantidentity.Active || resolved.Identity == nil || resolved.Identity.IssuerID != row.WorkloadIssuerID || resolved.Identity.Subject != row.Subject {
 		return nil, assistantidentity.ErrInvalidIdentity

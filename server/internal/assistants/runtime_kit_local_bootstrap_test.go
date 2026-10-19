@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -15,12 +16,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/assistants/kitacp"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"github.com/stretchr/testify/require"
 )
 
 func TestKitLocalBootstrapContractValidation(t *testing.T) {
+	t.Parallel()
 	backend, _, r, _ := kitLocalFixture(t)
 	good, err := backend.config.Bootstrap(t.Context(), r)
 	require.NoError(t, err)
@@ -43,6 +48,7 @@ func TestKitLocalBootstrapContractValidation(t *testing.T) {
 }
 
 func TestKitLocalStartupBootstrapRotatesCredential(t *testing.T) {
+	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "kit_startup_rotation")
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "kit-startup-rotation")
@@ -55,9 +61,12 @@ func TestKitLocalStartupBootstrapRotatesCredential(t *testing.T) {
 	resolved, err := core.identities.Resolve(t.Context(), db, "org-test", project, assistant.ID, trigger)
 	require.NoError(t, err)
 	require.NotNil(t, resolved.Identity)
-	runtime := uuid.New()
-	_, err = db.Exec(t.Context(), `INSERT INTO assistant_runtimes(id,project_id,assistant_id,assistant_thread_id,backend,state,runtime_version) VALUES($1,$2,$3,$4,'local','active',3)`, runtime, project, assistant.ID, uuid.Nil)
+	q := assistantrepo.New(db)
+	require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}))
+	require.NoError(t, q.ReserveAssistantRuntimeV2(t.Context(), assistantrepo.ReserveAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant.ID, AssistantThreadID: uuid.Nil, Backend: runtimeBackendLocal, State: runtimeStateActive}))
+	row, err := q.GetAssistantRuntimeV2(t.Context(), assistantrepo.GetAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant.ID})
 	require.NoError(t, err)
+	runtime := row.ID
 	manager := assistanttokens.New("test", db, nil, nil, nil)
 	in := KitStartupBootstrapInput{Identity: *resolved.Identity, RuntimeID: runtime, Lifetime: 24 * time.Hour, Origin: "https://api.example.invalid", AgentsMD: []byte("global instructions"), MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("test-token")}
 	first, id, err := PrepareKitStartupBootstrap(t.Context(), manager, in)
@@ -66,19 +75,26 @@ func TestKitLocalStartupBootstrapRotatesCredential(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, id, next)
 	require.NotEqual(t, string(first.InferenceJSON), string(second.InferenceJSON))
-	var revoked bool
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT revoked_at IS NOT NULL FROM assistant_inference_credentials WHERE project_id=$1 AND id=$2`, project, id).Scan(&revoked))
-	require.True(t, revoked)
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT revoked_at IS NOT NULL FROM assistant_inference_credentials WHERE project_id=$1 AND id=$2`, project, next).Scan(&revoked))
-	require.False(t, revoked)
+	var firstFile, secondFile kitInferenceFile
+	require.NoError(t, json.Unmarshal(first.InferenceJSON, &firstFile))
+	require.NoError(t, json.Unmarshal(second.InferenceJSON, &secondFile))
+	firstHash := sha256.Sum256([]byte(firstFile.BearerToken))
+	secondHash := sha256.Sum256([]byte(secondFile.BearerToken))
+	tokens := tokenrepo.New(db)
+	_, err = tokens.ReadInferenceCredential(t.Context(), firstHash[:])
+	require.ErrorIs(t, err, pgx.ErrNoRows, "previous startup credential must no longer authorize")
+	current, err := tokens.ReadInferenceCredential(t.Context(), secondHash[:])
+	require.NoError(t, err)
+	require.Equal(t, next, current.ID)
 	require.NoError(t, validateKitBootstrap(second))
 }
 
 // Explicit image smoke: no model calls, only authenticated catalog discovery,
 // canonical session creation, settlement observation and durable session close.
 func TestKitLocalExactImageGatewaySmoke(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("SPEAKEASY_KIT_IMAGE_SMOKE") != "1" {
-		t.Skip("set SPEAKEASY_KIT_IMAGE_SMOKE=1 to exercise the pinned local Kit image")
+		t.Skip("set SPEAKEASY_KIT_IMAGE_SMOKE=1 to exercise the pinned local Kit image") //nolint:forbidigo // Opt-in smoke requires a locally built image and running container engine.
 	}
 	var discovery atomic.Int64
 	mock := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +115,9 @@ func TestKitLocalExactImageGatewaySmoke(t *testing.T) {
 	mock.Listener = listener
 	mock.Start()
 	defer mock.Close()
-	origin, _ := url.Parse(fmt.Sprintf("http://%s:%d", LocalRuntimeHostGatewayAlias, listener.Addr().(*net.TCPAddr).Port))
+	address, ok := listener.Addr().(*net.TCPAddr)
+	require.True(t, ok)
+	origin, _ := url.Parse(fmt.Sprintf("http://%s:%d", LocalRuntimeHostGatewayAlias, address.Port))
 	config := DefaultKitLocalRuntimeConfig(origin)
 	config.Bootstrap = func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error) {
 		raw, _ := json.Marshal(kitInferenceFile{Version: 1, BearerToken: "sai_smoke", Origin: origin.String()})
@@ -118,7 +136,7 @@ func TestKitLocalExactImageGatewaySmoke(t *testing.T) {
 				return nil
 			}
 			if time.Now().After(deadline) {
-				return err
+				return fmt.Errorf("wait for kit smoke gateway: %w", err)
 			}
 			select {
 			case <-ctx.Done():

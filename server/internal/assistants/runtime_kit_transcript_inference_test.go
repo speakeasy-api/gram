@@ -5,19 +5,24 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
 
 func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
+	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "kit_inference_live")
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "kit-inference-live")
@@ -31,12 +36,16 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	resolution, err := core.identities.Resolve(t.Context(), db, "org-test", project, assistant.ID, trigger)
 	require.NoError(t, err)
 	require.NotNil(t, resolution.Identity)
-	runtime := uuid.New()
-	_, err = db.Exec(t.Context(), `INSERT INTO assistant_runtimes(id,project_id,assistant_id,assistant_thread_id,backend,state,runtime_version) VALUES($1,$2,$3,$4,'local','active',3)`, runtime, project, assistant.ID, uuid.Nil)
-	require.NoError(t, err)
 	thread := seedThreadWithEvent(t, db, assistant.ID, "inference", "inference", eventStatusPending)
-	var chatID uuid.UUID
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT chat_id FROM assistant_threads WHERE project_id=$1 AND id=$2`, project, thread).Scan(&chatID))
+	queries := assistantrepo.New(db)
+	require.NoError(t, queries.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}))
+	require.NoError(t, queries.ReserveAssistantRuntimeV2(t.Context(), assistantrepo.ReserveAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant.ID, AssistantThreadID: thread, Backend: "local", State: "active"}))
+	runtimeRow, err := queries.GetAssistantRuntimeV2(t.Context(), assistantrepo.GetAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant.ID})
+	require.NoError(t, err)
+	runtime := runtimeRow.ID
+	threadRow, err := assistantrepo.New(db).LoadAssistantThreadForBootstrap(t.Context(), assistantrepo.LoadAssistantThreadForBootstrapParams{ProjectID: project, ThreadID: thread})
+	require.NoError(t, err)
+	chatID := threadRow.ChatID
 	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
 	manager := assistanttokens.New("test-secret", db, engine, newTestPrincipalCredentials(t, db), nil)
 	issue := func() assistanttokens.InferenceCredential {
@@ -69,24 +78,24 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	require.Nil(t, session)
 	require.NoError(t, capture.CaptureMessage(ctx, session, request, openrouter.CompletionResponse{}))
 	require.Equal(t, chatID, request.ChatID)
-	var messages int64
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM chat_messages WHERE project_id=$1 AND chat_id=$2`, project, chatID).Scan(&messages))
+	messages, err := chatrepo.New(db).CountChatMessages(t.Context(), chatrepo.CountChatMessagesParams{ProjectID: project, ChatID: chatID})
+	require.NoError(t, err)
 	require.Zero(t, messages)
 	// Runtime-wide revoke is the restore/startup rotation boundary.
 	require.NoError(t, manager.RevokeRuntimeInferenceCredentials(t.Context(), project, runtime))
 	_, err = manager.AuthorizeInference(t.Context(), credential.Token)
 	require.Error(t, err)
 	credential = issue()
-	_, err = db.Exec(t.Context(), `UPDATE assistant_inference_credentials SET created_at=clock_timestamp()-interval '2 hours',expires_at=clock_timestamp()-interval '1 hour' WHERE project_id=$1 AND id=$2`, project, credential.ID)
+	err = testrepo.New(db).ExpireAssistantInferenceCredentialForTest(t.Context(), testrepo.ExpireAssistantInferenceCredentialForTestParams{ProjectID: project, ID: credential.ID})
 	require.NoError(t, err)
 	_, err = manager.AuthorizeInference(t.Context(), credential.Token)
 	require.Error(t, err, "persisted expiry is enforced")
 	credential = issue()
-	_, err = db.Exec(t.Context(), `UPDATE agents SET suspended_at=clock_timestamp() WHERE project_id=$1 AND id=$2`, project, resolution.Identity.AgentID)
+	_, err = agentrepo.New(db).SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: "org-test", ID: resolution.Identity.AgentID})
 	require.NoError(t, err)
 	_, err = manager.AuthorizeInference(t.Context(), credential.Token)
 	require.Error(t, err, "live workload eligibility is checked on every request")
-	_, err = db.Exec(t.Context(), `UPDATE agents SET suspended_at=NULL WHERE project_id=$1 AND id=$2`, project, resolution.Identity.AgentID)
+	_, err = agentrepo.New(db).ResumeAgent(t.Context(), agentrepo.ResumeAgentParams{OrganizationID: "org-test", ID: resolution.Identity.AgentID})
 	require.NoError(t, err)
 	ctx, err = manager.AuthorizeInference(t.Context(), credential.Token)
 	require.NoError(t, err)

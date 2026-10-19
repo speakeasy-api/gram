@@ -10,11 +10,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"github.com/stretchr/testify/require"
 )
 
 func TestInferenceCredentialNamespace(t *testing.T) {
+	t.Parallel()
+
 	for _, token := range []string{"sai_example", "Bearer sai_example", "bearer sai_example"} {
 		require.True(t, IsInferenceCredential(token))
 		require.False(t, IsRuntimeCredential(token))
@@ -28,6 +31,8 @@ func TestInferenceCredentialNamespace(t *testing.T) {
 }
 
 func TestInferenceCredentialLifetimeBounds(t *testing.T) {
+	t.Parallel()
+
 	m := new(Manager)
 	for _, lifetime := range []time.Duration{0, -time.Second, MaxInferenceLifetime + time.Second} {
 		_, err := m.IssueInferenceCredential(t.Context(), InferenceIssueInput{RuntimeID: uuid.New(), Lifetime: lifetime})
@@ -36,20 +41,31 @@ func TestInferenceCredentialLifetimeBounds(t *testing.T) {
 }
 
 func TestInferenceCredentialStorageFencing(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, "inference_credential_fencing")
 	ctx := t.Context()
 	runtimeID := uuid.New()
-	_, err := f.conn.Exec(ctx, `INSERT INTO assistant_runtimes (id, project_id, assistant_id, assistant_thread_id, backend, state) VALUES ($1, $2, $3, $4, 'local', 'running')`, runtimeID, f.projectID, f.assistantID, uuid.Nil)
-	require.NoError(t, err)
+	runtimes := assistantsrepo.New(f.conn)
+	createRuntime := func(id uuid.UUID) {
+		t.Helper()
+		now := pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}
+		require.NoError(t, runtimes.CreateAssistantRuntime(ctx, assistantsrepo.CreateAssistantRuntimeParams{
+			ID: id, AssistantThreadID: uuid.Nil, AssistantID: f.assistantID, ProjectID: f.projectID,
+			Backend: "local", BackendMetadataJson: []byte(`{}`), State: "running",
+			WarmUntil: now, LastHeartbeatAt: now, UpdatedAt: now, EndedAt: pgtype.Timestamptz{}, DeletedAt: pgtype.Timestamptz{},
+		}))
+	}
+	createRuntime(runtimeID)
 	q := tokenrepo.New(f.conn)
 	issue := func(seed string) (uuid.UUID, []byte) {
 		hash := sha256.Sum256([]byte(seed))
-		id, err := q.IssueInferenceCredential(ctx, tokenrepo.IssueInferenceCredentialParams{ProjectID: f.projectID, AssistantID: f.assistantID, RuntimeID: runtimeID, TokenHash: hash[:], IdentityJson: []byte(`{}`), PolicyJson: []byte(`{}`), PolicyVersion: 1, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}})
+		id, err := q.IssueInferenceCredential(ctx, tokenrepo.IssueInferenceCredentialParams{ProjectID: f.projectID, AssistantID: f.assistantID, RuntimeID: runtimeID, TokenHash: hash[:], IdentityJson: []byte(`{}`), PolicyJson: []byte(`{}`), PolicyVersion: 1, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true}})
 		require.NoError(t, err)
 		return id, hash[:]
 	}
 	id, hash := issue("test-only-credential-one")
-	_, err = q.ReadInferenceCredential(ctx, hash)
+	_, err := q.ReadInferenceCredential(ctx, hash)
 	require.NoError(t, err)
 	require.NoError(t, q.RevokeInferenceCredential(ctx, tokenrepo.RevokeInferenceCredentialParams{ProjectID: uuid.New(), ID: id}))
 	_, err = q.ReadInferenceCredential(ctx, hash)
@@ -58,18 +74,18 @@ func TestInferenceCredentialStorageFencing(t *testing.T) {
 	_, err = q.ReadInferenceCredential(ctx, hash)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	_, hash = issue("test-only-credential-two")
-	_, err = f.conn.Exec(ctx, `UPDATE assistant_runtimes SET ended_at = clock_timestamp() WHERE project_id = $1 AND id = $2`, f.projectID, runtimeID)
-	require.NoError(t, err)
+	require.NoError(t, runtimes.RetireAssistantRuntimesForSwitch(ctx, assistantsrepo.RetireAssistantRuntimesForSwitchParams{ProjectID: f.projectID, AssistantID: f.assistantID}))
 	_, err = q.ReadInferenceCredential(ctx, hash)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	// A fresh row for the same assistant must not resurrect the old generation.
-	_, err = f.conn.Exec(ctx, `INSERT INTO assistant_runtimes (project_id, assistant_id, assistant_thread_id, backend, state) VALUES ($1, $2, $3, 'local', 'running')`, f.projectID, f.assistantID, uuid.Nil)
-	require.NoError(t, err)
+	createRuntime(uuid.New())
 	_, err = q.ReadInferenceCredential(ctx, hash)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestInferenceChatOwnership(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, "inference_chat_ownership")
 	m := New("", f.conn, nil, nil, nil)
 	ctx := context.WithValue(t.Context(), inferenceContextKey{}, assistantidentity.Identity{ProjectID: f.projectID, AssistantID: f.assistantID})

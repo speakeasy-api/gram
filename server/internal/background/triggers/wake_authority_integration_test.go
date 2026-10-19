@@ -9,6 +9,7 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
 func TestWakeCreationRechecksLifecycleAfterSelectionLock(t *testing.T) {
@@ -28,11 +29,11 @@ func TestWakeCreationRechecksLifecycleAfterSelectionLock(t *testing.T) {
 	}()
 
 	testenv.WaitForQueryBlockedBy(t, ctx, f.db, testenv.BackendPID(selection), "%AcquireAssistantAdvisoryLock :exec%")
-	_, err := selection.Exec(ctx, "UPDATE assistants SET status = 'inactive' WHERE id = $1 AND project_id = $2", f.assistantID, f.projectID)
+	err := assistantrepo.New(selection).SetAssistantStatus(ctx, assistantrepo.SetAssistantStatusParams{Status: "inactive", ID: f.assistantID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	require.NoError(t, selection.Commit(ctx))
 	require.ErrorContains(t, <-result, "wake assistant is not active")
-	var wakes int
-	require.NoError(t, f.db.QueryRow(ctx, "SELECT count(*) FROM trigger_instances WHERE project_id = $1 AND target_ref = $2 AND definition_slug = 'wake'", f.projectID, f.assistantID.String()).Scan(&wakes))
-	require.Zero(t, wakes)
+	wakes, err := triggerrepo.New(f.db).ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{ProjectID: f.projectID, TargetRef: f.assistantID.String(), TargetKind: triggers.TargetKindAssistant, DefinitionSlug: triggers.DefinitionSlugWake})
+	require.NoError(t, err)
+	require.Empty(t, wakes)
 }

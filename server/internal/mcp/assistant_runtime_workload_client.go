@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -35,13 +36,13 @@ func (s *Service) ProvisionAssistantRuntimeWorkloadClient(ctx context.Context, r
 	var zero ProvisionedAssistantWorkloadClient
 	runtime, err := usersessions_repo.New(s.db).GetAssistantWorkloadRuntime(ctx, runtimeID)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("resolve assistant runtime workload: %w", err)
 	}
 	triggerID := c.TriggerID
 	if triggerID == uuid.Nil {
 		roots, err := usersessions_repo.New(s.db).ListAssistantWorkloadRuntimeRoots(ctx, usersessions_repo.ListAssistantWorkloadRuntimeRootsParams{ProjectID: runtime.ProjectID, OrganizationID: runtime.OrganizationID, AssistantID: runtime.AssistantID})
 		if err != nil {
-			return zero, err
+			return zero, fmt.Errorf("resolve assistant runtime workload: %w", err)
 		}
 		if len(roots) != 1 {
 			return zero, errors.New("bootstrap must select an existing root trigger when the assistant has zero or multiple roots")
@@ -49,7 +50,10 @@ func (s *Service) ProvisionAssistantRuntimeWorkloadClient(ctx context.Context, r
 		triggerID = roots[0]
 	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeSystem, "assistant-runtime-bootstrap")
-	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: runtime.OrganizationID, ProjectID: &runtime.ProjectID}, actor)
+	authContext := new(contextvalues.AuthContext)
+	authContext.ActiveOrganizationID = runtime.OrganizationID
+	authContext.ProjectID = &runtime.ProjectID
+	ctx = contextvalues.WithAuthenticatedActor(ctx, authContext, actor)
 	return s.provisionAssistantWorkloadClient(ctx, ProvisionAssistantWorkloadClientParams{
 		RuntimeID: runtime.ID, OrganizationID: runtime.OrganizationID, ProjectID: runtime.ProjectID, AssistantID: runtime.AssistantID,
 		TriggerID: triggerID, UserSessionIssuerID: c.UserSessionIssuerID, AuthMethod: c.AuthMethod, Secret: c.Secret, JWKS: c.JWKS, JWKSURI: c.JWKSURI,
@@ -64,7 +68,11 @@ func RevokeAssistantRuntimeWorkloadClients(ctx context.Context, tx pgx.Tx, organ
 	if organizationID == "" || projectID == uuid.Nil || runtimeID == uuid.Nil {
 		return nil, errors.New("runtime cleanup requires exact tenancy")
 	}
-	return usersessions_repo.New(tx).RevokeAssistantRuntimeWorkloadClients(ctx, usersessions_repo.RevokeAssistantRuntimeWorkloadClientsParams{RuntimeID: uuid.NullUUID{UUID: runtimeID, Valid: true}, OrganizationID: conv.ToPGText(organizationID), ProjectID: projectID})
+	revoked, err := usersessions_repo.New(tx).RevokeAssistantRuntimeWorkloadClients(ctx, usersessions_repo.RevokeAssistantRuntimeWorkloadClientsParams{RuntimeID: uuid.NullUUID{UUID: runtimeID, Valid: true}, OrganizationID: conv.ToPGText(organizationID), ProjectID: projectID})
+	if err != nil {
+		return nil, fmt.Errorf("revoke assistant runtime workload clients: %w", err)
+	}
+	return revoked, nil
 }
 
 // AssistantRuntimeWorkloadBinding is resolved from the persisted OAuth session,
@@ -87,13 +95,13 @@ func ResolveAssistantRuntimeWorkloadContext(ctx context.Context, db usersessions
 	}
 	issuer, subject, err := actor.Workload()
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("resolve assistant runtime workload: %w", err)
 	}
 	row, err := usersessions_repo.New(db).GetAssistantRuntimeForWorkloadSession(ctx, usersessions_repo.GetAssistantRuntimeForWorkloadSessionParams{
 		Jti: *ac.SessionID, SubjectUrn: urn.NewWorkloadSubject(issuer, subject), OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), ProjectID: *ac.ProjectID,
 	})
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("resolve assistant runtime workload: %w", err)
 	}
 	return AssistantRuntimeWorkloadBinding{RuntimeID: row.RuntimeID, AssistantID: row.AssistantID, ClientRegistrationID: row.ClientRegistrationID}, nil
 }

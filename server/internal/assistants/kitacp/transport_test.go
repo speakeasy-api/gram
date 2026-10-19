@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +18,7 @@ import (
 )
 
 func TestTransport(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var mu sync.Mutex
@@ -33,7 +37,7 @@ func TestTransport(t *testing.T) {
 			}
 			if m.Method == "initialize" {
 				w.Header().Set("Acp-Connection-Id", "conn")
-				fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":2,"info":{"name":"test","version":"0"},"capabilities":{}}}`, m.ID)
+				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":2,"info":{"name":"test","version":"0"},"capabilities":{}}}`, m.ID)
 				return
 			}
 			if r.Header.Get("Acp-Connection-Id") != "conn" {
@@ -83,12 +87,12 @@ func TestTransport(t *testing.T) {
 			mu.Unlock()
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.WriteHeader(200)
-			w.(http.Flusher).Flush()
+			flushTestResponse(t, w)
 			for {
 				select {
 				case msg := <-ch:
-					fmt.Fprint(w, msg)
-					w.(http.Flusher).Flush()
+					_, _ = fmt.Fprint(w, msg)
+					flushTestResponse(t, w)
 				case <-r.Context().Done():
 					return
 				}
@@ -100,11 +104,11 @@ func TestTransport(t *testing.T) {
 	}))
 	defer s.Close()
 	setup, stopSetup := context.WithCancel(ctx)
-	c, _, err := Dial(setup, s.URL+"/acp/v2", "test-secret", nil, json.RawMessage(`{"protocolVersion":2,"info":{"name":"test","version":"0"},"capabilities":{}}`))
+	c, _, err := Dial(setup, s.URL+"/acp/v2", "test-secret", testHTTPClient(t), json.RawMessage(`{"protocolVersion":2,"info":{"name":"test","version":"0"},"capabilities":{}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.CloseTransport(ctx)
+	defer func() { _ = c.CloseTransport(ctx) }()
 	stopSetup() // setup cancellation must not own live streams
 	if _, err = c.Call(ctx, "session/list", json.RawMessage(`{}`), ""); err != nil {
 		t.Fatal(err)
@@ -153,21 +157,23 @@ func TestTransport(t *testing.T) {
 	}
 }
 func TestRedirectAndSanitizedErrors(t *testing.T) {
+	t.Parallel()
 	var leaked atomic.Bool
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { leaked.Store(true) }))
 	defer target.Close()
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Location", target.URL)
 		w.WriteHeader(307)
-		fmt.Fprint(w, "test-secret")
+		_, _ = fmt.Fprint(w, "test-secret")
 	}))
 	defer origin.Close()
-	_, _, err := Dial(context.Background(), origin.URL+"/acp/v2", "test-secret", nil, struct{}{})
+	_, _, err := Dial(context.Background(), origin.URL+"/acp/v2", "test-secret", testHTTPClient(t), struct{}{})
 	if err == nil || strings.Contains(err.Error(), "test-secret") || leaked.Load() {
 		t.Fatalf("unsafe redirect/error: %v", err)
 	}
 }
 func TestSSEBoundsAndCorrelation(t *testing.T) {
+	t.Parallel()
 	c := &Client{pending: map[string]pending{"2": {session: "right", ch: make(chan reply, 1)}}, notifications: make(chan Notification, 1)}
 	if err := c.dispatch([]byte(`{"jsonrpc":"2.0","id":2,"result":{}}`), "wrong"); err == nil {
 		t.Fatal("wrong stream accepted")
@@ -178,4 +184,18 @@ func TestSSEBoundsAndCorrelation(t *testing.T) {
 	if err := c.readSSE(strings.NewReader(strings.Repeat(": comment\n", MaxMessageBytes/9+1)), ""); err == nil {
 		t.Fatal("oversized multiline frame accepted")
 	}
+}
+
+func testHTTPClient(t *testing.T) *guardian.HTTPClient {
+	t.Helper()
+	return guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).Client(guardian.WithAllowedCIDRBlocks("127.0.0.1/32"))
+}
+func flushTestResponse(t *testing.T, w http.ResponseWriter) {
+	t.Helper()
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		t.Error("test server requires HTTP flusher")
+		return
+	}
+	flusher.Flush()
 }

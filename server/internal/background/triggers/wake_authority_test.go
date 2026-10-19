@@ -70,19 +70,19 @@ func TestWakeRuntimeAuthority(t *testing.T) {
 						if tc.missingSession {
 							return pgx.ErrNoRows
 						}
-						*dest[0].(*uuid.NullUUID) = uuid.NullUUID{UUID: clientID, Valid: !tc.legacySession}
+						*wakeScanDestination[uuid.NullUUID](t, dest[0]) = uuid.NullUUID{UUID: clientID, Valid: !tc.legacySession}
 						return nil
 					}
 					require.Contains(t, query, "GetAssistantRuntimeForWorkloadSession")
 					if tc.retired {
 						return pgx.ErrNoRows
 					}
-					*dest[0].(*uuid.UUID) = uuid.New()
-					*dest[1].(*uuid.UUID) = assistantID
+					*wakeScanDestination[uuid.UUID](t, dest[0]) = uuid.New()
+					*wakeScanDestination[uuid.UUID](t, dest[1]) = assistantID
 					if tc.wrongAssistant {
-						*dest[1].(*uuid.UUID) = uuid.New()
+						*wakeScanDestination[uuid.UUID](t, dest[1]) = uuid.New()
 					}
-					*dest[2].(*uuid.UUID) = clientID
+					*wakeScanDestination[uuid.UUID](t, dest[2]) = clientID
 					return nil
 				})
 			}}
@@ -95,4 +95,11 @@ func TestWakeRuntimeAuthority(t *testing.T) {
 			require.Equal(t, tc.wantQueries, calls)
 		})
 	}
+}
+
+func wakeScanDestination[T any](t *testing.T, dest any) *T {
+	t.Helper()
+	value, ok := dest.(*T)
+	require.True(t, ok, "unexpected scan destination type")
+	return value
 }

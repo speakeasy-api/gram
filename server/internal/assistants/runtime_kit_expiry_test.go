@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -42,12 +43,12 @@ func TestKitLegacyExpiryPreservesPendingAdmission(t *testing.T) {
 	conn, err := assistantsInfra.CloneTestDatabase(t, "kit_expiry_pending")
 	require.NoError(t, err)
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
-	_, err = conn.Exec(t.Context(), "UPDATE assistants SET runtime_version = 3 WHERE id = $1 AND project_id = $2", assistantID, projectID)
+	err = assistantrepo.New(conn).SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{RuntimeVersion: 3, AssistantID: assistantID, ProjectID: projectID})
 	require.NoError(t, err)
 	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendLocal, runtimeStateActive, `{}`)
 	// Make the row eligible for the old idle sweep while a pending admission
 	// has not reached the guest. Both expiry entry points must leave it alone.
-	_, err = conn.Exec(t.Context(), "UPDATE assistant_runtimes SET warm_until = $3 WHERE id = $1 AND project_id = $2", runtimeID, projectID, time.Now().Add(-time.Hour))
+	err = assistantrepo.New(conn).SetAssistantRuntimeActive(t.Context(), assistantrepo.SetAssistantRuntimeActiveParams{ActiveState: runtimeStateActive, WarmUntil: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}, RuntimeID: runtimeID, ProjectID: projectID})
 	require.NoError(t, err)
 	var stops atomic.Int64
 	core := newProvisioningCore(t, conn)

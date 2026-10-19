@@ -12,6 +12,7 @@ import (
 )
 
 func TestKitCompositionMachineConfigUsesFiles(t *testing.T) {
+	t.Parallel()
 	resource, _ := url.Parse("https://mcp.example/mcp/resource")
 	issuer, _ := url.Parse("https://issuer.example/oauth/project")
 	raw, files, err := kitCompositionMCP(KitLocalCompositionConfig{MCPResource: resource, MCPIssuer: issuer}, KitMCPProvisionResult{ClientID: "registered-client", Secret: "never-in-configuration"})
@@ -20,16 +21,24 @@ func TestKitCompositionMachineConfigUsesFiles(t *testing.T) {
 	require.Equal(t, []byte("never-in-configuration"), files["mcp-workload-secret"])
 	var config map[string]any
 	require.NoError(t, json.Unmarshal(raw, &config))
-	auth := config["mcpServers"].(map[string]any)["workload"].(map[string]any)["auth"].(map[string]any)
+	servers, ok := config["mcpServers"].(map[string]any)
+	require.True(t, ok)
+	workload, ok := servers["workload"].(map[string]any)
+	require.True(t, ok)
+	auth, ok := workload["auth"].(map[string]any)
+	require.True(t, ok)
+	method, ok := auth["method"].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, "client_credentials", auth["type"])
 	require.Equal(t, resource.String(), auth["resource"])
 	require.Equal(t, issuer.String(), auth["expected_issuer"])
 	require.Equal(t, []any{"mcp:connect"}, auth["scopes"])
-	require.Equal(t, "/home/kit/.kit/credentials/mcp-workload-secret", auth["method"].(map[string]any)["client_secret_file"])
+	require.Equal(t, "/home/kit/.kit/credentials/mcp-workload-secret", method["client_secret_file"])
 	require.NotContains(t, string(raw), "Authorization")
 }
 
 func TestKitCompositionRejectsInvalidConfig(t *testing.T) {
+	t.Parallel()
 	origin, _ := url.Parse("https://api.example")
 	resource, _ := url.Parse("https://mcp.example/mcp/resource")
 	issuer, _ := url.Parse("https://issuer.example")
@@ -59,6 +68,7 @@ func TestKitCompositionRejectsInvalidConfig(t *testing.T) {
 }
 
 func TestKitCompositionRequiresExplicitAttachedResource(t *testing.T) {
+	t.Parallel()
 	resource, _ := url.Parse("https://mcp.example/mcp/attached")
 	a := assistantRecord{MCPServers: []assistantMCPServerRow{{EndpointSlug: "attached", Visibility: "private"}}}
 	require.True(t, kitResourceAttached(a, resource))

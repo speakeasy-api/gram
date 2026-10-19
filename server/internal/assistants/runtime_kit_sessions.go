@@ -14,10 +14,10 @@ import (
 )
 
 var (
-	ErrKitRuntimeBinding         = errors.New("Kit runtime authority or session binding is unavailable")
-	ErrKitRuntimeSessionConflict = errors.New("Kit session is already bound to another thread")
-	ErrKitGatewayTokenNotFound   = errors.New("Kit gateway credential is not stored")
-	errKitGatewayCredential      = errors.New("Kit gateway credential is unavailable")
+	ErrKitRuntimeBinding         = errors.New("kit runtime authority or session binding is unavailable")
+	ErrKitRuntimeSessionConflict = errors.New("kit session is already bound to another thread")
+	ErrKitGatewayTokenNotFound   = errors.New("kit gateway credential is not stored")
+	errKitGatewayCredential      = errors.New("kit gateway credential is unavailable")
 )
 
 // RuntimeID is the authority generation, not a backend process identifier.

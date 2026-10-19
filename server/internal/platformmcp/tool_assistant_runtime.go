@@ -80,9 +80,9 @@ func (s *AssistantIdentityService) selectRuntime(ctx context.Context, principal 
 	scoped.ProjectSlug = &project.Slug
 	ctx = contextvalues.SetAuthContext(ctx, &scoped)
 
-	current, err := management.GetAssistant(ctx, &genassistants.GetAssistantPayload{ID: assistantID.String()})
+	current, err := management.GetAssistant(ctx, &genassistants.GetAssistantPayload{ID: assistantID.String(), SessionToken: nil, ProjectSlugInput: nil})
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("read assistant runtime selection: %w", err)
 	}
 	if current == nil || current.ID != assistantID.String() || current.ProjectID != projectID.String() {
 		return zero, ErrUnavailable
@@ -92,9 +92,13 @@ func (s *AssistantIdentityService) selectRuntime(ctx context.Context, principal 
 	}
 	// The authorized service performs the locked compare-and-set and audits the
 	// persisted change. No frontend flag grants access.
-	assistant, err := management.UpdateAssistant(ctx, &genassistants.UpdateAssistantPayload{ID: assistantID.String(), RuntimeVersion: &input.RuntimeVersion, ExpectedRuntimeVersion: &input.ExpectedRuntimeVersion})
+	assistant, err := management.UpdateAssistant(ctx, &genassistants.UpdateAssistantPayload{
+		ID: assistantID.String(), RuntimeVersion: &input.RuntimeVersion, ExpectedRuntimeVersion: &input.ExpectedRuntimeVersion,
+		SessionToken: nil, ProjectSlugInput: nil, Name: nil, Model: nil, Instructions: nil, Toolsets: nil, McpServers: nil,
+		WarmTTLSeconds: nil, MaxConcurrency: nil, Status: nil,
+	})
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("select assistant runtime: %w", err)
 	}
 	if assistant == nil || assistant.ID != assistantID.String() || assistant.ProjectID != projectID.String() {
 		return zero, ErrUnavailable
@@ -104,11 +108,12 @@ func (s *AssistantIdentityService) selectRuntime(ctx context.Context, principal 
 
 func registerAssistantRuntimeTool(reg *Registrar, service *AssistantIdentityService) {
 	addTool(reg, &mcp.Tool{
+		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name:        selectAssistantRuntimeToolName,
 		Title:       "Select Assistant Runtime",
 		Description: "Select the persisted runtime for one assistant in an exact project. Versions 1 and 2 are legacy; select 2 for legacy or explicitly opt into Kit with 3. First call with confirmed:false to preview the current runtime_version without changing it, then obtain explicit confirmation of the exact target and choice. Supply that value as expected_runtime_version. Requires organization administrator access and the same project:write authorization as the dashboard; a frontend feature flag is not authorization. The shared service rejects stale versions and unsettled active or background work. On conflict read again and reconfirm; never automatically overwrite. Returns committed runtime configuration, not runtime readiness, instructions or credentials. Managed assistants cannot change their own runtime through this tool.",
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), ReadOnlyHint: false, IdempotentHint: false},
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SelectAssistantRuntimeInput) (*mcp.CallToolResult, SelectAssistantRuntimeOutput, error) {
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), ReadOnlyHint: false, IdempotentHint: false, OpenWorldHint: nil, Title: ""},
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input SelectAssistantRuntimeInput) (*mcp.CallToolResult, SelectAssistantRuntimeOutput, error) {
 		return principalToolCall(ctx, assistantRuntimeToolResult, func(principal Principal) (SelectAssistantRuntimeOutput, error) {
 			return service.selectRuntime(ctx, principal, input)
 		})
@@ -133,11 +138,13 @@ func assistantRuntimeToolResult(err error) (*mcp.CallToolResult, bool) {
 			result.Code, result.Message = "not_found", "That assistant or project is not available to you."
 		case oops.CodeConflict:
 			result.Code, result.Message = "conflict", "The runtime version changed or assistant work is not settled. Read the assistant again and reconfirm before retrying."
+		default:
+			// Unknown failures retain the bounded unavailable response.
 		}
 	}
 	payload, marshalErr := json.Marshal(result)
 	if marshalErr != nil {
 		return nil, false
 	}
-	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}, IsError: true}, true
+	return &mcp.CallToolResult{Meta: nil, StructuredContent: nil, InputRequests: nil, RequestState: "", Content: []mcp.Content{&mcp.TextContent{Meta: nil, Annotations: nil, Text: string(payload)}}, IsError: true}, true
 }

@@ -16,7 +16,9 @@ import (
 )
 
 const KitIntegrationImage = "localhost/kit-assistant-integration:c3cbc0e"
-const KitInferenceCredentialFilename = "f5a93b2411bbf44d12df4db53aa064d87685df4fad637f3c61a653f4bc5b200f.json"
+
+// KitInferenceCredentialFilename is a public provider cache key, not a credential.
+const KitInferenceCredentialFilename = "f5a93b2411bbf44d12df4db53aa064d87685df4fad637f3c61a653f4bc5b200f.json" //nolint:gosec // Public provider cache filename, not a secret.
 
 // KitWorkspacePath is persistent under the runtime's HOME volume. ACP cwd must
 // equal this approved canonical gateway project root on new and resumed sessions.
@@ -29,7 +31,7 @@ func KitGatewayCommand(port int) ([]string, []string) {
 func validateKitGatewayCommand(command, args []string, port int) error {
 	expectedCommand, expectedArgs := KitGatewayCommand(port)
 	if !slices.Equal(command, expectedCommand) || !slices.Equal(args, expectedArgs) {
-		return fmt.Errorf("Kit requires the authenticated wildcard gateway command and approved project root")
+		return fmt.Errorf("kit requires the authenticated wildcard gateway command and approved project root")
 	}
 	return nil
 }
@@ -53,11 +55,11 @@ func kitInferenceOrigin(raw []byte) (string, error) {
 }
 func validateKitBootstrap(b KitLocalBootstrap) error {
 	if len(b.AgentsMD) == 0 || len(b.GatewayToken) == 0 {
-		return fmt.Errorf("Kit requires global instructions and gateway bearer")
+		return fmt.Errorf("kit requires global instructions and gateway bearer")
 	}
 	for _, c := range b.GatewayToken {
 		if c <= 32 || c > 126 {
-			return fmt.Errorf("Kit gateway bearer must be one printable ASCII token")
+			return fmt.Errorf("kit gateway bearer must be one printable ASCII token")
 		}
 	}
 	if _, err := kitInferenceOrigin(b.InferenceJSON); err != nil {
@@ -67,11 +69,11 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 		Servers map[string]json.RawMessage `json:"mcpServers"`
 	}
 	if json.Unmarshal(b.MCPJSON, &mcp) != nil || mcp.Servers == nil {
-		return fmt.Errorf("Kit MCP config requires mcpServers object")
+		return fmt.Errorf("kit MCP config requires mcpServers object")
 	}
 	for name, data := range b.MCPFiles {
 		for _, c := range name {
-			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-') {
+			if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '.' && c != '_' && c != '-' {
 				return fmt.Errorf("invalid Kit machine credential filename")
 			}
 		}
@@ -86,7 +88,7 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 // contract. Caller must install Bootstrap, Protocol and authenticated Ready.
 func DefaultKitLocalRuntimeConfig(origin *url.URL) KitLocalRuntimeConfig {
 	command, args := KitGatewayCommand(8081)
-	return KitLocalRuntimeConfig{Environment: "local", Image: KitIntegrationImage, Command: command, Args: args, GuestPort: 8081, ServerURL: origin, CompatibilityGeneration: "kit-c3cbc0e-v1", HomeOwnedByRuntimeUser: true}
+	return KitLocalRuntimeConfig{Environment: "local", Image: KitIntegrationImage, Command: command, Args: args, GuestPort: 8081, ServerURL: origin, CompatibilityGeneration: "kit-c3cbc0e-v1", HomeOwnedByRuntimeUser: true, Env: nil, ExtraCACertFile: "", Bootstrap: nil, Protocol: nil, Ready: nil}
 }
 
 type KitStartupBootstrapInput struct {
@@ -103,7 +105,7 @@ type KitStartupBootstrapInput struct {
 // for the row before issuing a replacement; no snapshot credential is reused.
 // The caller must likewise refresh/revoke its MCP machine credentials separately.
 func PrepareKitStartupBootstrap(ctx context.Context, manager *assistanttokens.Manager, in KitStartupBootstrapInput) (KitLocalBootstrap, uuid.UUID, error) {
-	b := KitLocalBootstrap{AgentsMD: in.AgentsMD, MCPJSON: in.MCPJSON, GatewayToken: in.GatewayToken, MCPFiles: in.MCPFiles}
+	b := KitLocalBootstrap{InferenceJSON: nil, AgentsMD: in.AgentsMD, MCPJSON: in.MCPJSON, GatewayToken: in.GatewayToken, MCPFiles: in.MCPFiles}
 	b.InferenceJSON, _ = json.Marshal(kitInferenceFile{Version: 1, BearerToken: "sai_validation", Origin: in.Origin})
 	if err := validateKitBootstrap(b); err != nil {
 		return KitLocalBootstrap{}, uuid.Nil, err
@@ -112,11 +114,11 @@ func PrepareKitStartupBootstrap(ctx context.Context, manager *assistanttokens.Ma
 		return KitLocalBootstrap{}, uuid.Nil, fmt.Errorf("invalid Kit startup credential issuer, runtime or lifetime")
 	}
 	if err := manager.RevokeRuntimeInferenceCredentials(ctx, in.Identity.ProjectID, in.RuntimeID); err != nil {
-		return KitLocalBootstrap{}, uuid.Nil, err
+		return KitLocalBootstrap{}, uuid.Nil, fmt.Errorf("revoke previous kit inference credentials: %w", err)
 	}
 	credential, err := manager.IssueInferenceCredential(ctx, assistanttokens.InferenceIssueInput{Identity: in.Identity, RuntimeID: in.RuntimeID, Lifetime: in.Lifetime})
 	if err != nil {
-		return KitLocalBootstrap{}, uuid.Nil, err
+		return KitLocalBootstrap{}, uuid.Nil, fmt.Errorf("issue kit inference credential: %w", err)
 	}
 	b.InferenceJSON, _ = json.Marshal(kitInferenceFile{Version: 1, BearerToken: credential.Token, Origin: in.Origin})
 	return b, credential.ID, nil
