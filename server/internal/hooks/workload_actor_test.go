@@ -336,6 +336,21 @@ func TestCodex_WithdrawnWorkloadIsRefused(t *testing.T) {
 	requireShareableCode(t, err, oops.CodeUnauthorized)
 }
 
+// An expired token is refused as unauthorized on every ingest method, so the
+// device exchanges for a new one.
+func TestJWTAuth_ExpiredWorkloadTokenIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	workload := newHooksWorkload(t, ctx, ti)
+
+	expired, _, err := ti.service.deviceAgentTokens.Mint(workload.organizationID, urn.NewWorkloadPrincipal(workload.issuerID, workload.subject), time.Now().Add(-2*deviceagenttoken.Lifetime))
+	require.NoError(t, err)
+	for _, method := range []string{"cursor", "codex", "logs", "metrics"} {
+		_, err := authenticateWorkload(t, ti, method, expired, workload.projectSlug)
+		requireShareableCode(t, err, oops.CodeUnauthorized)
+	}
+}
+
 // A token not signed by the platform key is refused on every ingest method.
 func TestJWTAuth_ForgedWorkloadTokenIsRefused(t *testing.T) {
 	t.Parallel()

@@ -200,6 +200,19 @@ func TestJWTAuth_WorkloadWithoutDeviceSyncIsForbidden(t *testing.T) {
 	requireCode(t, err, oops.CodeForbidden)
 }
 
+// An expired token is refused as unauthorized, so the device exchanges for a
+// new one.
+func TestJWTAuth_ExpiredTokenIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	device := newWorkloadDevice(t, ctx, ti, []authz.Grant{authz.NewGrant(authz.ScopeOrgDeviceAgentSync, ti.orgID)})
+	expired, _, err := ti.deviceAgentTokens.Mint(ti.orgID, urn.NewWorkloadPrincipal(device.issuerID, device.subject), time.Now().Add(-2*deviceagenttoken.Lifetime))
+	require.NoError(t, err)
+
+	_, err = ti.service.JWTAuth(getPluginsContext(t), expired, deviceAgentTokenScheme)
+	requireCode(t, err, oops.CodeUnauthorized)
+}
+
 // A token signed by another platform key is refused, and the refusal is what
 // the API key requirement reports when the request carried no key.
 func TestJWTAuth_ForgedTokenRefusalReachesTheKeyRequirement(t *testing.T) {
