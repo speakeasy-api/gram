@@ -4343,20 +4343,50 @@ reachable AS (
         )
       )
 ),
+credential_subject AS (
+    -- A credential is named by its first session row's id, and rotation
+    -- keeps the subject, so that row names the subject.
+    SELECT s.subject_urn
+    FROM user_sessions AS s
+    WHERE s.id = $2::uuid
+),
+eligible AS (
+    SELECT a.mcp_server_id,
+           a.remote_session_client_id,
+           EXISTS (
+             SELECT 1
+             FROM remote_sessions AS rs
+             JOIN credential_subject AS cs
+               ON cs.subject_urn = rs.subject_urn
+             WHERE rs.remote_session_client_id = a.remote_session_client_id
+               AND rs.deleted IS FALSE
+           ) AS connected
+    FROM mcp_server_remote_session_clients AS a
+    JOIN reachable AS r
+      ON r.id = a.mcp_server_id
+    JOIN remote_session_clients AS c
+      ON c.id = a.remote_session_client_id
+     AND c.deleted IS FALSE
+    JOIN remote_session_client_user_session_issuers AS link
+      ON link.remote_session_client_id = a.remote_session_client_id
+     AND link.user_session_issuer_id = $4
+    WHERE a.deleted IS FALSE
+),
 decided AS (
     SELECT r.id AS mcp_server_id,
            r.project_id,
-           (
-             SELECT CASE WHEN count(*) = 1 THEN (array_agg(a.remote_session_client_id))[1] END
-             FROM mcp_server_remote_session_clients AS a
-             JOIN remote_session_clients AS c
-               ON c.id = a.remote_session_client_id
-              AND c.deleted IS FALSE
-             JOIN remote_session_client_user_session_issuers AS link
-               ON link.remote_session_client_id = a.remote_session_client_id
-              AND link.user_session_issuer_id = $4
-             WHERE a.mcp_server_id = r.id
-               AND a.deleted IS FALSE
+           COALESCE(
+             (
+               SELECT CASE WHEN count(*) = 1 THEN (array_agg(e.remote_session_client_id))[1] END
+               FROM eligible AS e
+               WHERE e.mcp_server_id = r.id
+             ),
+             (
+               SELECT CASE WHEN count(*) = 1 THEN (array_agg(e.remote_session_client_id))[1] END
+               FROM eligible AS e
+               WHERE e.mcp_server_id = r.id
+                 AND e.connected
+             )
            ) AS remote_session_client_id,
            (
              NOT EXISTS (
@@ -4401,6 +4431,13 @@ decided AS (
                      AND rs.deleted IS FALSE
                      AND r.upstream <> ''
                      AND rtrim(rs.resource, '/') = rtrim(r.upstream, '/')
+                     AND EXISTS (
+                       SELECT 1
+                       FROM user_session_issuers AS minted
+                       LEFT JOIN projects AS minted_project ON minted_project.id = minted.project_id
+                       WHERE minted.id = rs.user_session_issuer_id
+                         AND COALESCE(minted.organization_id, minted_project.organization_id) = r.organization_id
+                     )
                  )
                )
            ) = 0
@@ -4462,9 +4499,12 @@ type RecordUpstreamClientSelectionsParams struct {
 // credential is never presented to grants nothing, since the credential is
 // admitted on its own path before a choice is read.
 //
-// A client is chosen only when it is the server's single associated client
-// that the credential's issuer also binds, which is the client the issuer
-// path serves today. No-auth is chosen only when the server has no associated
+// A client is chosen when it is the server's single associated client that
+// the credential's issuer also binds, which is the client the issuer path
+// serves today. When the issuer binds several of the server's clients, the
+// one the credential's subject has connected (holds a live grant for) is
+// chosen, which is the card picked at consent; several connected, or none,
+// leaves the choice to a reconnection. No-auth is chosen only when the server has no associated
 // client, its own issuer binds none, and the credential's issuer binds no
 // client that a grant or the server's derived authorization server ties to
 // it, so a gateway member whose client is ambiguous is never called

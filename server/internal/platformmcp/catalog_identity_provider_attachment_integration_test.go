@@ -537,7 +537,7 @@ func TestExistingAttachmentAssociatesOnlyTheRegisteredServer(t *testing.T) {
 		return len(rows)
 	}
 
-	require.NoError(t, service.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, clients[0].ClientID))
+	require.NoError(t, service.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, clients[0]))
 	require.Equal(t, 1, associations())
 
 	moved := attachmentTestUserSessionIssuer(t, conn, project.ID)
@@ -554,7 +554,7 @@ func TestExistingAttachmentAssociatesOnlyTheRegisteredServer(t *testing.T) {
 	_, err = upstreamclientsrepo.New(conn).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{McpServerID: serverID, RemoteSessionClientID: clients[0].ClientID, ProjectID: project.ID})
 	require.NoError(t, err)
 
-	err = service.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, clients[0].ClientID)
+	err = service.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, clients[0])
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentConflict)
 	require.Zero(t, associations(), "a retry must not associate the client of the issuer the server left")
 }
