@@ -11,12 +11,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
-
-	"github.com/speakeasy-api/gram/server/internal/risk"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -277,18 +274,6 @@ func TestAttachDeadlineIncludesUnresponsiveResolver(t *testing.T) {
 	})
 }
 
-type slowScanner struct{ calls atomic.Int32 }
-
-func (s *slowScanner) ScanForInferenceEnforcement(ctx context.Context, _ risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error) {
-	s.calls.Add(1)
-	select {
-	case <-ctx.Done():
-		return nil, fmt.Errorf("scan deadline: %w", ctx.Err())
-	case <-time.After(time.Second):
-		return &risk.InferenceScanOutcome{Result: nil, Complete: true}, nil
-	}
-}
-
 func TestAttachBoundsLongTranscriptScanning(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
@@ -298,7 +283,7 @@ func TestAttachBoundsLongTranscriptScanning(t *testing.T) {
 		}
 		body, err := json.Marshal(frame)
 		require.NoError(t, err)
-		scanner := &slowScanner{}
+		scanner := &fakeScanner{delay: time.Second}
 		service := &Service{logger: testenv.NewLogger(t), store: &memoryStore{saved: nil, userID: "", err: nil}, scanner: scanner}
 		key := []byte("EXAMPLE-signing-secret")
 		var config Config
