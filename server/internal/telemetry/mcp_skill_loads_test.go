@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -159,27 +158,23 @@ func TestGetToolUsageSummary_CountsMCPSkillLoadUnderSkill(t *testing.T) {
 	})
 	insertMCPSkillLoad(t, ctx, ti, projectID, now.Add(-10*time.Minute), "payments", "golang")
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
-			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
-		})
-		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
-			return
-		}
+	// The fixtures are inserted synchronously and trace_summaries is fed by
+	// its materialized view on insert, so the summary is read once.
+	res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 
-		assert.Equal(c, int64(3), res.Totals.EventCount)
-		assert.Equal(c, int64(3), res.Totals.SuccessCount)
+	require.Equal(t, int64(3), res.Totals.EventCount)
+	require.Equal(t, int64(3), res.Totals.SuccessCount)
 
-		targets := toolUsageTargetsByKey(res.Targets)
-		hosted := targets["hosted_mcp_server:server:payments"]
-		if assert.NotNil(c, hosted) {
-			assert.Equal(c, int64(1), hosted.EventCount, "a skill load is not a call to the server it was read through")
-		}
-		skill := targets["skill:skill:golang"]
-		if assert.NotNil(c, skill) {
-			assert.Equal(c, int64(2), skill.EventCount, "hook and MCP loads of one skill are one target")
-			assert.Equal(c, int64(2), skill.SuccessCount)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	targets := toolUsageTargetsByKey(res.Targets)
+	hosted := targets["hosted_mcp_server:server:payments"]
+	require.NotNil(t, hosted)
+	require.Equal(t, int64(1), hosted.EventCount, "a skill load is not a call to the server it was read through")
+	skill := targets["skill:skill:golang"]
+	require.NotNil(t, skill)
+	require.Equal(t, int64(2), skill.EventCount, "hook and MCP loads of one skill are one target")
+	require.Equal(t, int64(2), skill.SuccessCount)
 }
