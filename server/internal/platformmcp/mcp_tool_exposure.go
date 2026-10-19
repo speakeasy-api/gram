@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -220,6 +221,7 @@ type MCPToolExposureService struct {
 	exposurePageSize int
 	publication      plugins.PublicationRequests
 	publisher        plugins.PluginPublishSignaler
+	features         feature.Provider
 	// reads meters the paginated project tool listing, and changes meters the
 	// write. They are separate allowances because the two cost different
 	// things and must not fund each other: walking the catalogue is a bounded
@@ -270,6 +272,14 @@ func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogge
 func (s *MCPToolExposureService) WithIndexing(index ToolExposureIndexer) *MCPToolExposureService {
 	if s != nil {
 		s.index = index
+	}
+	return s
+}
+
+// WithFeatureProvider supplies the hosted MCP write rollout gate; without it new toolsets keep the toolset key.
+func (s *MCPToolExposureService) WithFeatureProvider(provider feature.Provider) *MCPToolExposureService {
+	if s != nil {
+		s.features = provider
 	}
 	return s
 }

@@ -7,6 +7,18 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
+ * Message context used for classification. Sliding windows classify the current message with preceding messages ordered by timestamp.
+ */
+export const InputStrategy = {
+  SingleMessage: "single_message",
+  SlidingWindow: "sliding_window",
+} as const;
+/**
+ * Message context used for classification. Sliding windows classify the current message with preceding messages ordered by timestamp.
+ */
+export type InputStrategy = ClosedEnum<typeof InputStrategy>;
+
+/**
  * How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.
  */
 export const Mode = {
@@ -28,6 +40,10 @@ export type CreateSigintSensorForm = {
    * Whether to enable evaluation; omission defaults to true
    */
   enabled?: boolean | undefined;
+  /**
+   * Message context used for classification. Sliding windows classify the current message with preceding messages ordered by timestamp.
+   */
+  inputStrategy?: InputStrategy | undefined;
   /**
    * Optional classification instructions; empty stores no value
    */
@@ -52,7 +68,15 @@ export type CreateSigintSensorForm = {
    * A short url-friendly label that uniquely identifies a resource.
    */
   slug?: string | undefined;
+  /**
+   * Total sliding window messages including the target; omission defaults to 5
+   */
+  windowSize?: number | undefined;
 };
+
+/** @internal */
+export const InputStrategy$outboundSchema: z.ZodMiniEnum<typeof InputStrategy> =
+  z.enum(InputStrategy);
 
 /** @internal */
 export const Mode$outboundSchema: z.ZodMiniEnum<typeof Mode> = z.enum(Mode);
@@ -61,12 +85,14 @@ export const Mode$outboundSchema: z.ZodMiniEnum<typeof Mode> = z.enum(Mode);
 export type CreateSigintSensorForm$Outbound = {
   description?: string | undefined;
   enabled?: boolean | undefined;
+  input_strategy?: string | undefined;
   instructions?: string | undefined;
   match_expression?: string | undefined;
   mode: string;
   name: string;
   signal_ids?: Array<string> | undefined;
   slug?: string | undefined;
+  window_size?: number | undefined;
 };
 
 /** @internal */
@@ -77,17 +103,21 @@ export const CreateSigintSensorForm$outboundSchema: z.ZodMiniType<
   z.object({
     description: z.optional(z.string()),
     enabled: z.optional(z.boolean()),
+    inputStrategy: z.optional(InputStrategy$outboundSchema),
     instructions: z.optional(z.string()),
     matchExpression: z.optional(z.string()),
     mode: Mode$outboundSchema,
     name: z.string(),
     signalIds: z.optional(z.array(z.string())),
     slug: z.optional(z.string()),
+    windowSize: z.optional(z.int()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      inputStrategy: "input_strategy",
       matchExpression: "match_expression",
       signalIds: "signal_ids",
+      windowSize: "window_size",
     });
   }),
 );

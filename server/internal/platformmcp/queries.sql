@@ -3315,7 +3315,8 @@ WHERE p.id = @plugin_id
 -- name: ListPlatformMCPPluginServers :many
 -- Member-facing compatibility projection. It deliberately omits membership and
 -- backend IDs, which are administrative identity and must not cross this path.
--- A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists.
+-- A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists;
+-- a server-keyed canonical wrapper still falls back to its toolset's MCP slug.
 SELECT
     ps.id,
     ps.display_name,
@@ -3335,7 +3336,7 @@ LEFT JOIN mcp_servers s
   AND s.deleted IS FALSE
   AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
-  ON t.id = ps.toolset_id
+  ON t.id = COALESCE(ps.toolset_id, CASE WHEN s.toolset_id = s.id THEN s.id END)
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
@@ -3415,7 +3416,7 @@ LEFT JOIN mcp_servers s
   AND s.deleted IS FALSE
   AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
-  ON t.id = ps.toolset_id
+  ON t.id = COALESCE(ps.toolset_id, CASE WHEN s.toolset_id = s.id THEN s.id END)
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
@@ -3627,6 +3628,10 @@ LIMIT 2;
 -- name: SearchPlatformMCPAccessMembers :many
 -- Count distinct members and return only a bounded page from the same snapshot.
 -- Active local role assignments follow the access roster's WorkOS identity join.
+-- A member whose whole normalized email equals the query sorts first, so a
+-- small result page always carries the exact match the caller asked for.
+-- Emails are unique only case-sensitively, so exact_email_matches counts every
+-- member the normalized query names, including any cut off by the page limit.
 WITH member_roles AS (
   SELECT ora.workos_user_id,
     array_agg(DISTINCT COALESCE(r.id::text, g.id::text)) AS role_ids,
@@ -3640,7 +3645,8 @@ WITH member_roles AS (
     AND COALESCE(r.id, g.id) IS NOT NULL
   GROUP BY ora.workos_user_id
 ), matching AS (
-  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids
+  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids,
+    (@query::text <> '' AND lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))) = @query::text) AS exact_email_match
   FROM organization_user_relationships rel
   JOIN users u ON u.id = rel.user_id AND u.deleted_at IS NULL
   LEFT JOIN member_roles m ON m.workos_user_id = u.workos_id
@@ -3652,9 +3658,11 @@ WITH member_roles AS (
       OR EXISTS (SELECT 1 FROM unnest(m.role_names) AS role_name
         WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), @query::text) > 0))
 )
-SELECT id, display_name, email, role_ids, count(*) OVER ()::bigint AS total_matches
+SELECT id, display_name, email, role_ids, exact_email_match,
+  count(*) FILTER (WHERE exact_email_match) OVER ()::bigint AS exact_email_matches,
+  count(*) OVER ()::bigint AS total_matches
 FROM matching
-ORDER BY email, id
+ORDER BY exact_email_match DESC, email, id
 LIMIT @result_limit;
 
 -- name: GetPlatformMCPPluginForUpdate :one
@@ -3909,3 +3917,47 @@ WHERE m.id = @mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE
   AND m.toolset_id IS NOT NULL;
+
+-- name: ListPlatformMCPRoleDirectorySources :many
+-- Each live directory role mapping in the organization, with how many active
+-- directory users its group or attribute value matches today, counted by
+-- distinct email as the dashboard counts them. Mappings whose group is gone
+-- still list, matching nobody.
+SELECT
+  drm.role_urn::text AS role_urn,
+  drm.source_kind,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value,
+  (
+    CASE
+      WHEN drm.source_kind = 'group' THEN (
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+        FROM directory_user_group_memberships AS m
+        JOIN directory_users AS du
+          ON du.id = m.directory_user_id
+          AND du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+        WHERE m.directory_group_id = dg.id
+          AND m.deleted IS FALSE
+      )
+      ELSE (
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+        FROM directory_users AS du
+        WHERE du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+          AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    END
+  )::bigint AS member_count
+FROM directory_role_mappings AS drm
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE drm.organization_id = @organization_id
+  AND drm.deleted IS FALSE
+ORDER BY drm.role_urn, drm.source_kind DESC, dg.name, drm.attribute_key, drm.attribute_value, drm.id;

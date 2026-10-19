@@ -66,7 +66,7 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
 			return err
 		}
-		return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, uuid.Nil)
+		return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{agentID: uuid.Nil, organization: false}, nil)
 	}
 
 	if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
@@ -598,7 +598,23 @@ func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
 //
 // mcpRouteBase ("mcp" or "x/mcp") propagates into the resolved endpoint's
 // URL building on both the primary and fallback paths.
+//
+// mcpRouteBase "mcp/gateway" resolves slug as an organization slug to that
+// organization's gateway instead.
 func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string) (*ResolvedMcpEndpoint, error) {
+	return s.loadResolvedMcpEndpointBySlug(ctx, logger, slug, mcpRouteBase, mcpmetrics.LegacyFallbackOAuth)
+}
+
+// loadResolvedMcpEndpointBySlug is LoadResolvedMcpEndpointBySlug with the
+// entry point its legacy fallback is attributed to.
+func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string, fallbackEntryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
+	if mcpRouteBase == organizationGatewayRouteBase {
+		gateway, err := s.loadOrganizationGateway(ctx, slug)
+		if err != nil {
+			return nil, err
+		}
+		return gateway.resolved, nil
+	}
 	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
 	switch {
 	case err == nil:
@@ -619,7 +635,7 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 		}
 		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
 	case mcpendpoints.IsAddressMiss(err):
-		return s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase)
+		return s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase, fallbackEntryPoint)
 	default:
 		return nil, err
 	}

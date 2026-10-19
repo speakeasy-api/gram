@@ -15,7 +15,7 @@ import (
 	"time"
 
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 
@@ -247,7 +247,7 @@ func (s *Service) resolveWrapperMCPURL(ctx context.Context, toolset *types.Tools
 		return "", nil
 	}
 
-	mcpURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, organizationID, projectID, wrapper.ID, s.serverURL.String())
+	mcpURL, err := endpointaddr.PrimaryEndpointURL(ctx, s.db, organizationID, projectID, wrapper.ID, s.serverURL.String())
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "resolve wrapper mcp url").LogError(ctx, s.logger)
 	}

@@ -70,7 +70,7 @@ func (s *Service) CreatePolicyGrant(ctx context.Context, payload *gen.CreatePoli
 
 	var result *gen.AgentPolicyGrant
 	err = pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
-		human, agent, err := s.authorizer.RequireAgentForUpdate(ctx, tx, agentID, OwnedAgentSetup)
+		human, agent, err := s.authorizer.RequireAgentOwnerForUpdate(ctx, tx, agentID, OwnedAgentSetup)
 		if err != nil {
 			return err
 		}
@@ -84,6 +84,10 @@ func (s *Service) CreatePolicyGrant(ctx context.Context, payload *gen.CreatePoli
 }
 
 func (s *Service) createPolicyGrant(ctx context.Context, tx pgx.Tx, human HumanContext, agent repo.Agent, scope authz.Scope, selectorRaw []byte) (*gen.AgentPolicyGrant, error) {
+	if err := requirePolicyContainment(ctx, tx, human, agent, scope, selectorRaw); err != nil {
+		return nil, err
+	}
+
 	row, err := repo.New(tx).CreateAgentPolicyGrant(ctx, repo.CreateAgentPolicyGrantParams{
 		OrganizationID: human.Auth.ActiveOrganizationID,
 		AgentID:        agent.ID,
@@ -120,7 +124,7 @@ func (s *Service) UpdatePolicyGrant(ctx context.Context, payload *gen.UpdatePoli
 
 	var result *gen.AgentPolicyGrant
 	err = pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
-		human, agent, err := s.authorizer.RequireAgentForUpdate(ctx, tx, agentID, OwnedAgentSetup)
+		human, agent, err := s.authorizer.RequireAgentOwnerForUpdate(ctx, tx, agentID, OwnedAgentSetup)
 		if err != nil {
 			return err
 		}
@@ -135,6 +139,10 @@ func (s *Service) UpdatePolicyGrant(ctx context.Context, payload *gen.UpdatePoli
 			return fmt.Errorf("load agent policy grant: %w", err)
 		}
 		before := policyGrantRow{ID: beforeRow.ID, Scope: beforeRow.Scope, Selectors: beforeRow.Selectors, CreatedAt: beforeRow.CreatedAt.Time, UpdatedAt: beforeRow.UpdatedAt.Time}
+
+		if err := requirePolicyContainment(ctx, tx, human, agent, scope, selectorRaw); err != nil {
+			return err
+		}
 
 		row, err := q.UpdateAgentPolicyGrant(ctx, repo.UpdateAgentPolicyGrantParams{
 			OrganizationID: human.Auth.ActiveOrganizationID, AgentID: agent.ID, GrantID: grantID,
@@ -185,6 +193,47 @@ func (s *Service) DeletePolicyGrant(ctx context.Context, payload *gen.DeletePoli
 	})
 	if err != nil {
 		return s.serviceError(ctx, err, string(audit.ActionAgentPolicyGrantDelete))
+	}
+	return nil
+}
+
+// requirePolicyContainment checks the complete authority of one allow grant,
+// including implied scopes and overlapping exclusions. The caller and current
+// owner memberships must be pinned before the agent lock is acquired. No agent
+// policy is a parent here: setup may expand policy, but never human authority.
+func requirePolicyContainment(ctx context.Context, tx pgx.Tx, human HumanContext, agent repo.Agent, scope authz.Scope, selectorRaw []byte) error {
+	selector, err := authz.SelectorFromRow(selectorRaw)
+	if err != nil {
+		return fmt.Errorf("parse requested policy selector: %w", err)
+	}
+	policy, err := runtimepolicy.NewDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, []authz.Grant{authz.NewGrantWithSelector(scope, selector)})
+	if err != nil {
+		return fmt.Errorf("construct requested policy authority: %w", err)
+	}
+	contained, err := runtimepolicy.DelegationContained(policy, human.grants)
+	if err != nil {
+		return fmt.Errorf("check caller policy containment: %w", err)
+	}
+	if !contained {
+		return oops.E(oops.CodeForbidden, nil, "requested agent access exceeds your permissions; choose a narrower scope or ask an administrator for access")
+	}
+	if agent.OwnerUserID == human.Auth.UserID {
+		return nil
+	}
+	principals, err := authz.ResolveUserPrincipals(ctx, tx, human.Auth.ActiveOrganizationID, agent.OwnerUserID)
+	if err != nil {
+		return fmt.Errorf("resolve policy owner principals: %w", err)
+	}
+	ownerGrants, err := authz.LoadGrants(ctx, tx, human.Auth.ActiveOrganizationID, principals)
+	if err != nil {
+		return fmt.Errorf("load policy owner grants: %w", err)
+	}
+	contained, err = runtimepolicy.DelegationContained(policy, ownerGrants)
+	if err != nil {
+		return fmt.Errorf("check owner policy containment: %w", err)
+	}
+	if !contained {
+		return oops.E(oops.CodeForbidden, nil, "requested agent access exceeds the owner's permissions; choose a narrower scope or ask an administrator to review the owner's access")
 	}
 	return nil
 }

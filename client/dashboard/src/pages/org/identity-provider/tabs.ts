@@ -5,7 +5,7 @@ export const IDENTITY_TABS = [
 ] as const;
 export type IdentityPageTab = (typeof IDENTITY_TABS)[number];
 
-export const PROVIDER_IDS = ["okta"] as const;
+export const PROVIDER_IDS = ["okta", "speakeasy"] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 export const OKTA_VIEWS = [
@@ -32,6 +32,10 @@ export function oktaViewHref(view: OktaView, sectionId?: string): string {
     view,
   });
   return `?${search.toString()}${sectionId ? `#${sectionId}` : ""}`;
+}
+
+export function speakeasyProviderHref(): string {
+  return "?tab=identity-providers&provider=speakeasy";
 }
 
 /** After a verification the form below unmounts; bring the status card back into view. */

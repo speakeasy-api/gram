@@ -139,7 +139,7 @@ function useAllOrganizationSignInIssuers(): {
   error: Error | null;
 } {
   const query = useOrganizationUserSessionIssuersInfinite(
-    undefined,
+    { tier: "organization" },
     undefined,
     { throwOnError: false, retry: false },
   );

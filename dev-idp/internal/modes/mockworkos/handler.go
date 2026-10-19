@@ -50,6 +50,17 @@ type Handler struct {
 
 	magicAuthMu sync.Mutex
 	magicAuth   map[string]magicAuthState // keyed by one-time code
+
+	sessionsMu sync.Mutex
+	sessions   map[string]mockSession // keyed by session ID
+}
+
+// mockSession is a WorkOS session the emulator issued, so callers can list
+// sessions and read when they were created.
+type mockSession struct {
+	userID    string
+	createdAt time.Time
+	revoked   bool
 }
 
 func NewHandler(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
@@ -61,6 +72,8 @@ func NewHandler(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sq
 		pwlSessions: make(map[string]*passwordlessState),
 		magicAuthMu: sync.Mutex{},
 		magicAuth:   make(map[string]magicAuthState),
+		sessionsMu:  sync.Mutex{},
+		sessions:    make(map[string]mockSession),
 	}
 }
 

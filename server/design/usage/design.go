@@ -132,6 +132,9 @@ var InferenceSpendCap = Type("InferenceSpendCap", func() {
 // StripeSubscription reports the live lifecycle state of the organization's
 // Stripe PAYG subscription.
 var StripeSubscription = Type("StripeSubscription", func() {
+	Attribute("discount_description", String, "Verified terms of a currently applied Stripe subscription discount; absent when unsupported or inactive")
+	Attribute("discount_ends_at", String, "Discount expiration reported by Stripe, when present", func() { Format(FormatDateTime) })
+	Attribute("gateway_promotion_applied", Boolean, "Whether the live discount and gateway price verify the monthly five GiB promotion")
 	Attribute("status", String, "The live Stripe subscription status", func() {
 		Enum("incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused")
 	})

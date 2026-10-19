@@ -258,9 +258,12 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	for _, name := range []string{"list_skill_insights", "compare_skill_versions"} {
 		require.Equal(t, ExternalAuthorizationOrgAdmin, byName[name], "session cost is organization spend: %s", name)
 	}
-	// search_tool_calls returns masked identities and person references, so it
-	// stays admin-gated like the drill-downs that do the same.
-	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["search_tool_calls"])
+	// The individual-call tools hold the caller to log:read on the project in
+	// the handler, matching the dashboard Tool Logs list. log:read is never a
+	// system-role default, so membership alone admits nobody to the rows.
+	for _, name := range []string{"search_tool_calls", "query_mcp_traces"} {
+		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
+	}
 	for _, resource := range registrar.resources {
 		if resource.Meta.servesAudience(AudienceExternal) {
 			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)
@@ -444,6 +447,10 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		// Authoring a new server from a project's functions is the same kind
 		// of administrator decision.
 		createMCPFromFunctionsToolName,
+		// Gateways decide which servers people reach through one endpoint,
+		// the same kind of administrator decision.
+		createGatewayToolName,
+		setGatewayMembersToolName,
 		// An assistant is bound to its own project: creating another is
 		// outside its reach, and renaming its own is a decision for a person
 		// with write access to it, not for the assistant.

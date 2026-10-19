@@ -1,5 +1,8 @@
-import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
-import { useIsMutating, useQueryClient } from "@tanstack/react-query";
+import {
+  useIsFetching,
+  useIsMutating,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Check,
   ChevronRight,
@@ -15,6 +18,7 @@ import {
   type ReactNode,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -34,6 +38,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { Combobox, type DropdownItem } from "@/components/ui/Combobox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/Popover";
 import { SearchBar } from "@/components/ui/SearchBar";
 import {
   Select,
@@ -46,13 +55,14 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { attributeMemberCount } from "@/pages/access/directorySourcesForRole";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
 import type { ListDirectoryRoleMappingsResult } from "@gram/client/models/components/listdirectoryrolemappingsresult.js";
 import type { Role } from "@gram/client/models/components/role.js";
-import type { SetDirectoryRoleMappingForm } from "@gram/client/models/components/setdirectoryrolemappingform.js";
 import {
   mutationKeyDeleteDirectoryRoleMapping,
   useDeleteDirectoryRoleMappingMutation,
@@ -62,50 +72,67 @@ import {
   useDirectoryRoleMappings,
 } from "@gram/client/react-query/directoryRoleMappings.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import {
-  invalidateAllRoles,
-  useRoles,
-} from "@gram/client/react-query/roles.js";
-import { useSetDirectoryRoleMappingMutation } from "@gram/client/react-query/setDirectoryRoleMapping.js";
+  mutationKeySetDirectoryRoleMappings,
+  useSetDirectoryRoleMappingsMutation,
+} from "@gram/client/react-query/setDirectoryRoleMappings.js";
 import { useSyncDirectoryGroupsMutation } from "@gram/client/react-query/syncDirectoryGroups.js";
 
 import {
   finishCreateRoleFlow,
   availableRoleName,
+  type MappingSource,
   pendingMappingFromParams,
+  sourceRoleUrns,
   startCreateRoleFlow,
 } from "./directoryMappingFlow";
 
+import { invalidateDirectoryMappingAccess } from "./invalidateDirectoryMappingAccess";
+import { visibleChipCount } from "./chipOverflow";
+
 const CREATE_ROLE = "__create_role";
 
-/** One directory group or attribute value that can be mapped to a role. */
+// Roles take most of the row so more of a source's role set fits on its one
+// line. The attribute add row's grid-cols class repeats this split (1fr 2fr,
+// then the mark column) to line up with the table.
+const SOURCE_COLUMN = "1fr";
+const ROLES_COLUMN = "2fr";
+// Matches gap-2 between role chips.
+const CHIP_GAP = 8;
+
+/** One directory group or attribute value and the roles it grants. */
 type SourceRow = {
   key: string;
   label: string;
   detail: string;
   /** Speakeasy members in the source, shown as faces in place of the detail. */
   members?: FacepileMember[];
-  form: Omit<SetDirectoryRoleMappingForm, "roleUrn">;
-  mapping: DirectoryRoleMapping | undefined;
+  form: MappingSource;
+  /** Every live mapping from this source, one per role it grants. */
+  mappings: DirectoryRoleMapping[];
 };
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-function memberLabel(count: number): string {
-  return `${count} ${count === 1 ? "user" : "users"}`;
+/** Undefined means the count is not known. */
+function memberLabel(count: number | undefined): string {
+  return count === undefined ? "—" : pluralize(count, "user");
 }
 
 function groupRows(
   data: ListDirectoryRoleMappingsResult,
   members: AccessMember[],
 ): SourceRow[] {
-  const byGroup = new Map(
-    data.mappings
-      .filter((m) => m.sourceKind === "group")
-      .map((m) => [m.directoryGroupId, m]),
-  );
+  const byGroup = new Map<string, DirectoryRoleMapping[]>();
+  for (const mapping of data.mappings) {
+    if (mapping.sourceKind !== "group" || !mapping.directoryGroupId) continue;
+    const mappings = byGroup.get(mapping.directoryGroupId) ?? [];
+    mappings.push(mapping);
+    byGroup.set(mapping.directoryGroupId, mappings);
+  }
   // Members name their directory groups, not group ids, so match on the name.
   const membersByGroup = new Map<string, FacepileMember[]>();
   for (const member of members) {
@@ -126,7 +153,7 @@ function groupRows(
     detail: memberLabel(group.memberCount),
     members: membersByGroup.get(group.name),
     form: { sourceKind: "group", directoryGroupId: group.id },
-    mapping: byGroup.get(group.id),
+    mappings: byGroup.get(group.id) ?? [],
   }));
 }
 
@@ -134,27 +161,30 @@ function groupRows(
 function attributeMappingRows(
   data: ListDirectoryRoleMappingsResult,
 ): SourceRow[] {
-  return data.mappings
-    .filter((m) => m.sourceKind === "attribute")
-    .map((mapping): SourceRow => {
-      const key = mapping.attributeKey ?? "";
-      const value = mapping.attributeValue ?? "";
-      const option = data.attributes.find(
-        (a) => a.key === key && a.value === value,
-      );
-      return {
-        key: mapping.id,
-        label: `${key} = ${value}`,
-        detail: memberLabel(option?.memberCount ?? 0),
-        form: {
-          sourceKind: "attribute",
-          attributeKey: key,
-          attributeValue: value,
-        },
-        mapping,
-      };
-    })
-    .sort((a, b) => a.label.localeCompare(b.label));
+  const rows = new Map<string, SourceRow>();
+  for (const mapping of data.mappings) {
+    if (mapping.sourceKind !== "attribute") continue;
+    const key = mapping.attributeKey ?? "";
+    const value = mapping.attributeValue ?? "";
+    const sourceKey = JSON.stringify([key, value]);
+    const existing = rows.get(sourceKey);
+    if (existing) {
+      existing.mappings.push(mapping);
+      continue;
+    }
+    rows.set(sourceKey, {
+      key: sourceKey,
+      label: `${key} = ${value}`,
+      detail: memberLabel(attributeMemberCount(data, key, value)),
+      form: {
+        sourceKind: "attribute",
+        attributeKey: key,
+        attributeValue: value,
+      },
+      mappings: [mapping],
+    });
+  }
+  return [...rows.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
 /**
@@ -171,7 +201,15 @@ export function DirectoryRoleMappings({
   /** Shown at the right of the footer bar, such as the connection button. */
   footerAction?: ReactNode;
 }): JSX.Element {
-  const { data, isPending } = useDirectoryRoleMappings();
+  const { data, isPending, isFetching, isFetchedAfterMount, isError, refetch } =
+    useDirectoryRoleMappings(undefined, undefined, {
+      refetchOnMount: "always",
+    });
+  const refreshMappings = async (): Promise<DirectoryRoleMapping[]> => {
+    const result = await refetch({ throwOnError: true });
+    if (!result.data) throw new Error("Failed to refresh role mappings");
+    return result.data.mappings;
+  };
   const { data: rolesData } = useRoles();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
@@ -194,11 +232,18 @@ export function DirectoryRoleMappings({
   // trip ends only once the save succeeds; a failed save keeps it so a reload
   // retries. Only a round trip this tab started can get here.
   const [params, setParams] = useSearchParams();
-  const pending = pendingMappingFromParams(params);
+  // Wait for fresh mappings so the save is guarded by the source's current
+  // roles: a source changed while this tab was away is refused, not replaced.
+  const pending =
+    data && isFetchedAfterMount && !isFetching && !isError
+      ? pendingMappingFromParams(params, data.mappings)
+      : undefined;
   const queryClient = useQueryClient();
-  const savePending = useSetDirectoryRoleMappingMutation({
+  const savePending = useSetDirectoryRoleMappingsMutation({
+    retry: false,
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to map the new role"));
+      void refetch();
     },
   });
   const savedPending = useRef<string | null>(null);
@@ -206,17 +251,15 @@ export function DirectoryRoleMappings({
     if (!pending || savedPending.current === pending.key) return;
     savedPending.current = pending.key;
     savePending.mutate(
-      { request: { setDirectoryRoleMappingForm: pending.form } },
+      { request: { setDirectoryRoleMappingsForm: pending.form } },
       {
         onSuccess: () => {
           setParams((previous) => finishCreateRoleFlow(previous, pending.key), {
             replace: true,
           });
-          void Promise.all([
-            invalidateAllDirectoryRoleMappings(queryClient),
-            invalidateAllRoles(queryClient),
-            invalidateAllResourceAudience(queryClient),
-          ]).then(() => toast.success("Role created and mapped"));
+          void invalidateDirectoryMappingAccess(queryClient).then(() =>
+            toast.success("Role created and mapped"),
+          );
         },
       },
     );
@@ -231,7 +274,7 @@ export function DirectoryRoleMappings({
       const missing = rows.filter((row) => !(row.key in previous));
       if (missing.length === 0) return previous;
       const next = { ...previous };
-      for (const row of missing) next[row.key] = row.mapping !== undefined;
+      for (const row of missing) next[row.key] = row.mappings.length > 0;
       return next;
     });
   }, [rows]);
@@ -239,7 +282,7 @@ export function DirectoryRoleMappings({
   const visibleRows = useMemo(() => {
     const needle = deferredSearch.trim().toLowerCase();
     const wasMapped = (row: SourceRow) =>
-      mappedAtLoad[row.key] ?? row.mapping !== undefined;
+      mappedAtLoad[row.key] ?? row.mappings.length > 0;
     return rows
       .filter(
         (row) => needle === "" || row.label.toLowerCase().includes(needle),
@@ -251,9 +294,12 @@ export function DirectoryRoleMappings({
       );
   }, [rows, deferredSearch, mappedAtLoad]);
 
-  const mappedCount = rows.filter((row) => row.mapping).length;
-  const attributeCount =
-    data?.mappings.filter((m) => m.sourceKind === "attribute").length ?? 0;
+  const mappedCount = rows.filter((row) => row.mappings.length > 0).length;
+  const attributeRows = useMemo(
+    () => (data ? attributeMappingRows(data) : []),
+    [data],
+  );
+  const attributeCount = attributeRows.length;
 
   return (
     <div className="mt-4 space-y-3">
@@ -261,7 +307,7 @@ export function DirectoryRoleMappings({
         <div>
           <div className="text-eyebrow">Configure role mappings</div>
           <Text muted small>
-            {mappedCount} of {rows.length} groups give their members a role.
+            {mappedCount} of {rows.length} groups give their members roles.
           </Text>
         </div>
         <div className="flex items-center gap-2">
@@ -290,6 +336,7 @@ export function DirectoryRoleMappings({
           <MappingTable
             rows={visibleRows}
             roles={roles}
+            refreshMappings={refreshMappings}
             sourceHeader="Directory group"
             noResults="No groups match"
             scrollable
@@ -319,7 +366,14 @@ export function DirectoryRoleMappings({
           {footerAction}
         </div>
         <CollapsibleContent className="border-border space-y-2 border border-t-0 p-4">
-          {data && <AttributeMappings data={data} roles={roles} />}
+          {data && (
+            <AttributeMappings
+              data={data}
+              rows={attributeRows}
+              roles={roles}
+              refreshMappings={refreshMappings}
+            />
+          )}
         </CollapsibleContent>
       </Collapsible>
     </div>
@@ -334,26 +388,23 @@ export function DirectoryRoleMappings({
 function MappingTable({
   rows,
   roles,
+  refreshMappings,
   sourceHeader,
   noResults,
   scrollable = false,
-  removable = false,
 }: {
   rows: SourceRow[];
   roles: Role[];
+  refreshMappings: () => Promise<DirectoryRoleMapping[]>;
   sourceHeader: string;
   noResults: string;
   scrollable?: boolean;
-  /**
-   * Shows a remove button in place of the mark, for tables where every row is
-   * a mapping (attribute values), so the mark would say nothing.
-   */
-  removable?: boolean;
 }): JSX.Element {
   const columns: Column<SourceRow>[] = [
     {
       key: "source",
       header: sourceHeader,
+      width: SOURCE_COLUMN,
       render: (row) => (
         <div className="min-w-0">
           <Text className="truncate font-medium">{row.label}</Text>
@@ -371,20 +422,17 @@ function MappingTable({
     },
     {
       key: "role",
-      header: "Role",
-      width: "280px",
-      render: (row) => <RolePicker row={row} roles={roles} />,
+      header: "Roles",
+      width: ROLES_COLUMN,
+      render: (row) => (
+        <RolePicker row={row} roles={roles} refreshMappings={refreshMappings} />
+      ),
     },
     {
       key: "status",
       header: "",
       width: "64px",
-      render: (row) =>
-        removable && row.mapping ? (
-          <RemoveMappingButton mapping={row.mapping} label={row.label} />
-        ) : (
-          <MappedMark mapped={row.mapping !== undefined} />
-        ),
+      render: (row) => <MappedMark mapped={row.mappings.length > 0} />,
     },
   ];
 
@@ -400,7 +448,9 @@ function MappingTable({
         cloneElement(rowElement as ReactElement<{ className?: string }>, {
           className: cn(
             (rowElement.props as { className?: string }).className,
-            row.mapping ? "bg-muted/25 hover:bg-muted/40" : "hover:bg-muted/10",
+            row.mappings.length > 0
+              ? "bg-muted/25 hover:bg-muted/40"
+              : "hover:bg-muted/10",
           ),
         })
       }
@@ -424,12 +474,15 @@ function MappingTable({
  */
 function AttributeMappings({
   data,
+  rows,
   roles,
+  refreshMappings,
 }: {
   data: ListDirectoryRoleMappingsResult;
+  rows: SourceRow[];
   roles: Role[];
+  refreshMappings: () => Promise<DirectoryRoleMapping[]>;
 }): JSX.Element {
-  const rows = attributeMappingRows(data);
   const [attributeKey, setAttributeKey] = useState("");
   const [attributeValue, setAttributeValue] = useState("");
 
@@ -444,7 +497,12 @@ function AttributeMappings({
     label: "",
     detail: "",
     form: { sourceKind: "attribute", attributeKey, attributeValue },
-    mapping: undefined,
+    mappings: data.mappings.filter(
+      (mapping) =>
+        mapping.sourceKind === "attribute" &&
+        mapping.attributeKey === attributeKey &&
+        mapping.attributeValue === attributeValue,
+    ),
   };
 
   return (
@@ -459,58 +517,63 @@ function AttributeMappings({
           <MappingTable
             rows={rows}
             roles={roles}
+            refreshMappings={refreshMappings}
             sourceHeader="Attribute value"
-            removable
+
             noResults="No attribute mappings"
           />
         )}
 
         {/* The add row sits under the table and lines up with its columns:
-          attribute and value take the source column, then the role. */}
+          attribute and value take the source column, then the role, then
+          the mark column's width. */}
         <div
           className={cn(
-            "border-border flex items-center gap-3 border px-4 py-3",
+            "border-border grid grid-cols-[1fr_2fr_4rem] items-center gap-3 border px-4 py-3",
             rows.length > 0 && "border-t-0",
           )}
         >
-          <Select
-            value={attributeKey}
-            onValueChange={(key) => {
-              setAttributeKey(key);
-              setAttributeValue("");
-            }}
-          >
-            <SelectTrigger className="min-w-0 flex-1" aria-label="Attribute">
-              <SelectValue placeholder="Attribute" />
-            </SelectTrigger>
-            <SelectContent>
-              {keys.map((key) => (
-                <SelectItem key={key} value={key}>
-                  {key}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={attributeValue}
-            onValueChange={setAttributeValue}
-            disabled={attributeKey === ""}
-          >
-            <SelectTrigger className="min-w-0 flex-1" aria-label="Value">
-              <SelectValue placeholder="Value" />
-            </SelectTrigger>
-            <SelectContent>
-              {values.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.value} ({option.memberCount})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="w-[280px] shrink-0">
+          <div className="flex min-w-0 items-center gap-3">
+            <Select
+              value={attributeKey}
+              onValueChange={(key) => {
+                setAttributeKey(key);
+                setAttributeValue("");
+              }}
+            >
+              <SelectTrigger className="min-w-0 flex-1" aria-label="Attribute">
+                <SelectValue placeholder="Attribute" />
+              </SelectTrigger>
+              <SelectContent>
+                {keys.map((key) => (
+                  <SelectItem key={key} value={key}>
+                    {key}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={attributeValue}
+              onValueChange={setAttributeValue}
+              disabled={attributeKey === ""}
+            >
+              <SelectTrigger className="min-w-0 flex-1" aria-label="Value">
+                <SelectValue placeholder="Value" />
+              </SelectTrigger>
+              <SelectContent>
+                {values.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.value} ({option.memberCount})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0">
             <RolePicker
               row={draft}
               roles={roles}
+              refreshMappings={refreshMappings}
               disabledMessage={
                 attributeValue === ""
                   ? "Pick an attribute and value first"
@@ -522,81 +585,93 @@ function AttributeMappings({
               }}
             />
           </div>
-          {/* Keeps the role picker in line with the table's mark column. */}
-          <div className="w-16 shrink-0" />
         </div>
       </div>
     </>
   );
 }
 
-/**
- * Picks the role for one group or attribute value. Picking a role saves it
- * straight away; picking the mapped role again removes the mapping.
- */
 function RolePicker({
   row,
   roles,
+  refreshMappings,
   disabledMessage,
   onSaved,
 }: {
   row: SourceRow;
   roles: Role[];
+  refreshMappings: () => Promise<DirectoryRoleMapping[]>;
   disabledMessage?: string;
   onSaved?: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const orgRoutes = useOrgRoutes();
-
-  const refresh = () =>
-    Promise.all([
-      invalidateAllDirectoryRoleMappings(queryClient),
-      invalidateAllRoles(queryClient),
-      invalidateAllResourceAudience(queryClient),
-    ]);
-  // Returning the refresh keeps the mutation pending until the row reloads.
-  const save = useSetDirectoryRoleMappingMutation({
+  const save = useSetDirectoryRoleMappingsMutation({
+    retry: false,
     onSuccess: async () => {
-      await refresh();
+      await invalidateDirectoryMappingAccess(queryClient);
       onSaved?.();
     },
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to save role mapping"));
+      void invalidateDirectoryMappingAccess(queryClient);
     },
   });
   const remove = useDeleteDirectoryRoleMappingMutation({
-    onSuccess: () => refresh(),
+    retry: false,
+    onSuccess: async () => {
+      await invalidateDirectoryMappingAccess(queryClient);
+      onSaved?.();
+    },
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to remove role mapping"));
+      void invalidateDirectoryMappingAccess(queryClient);
     },
   });
-  // Any mapping delete in flight locks the pickers, so a row cannot be
-  // re-mapped while its trash action is still removing it.
   const deleting =
     useIsMutating({ mutationKey: mutationKeyDeleteDirectoryRoleMapping() }) > 0;
-  const saving = save.isPending || remove.isPending || deleting;
-
-  const current = roles.find(
-    (role) => role.principalUrn === row.mapping?.roleUrn,
-  );
-  const items: DropdownItem[] = roles.map((role) => ({
-    value: role.principalUrn,
-    label: role.name,
-    description: role.description || undefined,
-  }));
-  // A mapping can outlive its role. List that role so picking it again clears
-  // the stale mapping, like any other.
-  if (
-    row.mapping &&
-    !roles.some((role) => role.principalUrn === row.mapping?.roleUrn)
-  ) {
-    items.push({
-      value: row.mapping.roleUrn,
-      label: "Deleted role",
-      description: "Pick to remove this mapping",
-    });
-  }
+  const setting =
+    useIsMutating({ mutationKey: mutationKeySetDirectoryRoleMappings() }) > 0;
+  const refreshing =
+    useIsFetching({
+      queryKey: ["@gram/client", "access", "listDirectoryRoleMappings"],
+    }) > 0;
+  const [preparing, setPreparing] = useState(false);
+  const saving =
+    preparing ||
+    refreshing ||
+    save.isPending ||
+    remove.isPending ||
+    setting ||
+    deleting;
+  const changeRole = async (roleUrn: string) => {
+    setPreparing(true);
+    try {
+      const current = sourceRoleUrns(await refreshMappings(), row.form);
+      save.mutate({
+        request: {
+          setDirectoryRoleMappingsForm: {
+            ...row.form,
+            expectedRoleUrns: current,
+            roleUrns: [...new Set([...current, roleUrn])],
+          },
+        },
+      });
+    } catch (error) {
+      toast.error(errorMessage(error, "Failed to refresh role mappings"));
+    } finally {
+      setPreparing(false);
+    }
+  };
+  const mappedRoles = row.mappings.map((mapping) => mapping.roleUrn);
+  const items: DropdownItem[] = roles
+    .filter((role) => !mappedRoles.includes(role.principalUrn))
+    .map((role) => ({
+      value: role.principalUrn,
+      label: role.name,
+      description: role.description || undefined,
+    }));
   items.unshift({
     value: CREATE_ROLE,
     label: "Create role…",
@@ -604,11 +679,8 @@ function RolePicker({
     icon: <Plus className="h-4 w-4" />,
     separatorAfter: true,
   });
-
   const pick = (value: string) => {
     if (value === CREATE_ROLE) {
-      // Start the new role with the group's name, or the attribute value,
-      // made unique so saving does not fail on a taken name.
       const baseName =
         row.form.sourceKind === "attribute"
           ? (row.form.attributeValue ?? "")
@@ -620,42 +692,242 @@ function RolePicker({
       void navigate(`${orgRoutes.createRole.href()}?${params.toString()}`);
       return;
     }
-    // Picking the role that is already mapped clears it, like unticking it.
-    if (row.mapping && value === row.mapping.roleUrn) {
-      remove.mutate({ request: { id: row.mapping.id } });
-      return;
-    }
-    save.mutate({
-      request: { setDirectoryRoleMappingForm: { ...row.form, roleUrn: value } },
-    });
+    void changeRole(value);
   };
+  const chips = row.mappings.map((mapping) => ({
+    id: mapping.id,
+    name:
+      roles.find((role) => role.principalUrn === mapping.roleUrn)?.name ??
+      "Deleted role",
+  }));
+  return (
+    <RoleChips
+      chips={chips}
+      // The attribute add row's draft has no label; name its chips after the
+      // picked attribute value instead.
+      sourceLabel={
+        row.label ||
+        (row.form.sourceKind === "attribute"
+          ? `${row.form.attributeKey ?? ""} = ${row.form.attributeValue ?? ""}`
+          : "")
+      }
+      disabled={saving || !!disabledMessage}
+      onRemove={(id) => remove.mutate({ request: { id } })}
+    >
+      <Combobox
+        items={items}
+        selected={undefined}
+        onSelectionChange={(item) => pick(item.value)}
+        searchable
+        searchPlaceholder="Search roles…"
+        variant="secondary"
+        className="h-auto justify-start border-dashed py-1 text-left"
+        contentClassName="w-[min(24rem,90vw)]"
+        disabledMessage={saving ? "Saving mapping" : disabledMessage}
+      >
+        <span className="flex items-center gap-2">
+          <Plus className="size-4 shrink-0" />
+          {saving ? "Saving…" : "Add role"}
+        </span>
+      </Combobox>
+    </RoleChips>
+  );
+}
 
-  let label = "Assign role";
-  if (saving) label = "Saving…";
-  else if (row.mapping) label = current?.name ?? "Deleted role";
+type RoleChipItem = { id: string; name: string };
+
+/**
+ * A source's roles on one line, so a row keeps the same height however many
+ * roles the source grants. The chips that fit are shown in order; the rest
+ * collapse into a "+N more" chip that opens the whole set, each role still
+ * removable there. `children` (the add control) always stays visible after
+ * the chips. Until the line can be measured (no layout yet, or in tests)
+ * every chip is shown.
+ */
+function RoleChips({
+  chips,
+  sourceLabel,
+  disabled,
+  onRemove,
+  children,
+}: {
+  chips: RoleChipItem[];
+  sourceLabel: string;
+  disabled: boolean;
+  onRemove: (id: string) => void;
+  children: ReactNode;
+}): JSX.Element {
+  const lineRef = useRef<HTMLDivElement>(null);
+  const addRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [canMeasure, setCanMeasure] = useState(false);
+  const [visible, setVisible] = useState<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const chipKey = chips.map((chip) => `${chip.id}:${chip.name}`).join("|");
+
+  useLayoutEffect(() => {
+    const line = lineRef.current;
+    if (!line) return;
+    const measure = () => {
+      if (line.clientWidth === 0) {
+        setCanMeasure(false);
+        setVisible(null);
+        return;
+      }
+      setCanMeasure(true);
+      const layer = measureRef.current;
+      if (!layer) return;
+      const sizes = [...layer.children].map(
+        (child) => (child as HTMLElement).offsetWidth,
+      );
+      // The layer holds every chip, then a sample overflow chip.
+      const overflowWidth = sizes.pop() ?? 0;
+      const addWidth = addRef.current?.offsetWidth ?? 0;
+      const available = line.clientWidth - addWidth - CHIP_GAP;
+      const next = visibleChipCount(sizes, available, CHIP_GAP, overflowWidth);
+      setVisible((previous) => (previous === next ? previous : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(line);
+    // The add control changes width while it saves.
+    if (addRef.current) observer.observe(addRef.current);
+    // Chips can change width when the web font lands, so measure again then.
+    let live = true;
+    void document.fonts?.ready.then(() => live && measure());
+    return () => {
+      live = false;
+      observer.disconnect();
+    };
+  }, [chipKey, canMeasure]);
+
+  const shown = visible === null ? chips : chips.slice(0, visible);
+  const hidden = chips.length - shown.length;
+  // Once every role fits again the overflow chip goes, and so does its
+  // popover; reset it so it doesn't reopen when roles overflow later.
+  if (hidden === 0 && open) setOpen(false);
 
   return (
-    <Combobox
-      items={items}
-      selected={row.mapping?.roleUrn}
-      onSelectionChange={(item) => pick(item.value)}
-      searchable
-      searchPlaceholder="Search roles…"
-      // An unmapped row is a call to action, so its picker is a bordered
-      // button; a mapped row reads as settled state.
-      variant={row.mapping ? "tertiary" : "secondary"}
-      className={cn(
-        "h-auto w-full justify-start py-1 text-left",
-        !row.mapping && "border-dashed",
-      )}
-      contentClassName="w-[min(24rem,90vw)]"
-      disabledMessage={saving ? "Saving mapping" : disabledMessage}
+    // Fills the cell, so its width is the room available and not its own
+    // content: sized to its content, a line that collapsed to "N roles"
+    // would measure too narrow to ever show its chips again.
+    <div
+      ref={lineRef}
+      className="relative flex h-8 w-full min-w-0 items-center gap-2"
     >
-      <span className="flex items-center gap-2">
-        {!row.mapping && !saving && <Plus className="size-4 shrink-0" />}
-        {label}
+      {shown.map((chip) => (
+        <RoleChip
+          key={chip.id}
+          chip={chip}
+          sourceLabel={sourceLabel}
+          disabled={disabled}
+          onRemove={onRemove}
+        />
+      ))}
+      {hidden > 0 && (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-8 shrink-0 px-2"
+              aria-label={`Show all ${chips.length} roles from ${sourceLabel}`}
+            >
+              {overflowLabel(hidden, shown.length)}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            ref={popoverRef}
+            tabIndex={-1}
+            align="start"
+            className="w-[min(24rem,90vw)] p-3"
+            // Focus the panel, not its first remove button, so opening it
+            // doesn't pop that button's tooltip over the heading; Tab still
+            // moves straight into the roles.
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              popoverRef.current?.focus();
+            }}
+          >
+            <Text small muted className="mb-2">
+              {pluralize(chips.length, "role")} from {sourceLabel}
+            </Text>
+            <div className="flex max-h-64 flex-wrap gap-2 overflow-y-auto">
+              {chips.map((chip) => (
+                <RoleChip
+                  key={chip.id}
+                  chip={chip}
+                  sourceLabel={sourceLabel}
+                  disabled={disabled}
+                  onRemove={onRemove}
+                />
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+      <div ref={addRef} className="shrink-0">
+        {children}
+      </div>
+      {/* An invisible copy of every chip, plus the widest overflow chip, so
+        the line can work out how many fit without showing them first. */}
+      {canMeasure && (
+        // Clipped to the line so the copy never widens a scrolling table.
+        <div
+          aria-hidden
+          className="pointer-events-none invisible absolute inset-0 overflow-hidden"
+        >
+          <div ref={measureRef} className="flex w-max gap-2 whitespace-nowrap">
+            {chips.map((chip) => (
+              <RoleChip key={chip.id} chip={chip} sourceLabel="" placeholder />
+            ))}
+            <span className="inline-flex h-8 items-center px-2 text-sm">
+              {overflowLabel(chips.length, 1)}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function overflowLabel(hidden: number, shown: number): string {
+  return shown === 0 ? pluralize(hidden, "role") : `+${hidden} more`;
+}
+
+/**
+ * One role a source grants, with its remove control. A placeholder chip has
+ * the same size but no control, for measuring.
+ */
+function RoleChip({
+  chip,
+  sourceLabel,
+  disabled = false,
+  onRemove,
+  placeholder = false,
+}: {
+  chip: RoleChipItem;
+  sourceLabel: string;
+  disabled?: boolean;
+  onRemove?: (id: string) => void;
+  placeholder?: boolean;
+}): JSX.Element {
+  return (
+    <span className="bg-muted/40 border-border inline-flex h-8 max-w-48 shrink-0 items-center gap-1 rounded-md border pl-2 text-sm">
+      <span className="truncate" title={chip.name}>
+        {chip.name}
       </span>
-    </Combobox>
+      {placeholder ? (
+        <span className="size-8 shrink-0" />
+      ) : (
+        <RemoveMappingButton
+          label={`${chip.name} from ${sourceLabel}`}
+          disabled={disabled}
+          onRemove={() => onRemove?.(chip.id)}
+        />
+      )}
+    </span>
   );
 }
 
@@ -690,41 +962,26 @@ function MappedMark({ mapped }: { mapped: boolean }): JSX.Element {
 
 /** Removes one mapping. */
 function RemoveMappingButton({
-  mapping,
   label,
+  disabled,
+  onRemove,
 }: {
-  mapping: DirectoryRoleMapping;
   label: string;
+  disabled: boolean;
+  onRemove: () => void;
 }): JSX.Element {
-  const queryClient = useQueryClient();
-  const remove = useDeleteDirectoryRoleMappingMutation({
-    onSuccess: () =>
-      Promise.all([
-        invalidateAllDirectoryRoleMappings(queryClient),
-        invalidateAllRoles(queryClient),
-        invalidateAllResourceAudience(queryClient),
-      ]),
-    onError: (error) => {
-      toast.error(errorMessage(error, "Failed to remove role mapping"));
-    },
-  });
-
   return (
     <div className="flex justify-center">
-      <SimpleTooltip tooltip="Remove this mapping">
+      <SimpleTooltip tooltip="Remove this role from the source">
         <Button
           variant="tertiary"
           size="sm"
-          aria-label={`Remove mapping for ${label}`}
+          aria-label={`Remove ${label}`}
           className="size-8 justify-center p-0"
-          disabled={remove.isPending}
-          onClick={() => remove.mutate({ request: { id: mapping.id } })}
+          disabled={disabled}
+          onClick={onRemove}
         >
-          {remove.isPending ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Trash2 className="size-4" />
-          )}
+          <Trash2 className="size-4" />
         </Button>
       </SimpleTooltip>
     </div>

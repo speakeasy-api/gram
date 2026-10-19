@@ -151,6 +151,7 @@ function target(overrides: Partial<AuthTarget> = {}): AuthTarget {
     slug: "example-server",
     projectId: "project-1",
     permissionResourceId: "mcp-server-1",
+    attachImpactTarget: { mcpServerId: "mcp-server-1" },
     supportsOrganizationIssuers: true,
     userSessionIssuerId: null,
     invalidate: mocks.invalidateTarget,
@@ -189,7 +190,7 @@ async function submitManualClient(): Promise<void> {
     target: { value: "client-1" },
   });
   fireEvent.click(
-    screen.getByRole("button", { name: "Attach Identity Provider" }),
+    screen.getByRole("button", { name: "Attach Authorization Server" }),
   );
 }
 
@@ -298,7 +299,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
     });
 
     const confirm = screen.getAllByRole("button", {
-      name: "Attach Identity Provider",
+      name: "Attach Authorization Server",
     });
     fireEvent.click(confirm[confirm.length - 1] as HTMLElement);
     await waitFor(() => expect(mocks.createProvider).toHaveBeenCalled());
@@ -342,7 +343,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
       ),
     ).toBeTruthy();
     const confirm = screen.getAllByRole("button", {
-      name: "Attach Identity Provider",
+      name: "Attach Authorization Server",
     });
     expect((confirm[confirm.length - 1] as HTMLButtonElement).disabled).toBe(
       true,
@@ -369,9 +370,9 @@ describe("AttachRemoteIdentityProviderSheet", () => {
     );
     renderSheet([attached.id]);
 
-    fireEvent.click(screen.getByText("Choose an identity provider…"));
+    fireEvent.click(screen.getByText("Choose an authorization server…"));
     fireEvent.change(
-      screen.getByPlaceholderText("Search identity providers…"),
+      screen.getByPlaceholderText("Search authorization servers…"),
       { target: { value: "catalog" } },
     );
     await waitFor(() =>
@@ -392,7 +393,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
     mocks.issuersPage.mockReturnValue([]);
     fireEvent.click(screen.getAllByRole("combobox")[0] as HTMLElement);
     fireEvent.change(
-      screen.getByPlaceholderText("Search identity providers…"),
+      screen.getByPlaceholderText("Search authorization servers…"),
       { target: { value: "nothing" } },
     );
     await waitFor(() =>

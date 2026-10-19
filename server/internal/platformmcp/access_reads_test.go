@@ -19,15 +19,30 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 	roles := ListAccessRolesOutput{Roles: []AccessRole{{
 		Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7),
 		MCPAccess: MCPConnectSummary{AllServers: false, ProjectRules: 1, ServerRules: 1, ToolRules: 1, DispositionRules: []string{"read_only"}, BlockedServers: false, BlockedProjectRules: 1, BlockedServerRules: 1, BlockedToolRules: 0, BlockedDispositionRules: []string{}},
+		DirectorySources: []AccessRoleDirectorySource{
+			{Kind: "group", Group: "Data Analytics", AttributeKey: "", AttributeValue: "", Removed: false, MatchedUsers: NewSubjectCount(6)},
+			{Kind: "attribute", Group: "", AttributeKey: "department_name", AttributeValue: "Research", Removed: false, MatchedUsers: NewSubjectCount(2)},
+			{Kind: "group", Group: "", AttributeKey: "", AttributeValue: "", Removed: true, MatchedUsers: NewSubjectCount(0)},
+		},
 		Reference: "opaque-role", Version: "opaque-version",
 	}}, ExpiresAt: "2026-09-04T12:10:00Z"}
-	require.ElementsMatch(t, []string{"roles", "name", "type", "member_count", "mcp_access", "all_servers", "project_rules", "server_rules", "tool_rules", "disposition_rules", "blocked_servers", "blocked_project_rules", "blocked_server_rules", "blocked_tool_rules", "blocked_disposition_rules", "reference", "version", "expires_at"}, decodeKeys(t, roles))
+	require.ElementsMatch(t, []string{"roles", "name", "type", "member_count", "mcp_access", "all_servers", "project_rules", "server_rules", "tool_rules", "disposition_rules", "blocked_servers", "blocked_project_rules", "blocked_server_rules", "blocked_tool_rules", "blocked_disposition_rules", "directory_sources", "kind", "kind", "kind", "group", "attribute_key", "attribute_value", "removed", "matched_users", "matched_users", "matched_users", "reference", "version", "expires_at"}, decodeKeys(t, roles))
 
 	members := ListAccessMembersOutput{
 		Members:      []AccessMember{{MaskedIdentity: "a***@e***", Roles: []string{"Operators"}, Reference: "opaque-member", Version: "opaque-version"}},
 		TotalMatches: NewSubjectCount(7), Suppressed: false, Truncated: false, ExpiresAt: "2026-09-04T12:10:00Z",
 	}
-	require.ElementsMatch(t, []string{"members", "masked_identity", "roles", "reference", "version", "total_matches", "suppressed", "truncated", "expires_at"}, decodeKeys(t, members))
+	require.ElementsMatch(t, []string{"members", "masked_identity", "roles", "reference", "version", "total_matches", "suppressed", "truncated", "exact_email_match", "expires_at"}, decodeKeys(t, members))
+
+	memberAccess := GetMemberMCPAccessOutput{Servers: []MemberMCPAccessRow{{
+		ProjectID: uuid.NewString(), ProjectName: "Default", MCPID: uuid.NewString(), MCPName: "Tasks",
+		Backend: "remote", Visibility: "private", AuthorizationMode: "rbac", ConnectionAccess: "some_tools",
+		CanConnect: true, ToolAccess: "some", CanView: true, CanManage: false,
+	}}}
+	require.ElementsMatch(t, []string{
+		"servers", "project_id", "project_name", "mcp_id", "mcp_name", "backend", "visibility", "authorization_mode",
+		"connection_access", "can_connect", "tool_access", "can_view", "can_manage", "truncated",
+	}, decodeKeys(t, memberAccess))
 
 	access := GetMCPAccessOutput{
 		ProjectID: uuid.NewString(),
@@ -40,10 +55,12 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 		"project_id", "mcp", "id", "name", "backend", "visibility", "authorization_mode", "authorization_surface", "access_summary", "tool_catalog", "tools", "name", "tools_truncated", "disposition",
 		"roles", "name", "type", "member_count", "reference", "version", "can_enter_server", "known_tool_access", "allowed_known_tools", "disposition_rules", "blocked_dispositions", "unevaluated_grants", "assignment_eligible", "expires_at", "matching_plugins", "plugin_id", "name", "slug",
 	}, keys)
-	encoded, err := json.Marshal(access)
-	require.NoError(t, err)
-	for _, forbidden := range []string{"principal_urn", "user_id", "role_id", "email", "selector", "resource_id"} {
-		require.NotContains(t, string(encoded), forbidden)
+	for _, output := range []any{access, memberAccess} {
+		encoded, err := json.Marshal(output)
+		require.NoError(t, err)
+		for _, forbidden := range []string{"principal_urn", "user_id", "role_id", "email", "selector", "resource_id"} {
+			require.NotContains(t, string(encoded), forbidden)
+		}
 	}
 }
 

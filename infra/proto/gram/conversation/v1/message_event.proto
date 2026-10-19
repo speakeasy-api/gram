@@ -79,6 +79,10 @@ message MessageEvent {
 
     // Historical source import/replay marker, not Pub/Sub redelivery.
     bool replayed = 10;
+
+    // Customer-defined string labels observed by ingestion. Consumers preserve
+    // this snapshot rather than resolving labels from current configuration.
+    map<string, string> attributes = 11;
   }
 
   // UUID identifying this mutation event. Stable across outbox publication

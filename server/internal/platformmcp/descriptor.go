@@ -83,6 +83,7 @@ type ToolMeta struct {
 var (
 	discoveryOrgRead             = []authz.Scope{authz.ScopeOrgRead}
 	discoveryProjectRead         = []authz.Scope{authz.ScopeProjectRead}
+	discoveryLogRead             = []authz.Scope{authz.ScopeLogRead}
 	discoveryProjectWrite        = []authz.Scope{authz.ScopeProjectWrite}
 	discoveryMCPRead             = []authz.Scope{authz.ScopeMCPRead}
 	discoveryMCPWrite            = []authz.Scope{authz.ScopeMCPWrite}

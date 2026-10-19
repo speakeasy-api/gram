@@ -381,6 +381,70 @@ func (q *Queries) ListAddressableMCPEndpointsByMCPServerID(ctx context.Context, 
 	return items, nil
 }
 
+const listAddressableMCPEndpointsByMCPServerIDs = `-- name: ListAddressableMCPEndpointsByMCPServerIDs :many
+SELECT e.id, e.project_id, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, e.slug, e.is_domain_root, e.created_at, e.updated_at, e.deleted_at, e.deleted, cd.domain AS custom_domain
+FROM mcp_endpoints e
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.organization_id = $1
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = $1
+  AND cd.deleted IS FALSE
+  AND cd.verified IS TRUE
+  AND cd.activated IS TRUE
+WHERE e.project_id = ANY($2::uuid[])
+  AND e.mcp_server_id = ANY($3::uuid[])
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+`
+
+type ListAddressableMCPEndpointsByMCPServerIDsParams struct {
+	OrganizationID string
+	ProjectIds     []uuid.UUID
+	McpServerIds   []uuid.UUID
+}
+
+type ListAddressableMCPEndpointsByMCPServerIDsRow struct {
+	McpEndpoint  McpEndpoint
+	CustomDomain pgtype.Text
+}
+
+// Custom-domain endpoints count only on a verified, activated domain, the
+// same gate the custom-domain middleware applies before serving.
+func (q *Queries) ListAddressableMCPEndpointsByMCPServerIDs(ctx context.Context, arg ListAddressableMCPEndpointsByMCPServerIDsParams) ([]ListAddressableMCPEndpointsByMCPServerIDsRow, error) {
+	rows, err := q.db.Query(ctx, listAddressableMCPEndpointsByMCPServerIDs, arg.OrganizationID, arg.ProjectIds, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAddressableMCPEndpointsByMCPServerIDsRow
+	for rows.Next() {
+		var i ListAddressableMCPEndpointsByMCPServerIDsRow
+		if err := rows.Scan(
+			&i.McpEndpoint.ID,
+			&i.McpEndpoint.ProjectID,
+			&i.McpEndpoint.CustomDomainID,
+			&i.McpEndpoint.McpServerID,
+			&i.McpEndpoint.MetaMcpServerID,
+			&i.McpEndpoint.Slug,
+			&i.McpEndpoint.IsDomainRoot,
+			&i.McpEndpoint.CreatedAt,
+			&i.McpEndpoint.UpdatedAt,
+			&i.McpEndpoint.DeletedAt,
+			&i.McpEndpoint.Deleted,
+			&i.CustomDomain,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCustomDomainIDsByMCPServerID = `-- name: ListCustomDomainIDsByMCPServerID :many
 SELECT DISTINCT custom_domain_id::uuid
 FROM mcp_endpoints

@@ -4,6 +4,15 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsTab } from "./SettingsTab";
 
+vi.mock("@/hooks/useToolsetUrl", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useToolsetUrl")>()),
+  useResolvedMcpServerUrl: () => ({
+    mcpUrl: undefined,
+    installPageUrl: undefined,
+    loading: false,
+  }),
+}));
+
 vi.mock("./sections/GeneralSection", () => ({
   GeneralSection: () => <h2>General</h2>,
 }));

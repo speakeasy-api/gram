@@ -45,6 +45,7 @@ var (
 	JsonWebKeyV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.json_web_key_event_v1", "Emitted when changes to published JSON Web Keys are made")
 	IdentityProviderConnectionV1           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.identity_provider_connection_event_v1", "Emitted when an organization creates, verifies, annotates, or revokes an identity provider connection")
 	JsonWebKeySetV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.json_web_key_set_event_v1", "Emitted when changes to JSON Web Key Sets are made")
+	InternalSessionIssuerV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.internal_session_issuer_event_v1", "Emitted when an organization enables or disables its internal session issuer")
 	KillswitchV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.killswitch_event_v1", "Emitted when killswitches are activated, changed, deactivated, or expire")
 	LiteLLMInstanceV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.litellm_instance_event_v1", "Emitted when changes to LiteLLM instances are made")
 	McpApprovalRequestV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_approval_request_event_v1", "Emitted when changes to MCP approval requests are made")

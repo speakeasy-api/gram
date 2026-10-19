@@ -560,6 +560,44 @@ var registry = []Product{
 		}},
 	},
 
+	// Verified 2026-10-14, re-verified 2026-10-14. A desktop IDE and CLI with
+	// a same-origin hosted https callback (antigravity.google). Sibling paths
+	// return 404 (/oauth/client-metadata, /oauth/zzz.json, etc.), so an exact
+	// entry rather than a pattern is the right rule. The www form
+	// (www.antigravity.google) is deliberately absent because its client_id is
+	// the apex URL.
+	//
+	// Signatures verified 2026-10-14 against the Antigravity 2.23.0 macOS DMG
+	// and Antigravity CLI 1.3.5 tarball (the Homebrew cask artifacts). Both
+	// bundled language servers embed the document URL above; the separate
+	// Antigravity IDE (com.google.antigravity-ide, 2.5.5) does not, so it is
+	// not covered here. The app's CFBundleExecutable is "Antigravity" and it
+	// keeps state in ~/.gemini/antigravity. The CLI installer writes the binary
+	// to ~/.local/bin/agy, while the Homebrew cask links agy to a file named
+	// antigravity, so both process names are kept; its settings live in
+	// ~/.gemini/antigravity-cli. ~/.antigravity is deliberately absent: the
+	// 2.x app never references it (only the cask's zap stanza does, a leftover
+	// of the earlier IDE builds), so it would match stale installs.
+	{
+		ID:          "antigravity",
+		VendorKey:   "google",
+		DisplayName: "Google Antigravity",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.google.antigravity"},
+			Binaries:     []string{"agy"},
+			ConfigDirs:   []string{"~/.gemini/antigravity", "~/.gemini/antigravity-cli"},
+			ProcessNames: []string{"Antigravity", "agy", "antigravity"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://antigravity.google/oauth/client-metadata.json",
+			DisplayName: "Google Antigravity",
+			Enabled:     true,
+		}},
+	},
+
 	// Products below publish no CIMD document. They register dynamically or
 	// do not speak MCP to Speakeasy at all, so an access decision about them is
 	// recorded and enforces nothing — the dashboard says so rather than
@@ -581,6 +619,11 @@ var registry = []Product{
 		Documents:       nil,
 	},
 	{
+		// ~/.gemini itself is shared with Google Antigravity, which keeps its
+		// state in ~/.gemini/antigravity, ~/.gemini/config and others, so the
+		// root would report every Antigravity install as Gemini CLI too. The
+		// marker is the CLI's session directory instead, written on first use,
+		// which neither Antigravity 2.23.0 nor its CLI 1.3.5 references.
 		ID:          "gemini-cli",
 		VendorKey:   "google",
 		DisplayName: "Gemini CLI",
@@ -588,7 +631,7 @@ var registry = []Product{
 		Signatures: Signatures{
 			BundleIDs:    nil,
 			Binaries:     []string{"gemini"},
-			ConfigDirs:   []string{"~/.gemini"},
+			ConfigDirs:   []string{"~/.gemini/tmp"},
 			ProcessNames: []string{"gemini"},
 		},
 		VersionPlistKey: "",

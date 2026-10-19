@@ -13,6 +13,7 @@ function readBootstrap(el: HTMLElement): ConsentToolsAppProps | null {
   const formId = el.dataset["formId"];
   const approveButtonId = el.dataset["approveButtonId"];
   const consentEnabled = el.dataset["consentEnabled"];
+  const inventoryDeferred = el.dataset["inventoryDeferred"];
   const serverName = el.dataset["serverName"];
   if (
     !toolsUrl ||
@@ -33,6 +34,7 @@ function readBootstrap(el: HTMLElement): ConsentToolsAppProps | null {
     formId,
     approveButtonId,
     consentEnabled: consentEnabled === "true",
+    inventoryDeferred: inventoryDeferred === "true",
     serverName,
     prefill: parsePrefillBootstrap(el.dataset["prefill"]),
   };

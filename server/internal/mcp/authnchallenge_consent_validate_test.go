@@ -383,6 +383,9 @@ type validationFixture struct {
 	clientID uuid.UUID
 	// name is what a verdict calls the member.
 	name string
+	// server is the gateway server whose connect page shows the card, empty
+	// for an endpoint that is not a gateway.
+	server string
 }
 
 func newValidationMeterProvider() (*sdkmetric.ManualReader, metric.MeterProvider) {
@@ -418,6 +421,7 @@ func seedMetaValidationFixture(t *testing.T, prefix string) (context.Context, va
 		member:   member,
 		clientID: clientID,
 		name:     prefix + "-member",
+		server:   prefix + "-member",
 	}
 }
 
@@ -478,6 +482,9 @@ func postValidate(t *testing.T, fx validationFixture, clientID uuid.UUID) (*http
 	form.Set("csrf_token", "csrf-token")
 	form.Set("action", "validate")
 	form.Set("client_id", clientID.String())
+	if fx.server != "" {
+		form.Set("server", fx.server)
+	}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
@@ -492,13 +499,23 @@ func requireValidated(t *testing.T, fx validationFixture) {
 	w, err := postValidate(t, fx, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, w.Code)
-	require.Equal(t, "/mcp/"+fx.endpoint.Slug+"/connect?state="+url.QueryEscape(fx.stateID), w.Header().Get("Location"))
+	require.Equal(t, consentPagePath(fx), w.Header().Get("Location"))
+}
+
+// consentPagePath is the page a card action returns to: the gateway server's
+// connect page for a gateway, the endpoint's consent page otherwise.
+func consentPagePath(fx validationFixture) string {
+	path := "/mcp/" + fx.endpoint.Slug + "/connect?state=" + url.QueryEscape(fx.stateID)
+	if fx.server != "" {
+		path += "&server=" + url.QueryEscape(fx.server)
+	}
+	return path
 }
 
 // renderConsent renders the page after an action, normalized for copy assertions.
 func renderConsent(t *testing.T, fx validationFixture) string {
 	t.Helper()
-	return renderConsentAt(t, fx, "/mcp/"+fx.endpoint.Slug+"/connect?state="+url.QueryEscape(fx.stateID))
+	return renderConsentAt(t, fx, consentPagePath(fx))
 }
 
 func renderConsentAt(t *testing.T, fx validationFixture, target string) string {
@@ -1057,7 +1074,7 @@ func TestServeConsentAction_ValidateOrgLevelClient(t *testing.T) {
 	createMetaMember(t, ctx, ti.conn, projectID, metaServerID, "aim204-org-member", member.url, conv.ToNullUUID(issuerID), 0)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-aim204-org", member.url)
 
-	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: stateID, subject: subject, member: member, clientID: clientID, name: "aim204-org-member"}
+	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: stateID, subject: subject, member: member, clientID: clientID, name: "aim204-org-member", server: "aim204-org-member"}
 	requireValidated(t, fx)
 	requireProbe(t, member.drain(), "token-aim204-org", true, true)
 	require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
@@ -1267,7 +1284,7 @@ func TestServeConsentAction_ValidateRateLimited(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, w.Code)
 	location := w.Header().Get("Location")
-	require.Equal(t, "/mcp/"+fx.endpoint.Slug+"/connect?state="+url.QueryEscape(fx.stateID)+"&validate_limited="+fx.clientID.String(), location)
+	require.Equal(t, consentPagePath(fx)+"&validate_limited="+fx.clientID.String(), location)
 	require.Empty(t, fx.member.drain(), "a limited verify never reaches the member")
 
 	page := renderConsentAt(t, fx, location)

@@ -63,7 +63,10 @@ type Service interface {
 	SetToolMetadata(context.Context, *SetToolMetadataPayload) (res *types.ToolMetadata, err error)
 	// Soft-delete a single tool metadata entry.
 	DeleteToolMetadata(context.Context, *DeleteToolMetadataPayload) (err error)
-	// Delete an MCP server
+	// Delete an MCP server. A toolset's own hosted server (its id equals the
+	// toolset id) is disabled instead, as turning MCP off on the toolset does, and
+	// stays listed with visibility disabled. Other servers, including other
+	// toolset-backed ones, are deleted.
 	DeleteMcpServer(context.Context, *DeleteMcpServerPayload) (err error)
 }
 

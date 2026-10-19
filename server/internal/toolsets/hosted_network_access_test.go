@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -148,6 +149,8 @@ func TestHostedNetworkAccessCanDisableDuringIngressOutage(t *testing.T) {
 func TestHostedNetworkAccessPreservesDomainRootOnSlugRename(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestToolsetsService(t)
+	// Renaming to a slug without the org prefix needs a paid tier.
+	ctx = withAccountType(t, ctx, string(billing.TierEnterprise))
 	created := createMinimalPublicToolset(t, ctx, ti, "Hosted Domain Root")
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

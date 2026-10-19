@@ -106,13 +106,24 @@ type DirectoryUser struct {
 // ListDirectoryUsers fetches all provisioned users for a directory from WorkOS.
 // https://workos.com/docs/reference/directory-sync/directory-user/list
 func (wc *Client) ListDirectoryUsers(ctx context.Context, directoryID string) ([]DirectoryUser, error) {
+	return wc.listDirectoryUsers(ctx, directoryID, "")
+}
+
+// ListDirectoryGroupUsers fetches every user in a directory group from WorkOS,
+// following pagination to the last page.
+// https://workos.com/docs/reference/directory-sync/directory-user/list
+func (wc *Client) ListDirectoryGroupUsers(ctx context.Context, groupID string) ([]DirectoryUser, error) {
+	return wc.listDirectoryUsers(ctx, "", groupID)
+}
+
+func (wc *Client) listDirectoryUsers(ctx context.Context, directoryID, groupID string) ([]DirectoryUser, error) {
 	var all []DirectoryUser
 	after := ""
 
 	for {
 		resp, err := wc.dsync.ListUsers(ctx, directorysync.ListUsersOpts{
 			Directory: directoryID,
-			Group:     "",
+			Group:     groupID,
 			Limit:     100,
 			Order:     "",
 			Before:    "",

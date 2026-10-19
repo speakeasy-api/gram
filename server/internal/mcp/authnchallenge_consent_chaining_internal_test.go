@@ -44,6 +44,10 @@ func (g *funcGovernor) HasUsableCredential(context.Context, identitychaining.Req
 	return false
 }
 
+func (g *funcGovernor) RefreshDecision(context.Context, identitychaining.Request) identitychaining.RefreshVerdict {
+	return identitychaining.RefreshVerdict{Decision: identitychaining.RefreshNotChained, RemoteSessionIssuerID: uuid.Nil, Provider: "", Reason: ""}
+}
+
 func (g *funcGovernor) Acquire(context.Context, identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {
 	panic("consent must never acquire a chained token")
 }
@@ -62,7 +66,7 @@ func consentChainingFixture(t *testing.T, g *funcGovernor) (*Service, *ResolvedM
 }
 
 func directRouting(backend consentBackend, issuer uuid.NullUUID) consentRouting {
-	return consentRouting{backend: backend, upstream: "", issuer: issuer, members: nil, grants: nil}
+	return consentRouting{backend: backend, upstream: "", issuer: issuer, members: nil, grants: nil, projectScoped: false}
 }
 
 func TestConsentChainedClients_RequestMatchesRuntime(t *testing.T) {
@@ -86,7 +90,9 @@ func TestConsentChainedClients_RequestMatchesRuntime(t *testing.T) {
 
 			runtime, ok := s.identityChainingRequest(humanChainingContext(t, "user-1", chainingTestOrg), endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, endpoint.UpstreamResource, tc.tunneled, uuid.NullUUID{UUID: tunnelIssuer, Valid: true})
 			require.True(t, ok)
-			require.Equal(t, []identitychaining.Request{runtime}, g.requests, "consent judges with the runtime's own request")
+			require.NotEmpty(t, runtime.UserSessionJTI)
+			runtime.UserSessionJTI = "" // Consent precedes grant creation and carries no validated grant identifier.
+			require.Equal(t, []identitychaining.Request{runtime}, g.requests, "consent selects the same endpoint without asserting runtime SSO provenance")
 		})
 	}
 }
@@ -195,6 +201,32 @@ func TestConsentTemplateRendersRejectedChainedServiceWithPrimaryConnect(t *testi
 	require.Contains(t, html, "0 of 1 connected")
 }
 
+// The runtime answers a definitive chaining refusal on a stale linked session
+// with the reconnect challenge, relying on the consent page to offer a
+// separate sign-in. Pin that every such refusal, repairable or not, leaves the
+// chained card with a Connect action.
+func TestConsentChainedCardOffersConnectForEveryDefinitiveRefusal(t *testing.T) {
+	t.Parallel()
+
+	for _, reason := range []identitychaining.Reason{
+		identitychaining.ReasonConfigurationRequired, identitychaining.ReasonReauthenticationRequired, identitychaining.ReasonInvalidTarget,
+		identitychaining.ReasonScopePolicyDenied, identitychaining.ReasonAccessDenied, identitychaining.ReasonInvalidClient,
+		identitychaining.ReasonInvalidGrant, identitychaining.ReasonMalformedAssertion, identitychaining.ReasonMalformedResponse,
+		identitychaining.ReasonInsufficientScope, identitychaining.ReasonUnknownRejection, identitychaining.ReasonIneligibleIdentity,
+	} {
+		for _, stage := range []identitychaining.Stage{identitychaining.StageSelection, identitychaining.StageAuthorization, identitychaining.StageDelegation, identitychaining.StageExchange, identitychaining.StageValidation, identitychaining.StageRedemption} {
+			outcome := identitychaining.Outcome{Stage: stage, Reason: reason, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
+			checked := classifyChainCheck(outcome, "Example")
+			require.Contains(t, []string{chainCheckRejected, chainCheckUnknown}, checked.Status, "%s at %s", reason, stage)
+			if checked.Status == chainCheckRejected {
+				require.Contains(t, checked.Message, "use a separate sign-in", "%s at %s", reason, stage)
+			}
+			html := renderChainedCard(t, checked.Status, checked.Message, 0)
+			require.Regexp(t, `name="action" value="connect" class="[^"]*" data-connect-link`, html, "%s at %s", reason, stage)
+		}
+	}
+}
+
 func TestShouldAutoCloseFirstPartyKeepsChainedCardOpen(t *testing.T) {
 	t.Parallel()
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{{Chained: true}}), "chaining alone has not connected anything")
@@ -208,11 +240,20 @@ func TestConsentChainedMetaClients_ServesEachRequestOnce(t *testing.T) {
 	endpoint.MetaMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	clientA := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: issuer}
 	clientB := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: issuer}
-	member := metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow{McpServerID: uuid.New(), McpServerVisibility: "private", UpstreamUrl: "https://upstream.example.test/mcp", Tunneled: false}
-	routing := consentRouting{backend: consentBackendMeta, upstream: "", issuer: uuid.NullUUID{}, members: map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow{issuer: {member, member}}, grants: nil}
+	member := metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow{McpServerID: uuid.New(), ProjectID: endpoint.ProjectID, McpServerVisibility: "private", UpstreamUrl: "https://upstream.example.test/mcp", Tunneled: false}
+	members := []metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow{member, member}
+	routing := consentRouting{backend: consentBackendMeta, upstream: "", issuer: uuid.NullUUID{}, members: map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow{clientA.ID: members, clientB.ID: members}, grants: nil, projectScoped: false}
 
 	chained := s.consentChainedClients(t.Context(), endpoint, state, []remotesessions.Client{clientA, clientB}, routing)
 	require.True(t, chained[clientA.ID])
 	require.True(t, chained[clientB.ID])
 	require.Len(t, g.requests, 1, "one render judges each distinct request once")
+}
+
+func (g *funcGovernor) CheckConsent(context.Context, identitychaining.Request, uuid.UUID) identitychaining.Outcome {
+	return identitychaining.Outcome{}
+}
+
+func (g *funcGovernor) RetireConsentCredentials(context.Context, string, uuid.UUID, uuid.UUID, string, uuid.UUID) error {
+	return nil
 }

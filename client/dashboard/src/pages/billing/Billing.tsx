@@ -69,8 +69,13 @@ function BillingInner() {
     productTier === "payg" ? "unsubscribed-payg" : "active-trial",
   );
   const activeTrial = trialLifecycle === "active";
+  const { eligible: canStartBaseCheckout } =
+    usePaygCheckoutAccess("unsubscribed-base");
   const subscription = useStripeSubscription({
-    enabled: productTier === "payg" && !activeTrial,
+    enabled:
+      !activeTrial &&
+      (productTier === "payg" ||
+        (productTier === "base" && canStartBaseCheckout)),
   });
 
   let paymentRequired = activeTrial && canStartCheckout;
@@ -86,7 +91,26 @@ function BillingInner() {
     }
   }
 
-  const paymentGroup = (activeTrial || productTier === "payg") && (
+  if (productTier === "base" && !activeTrial) {
+    paymentRequired =
+      canStartBaseCheckout &&
+      !subscription.isFetching &&
+      !subscription.data &&
+      subscription.isError &&
+      isNotFoundError(subscription.error);
+  }
+
+  const baseSubscriptionError =
+    productTier === "base" &&
+    !activeTrial &&
+    canStartBaseCheckout &&
+    subscription.isError &&
+    !isNotFoundError(subscription.error);
+
+  const paymentGroup = (activeTrial ||
+    baseSubscriptionError ||
+    productTier === "payg" ||
+    paymentRequired) && (
     <div
       key="payment"
       className={cn(
@@ -94,7 +118,28 @@ function BillingInner() {
         activeTrial && canStartCheckout && "@3xl/main:grid-cols-2",
       )}
     >
-      <PaygPlanSection />
+      {baseSubscriptionError ? (
+        <Page.Section>
+          <Page.Section.Title area="">Payment</Page.Section.Title>
+          <Page.Section.Body>
+            <Stack direction="horizontal" align="center" gap={3}>
+              <Text muted small role="alert">
+                Couldn't load your subscription.
+              </Text>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={subscription.isFetching}
+                onClick={() => void subscription.refetch()}
+              >
+                {subscription.isFetching ? "RETRYING..." : "RETRY"}
+              </Button>
+            </Stack>
+          </Page.Section.Body>
+        </Page.Section>
+      ) : (
+        <PaygPlanSection />
+      )}
       <PaygPriceList />
     </div>
   );

@@ -1,5 +1,5 @@
-// End-to-end coverage of the upstream scope parameter: client scope, else
-// scopes_supported, plus the standard scopes the issuer advertises.
+// End-to-end coverage of the upstream scope parameter: the client scope as
+// set, else the issuer's scopes_supported.
 
 package remotesessions_test
 
@@ -33,10 +33,10 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 		expectedScope string
 	}{
 		{
-			name:          "client scope is the base and the advertised standard scopes follow it",
+			name:          "client scope is sent as set though the issuer advertises standard scopes",
 			clientScope:   []string{"read:tools", "write:tools"},
 			issuerScopes:  []string{"openid", "profile", "email"},
-			expectedScope: "read:tools write:tools openid email profile",
+			expectedScope: "read:tools write:tools",
 		},
 		{
 			name:          "client scope stays narrow when the issuer advertises no standard scope",

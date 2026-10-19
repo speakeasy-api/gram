@@ -73,6 +73,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     // Observe navigation stays visible to project readers. The Identities
     // roster uses that scope; identity detail resolution separately requires
     // org:read, and the remaining Observe pages render an org-admin notice.
+    // Tool Logs is the exception: it needs log:read on this project, which no
+    // role holds by default, so it only appears to those granted it.
     const observe: Scope[] = ["project:read"];
     return [
       { route: routes.home, scope: read },
@@ -120,16 +122,11 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
-      // Watchdog supersedes the Risk Overview page: with the flag on, it is
-      // the Secure section's landing surface and the legacy overview nav item
-      // hides (its route stays reachable by direct URL). Risk Events shows in
-      // both modes, directly below the landing surface.
       ...(isRiskWatchdogEnabled
         ? [{ route: routes.watchdog, scope: read }]
-        : [{ route: routes.riskOverview, scope: read }]),
+        : []),
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
-      { route: routes.shadowAI, scope: readWrite },
       { route: routes.costs, scope: observe },
       ...(isExploreEnabled
         ? [
@@ -151,7 +148,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       ...(isOrgMemoryEnabled
         ? [{ route: routes.orgMemory, scope: observe }]
         : []),
-      { route: routes.logs, scope: observe },
+      { route: routes.logs, scope: ["log:read"], resourceId: projectId },
       { route: routes.settings, scope: ["project:write"] },
     ];
   }, [

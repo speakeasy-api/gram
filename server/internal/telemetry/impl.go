@@ -172,7 +172,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		to = payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeLogRead, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +258,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 		from, to = payload.Filter.From, payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeLogRead, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +325,7 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		from, to = payload.Filter.From, payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeProjectRead, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -459,7 +459,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		}
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeProjectRead, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
 	if err != nil {
 		return nil, err
 	}
@@ -1205,7 +1205,7 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 		}
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeProjectRead, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
 	if err != nil {
 		return nil, err
 	}
@@ -1830,14 +1830,18 @@ type searchParams struct {
 	timeEnd        int64
 }
 
-// prepareTelemetrySearch validates and prepares common search parameters.
-func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
+// prepareTelemetrySearch authorizes the caller for requiredScope on the active
+// project, then validates and prepares common search parameters. Endpoints that
+// return individual tool calls or raw log records pass authz.ScopeLogRead, since
+// those rows carry every member's tool arguments, results, and prompts;
+// aggregate and per-person summary endpoints pass authz.ScopeProjectRead.
+func (s *Service) prepareTelemetrySearch(ctx context.Context, requiredScope authz.Scope, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: requiredScope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -3855,7 +3859,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 
 	logger := s.logger
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeLogRead, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
 	if err != nil {
 		return nil, err
 	}
@@ -4627,7 +4631,7 @@ func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetTool
 // ListHooksTraces retrieves hook trace summaries with pagination and filtering.
 // Uses materialized columns for efficient querying while accessing user_email from JSON.
 func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHooksTracesPayload) (res *telem_gen.ListHooksTracesResult, err error) {
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeLogRead, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
 	if err != nil {
 		return nil, err
 	}

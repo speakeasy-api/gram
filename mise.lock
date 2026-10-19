@@ -35,36 +35,36 @@ url = "https://github.com/chainguard-dev/apko/releases/download/v1.2.31/apko_1.2
 url_api = "https://api.github.com/repos/chainguard-dev/apko/releases/assets/499430053"
 
 [[tools."aqua:ariga/atlas"]]
-version = "1.3.0"
+version = "1.3.4"
 backend = "aqua:ariga/atlas"
 
 [tools."aqua:ariga/atlas"."platforms.linux-arm64"]
-checksum = "sha256:d2cfb1c71e58170bb4ddbe62107a38da4490f516ffa53a13abf57583819b6a40"
-url = "https://release.ariga.io/atlas/atlas-linux-arm64-v1.3.0"
+checksum = "sha256:870fdd78dea732b8d1985caed6e8ea424b84dcf3b5cbb7e1d2c06f1ba09e59e4"
+url = "https://release.ariga.io/atlas/atlas-linux-arm64-v1.3.4"
 
 [tools."aqua:ariga/atlas"."platforms.linux-arm64-musl"]
-checksum = "sha256:d2cfb1c71e58170bb4ddbe62107a38da4490f516ffa53a13abf57583819b6a40"
-url = "https://release.ariga.io/atlas/atlas-linux-arm64-v1.3.0"
+checksum = "sha256:870fdd78dea732b8d1985caed6e8ea424b84dcf3b5cbb7e1d2c06f1ba09e59e4"
+url = "https://release.ariga.io/atlas/atlas-linux-arm64-v1.3.4"
 
 [tools."aqua:ariga/atlas"."platforms.linux-x64"]
-checksum = "sha256:cfc773e5b4e845bc01d680390c174648938a7f88bf30e5a2c83ae85217c21587"
-url = "https://release.ariga.io/atlas/atlas-linux-amd64-v1.3.0"
+checksum = "sha256:aec7e73a561889836b5fb7d8ba8cc55969c593e53188048d83cdf087f23bc476"
+url = "https://release.ariga.io/atlas/atlas-linux-amd64-v1.3.4"
 
 [tools."aqua:ariga/atlas"."platforms.linux-x64-musl"]
-checksum = "sha256:cfc773e5b4e845bc01d680390c174648938a7f88bf30e5a2c83ae85217c21587"
-url = "https://release.ariga.io/atlas/atlas-linux-amd64-v1.3.0"
+checksum = "sha256:aec7e73a561889836b5fb7d8ba8cc55969c593e53188048d83cdf087f23bc476"
+url = "https://release.ariga.io/atlas/atlas-linux-amd64-v1.3.4"
 
 [tools."aqua:ariga/atlas"."platforms.macos-arm64"]
-checksum = "sha256:47aaf7c295c7569c7eecfcbc53f02de862846ce1fbef16f1bd8ae98b03c3c68f"
-url = "https://release.ariga.io/atlas/atlas-darwin-arm64-v1.3.0"
+checksum = "sha256:e85bb80abbc20d312e42ce320acc7fe35aa985566aede1d911ee2107d99d7174"
+url = "https://release.ariga.io/atlas/atlas-darwin-arm64-v1.3.4"
 
 [tools."aqua:ariga/atlas"."platforms.macos-x64"]
-checksum = "sha256:4b4d8621332eabc3e6e7554d799a98ceef6376c4d8bbad6ed7832b49655e3480"
-url = "https://release.ariga.io/atlas/atlas-darwin-amd64-v1.3.0"
+checksum = "sha256:9fb08ec9b57d0ae500722a241e8c8a749b5783e7155d57173296abbf58eaff5a"
+url = "https://release.ariga.io/atlas/atlas-darwin-amd64-v1.3.4"
 
 [tools."aqua:ariga/atlas"."platforms.windows-x64"]
-checksum = "sha256:19b3bf812be93d1b30d7199c5700af01002cbd606c2aec2394fd618af7e3f7b1"
-url = "https://release.ariga.io/atlas/atlas-windows-amd64-v1.3.0.exe"
+checksum = "sha256:4d8fda6d16c11531e2d0df6b0c6d954e48b0dd7637163f044c638309f7a86479"
+url = "https://release.ariga.io/atlas/atlas-windows-amd64-v1.3.4.exe"
 
 [[tools.aube]]
 version = "1.38.1"
@@ -1177,3 +1177,43 @@ checksum = "sha256:e279bc506a452eeafcdf364f91a025455e402a8001169083caf01f4b64a54
 url = "https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_windows_amd64.exe"
 url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/440146721"
 provenance = "cosign"
+
+[[tools.zizmor]]
+version = "1.30.1"
+backend = "aqua:zizmorcore/zizmor"
+
+[tools.zizmor."platforms.linux-arm64"]
+checksum = "sha256:7ff1dce33bdd18fd2a4affe63bdd47efcccca97b2cec1c1863ec26e9e2647540"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067643"
+provenance = "github-attestations"
+
+[tools.zizmor."platforms.linux-arm64-musl"]
+provenance = "github-attestations"
+
+[tools.zizmor."platforms.linux-x64"]
+checksum = "sha256:e65324f4430c2717591937edcec90ccbefaf14c174f8ec9415e03ca875b46e1a"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067642"
+provenance = "github-attestations"
+
+[tools.zizmor."platforms.linux-x64-musl"]
+provenance = "github-attestations"
+
+[tools.zizmor."platforms.macos-arm64"]
+checksum = "sha256:e28d22b087f9ebb8d99da6e740d348c930f559961c7c3f12badda54f882195a2"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067640"
+provenance = "github-attestations"
+
+[tools.zizmor."platforms.macos-x64"]
+checksum = "sha256:10e6b18b11ea07e515a16f0f0518c7b07527bc9977c1fd5698181ce7f3554202"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067641"
+provenance = "github-attestations"
+
+[tools.zizmor."platforms.windows-x64"]
+checksum = "sha256:b183b1e996eddfab9659f1e9b46e059f1ef1cf984a1f14e5da09f7876a4b3a1c"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067645"
+provenance = "github-attestations"

@@ -48,7 +48,7 @@ func AssistantRuntimeImageRecycleWorkflow(ctx workflow.Context) (*AssistantRunti
 	logger := workflow.GetLogger(ctx)
 
 	// MaximumAttempts is 2 so a transient DB error on the candidate list does
-	// not lose the deploy's only sweep; per-row Fly failures are swallowed
+	// not lose the deploy's only sweep; per-row backend failures are swallowed
 	// inside the activity and never retry.
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: assistantRuntimeImageRecycleActivityTimeout,
