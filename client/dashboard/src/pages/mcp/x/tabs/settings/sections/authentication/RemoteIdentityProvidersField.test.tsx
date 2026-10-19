@@ -84,9 +84,11 @@ describe("RemoteIdentityProvidersField", () => {
     renderField([], { isError: true });
 
     expect(
-      screen.getByText(/Failed to load the connected services/),
+      screen.getByText(/Failed to load the authorization servers/),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /add provider/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /add authorization server/i }),
+    ).toBeNull();
   });
 
   it("keeps the providers that loaded when another fails", () => {
@@ -94,7 +96,7 @@ describe("RemoteIdentityProvidersField", () => {
 
     expect(screen.getByText("Acme Identity")).toBeTruthy();
     expect(
-      screen.getByText(/Failed to load the connected services/),
+      screen.getByText(/Failed to load the authorization servers/),
     ).toBeTruthy();
   });
 
@@ -103,7 +105,9 @@ describe("RemoteIdentityProvidersField", () => {
   it("keeps Attach Provider available once providers exist", () => {
     renderField([issuer()]);
 
-    expect(screen.getByRole("button", { name: /add provider/i })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /add authorization server/i }),
+    ).toBeTruthy();
   });
 
   // Remote/tunneled servers have exactly one upstream: once it is attached,
@@ -111,7 +115,9 @@ describe("RemoteIdentityProvidersField", () => {
   it("hides Attach Provider for single-upstream targets once a provider exists", () => {
     renderField([issuer()], { allowAdditionalProviders: false });
 
-    expect(screen.queryByRole("button", { name: /add provider/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /add authorization server/i }),
+    ).toBeNull();
   });
 
   it("links the provider name to its detail page", () => {

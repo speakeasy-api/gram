@@ -18,10 +18,11 @@ import (
 )
 
 // AdmitWorkloadSession admits a workload session and loads three independent
-// policy sets: the session's immutable ceiling R, the assigned agent's live
-// policy A, and its current owner's live policy O. The caller must have stamped
-// the workload actor and the session's credential profile first. Results must
-// not be cached across requests.
+// policy sets: the session's ceiling R, the assigned agent's live policy A, and
+// its current owner's live policy O. R is the session's stored delegated
+// policy, or, for a credential that stores none, the ceiling derived from A.
+// The caller must have stamped the workload actor and the session's credential
+// profile first. Results must not be cached across requests.
 func AdmitWorkloadSession(ctx context.Context, db *pgxpool.Pool) (authz.WorkloadSessionAdmission, error) {
 	if !hasWorkloadSessionAdmissionContext(ctx) {
 		return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
@@ -72,12 +73,20 @@ func admitWorkloadSessionInTx(ctx context.Context, tx accessrepo.DBTX) (authz.Wo
 		return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
 	}
 
-	policy, err := DecodeDelegatedPolicy(DelegatedPolicyVersion(credential.DelegatedGrantsVersion), credential.DelegatedGrants)
-	if err != nil {
-		if errors.Is(err, ErrInvalidDelegatedPolicy) {
+	var storedCeiling []authz.Grant
+	if credential.DerivesPolicyAtAdmission {
+		if len(credential.DelegatedGrants) != 0 {
 			return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
 		}
-		return authz.WorkloadSessionAdmission{}, fmt.Errorf("decode workload session policy: %w", err)
+	} else {
+		policy, err := DecodeDelegatedPolicy(DelegatedPolicyVersion(credential.DelegatedGrantsVersion), credential.DelegatedGrants)
+		if err != nil {
+			if errors.Is(err, ErrInvalidDelegatedPolicy) {
+				return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
+			}
+			return authz.WorkloadSessionAdmission{}, fmt.Errorf("decode workload session policy: %w", err)
+		}
+		storedCeiling = policy.RuntimeGrants()
 	}
 
 	agentID, assigned, err := workloadidentity.ResolveAssignedAgent(ctx, tx, workloadidentity.AssignmentParams{
@@ -122,10 +131,18 @@ func admitWorkloadSessionInTx(ctx context.Context, tx accessrepo.DBTX) (authz.Wo
 		return authz.WorkloadSessionAdmission{}, fmt.Errorf("load live workload owner policy: %w", err)
 	}
 
+	ceiling := storedCeiling
+	if credential.DerivesPolicyAtAdmission {
+		ceiling, err = DelegatedRuntimeGrants(agentPolicy, agentPolicy, agentPolicy)
+		if err != nil {
+			return authz.WorkloadSessionAdmission{}, fmt.Errorf("derive workload ceiling: %w", err)
+		}
+	}
+
 	return authz.WorkloadSessionAdmission{
 		AgentPrincipal: agentPrincipal.String(),
 		OwnerUserID:    agent.OwnerUserID,
-		Ceiling:        policy.RuntimeGrants(),
+		Ceiling:        ceiling,
 		Agent:          agentPolicy,
 		Owner:          ownerPolicy,
 	}, nil

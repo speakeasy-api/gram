@@ -59,7 +59,7 @@ it.each([
     );
     expect(
       screen
-        .getByRole("link", { name: "View existing provider" })
+        .getByRole("link", { name: "View existing authorization server" })
         .getAttribute("href"),
     ).toBe(
       `/org/projects/${projectSlug}/remote-identity-providers/other-issuer`,
@@ -67,7 +67,7 @@ it.each([
   },
 );
 it.each(["missing", "inaccessible-issuer"])(
-  "does not link unresolved provider %s into the active project",
+  "does not link unresolved authorization server %s into the active project",
   (id) => {
     render(
       <MemoryRouter>

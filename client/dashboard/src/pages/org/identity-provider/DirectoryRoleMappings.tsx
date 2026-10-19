@@ -854,7 +854,13 @@ function RoleChips({
   if (hidden === 0 && open) setOpen(false);
 
   return (
-    <div ref={lineRef} className="relative flex h-8 min-w-0 items-center gap-2">
+    // Fills the cell, so its width is the room available and not its own
+    // content: sized to its content, a line that collapsed to "N roles"
+    // would measure too narrow to ever show its chips again.
+    <div
+      ref={lineRef}
+      className="relative flex h-8 w-full min-w-0 items-center gap-2"
+    >
       {shown.map((chip) => (
         <RoleChip
           key={chip.id}

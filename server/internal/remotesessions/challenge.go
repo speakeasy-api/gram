@@ -77,7 +77,7 @@ import (
 // upstream token exchange instead of bouncing back to
 // /<RouteBase>/{slug}/connect.
 //
-// RouteBase is "mcp" or "x/mcp" — the surface the parent challenge was
+// RouteBase is the surface the parent challenge was
 // minted under. Drives both the upstream provider's redirect_uri
 // (/<RouteBase>/remote_login_callback) and the post-callback bounce to
 // /<RouteBase>/{slug}/connect. Empty values fall back to "mcp" so
@@ -147,7 +147,7 @@ type RemoteLoginState struct {
 	Resource        string              `json:"resource,omitempty"`
 	Subject         *urn.SessionSubject `json:"subject,omitempty"`
 	McpSlug         string              `json:"mcp_slug"`
-	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
+	// RouteBase drives the post-callback redirect
 	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
 	// for in-flight states minted before this field landed.
 	RouteBase       string        `json:"route_base,omitempty"`
@@ -1256,7 +1256,7 @@ func (m *ChallengeManager) mintAuthorization(
 	}
 
 	if client.AuthorizationEndpoint == "" {
-		return "", fmt.Errorf("remote_session_issuer %s missing authorization_endpoint", client.IssuerSlug)
+		return "", fmt.Errorf("remote_session_issuer %s: %w", client.IssuerSlug, ErrIssuerNoAuthorizationEndpoint)
 	}
 	if client.TokenEndpoint == "" {
 		return "", fmt.Errorf("remote_session_issuer %s missing token_endpoint", client.IssuerSlug)
@@ -1910,9 +1910,8 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 }
 
 // canonicalCallbackRouteBase is the route base the outbound remote-login
-// redirect_uri uses. remote_login_callback is mounted slug-less under both /mcp
-// and /x/mcp and recovers the originating slug from the cached login state, so
-// one canonical base serves either surface. A single stable redirect_uri also
+// redirect_uri uses. remote_login_callback is mounted slug-less under /mcp and
+// recovers the originating slug from the cached login state. A single stable redirect_uri also
 // matches the lone redirect_uri a CIMD client publishes in its metadata
 // document; the originating surface lives in the login state's RouteBase for
 // the post-callback bounce.

@@ -456,7 +456,7 @@ var oktaSignInGuidance = map[string]string{
 	idpc.SignInStepVerifyConnection:  "Finish and verify the Okta connection" + oktaSignInDashboard,
 	idpc.SignInStepRecordAgent:       "Register the Okta AI agent and record its ID" + oktaSignInDashboard,
 	idpc.SignInStepAwaitProvision:    "Speakeasy is still provisioning the connection; check again shortly.",
-	idpc.SignInStepResolveDuplicates: "Several organization sign-in clients use the agent ID under the Okta connection's issuer, so none is used. Delete the extras under Remote identity providers" + oktaSignInDashboard,
+	idpc.SignInStepResolveDuplicates: "Several organization sign-in clients use the agent ID under the Okta connection's issuer, so none is used. Delete the extras under Authorization Servers" + oktaSignInDashboard,
 	idpc.SignInStepSetUpSignIn:       "Use Set up Okta sign-in, which needs customer-managed encryption keys enabled for the organization and a Google Cloud KMS key to sign with," + oktaSignInDashboard,
 	idpc.SignInStepTrustSignIn:       "Confirm which sign-in issuer trusts Okta sign-in" + oktaSignInDashboard,
 	idpc.SignInStepRegisterInOkta:    "In Okta, paste public_jwk in the agent's Credentials and click Activate, then enable Authorization Code and Refresh Token on the linked app and add redirect_uri. Rotating the signing key set or publishing a new key needs the new public key pasted in Okta again. Speakeasy cannot observe these Okta settings.",

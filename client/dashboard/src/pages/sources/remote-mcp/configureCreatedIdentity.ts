@@ -159,7 +159,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Existing identity providers could not be checked. Configure User Identity in Settings > Identity.",
+        "Existing authorization servers could not be checked. Configure User Identity in Settings > Identity.",
       );
     }
     provider = null;
@@ -172,7 +172,7 @@ export async function configureCreatedRemoteMcpIdentity({
     return setupRequired(
       mcpServer,
       identityMode,
-      "The matching identity provider is missing OAuth endpoints. Update it in Remote Identity Providers.",
+      "The matching authorization server is missing OAuth endpoints. Update it in Authorization Servers.",
     );
   }
 
@@ -268,7 +268,7 @@ export async function configureCreatedRemoteMcpIdentity({
     return setupRequired(
       mcpServer,
       identityMode,
-      "The identity provider needs its client registered by hand. Finish setup in Settings > Identity.",
+      "The authorization server needs its client registered by hand. Finish setup in Settings > Identity.",
       result,
     );
   }
@@ -350,8 +350,8 @@ function commitFailureMessage(
   if (result.failure) {
     const outcome =
       result.failure.outcome === "unreachable"
-        ? "The identity provider was unreachable"
-        : "The identity provider refused registration";
+        ? "The authorization server was unreachable"
+        : "The authorization server refused registration";
     return `${outcome}. Configure User Identity in Settings > Identity.`;
   }
   return "Automatic client registration is unavailable. Configure User Identity in Settings > Identity.";

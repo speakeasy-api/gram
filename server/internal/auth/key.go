@@ -398,23 +398,24 @@ func classifyPrincipalAPIKey(apiKey repo.GetAPIKeyByKeyHashRow, now time.Time) (
 	// expired row.
 	profilePresent := apiKey.SubjectUrn.Valid || apiKey.DelegatedGrants != nil || apiKey.DelegatedGrantsVersion.Valid
 	if !profilePresent {
-		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, false, nil
+		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: false}, false, nil
 	}
 	if !apiKey.SubjectUrn.Valid || apiKey.DelegatedGrants == nil || !apiKey.DelegatedGrantsVersion.Valid || !apiKey.ExpiresAt.Valid || !apiKey.CreatedAt.Valid ||
 		len(apiKey.Scopes) != 0 || apiKey.CreatedByUserID == "" || !apiKey.ExpiresAt.Time.After(now) ||
 		!apiKey.ExpiresAt.Time.After(apiKey.CreatedAt.Time) || apiKey.ExpiresAt.Time.After(apiKey.CreatedAt.Time.Add(maxAgentAPIKeyLifetime)) {
-		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, true, errors.New("invalid principal-backed api key profile")
+		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: false}, true, errors.New("invalid principal-backed api key profile")
 	}
 
 	actor, err := urn.ParsePrincipal(apiKey.SubjectUrn.String)
 	if err != nil || actor.Type != urn.PrincipalTypeAgent {
-		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, true, errors.New("invalid principal-backed api key subject")
+		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: false}, true, errors.New("invalid principal-backed api key subject")
 	}
 
 	return actor, contextvalues.PrincipalCredential{
-		AuthorizerUserID:       apiKey.CreatedByUserID,
-		DelegatedGrants:        apiKey.DelegatedGrants,
-		DelegatedGrantsVersion: apiKey.DelegatedGrantsVersion.Int32,
+		AuthorizerUserID:         apiKey.CreatedByUserID,
+		DelegatedGrants:          apiKey.DelegatedGrants,
+		DelegatedGrantsVersion:   apiKey.DelegatedGrantsVersion.Int32,
+		DerivesPolicyAtAdmission: false,
 	}, true, nil
 }
 

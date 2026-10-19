@@ -39,6 +39,10 @@ var ErrClientCredentialClientNotFound = errors.New("remotesessions: client crede
 // client, so there is no authorize redirect to mint.
 var ErrSelfCredentialClient = errors.New("remotesessions: client holds its own upstream credential and is not connected by subjects")
 
+// ErrIssuerNoAuthorizationEndpoint means the upstream authorization server
+// advertises no authorization endpoint, so nobody can sign in to it.
+var ErrIssuerNoAuthorizationEndpoint = errors.New("remotesessions: authorization server has no authorization endpoint")
+
 // ErrClientCredentialMisconfigured means the credential a self client holds
 // for itself cannot be obtained, or the upstream rejected it, for a reason
 // only an administrator can repair. It refines ErrRemoteSessionMisconfigured,

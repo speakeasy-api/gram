@@ -1124,6 +1124,39 @@ func (q *Queries) AdminListOrganizationMembersPage(ctx context.Context, arg Admi
 	return items, nil
 }
 
+const adminListOrganizationNamesByIDs = `-- name: AdminListOrganizationNamesByIDs :many
+SELECT id, name, slug
+FROM organization_metadata
+WHERE id = ANY($1::text[])
+`
+
+type AdminListOrganizationNamesByIDsRow struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// Labels the hook client grids, whose rows carry only organization ids.
+func (q *Queries) AdminListOrganizationNamesByIDs(ctx context.Context, ids []string) ([]AdminListOrganizationNamesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationNamesByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationNamesByIDsRow
+	for rows.Next() {
+		var i AdminListOrganizationNamesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListOrganizations = `-- name: AdminListOrganizations :many
 WITH search AS (
     -- Escaped once here rather than per arm so the name and the slug arm cannot
