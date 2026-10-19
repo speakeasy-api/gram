@@ -83,10 +83,10 @@ PostHog); anything else — off, absent, unrecognized, provider error — is `of
   holding enforcement back. Without a configured analyzer the comparison lane
   is skipped
   (`risk.llm.policy_evaluations{scan_mode=async,outcome=shadow_skipped}`).
-- **Realtime** (`ScanForEnforcement`): one `enforcereply.DispatchRequest`
-  carries the legacy lanes exactly as under `off` (gitleaks / Presidio lanes
-  only when `risk-enforcement-pubsub` is on, otherwise those engines run
-  in-process) and dispatches the LLM lane **separately and detached** with
+- **Realtime** (`ScanForEnforcement`): the legacy lanes travel in one
+  `enforcereply.DispatchRequest` exactly as under `off` (gitleaks / Presidio
+  lanes only when `risk-enforcement-pubsub` is on, otherwise those engines run
+  in-process), and the LLM lane is dispatched **separately and detached** with
   `execution_path = realtime_shadow`: the scan enforces as soon as the legacy
   path answers and never waits for the model, so hook latency is that of the
   legacy path. The lane runs on a cancellation-detached context bounded by the
@@ -232,9 +232,11 @@ scanPolicy: FindingsForSource(llmFindings, source) per covered source
 - In the `llm` mode a single `LLMEnforcement` is published per hook event,
   regardless of `risk-enforcement-pubsub`; the gitleaks and Presidio lanes are
   not dispatched for that org and no in-process engine runs for covered
-  sources. In the `shadow` mode the same `LLMEnforcement` travels in the one
-  request that also carries the legacy lanes, and `scanPolicy` only compares
-  its findings (see "Engine modes").
+  sources. In the `shadow` mode the legacy lanes travel in their own request
+  exactly as under `off`, and the `LLMEnforcement` is dispatched separately
+  and detached (`execution_path = realtime_shadow`): enforcement never waits
+  for it, and its findings are only compared once it answers (see "Engine
+  modes").
 - The consumer drops requests older than 30 s (`DefaultMaxRequestAge`) without
   analysis, and acks model failures and Redis write failures. Only requests it
   cannot decode return an error, so the DLQ holds malformed payloads.

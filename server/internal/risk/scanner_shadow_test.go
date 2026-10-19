@@ -221,11 +221,11 @@ func degradedFailModes(t *testing.T, reader *sdkmetric.ManualReader) map[string]
 	return counts
 }
 
-// TestScanner_ShadowModeDispatchesLegacyAndLLMLanesTogether pins the realtime
-// half of the shadow engine mode: the legacy lanes travel exactly as in the
-// off mode, the LLM lane rides in the same request marked realtime_shadow,
-// and a model verdict the legacy engines do not share is compared, never
-// enforced.
+// TestScanner_ShadowModeDispatchesLegacyAndLLMLanesSeparately pins the
+// realtime half of the shadow engine mode: the legacy lanes travel in their
+// own request exactly as in the off mode, the LLM lane goes out in a separate
+// detached request marked realtime_shadow, and a model verdict the legacy
+// engines do not share is compared, never enforced.
 func TestScanner_ShadowModeDispatchesLegacyAndLLMLanesSeparately(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

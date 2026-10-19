@@ -600,6 +600,9 @@ func (s *Scanner) scanForEnforcement(
 	// comparedLane is the LLM lane dispatched off the enforcement path; its
 	// reply is only compared, after the scan returned.
 	var comparedLane *pendingLLMLane
+	// awaitedLaneDuration is how long the awaited LLM lane took, for the
+	// comparisons recorded inline.
+	var awaitedLaneDuration time.Duration
 	legacyLanesOn := func() bool {
 		return len(applicablePolicies) > 0 && s.projectFlagEnabled(ctx, organizationID, projectID, feature.FlagRiskEnforcementPubsub)
 	}
@@ -614,12 +617,14 @@ func (s *Scanner) scanForEnforcement(
 		if slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
 			return p.PolicyType != ra.PolicyTypePromptBased && llmanalyzer.EnforcesAnySource(p.Sources)
 		}) {
+			laneStarted := time.Now()
 			_, llmFindings, laneTruncated = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
 				legacy:           false,
 				llm:              true,
 				llmExecutionPath: realtimeStreamsExecutionPath,
 				llmFailMode:      failModeClosed,
 			})
+			awaitedLaneDuration = time.Since(laneStarted)
 		} else {
 			comparedLane = s.startComparedLLMLane(ctx, request, orgSlug, applicablePolicies)
 		}
@@ -730,7 +735,7 @@ func (s *Scanner) scanForEnforcement(
 		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
 		return nil, fmt.Errorf("risk policy fan-out: %w", err)
 	}
-	s.recordComparisons(ctx, comparedLane, llmFindings, laneTruncated, start, comparisons)
+	s.recordComparisons(ctx, comparedLane, llmFindings, laneTruncated, awaitedLaneDuration, comparisons)
 	if hit := quarantineWinner.Load(); hit != nil {
 		s.recordScan(ctx, projectID.String(), "quarantined", time.Since(start))
 		return hit, nil
@@ -916,7 +921,6 @@ func (s *Scanner) scanPolicyEnforce(ctx context.Context, policy repo.RiskPolicy,
 		compare, compareSources = true, llmanalyzer.ComparedSources
 	}
 	if compare {
-		policyStarted := time.Now()
 		defer func() {
 			if retErr != nil || filter == nil {
 				return
@@ -930,7 +934,6 @@ func (s *Scanner) scanPolicyEnforce(ctx context.Context, policy repo.RiskPolicy,
 				categoryScope:     categoryScope,
 				filter:            filter,
 				sources:           compareSources,
-				started:           policyStarted,
 			}
 		}()
 	}
@@ -1775,8 +1778,6 @@ type shadowComparisonInput struct {
 	filter            func([]scanners.Finding) []scanners.Finding
 	// sources restricts the comparison; nil compares realtimeLegacySources.
 	sources []string
-	// started is the policy evaluation start, for the inline duration.
-	started time.Time
 }
 
 // recordShadowComparison sets the LLM analyzer lane's verdict for a policy
@@ -2026,10 +2027,10 @@ func (s *Scanner) startComparedLLMLane(ctx context.Context, request RealtimeScan
 	return lane
 }
 
-// recordComparisons records each policy comparison: inline with the scan
-// duration when the lane was awaited, otherwise in the background with the
-// lane's duration once it answers.
-func (s *Scanner) recordComparisons(ctx context.Context, lane *pendingLLMLane, llmFindings []scanners.Finding, truncated bool, started time.Time, comparisons []pendingComparison) {
+// recordComparisons records each policy comparison with the LLM lane's own
+// latency: inline with awaitedLane when the scan awaited the lane, otherwise
+// in the background with the detached lane's duration once it answers.
+func (s *Scanner) recordComparisons(ctx context.Context, lane *pendingLLMLane, llmFindings []scanners.Finding, truncated bool, awaitedLane time.Duration, comparisons []pendingComparison) {
 	if len(comparisons) == 0 {
 		return
 	}
@@ -2037,7 +2038,7 @@ func (s *Scanner) recordComparisons(ctx context.Context, lane *pendingLLMLane, l
 		for _, c := range comparisons {
 			c.input.llmFindings = llmFindings
 			c.input.truncated = truncated
-			s.recordShadowComparison(ctx, c.policy, c.input, time.Since(started))
+			s.recordShadowComparison(ctx, c.policy, c.input, awaitedLane)
 		}
 		return
 	}
