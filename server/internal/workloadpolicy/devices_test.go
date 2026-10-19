@@ -36,7 +36,6 @@ func createJoinToken(t *testing.T, ctx context.Context, ti *testInstance, agentI
 	t.Helper()
 	res, err := ti.service.CreateDeviceJoinToken(ctx, &gen.CreateDeviceJoinTokenPayload{
 		AgentID:          agentID.String(),
-		HooksProjectID:   ti.projectID.String(),
 		ExpiresInSeconds: 3600,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -93,8 +92,6 @@ func TestRegisterDevice_EnrollsTheDeviceUnderTheTokensAgent(t *testing.T) {
 	require.Equal(t, workloadidentity.DeviceIssuerURL(testServerURL, ti.orgID), reg.Issuer)
 	require.Equal(t, agentID.String(), reg.AgentID)
 	require.Equal(t, ti.orgID, reg.OrganizationID)
-	require.Equal(t, ti.projectID.String(), reg.HooksProjectID)
-	require.NotEmpty(t, reg.HooksProjectSlug)
 
 	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
@@ -104,8 +101,6 @@ func TestRegisterDevice_EnrollsTheDeviceUnderTheTokensAgent(t *testing.T) {
 			found = true
 			require.Equal(t, agentID.String(), admission.AgentID)
 			require.Equal(t, "exact", admission.MatchKind)
-			require.Equal(t, ti.projectID.String(), admission.HooksProjectID)
-			require.Equal(t, reg.HooksProjectSlug, admission.HooksProjectSlug)
 		}
 	}
 	require.True(t, found, "the device should be admitted")
@@ -317,30 +312,26 @@ func TestCreateDeviceJoinToken_RequiresAuthorizingTheAgent(t *testing.T) {
 	agentID := newAgent(t, ctx, ti, "someone-elses-agent")
 	payload := &gen.CreateDeviceJoinTokenPayload{
 		AgentID:          agentID.String(),
-		HooksProjectID:   ti.projectID.String(),
 		ExpiresInSeconds: 3600,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	}
 
-	// The owner may create one with workload:write and read access to the
-	// hooks project.
-	projectRead := authz.NewGrant(authz.ScopeProjectRead, ti.projectID.String())
-	_, err := ti.service.CreateDeviceJoinToken(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeWorkloadWrite, ti.orgID), projectRead), payload)
+	// The owner may create one with workload:write alone.
+	_, err := ti.service.CreateDeviceJoinToken(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeWorkloadWrite, ti.orgID)), payload)
 	require.NoError(t, err)
 
 	// Anyone else needs agent:authorize on the agent as well, so ownership is
 	// the only thing standing in for it.
 	other := asUser(t, ctx, ti.userID+"-other")
 
-	_, err = ti.service.CreateDeviceJoinToken(authztest.WithExactGrants(t, other, authz.NewGrant(authz.ScopeWorkloadWrite, ti.orgID), projectRead), payload)
+	_, err = ti.service.CreateDeviceJoinToken(authztest.WithExactGrants(t, other, authz.NewGrant(authz.ScopeWorkloadWrite, ti.orgID)), payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	authorized := authztest.WithExactGrants(t, other,
 		authz.NewGrant(authz.ScopeWorkloadWrite, ti.orgID),
 		authz.NewGrant(authz.ScopeAgentAuthorize, agentID.String()),
-		projectRead,
 	)
 	_, err = ti.service.CreateDeviceJoinToken(authorized, payload)
 	require.NoError(t, err)
@@ -357,7 +348,6 @@ func TestCreateDeviceJoinToken_RequiresTheDeviceAgentGrants(t *testing.T) {
 	payload := func(agentID uuid.UUID) *gen.CreateDeviceJoinTokenPayload {
 		return &gen.CreateDeviceJoinTokenPayload{
 			AgentID:          agentID.String(),
-			HooksProjectID:   ti.projectID.String(),
 			ExpiresInSeconds: 3600,
 			SessionToken:     nil,
 			ApikeyToken:      nil,
@@ -445,53 +435,6 @@ func TestRegisterIssuer_RefusesTheDeviceIssuerPrefix(t *testing.T) {
 	}
 }
 
-func TestCreateDeviceJoinToken_RequiresAHooksProjectInTheOrganization(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-	agentID := newAgent(t, ctx, ti, "project-bound-agent")
-
-	payload := func(hooksProjectID string) *gen.CreateDeviceJoinTokenPayload {
-		return &gen.CreateDeviceJoinTokenPayload{
-			AgentID:          agentID.String(),
-			HooksProjectID:   hooksProjectID,
-			ExpiresInSeconds: 3600,
-			SessionToken:     nil,
-			ApikeyToken:      nil,
-			ProjectSlugInput: nil,
-		}
-	}
-
-	_, err := ti.service.CreateDeviceJoinToken(ctx, payload(""))
-	requireOopsCode(t, err, oops.CodeInvalid)
-
-	// A project id from no organization, or another one, is not found rather
-	// than a permission error, so it reveals nothing about other tenants.
-	for _, other := range []string{foreignProject(t, ctx, ti).String(), uuid.NewString()} {
-		_, err = ti.service.CreateDeviceJoinToken(ctx, payload(other))
-		requireOopsCode(t, err, oops.CodeNotFound)
-	}
-
-	// A project the caller cannot read is refused.
-	noProjectRead := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeWorkloadWrite, ti.orgID))
-	_, err = ti.service.CreateDeviceJoinToken(noProjectRead, payload(ti.projectID.String()))
-	requireOopsCode(t, err, oops.CodeForbidden)
-}
-
-func TestRegisterDevice_SameKeyRetryReturnsTheHooksProject(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-	agentID := newAgent(t, ctx, ti, "retry-agent")
-	token := createJoinToken(t, ctx, ti, agentID)
-	jwk := publicJWK(t, newDeviceKey(t).Public())
-
-	first, err := registerDevice(ctx, ti, token, jwk)
-	require.NoError(t, err)
-	again, err := registerDevice(ctx, ti, token, jwk)
-	require.NoError(t, err)
-	require.Equal(t, first.HooksProjectID, again.HooksProjectID)
-	require.Equal(t, first.HooksProjectSlug, again.HooksProjectSlug)
-}
-
 func TestRegisterDevice_ThrottlesOneTokenWithoutThrottlingOthers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -554,7 +497,6 @@ func TestCreateDeviceJoinToken_RequiresAPerson(t *testing.T) {
 	noPerson.UserID = ""
 	_, err := ti.service.CreateDeviceJoinToken(contextvalues.SetAuthContext(ctx, &noPerson), &gen.CreateDeviceJoinTokenPayload{
 		AgentID:          agentID.String(),
-		HooksProjectID:   ti.projectID.String(),
 		ExpiresInSeconds: 3600,
 		SessionToken:     nil,
 		ApikeyToken:      nil,

@@ -54,6 +54,8 @@ vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
 // The sheet's own behavior is covered by its dedicated tests; the table test
 // only asserts the wiring, so a marker div records the props it receives.
 vi.mock("@/components/mcp-approvals/DecideAccessSheet", () => ({
+  POLICIES_UNAVAILABLE_REASON:
+    "Policy data could not be loaded — deciding now would not be enforced",
   DecideAccessSheet: (props: DecideAccessSheetProps) => {
     mocks.decideAccessSheet(props);
 
@@ -121,6 +123,7 @@ vi.mock("@/components/mcp-approvals/ReviewRequestSheet", () => ({
     request,
     open,
     onDecide,
+    decideDisabledReason,
   }: {
     request: { id: string; targetRaw: string; requesterCount: number } | null;
     open: boolean;
@@ -129,6 +132,7 @@ vi.mock("@/components/mcp-approvals/ReviewRequestSheet", () => ({
       targetRaw: string;
       requesterCount: number;
     }) => void;
+    decideDisabledReason?: string;
   }) =>
     open && request ? (
       <div
@@ -136,7 +140,12 @@ vi.mock("@/components/mcp-approvals/ReviewRequestSheet", () => ({
         data-request-id={request.id}
         data-target-raw={request.targetRaw}
       >
-        <button type="button" onClick={() => onDecide(request)}>
+        <button
+          type="button"
+          disabled={decideDisabledReason !== undefined}
+          title={decideDisabledReason}
+          onClick={() => onDecide(request)}
+        >
           Decide Access
         </button>
       </div>
@@ -383,6 +392,7 @@ function renderInventoryTable(
   roles: Role[] = [],
   members: AccessMember[] = [],
   onOpenServer?: (server: ShadowMCPInventoryServer) => void,
+  policiesUnavailable = false,
 ) {
   const queryClient = new QueryClient();
 
@@ -395,6 +405,7 @@ function renderInventoryTable(
           <ShadowMCPInventoryTable
             members={members}
             onOpenServer={onOpenServer}
+            policiesUnavailable={policiesUnavailable}
             projectID={projectID}
             roles={roles}
             shadowMCPPolicies={shadowMCPPolicies}
@@ -588,6 +599,9 @@ describe("ShadowMCPInventoryTable", () => {
 
     expect(screen.getByText("2 Access Requests")).toBeTruthy();
     expect(screen.queryByText("0 Access Requests")).toBeFalsy();
+    // A legacy request with no dossier yet is still a pending ask: the row
+    // sorts and filters as awaiting a decision, so its Review cell says so.
+    expect(screen.getAllByText("Awaiting decision")).toHaveLength(1);
   });
 
   it("opens the server detail page when an inventory row is clicked", async () => {
@@ -668,6 +682,57 @@ describe("ShadowMCPInventoryTable", () => {
     );
     expect(sheet.getAttribute("data-display-name")).toBe("unnamed.example.com");
     expect(sheet.getAttribute("data-approval-request-id")).toBeNull();
+  });
+
+  it("pauses deciding while the policy list is unavailable", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://unnamed.example.com/mcp",
+        }),
+        inventoryServer({
+          canonicalServerUrl: "npx -y example-package",
+          urlHost: "",
+          targetKind: "stdio_command",
+          approvalRequest: {
+            id: "stdio-request-1",
+            requesterCount: 1,
+            status: "requested",
+          },
+        }),
+      ],
+    });
+
+    renderInventoryTable("project-id-1", [], [], [], undefined, true);
+
+    await waitFor(() => {
+      expect(screen.getByText("https://unnamed.example.com/mcp")).toBeTruthy();
+    });
+
+    // Deciding writes grants against the policies the sheet can see; with
+    // the list failed, the row action waits and says why.
+    const calls = mocks.rowContextMenu.mock.calls as Array<
+      [Array<{ label: string; disabled?: boolean; description?: string }>]
+    >;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [actions] of calls) {
+      expect(actions).toEqual([
+        expect.objectContaining({
+          label: "Decide access",
+          disabled: true,
+          description:
+            "Policy data could not be loaded — deciding now would not be enforced",
+        }),
+      ]);
+    }
+
+    // The stdio review still opens, so the evidence can be read, but its
+    // Decide Access button waits too.
+    fireEvent.click(screen.getByText("npx -y example-package").closest("tr")!);
+    const sheet = await screen.findByTestId("review-request-sheet");
+    const decide = within(sheet).getByRole("button", { name: "Decide Access" });
+    expect((decide as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTestId("decide-access-sheet")).toBeNull();
   });
 
   it("renders stdio rows and reviews them in the sheet", async () => {
@@ -1332,6 +1397,28 @@ describe("matchesReviewFilter", () => {
     expect(matchesReviewFilter(superseded, "none")).toBe(false);
   });
 
+  it("counts a pending legacy bypass request as awaiting a decision", () => {
+    // The server counts only requests still waiting against an enabled
+    // blocking policy, so a row with one is pending whatever its dossier
+    // says — including when it has none.
+    const legacyOnly = inventoryServer({
+      canonicalServerUrl: url,
+      requestCount: 2,
+    });
+    expect(matchesReviewFilter(legacyOnly, "requested")).toBe(true);
+    expect(matchesReviewFilter(legacyOnly, "none")).toBe(false);
+    expect(matchesReviewFilter(legacyOnly, "approved")).toBe(false);
+
+    // A new ask on an approved server reads as both: decided, and waiting.
+    const reopened = inventoryServer({
+      canonicalServerUrl: url,
+      approvalRequest: { id: "r1", requesterCount: 1, status: "approved" },
+      requestCount: 1,
+    });
+    expect(matchesReviewFilter(reopened, "requested")).toBe(true);
+    expect(matchesReviewFilter(reopened, "approved")).toBe(true);
+  });
+
   it("treats an unreviewed dossier and no review as the same 'none' state", () => {
     const noReview = inventoryServer({ canonicalServerUrl: url });
     const unreviewed = inventoryServer({
@@ -1380,6 +1467,23 @@ describe("reviewSortRank", () => {
     expect(rank(undefined)).toBe(2);
     expect(rank("requested")).toBeLessThan(rank("approved"));
     expect(rank("approved")).toBeLessThan(rank("unreviewed"));
+  });
+
+  it("sorts a pending legacy bypass request with the pending decisions", () => {
+    expect(
+      reviewSortRank(
+        inventoryServer({ canonicalServerUrl: url, requestCount: 1 }),
+      ),
+    ).toBe(0);
+    expect(
+      reviewSortRank(
+        inventoryServer({
+          canonicalServerUrl: url,
+          approvalRequest: { id: "r1", requesterCount: 0, status: "denied" },
+          requestCount: 1,
+        }),
+      ),
+    ).toBe(0);
   });
 });
 

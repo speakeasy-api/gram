@@ -53,6 +53,7 @@ concurrency:
 
 jobs:
   wake-stack-e2e:
+    name: wake-stack-e2e
     # Booting the stack applies the Postgres migrations, and Atlas refuses to
     # apply a directory using `atlas:txtar` checks without a login. A fork PR
     # gets no secrets, so it would fail on that rather than on anything it
@@ -83,7 +84,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: ./.github/workflows/composite/go-mod-cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       # `./zero --agent` would otherwise pick the ClickHouse migration engine
       # by prompting for an Atlas Pro login, on a runner with nobody to ask.

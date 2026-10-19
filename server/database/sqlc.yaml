@@ -193,6 +193,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/demoseed/queries
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/demoseed/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/deployments/queries.sql
     engine: postgresql
     gen:
@@ -627,6 +637,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/signins/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/signins/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/usersessions/queries.sql
     engine: postgresql
     gen:
@@ -938,6 +958,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/admin/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/externalmcp/migration/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/externalmcp/migration/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

@@ -370,7 +370,7 @@ func TestOrganizationUserSessionIssuersCRUDAndListIsolation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	listed, err := ti.service.ListIssuers(ctx, &orggen.ListIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil})
+	listed, err := ti.service.ListIssuers(ctx, &orggen.ListIssuersPayload{Cursor: nil, Limit: nil, Tier: new("organization"), SessionToken: nil})
 	require.NoError(t, err)
 	require.Len(t, listed.Items, 2)
 

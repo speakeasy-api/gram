@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestTransferAtomicallyReplacesOwnerAndPreservesDirectPolicy(t *testing.T) {
@@ -31,6 +32,7 @@ func TestTransferAtomicallyReplacesOwnerAndPreservesDirectPolicy(t *testing.T) {
 	created, err := service.Create(validatedHumanContext(t, "org-a", "owner"), &gen.CreatePayload{Name: "Transfer agent"})
 	require.NoError(t, err)
 
+	seedGrant(t, t.Context(), conn, "org-a", urn.NewPrincipal(urn.PrincipalTypeUser, "owner"), authz.ScopeProjectRead, "project-one")
 	grant, err := service.CreatePolicyGrant(validatedHumanContext(t, "org-a", "owner"), &gen.CreatePolicyGrantPayload{
 		AgentID: created.ID, Scope: string(authz.ScopeProjectRead), Effect: "allow",
 		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "project-one"},
@@ -222,6 +224,9 @@ func TestLatchedRestoredOwnerCannotManagePolicyButExactWriteAdministratorCan(t *
 	createPayload := &gen.CreatePolicyGrantPayload{
 		AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "allow",
 		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "project-one"},
+	}
+	for _, userID := range []string{"owner", "admin"} {
+		seedGrant(t, ownerCtx, conn, "org-a", urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeProjectWrite, "project-one")
 	}
 	grant, err := service.CreatePolicyGrant(ownerCtx, createPayload)
 	require.NoError(t, err)

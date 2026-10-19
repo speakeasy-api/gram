@@ -35,10 +35,6 @@ type WorkloadAdmission struct {
 	AgentID string
 	// The assigned agent's name; empty when the assignment is missing.
 	AgentName string
-	// The project this workload may send hooks to; empty when it sends none.
-	HooksProjectID string
-	// That project's slug; empty when it sends none or the project was deleted.
-	HooksProjectSlug string
 	// False when this is a wildcard rule under an issuer that no longer permits
 	// wildcard matching. Such a rule is inert: it is stored, listed, and matches
 	// nothing.

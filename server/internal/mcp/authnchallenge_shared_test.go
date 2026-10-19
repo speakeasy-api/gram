@@ -134,7 +134,7 @@ func sharedAuthorize(t *testing.T, ctx context.Context, ti *testInstance, f shar
 	q := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {f.client.ClientID},
-		"redirect_uri":          {sharedTestRedirectURI},
+		"redirect_uri":          {f.client.RedirectUris[0]},
 		"state":                 {"client-state"},
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},

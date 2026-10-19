@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -30,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -488,6 +490,12 @@ func (s *Service) CreateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 	}
 
 	mode := string(payload.Mode)
+	strategy := string(conv.PtrValOr(payload.InputStrategy, types.SigintInputStrategy(evaluation.InputStrategySingleMessage)))
+	windowSize := conv.PtrValOr(payload.WindowSize, evaluation.DefaultWindowSize)
+	if err := evaluation.ValidateInputConfiguration(strategy, windowSize); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor message context")
+	}
+
 	expression := matching.DefaultExpression
 	if payload.MatchExpression != nil {
 		expression = *payload.MatchExpression
@@ -532,6 +540,8 @@ func (s *Service) CreateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		Description: conv.PtrToPGTextEmpty(payload.Description), Instructions: conv.PtrToPGTextEmpty(payload.Instructions), Mode: mode,
 		MatchExpression: expression,
 		Enabled:         conv.PtrValOr(payload.Enabled, true),
+		InputStrategy:   conv.ToPGText(strategy),
+		WindowSize:      pgtype.Int4{Int32: conv.SafeInt32(windowSize), Valid: true},
 	})
 	if isSlugConflict(err) {
 		return nil, oops.E(oops.CodeConflict, err, "sensor slug already exists")
@@ -678,7 +688,13 @@ func (s *Service) UpdateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		Mode: beforeRow.Mode, ID: id, ProjectID: *authCtx.ProjectID,
 		MatchExpression: beforeRow.MatchExpression,
 		Enabled:         conv.PtrValOr(payload.Enabled, beforeRow.Enabled),
+		InputStrategy:   conv.ToPGText(string(conv.PtrValOr(payload.InputStrategy, types.SigintInputStrategy(beforeRow.InputStrategy)))),
+		WindowSize:      pgtype.Int4{Int32: conv.SafeInt32(conv.PtrValOr(payload.WindowSize, int(beforeRow.WindowSize))), Valid: true},
 	}
+	if err := evaluation.ValidateInputConfiguration(params.InputStrategy.String, int(params.WindowSize.Int32)); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor message context")
+	}
+
 	if payload.Name != nil {
 		params.Name, err = validateName(*payload.Name)
 		if err != nil {
@@ -902,6 +918,8 @@ func sensorViewFromAffected(sensor repo.ListSensorsForSignalRow) *types.SigintSe
 		Description: conv.FromPGText[string](sensor.Description), Instructions: conv.FromPGText[string](sensor.Instructions),
 		Mode: types.SigintSensorMode(sensor.Mode), SignalIds: signalIDs,
 		MatchExpression: sensor.MatchExpression,
+		InputStrategy:   types.SigintInputStrategy(sensor.InputStrategy),
+		WindowSize:      int(sensor.WindowSize),
 		Enabled:         sensor.Enabled,
 		CreatedAt:       sensor.CreatedAt.Time.Format(time.RFC3339), UpdatedAt: sensor.UpdatedAt.Time.Format(time.RFC3339),
 	}

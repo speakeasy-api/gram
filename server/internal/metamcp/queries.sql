@@ -310,7 +310,9 @@ RETURNING *;
 -- Hosted and unproxied members have no upstream and cannot claim.
 SELECT
     s.id AS mcp_server_id,
+    s.project_id AS project_id,
     s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
     (t.id IS NOT NULL)::boolean AS tunneled
 FROM meta_mcp_server_members m
@@ -335,6 +337,78 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND s.remote_session_issuer_id = @remote_session_issuer_id
 ORDER BY m.sort_order, m.created_at, m.id;
 
+-- name: ListOrganizationMCPServersForRemoteSessionIssuer :many
+-- The organization gateway's counterpart to
+-- ListMetaMCPMembersForRemoteSessionIssuer: the organization's proxied servers
+-- that authenticate against a given authorization server, filtered as
+-- ListServableMCPServersByOrganizationID so a server the gateway cannot serve
+-- cannot claim a credential either. Returns the same columns, so callers
+-- treat both alike.
+--
+-- project_id narrows the claim to one project's servers, for a client that a
+-- project owns: that client's grant routes only to its own project's members.
+-- NULL considers every project, for an organization-level client. Callers
+-- apply each server's network access mode for the request's surface, as the
+-- member snapshot does.
+SELECT
+    s.id AS mcp_server_id,
+    s.project_id AS project_id,
+    s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
+    (t.id IS NOT NULL)::boolean AS tunneled
+FROM mcp_servers s
+JOIN projects p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = s.project_id
+ AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = s.project_id
+ AND t.deleted IS FALSE
+WHERE p.organization_id = @organization_id
+  AND (sqlc.narg('project_id')::uuid IS NULL OR s.project_id = sqlc.narg('project_id')::uuid)
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
+  AND (r.id IS NOT NULL OR t.id IS NOT NULL)
+  AND s.remote_session_issuer_id = @remote_session_issuer_id
+ORDER BY s.project_id, s.slug;
+
+-- name: ListOrganizationProxiedMCPServerResources :many
+-- The organization gateway's counterpart to ListMetaMCPProxiedMemberResources,
+-- over the servers ListOrganizationMCPServersForRemoteSessionIssuer considers.
+-- Each row carries its server's project and network access mode, which the
+-- caller matches against a card's client and the request's surface.
+SELECT
+    s.remote_session_issuer_id,
+    s.id AS mcp_server_id,
+    s.project_id AS project_id,
+    s.network_access_mode AS mcp_server_network_access_mode,
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
+FROM mcp_servers s
+JOIN projects p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = s.project_id
+ AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = s.project_id
+ AND t.deleted IS FALSE
+WHERE p.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
+  AND s.remote_session_issuer_id IS NOT NULL
+  AND (r.id IS NOT NULL OR t.id IS NOT NULL)
+ORDER BY s.project_id, s.slug;
+
 -- name: ListMetaMCPProxiedMemberResources :many
 -- Every proxied member's authorization server and RFC 8707 resource, filtered
 -- as ListMetaMCPMembersForRemoteSessionIssuer but across all issuers, so a
@@ -342,6 +416,9 @@ ORDER BY m.sort_order, m.created_at, m.id;
 -- read.
 SELECT
     s.remote_session_issuer_id,
+    s.id AS mcp_server_id,
+    s.project_id AS project_id,
+    s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
 FROM meta_mcp_server_members m
 JOIN mcp_servers s

@@ -57,7 +57,7 @@ func TestConsentChainCheck_SuccessConnectsWithRuntimeRequest(t *testing.T) {
 	var deadline time.Time
 	g.acquire = func(ctx context.Context, _ identitychaining.Request) identitychaining.Outcome {
 		deadline, _ = ctx.Deadline()
-		return identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false}
+		return identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
 	}
 
 	w, err := postChainCheck(t, fx, nil)
@@ -96,7 +96,7 @@ func TestConsentChainCheck_RejectionsAreGeneric(t *testing.T) {
 		{identitychaining.StageSelection, identitychaining.ReasonConfigurationRequired, "isn't set up for identity provider sign-in"},
 		{identitychaining.StageDelegation, identitychaining.ReasonReauthenticationRequired, "sign-in for"},
 	} {
-		outcome := identitychaining.Outcome{Stage: tc.stage, Reason: tc.reason, Confidence: identitychaining.ConfidenceInferred, Retryable: false, Cached: false}
+		outcome := identitychaining.Outcome{Stage: tc.stage, Reason: tc.reason, Confidence: identitychaining.ConfidenceInferred, Retryable: false, Cached: false, Provider: ""}
 		g.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome { return outcome }
 
 		w, err := postChainCheck(t, fx, nil)
@@ -116,10 +116,11 @@ func TestConsentChainCheck_TransientAndAmbiguousAreUnknown(t *testing.T) {
 	g := setConsentGovernor(t, fx, issuer, consentChainedUpstream)
 
 	for _, outcome := range []identitychaining.Outcome{
-		{Stage: identitychaining.StagePersistence, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false},
-		{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonUnknownRejection, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false},
-		{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonStaleConfiguration, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false},
-		{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false},
+		{Stage: identitychaining.StagePersistence, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false, Provider: ""},
+		{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonUnknownRejection, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""},
+		{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonStaleConfiguration, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false, Provider: ""},
+		{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""},
+		{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonProviderUnavailable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""},
 	} {
 		g.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome { return outcome }
 		w, err := postChainCheck(t, fx, nil)
@@ -135,7 +136,7 @@ func TestConsentChainCheck_TimeoutIsUnknown(t *testing.T) {
 	g := setConsentGovernor(t, fx, issuer, consentChainedUpstream)
 	g.acquire = func(ctx context.Context, _ identitychaining.Request) identitychaining.Outcome {
 		<-ctx.Done()
-		return identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceUnknown, Retryable: true, Cached: false}
+		return identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceUnknown, Retryable: true, Cached: false, Provider: ""}
 	}
 
 	started := time.Now()
@@ -217,4 +218,32 @@ func TestConsentPage_CachedChainedCredentialRendersConnected(t *testing.T) {
 	require.Contains(t, page, "1 of 1 connected")
 	require.Contains(t, page, "Use a separate sign-in instead")
 	require.Empty(t, g.acquired, "rendering reads stored credentials only")
+}
+
+func TestConsentChainCheck_UnknownAllowsAuthorizationWithoutPersonalOAuth(t *testing.T) {
+	t.Parallel()
+	_, fx, issuer := seedChainedConsentEndpoint(t, "ema-consent-unknown")
+	g := setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	g.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome {
+		return identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceInferred, Retryable: true, Cached: false, Provider: ""}
+	}
+	w, err := postChainCheck(t, fx, nil)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"status": "unknown", "message": "Managed by your identity provider"}, chainCheckResult(t, w))
+	code, page, redirect := render(t, fx)
+	require.Equal(t, http.StatusOK, code)
+	require.Nil(t, redirect, "must not redirect to personal upstream OAuth")
+	require.Contains(t, page, `data-consent-enabled="true"`)
+	require.Contains(t, page, "Use a separate sign-in instead")
+	require.NotContains(t, page, "Connect a service above to enable access.")
+	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	approved := httptest.NewRecorder()
+	require.NoError(t, fx.ti.service.ServeConsent(approved, req, fx.endpoint))
+	require.Equal(t, http.StatusSeeOther, approved.Code)
+	location, err := url.Parse(approved.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "example.com", location.Host, "approval returns to the MCP client, not upstream OAuth")
+	require.NotEmpty(t, location.Query().Get("code"))
 }

@@ -1,6 +1,6 @@
 // The agent gateway MCP surface: one URL per agent, whose members are derived
 // from the agent's own grants rather than from stored membership rows. It
-// reuses the meta-server runtime wholesale — same four-tool contract, same
+// reuses the meta-server runtime wholesale — same tool contract, same
 // member dispatch — so the only thing particular to it is how the request is
 // authenticated and how membership is resolved.
 
@@ -91,6 +91,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 		Name:                "Agent gateway",
 		// NULL serves Speakeasy's built-in gateway instructions.
 		Instructions:      pgtype.Text{String: "", Valid: false},
+		DiscoveryMode:     "progressive",
 		Visibility:        visibility.Private,
 		NetworkAccessMode: pgtype.Text{String: "", Valid: false},
 		CreatedAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -102,7 +103,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 		ProjectID: uuid.Nil,
 	}
 
-	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, endpoint, metaServer, agentID); err != nil {
+	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, endpoint, metaServer, metaMembership{agentID: agentID, organization: false}, nil); err != nil {
 		return fmt.Errorf("serve agent gateway: %w", err)
 	}
 	return nil

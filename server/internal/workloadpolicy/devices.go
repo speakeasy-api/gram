@@ -66,21 +66,18 @@ var (
 var deviceAgentScopes = []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest}
 
 // requireDeviceAgentGrants refuses a join token for an agent whose live policy
-// lacks the device-agent scopes, naming each one missing. Hooks are checked for
-// hooksProjectID, the project the device will send them to, so an agent bound
-// to another project is refused here rather than on every send.
-func (s *Service) requireDeviceAgentGrants(ctx context.Context, organizationID string, agentID uuid.UUID, hooksProjectID uuid.UUID) error {
+// lacks the device-agent scopes, naming each one missing. The hooks check names
+// no project, so a grant bounded to any one project satisfies it: which
+// project a hook may reach is decided per request, against the project the
+// hook names.
+func (s *Service) requireDeviceAgentGrants(ctx context.Context, organizationID string, agentID uuid.UUID) error {
 	grants, err := runtimepolicy.LoadAgentPolicy(ctx, s.db, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading agent policy").LogError(ctx, s.logger)
 	}
 	var missing []string
 	for _, scope := range deviceAgentScopes {
-		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}
-		if scope == authz.ScopeOrgHooksIngest {
-			check = authz.HooksIngestCheck(organizationID, hooksProjectID.String())
-		}
-		if !authz.GrantsSatisfy(grants, check) {
+		if !authz.GrantsSatisfy(grants, authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}) {
 			missing = append(missing, string(scope))
 		}
 	}
@@ -88,32 +85,6 @@ func (s *Service) requireDeviceAgentGrants(ctx context.Context, organizationID s
 		return oops.E(oops.CodeFailedPrecondition, nil, "the agent's policy must grant %s on the organization before a device can enroll under it", strings.Join(missing, " and "))
 	}
 	return nil
-}
-
-// resolveHooksProject validates the project a workload is bound to for hooks:
-// it must be a live project in organizationID that the caller can read, since
-// binding a workload to it lets that workload write hooks into it.
-func (s *Service) resolveHooksProject(ctx context.Context, organizationID string, rawID string) (repo.GetHooksProjectRow, error) {
-	id, err := uuid.Parse(rawID)
-	if err != nil {
-		return repo.GetHooksProjectRow{}, oops.E(oops.CodeInvalid, err, "hooks_project_id is not a valid uuid")
-	}
-	project, err := s.repo.GetHooksProject(ctx, repo.GetHooksProjectParams{OrganizationID: organizationID, ID: id})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return repo.GetHooksProjectRow{}, oops.E(oops.CodeNotFound, err, "hooks project not found")
-	case err != nil:
-		return repo.GetHooksProjectRow{}, oops.E(oops.CodeUnexpected, err, "error resolving hooks project").LogError(ctx, s.logger)
-	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   project.ID.String(),
-		Dimensions:   nil,
-	}); err != nil {
-		return repo.GetHooksProjectRow{}, err
-	}
-	return project, nil
 }
 
 func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.CreateDeviceJoinTokenPayload) (*gen.WorkloadDeviceJoinToken, error) {
@@ -157,12 +128,7 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 		}
 	}
 
-	hooksProject, err := s.resolveHooksProject(ctx, t.organizationID, payload.HooksProjectID)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.requireDeviceAgentGrants(ctx, t.organizationID, agent.ID, hooksProject.ID); err != nil {
+	if err := s.requireDeviceAgentGrants(ctx, t.organizationID, agent.ID); err != nil {
 		return nil, err
 	}
 
@@ -182,7 +148,6 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 		OrganizationID:  t.organizationID,
 		TokenHash:       hash,
 		AgentID:         agent.ID,
-		HooksProjectID:  hooksProject.ID,
 		CreatedByUserID: authCtx.UserID,
 		ExpiresAt:       pgtype.Timestamptz{Time: expiresAt, InfinityModifier: pgtype.Finite, Valid: true},
 	})
@@ -198,11 +163,10 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 		JoinTokenURN:         urn.NewWorkloadDeviceJoinToken(row.ID),
 		JoinTokenDisplayName: agent.Name,
 		JoinTokenSnapshotAfter: &audit.WorkloadDeviceJoinTokenSnapshot{
-			AgentID:        agent.ID.String(),
-			ExpiresAt:      row.ExpiresAt.Time.UTC().Format(time.RFC3339),
-			HooksProjectID: hooksProject.ID.String(),
-			DeviceSubject:  "",
-			Hostname:       "",
+			AgentID:       agent.ID.String(),
+			ExpiresAt:     row.ExpiresAt.Time.UTC().Format(time.RFC3339),
+			DeviceSubject: "",
+			Hostname:      "",
 		},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording join token").LogError(ctx, s.logger)
@@ -282,18 +246,8 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 	// Re-checked too: grants removed since the token was issued would enroll a
 	// device every request of which is refused. Failing here rolls back the
 	// redemption, so the token is not spent.
-	if err := s.requireDeviceAgentGrants(ctx, org, agent.ID, joinToken.HooksProjectID); err != nil {
+	if err := s.requireDeviceAgentGrants(ctx, org, agent.ID); err != nil {
 		return nil, err
-	}
-
-	// The project must still be live: a device bound to a deleted project
-	// would enroll unable to send hooks. Failing rolls back the redemption.
-	hooksProject, err := q.GetHooksProject(ctx, repo.GetHooksProjectParams{OrganizationID: org, ID: joinToken.HooksProjectID})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeFailedPrecondition, err, "the join token's hooks project was deleted; ask for a new join token")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving hooks project").LogError(ctx, s.logger)
 	}
 
 	issuer, err := s.deviceIssuer(ctx, dbtx, org, actor)
@@ -326,7 +280,6 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 		MatchKind:        string(workloadidentity.MatchKindExact),
 		Name:             conv.PtrToPGTextEmpty(payload.Hostname),
 		Tags:             []string{},
-		HooksProjectID:   uuid.NullUUID{UUID: hooksProject.ID, Valid: true},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error admitting device").LogError(ctx, s.logger)
@@ -363,18 +316,16 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 		JoinTokenURN:         urn.NewWorkloadDeviceJoinToken(joinToken.ID),
 		JoinTokenDisplayName: agent.Name,
 		JoinTokenSnapshotBefore: &audit.WorkloadDeviceJoinTokenSnapshot{
-			AgentID:        agent.ID.String(),
-			ExpiresAt:      joinToken.ExpiresAt.Time.UTC().Format(time.RFC3339),
-			HooksProjectID: hooksProject.ID.String(),
-			DeviceSubject:  "",
-			Hostname:       "",
+			AgentID:       agent.ID.String(),
+			ExpiresAt:     joinToken.ExpiresAt.Time.UTC().Format(time.RFC3339),
+			DeviceSubject: "",
+			Hostname:      "",
 		},
 		JoinTokenSnapshotAfter: &audit.WorkloadDeviceJoinTokenSnapshot{
-			AgentID:        agent.ID.String(),
-			ExpiresAt:      joinToken.ExpiresAt.Time.UTC().Format(time.RFC3339),
-			HooksProjectID: hooksProject.ID.String(),
-			DeviceSubject:  subject,
-			Hostname:       conv.PtrValOr(payload.Hostname, ""),
+			AgentID:       agent.ID.String(),
+			ExpiresAt:     joinToken.ExpiresAt.Time.UTC().Format(time.RFC3339),
+			DeviceSubject: subject,
+			Hostname:      conv.PtrValOr(payload.Hostname, ""),
 		},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording join token redemption").LogError(ctx, s.logger)
@@ -385,12 +336,10 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 	}
 
 	return &gen.WorkloadDeviceRegistration{
-		DeviceSubject:    subject,
-		Issuer:           issuer.Issuer,
-		AgentID:          agent.ID.String(),
-		OrganizationID:   org,
-		HooksProjectID:   hooksProject.ID.String(),
-		HooksProjectSlug: hooksProject.Slug,
+		DeviceSubject:  subject,
+		Issuer:         issuer.Issuer,
+		AgentID:        agent.ID.String(),
+		OrganizationID: org,
 	}, nil
 }
 
@@ -423,12 +372,10 @@ func (s *Service) replayedDeviceRegistration(ctx context.Context, q *repo.Querie
 	)
 
 	return &gen.WorkloadDeviceRegistration{
-		DeviceSubject:    replay.Subject.String,
-		Issuer:           replay.Issuer,
-		AgentID:          replay.AgentID.String(),
-		OrganizationID:   replay.OrganizationID,
-		HooksProjectID:   replay.HooksProjectID.String(),
-		HooksProjectSlug: replay.HooksProjectSlug,
+		DeviceSubject:  replay.Subject.String,
+		Issuer:         replay.Issuer,
+		AgentID:        replay.AgentID.String(),
+		OrganizationID: replay.OrganizationID,
 	}, nil
 }
 

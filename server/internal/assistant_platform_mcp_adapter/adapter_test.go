@@ -8,6 +8,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -318,4 +319,20 @@ func TestPluginReadSchemasHideAndInjectTheAssistantProject(t *testing.T) {
 		require.NoError(t, json.Unmarshal(arguments, &decoded))
 		require.Equal(t, projectPolicy().ProjectID, decoded["project_id"], "%q acts in the assistant's project, not the model's", read.name)
 	}
+}
+
+// Platform MCP tools that list individual tool calls need log:read on the
+// project for every call, so the assistant is only offered them when it holds
+// it. Coarse discovery scopes on other tools are not carried over.
+func TestExternalToolsCarryLogReadRequirement(t *testing.T) {
+	t.Parallel()
+
+	tools := ExternalTools([]platformmcp.Descriptor{
+		{Name: "search_tool_calls", Meta: platformmcp.ToolMeta{DiscoveryScopes: []authz.Scope{authz.ScopeLogRead}}},
+		{Name: "get_project_overview", Meta: platformmcp.ToolMeta{DiscoveryScopes: []authz.Scope{authz.ScopeProjectRead}}},
+	}, nil)
+
+	require.Len(t, tools, 2)
+	require.Equal(t, string(authz.ScopeLogRead), tools[0].RequiredScope)
+	require.Empty(t, tools[1].RequiredScope)
 }

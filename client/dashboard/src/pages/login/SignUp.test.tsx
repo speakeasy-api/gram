@@ -20,13 +20,33 @@ vi.mock("./components/auth-shell", () => ({
   AuthShell: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("./components/signup-panel", () => ({
-  SignUpPanel: ({ redirectTo }: { redirectTo?: string | null }) => (
-    <div data-testid="signup-panel" data-redirect-to={redirectTo} />
+  SignUpPanel: ({
+    redirectTo,
+    partnerCode,
+  }: {
+    redirectTo?: string | null;
+    partnerCode?: string;
+  }) => (
+    <div
+      data-testid="signup-panel"
+      data-redirect-to={redirectTo}
+      data-partner-code={partnerCode}
+    />
   ),
 }));
 vi.mock("./components/register-panel", () => ({
-  RegisterPanel: ({ redirectTo }: { redirectTo?: string | null }) => (
-    <div data-testid="register-panel" data-redirect-to={redirectTo} />
+  RegisterPanel: ({
+    redirectTo,
+    partnerCode,
+  }: {
+    redirectTo?: string | null;
+    partnerCode?: string;
+  }) => (
+    <div
+      data-testid="register-panel"
+      data-redirect-to={redirectTo}
+      data-partner-code={partnerCode}
+    />
   ),
 }));
 
@@ -140,4 +160,34 @@ describe("SignUp", () => {
     expect(screen.getByTestId("navigate").getAttribute("data-to")).toBe("/");
     expect(screen.queryByTestId("register-panel")).toBeNull();
   });
+});
+
+it.each([
+  ["", "signup-panel"],
+  ["session", "register-panel"],
+])("retains the partner query for session %s", (session, panel) => {
+  mocks.useSession.mockReturnValue({ session, activeOrganizationId: "" });
+  mocks.useSearchParams.mockReturnValue([
+    new URLSearchParams("partner_code=partner&signin_error=init_error"),
+    vi.fn(),
+  ]);
+  render(<SignUp />);
+  expect(screen.getByTestId(panel).getAttribute("data-partner-code")).toBe(
+    "partner",
+  );
+});
+
+it("does not offer redemption to an existing organization", () => {
+  mocks.useSession.mockReturnValue({
+    session: "session",
+    activeOrganizationId: "existing-org",
+  });
+  mocks.useSearchParams.mockReturnValue([
+    new URLSearchParams("partner_code=partner"),
+    vi.fn(),
+  ]);
+  render(<SignUp />);
+  expect(screen.getByTestId("navigate").getAttribute("data-to")).toBe("/");
+  expect(screen.queryByTestId("signup-panel")).toBeNull();
+  expect(screen.queryByTestId("register-panel")).toBeNull();
 });

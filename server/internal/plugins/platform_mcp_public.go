@@ -210,9 +210,15 @@ func platformMCPMarketplaceReadme(marketplaceRepoURL string, mode platformMCPMar
 	}
 
 	b.WriteString("## Claude Code\n\n")
-	b.WriteString("Merge this into `~/.claude/settings.json`, or into managed settings for your organization:\n\n")
+	b.WriteString("```\n")
+	b.WriteString("/plugin marketplace add " + marketplaceRepoURL + "\n")
+	b.WriteString("/plugin install " + platformMCPPluginName + "@" + PublicMarketplaceName + "\n")
+	b.WriteString("```\n\n")
+	b.WriteString("Then open `/mcp`, select Platform MCP, and choose Authenticate.\n\n")
+	b.WriteString("### Keep Platform MCP up to date\n\n")
+	b.WriteString("`/plugin marketplace add` leaves auto-update off. To turn it on for yourself, run `/plugin`, open **Marketplaces**, select `" + PublicMarketplaceName + "`, and choose **Enable auto-update**.\n\n")
+	b.WriteString("To turn it on for everyone in your organization, merge this into managed settings, or into `~/.claude/settings.json` for yourself, and restart Claude Code:\n\n")
 	b.WriteString(claudeCodeSettingsSnippet(PublicMarketplaceName, marketplaceRepoURL, platformMCPPluginName))
-	b.WriteString("Restart Claude Code, then open `/mcp`, select Platform MCP, and choose Authenticate.\n\n")
 
 	b.WriteString("## Codex\n\n")
 	b.WriteString("```\n")

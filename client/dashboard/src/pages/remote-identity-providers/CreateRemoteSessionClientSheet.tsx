@@ -58,7 +58,6 @@ import {
   parseScopes,
   TUNNELED_DCR_PERMISSION_MESSAGE,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
-import { IssuerScopeOverrideAlert } from "./clientAlerts";
 import { issuerDocumentationLinks } from "./issuerDocumentationLinks";
 
 // Sentinel for the unselected project in the org-level-issuer scope picker.
@@ -476,7 +475,8 @@ export function CreateRemoteSessionClientSheet({
               </Stack>
             ) : (
               <Text muted small>
-                The client will be created in this provider's project.
+                The client will be created in this authorization server's
+                project.
               </Text>
             )}
 
@@ -669,7 +669,6 @@ export function CreateRemoteSessionClientSheet({
               audienceOverride={audienceOverride}
               onScopeOverrideChange={setScopeOverride}
               onAudienceOverrideChange={setAudienceOverride}
-              scopeWarning={<IssuerScopeOverrideAlert issuer={issuer} />}
             />
           </Stack>
 

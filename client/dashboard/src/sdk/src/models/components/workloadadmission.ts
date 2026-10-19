@@ -37,14 +37,6 @@ export type WorkloadAdmission = {
   agentName: string;
   createdAt: Date;
   /**
-   * The project this workload may send hooks to; empty when it sends none.
-   */
-  hooksProjectId: string;
-  /**
-   * That project's slug; empty when it sends none or the project was deleted.
-   */
-  hooksProjectSlug: string;
-  /**
    * The admission id.
    */
   id: string;
@@ -108,8 +100,6 @@ export const WorkloadAdmission$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    hooks_project_id: z.string(),
-    hooks_project_slug: z.string(),
     id: z.string(),
     issuer: z.string(),
     issuer_name: z.string(),
@@ -131,8 +121,6 @@ export const WorkloadAdmission$inboundSchema: z.ZodMiniType<
       "agent_id": "agentId",
       "agent_name": "agentName",
       "created_at": "createdAt",
-      "hooks_project_id": "hooksProjectId",
-      "hooks_project_slug": "hooksProjectSlug",
       "issuer_name": "issuerName",
       "match_kind": "matchKind",
       "organization_id": "organizationId",

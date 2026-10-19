@@ -592,6 +592,14 @@ export function AgentProviderIcon({
       return <CopilotIcon className={className} />;
     case "gemini":
       return <GeminiIcon className={className} />;
+    case "antigravity":
+      return (
+        <img
+          src="/icons/platforms/antigravity.png"
+          alt=""
+          className={className}
+        />
+      );
     case "glean":
       return <GleanIcon className={className} />;
     case "bedrock":

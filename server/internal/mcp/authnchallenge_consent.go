@@ -178,6 +178,10 @@ type consentTemplateData struct {
 	// ConsentToolsPrefill is the subject's stored selection serialized for
 	// the island bootstrap; empty when there is no restrictive prefill.
 	ConsentToolsPrefill string
+	// ConsentToolsDeferred tells the island that a "not connected" inventory
+	// answer only means identity chaining has not run yet, so approval
+	// proceeds with the unrestricted default.
+	ConsentToolsDeferred bool
 	// ValidationDeadlineMS is the callback probe's absolute deadline. Only first-party pages poll because reloading interactive consent would discard unsaved tool choices.
 	ValidationDeadlineMS int64
 	// ConnectedCardCount is the number of RemoteSessionCards already linked or
@@ -196,6 +200,10 @@ type consentTemplateData struct {
 	AgentSelectionEnabled bool
 	AgentOptions          []consentAgentOption
 	AgentSetupURL         string
+	// Gateway replaces the list of services on a gateway's page with its
+	// servers, or, on one server's connect page, narrows RemoteSessionCards
+	// to that server's services. Nil for every other endpoint.
+	Gateway *gatewayConsentView
 }
 
 // sessionDurationOption is one <option> of the consent page's session length
@@ -306,6 +314,15 @@ type remoteSessionCard struct {
 	CanValidate bool
 	// Pending marks a card whose automatic verification is still running, so the page refreshes until its verdict lands.
 	Pending bool
+	// SharedServerNote names, on a gateway server's connect page, the other
+	// servers connecting this service also makes usable. Empty elsewhere.
+	SharedServerNote string
+
+	// remoteSessionIssuerID and projectID are the card's client's
+	// authorization server and owning project, which match it to the gateway
+	// servers it signs in to.
+	remoteSessionIssuerID uuid.UUID
+	projectID             uuid.NullUUID
 }
 
 // cardPanel is which detail lines a card renders. The status line says whether
@@ -389,16 +406,6 @@ func (p autoRefreshPolicy) IsUserControlled() bool {
 // IsEnforced reports whether the organization requires auto refresh.
 func (p autoRefreshPolicy) IsEnforced() bool {
 	return p == autoRefreshEnforced
-}
-
-// consentToolFilteringEnabled reports the organization admin's durable opt-in
-// from the consent_tool_filtering product feature managed on MCP Connections.
-// An unavailable checker degrades to off.
-func (s *Service) consentToolFilteringEnabled(ctx context.Context, _ *slog.Logger, organizationID string) bool {
-	if s.platformFeatureChecker == nil {
-		return false
-	}
-	return s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureConsentToolFiltering))
 }
 
 // resolveAutoRefreshPolicy reports the organization's automatic-refresh policy.
@@ -573,6 +580,31 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
+	// A gateway's page approves the gateway and lists its servers; the
+	// services it shows are those of one server, on that server's connect
+	// page. A first-party connect opened for a server lands on its page, and
+	// an explicit server parameter (empty for the gateway's own page) wins.
+	var gateway *gatewayConsentView
+	focusServer := ""
+	if endpoint.MetaMcpServerID.Valid {
+		focus := challengeState.FocusServer
+		if r.URL.Query().Has("server") {
+			focus = r.URL.Query().Get("server")
+		}
+		if len(focus) > maxFocusServerLength {
+			return oops.E(oops.CodeBadRequest, nil, "server is too long").LogError(ctx, logger)
+		}
+		view, focused, gerr := s.gatewayConsent(ctx, endpoint, challengeState, cards, focus)
+		if gerr != nil {
+			return oops.E(oops.CodeUnexpected, gerr, "build gateway consent").LogError(ctx, logger)
+		}
+		gateway = view
+		cards = focused
+		if view.Focus != nil {
+			focusServer = view.Focus.Slug
+		}
+	}
+
 	connectedCardCount := 0
 	chainedCardCount := 0
 	autoRefreshHasSessions := false
@@ -594,7 +626,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
 	// Chained cards enable access too: the runtime chains when no interactive token exists.
-	consentEnabled := len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
+	// A gateway's servers each connect on their own page, and a server not
+	// yet connected answers its tool calls with a link to that page, so
+	// approving the gateway waits on none of them.
+	consentEnabled := gateway != nil || len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
 
 	agentSelectionEnabled := false
 	agentSetupURL := ""
@@ -622,8 +657,13 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// When an eligible existing agent is available, render the choice before
 	// starting any human remote-credential flow. A user who chooses themselves
 	// can still connect the service from the rendered cards.
-	if len(agentOptions) == 0 {
-		if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, cards); err != nil {
+	// On a gateway, only a connect opened for one server, as a tool call's
+	// link opens it, goes straight on to that server's provider. A server
+	// picked from the gateway's list shows its page first, which says what
+	// connecting does.
+	autoConnect := gateway == nil || (gateway.Focus != nil && challengeState.FirstParty && challengeState.FocusServer == gateway.Focus.Slug)
+	if len(agentOptions) == 0 && autoConnect {
+		if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, cards, focusServer); err != nil {
 			return err
 		} else if redirected {
 			return nil
@@ -633,8 +673,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// First-party pages mint no user session, so there is no length to pick.
 	// A lookup failure degrades to no picker rather than a failed render; the
 	// mint falls back to the issuer default in that case anyway.
+	// A gateway server's connect page has no approval for a length to apply to.
 	var durationOptions []sessionDurationOption
-	if !challengeState.FirstParty {
+	if !challengeState.FirstParty && focusServer == "" {
 		if issuer, ierr := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 			ID:             endpoint.UserSessionIssuerID,
 			ProjectID:      endpoint.ProjectID,
@@ -650,7 +691,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// approve-button enabling, so unavailable checks must hide it rather than
 	// prevent unrestricted approval.
 	showToolsIsland := false
-	if !challengeState.FirstParty && s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
+	if !challengeState.FirstParty {
 		var eligibilityErr error
 		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
 		if eligibilityErr != nil {
@@ -677,6 +718,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			s.consentToolSelectionPrefill(ctx, endpoint, *challengeState.Subject, clientRowID),
 		)
 	}
+	inventoryDeferred := consentInventoryDeferred(cards, prefillAttr != "")
 
 	data := consentTemplateData{
 		ClientName:              clientName,
@@ -702,6 +744,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
+		ConsentToolsDeferred:    inventoryDeferred,
 		ValidationDeadlineMS:    validationDeadlineMS,
 		ConnectedCardCount:      connectedCardCount,
 		Styles:                  consentPageStyles,
@@ -709,10 +752,16 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		AgentSelectionEnabled:   agentSelectionEnabled,
 		AgentOptions:            agentOptions,
 		AgentSetupURL:           agentSetupURL,
+		Gateway:                 gateway,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	// Consent cannot be embedded, even by the same origin. Do not restrict
+	// form-action: consent submissions redirect to clients on other origins,
+	// including loopback addresses and custom URI schemes.
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+	w.Header().Set("X-Frame-Options", "DENY")
 	if err := consentTemplate.Execute(w, data); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "render consent template").LogError(ctx, logger)
 	}
@@ -791,6 +840,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 		}
 		s.evictConsentToolInventory(ctx, stateID)
+		s.retireDeniedConsentCredentials(ctx, logger, endpoint, challengeState)
 		denyURL, err := buildClientRedirect(clientRedirectParams{
 			RedirectURI:      challengeState.RedirectURI,
 			Issuer:           issuer,
@@ -992,7 +1042,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		AgentAuthorization:          agentAuthorization,
 		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
 		ToolSelection:               toolSelection,
+		SignInID:                    nil,
 		CreatedAt:                   time.Now(),
+	}
+	// Only a human subject's own session is linked to its sign-in.
+	if agentAuthorization == nil && subject.Kind == urn.SessionSubjectKindUser && subject.ID == challengeState.AuthorizerUserID {
+		grant.SignInID = challengeState.SignInID
 	}
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
@@ -1332,13 +1387,36 @@ type resourceDisplayOwner struct {
 	load     func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error)
 	loaded   bool
 	// upstreams is each issuer's member resources, keyed by remote_session_issuer_id.
-	upstreams map[uuid.UUID][]string
+	upstreams map[uuid.UUID][]metamcprepo.ListMetaMCPProxiedMemberResourcesRow
 }
 
-func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint) *resourceDisplayOwner {
+func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) *resourceDisplayOwner {
 	return &resourceDisplayOwner{
 		endpoint: endpoint,
 		load: func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error) {
+			if endpoint.IsOrganizationGateway() {
+				rows, err := metamcprepo.New(s.db).ListOrganizationProxiedMCPServerResources(ctx, endpoint.OrganizationID)
+				if err != nil {
+					return nil, fmt.Errorf("list organization proxied MCP server resources: %w", err)
+				}
+				// Only servers the subject reaches lend a card their resource;
+				// another server's would say it exists.
+				members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+				if err != nil {
+					return nil, err
+				}
+				admitted := make(map[uuid.UUID]bool, len(members))
+				for _, member := range members {
+					admitted[member.serverID] = true
+				}
+				converted := make([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, 0, len(rows))
+				for _, row := range rows {
+					if admitted[row.McpServerID] {
+						converted = append(converted, metamcprepo.ListMetaMCPProxiedMemberResourcesRow(row))
+					}
+				}
+				return converted, nil
+			}
 			return metamcprepo.New(s.db).ListMetaMCPProxiedMemberResources(ctx, metamcprepo.ListMetaMCPProxiedMemberResourcesParams{
 				MetaMcpServerID: endpoint.MetaMcpServerID.UUID,
 				ProjectID:       endpoint.ProjectID,
@@ -1361,16 +1439,22 @@ func (o *resourceDisplayOwner) owns(ctx context.Context, c remotesessions.Client
 		if err != nil {
 			return false, fmt.Errorf("list meta MCP member resources for resource display: %w", err)
 		}
-		o.upstreams = make(map[uuid.UUID][]string, len(rows))
+		o.upstreams = make(map[uuid.UUID][]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, len(rows))
 		for _, row := range rows {
 			if row.RemoteSessionIssuerID.Valid {
-				o.upstreams[row.RemoteSessionIssuerID.UUID] = append(o.upstreams[row.RemoteSessionIssuerID.UUID], row.UpstreamUrl)
+				o.upstreams[row.RemoteSessionIssuerID.UUID] = append(o.upstreams[row.RemoteSessionIssuerID.UUID], row)
 			}
 		}
 		o.loaded = true
 	}
-	return slices.ContainsFunc(o.upstreams[c.RemoteSessionIssuerID], func(upstream string) bool {
-		return wellknown.SameResource(c.ResourceIdentifier, upstream)
+	// A client a project owns routes only to its own project's servers, so
+	// only they can lend it their resource. A stored gateway's members all
+	// share its project.
+	return slices.ContainsFunc(o.upstreams[c.RemoteSessionIssuerID], func(row metamcprepo.ListMetaMCPProxiedMemberResourcesRow) bool {
+		if c.ProjectID.Valid && c.ProjectID.UUID != row.ProjectID {
+			return false
+		}
+		return wellknown.SameResource(c.ResourceIdentifier, row.UpstreamUrl)
 	}), nil
 }
 
@@ -1397,7 +1481,7 @@ func (s *Service) buildRemoteSessionCards(
 	challengeState AuthnChallengeState,
 	policy autoRefreshPolicy,
 ) ([]remoteSessionCard, error) {
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	clients, err := s.listEndpointClients(ctx, endpoint, challengeState)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -1407,13 +1491,13 @@ func (s *Service) buildRemoteSessionCards(
 	}
 	clients = s.remoteChallengeMgr.WithCatalogBranding(ctx, clients)
 	// Cards read the cached resource row only; the login probes. The row is
-	// the one the login resolves (keyed by the endpoint's server URL) and,
-	// as at login, it decides only for a client whose grant is qualified to
-	// that resource among the bound clients. A gateway, a tunneled or hosted
-	// server, or a client whose grant goes elsewhere is decided by its
-	// authorization server alone; a client's own claimed resource never
-	// stands in, because no login reads it.
-	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled(ctx, endpoint.OrganizationID)
+	// the one the login resolves (keyed by the endpoint's server URL, or on a
+	// gateway the member the client is qualified to) and, as at login, it
+	// decides only for a client whose grant is qualified to that resource. A
+	// tunneled or hosted server, or a client whose grant goes elsewhere, is
+	// decided by its authorization server alone; a client's own claimed
+	// resource never stands in, because no login reads it.
+	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled()
 	var serverResource remotesessions.ResourceScopes
 	var serverResourceURL string
 	hasServerResource := false
@@ -1440,11 +1524,19 @@ func (s *Service) buildRemoteSessionCards(
 	if err != nil {
 		return nil, err
 	}
+	// The member's scopes only feed the reconnect hint, which needs a session.
+	connectedClients := make([]remotesessions.Client, 0, len(clients))
+	for _, c := range clients {
+		if state, ok := statuses[c.ID]; ok && state.Status == remotesessions.RemoteSessionActive {
+			connectedClients = append(connectedClients, c)
+		}
+	}
+	memberResources := s.gatewayMemberResourceScopes(ctx, endpoint, challengeState, connectedClients, discoverScopes)
 	chainRequests := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
 
 	cards := make([]remoteSessionCard, 0, len(clients))
 	renderedAt := time.Now()
-	owner := s.newResourceDisplayOwner(endpoint)
+	owner := s.newResourceDisplayOwner(endpoint, challengeState)
 	for _, c := range clients {
 		state, hasSession := statuses[c.ID]
 		unroutable := hasSession && state.Status == remotesessions.RemoteSessionActive && routing.unroutable(c, state.Resource)
@@ -1500,6 +1592,9 @@ func (s *Service) buildRemoteSessionCards(
 		if resourceApplies[c.ID] {
 			resourceScopes = serverResource
 		}
+		if member, ok := memberResources[c.ID]; ok {
+			resourceScopes = member
+		}
 		requested := c.RequestedScopes(resourceScopes).Scopes
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
 		chained := len(chainRequests[c.ID]) > 0 && !connected && !unroutable
@@ -1547,6 +1642,9 @@ func (s *Service) buildRemoteSessionCards(
 			ValidationNotice:       "",
 			CanValidate:            routing.canValidate(c, state.Resource),
 			Pending:                false,
+			SharedServerNote:       "",
+			remoteSessionIssuerID:  c.RemoteSessionIssuerID,
+			projectID:              c.ProjectID,
 		})
 	}
 	return cards, nil
@@ -1609,12 +1707,13 @@ func (s *Service) maybeAutoConnect(
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 	cards []remoteSessionCard,
+	focusServer string,
 ) (bool, error) {
 	if challengeState.AutoConnectDone || len(cards) != 1 || cards[0].Connected || cards[0].Chained {
 		return false, nil
 	}
 
-	bound, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	bound, err := s.listEndpointClients(ctx, endpoint, challengeState)
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
@@ -1655,7 +1754,7 @@ func (s *Service) maybeAutoConnect(
 	// autoRefresh is nil: the subject has not been shown the control yet, so
 	// there is no choice to record. The page's own Connect action is what
 	// authors a stored preference.
-	challengeURL, hop, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, nil)
+	challengeURL, hop, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, nil, focusServer)
 	if err != nil {
 		// Already logged. Render the page so the user can connect manually
 		// rather than seeing an error for a step they did not take.

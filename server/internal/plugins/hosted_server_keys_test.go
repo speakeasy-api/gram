@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"maps"
 	"regexp"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -174,7 +175,7 @@ func TestPluginsService_PublishPlugins_EndpointlessHostedEntryKeepsToolsetAddres
 
 func TestPluginsService_AddPluginServer_RejectsTwinsUnderEitherKey(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestPluginsService(t)
+	ctx, ti := newServerKeyPluginsService(t)
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Keys"})
 	require.NoError(t, err)
@@ -189,7 +190,13 @@ func TestPluginsService_AddPluginServer_RejectsTwinsUnderEitherKey(t *testing.T)
 	createCanonicalWrapper(t, ctx, ti, byToolset, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, byToolset.McpSlug.String)
 	added, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(byToolset.ID.String()), Policy: "required"})
 	require.NoError(t, err)
-	require.Equal(t, byToolset.ID.String(), *added.ToolsetID, "toolset attaches keep the key older servers read")
+	stored, err := pluginsrepo.New(ti.conn).ListPluginServers(ctx, uuid.MustParse(plugin.ID))
+	require.NoError(t, err)
+	require.Len(t, stored, 1)
+	require.Equal(t, uuid.NullUUID{UUID: byToolset.ID, Valid: true}, stored[0].McpServerID, "a wrapped toolset is stored under its canonical server")
+	require.False(t, stored[0].ToolsetID.Valid)
+	require.Equal(t, new(byToolset.ID.String()), added.ToolsetID)
+	require.Equal(t, new(byToolset.ID.String()), added.McpServerID)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(byToolset.ID.String()), DisplayName: conv.PtrEmpty("Twin"), Policy: "required"})
 	requireConflict(err)
 
@@ -199,6 +206,34 @@ func TestPluginsService_AddPluginServer_RejectsTwinsUnderEitherKey(t *testing.T)
 	require.NoError(t, err)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(byServer.ID.String()), DisplayName: conv.PtrEmpty("Twin 2"), Policy: "required"})
 	requireConflict(err)
+
+	legacy := createTestToolset(t, ctx, ti.conn, "by-legacy")
+	addToolsetKeyedEntry(t, ctx, ti, plugin.ID, legacy.ID, "Legacy")
+	createCanonicalWrapper(t, ctx, ti, legacy, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, legacy.McpSlug.String)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(legacy.ID.String()), DisplayName: conv.PtrEmpty("Twin 3"), Policy: "required"})
+	requireConflict(err)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(legacy.ID.String()), DisplayName: conv.PtrEmpty("Twin 4"), Policy: "required"})
+	requireConflict(err)
+
+	unwrapped := createTestToolset(t, ctx, ti.conn, "unwrapped")
+	added, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(unwrapped.ID.String()), Policy: "required"})
+	require.NoError(t, err)
+	require.NotNil(t, added.ToolsetID, "a toolset without a canonical server keeps the toolset key")
+	require.Equal(t, unwrapped.ID.String(), *added.ToolsetID)
+	require.Nil(t, added.McpServerID)
+
+	// A canonical server disabled out of sync with its toolset would drop the entry from packages; keep the toolset key.
+	drifted := createTestToolset(t, ctx, ti.conn, "drifted")
+	createCanonicalWrapper(t, ctx, ti, drifted, "disabled", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	added, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(drifted.ID.String()), Policy: "required"})
+	require.NoError(t, err)
+	stored, err = pluginsrepo.New(ti.conn).ListPluginServers(ctx, uuid.MustParse(plugin.ID))
+	require.NoError(t, err)
+	idx := slices.IndexFunc(stored, func(row pluginsrepo.PluginServer) bool { return row.ID.String() == added.ID })
+	require.GreaterOrEqual(t, idx, 0)
+	require.Equal(t, uuid.NullUUID{UUID: drifted.ID, Valid: true}, stored[idx].ToolsetID)
+	require.Equal(t, new(drifted.ID.String()), added.ToolsetID)
+	require.Equal(t, new(drifted.ID.String()), added.McpServerID)
 }
 
 // A server-keyed metadata twin must not add headers to a toolset whose own metadata still serves.

@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	agent "github.com/speakeasy-api/gram/server/gen/agent"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -2703,6 +2704,9 @@ func unmarshalAiScanTargetResponseBodyToAgentAiScanTarget(v *AiScanTargetRespons
 	}
 	res.Signatures = unmarshalAiScanTargetSignaturesResponseBodyToAgentAiScanTargetSignatures(v.Signatures)
 	res.GatewayClient = unmarshalAiScanTargetGatewayClientResponseBodyToAgentAiScanTargetGatewayClient(v.GatewayClient)
+	if v.Access != nil {
+		res.Access = unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(v.Access)
+	}
 
 	return res
 }
@@ -2748,6 +2752,23 @@ func unmarshalAiScanTargetGatewayClientResponseBodyToAgentAiScanTargetGatewayCli
 	res.ClientInfoNames = make([]string, len(v.ClientInfoNames))
 	for i, val := range v.ClientInfoNames {
 		res.ClientInfoNames[i] = val
+	}
+
+	return res
+}
+
+// unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary builds a
+// value of type *types.AIToolAccessSummary from a value of type
+// *AIToolAccessSummaryResponseBody.
+func unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(v *AIToolAccessSummaryResponseBody) *types.AIToolAccessSummary {
+	if v == nil {
+		return nil
+	}
+	res := &types.AIToolAccessSummary{
+		State:       *v.State,
+		Decision:    *v.Decision,
+		Enforceable: *v.Enforceable,
+		Rationale:   v.Rationale,
 	}
 
 	return res

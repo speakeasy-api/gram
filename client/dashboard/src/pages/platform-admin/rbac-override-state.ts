@@ -123,6 +123,12 @@ export const SCOPE_DEFS: {
     resourceType: "chat",
     description: "Read all agent session transcripts",
   },
+  {
+    scope: "log:read",
+    label: "log:read",
+    resourceType: "project",
+    description: "View a project's tool-call logs and traces",
+  },
 ];
 
 export const GROUP_ORDER: { key: ResourceType; label: string }[] = [

@@ -9,18 +9,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 type PostgresDBCloneFunc func(t *testing.T, name string) (*pgxpool.Pool, error)
-
-var pgCloneMutex sync.Mutex
 
 func nextPostgresCloneSuffix() string {
 	return fmt.Sprintf("%d", uuid.New().ID())
@@ -30,7 +25,7 @@ func nextPostgresCloneSuffix() string {
 // from a SQL init script. A reference to the container is returned as well as
 // a function to create test databases from the template. All clone databases
 // are automatically dropped when the test ends using t.Cleanup hooks.
-func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCloneFunc, error) {
+func NewTestPostgres(ctx context.Context) (_ *postgres.PostgresContainer, _ PostgresDBCloneFunc, err error) {
 	root, err := FindRepoRoot(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("locate Postgres test schema: %w", err)
@@ -39,9 +34,34 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 		return nil, nil, fmt.Errorf("wait for docker: %w", err)
 	}
 
+	// The maintenance pool is shared by every clone and drop for this
+	// container, so each test pays for a SCRAM handshake only on its own
+	// pool's connections. It is closed before the container stops.
+	var maintenance *pgxpool.Pool
+	closeMaintenance := testcontainers.ContainerLifecycleHooks{
+		PreStops: []testcontainers.ContainerHook{
+			func(context.Context, testcontainers.Container) error {
+				if maintenance != nil {
+					maintenance.Close()
+				}
+				return nil
+			},
+		},
+		PreBuilds:      nil,
+		PostBuilds:     nil,
+		PreCreates:     nil,
+		PostCreates:    nil,
+		PreStarts:      nil,
+		PostStarts:     nil,
+		PostReadies:    nil,
+		PostStops:      nil,
+		PreTerminates:  nil,
+		PostTerminates: nil,
+	}
+
 	container, err := postgres.Run(
 		ctx,
-		"pgvector/pgvector:pg17",
+		"pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11",
 		postgres.WithUsername("gotest"),
 		postgres.WithPassword("gotest"),
 		postgres.WithDatabase("gotestdb"),
@@ -52,11 +72,20 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 			wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
 		),
 		WithPublishedPortWait("5432/tcp"),
-		WithoutPublishedPorts(),
+		WithLoopbackPorts(),
 		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
 		testcontainers.WithEnv(map[string]string{"PGDATA": "/var/lib/postgresql/data"}),
 		testcontainers.WithLogger(NewTestcontainersLogger()),
+		testcontainers.WithAdditionalLifecycleHooks(closeMaintenance),
 	)
+	// The caller receives the container only on success, so terminate it if
+	// any step fails, including a failed Run that still created one. Its
+	// PreStop hook closes the maintenance pool.
+	defer func() {
+		if err != nil && container != nil {
+			_ = container.Terminate(context.WithoutCancel(ctx))
+		}
+	}()
 	if err != nil {
 		return nil, nil, fmt.Errorf("start postgres container: %w", err)
 	}
@@ -66,17 +95,16 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 		return nil, nil, fmt.Errorf("read connection string: %w", err)
 	}
 
-	conn, err := pgx.Connect(ctx, uri)
+	maintenance, err = pgxpool.New(context.WithoutCancel(ctx), uri)
 	if err != nil {
-		return nil, nil, fmt.Errorf("connect to maintenance database: %w", err)
+		return nil, nil, fmt.Errorf("create maintenance pool: %w", err)
 	}
-	defer o11y.NoLogDefer(func() error { return conn.Close(ctx) })
 
-	if _, err := conn.Exec(ctx, "ALTER DATABASE gotestdb WITH is_template = true;"); err != nil {
+	if _, err := maintenance.Exec(ctx, "ALTER DATABASE gotestdb WITH is_template = true;"); err != nil {
 		return nil, nil, fmt.Errorf("mark template database: %w", err)
 	}
 
-	return container, newPostgresCloneFunc(container), nil
+	return container, newPostgresCloneFunc(uri, maintenance), nil
 }
 
 func postgresURI(ctx context.Context, container *postgres.PostgresContainer) (string, error) {
@@ -89,27 +117,22 @@ func postgresURI(ctx context.Context, container *postgres.PostgresContainer) (st
 	return fmt.Sprintf("postgres://gotest:gotest@%s/postgres?sslmode=disable", addr), nil
 }
 
-func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBCloneFunc {
+func newPostgresCloneFunc(uri string, maintenance *pgxpool.Pool) PostgresDBCloneFunc {
+	// Clones of one template run one at a time as a precaution. Clones never
+	// connect to the template and CREATE DATABASE takes only a share lock on
+	// it, so the lock may be unnecessary. It covers only the CREATE statement.
+	var cloneMu sync.Mutex
+
 	return func(t *testing.T, name string) (*pgxpool.Pool, error) {
 		t.Helper()
 
 		ctx := t.Context()
-		uri, err := postgresURI(ctx, container)
-		if err != nil {
-			return nil, fmt.Errorf("read connection string: %w", err)
-		}
-
-		pgCloneMutex.Lock()
-		defer pgCloneMutex.Unlock()
-
-		conn, err := pgx.Connect(ctx, uri)
-		if err != nil {
-			return nil, fmt.Errorf("connect to maintenance database: %w", err)
-		}
-		defer o11y.NoLogDefer(func() error { return conn.Close(ctx) })
-
 		cloneName := fmt.Sprintf("%s_%s", name, nextPostgresCloneSuffix())
-		if _, err := conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s WITH TEMPLATE gotestdb;", cloneName)); err != nil {
+
+		cloneMu.Lock()
+		_, err := maintenance.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s WITH TEMPLATE gotestdb;", cloneName))
+		cloneMu.Unlock()
+		if err != nil {
 			return nil, fmt.Errorf("create test database: %w", err)
 		}
 
@@ -125,13 +148,7 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 
 			pool.Close()
 
-			conn, err := pgx.Connect(timeoutCtx, uri)
-			if err != nil {
-				panic(fmt.Errorf("drop test database: connect: %w", err))
-			}
-			defer o11y.NoLogDefer(func() error { return conn.Close(timeoutCtx) })
-
-			if _, err := conn.Exec(timeoutCtx, fmt.Sprintf("DROP DATABASE %s;", cloneName)); err != nil {
+			if _, err := maintenance.Exec(timeoutCtx, fmt.Sprintf("DROP DATABASE %s WITH (FORCE);", cloneName)); err != nil {
 				panic(fmt.Errorf("drop test database: exec: %w", err))
 			}
 		})

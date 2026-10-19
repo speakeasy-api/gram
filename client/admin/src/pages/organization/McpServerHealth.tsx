@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 
 import { SOURCE_LABELS, VISIBILITY_LABELS } from "./mcpServerLabels";
 import {
+  adminMcpPrompt,
   admissionLabel,
   bucketSquares,
   callsPerSquare,
@@ -60,7 +61,6 @@ import {
   linkedAccounts,
   loginChallengeQuery,
   loginChallengeUrl,
-  platformMcpPrompt,
   SCOPE_LABELS,
   toolCallTailQuery,
   toolCallTailUrl,
@@ -684,7 +684,7 @@ function ToolCallsChart({
         OK.
       </p>
       <PromptBlock
-        prompt={platformMcpPrompt({
+        prompt={adminMcpPrompt({
           ...prompt,
           range: rangeLabel(range),
           worst: worst && bucketName(worst, weekly),
@@ -805,7 +805,7 @@ function PromptBlock({ prompt }: { prompt: string }): JSX.Element {
     <div className="bg-muted/30 flex flex-col gap-2.5 border-t px-5 pt-4 pb-4.5">
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium">
-          Investigate with the Platform MCP
+          Investigate with the Speakeasy Admin MCP server
         </span>
         <Button
           variant="outline"
@@ -949,6 +949,11 @@ function IssuerPanel({
         </KeyValue>
         <KeyValue label="Authentication host">
           {issuer.useAuthenticationHost ? "Used" : "Not used"}
+        </KeyValue>
+        <KeyValue label="Authorization server">
+          {issuer.authorizationServerMode === "shared"
+            ? `Shared by the issuer · issuer URL ${issuer.issuerUrlPinned ? "pinned" : "not pinned"}`
+            : "One per MCP server"}
         </KeyValue>
         <KeyValue label="Trusted remote session">
           {trusted ? (

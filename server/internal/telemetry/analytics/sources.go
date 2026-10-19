@@ -1,8 +1,6 @@
 package analytics
 
 import (
-	"strings"
-
 	"github.com/Masterminds/squirrel"
 )
 
@@ -33,11 +31,6 @@ type QueryContext struct {
 	Lookups LookupMaps
 }
 
-// SourceQuery builds the query that turns observations into rows at the
-// dataset's grain. It is a subquery over the dataset's table, run as part of
-// every request; nothing is stored.
-type SourceQuery func(qc QueryContext) squirrel.SelectBuilder
-
 // toolCallEventTypes are the observations of one tool call: the call itself
 // (semantic-convention and Codex producers name it so), its result, and the
 // decision that admitted or blocked it. A blocked call is a decision alone,
@@ -45,113 +38,132 @@ type SourceQuery func(qc QueryContext) squirrel.SelectBuilder
 // three.
 var toolCallEventTypes = []string{"tool_call", "tool_call_result", "tool_decision"}
 
-// toolCallEventTypesSQL is the same set as a SQL predicate, for the one place
-// squirrel cannot bind it: a condition inside an aggregate in a select list.
-// Derived from the slice above so the two datasets cannot disagree; the
-// values are those declared constants, never input.
-var toolCallEventTypesSQL = "event_type IN (" + quotedList(toolCallEventTypes) + ")"
-
-// quotedList renders declared string constants as a SQL list.
-func quotedList(values []string) string {
-	quoted := make([]string, len(values))
-	for i, value := range values {
-		quoted[i] = "'" + value + "'"
-	}
-	return strings.Join(quoted, ", ")
+// Source declares one row per Key of a dataset: the table it reads, the
+// predicates, and the Columns that fold or merge into that row. Observations
+// is the predicates alone over agent_events, for listing a dimension's values.
+type Source struct {
+	Table   engine
+	Where   []squirrel.Sqlizer
+	Key     string
+	Columns []string
+	// Having keeps a folded row. It must name columns the fold keeps any
+	// non-empty value of, so Observations can test it on the raw rows.
+	Having string
 }
 
-// dedupedAgentEvents is the innermost scan every event dataset starts from:
-// the tenancy and window filter, then LIMIT 1 BY record_id so a redelivered
-// record counts once before anything is aggregated. No aggregate function can
-// express that, which is why it lives here and not in a measure.
-//
-// The rows are ordered by observation time first. LIMIT BY keeps whichever
-// row it meets first, and without an order that is whichever row ClickHouse
-// happened to read first, so a record re-emitted with a correction could
-// survive as its stale copy. Newest observed wins, which is also the rule
-// every argMax downstream applies.
-//
-// The collapse runs over the complete scoped record, and only then do the
-// dataset's own predicates apply. Filtering first would let a correction
-// that moved a record out of the dataset (a session id withdrawn, an event
-// retyped) be dropped before the collapse, leaving its stale copy to win.
-func dedupedAgentEvents(qc QueryContext, extra ...squirrel.Sqlizer) squirrel.SelectBuilder {
-	scoped := sq.Select("*").
-		From("agent_events").
-		Where(squirrel.Eq{"organization_id": qc.Tenant.OrganizationID}).
-		Where(squirrel.Eq{"project_id": qc.Tenant.ProjectID}).
-		Where("occurred_at_unix_nano >= ?", qc.Window.FromUnixNano).
-		Where("occurred_at_unix_nano < ?", qc.Window.ToUnixNano).
-		OrderBy("observed_at_unix_nano DESC").
-		Suffix("LIMIT 1 BY organization_id, project_id, record_id")
-	builder := sq.Select("*").FromSelect(scoped, "scoped")
-	for _, condition := range extra {
+func (s Source) Rows(qc QueryContext) squirrel.SelectBuilder {
+	builder := s.Table.rows(qc, s)
+	if s.Having != "" {
+		builder = builder.Having(s.Having)
+	}
+	return builder
+}
+
+// Observations reads the predicates over the plain agent_events scan, so a
+// value a later correction withdrew can still show up.
+func (s Source) Observations(qc QueryContext) squirrel.SelectBuilder {
+	builder := where(agentEvents.scan(qc), s.Where)
+	if s.Having != "" {
+		keys := where(agentEvents.scan(qc).RemoveColumns().Column(s.Key), s.Where).Where(s.Having)
+		builder = builder.Where(squirrel.Expr(s.Key+" IN (?)", keys))
+	}
+	return builder
+}
+
+// engine reads a table the way its ClickHouse engine family merges it.
+type engine interface {
+	rows(qc QueryContext, s Source) squirrel.SelectBuilder
+}
+
+// mergeTree rows are facts as appended. Its fold must be idempotent, so a
+// redelivered row changes nothing: argMax, min, max, uniqExact, never count
+// or sum over raw rows.
+type mergeTree struct{ table, time string }
+
+// aggregatingMergeTree rows are partial states per key until merges catch
+// up, so keys are picked by start and every row of those keys is merged.
+type aggregatingMergeTree struct{ table, start string }
+
+var (
+	agentEvents = mergeTree{table: "agent_events", time: "occurred_at_unix_nano"}
+	toolCalls   = aggregatingMergeTree{table: "tool_calls", start: "started_at_unix_nano"}
+)
+
+func (t mergeTree) scan(qc QueryContext) squirrel.SelectBuilder {
+	return sq.Select("*").
+		From(t.table).
+		Where(tenant(qc)).
+		Where(t.time+" >= ?", qc.Window.FromUnixNano).
+		Where(t.time+" < ?", qc.Window.ToUnixNano)
+}
+
+func (t mergeTree) rows(qc QueryContext, s Source) squirrel.SelectBuilder {
+	return where(t.scan(qc).RemoveColumns().Columns(s.Columns...), s.Where).
+		GroupBy("organization_id", "project_id", s.Key)
+}
+
+func (t aggregatingMergeTree) rows(qc QueryContext, s Source) squirrel.SelectBuilder {
+	keys := sq.Select(s.Key).
+		From(t.table).
+		Where(tenant(qc)).
+		Where(t.start+" >= ?", qc.Window.FromUnixNano).
+		Where(t.start+" < ?", qc.Window.ToUnixNano)
+	return sq.Select(s.Columns...).
+		From(t.table).
+		Where(tenant(qc)).
+		Where(squirrel.Expr(s.Key+" IN (?)", keys)).
+		GroupBy("organization_id", "project_id", s.Key).
+		Having("started_at >= ?", qc.Window.FromUnixNano).
+		Having("started_at < ?", qc.Window.ToUnixNano)
+}
+
+func tenant(qc QueryContext) squirrel.Eq {
+	return squirrel.Eq{"organization_id": qc.Tenant.OrganizationID, "project_id": qc.Tenant.ProjectID}
+}
+
+func where(builder squirrel.SelectBuilder, conditions []squirrel.Sqlizer) squirrel.SelectBuilder {
+	for _, condition := range conditions {
 		builder = builder.Where(condition)
 	}
 	return builder
 }
 
-// sessionsSource collapses agent_events to one row per session. Dimensions
-// resolve to the latest observed value that stated one: a session usually ends
-// on a hook or MCP event that carries no model, and that must not blank the
-// model an API request stated. The measures are identity-aware counts, so a
-// caller composing sum(turn_count) gets the de-duplicated figure without
-// needing to know why.
-func sessionsSource(qc QueryContext) squirrel.SelectBuilder {
-	return sq.Select(
-		"organization_id",
-		"project_id",
-		"session_id",
-		"min(occurred_at_unix_nano) AS started_at",
-		"max(occurred_at_unix_nano) AS ended_at",
-		"argMaxIf(user_email, observed_at_unix_nano, user_email != '') AS user_email",
-		"argMaxIf(model, observed_at_unix_nano, model != '') AS model",
-		"argMaxIf(surface, observed_at_unix_nano, surface != '') AS surface",
-		"argMaxIf(provider, observed_at_unix_nano, provider != '') AS provider",
-		// uniqExact yields UInt64; the catalog declares these Int64, and the
-		// column must be what the contract says it is.
-		"toInt64(uniqExactIf(turn_id, turn_id != '')) AS turn_count",
-		"toInt64(uniqExactIf(event_id, "+toolCallEventTypesSQL+")) AS tool_call_count",
-	).
-		FromSelect(dedupedAgentEvents(qc, squirrel.NotEq{"session_id": ""}), "deduped").
-		GroupBy("organization_id", "project_id", "session_id")
-}
-
-// toolCallsSource is one row per tool call, Skill invocations included.
-func toolCallsSource(qc QueryContext) squirrel.SelectBuilder {
-	return collapsedToolCalls(qc)
-}
-
-// skillsSource is one row per tool call that named a skill. The filter runs
-// after the collapse because not every observation of a call carries the
-// name: a blocked invocation's decision does not, its result does.
-func skillsSource(qc QueryContext) squirrel.SelectBuilder {
-	return collapsedToolCalls(qc).Having("skill_name != ''")
-}
-
-// collapsedToolCalls folds the observations of each tool call (decision,
-// call, result) into one row at its latest observation. A blocked call has
-// only its decision, so that row is the call and its status is rejected.
-func collapsedToolCalls(qc QueryContext) squirrel.SelectBuilder {
-	return sq.Select(
+// toolCallsSource is one row per tool call (decision, call, result), Skill
+// invocations included. A blocked call has only its decision, so that row is
+// the call and its status is rejected.
+var toolCallsSource = Source{
+	Where: []squirrel.Sqlizer{
+		squirrel.Eq{"event_type": toolCallEventTypes},
+		squirrel.NotEq{"event_id": ""},
+	},
+	Key:   "event_id",
+	Table: toolCalls,
+	Columns: []string{
 		"organization_id",
 		"project_id",
 		"event_id AS tool_call_id",
-		"argMaxIf(tool_name, observed_at_unix_nano, tool_name != '') AS tool_name",
-		"argMaxIf(mcp_server_name, observed_at_unix_nano, mcp_server_name != '') AS mcp_server_name",
-		"argMaxIf(mcp_tool_name, observed_at_unix_nano, mcp_tool_name != '') AS mcp_tool_name",
-		"argMaxIf(skill_name, observed_at_unix_nano, skill_name != '') AS skill_name",
-		"argMaxIf(session_id, observed_at_unix_nano, session_id != '') AS session_id",
-		"argMaxIf(user_email, observed_at_unix_nano, user_email != '') AS user_email",
-		"argMaxIf(surface, observed_at_unix_nano, surface != '') AS surface",
-		"argMaxIf(outcome, observed_at_unix_nano, outcome != '') AS status",
-		"argMaxIf(duration_nano, observed_at_unix_nano, duration_nano != 0) AS duration_nano",
-		"min(occurred_at_unix_nano) AS started_at",
-		"max(occurred_at_unix_nano) AS ended_at",
-	).
-		FromSelect(dedupedAgentEvents(qc,
-			squirrel.Eq{"event_type": toolCallEventTypes},
-			squirrel.NotEq{"event_id": ""},
-		), "deduped").
-		GroupBy("organization_id", "project_id", "event_id")
+		"argMaxIfMerge(tool_name) AS tool_name",
+		"argMaxIfMerge(mcp_server_name) AS mcp_server_name",
+		"argMaxIfMerge(mcp_tool_name) AS mcp_tool_name",
+		"argMaxIfMerge(skill_name) AS skill_name",
+		"argMaxIfMerge(session_id) AS session_id",
+		"argMaxIfMerge(user_email) AS user_email",
+		"argMaxIfMerge(surface) AS surface",
+		"argMaxIfMerge(status) AS status",
+		"argMaxIfMerge(duration_nano) AS duration_nano",
+		"min(started_at_unix_nano) AS started_at",
+		"max(ended_at_unix_nano) AS ended_at",
+	},
+	Having: "",
+}
+
+// skillsSource is one row per tool call that named a skill. Having runs after
+// the fold because not every observation of a call carries the name: a
+// blocked invocation's decision does not, its result does.
+var skillsSource = Source{
+	Table:   toolCallsSource.Table,
+	Where:   toolCallsSource.Where,
+	Key:     toolCallsSource.Key,
+	Columns: toolCallsSource.Columns,
+	Having:  "skill_name != ''",
 }

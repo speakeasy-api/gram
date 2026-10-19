@@ -7,17 +7,21 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -173,6 +177,73 @@ func TestHandleToken_RefreshProceedsWhileUpstreamUnavailable(t *testing.T) {
 	require.Zero(t, upstreamRefreshes.Load(), "the token endpoint must judge upstream sessions from stored state")
 }
 
+// A grant whose only upstream identity chaining serves holds no interactive
+// remote session; refresh must not demand a reconnect the runtime never needs.
+func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
+	t.Parallel()
+
+	const upstream = "https://chained-refresh.example.com/mcp"
+	cases := []struct {
+		name          string
+		decision      identitychaining.RefreshDecision
+		sibling       bool
+		wantReconnect bool
+	}{
+		{name: "served by chaining", decision: identitychaining.RefreshServed},
+		{name: "served while a sibling client has no session", decision: identitychaining.RefreshServed, sibling: true},
+		{name: "chaining unconfirmed", decision: identitychaining.RefreshUnconfirmed},
+		{name: "chaining needs a fresh sign-in", decision: identitychaining.RefreshReauthenticate, wantReconnect: true},
+		{name: "chaining does not serve the upstream", decision: identitychaining.RefreshNotChained, wantReconnect: true},
+		{name: "a provider just refused chaining", decision: identitychaining.RefreshRefused, wantReconnect: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMCPService(t)
+			authCtx := requireProjectAuthContext(t, ctx)
+			_, issuer, client, refreshToken, oldJTI := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+			remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+			if tc.sibling {
+				attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+			}
+			slug := "chained-refresh-" + uuid.NewString()[:8]
+			serverID := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug, upstream)
+			_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+				ProjectID:       *authCtx.ProjectID,
+				CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				McpServerID:     conv.ToNullUUID(serverID),
+				MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				Slug:            slug,
+			})
+			require.NoError(t, err)
+
+			g := &consentGovernor{t: t, issuer: remoteClient.RemoteSessionIssuerID, served: map[string]bool{}, governs: false, configured: true, usable: false, refresh: tc.decision, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
+			ti.service.SetIdentityChainer(g)
+
+			res := performRefreshRequest(ctx, ti, slug, client.ClientID, refreshToken)
+			require.NoError(t, res.err)
+			if tc.wantReconnect {
+				require.Equal(t, http.StatusBadRequest, res.code, res.body)
+				require.Contains(t, res.body, `"error":"invalid_grant"`)
+				require.Contains(t, res.body, reconnectDescription)
+			} else {
+				require.Equal(t, http.StatusOK, res.code, res.body)
+			}
+
+			g.mu.Lock()
+			defer g.mu.Unlock()
+			require.Len(t, g.refreshed, 1, "refresh asks identity chaining once")
+			req := g.refreshed[0]
+			require.Equal(t, upstream, req.UpstreamResource)
+			require.Equal(t, "refresh-replay-user", req.UserID)
+			require.Equal(t, issuer.ID, req.UserSessionIssuerID)
+			require.Equal(t, oldJTI, req.UserSessionJTI, "chaining is judged for the grant being refreshed")
+			require.False(t, req.RemoteSessionIssuerID.Valid, "a remote upstream selects by resource, as the runtime does")
+		})
+	}
+}
+
 // The runtime and the token endpoint must agree: once a refresh the gate ran
 // fails for good and the gate answers invalid_token, the client's Speakeasy
 // refresh is refused rather than handing it a token for the same rejection.
@@ -281,6 +352,104 @@ func TestHandleToken_RefreshChecksStoredUpstreamCredentials(t *testing.T) {
 				require.Equal(t, http.StatusOK, refreshed.code, refreshed.body)
 			}
 			require.Zero(t, upstreamRefreshes.Load(), "stored credential checks must not contact the upstream")
+		})
+	}
+}
+
+// A provider's definitive refusal must not strand a human whose linked
+// upstream session needs reconnecting: the gate challenges as without
+// chaining, so reauthorizing reaches the consent page's separate sign-in,
+// which every chained card offers whatever the refusal. The reconnected
+// session then routes directly and never chains, so even refusals a sign-in
+// cannot repair (configuration, invalid target) are served by it. Only
+// provider refusals challenge: refresh sees nothing else, so a selection or
+// authorization failure would loop between refresh and the challenge and
+// stands instead. Without a linked session there is nothing to reconnect and
+// the refusal stands; a retryable failure stays a retry.
+func TestServePublic_IssuerGate_ChainingRefusalChallengesTheLinkedSession(t *testing.T) {
+	t.Parallel()
+
+	type refusal struct {
+		stage     identitychaining.Stage
+		reason    identitychaining.Reason
+		retryable bool
+	}
+	refusals := []refusal{
+		{identitychaining.StageExchange, identitychaining.ReasonAccessDenied, false},
+		{identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, false},
+		{identitychaining.StageExchange, identitychaining.ReasonConfigurationRequired, false},
+		{identitychaining.StageAuthorization, identitychaining.ReasonIneligibleIdentity, false},
+		{identitychaining.StageSelection, identitychaining.ReasonConfigurationRequired, false},
+		{identitychaining.StageRedemption, identitychaining.ReasonInvalidGrant, false},
+		{identitychaining.StageExchange, identitychaining.ReasonUnknownRejection, false},
+		{identitychaining.StageExchange, identitychaining.ReasonTransientFailure, true},
+	}
+	type gateCase struct {
+		name    string
+		linked  bool
+		refusal refusal
+	}
+	var cases []gateCase
+	for _, r := range refusals {
+		cases = append(cases,
+			gateCase{name: string(r.reason) + "/stale linked session", linked: true, refusal: r},
+			gateCase{name: string(r.reason) + "/no linked session", linked: false, refusal: r},
+		)
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMCPService(t)
+			authCtx := requireProjectAuthContext(t, ctx)
+			issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+			slug := "chain-refused-" + uuid.NewString()[:8]
+			mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://chain-refused.example.test/mcp", slug, "private", issuerID)
+			seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockidp.MockUserID, mcpServer.ID.String())
+			subject := urn.NewUserSubject(mockidp.MockUserID)
+			if tc.linked {
+				remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuerID)
+				upsertExpiredRefreshableRemoteSession(t, ctx, ti, issuerID, remoteClient.ID, subject)
+				pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, remoteClient.ID, func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadRequest)
+					_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+				})
+			}
+			token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
+				Subject:  subject,
+				Audience: urn.NewUserSessionIssuer(issuerID).String(),
+				Issuer:   ti.serverURL.String() + "/mcp/" + slug,
+				Lifetime: time.Hour,
+			})
+			require.NoError(t, err)
+			persistTestUserSession(t, ti, issuerID, subject, jti)
+
+			refused := identitychaining.Outcome{Stage: tc.refusal.stage, Reason: tc.refusal.reason, Confidence: identitychaining.ConfidenceVerified, Retryable: tc.refusal.retryable, Cached: false, Provider: ""}
+			// Refresh sees a refusal only once it is cached, as the chainer reads it.
+			refresh := identitychaining.RefreshUnconfirmed
+			if refused.ProviderRefusal() {
+				refresh = identitychaining.RefreshRefused
+			}
+			g := &consentGovernor{t: t, issuer: uuid.Nil, served: map[string]bool{}, governs: true, configured: true, usable: false, refresh: refresh, acquire: func(context.Context, identitychaining.Request) identitychaining.Outcome { return refused }, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
+			ti.service.SetIdentityChainer(g)
+
+			w, err := servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), token, nil)
+			g.mu.Lock()
+			acquired := len(g.acquired)
+			g.mu.Unlock()
+			require.Equal(t, 1, acquired, "the gate tries chaining before answering")
+			switch {
+			case tc.refusal.retryable:
+				require.Contains(t, requireOopsCode(t, err, oops.CodeUnavailable), "retry shortly")
+				require.Empty(t, w.Header().Get("WWW-Authenticate"))
+			case tc.linked && refused.ProviderRefusal():
+				require.Equal(t, reconnectDescription, requireOopsCode(t, err, oops.CodeUnauthorized))
+				require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
+			default:
+				require.Contains(t, requireOopsCode(t, err, oops.CodeForbidden), "contact your administrator")
+				require.Empty(t, w.Header().Get("WWW-Authenticate"))
+			}
 		})
 	}
 }
@@ -414,6 +583,7 @@ func TestServePublic_SharedSessionReconnectUsesIssuancePolicy(t *testing.T) {
 				UserSessionIssuerID: fixture.UserSessionIssuer.ID, SubjectUrn: subject, Jti: jti,
 				RefreshTokenHash: tc.hash, ExpiresAt: conv.ToPGTimestamptz(now.Add(time.Hour)),
 				RefreshExpiresAt: conv.ToPGTimestamptz(now.Add(time.Hour)),
+				SignInID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			})
 			require.NoError(t, err)
 			for range 2 {

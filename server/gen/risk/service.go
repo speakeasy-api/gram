@@ -95,11 +95,8 @@ type Service interface {
 	// compiler error message. An empty expression is valid (ok=true).
 	CompileExpr(context.Context, *CompileExprPayload) (res *ExprCompileResult, err error)
 	// Per-user breakdowns of findings by category and by rule_id within a time
-	// window. Powers the user drill-down on /risk-overview.
+	// window. Powers the risk panels on identity pages.
 	GetRiskUserBreakdown(context.Context, *GetRiskUserBreakdownPayload) (res *RiskUserBreakdownResult, err error)
-	// Get per-rule_id finding counts for a category within a time window. Powers
-	// the per-category drill-down chart on /risk-overview.
-	GetRiskRuleBreakdown(context.Context, *GetRiskRuleBreakdownPayload) (res *RiskRuleBreakdownResult, err error)
 	// Get clustered risk signals — findings grouped by rule and ranked by severity
 	// score — plus window-level KPI stats and the exposure breakdown by category.
 	// Powers the Watchdog page. Served from the ClickHouse findings store.
@@ -227,7 +224,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [55]string{"createRiskPolicy", "listRiskPolicies", "listMCPPlatformToolsets", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "revealRiskResultPayload", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "listRiskPresets", "suggestRiskPolicy", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskMcpServerCounts", "getRiskAnalysisStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [54]string{"createRiskPolicy", "listRiskPolicies", "listMCPPlatformToolsets", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "revealRiskResultPayload", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "listRiskPresets", "suggestRiskPolicy", "compileExpr", "getRiskUserBreakdown", "getRiskSignals", "getRiskMcpServerCounts", "getRiskAnalysisStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -607,21 +604,6 @@ type GetRiskPolicyPayload struct {
 	ProjectSlugInput *string
 	// The policy ID.
 	ID string
-}
-
-// GetRiskRuleBreakdownPayload is the payload type of the risk service
-// getRiskRuleBreakdown method.
-type GetRiskRuleBreakdownPayload struct {
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
-	// Required category key to break down by rule_id (e.g. secrets, pii).
-	Category string
-	// Inclusive start of the window. Defaults to the same 7-day window as the
-	// overview.
-	From *string
-	// Exclusive end of the window. Defaults to now.
-	To *string
 }
 
 // GetRiskSignalsPayload is the payload type of the risk service getRiskSignals
@@ -1217,14 +1199,10 @@ type RiskOverviewResult struct {
 	From string
 	// Exclusive end of the overview window.
 	To string
-	// Messages analyzed by risk policies in the window.
-	MessagesScanned int64
 	// Policy findings in the window.
 	Findings int64
 	// Chat sessions with at least one finding in the window.
 	FlaggedSessions int64
-	// Enabled risk policies for the current project.
-	ActivePolicies int64
 	// Top policy categories by finding count.
 	TopCategories []*RiskOverviewCategory
 	// Top users by finding count.
@@ -1362,21 +1340,6 @@ type RiskRuleBreakdownEntry struct {
 	Source string
 	// Finding count for this rule within the window.
 	Findings int64
-}
-
-// RiskRuleBreakdownResult is the result type of the risk service
-// getRiskRuleBreakdown method.
-type RiskRuleBreakdownResult struct {
-	// Inclusive start of the window used.
-	From string
-	// Exclusive end of the window used.
-	To string
-	// Category the breakdown is scoped to.
-	Category string
-	// Rules in this category, ordered by finding count descending.
-	Rules []*RiskRuleBreakdownEntry
-	// Total findings across all rules in this category and window.
-	Total int64
 }
 
 // One clustered risk signal: all live findings for a single rule in the

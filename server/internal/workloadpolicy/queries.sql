@@ -89,8 +89,7 @@ SELECT
   i.name AS issuer_name,
   i.allow_wildcard_admission,
   g.agent_id,
-  ag.name AS agent_name,
-  hp.slug AS hooks_project_slug
+  ag.name AS agent_name
 FROM workload_identity_admissions a
 JOIN workload_issuers i
   ON i.organization_id = a.organization_id
@@ -110,10 +109,6 @@ LEFT JOIN agents ag
   ON ag.organization_id = g.organization_id
  AND ag.id = g.agent_id
  AND ag.deleted IS FALSE
-LEFT JOIN projects hp
-  ON hp.organization_id = a.organization_id
- AND hp.id = a.hooks_project_id
- AND hp.deleted IS FALSE
 WHERE a.organization_id = @organization_id
   AND (a.project_id IS NULL OR a.project_id = @project_id)
   AND a.deleted IS FALSE
@@ -128,11 +123,8 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: CreateWorkloadAdmission :one
-INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, hooks_project_id, hooks_project_organization_id)
-VALUES (
-  @organization_id, @project_id, @workload_issuer_id, @subject, @match_kind, @name, @tags, sqlc.narg(hooks_project_id),
-  CASE WHEN sqlc.narg(hooks_project_id)::uuid IS NULL THEN NULL ELSE @organization_id END
-)
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags)
+VALUES (@organization_id, @project_id, @workload_issuer_id, @subject, @match_kind, @name, @tags)
 RETURNING *;
 
 -- name: UpdateWorkloadAdmission :one
@@ -143,8 +135,6 @@ RETURNING *;
 UPDATE workload_identity_admissions
 SET name = sqlc.narg(name),
     tags = @tags,
-    hooks_project_id = sqlc.narg(hooks_project_id),
-    hooks_project_organization_id = CASE WHEN sqlc.narg(hooks_project_id)::uuid IS NULL THEN NULL ELSE organization_id END,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND id = @id
@@ -271,8 +261,8 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: CreateWorkloadDeviceJoinToken :one
-INSERT INTO workload_device_join_tokens (organization_id, token_hash, agent_id, hooks_project_id, created_by_user_id, expires_at)
-VALUES (@organization_id, @token_hash, @agent_id, @hooks_project_id, @created_by_user_id, @expires_at)
+INSERT INTO workload_device_join_tokens (organization_id, token_hash, agent_id, created_by_user_id, expires_at)
+VALUES (@organization_id, @token_hash, @agent_id, @created_by_user_id, @expires_at)
 RETURNING *;
 
 -- name: ConsumeWorkloadDeviceJoinToken :one
@@ -290,12 +280,8 @@ RETURNING *;
 -- name: GetReplayedDeviceRegistration :one
 -- The enrollment a spent token produced, for the same key retrying after a crash.
 -- Only within the token's lifetime, while the device is still enrolled under its agent.
-SELECT t.organization_id, t.agent_id, t.consumed_by_subject AS subject, i.issuer, t.hooks_project_id, p.slug AS hooks_project_slug
+SELECT t.organization_id, t.agent_id, t.consumed_by_subject AS subject, i.issuer
 FROM workload_device_join_tokens t
-JOIN projects p
-  ON p.organization_id = t.organization_id
-  AND p.id = t.hooks_project_id
-  AND p.deleted IS FALSE
 JOIN workload_device_keys k
   ON k.organization_id = t.organization_id
   AND k.subject = t.consumed_by_subject
@@ -359,13 +345,3 @@ WHERE organization_id = @organization_id
   AND subject = @subject
   AND deleted IS FALSE
 RETURNING *;
-
--- name: GetHooksProject :one
--- A project in the caller's organization that a workload may be bound to for
--- hooks. Scoped by organization so naming another tenant's project is a
--- not-found.
-SELECT id, slug
-FROM projects
-WHERE organization_id = @organization_id
-  AND id = @id
-  AND deleted IS FALSE;

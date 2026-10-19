@@ -213,3 +213,30 @@ describe("MCPServerAvailabilityToggle", () => {
     });
   });
 });
+
+describe("hosted MCP server visibility", () => {
+  const hosted = {
+    ...server,
+    id: "hosted-1",
+    remoteMcpServerId: undefined,
+    toolsetId: "hosted-1",
+    visibility: "public",
+  } as McpServer;
+
+  it("keeps the availability switch read-only", () => {
+    renderToggle(hosted);
+
+    expect(
+      screen.getByRole("switch", { name: "Disable MCP server" }),
+    ).toHaveProperty("disabled", true);
+  });
+
+  it("keeps the status dropdown read-only", () => {
+    renderInApp(<MCPServerStatusDropdown server={hosted} />);
+
+    expect(screen.getByRole("button", { name: /Public/ })).toHaveProperty(
+      "disabled",
+      true,
+    );
+  });
+});

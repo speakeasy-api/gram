@@ -2768,8 +2768,6 @@ func marshalTypesWorkloadAdmissionToWorkloadAdmissionResponseBody(v *types.Workl
 		Name:             v.Name,
 		AgentID:          v.AgentID,
 		AgentName:        v.AgentName,
-		HooksProjectID:   v.HooksProjectID,
-		HooksProjectSlug: v.HooksProjectSlug,
 		WildcardActive:   v.WildcardActive,
 		CreatedAt:        v.CreatedAt,
 		UpdatedAt:        v.UpdatedAt,

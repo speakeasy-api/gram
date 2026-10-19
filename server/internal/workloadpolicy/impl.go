@@ -290,18 +290,17 @@ func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListToken
 	items := make([]*types.WorkloadTokenEndpoint, 0, len(rows))
 	for _, row := range rows {
 		issuer := row.UserSessionIssuer
-		issuerURL, err := s.sharedHosts.SharedIssuerURL(issuer)
-		if err != nil {
+		authorizationServer, err := s.sharedHosts.SharedAuthorizationServer(issuer)
+		switch {
+		case errors.Is(err, authserver.ErrPinnedIssuerURLInvalid), errors.Is(err, authserver.ErrHostNotServed):
 			// The issuer's MCP servers fall back to per-endpoint authorization
 			// servers, so there is no shared token endpoint to point a platform at.
 			s.logger.WarnContext(ctx, "skip user session issuer without a served shared authorization server", attr.SlogError(err))
 			continue
-		}
-		tokenEndpoint, err := authserver.SharedTokenEndpoint(issuerURL)
-		if err != nil {
+		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to build token endpoint").LogError(ctx, s.logger)
 		}
-		items = append(items, mv.BuildWorkloadTokenEndpointView(issuer, row.ProjectName.String, issuerURL, tokenEndpoint, serverURL.Host))
+		items = append(items, mv.BuildWorkloadTokenEndpointView(issuer, row.ProjectName.String, authorizationServer.IssuerURL, authorizationServer.TokenEndpoint, serverURL.Host))
 	}
 
 	return &types.WorkloadTokenEndpoints{Items: items}, nil
@@ -441,7 +440,6 @@ func AdmissionSnapshot(row repo.WorkloadIdentityAdmission, issuer repo.WorkloadI
 		Name:            conv.FromPGTextOrEmpty[string](row.Name),
 		Tags:            conv.DefaultSlice(row.Tags, []string{}),
 		AssignedAgentID: assignedAgentID,
-		HooksProjectID:  conv.PtrValOr(conv.FromNullableUUID(row.HooksProjectID), ""),
 		Tier:            tier(row.ProjectID),
 	}
 }
@@ -837,15 +835,6 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 		return nil, oops.E(oops.CodeInvalid, err, "agent_id is not a valid uuid")
 	}
 
-	hooksProjectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if payload.HooksProjectID != nil {
-		project, err := s.resolveHooksProject(ctx, t.organizationID, *payload.HooksProjectID)
-		if err != nil {
-			return nil, err
-		}
-		hooksProjectID = uuid.NullUUID{UUID: project.ID, Valid: true}
-	}
-
 	tags, err := normalizeTags(payload.Tags)
 	if err != nil {
 		return nil, err
@@ -952,7 +941,6 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 		MatchKind:        string(matchKind),
 		Name:             conv.PtrToPGTextEmpty(payload.Name),
 		Tags:             tags,
-		HooksProjectID:   hooksProjectID,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -1136,25 +1124,12 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 	params := repo.UpdateWorkloadAdmissionParams{
 		Name:           existing.Name,
 		Tags:           conv.DefaultSlice(existing.Tags, []string{}),
-		HooksProjectID: existing.HooksProjectID,
 		OrganizationID: t.organizationID,
 		ID:             id,
 		ProjectID:      t.projectID,
 	}
 	if name != nil {
 		params.Name = conv.ToPGTextEmpty(*name)
-	}
-	if payload.HooksProjectID != nil {
-		switch raw := strings.TrimSpace(*payload.HooksProjectID); raw {
-		case "":
-			params.HooksProjectID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		default:
-			project, err := s.resolveHooksProject(ctx, t.organizationID, raw)
-			if err != nil {
-				return nil, err
-			}
-			params.HooksProjectID = uuid.NullUUID{UUID: project.ID, Valid: true}
-		}
 	}
 	if tags != nil {
 		params.Tags = tags

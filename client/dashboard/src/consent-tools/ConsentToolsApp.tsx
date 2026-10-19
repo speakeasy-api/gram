@@ -5,7 +5,7 @@ import {
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { AlertTriangle, Check } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 
 import {
   ANNOTATION_OPTIONS,
@@ -22,6 +22,12 @@ export interface ConsentToolsAppProps {
   formId: string;
   approveButtonId: string;
   consentEnabled: boolean;
+  /**
+   * Set by the server when every service is linked or reached through
+   * identity chaining: a "not connected" inventory then only means chaining
+   * runs after approval, so access is given with all tools.
+   */
+  inventoryDeferred: boolean;
   serverName: string;
   prefill: ConsentSelection;
 }
@@ -46,6 +52,7 @@ interface ConsentInventory {
 type ConsentPhase =
   | { name: "loading" }
   | { name: "error"; conflict: boolean; message: string }
+  | { name: "deferred" }
   | { name: "ready"; inventory: ConsentInventory };
 
 /**
@@ -62,6 +69,28 @@ type ConsentGroup = "all" | ToolAnnotation | "none";
 type ToolAccessMode = "all" | "specific";
 
 const GENERIC_ERROR_MESSAGE = "Couldn't load this server's tools.";
+
+/**
+ * The consent page script raises this, and sets the matching attribute on
+ * the document element, when any identity-chained service is refused. A
+ * deferred page is chain-only, so its inventory can no longer load after
+ * approval.
+ */
+export const CHAIN_REJECTED_EVENT = "gram:consent-chain-rejected";
+const CHAIN_REJECTED_ATTRIBUTE = "data-consent-chain-rejected";
+
+const CHAIN_REJECTED_PHASE: ConsentPhase = {
+  name: "error",
+  conflict: true,
+  message:
+    "Your identity provider couldn't connect this service, so its tools can't load.",
+};
+
+function chainRejectedOnPage(): boolean {
+  return (
+    document.documentElement.getAttribute(CHAIN_REJECTED_ATTRIBUTE) === "true"
+  );
+}
 
 /**
  * Chip labels for the group filters. Deliberately terse: all six groups have to
@@ -163,8 +192,11 @@ function annotationsFromHints(value: unknown): ToolAnnotation[] {
   );
 }
 
-function errorPhase(err: unknown): ConsentPhase {
+function errorPhase(err: unknown, canDefer: boolean): ConsentPhase {
   const status = err instanceof StreamableHTTPError ? err.code : undefined;
+  if (status === 409 && canDefer) {
+    return { name: "deferred" };
+  }
   if (status === 409) {
     return {
       name: "error",
@@ -194,10 +226,11 @@ export function ConsentToolsApp({
   formId,
   approveButtonId,
   consentEnabled,
+  inventoryDeferred,
   serverName,
   prefill,
 }: ConsentToolsAppProps): JSX.Element {
-  const [phase, setPhase] = useState<ConsentPhase>({ name: "loading" });
+  const [loadPhase, setPhase] = useState<ConsentPhase>({ name: "loading" });
   const [attemptID, setAttemptID] = useState(() => crypto.randomUUID());
   // Tool access is a two-step choice: almost nobody narrows the grant, so the
   // picker stays behind "Specific tools" and "All tools" is the one-glance
@@ -256,18 +289,36 @@ export function ConsentToolsApp({
       setPhase({ name: "ready", inventory });
     };
     load().catch((err: unknown) => {
-      if (!cancelled) setPhase(errorPhase(err));
+      // A stored narrower selection must never be replaced by all tools.
+      if (!cancelled) {
+        setPhase(errorPhase(err, inventoryDeferred && prefill === null));
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [attemptID, toolsUrl, state, csrfToken, prefill]);
+  }, [attemptID, toolsUrl, state, csrfToken, prefill, inventoryDeferred]);
+
+  const [chainRejected, setChainRejected] = useState(chainRejectedOnPage);
+  useEffect(() => {
+    const onRejected = () => setChainRejected(true);
+    document.addEventListener(CHAIN_REJECTED_EVENT, onRejected);
+    if (chainRejectedOnPage()) setChainRejected(true);
+    return () => document.removeEventListener(CHAIN_REJECTED_EVENT, onRejected);
+  }, []);
+  const phase: ConsentPhase =
+    loadPhase.name === "deferred" && chainRejected
+      ? CHAIN_REJECTED_PHASE
+      : loadPhase;
 
   // Approval is gated on both a successfully loaded inventory and the
   // server-rendered remote-session readiness flag; anything else (loading,
-  // error, retry, malformed response) keeps the button disabled.
-  const approveReady = phase.name === "ready" && consentEnabled;
-  useEffect(() => {
+  // error, retry, malformed response) keeps the button disabled. A layout
+  // effect keeps the server-rendered button in step with the commit, so it is
+  // never enabled while the island already shows a blocking error.
+  const approveReady =
+    (phase.name === "ready" || phase.name === "deferred") && consentEnabled;
+  useLayoutEffect(() => {
     const button = document.getElementById(approveButtonId);
     if (button instanceof HTMLButtonElement) {
       button.dataset["consentSelfReady"] = approveReady ? "true" : "false";
@@ -313,6 +364,32 @@ export function ConsentToolsApp({
         className="border-border text-muted-foreground border px-3 py-3 text-sm"
       >
         Loading available tools…
+      </div>
+    );
+  }
+
+  if (phase.name === "deferred") {
+    return (
+      <div
+        role="status"
+        className="border-border text-muted-foreground space-y-1 border px-3 py-3 text-sm"
+      >
+        <p>
+          Tools load after you give access. This connection starts with all
+          tools available to you, because tool selection needs the service
+          connected first.
+        </p>
+        <input type="hidden" name="tool_filtering" value="off" form={formId} />
+        <p>
+          Signed in to the service separately?{" "}
+          <button
+            type="button"
+            onClick={() => setAttemptID(crypto.randomUUID())}
+            className="text-primary hover:underline"
+          >
+            Load tools
+          </button>
+        </p>
       </div>
     );
   }

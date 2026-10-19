@@ -104,6 +104,7 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeRiskPolicyBlock:         activeRuntimeScope(),
 	authz.ScopeChatRead:                activeRuntimeScope(),
 	authz.ScopeChatWrite:               activeRuntimeScope(),
+	authz.ScopeLogRead:                 activeRuntimeScope(),
 	authz.ScopeAgentRead:               activeRuntimeScope(),
 	authz.ScopeAgentWrite:              activeRuntimeScope(),
 	authz.ScopeAgentAuthorize:          activeRuntimeScope(),

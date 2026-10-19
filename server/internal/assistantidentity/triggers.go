@@ -128,8 +128,6 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, project, trigger uuid
 		admission, err := workloads.CreateWorkloadAdmission(ctx, workloadrepo.CreateWorkloadAdmissionParams{
 			OrganizationID: root.OrganizationID, ProjectID: projectID, WorkloadIssuerID: issuer.ID, Subject: subject,
 			MatchKind: string(workloadidentity.MatchKindExact), Name: conv.ToPGTextEmpty(""), Tags: []string{},
-			// Assistant triggers send no hooks through device-agent tokens.
-			HooksProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		})
 		if err != nil {
 			return fmt.Errorf("admit assistant trigger workload: %w", err)

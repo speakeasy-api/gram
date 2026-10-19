@@ -56,6 +56,7 @@ type Service struct {
 	pluginsGitHubEnabled  bool
 	distributionAdmission *admission.Guard
 	publicationRequests   plugins.PublicationRequests
+	hostedAddresses       HostedAddressWriter
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -84,6 +85,7 @@ func NewService(
 		pluginsGitHubEnabled:  pluginsGitHubEnabled,
 		distributionAdmission: admission.NewGuard(),
 		publicationRequests:   plugins.PublicationRequests{Enabled: false},
+		hostedAddresses:       nil,
 	}
 }
 
@@ -287,11 +289,12 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 // could still roll back.
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer) (bool, bool, error) {
 	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
-		DisplayName:    mcpservers.ServerDisplayName(server),
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       *authCtx.ProjectID,
+		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
+		DisplayName:     mcpservers.ServerDisplayName(server),
+		HostedServerKey: false,
 	}, s.distributionAdmission)
 	if err != nil {
 		return false, false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
@@ -479,6 +482,15 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 			return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp endpoint").LogError(ctx, logger)
+	}
+	if preexisting.McpServerID.Valid {
+		server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: preexisting.McpServerID.UUID, ProjectID: *authCtx.ProjectID})
+		switch {
+		case err == nil && server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID:
+			return s.updateHostedEndpoint(ctx, logger, preexisting, server, mcpServerID, customDomainID, slug)
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeUnexpected, err, "get endpoint backing server").LogError(ctx, logger)
+		}
 	}
 
 	dbtx, err := s.db.Begin(ctx)

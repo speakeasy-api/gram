@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	agent "github.com/speakeasy-api/gram/server/gen/agent"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -2438,6 +2439,9 @@ func marshalAgentAiScanTargetToAiScanTargetResponseBody(v *agent.AiScanTarget) *
 	if v.GatewayClient != nil {
 		res.GatewayClient = marshalAgentAiScanTargetGatewayClientToAiScanTargetGatewayClientResponseBody(v.GatewayClient)
 	}
+	if v.Access != nil {
+		res.Access = marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v.Access)
+	}
 
 	return res
 }
@@ -2511,6 +2515,23 @@ func marshalAgentAiScanTargetGatewayClientToAiScanTargetGatewayClientResponseBod
 		}
 	} else {
 		res.ClientInfoNames = []string{}
+	}
+
+	return res
+}
+
+// marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody builds a
+// value of type *AIToolAccessSummaryResponseBody from a value of type
+// *types.AIToolAccessSummary.
+func marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v *types.AIToolAccessSummary) *AIToolAccessSummaryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AIToolAccessSummaryResponseBody{
+		State:       v.State,
+		Decision:    v.Decision,
+		Enforceable: v.Enforceable,
+		Rationale:   v.Rationale,
 	}
 
 	return res

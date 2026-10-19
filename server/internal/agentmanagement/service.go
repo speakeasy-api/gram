@@ -151,8 +151,8 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		if err := s.logAgent(ctx, tx, human, audit.ActionAgentCreate, nil, &agent); err != nil {
 			return err
 		}
-		// Policy grants are ceilings, not credentials. As with CreatePolicyGrant,
-		// intrinsic ownership permits setup; issuance still intersects live authority.
+		// Initial policy is bounded by caller and owner authority. Credential
+		// issuance independently checks its requested delegation against live policy.
 		for _, grant := range payload.PolicyGrants {
 			if grant == nil {
 				return oops.E(oops.CodeBadRequest, nil, "agent policy grant is required")

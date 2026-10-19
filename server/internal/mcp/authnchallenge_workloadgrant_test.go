@@ -85,7 +85,7 @@ func newWorkloadGrantFixtureOn(t *testing.T, logger *slog.Logger, serverURL stri
 		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		MaxRequestLifetime: 0,
 	}, nil, nil, true, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0}, testenv.NewTracerProvider(t), nil, nil, serverURL, guardian.WithTLSRootCAs(issuer.RootCAs()))
-	fx := newAgentConsentFixture(t, ctx, ti)
+	fx := newWorkloadConsentFixture(t, ctx, ti)
 
 	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)

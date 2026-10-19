@@ -155,10 +155,10 @@ const PRODUCT_FEATURES = {
     kind: "omitted",
     where: "Dashboard remote session settings",
   },
-  // reason: managed in dashboard consent settings
-  consent_tool_filtering: {
+  // reason: managed in dashboard Gateway settings
+  organization_gateway_disabled: {
     kind: "omitted",
-    where: "Dashboard consent settings",
+    where: "Dashboard Gateway settings",
   },
 } satisfies Record<FeatureName, ProductFeatureDecision>;
 

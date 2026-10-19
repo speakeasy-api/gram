@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import {
   ListOrganizationUserSessionIssuersResult,
@@ -16,6 +17,18 @@ export type ListOrganizationUserSessionIssuersSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
+/**
+ * Only issuers from one tier: organization-owned (organization) or project-specific (project). Omitted lists both.
+ */
+export const QueryParamTier = {
+  Organization: "organization",
+  Project: "project",
+} as const;
+/**
+ * Only issuers from one tier: organization-owned (organization) or project-specific (project). Omitted lists both.
+ */
+export type QueryParamTier = ClosedEnum<typeof QueryParamTier>;
+
 export type ListOrganizationUserSessionIssuersRequest = {
   /**
    * Pagination cursor: id of the last item from the previous page.
@@ -25,6 +38,10 @@ export type ListOrganizationUserSessionIssuersRequest = {
    * Page size (default 50, max 100).
    */
   limit?: number | undefined;
+  /**
+   * Only issuers from one tier: organization-owned (organization) or project-specific (project). Omitted lists both.
+   */
+  tier?: QueryParamTier | undefined;
   /**
    * Session header
    */
@@ -68,9 +85,15 @@ export function listOrganizationUserSessionIssuersSecurityToJSON(
 }
 
 /** @internal */
+export const QueryParamTier$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamTier
+> = z.enum(QueryParamTier);
+
+/** @internal */
 export type ListOrganizationUserSessionIssuersRequest$Outbound = {
   cursor?: string | undefined;
   limit?: number | undefined;
+  tier?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -83,6 +106,7 @@ export const ListOrganizationUserSessionIssuersRequest$outboundSchema:
     z.object({
       cursor: z.optional(z.string()),
       limit: z.optional(z.int()),
+      tier: z.optional(QueryParamTier$outboundSchema),
       gramSession: z.optional(z.string()),
     }),
     z.transform((v) => {

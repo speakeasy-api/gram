@@ -76,6 +76,7 @@ func TestFindToolEntries_PreservesBuiltInPrecedence(t *testing.T) {
 		ExternalTool{
 			Executor:        &fixedDescriptorExecutor{descriptor: override},
 			RequiredFeature: "",
+			RequiredScope:   "",
 		},
 	)
 
@@ -111,6 +112,7 @@ func TestBuildToolsetsIncludesPlatformMCPReadToolset(t *testing.T) {
 			Name:        ToolNameListProjects,
 		}},
 		RequiredFeature: "",
+		RequiredScope:   "",
 	}
 
 	toolsets := BuildToolsets(ToolsetDependencies{

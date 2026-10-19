@@ -21,10 +21,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -62,6 +65,11 @@ const recallDigestByteCap = 48 << 10
 // so a truncated document is never mistaken for a complete one.
 const recallDigestTruncationMarker = "\n\n[digest truncated: size cap reached]"
 
+// RecallRiskFindingReader supplies live ClickHouse finding spans for masking.
+type RecallRiskFindingReader interface {
+	ListRiskFindingSpansForRecall(context.Context, chrepo.ListRiskFindingSpansForRecallParams) ([]chrepo.RiskFindingUnmaskRow, error)
+}
+
 // SessionRecallService serves the session-portability recall tools: listing
 // the caller's own captured coding-agent sessions and rendering one as a
 // redacted handoff digest so its work can continue in the current harness.
@@ -70,25 +78,39 @@ const recallDigestTruncationMarker = "\n\n[digest truncated: size cap reached]"
 // carry organization + owner user_id + not-deleted + the personal-account
 // exclusion), so there is no fetch-then-authorize step anywhere in this file.
 type SessionRecallService struct {
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	repo        *platformrepo.Queries
-	auditor     *audit.Logger
-	portability FeatureChecker
-	budget      OperationBudget
+	logger        *slog.Logger
+	db            *pgxpool.Pool
+	repo          *platformrepo.Queries
+	auditor       *audit.Logger
+	portability   FeatureChecker
+	cutover       feature.Provider
+	organizations OrganizationSlugResolver
+	findings      RecallRiskFindingReader
+	budget        OperationBudget
 }
 
-// NewSessionRecallService composes the recall entry points. A nil dependency
-// leaves the service invalid, which registers the unavailable stubs rather
-// than tools that always fail.
-func NewSessionRecallService(logger *slog.Logger, db *pgxpool.Pool, repo *platformrepo.Queries, auditor *audit.Logger, portability FeatureChecker, budget OperationBudget) *SessionRecallService {
+// NewSessionRecallService composes recall with optional cutover dependencies.
+func NewSessionRecallService(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	repo *platformrepo.Queries,
+	auditor *audit.Logger,
+	portability FeatureChecker,
+	cutover feature.Provider,
+	organizations OrganizationSlugResolver,
+	findings RecallRiskFindingReader,
+	budget OperationBudget,
+) *SessionRecallService {
 	return &SessionRecallService{
-		logger:      logger,
-		db:          db,
-		repo:        repo,
-		auditor:     auditor,
-		portability: portability,
-		budget:      budget,
+		logger:        logger,
+		db:            db,
+		repo:          repo,
+		auditor:       auditor,
+		portability:   portability,
+		cutover:       cutover,
+		organizations: organizations,
+		findings:      findings,
+		budget:        budget,
 	}
 }
 
@@ -163,6 +185,77 @@ func (s *SessionRecallService) ListMySessions(ctx context.Context, principal Pri
 	return ListMySessionsOutput{Sessions: sessions}, nil
 }
 
+// useClickHouseFindings fails closed: a cut-over org's ClickHouse-only
+// findings are absent from Postgres, so an unresolved flag must not downgrade
+// the masking source.
+func (s *SessionRecallService) useClickHouseFindings(ctx context.Context, principal Principal) (bool, error) {
+	if s.cutover == nil || s.organizations == nil {
+		return false, nil
+	}
+	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
+	if err != nil {
+		return false, fmt.Errorf("resolve organization for risk findings cutover: %w", err)
+	}
+	enabled, err := s.cutover.IsFlagEnabled(
+		ctx,
+		feature.FlagRiskFindingsClickHouseCutover,
+		principal.OrganizationID,
+		feature.OrgProjectGroups(organizationSlug, ""),
+	)
+	if err != nil {
+		return false, fmt.Errorf("check risk findings clickhouse cutover flag: %w", err)
+	}
+	return enabled, nil
+}
+
+func (s *SessionRecallService) riskFindingMasks(
+	ctx context.Context,
+	principal Principal,
+	chatID, projectID uuid.UUID,
+	messages []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow,
+) (findingMasks, error) {
+	useClickHouse, err := s.useClickHouseFindings(ctx, principal)
+	if err != nil {
+		return findingMasks{}, err
+	}
+	if !useClickHouse {
+		findings, err := s.repo.ListRiskFindingSpansForRecall(ctx, platformrepo.ListRiskFindingSpansForRecallParams{
+			ChatID:         chatID,
+			ProjectID:      projectID,
+			OrganizationID: principal.OrganizationID,
+			UserID:         principal.UserID,
+		})
+		if err != nil {
+			return findingMasks{}, fmt.Errorf("read risk findings for recall: %w", err)
+		}
+		return maskFindingSpans(messages, findings), nil
+	}
+	if s.findings == nil {
+		return findingMasks{}, errors.New("clickhouse risk findings for recall are unavailable")
+	}
+	policies, err := riskrepo.New(s.db).ListEnabledRiskPolicyIDsByOrganizationProject(ctx, riskrepo.ListEnabledRiskPolicyIDsByOrganizationProjectParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return findingMasks{}, fmt.Errorf("list enabled risk policies for recall: %w", err)
+	}
+	policyIDs := make([]string, 0, len(policies))
+	for _, id := range policies {
+		policyIDs = append(policyIDs, id.String())
+	}
+	findings, err := s.findings.ListRiskFindingSpansForRecall(ctx, chrepo.ListRiskFindingSpansForRecallParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      projectID.String(),
+		ChatID:         chatID.String(),
+		PolicyIDs:      policyIDs,
+	})
+	if err != nil {
+		return findingMasks{}, fmt.Errorf("read clickhouse risk findings for recall: %w", err)
+	}
+	return maskClickHouseFindingSpans(messages, findings), nil
+}
+
 func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Principal, input ContinueSessionInput) (ContinueSessionOutput, error) {
 	empty := ContinueSessionOutput{Digest: "", SourceSessionID: "", ChatID: "", NotCarriedOver: nil, Notes: nil}
 	if !s.valid() {
@@ -208,17 +301,10 @@ func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Pr
 	// tail; everything downstream expects chronological order.
 	cappedRead := len(messages) == recallMessageRowCap
 	slices.Reverse(messages)
-	findings, err := s.repo.ListRiskFindingSpansForRecall(ctx, platformrepo.ListRiskFindingSpansForRecallParams{
-		ChatID:         chatID,
-		ProjectID:      row.ProjectID,
-		OrganizationID: principal.OrganizationID,
-		UserID:         principal.UserID,
-	})
+	masks, err := s.riskFindingMasks(ctx, principal, chatID, row.ProjectID, messages)
 	if err != nil {
-		return empty, fmt.Errorf("read risk findings for recall: %w", err)
+		return empty, err
 	}
-
-	masks := maskFindingSpans(messages, findings)
 	extract := turnsFromRows(messages, masks.content)
 
 	sourceSessionID := sessionIDForChat(row.ExternalChatID, row.ID)
@@ -379,6 +465,10 @@ type contentMaskSpan struct {
 	// so applyContentMasks refuses any span whose selected bytes differ.
 	match string
 }
+type recallMessageSpans struct {
+	spans       []contentMaskSpan
+	unappliable int
+}
 
 // findingMasks is maskFindingSpans's result: the substitute content per
 // affected message, the number of finding spans neutralized (masked in place
@@ -403,18 +493,14 @@ func maskFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessagesForReca
 	if len(findings) == 0 {
 		return out
 	}
-	type messageSpans struct {
-		spans       []contentMaskSpan
-		unappliable int
-	}
-	byMessage := make(map[uuid.UUID]*messageSpans)
+	byMessage := make(map[uuid.UUID]*recallMessageSpans)
 	for _, finding := range findings {
 		if !finding.ChatMessageID.Valid {
 			continue
 		}
 		ms := byMessage[finding.ChatMessageID.UUID]
 		if ms == nil {
-			ms = &messageSpans{spans: nil, unappliable: 0}
+			ms = &recallMessageSpans{spans: nil, unappliable: 0}
 			byMessage[finding.ChatMessageID.UUID] = ms
 		}
 		ruleID := conv.FromPGTextOrEmpty[string](finding.RuleID)
@@ -474,7 +560,71 @@ func maskFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessagesForReca
 			}
 		}
 	}
-	out.content = make(map[uuid.UUID]string, len(byMessage))
+	return applyFindingMasks(rows, byMessage)
+}
+
+func maskClickHouseFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow, findings []chrepo.RiskFindingUnmaskRow) findingMasks {
+	if len(findings) == 0 {
+		return findingMasks{content: nil, neutralized: 0, withheld: 0}
+	}
+	messages := make(map[uuid.UUID]string, len(rows))
+	for _, row := range rows {
+		messages[row.ID] = row.Content
+	}
+	byMessage := make(map[uuid.UUID]*recallMessageSpans)
+	for _, finding := range findings {
+		messageID, err := uuid.Parse(finding.ChatMessageID)
+		if err != nil {
+			continue
+		}
+		content, visible := messages[messageID]
+		if !visible {
+			continue
+		}
+		ms := byMessage[messageID]
+		if ms == nil {
+			ms = &recallMessageSpans{spans: nil, unappliable: 0}
+			byMessage[messageID] = ms
+		}
+		surface := finding.Surface
+		if surface == "" {
+			// Rows written before the surface column default to empty.
+			surface = scanners.FindingSurface(finding.Source, finding.Field, finding.Path)
+		}
+		if strings.HasPrefix(finding.Field, "tool.") || surface == scanners.SurfaceToolArgs {
+			continue
+		}
+		switch surface {
+		case scanners.SurfaceContent:
+			start, end := int(finding.StartPos), int(finding.EndPos)
+			if start < 0 || end <= start || end > len(content) || finding.MatchLen == 0 || end-start != conv.SafeInt(int64(finding.MatchLen)) {
+				ms.unappliable++
+				continue
+			}
+			match := content[start:end]
+			display := maskdisplay.Display(finding.Source, finding.RuleID, match)
+			// ClickHouse stores no raw match, so the ingest-time display string
+			// is the evidence that these bytes are still the finding's.
+			if display != finding.MatchRedacted {
+				ms.unappliable++
+				continue
+			}
+			ms.spans = append(ms.spans, contentMaskSpan{
+				start:   start,
+				end:     end,
+				display: display,
+				match:   match,
+			})
+		case scanners.SurfaceDerived, scanners.SurfaceNone:
+		default:
+			ms.unappliable++
+		}
+	}
+	return applyFindingMasks(rows, byMessage)
+}
+
+func applyFindingMasks(rows []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow, byMessage map[uuid.UUID]*recallMessageSpans) findingMasks {
+	out := findingMasks{content: make(map[uuid.UUID]string, len(byMessage)), neutralized: 0, withheld: 0}
 	for _, row := range rows {
 		ms, ok := byMessage[row.ID]
 		if !ok || (len(ms.spans) == 0 && ms.unappliable == 0) {

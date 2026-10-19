@@ -1,0 +1,21 @@
+edition = "2024";
+
+package gram.sigint.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1;sigintv1";
+
+// OutcomeCHWriter lands sensor outcomes in ClickHouse beside readings.
+message OutcomeCHWriter {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.sigint.v1.Outcome"
+    ack_deadline: { seconds: 60 }
+    retention: { seconds: 345600 /* 4 days */ }
+    retain_acked_messages: true
+    retry_policy: {
+      minimum_backoff: { seconds: 10 }
+      maximum_backoff: { seconds: 600 }
+    }
+  };
+}

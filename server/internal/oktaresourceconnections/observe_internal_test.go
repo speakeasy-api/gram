@@ -15,7 +15,7 @@ func TestResultFor(t *testing.T) {
 	t.Parallel()
 
 	outcome := func(stage identitychaining.Stage, reason identitychaining.Reason, retryable bool) identitychaining.Outcome {
-		return identitychaining.Outcome{Stage: stage, Reason: reason, Confidence: identitychaining.ConfidenceInferred, Retryable: retryable, Cached: false}
+		return identitychaining.Outcome{Stage: stage, Reason: reason, Confidence: identitychaining.ConfidenceInferred, Retryable: retryable, Cached: false, Provider: ""}
 	}
 	tests := []struct {
 		name      string

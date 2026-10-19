@@ -77,6 +77,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/lake"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
@@ -513,11 +514,21 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	}, nil
 }
 
+// newFeatureFlags returns PostHog, or the CSV-backed in-memory provider in local dev.
+func newFeatureFlags(ctx context.Context, c *cli.Context, logger *slog.Logger, posthogClient feature.Provider) feature.Provider {
+	if c.String("environment") == "local" {
+		return newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+	}
+	return posthogClient
+}
+
 func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath string) *feature.InMemory {
 	inmem := &feature.InMemory{}
 	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
 	// Pub/Sub lanes to pystreams. A CSV row can still turn this off.
 	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
+	// The issuer kill switch fails closed when unset, so local dev sets it off.
+	inmem.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, feature.AnyDistinctID, false)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -795,8 +806,9 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 // the dev-idp's WorkOS emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
-		Endpoint: c.String("workos-endpoint"),
-		ClientID: c.String("idp-client-id"),
+		Endpoint:    c.String("workos-endpoint"),
+		ClientID:    c.String("idp-client-id"),
+		RetryConfig: nil,
 	}
 }
 
@@ -1438,6 +1450,18 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "llmAnalysis", pub: llmAnalysis})
 
+	toolCallAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.ToolCallAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for tool call analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "toolCallAnalysis", pub: toolCallAnalysis})
+
+	accountIdentityAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.AccountIdentityAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for account identity analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "accountIdentityAnalysis", pub: accountIdentityAnalysis})
+
 	riskFindings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
@@ -1542,6 +1566,8 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
 		LLMAnalysis:             llmAnalysis,
+		ToolCallAnalysis:        toolCallAnalysis,
+		AccountIdentityAnalysis: accountIdentityAnalysis,
 		RiskFindings:            riskFindings,
 		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,
@@ -1713,6 +1739,7 @@ func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog
 		SigningCredentialID:   credentialID,
 		SigningServiceAccount: strings.TrimSpace(c.String(identityProviderSigningServiceAccount)),
 		ServerURL:             serverURL,
+		AllowLoopbackIssuer:   c.String("environment") == "local",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build identity provider connections provisioner: %w", err)
@@ -1780,4 +1807,38 @@ func preserveLegacyLocalSigningKey(sourcePath, targetPath string) error {
 // capacity.
 func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog, replicaDB *pgxpool.Pool, siteURL *url.URL) *growthsignals.Emitter {
 	return growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(replicaDB), siteURL)
+}
+
+// newInternalSessionIssuerGate reports what each organization may do with its
+// issuer, honoring the startup kill switch.
+func newInternalSessionIssuerGate(c *cli.Context, db *pgxpool.Pool, featureFlags feature.Provider, provisioning bool) *internalsessionissuers.Gate {
+	return internalsessionissuers.NewGate(db, featureFlags, internalsessionissuers.GateConfig{
+		Provisioning:  provisioning,
+		SigningPaused: c.Bool(internalSessionIssuerSigningPausedFlag),
+	})
+}
+
+// internalSessionIssuerManager keeps a nil provisioner a nil interface.
+func internalSessionIssuerManager(provisioner *identityproviderconnections.Provisioner) internalsessionissuers.Manager {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
+}
+
+// enableIssuerKeyAutoActivation lets the key sweep finish routine rotations,
+// approving each key with the same checks a signature passes.
+func enableIssuerKeyAutoActivation(provisioner *identityproviderconnections.Provisioner, signer *internalsessionissuers.Signer) {
+	if provisioner == nil {
+		return
+	}
+	provisioner.SetEMAIssuerActivationCheck(signer.CheckActivation)
+}
+
+// issuerKeySweeper keeps a nil provisioner a nil interface.
+func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) background.InternalSessionIssuerKeySweeper {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
 }

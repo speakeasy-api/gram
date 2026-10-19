@@ -49,8 +49,8 @@ func TestEvaluationMessageBatchScopesAndSplitProjection(t *testing.T) {
 	require.Len(t, rows, 3)
 
 	for _, row := range rows {
-		require.Equal(t, row.ChatMessage.ID != ids[2], row.RowLocalContent)
-		if row.ChatMessage.ID == ids[1] {
+		require.Equal(t, row.ID != ids[2], row.RowLocalContent)
+		if row.ID == ids[1] {
 			require.Equal(t, []string{uri}, row.AttachmentUris)
 		} else {
 			require.Empty(t, row.AttachmentUris)

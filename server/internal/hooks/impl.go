@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -72,6 +73,7 @@ type Service struct {
 	authz              *authz.Engine
 	audit              *audit.Logger
 	cache              cache.Cache
+	ahpUploadLimiter   *ratelimit.Limiter
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
@@ -268,6 +270,7 @@ func NewService(
 	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord],
 	sessionsMgr *sessions.Manager,
 	cacheAdapter cache.Cache,
+	uploadLimitStore ratelimit.Store,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	authz *authz.Engine,
@@ -301,6 +304,7 @@ func NewService(
 		authz:              authz,
 		audit:              auditLogger,
 		cache:              cacheAdapter,
+		ahpUploadLimiter:   ratelimit.New(uploadLimitStore, "ahp-upload", ratelimit.Rate{Tokens: ahpUploadBurst, Interval: ahpUploadTTL, Burst: ahpUploadBurst}, ratelimit.WithMetrics(meterProvider)),
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),
 		productFeatures:    pfClient,

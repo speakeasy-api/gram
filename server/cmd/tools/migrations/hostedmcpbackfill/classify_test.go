@@ -1,7 +1,10 @@
 package hostedmcpbackfill
 
 import (
+	"context"
 	"errors"
+	"io"
+	"net"
 	"testing"
 
 	"github.com/jackc/pgerrcode"
@@ -29,6 +32,14 @@ func TestClassifySyncError(t *testing.T) {
 		{"unexpected", oops.E(oops.CodeUnexpected, errors.New("db down"), "load hosted MCP server"), "", false},
 		{"unauthorized", oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor"), "", false},
 		{"plain error", errors.New("boom"), "", false},
+		{"deadlock", oops.E(oops.CodeConflict, &pgconn.PgError{Code: pgerrcode.DeadlockDetected}, "create hosted MCP endpoint"), "", false},
+		{"serialization failure", oops.E(oops.CodeConflict, &pgconn.PgError{Code: pgerrcode.SerializationFailure}, "create hosted MCP endpoint"), "", false},
+		{"lock timeout", oops.E(oops.CodeInvalid, &pgconn.PgError{Code: pgerrcode.LockNotAvailable}, "lock hosted MCP server"), "", false},
+		{"statement timeout", oops.E(oops.CodeConflict, &pgconn.PgError{Code: pgerrcode.QueryCanceled}, "update hosted MCP server"), "", false},
+		{"idle timeout", oops.E(oops.CodeConflict, &pgconn.PgError{Code: pgerrcode.IdleInTransactionSessionTimeout}, "update hosted MCP server"), "", false},
+		{"context canceled", oops.E(oops.CodeConflict, context.Canceled, "update hosted MCP server"), "", false},
+		{"connection reset", oops.E(oops.CodeConflict, &net.OpError{Op: "read", Net: "tcp", Err: errors.New("connection reset by peer")}, "create hosted MCP server"), "", false},
+		{"unexpected eof", oops.E(oops.CodeConflict, io.ErrUnexpectedEOF, "create hosted MCP endpoint"), "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

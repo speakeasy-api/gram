@@ -83,7 +83,7 @@ describe("RemoteIdentitySummary", () => {
   it.each([
     ["user", "User"],
     ["agent", "Service Account"],
-    ["none", "None"],
+    ["none", "Manual"],
   ] as const)("makes the %s pill the way into settings", (mode, label) => {
     renderSummary({ mode });
 
@@ -112,7 +112,7 @@ describe("RemoteIdentitySummary", () => {
     // Warning states used to spend a line of the sidebar on their own; the
     // pill carries the amber and the detail waits for a hover.
     expect(screen.queryByText(/keep failing/i)).toBeNull();
-    expect(screen.getByRole("link", { name: /None/ }).className).toContain(
+    expect(screen.getByRole("link", { name: /Manual/ }).className).toContain(
       "border-warning-default",
     );
   });

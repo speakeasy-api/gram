@@ -294,7 +294,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		// completions retain the claim generation. Preserve the original CAS below.
 		b.Generation++
 		b.RemoteSessionClientID = conv.ToNullUUID(client.ID)
-		b.RequestedScopes = scopes
+		b.RequestedScopes = sortedScopes(scopes)
 		b.GrantSource = conv.ToPGText(PreparationGrantSourceProviderReturned)
 		b.ClaimID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		b.ClaimedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}

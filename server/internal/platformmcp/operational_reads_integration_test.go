@@ -382,7 +382,7 @@ func TestListRecentToolCallsUsesBoundedSafeSummaryProjection(t *testing.T) {
 	reader.recentToolCalls.now = func() time.Time { return fixedNow }
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
-	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String())})
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeLogRead, project.ID.String())})
 
 	output, err := reader.ListRecentToolCalls(ctx, principal, ListRecentToolCallsInput{ProjectSlug: project.Slug})
 	require.NoError(t, err)
@@ -416,6 +416,31 @@ func TestListRecentToolCallsUsesBoundedSafeSummaryProjection(t *testing.T) {
 	require.NotContains(t, string(encoded), "private-user-key")
 	require.NotContains(t, string(encoded), "person@example.test")
 	require.NotContains(t, string(encoded), "trace-id")
+}
+
+func TestListRecentToolCallsRequiresLogRead(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_recent_tool_calls_log_read")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	telemetry := &recordingRecentToolCallReader{rows: nil}
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithAuthorization(engine).
+		WithRecentToolCalls(telemetry, mustParseURL(t, "https://app.getgram.test"))
+	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
+	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{
+		authz.NewGrant(authz.ScopeProjectRead, project.ID.String()),
+		authz.NewGrant(authz.ScopeProjectWrite, project.ID.String()),
+		authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID),
+	})
+
+	_, err = reader.ListRecentToolCalls(ctx, principal, ListRecentToolCallsInput{ProjectSlug: project.Slug})
+	require.ErrorIs(t, err, ErrForbidden)
+	require.Empty(t, telemetry.params.GramProjectID, "no tool-call rows are read without log:read")
 }
 
 func TestRecentToolCallTargetOmitsUnclassifiedShadowSource(t *testing.T) {

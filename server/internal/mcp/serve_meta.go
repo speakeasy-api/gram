@@ -2,7 +2,8 @@
 // /mcp/{slug} endpoints. This surface answers MCP 2026-07-28 — including the
 // sessionless server/discover method and per-request protocol-version
 // declarations — and exposes the fixed meta MCP tool contract (list_servers,
-// describe_server, describe_tools, execute_tool). Hosted (toolset-backed)
+// describe_server, describe_tools, execute_tool, connection_status) plus the
+// one MCP Apps resource connection_status renders with. Hosted (toolset-backed)
 // members serve the full drill-down through the in-process tool dispatch;
 // proxied (remote/tunneled) members through their own upstream sessions.
 
@@ -52,11 +53,25 @@ type metaGateContext struct {
 	// agentID is set only when this request is an agent gateway, which
 	// derives its members from the caller's delegated policy instead of
 	// stored membership rows.
-	agentID        uuid.UUID
-	organizationID string
-	tokens         map[uuid.UUID]remotesessions.UpstreamToken
+	agentID uuid.UUID
+	// organizationGateway is set only when this request is an organization
+	// gateway, which derives its members from the signed-in user's access
+	// across the organization instead of stored membership rows.
+	organizationGateway bool
+	organizationID      string
+	// tokens is the upstream token map every member routes from, unless
+	// projectTokens is set.
+	tokens map[uuid.UUID]remotesessions.UpstreamToken
+	// projectTokens resolves upstream tokens per member project instead of
+	// tokens, for an organization gateway whose members span projects. Read
+	// both through memberTokens.
+	projectTokens *projectTokenCache
 	// userSessionIssuerID is the gated endpoint's issuer; uuid.Nil when ungated.
 	userSessionIssuerID uuid.UUID
+	// connectRoot is the gateway's root URL, under which each member has a
+	// connect page a signed-in person opens to connect it. Empty when nobody
+	// signs in to the gateway in a browser: ungated and agent gateways.
+	connectRoot string
 	// chainUpstream acquires a member's upstream token by identity chaining
 	// when routing finds none. Set only on the tools/call dispatch copy, so
 	// describe and consent probes never exchange; nil otherwise.
@@ -69,11 +84,27 @@ type metaGateContext struct {
 	externalUserID  string
 	apiKeyID        string
 	protocolVersion mcpversions.Resolution
+	// connectURL is the gateway's browser connect page; empty when ungated.
+	connectURL string
 }
 
-func shouldRecordMetaMCPNetworkRequest(agentID uuid.UUID) bool {
-	// Agent gateways are synthetic and have no network access panel to feed.
-	return agentID == uuid.Nil
+// metaMembership names where a meta request's members come from. The zero
+// value is a stored gateway, whose members are its meta_mcp_server_members
+// rows.
+type metaMembership struct {
+	// agentID is set for an agent gateway: its members are what the agent's
+	// delegated policy reaches.
+	agentID uuid.UUID
+
+	// organization is set for an organization gateway: its members are what
+	// the signed-in user can reach across the organization.
+	organization bool
+}
+
+// derived reports whether members come from the caller's access rather than
+// from stored membership rows.
+func (m metaMembership) derived() bool {
+	return m.agentID != uuid.Nil || m.organization
 }
 
 // serveResolvedMetaMCPEndpoint terminates MCP for a meta-MCP-backed
@@ -81,19 +112,22 @@ func shouldRecordMetaMCPNetworkRequest(agentID uuid.UUID) bool {
 // then dispatches the JSON-RPC request. Only POST reaches here — GET/DELETE
 // on /mcp/{slug} stay with their existing handlers, which treat meta-backed
 // endpoints as having no proxied stream and no upstream session.
-// agentID is the agent whose grants define membership, or uuid.Nil for a
-// stored gateway whose members come from meta_mcp_server_members.
+// membership says where the members come from. resolvedEndpoint is the
+// issuer-gate endpoint for a gateway that has no mcp_endpoints row behind it,
+// and nil for one that does.
 func (s *Service) serveResolvedMetaMCPEndpoint(
 	w http.ResponseWriter,
 	r *http.Request,
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
 	metaServer *metamcprepo.MetaMcpServer,
-	agentID uuid.UUID,
+	membership metaMembership,
+	resolvedEndpoint *ResolvedMcpEndpoint,
 ) error {
 	ctx := r.Context()
 
-	if shouldRecordMetaMCPNetworkRequest(agentID) {
+	// Derived gateways are synthetic and have no network access panel to feed.
+	if !membership.derived() {
 		s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, uuid.Nil, metaServer.ID, metaServer.OrganizationID)
 	}
 	logger = logger.With(attr.SlogMetaMcpServerID(metaServer.ID.String()))
@@ -146,11 +180,28 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	}
 
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
+	var gateProjectTokens *projectTokenCache
 	var gateToolSelection *toolfilter.SessionSelection
-	if metaServer.UserSessionIssuerID.Valid {
-		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, "mcp")
+	switch {
+	case !metaServer.UserSessionIssuerID.Valid:
+	case membership.organization:
+		// Members span projects, so credentials resolve per member project
+		// when a member first needs them rather than once for the gateway.
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
-			return err
+			return fmt.Errorf("authenticate organization gateway: %w", err)
+		}
+		ctx = newCtx
+		r = r.WithContext(ctx)
+		gateProjectTokens = s.newOrganizationGatewayTokens(authentication)
+		gateToolSelection = toolSelection
+	default:
+		if resolvedEndpoint == nil {
+			built, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, "mcp")
+			if err != nil {
+				return err
+			}
+			resolvedEndpoint = built
 		}
 		newCtx, tokens, toolSelection, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
@@ -167,16 +218,31 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if err := validateMCPRequestEnvelope(ctx, logger, prepared, oops.CodeRequestTooLarge, "meta mcp request body exceeds 1 MiB"); err != nil {
 		return err
 	}
+	connectURL, connectRoot := "", ""
+	if metaServer.UserSessionIssuerID.Valid && resolvedEndpoint != nil {
+		root, err := resolvedEndpoint.RootURL(s.BaseURLForRequest(r))
+		if err != nil {
+			logger.WarnContext(ctx, "build gateway connect url", attr.SlogError(err))
+		} else {
+			connectURL = root + "/connect/first-party"
+			if membership.agentID == uuid.Nil {
+				connectRoot = root
+			}
+		}
+	}
 	gate := &metaGateContext{
 		projectID:    mcpEndpoint.ProjectID,
 		metaServerID: metaServer.ID,
-		// Nil for a stored gateway, whose members come from
+		// Both unset for a stored gateway, whose members come from
 		// meta_mcp_server_members rather than from a caller's grants.
-		agentID:        agentID,
-		organizationID: metaServer.OrganizationID,
-		tokens:         gateTokens,
+		agentID:             membership.agentID,
+		organizationGateway: membership.organization,
+		organizationID:      metaServer.OrganizationID,
+		tokens:              gateTokens,
+		projectTokens:       gateProjectTokens,
 		// Uninitialized when ungated, which disables identity chaining.
 		userSessionIssuerID: metaServer.UserSessionIssuerID.UUID,
+		connectRoot:         connectRoot,
 		chainUpstream:       nil,
 		toolSelection:       gateToolSelection,
 		authenticated:       false,
@@ -188,6 +254,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		// Member dispatch carries this InEffect verbatim; nothing on the
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion: resolution,
+		connectURL:      connectURL,
 	}
 	// Identity comes from the issuer gate alone: this surface runs no
 	// identity-auth ladder, so ungated meta endpoints serve anonymously —
@@ -200,11 +267,11 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		// authenticated = the caller's org owns the endpoint's project,
 		// unlocking gram environments for hosted-member execution.
 		//
-		// An agent gateway has no endpoint project to own, and its key was
+		// A derived gateway has no endpoint project to own, and its caller was
 		// already authenticated against this organization before dispatch. It
 		// is authenticated by construction; leaving it false would list a
 		// granted private member and then fail to drill into it.
-		if agentID != uuid.Nil {
+		if membership.derived() {
 			gate.authenticated = authCtx.ActiveOrganizationID == metaServer.OrganizationID
 		} else if authCtx.ActiveOrganizationID != "" {
 			projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
@@ -281,6 +348,10 @@ func (s *Service) handleMetaMCPRequest(
 		return s.listMetaServerTools(ctx, logger, req)
 	case mcpversions.MethodToolsCall:
 		return s.callMetaServerTool(ctx, logger, mcpEndpoint, metaServer, gate, req)
+	case mcpversions.MethodResourcesList:
+		return handleMetaResourcesList(ctx, logger, req)
+	case mcpversions.MethodResourcesRead:
+		return handleMetaResourcesRead(ctx, logger, req)
 	default:
 		return nil, unavailableMethod(req)
 	}
@@ -404,6 +475,12 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 			Annotations: nil,
 			Meta:        nil,
 		})
+		if tool.Name == metamcp.ToolConnectionStatus {
+			tools[len(tools)-1].Meta = map[string]any{
+				"ui":             map[string]any{"resourceUri": metamcp.ConnectionStatusResourceURI},
+				"ui/resourceUri": metamcp.ConnectionStatusResourceURI,
+			}
+		}
 	}
 
 	bs, err := json.Marshal(&result[toolsListResultTools]{
@@ -411,7 +488,7 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 		Result:         toolsListResultTools{Tools: tools},
 		serverIdentity: serverInfoMetaServer,
 		// The gateway tool contract is fixed and consults neither the endpoint
-		// nor the meta server, so every caller receives the same four tools.
+		// nor the meta server, so every caller receives the same tools.
 		cacheHints: cacheHintsCallerUniform,
 	})
 	if err != nil {
@@ -437,7 +514,7 @@ func (s *Service) callMetaServerTool(
 	}
 
 	switch params.Name {
-	case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool:
+	case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool, metamcp.ToolConnectionStatus:
 	default:
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown tool %q", params.Name).LogError(ctx, logger)
 	}
@@ -446,15 +523,19 @@ func (s *Service) callMetaServerTool(
 
 	// One snapshot per request: every meta MCP tool answers from the same
 	// member set, so a membership mutation lands between requests, never
-	// inside one. An agent gateway has no stored membership — its members are
-	// whatever its delegated policy still reaches at this instant — so a
+	// inside one. A derived gateway has no stored membership — its members
+	// are whatever the caller's access still reaches at this instant — so a
 	// revoked grant lands between requests the same way.
 	var (
 		members []metaMember
 		err     error
 	)
-	if gate.agentID != uuid.Nil {
-		ctx, members, err = s.resolveAgentMemberSnapshot(ctx, logger, gate.organizationID)
+	if gate.agentID != uuid.Nil || gate.organizationGateway {
+		issuer := uuid.Nil
+		if gate.organizationGateway {
+			issuer = gate.userSessionIssuerID
+		}
+		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID, issuer)
 	} else {
 		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
 	}
@@ -473,6 +554,8 @@ func (s *Service) callMetaServerTool(
 		body, err = s.handleMetaDescribeServerCall(ctx, logger, gate, members, req, params.Arguments)
 	case metamcp.ToolDescribeTools:
 		body, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
+	case metamcp.ToolConnectionStatus:
+		body, err = s.handleMetaConnectionStatusCall(ctx, logger, gate, members, req)
 	default:
 		// execute_tool is deliberately not logged here: the member dispatch
 		// writes the single tool_call row, stamped with this gateway's id.

@@ -34,6 +34,54 @@ type McpEndpoint struct {
 	Deleted bool
 }
 
+type McpEnvironmentConfig struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	McpMetadataID uuid.UUID
+	// @access: confidential
+	VariableName string
+	// @access: confidential
+	HeaderDisplayName pgtype.Text
+	// @access: opaque-confidential
+	ProvidedBy string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type McpMetadatum struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ToolsetID uuid.NullUUID
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: restricted
+	ExternalDocumentationUrl pgtype.Text
+	// @access: opaque-restricted
+	ExternalDocumentationText pgtype.Text
+	// @access: confidential
+	LogoID uuid.NullUUID
+	// @access: opaque-restricted
+	Instructions pgtype.Text
+	// @access: opaque-restricted
+	HeaderDisplayNames []byte
+	// @access: confidential
+	DefaultEnvironmentID uuid.NullUUID
+	// @access: restricted
+	InstallationOverrideUrl pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type McpServer struct {
 	// @access: confidential
 	ID uuid.UUID
