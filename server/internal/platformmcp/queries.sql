@@ -4139,3 +4139,117 @@ SELECT id, seq, created_at, role, generation,
        (content_asset_url IS NOT NULL AND content_raw IS NULL) AS offloaded,
        (octet_length(content) > 131072 OR COALESCE(octet_length(tool_calls::text), 0) > 131072 OR COALESCE(octet_length(content_raw::text), 0) > 131072) AS oversized
 FROM neighbors ORDER BY seq;
+
+-- name: ListPlatformChatEvidenceParticipants :many
+-- Only messages already selected under transcript authorization are admitted.
+-- The per-message sentinel makes truncated attribution explicit.
+SELECT cm.id AS message_id, cp.provider, cp.provider_user_id,
+       cp.provider_team_id, cp.user_id, cp.display_name, cp.created_at
+FROM chat_messages cm
+JOIN chats c ON c.id=cm.chat_id AND c.project_id=cm.project_id AND c.deleted IS FALSE
+JOIN projects pr ON pr.id=c.project_id AND pr.organization_id=c.organization_id AND pr.deleted IS FALSE
+CROSS JOIN LATERAL (
+ SELECT
+   CASE WHEN octet_length(p.provider)<=128 THEN p.provider ELSE '[WITHHELD]' END::text AS provider,
+   CASE WHEN octet_length(p.provider_user_id)<=128 THEN p.provider_user_id ELSE '[WITHHELD]' END::text AS provider_user_id,
+   CASE WHEN coalesce(octet_length(p.provider_team_id),0)<=128 THEN coalesce(p.provider_team_id,'') ELSE '[WITHHELD]' END::text AS provider_team_id,
+   CASE WHEN coalesce(octet_length(p.user_id),0)<=128 THEN coalesce(p.user_id,'') ELSE '[WITHHELD]' END::text AS user_id,
+   CASE WHEN coalesce(octet_length(p.display_name),0)<=256 THEN coalesce(p.display_name,'') ELSE '[WITHHELD]' END::text AS display_name,
+   p.created_at, p.id, CASE WHEN
+   (sqlc.arg('participant_user_id')::text<>'' AND p.user_id=sqlc.arg('participant_user_id'))
+   OR (sqlc.arg('participant_provider')::text<>'' AND p.provider=sqlc.arg('participant_provider')
+       AND p.provider_user_id=sqlc.arg('participant_provider_user_id')
+       AND (sqlc.arg('participant_provider_team_id')::text='' OR p.provider_team_id=sqlc.arg('participant_provider_team_id')))
+   THEN 0 ELSE 1 END AS match_priority
+ FROM chat_message_participants p
+ WHERE p.project_id=cm.project_id AND p.chat_id=cm.chat_id AND p.message_id=cm.id
+ ORDER BY match_priority,p.provider,p.provider_user_id,p.id
+ LIMIT sqlc.arg('participant_row_limit')::integer
+) cp
+WHERE cm.project_id=sqlc.arg('project_id') AND c.organization_id=sqlc.arg('organization_id')
+  AND pr.organization_id=sqlc.arg('organization_id') AND cm.id=ANY(sqlc.arg('message_ids')::uuid[])
+ORDER BY cm.id,cp.match_priority,cp.provider,cp.provider_user_id,cp.id;
+
+-- name: ResolvePlatformChatEvidenceSlackIdentities :many
+-- Caller separately requires org:admin for current directory data. A missing
+-- workspace is resolvable only when the organization has one exact match.
+WITH identities AS (
+ SELECT unnest(sqlc.arg('provider_user_ids')::text[])::text AS provider_user_id,
+        unnest(sqlc.arg('provider_team_ids')::text[])::text AS provider_team_id
+), candidates AS (
+ SELECT i.provider_user_id,i.provider_team_id,
+   CASE WHEN coalesce(octet_length(d.display_name),0)<=256 THEN coalesce(d.display_name,'') ELSE '[WITHHELD]' END::text AS display_name,
+   CASE WHEN coalesce(octet_length(m.user_id),0)<=128 THEN coalesce(m.user_id,'') ELSE '[WITHHELD]' END::text AS user_id,
+   m.created_at AS mapping_confirmed_at,d.last_seen_at AS directory_observed_at,
+   count(*) OVER (PARTITION BY i.provider_user_id,i.provider_team_id) AS matches
+ FROM identities i
+ JOIN projects pr ON pr.id=sqlc.arg('project_id') AND pr.organization_id=sqlc.arg('organization_id') AND pr.deleted IS FALSE
+ JOIN slack_directory_memberships d ON d.organization_id=pr.organization_id AND d.slack_user_id=i.provider_user_id
+   AND (i.provider_team_id='' OR d.slack_team_id=i.provider_team_id)
+ JOIN slack_directory_connections c ON c.organization_id=d.organization_id AND c.slack_team_id=d.slack_team_id AND c.disconnected_at IS NULL
+ LEFT JOIN slack_identity_mappings m ON m.organization_id=d.organization_id
+   AND m.slack_team_id=d.slack_team_id AND m.slack_user_id=d.slack_user_id AND m.revoked_at IS NULL
+   AND d.mapping_conflict_reason IS NULL
+   AND EXISTS (SELECT 1 FROM users u JOIN organization_user_relationships r ON r.user_id=u.id AND r.organization_id=d.organization_id
+               WHERE u.id=m.user_id AND u.deleted_at IS NULL AND r.deleted_at IS NULL)
+)
+SELECT provider_user_id,provider_team_id,display_name,user_id,mapping_confirmed_at,directory_observed_at
+FROM candidates WHERE matches=1;
+
+-- name: SeedPlatformChatEvidenceParticipantFixture :exec
+-- Synthetic participant snapshots for transcript authorization/attribution tests.
+INSERT INTO chat_message_participants(project_id,chat_id,message_id,provider,provider_user_id,provider_team_id,user_id,display_name)
+VALUES(sqlc.arg('project_id')::uuid,sqlc.arg('chat_id')::uuid,sqlc.arg('message_id')::uuid,
+ sqlc.arg('provider')::text,sqlc.arg('provider_user_id')::text,
+ nullif(sqlc.arg('provider_team_id')::text,''),nullif(sqlc.arg('user_id')::text,''),nullif(sqlc.arg('display_name')::text,''));
+
+-- name: SeedPlatformChatEvidenceDirectoryFixture :exec
+-- Synthetic directory/mapping state, without credentials or provider requests.
+WITH person AS (
+ INSERT INTO users(id,email,display_name)
+ SELECT sqlc.arg('mapped_user_id')::text,'fixture@example.test','Fixture user'
+ WHERE sqlc.arg('mapped_user_id')::text<>'' ON CONFLICT(id) DO NOTHING
+), relationship AS (
+ INSERT INTO organization_user_relationships(organization_id,user_id)
+ SELECT sqlc.arg('organization_id')::text,sqlc.arg('mapped_user_id')::text
+ WHERE sqlc.arg('mapped_user_id')::text<>'' ON CONFLICT(organization_id,user_id) DO NOTHING
+), connection AS (
+ INSERT INTO slack_directory_connections(organization_id,slack_team_id)
+ VALUES(sqlc.arg('organization_id')::text,sqlc.arg('team_id')::text)
+), membership AS (
+ INSERT INTO slack_directory_memberships(organization_id,slack_team_id,slack_user_id,display_name,last_seen_at)
+ VALUES(sqlc.arg('organization_id')::text,sqlc.arg('team_id')::text,sqlc.arg('provider_user_id')::text,sqlc.arg('display_name')::text,sqlc.arg('observed_at')::timestamptz)
+)
+INSERT INTO slack_identity_mappings(organization_id,slack_team_id,slack_user_id,user_id)
+SELECT sqlc.arg('organization_id')::text,sqlc.arg('team_id')::text,sqlc.arg('provider_user_id')::text,sqlc.arg('mapped_user_id')::text
+WHERE sqlc.arg('mapped_user_id')::text<>'';
+
+-- name: SetPlatformChatEvidenceDirectoryStateFixture :exec
+-- Independently exercise invalidation states and restore the synthetic fixture.
+WITH membership AS (
+ UPDATE slack_directory_memberships SET mapping_conflict_reason=CASE WHEN sqlc.arg('state')::text='conflict' THEN 'fixture_conflict' END
+ WHERE organization_id=sqlc.arg('organization_id')::text
+), person AS (
+ UPDATE users SET deleted_at=CASE WHEN sqlc.arg('state')::text='deleted_user' THEN clock_timestamp() END
+ WHERE id=sqlc.arg('user_id')::text
+), relationship AS (
+ UPDATE organization_user_relationships SET deleted_at=CASE WHEN sqlc.arg('state')::text='deleted_membership' THEN clock_timestamp() END
+ WHERE organization_id=sqlc.arg('organization_id')::text AND user_id=sqlc.arg('user_id')::text
+), mapping AS (
+ UPDATE slack_identity_mappings SET revoked_at=CASE WHEN sqlc.arg('state')::text='revoked_mapping' THEN clock_timestamp() END
+ WHERE organization_id=sqlc.arg('organization_id')::text
+)
+UPDATE slack_directory_connections SET disconnected_at=CASE WHEN sqlc.arg('state')::text='disconnected'
+ AND (sqlc.arg('team_id')::text='' OR slack_team_id=sqlc.arg('team_id')) THEN clock_timestamp() END
+WHERE organization_id=sqlc.arg('organization_id')::text;
+
+-- name: SeedPlatformChatEvidenceParticipantBatchFixture :exec
+-- A dense synthetic attribution page proves bounded work and continuation.
+WITH messages AS (
+ INSERT INTO chat_messages(chat_id,project_id,role,content,created_at)
+ SELECT sqlc.arg('chat_id')::uuid,sqlc.arg('project_id')::uuid,'user','attribution_fixture',sqlc.arg('at')::timestamptz
+ FROM generate_series(1,sqlc.arg('message_count')::integer) RETURNING id
+)
+INSERT INTO chat_message_participants(project_id,chat_id,message_id,provider,provider_user_id)
+SELECT sqlc.arg('project_id')::uuid,sqlc.arg('chat_id')::uuid,m.id,'fixture','EXAMPLE' || n::text
+FROM messages m CROSS JOIN generate_series(0,sqlc.arg('participant_count')::integer-1) n;

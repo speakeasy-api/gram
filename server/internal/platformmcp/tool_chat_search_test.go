@@ -45,6 +45,9 @@ func TestChatEvidenceToolContractAndDiscovery(t *testing.T) {
 		`{"project_slug":"fixture","project_id":"00000000-0000-0000-0000-000000000001","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z"}`,
 		`{"project_slug":"fixture","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z","limit":21}`,
 		`{"project_slug":"fixture","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z","unknown":true}`,
+		`{"project_slug":"fixture","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z","participant":{}}`,
+		`{"project_slug":"fixture","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z","participant":{"provider":"slack","provider_user_id":"UEXAMPLE01","unknown":true}}`,
+		`{"project_slug":"fixture","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z","participant":{"user_id":"fixture","provider":"slack","provider_user_id":"UEXAMPLE01"}}`,
 	} {
 		_, err := descriptorByName(t, live, searchChatsToolName).Invoke(ctx, json.RawMessage(arguments))
 		require.ErrorContains(t, err, "arguments do not match the tool schema", arguments)

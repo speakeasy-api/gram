@@ -9,28 +9,35 @@ import (
 
 const chatEvidenceMaxDepth = 16
 
-// canonicalEvidenceText preserves compact JSON and decoded string leaves so
-// quoted commands, newlines and nested JSON arguments have literal matches.
-// Apply the same projection before and after redaction; never return raw text.
-func canonicalEvidenceText(content string, calls, raw []byte) string {
+// canonicalEvidenceProjection preserves compact JSON and decoded leaves for
+// literal matching, reporting structural omissions independently of the query.
+func canonicalEvidenceProjection(content string, calls, raw []byte) (string, bool) {
 	fields := []string{content, string(calls), string(raw)}
+	withheld := false
 	for i, field := range fields {
-		fields[i] = canonicalEvidenceField(field)
+		text, hidden := canonicalEvidenceFieldProjection(field)
+		fields[i] = text
+		withheld = withheld || hidden
 	}
-	return strings.Join(fields, "\n")
+	return strings.Join(fields, "\n"), withheld
 }
 
 func canonicalEvidenceField(field string) string {
+	text, _ := canonicalEvidenceFieldProjection(field)
+	return text
+}
+
+func canonicalEvidenceFieldProjection(field string) (string, bool) {
 	if len(field) > 131072 || !utf8.ValidString(field) {
-		return "[WITHHELD]"
+		return "[WITHHELD]", true
 	}
 	value, ok := decodeEvidenceJSON(field)
 	if !ok {
-		return field
+		return field, false
 	}
 	data, err := json.Marshal(value)
 	if err != nil {
-		return "[WITHHELD]"
+		return "[WITHHELD]", true
 	}
 	var out strings.Builder
 	out.Write(data)
@@ -67,10 +74,10 @@ func canonicalEvidenceField(field string) string {
 		}
 		return out.Len() <= 524288
 	}
-	if !appendLeaves(value, 0) {
-		return "[WITHHELD]"
+	if !appendLeaves(value, 1) {
+		return "[WITHHELD]", true
 	}
-	return out.String()
+	return out.String(), false
 }
 
 // UseNumber preserves identifier-sized integers and keeps valid large numbers

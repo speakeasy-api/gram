@@ -4981,6 +4981,95 @@ func (q *Queries) ListOwnedChatTranscriptMessagesForRecall(ctx context.Context, 
 	return items, nil
 }
 
+const listPlatformChatEvidenceParticipants = `-- name: ListPlatformChatEvidenceParticipants :many
+SELECT cm.id AS message_id, cp.provider, cp.provider_user_id,
+       cp.provider_team_id, cp.user_id, cp.display_name, cp.created_at
+FROM chat_messages cm
+JOIN chats c ON c.id=cm.chat_id AND c.project_id=cm.project_id AND c.deleted IS FALSE
+JOIN projects pr ON pr.id=c.project_id AND pr.organization_id=c.organization_id AND pr.deleted IS FALSE
+CROSS JOIN LATERAL (
+ SELECT
+   CASE WHEN octet_length(p.provider)<=128 THEN p.provider ELSE '[WITHHELD]' END::text AS provider,
+   CASE WHEN octet_length(p.provider_user_id)<=128 THEN p.provider_user_id ELSE '[WITHHELD]' END::text AS provider_user_id,
+   CASE WHEN coalesce(octet_length(p.provider_team_id),0)<=128 THEN coalesce(p.provider_team_id,'') ELSE '[WITHHELD]' END::text AS provider_team_id,
+   CASE WHEN coalesce(octet_length(p.user_id),0)<=128 THEN coalesce(p.user_id,'') ELSE '[WITHHELD]' END::text AS user_id,
+   CASE WHEN coalesce(octet_length(p.display_name),0)<=256 THEN coalesce(p.display_name,'') ELSE '[WITHHELD]' END::text AS display_name,
+   p.created_at, p.id, CASE WHEN
+   ($1::text<>'' AND p.user_id=$1)
+   OR ($2::text<>'' AND p.provider=$2
+       AND p.provider_user_id=$3
+       AND ($4::text='' OR p.provider_team_id=$4))
+   THEN 0 ELSE 1 END AS match_priority
+ FROM chat_message_participants p
+ WHERE p.project_id=cm.project_id AND p.chat_id=cm.chat_id AND p.message_id=cm.id
+ ORDER BY match_priority,p.provider,p.provider_user_id,p.id
+ LIMIT $5::integer
+) cp
+WHERE cm.project_id=$6 AND c.organization_id=$7
+  AND pr.organization_id=$7 AND cm.id=ANY($8::uuid[])
+ORDER BY cm.id,cp.match_priority,cp.provider,cp.provider_user_id,cp.id
+`
+
+type ListPlatformChatEvidenceParticipantsParams struct {
+	ParticipantUserID         string
+	ParticipantProvider       string
+	ParticipantProviderUserID string
+	ParticipantProviderTeamID string
+	ParticipantRowLimit       int32
+	ProjectID                 uuid.NullUUID
+	OrganizationID            string
+	MessageIds                []uuid.UUID
+}
+
+type ListPlatformChatEvidenceParticipantsRow struct {
+	MessageID      uuid.UUID
+	Provider       string
+	ProviderUserID string
+	ProviderTeamID string
+	UserID         string
+	DisplayName    string
+	CreatedAt      pgtype.Timestamptz
+}
+
+// Only messages already selected under transcript authorization are admitted.
+// The per-message sentinel makes truncated attribution explicit.
+func (q *Queries) ListPlatformChatEvidenceParticipants(ctx context.Context, arg ListPlatformChatEvidenceParticipantsParams) ([]ListPlatformChatEvidenceParticipantsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformChatEvidenceParticipants,
+		arg.ParticipantUserID,
+		arg.ParticipantProvider,
+		arg.ParticipantProviderUserID,
+		arg.ParticipantProviderTeamID,
+		arg.ParticipantRowLimit,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.MessageIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformChatEvidenceParticipantsRow
+	for rows.Next() {
+		var i ListPlatformChatEvidenceParticipantsRow
+		if err := rows.Scan(
+			&i.MessageID,
+			&i.Provider,
+			&i.ProviderUserID,
+			&i.ProviderTeamID,
+			&i.UserID,
+			&i.DisplayName,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPAssignedPluginInventory = `-- name: ListPlatformMCPAssignedPluginInventory :many
 SELECT
     p.id,
@@ -8018,6 +8107,81 @@ func (q *Queries) RecordPlatformMCPSetupMilestone(ctx context.Context, arg Recor
 	return err
 }
 
+const resolvePlatformChatEvidenceSlackIdentities = `-- name: ResolvePlatformChatEvidenceSlackIdentities :many
+WITH identities AS (
+ SELECT unnest($1::text[])::text AS provider_user_id,
+        unnest($2::text[])::text AS provider_team_id
+), candidates AS (
+ SELECT i.provider_user_id,i.provider_team_id,
+   CASE WHEN coalesce(octet_length(d.display_name),0)<=256 THEN coalesce(d.display_name,'') ELSE '[WITHHELD]' END::text AS display_name,
+   CASE WHEN coalesce(octet_length(m.user_id),0)<=128 THEN coalesce(m.user_id,'') ELSE '[WITHHELD]' END::text AS user_id,
+   m.created_at AS mapping_confirmed_at,d.last_seen_at AS directory_observed_at,
+   count(*) OVER (PARTITION BY i.provider_user_id,i.provider_team_id) AS matches
+ FROM identities i
+ JOIN projects pr ON pr.id=$3 AND pr.organization_id=$4 AND pr.deleted IS FALSE
+ JOIN slack_directory_memberships d ON d.organization_id=pr.organization_id AND d.slack_user_id=i.provider_user_id
+   AND (i.provider_team_id='' OR d.slack_team_id=i.provider_team_id)
+ JOIN slack_directory_connections c ON c.organization_id=d.organization_id AND c.slack_team_id=d.slack_team_id AND c.disconnected_at IS NULL
+ LEFT JOIN slack_identity_mappings m ON m.organization_id=d.organization_id
+   AND m.slack_team_id=d.slack_team_id AND m.slack_user_id=d.slack_user_id AND m.revoked_at IS NULL
+   AND d.mapping_conflict_reason IS NULL
+   AND EXISTS (SELECT 1 FROM users u JOIN organization_user_relationships r ON r.user_id=u.id AND r.organization_id=d.organization_id
+               WHERE u.id=m.user_id AND u.deleted_at IS NULL AND r.deleted_at IS NULL)
+)
+SELECT provider_user_id,provider_team_id,display_name,user_id,mapping_confirmed_at,directory_observed_at
+FROM candidates WHERE matches=1
+`
+
+type ResolvePlatformChatEvidenceSlackIdentitiesParams struct {
+	ProviderUserIds []string
+	ProviderTeamIds []string
+	ProjectID       uuid.UUID
+	OrganizationID  string
+}
+
+type ResolvePlatformChatEvidenceSlackIdentitiesRow struct {
+	ProviderUserID      string
+	ProviderTeamID      string
+	DisplayName         string
+	UserID              string
+	MappingConfirmedAt  pgtype.Timestamptz
+	DirectoryObservedAt pgtype.Timestamptz
+}
+
+// Caller separately requires org:admin for current directory data. A missing
+// workspace is resolvable only when the organization has one exact match.
+func (q *Queries) ResolvePlatformChatEvidenceSlackIdentities(ctx context.Context, arg ResolvePlatformChatEvidenceSlackIdentitiesParams) ([]ResolvePlatformChatEvidenceSlackIdentitiesRow, error) {
+	rows, err := q.db.Query(ctx, resolvePlatformChatEvidenceSlackIdentities,
+		arg.ProviderUserIds,
+		arg.ProviderTeamIds,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolvePlatformChatEvidenceSlackIdentitiesRow
+	for rows.Next() {
+		var i ResolvePlatformChatEvidenceSlackIdentitiesRow
+		if err := rows.Scan(
+			&i.ProviderUserID,
+			&i.ProviderTeamID,
+			&i.DisplayName,
+			&i.UserID,
+			&i.MappingConfirmedAt,
+			&i.DirectoryObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resolvePlatformMCPAssignedPluginTarget = `-- name: ResolvePlatformMCPAssignedPluginTarget :many
 SELECT
     p.id,
@@ -8849,6 +9013,150 @@ func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg Search
 		return nil, err
 	}
 	return items, nil
+}
+
+const seedPlatformChatEvidenceDirectoryFixture = `-- name: SeedPlatformChatEvidenceDirectoryFixture :exec
+WITH person AS (
+ INSERT INTO users(id,email,display_name)
+ SELECT $4::text,'fixture@example.test','Fixture user'
+ WHERE $4::text<>'' ON CONFLICT(id) DO NOTHING
+), relationship AS (
+ INSERT INTO organization_user_relationships(organization_id,user_id)
+ SELECT $1::text,$4::text
+ WHERE $4::text<>'' ON CONFLICT(organization_id,user_id) DO NOTHING
+), connection AS (
+ INSERT INTO slack_directory_connections(organization_id,slack_team_id)
+ VALUES($1::text,$2::text)
+), membership AS (
+ INSERT INTO slack_directory_memberships(organization_id,slack_team_id,slack_user_id,display_name,last_seen_at)
+ VALUES($1::text,$2::text,$3::text,$5::text,$6::timestamptz)
+)
+INSERT INTO slack_identity_mappings(organization_id,slack_team_id,slack_user_id,user_id)
+SELECT $1::text,$2::text,$3::text,$4::text
+WHERE $4::text<>''
+`
+
+type SeedPlatformChatEvidenceDirectoryFixtureParams struct {
+	OrganizationID string
+	TeamID         string
+	ProviderUserID string
+	MappedUserID   string
+	DisplayName    string
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Synthetic directory/mapping state, without credentials or provider requests.
+func (q *Queries) SeedPlatformChatEvidenceDirectoryFixture(ctx context.Context, arg SeedPlatformChatEvidenceDirectoryFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedPlatformChatEvidenceDirectoryFixture,
+		arg.OrganizationID,
+		arg.TeamID,
+		arg.ProviderUserID,
+		arg.MappedUserID,
+		arg.DisplayName,
+		arg.ObservedAt,
+	)
+	return err
+}
+
+const seedPlatformChatEvidenceParticipantBatchFixture = `-- name: SeedPlatformChatEvidenceParticipantBatchFixture :exec
+WITH messages AS (
+ INSERT INTO chat_messages(chat_id,project_id,role,content,created_at)
+ SELECT $2::uuid,$1::uuid,'user','attribution_fixture',$4::timestamptz
+ FROM generate_series(1,$5::integer) RETURNING id
+)
+INSERT INTO chat_message_participants(project_id,chat_id,message_id,provider,provider_user_id)
+SELECT $1::uuid,$2::uuid,m.id,'fixture','EXAMPLE' || n::text
+FROM messages m CROSS JOIN generate_series(0,$3::integer-1) n
+`
+
+type SeedPlatformChatEvidenceParticipantBatchFixtureParams struct {
+	ProjectID        uuid.UUID
+	ChatID           uuid.UUID
+	ParticipantCount int32
+	At               pgtype.Timestamptz
+	MessageCount     int32
+}
+
+// A dense synthetic attribution page proves bounded work and continuation.
+func (q *Queries) SeedPlatformChatEvidenceParticipantBatchFixture(ctx context.Context, arg SeedPlatformChatEvidenceParticipantBatchFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedPlatformChatEvidenceParticipantBatchFixture,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.ParticipantCount,
+		arg.At,
+		arg.MessageCount,
+	)
+	return err
+}
+
+const seedPlatformChatEvidenceParticipantFixture = `-- name: SeedPlatformChatEvidenceParticipantFixture :exec
+INSERT INTO chat_message_participants(project_id,chat_id,message_id,provider,provider_user_id,provider_team_id,user_id,display_name)
+VALUES($1::uuid,$2::uuid,$3::uuid,
+ $4::text,$5::text,
+ nullif($6::text,''),nullif($7::text,''),nullif($8::text,''))
+`
+
+type SeedPlatformChatEvidenceParticipantFixtureParams struct {
+	ProjectID      uuid.UUID
+	ChatID         uuid.UUID
+	MessageID      uuid.UUID
+	Provider       string
+	ProviderUserID string
+	ProviderTeamID string
+	UserID         string
+	DisplayName    string
+}
+
+// Synthetic participant snapshots for transcript authorization/attribution tests.
+func (q *Queries) SeedPlatformChatEvidenceParticipantFixture(ctx context.Context, arg SeedPlatformChatEvidenceParticipantFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedPlatformChatEvidenceParticipantFixture,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.MessageID,
+		arg.Provider,
+		arg.ProviderUserID,
+		arg.ProviderTeamID,
+		arg.UserID,
+		arg.DisplayName,
+	)
+	return err
+}
+
+const setPlatformChatEvidenceDirectoryStateFixture = `-- name: SetPlatformChatEvidenceDirectoryStateFixture :exec
+WITH membership AS (
+ UPDATE slack_directory_memberships SET mapping_conflict_reason=CASE WHEN $1::text='conflict' THEN 'fixture_conflict' END
+ WHERE organization_id=$3::text
+), person AS (
+ UPDATE users SET deleted_at=CASE WHEN $1::text='deleted_user' THEN clock_timestamp() END
+ WHERE id=$4::text
+), relationship AS (
+ UPDATE organization_user_relationships SET deleted_at=CASE WHEN $1::text='deleted_membership' THEN clock_timestamp() END
+ WHERE organization_id=$3::text AND user_id=$4::text
+), mapping AS (
+ UPDATE slack_identity_mappings SET revoked_at=CASE WHEN $1::text='revoked_mapping' THEN clock_timestamp() END
+ WHERE organization_id=$3::text
+)
+UPDATE slack_directory_connections SET disconnected_at=CASE WHEN $1::text='disconnected'
+ AND ($2::text='' OR slack_team_id=$2) THEN clock_timestamp() END
+WHERE organization_id=$3::text
+`
+
+type SetPlatformChatEvidenceDirectoryStateFixtureParams struct {
+	State          string
+	TeamID         string
+	OrganizationID string
+	UserID         string
+}
+
+// Independently exercise invalidation states and restore the synthetic fixture.
+func (q *Queries) SetPlatformChatEvidenceDirectoryStateFixture(ctx context.Context, arg SetPlatformChatEvidenceDirectoryStateFixtureParams) error {
+	_, err := q.db.Exec(ctx, setPlatformChatEvidenceDirectoryStateFixture,
+		arg.State,
+		arg.TeamID,
+		arg.OrganizationID,
+		arg.UserID,
+	)
+	return err
 }
 
 const updatePlatformMCPCatalogRegistrationComponents = `-- name: UpdatePlatformMCPCatalogRegistrationComponents :one
