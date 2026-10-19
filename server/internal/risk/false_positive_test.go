@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // chDismissalCopy builds one ClickHouse copy of a finding in the false-positive
@@ -68,7 +67,6 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}, chrepo.EventKindFinding),
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	before, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
 	require.NoError(t, err)
@@ -164,7 +162,6 @@ func TestMarkUnmarkRiskResultsFalsePositive_ConcurrentStateConverges(t *testing.
 		chDismissalCopy(t, projectID, orgID, policy.ID, resultIDs[0], chatID, msgID, time.Time{}, chrepo.EventKindFinding),
 		chDismissalCopy(t, projectID, orgID, policy.ID, resultIDs[1], chatID, msgID, time.Time{}, chrepo.EventKindFinding),
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	pgQueries := riskrepo.New(ti.conn)
 
 	for round := range 20 {
@@ -186,7 +183,6 @@ func TestMarkUnmarkRiskResultsFalsePositive_ConcurrentStateConverges(t *testing.
 		close(start)
 		require.NoError(t, <-errs)
 		require.NoError(t, <-errs)
-		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 		dismissed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
 		require.NoError(t, err)
@@ -255,7 +251,6 @@ func TestMarkUnmarkRiskResultsFalsePositive_ClickHouseOnlyMediatedFinding(t *tes
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	pgRows, err := riskrepo.New(ti.conn).GetRiskResultsByIDs(ctx, riskrepo.GetRiskResultsByIDsParams{
 		ProjectID: projectID,
@@ -351,7 +346,6 @@ func TestMarkRiskResultsFalsePositive_ClickHouseTenancy(t *testing.T) {
 	)
 	queries := chrepo.New(ti.chConn)
 	require.NoError(t, queries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
 	require.NoError(t, err)
@@ -509,7 +503,6 @@ func TestMarkRiskResultsFalsePositive_ContentPartAnchoredFindingIsListable(t *te
 	source.ContentPartID = partID.String()
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{source}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
 		ResultIds: []string{resultID.String()},
@@ -624,7 +617,6 @@ func TestListDismissedRiskResults_ClickHousePageOrderingAndRedaction(t *testing.
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		manual, tiedA, tiedB, legacy, ruleSuppressed, open, deadLetter, foreign,
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	ids := func(result *gen.ListRiskResultsResult) []string {
 		out := make([]string, 0, len(result.Results))
@@ -769,7 +761,6 @@ func TestListDismissedRiskResults_ClickHouseLegacyRuleRowDerivesRule(t *testing.
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{legacyRule}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	listed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{Limit: nil, Cursor: nil, Reasons: nil})
 	require.NoError(t, err)
@@ -820,13 +811,11 @@ func TestListDismissedRiskResults_ClickHouseResolvesLatestCopy(t *testing.T) {
 		chDismissalCopy(t, projectID, orgID, policy.ID, restoredID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression),
 		chDismissalCopy(t, projectID, orgID, policy.ID, stillDismissedID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression),
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// The undo's copy: same id, no suppression, inserted later.
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		chDismissalCopy(t, projectID, orgID, policy.ID, restoredID, chatID, msgID, time.Time{}, chrepo.EventKindUnsuppression),
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	dismissed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
 	require.NoError(t, err)
@@ -847,11 +836,9 @@ func TestAppendAutomatedFalsePositiveSuppression_RoundTrip(t *testing.T) {
 		"presidio", "pii.email", "", "<redacted len=8 sha=aaaaaaaa>", "fingerprint", "")
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	now := chrepo.FormatCHTime(time.Now())
 	require.NoError(t, chQueries.AppendAutomatedFalsePositiveSuppression(ctx, orgID, projectID.String(), now, now, "placeholder email", []uuid.UUID{finding.ID}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	states, err := chQueries.ListFalsePositiveStates(ctx, orgID, projectID.String(), []uuid.UUID{finding.ID})
 	require.NoError(t, err)

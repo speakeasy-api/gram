@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,75 +105,63 @@ func TestGetHooksSummary_AggregatesServersUsersAndBreakdown(t *testing.T) {
 		conversationID: "conv-2",
 	})
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
-			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
+	res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
 
-		// Total events = 3 traces (trace_summaries counts at trace level, not log level), sessions = 2 unique conversation IDs
-		assert.Equal(c, int64(3), res.TotalEvents)
-		assert.Equal(c, int64(2), res.TotalSessions)
+	// Total events = 3 traces (trace_summaries counts at trace level, not log level), sessions = 2 unique conversation IDs
+	require.Equal(t, int64(3), res.TotalEvents)
+	require.Equal(t, int64(2), res.TotalSessions)
 
-		// Server aggregation: 2 servers
-		serversByName := make(map[string]*gen.HooksServerSummary)
-		for _, s := range res.Servers {
-			serversByName[s.ServerName] = s
-		}
-		if !assert.Len(c, serversByName, 2) {
-			return
-		}
-		assert.Equal(c, int64(2), serversByName["server-a"].EventCount)
-		assert.Equal(c, int64(1), serversByName["server-a"].SuccessCount)
-		assert.Equal(c, int64(1), serversByName["server-a"].FailureCount)
-		assert.Equal(c, int64(1), serversByName["server-b"].EventCount)
-		assert.Equal(c, int64(1), serversByName["server-b"].SuccessCount)
-		assert.Equal(c, int64(0), serversByName["server-b"].FailureCount)
+	// Server aggregation: 2 servers
+	serversByName := make(map[string]*gen.HooksServerSummary)
+	for _, s := range res.Servers {
+		serversByName[s.ServerName] = s
+	}
+	require.Len(t, serversByName, 2)
+	require.Equal(t, int64(2), serversByName["server-a"].EventCount)
+	require.Equal(t, int64(1), serversByName["server-a"].SuccessCount)
+	require.Equal(t, int64(1), serversByName["server-a"].FailureCount)
+	require.Equal(t, int64(1), serversByName["server-b"].EventCount)
+	require.Equal(t, int64(1), serversByName["server-b"].SuccessCount)
+	require.Equal(t, int64(0), serversByName["server-b"].FailureCount)
 
-		// User aggregation: 2 users
-		usersByEmail := make(map[string]*gen.HooksUserSummary)
-		for _, u := range res.Users {
-			usersByEmail[u.UserEmail] = u
-		}
-		if !assert.Len(c, usersByEmail, 2) {
-			return
-		}
-		assert.Equal(c, int64(2), usersByEmail["user1@example.com"].EventCount)
-		assert.Equal(c, int64(1), usersByEmail["user1@example.com"].SuccessCount)
-		assert.Equal(c, int64(1), usersByEmail["user1@example.com"].FailureCount)
-		assert.Equal(c, int64(1), usersByEmail["user2@example.com"].EventCount)
-		assert.Equal(c, int64(1), usersByEmail["user2@example.com"].SuccessCount)
-		assert.Equal(c, int64(0), usersByEmail["user2@example.com"].FailureCount)
+	// User aggregation: 2 users
+	usersByEmail := make(map[string]*gen.HooksUserSummary)
+	for _, u := range res.Users {
+		usersByEmail[u.UserEmail] = u
+	}
+	require.Len(t, usersByEmail, 2)
+	require.Equal(t, int64(2), usersByEmail["user1@example.com"].EventCount)
+	require.Equal(t, int64(1), usersByEmail["user1@example.com"].SuccessCount)
+	require.Equal(t, int64(1), usersByEmail["user1@example.com"].FailureCount)
+	require.Equal(t, int64(1), usersByEmail["user2@example.com"].EventCount)
+	require.Equal(t, int64(1), usersByEmail["user2@example.com"].SuccessCount)
+	require.Equal(t, int64(0), usersByEmail["user2@example.com"].FailureCount)
 
-		// Breakdown: one entry for user1/server-a/weather covering both traces.
-		// trace_summaries aggregates has_error=1 for the failure trace via gram.hook.error.
-		breakdownKey := func(b *gen.HooksBreakdownRow) string {
-			return b.UserEmail + "|" + b.ServerName + "|" + b.ToolName
-		}
-		breakdownMap := make(map[string]*gen.HooksBreakdownRow)
-		for _, b := range res.Breakdown {
-			breakdownMap[breakdownKey(b)] = b
-		}
-		row := breakdownMap["user1@example.com|server-a|weather"]
-		if !assert.NotNil(c, row) {
-			return
-		}
-		assert.Equal(c, int64(2), row.EventCount)
-		assert.Equal(c, int64(1), row.FailureCount)
+	// Breakdown: one entry for user1/server-a/weather covering both traces.
+	// trace_summaries aggregates has_error=1 for the failure trace via gram.hook.error.
+	breakdownKey := func(b *gen.HooksBreakdownRow) string {
+		return b.UserEmail + "|" + b.ServerName + "|" + b.ToolName
+	}
+	breakdownMap := make(map[string]*gen.HooksBreakdownRow)
+	for _, b := range res.Breakdown {
+		breakdownMap[breakdownKey(b)] = b
+	}
+	row := breakdownMap["user1@example.com|server-a|weather"]
+	require.NotNil(t, row)
+	require.Equal(t, int64(2), row.EventCount)
+	require.Equal(t, int64(1), row.FailureCount)
 
-		// Time series: at least one point
-		assert.NotEmpty(c, res.TimeSeries)
-		for _, pt := range res.TimeSeries {
-			assert.NotEmpty(c, pt.BucketStartNs)
-			assert.Positive(c, pt.EventCount)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	// Time series: at least one point
+	require.NotEmpty(t, res.TimeSeries)
+	for _, pt := range res.TimeSeries {
+		require.NotEmpty(t, pt.BucketStartNs)
+		require.Positive(t, pt.EventCount)
+	}
 }
 
 func TestGetHooksSummary_FilterByHookType(t *testing.T) {
@@ -216,24 +203,16 @@ func TestGetHooksSummary_FilterByHookType(t *testing.T) {
 	})
 
 	// Filter to only "mcp" type — tool_source != '' AND tool_name != 'Skill'
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
-			From:           now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:             now.Add(1 * time.Hour).Format(time.RFC3339),
-			TypesToInclude: []string{"mcp"},
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Equal(c, int64(1), res.TotalEvents)
-		if !assert.Len(c, res.Servers, 1) {
-			return
-		}
-		assert.Equal(c, "remote-server", res.Servers[0].ServerName)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From:           now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:             now.Add(1 * time.Hour).Format(time.RFC3339),
+		TypesToInclude: []string{"mcp"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, int64(1), res.TotalEvents)
+	require.Len(t, res.Servers, 1)
+	require.Equal(t, "remote-server", res.Servers[0].ServerName)
 }
 
 func TestGetHooksSummary_AttributeFilter(t *testing.T) {
@@ -275,26 +254,18 @@ func TestGetHooksSummary_AttributeFilter(t *testing.T) {
 	})
 
 	// Filter to only alice's events
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
-			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
-			Filters: []*gen.LogFilter{
-				{Path: "user.email", Operator: "eq", Values: []string{"alice@example.com"}},
-			},
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Equal(c, int64(1), res.TotalEvents)
-		if !assert.Len(c, res.Users, 1) {
-			return
-		}
-		assert.Equal(c, "alice@example.com", res.Users[0].UserEmail)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+		Filters: []*gen.LogFilter{
+			{Path: "user.email", Operator: "eq", Values: []string{"alice@example.com"}},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, int64(1), res.TotalEvents)
+	require.Len(t, res.Users, 1)
+	require.Equal(t, "alice@example.com", res.Users[0].UserEmail)
 }
 
 // hookEventParams holds parameters for inserting a single hook log event.
@@ -408,28 +379,22 @@ func TestGetHooksSummary_SkillTimeSeriesGroupsBySkill(t *testing.T) {
 		})
 	}
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
-			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
+	res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
 
-		assert.NotEmpty(c, res.SkillTimeSeries)
+	require.NotEmpty(t, res.SkillTimeSeries)
 
-		countBySkill := make(map[string]int64)
-		for _, pt := range res.SkillTimeSeries {
-			assert.NotEmpty(c, pt.BucketStartNs)
-			countBySkill[pt.SkillName] += pt.EventCount
-		}
-		assert.Equal(c, int64(2), countBySkill["golang"])
-		assert.Equal(c, int64(1), countBySkill["typescript"])
-	}, 10*time.Second, 200*time.Millisecond)
+	countBySkill := make(map[string]int64)
+	for _, pt := range res.SkillTimeSeries {
+		require.NotEmpty(t, pt.BucketStartNs)
+		countBySkill[pt.SkillName] += pt.EventCount
+	}
+	require.Equal(t, int64(2), countBySkill["golang"])
+	require.Equal(t, int64(1), countBySkill["typescript"])
 }
 
 func TestGetHooksSummary_SkillTimeSeriesEmptyWhenNoSkillEvents(t *testing.T) {
@@ -454,22 +419,16 @@ func TestGetHooksSummary_SkillTimeSeriesEmptyWhenNoSkillEvents(t *testing.T) {
 		conversationID: "conv-1",
 	})
 
-	// Wait for the non-skill event to land (TotalEvents == 1), then assert
-	// SkillTimeSeries stays empty.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
-			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Equal(c, int64(1), res.TotalEvents)
-		assert.Empty(c, res.SkillTimeSeries)
-	}, 10*time.Second, 200*time.Millisecond)
+	// The non-skill event lands (TotalEvents == 1) while SkillTimeSeries stays
+	// empty.
+	res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, int64(1), res.TotalEvents)
+	require.Empty(t, res.SkillTimeSeries)
 }
 
 func TestGetHooksSummary_SkillTimeSeriesExcludesNonSkillEvents(t *testing.T) {
@@ -507,24 +466,16 @@ func TestGetHooksSummary_SkillTimeSeriesExcludesNonSkillEvents(t *testing.T) {
 		conversationID: "conv-2",
 	})
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
-			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Equal(c, int64(2), res.TotalEvents)
-		if !assert.Len(c, res.SkillTimeSeries, 1) {
-			return
-		}
-		assert.Equal(c, "golang", res.SkillTimeSeries[0].SkillName)
-		assert.Equal(c, int64(1), res.SkillTimeSeries[0].EventCount)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, int64(2), res.TotalEvents)
+	require.Len(t, res.SkillTimeSeries, 1)
+	require.Equal(t, "golang", res.SkillTimeSeries[0].SkillName)
+	require.Equal(t, int64(1), res.SkillTimeSeries[0].EventCount)
 }
 
 func TestGetHooksSummary_SkillBreakdownGroupsBySkillAndUser(t *testing.T) {
@@ -560,30 +511,24 @@ func TestGetHooksSummary_SkillBreakdownGroupsBySkillAndUser(t *testing.T) {
 		})
 	}
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
-			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Equal(c, int64(4), res.TotalEvents)
+	res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, int64(4), res.TotalEvents)
 
-		type key struct{ skill, user string }
-		bySkillUser := make(map[key]int64)
-		for _, row := range res.SkillBreakdown {
-			bySkillUser[key{row.SkillName, row.UserEmail}] += row.UseCount
-		}
+	type key struct{ skill, user string }
+	bySkillUser := make(map[key]int64)
+	for _, row := range res.SkillBreakdown {
+		bySkillUser[key{row.SkillName, row.UserEmail}] += row.UseCount
+	}
 
-		assert.Equal(c, int64(2), bySkillUser[key{"golang", "user1@example.com"}])
-		assert.Equal(c, int64(1), bySkillUser[key{"golang", "user2@example.com"}])
-		assert.Equal(c, int64(1), bySkillUser[key{"typescript", "user2@example.com"}])
-		assert.NotContains(c, bySkillUser, key{"typescript", "user1@example.com"})
-	}, 10*time.Second, 200*time.Millisecond)
+	require.Equal(t, int64(2), bySkillUser[key{"golang", "user1@example.com"}])
+	require.Equal(t, int64(1), bySkillUser[key{"golang", "user2@example.com"}])
+	require.Equal(t, int64(1), bySkillUser[key{"typescript", "user2@example.com"}])
+	require.NotContains(t, bySkillUser, key{"typescript", "user1@example.com"})
 }
 
 func TestGetHooksSummary_SkillBreakdownEmptyWhenNoSkillEvents(t *testing.T) {
@@ -608,22 +553,16 @@ func TestGetHooksSummary_SkillBreakdownEmptyWhenNoSkillEvents(t *testing.T) {
 		conversationID: "conv-1",
 	})
 
-	// Wait for the non-skill event to land (TotalEvents == 1), then assert
-	// SkillBreakdown stays empty.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
-			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Equal(c, int64(1), res.TotalEvents)
-		assert.Empty(c, res.SkillBreakdown)
-	}, 10*time.Second, 200*time.Millisecond)
+	// The non-skill event lands (TotalEvents == 1) while SkillBreakdown stays
+	// empty.
+	res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, int64(1), res.TotalEvents)
+	require.Empty(t, res.SkillBreakdown)
 }
 
 func TestGetHooksSummary_SkillTimeSeriesWithSkillTypeFilter(t *testing.T) {
@@ -663,28 +602,18 @@ func TestGetHooksSummary_SkillTimeSeriesWithSkillTypeFilter(t *testing.T) {
 	// TypesToInclude=["skill"] scopes the overall summary to skill events,
 	// but skill_time_series and skill_breakdown hardcode tool_name='Skill' so they
 	// return skill data regardless of TypesToInclude.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
-			From:           now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:             now.Add(1 * time.Hour).Format(time.RFC3339),
-			TypesToInclude: []string{"skill"},
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Equal(c, int64(1), res.TotalEvents)
-		if !assert.Len(c, res.SkillTimeSeries, 1) {
-			return
-		}
-		assert.Equal(c, "golang", res.SkillTimeSeries[0].SkillName)
-		if !assert.Len(c, res.SkillBreakdown, 1) {
-			return
-		}
-		assert.Equal(c, "golang", res.SkillBreakdown[0].SkillName)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From:           now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:             now.Add(1 * time.Hour).Format(time.RFC3339),
+		TypesToInclude: []string{"skill"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, int64(1), res.TotalEvents)
+	require.Len(t, res.SkillTimeSeries, 1)
+	require.Equal(t, "golang", res.SkillTimeSeries[0].SkillName)
+	require.Len(t, res.SkillBreakdown, 1)
+	require.Equal(t, "golang", res.SkillBreakdown[0].SkillName)
 }
 
 func TestGetHooksSummary_SkillFieldsIgnoreTypesToInclude(t *testing.T) {
@@ -725,26 +654,16 @@ func TestGetHooksSummary_SkillFieldsIgnoreTypesToInclude(t *testing.T) {
 	// TypesToInclude=["mcp"] scopes TotalEvents/Servers/Users to MCP events only,
 	// but skill_time_series and skill_breakdown hardcode tool_name='Skill' so they
 	// must always return skill data regardless of TypesToInclude.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
-			From:           now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:             now.Add(1 * time.Hour).Format(time.RFC3339),
-			TypesToInclude: []string{"mcp"},
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Equal(c, int64(1), res.TotalEvents) // only MCP event counted
-		if !assert.Len(c, res.SkillTimeSeries, 1) {
-			return
-		}
-		assert.Equal(c, "golang", res.SkillTimeSeries[0].SkillName)
-		if !assert.Len(c, res.SkillBreakdown, 1) {
-			return
-		}
-		assert.Equal(c, "golang", res.SkillBreakdown[0].SkillName)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From:           now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:             now.Add(1 * time.Hour).Format(time.RFC3339),
+		TypesToInclude: []string{"mcp"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, int64(1), res.TotalEvents) // only MCP event counted
+	require.Len(t, res.SkillTimeSeries, 1)
+	require.Equal(t, "golang", res.SkillTimeSeries[0].SkillName)
+	require.Len(t, res.SkillBreakdown, 1)
+	require.Equal(t, "golang", res.SkillBreakdown[0].SkillName)
 }

@@ -65,6 +65,22 @@ type Service interface {
 	// Withdraw an admitted subject and its agent assignment, stopping it
 	// authenticating. Requires workload:write.
 	WithdrawSubject(context.Context, *WithdrawSubjectPayload) (res *WorkloadIdentityPolicy, err error)
+	// Create a single-use join token that enrolls one headless box with no
+	// platform identity as a workload assigned to an agent. The token is returned
+	// once and only its hash is kept. Only a person can create one: a key backed
+	// by a principal rather than a user is refused with 403 whatever its grants.
+	// Requires workload:write, and either owning the agent or agent:authorize on
+	// it, since an enrolled box acts under the agent's policy.
+	CreateDeviceJoinToken(context.Context, *CreateDeviceJoinTokenPayload) (res *WorkloadDeviceJoinToken, err error)
+	// Enroll a device with its public key, redeeming a join token. No session or
+	// API key: the single-use join token is the credential, and an unknown,
+	// expired, or already redeemed token returns 401. A key already registered to
+	// another device returns 409, and an agent whose policy no longer grants
+	// org:device_agent_sync returns a failed precondition without spending the
+	// token. In one transaction the device's key is registered, the device is
+	// admitted under the organization's Speakeasy device issuer, and it is
+	// assigned the token's agent.
+	RegisterDevice(context.Context, *RegisterDevicePayload) (res *WorkloadDeviceRegistration, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -87,7 +103,7 @@ const ServiceName = "workloadIdentities"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"list", "listPlatforms", "getCustomFlows", "listTokenEndpoints", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject"}
+var MethodNames = [12]string{"list", "listPlatforms", "getCustomFlows", "listTokenEndpoints", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject", "createDeviceJoinToken", "registerDevice"}
 
 // AdmitSubjectPayload is the payload type of the workloadIdentities service
 // admitSubject method.
@@ -121,6 +137,18 @@ type AdmitSubjectPayload struct {
 	ProjectScoped bool
 }
 
+// CreateDeviceJoinTokenPayload is the payload type of the workloadIdentities
+// service createDeviceJoinToken method.
+type CreateDeviceJoinTokenPayload struct {
+	// The agent the enrolled device inherits its policy from.
+	AgentID string
+	// How long the token stays redeemable. Defaults to one hour.
+	ExpiresInSeconds int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // GetCustomFlowsPayload is the payload type of the workloadIdentities service
 // getCustomFlows method.
 type GetCustomFlowsPayload struct {
@@ -151,6 +179,20 @@ type ListTokenEndpointsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// RegisterDevicePayload is the payload type of the workloadIdentities service
+// registerDevice method.
+type RegisterDevicePayload struct {
+	// The join token from createDeviceJoinToken.
+	JoinToken string
+	// The device's public signing key as a JWK: EC P-256 (ES256) or OKP Ed25519
+	// (EdDSA). Private key material is refused.
+	PublicJwk map[string]any
+	// The device's hostname, shown to administrators. Self-reported.
+	Hostname *string
+	// The device's serial number, shown to administrators. Self-reported.
+	Serial *string
 }
 
 // RegisterIssuerPayload is the payload type of the workloadIdentities service
@@ -258,6 +300,29 @@ type WorkloadCustomFlows struct {
 	AllowAccess *WorkloadForm
 	// Edits allowed access; submits updateSubject.
 	EditAccess *WorkloadForm
+}
+
+// WorkloadDeviceJoinToken is the result type of the workloadIdentities service
+// createDeviceJoinToken method.
+type WorkloadDeviceJoinToken struct {
+	// The join token. Shown once; only its hash is stored.
+	Token string
+	// When the token stops being redeemable.
+	ExpiresAt string
+}
+
+// WorkloadDeviceRegistration is the result type of the workloadIdentities
+// service registerDevice method.
+type WorkloadDeviceRegistration struct {
+	// The device's workload subject, device:<uuid>. Its assertions carry this as
+	// sub.
+	DeviceSubject string
+	// The issuer its assertions carry as iss.
+	Issuer string
+	// The agent the device inherits its policy from.
+	AgentID string
+	// The organization the device enrolled in.
+	OrganizationID string
 }
 
 // A custom flow's form, held to the management API form it submits.
