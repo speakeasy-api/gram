@@ -1,0 +1,24 @@
+client/dashboard/src/pages/org/identity-provider/directoryRoleSetup.ts
+  s_c4f6e74f60abe4::t_d7fa3a642cb8a0 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f49a38191266f335ce238ded71bdf4044da09c86",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_c4f6e74f60abe4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cddde939-6b36-4228-a930-bb79fa3f1b41",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
