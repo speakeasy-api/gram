@@ -924,6 +924,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// grant while ignoring the newly introduced agent_id field.
 		return oops.E(oops.CodeBadRequest, nil, "agent approval action and selection do not match").LogError(ctx, logger)
 	}
+	// The credential the grant mints is the selected agent's for an agent
+	// approval, so its upstream client picks are judged by the agent's own
+	// connections.
+	pickState := challengeState
 	if selectedAgentID != "" {
 		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
 		if err != nil {
@@ -932,6 +936,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// Keep the challenge retryable while the human connects and attaches
 		// required services. Human-owned tokens alone do not authorize an agent.
 		subject := urn.NewAgentSubject(selectedAgent.AgentID)
+		pickState.Subject = &subject
 		agentCtx, err := s.contextForSessionSubject(ctx, endpoint, subject, "", "")
 		if err != nil {
 			return oops.E(oops.CodeUnavailable, err, "resolve selected agent identity").LogWarn(ctx, logger)
@@ -1060,6 +1065,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		toolSelection, duration = approval.selection, approval.duration
 	}
 
+	// For each server offering several upstream clients, the one usable card
+	// the credential goes through is recorded as its choice. Read before the
+	// challenge is consumed, so a failure leaves the page retryable.
+	upstreamPicks, err := s.consentUpstreamClientPicks(ctx, endpoint, pickState)
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "read upstream client picks").LogError(ctx, logger)
+	}
+
 	// Atomic GETDEL: a consent approval consumes the authn-challenge state
 	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
 	// and get "not found or expired", so only one grant is ever minted per
@@ -1107,14 +1120,6 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			}
 			return oops.E(oops.CodeUnexpected, err, "record consent").LogError(ctx, logger)
 		}
-	}
-
-	// The credential this grant mints records the upstream client picked here
-	// for each server offering several.
-	upstreamPicks, err := s.consentUpstreamClientPicks(ctx, endpoint, challengeState)
-	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
-		return oops.E(oops.CodeUnavailable, err, "read upstream client picks").LogError(ctx, logger)
 	}
 
 	code, err := generateOpaqueToken()
