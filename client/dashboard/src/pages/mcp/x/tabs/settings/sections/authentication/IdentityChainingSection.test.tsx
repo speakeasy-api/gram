@@ -280,7 +280,7 @@ describe("IdentityChainingSection", () => {
     [
       "Speakeasy isn't rolled out and nothing else can vouch",
       () => {
-        state.speakeasy = { state: "setup_required" };
+        state.speakeasy = { state: "unavailable" };
         state.flags = { oktaConnections: true, emaProviders: false };
       },
     ],
@@ -313,6 +313,7 @@ describe("IdentityChainingSection", () => {
       "the rollouts are off",
       () => {
         state.flags = { oktaConnections: false, emaProviders: false };
+        state.speakeasy = { state: "unavailable" };
       },
     ],
   ])("is hidden when %s", (_name, arrange) => {
@@ -323,6 +324,27 @@ describe("IdentityChainingSection", () => {
         name: "Enterprise Managed Authorization",
       }),
     ).toBe(null);
+  });
+
+  it("stays hidden when Speakeasy's issuer is unavailable even with ema-providers on", () => {
+    state.flags = { oktaConnections: false, emaProviders: true };
+    state.speakeasy = { state: "unavailable" };
+    render(<IdentityChainingSection mcpServer={server} />);
+    expect(
+      screen.queryByRole("heading", {
+        name: "Enterprise Managed Authorization",
+      }),
+    ).toBe(null);
+  });
+
+  it("shows when Speakeasy's issuer is offered while ema-providers is off", () => {
+    state.flags = { oktaConnections: false, emaProviders: false };
+    render(<IdentityChainingSection mcpServer={server} />);
+    expect(
+      screen.getByRole("heading", {
+        name: "Enterprise Managed Authorization",
+      }),
+    ).toBeTruthy();
   });
 
   it.each([
@@ -341,6 +363,7 @@ describe("IdentityChainingSection", () => {
     ],
   ])("stays off the page while %s with both rollouts off", (_name, arrange) => {
     state.flags = { oktaConnections: false, emaProviders: false };
+    state.speakeasy = { state: "unavailable" };
     arrange();
     render(<IdentityChainingSection mcpServer={server} />);
     expect(
