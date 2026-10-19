@@ -123,12 +123,12 @@ func TestClassifyTransportError(t *testing.T) {
 		{name: "nil is a definitive exchange", err: nil, want: causeNone},
 		{
 			name: "dns",
-			err:  fmt.Errorf("post: %w", &net.DNSError{Err: "no such host", Name: "app.getgram.ai"}),
+			err:  fmt.Errorf("post: %w", &net.DNSError{Err: "no such host", Name: "ai.speakeasy.com"}),
 			want: causeDNS,
 		},
 		{
 			name: "dns timeout reports as dns",
-			err:  &net.DNSError{Err: "i/o timeout", Name: "app.getgram.ai", IsTimeout: true},
+			err:  &net.DNSError{Err: "i/o timeout", Name: "ai.speakeasy.com", IsTimeout: true},
 			want: causeDNS,
 		},
 		{

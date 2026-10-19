@@ -235,7 +235,7 @@ describe("AppSidebar", () => {
           { label: "Admin MCP", href: "/mcp-setup" },
           {
             label: "Demo organization",
-            href: "https://app.getgram.ai/explore-demo",
+            href: "https://ai.speakeasy.com/explore-demo",
           },
           { label: "Customer usage", href: "/customer-usage" },
         ],

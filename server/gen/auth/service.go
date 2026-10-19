@@ -256,7 +256,7 @@ type SwitchScopesResult struct {
 // TransferInPayload is the payload type of the auth service transferIn method.
 type TransferInPayload struct {
 	// Start mode: the platform host that holds the session to move here (e.g.
-	// app.getgram.ai)
+	// ai.speakeasy.com)
 	SourceHost *string
 	// Callback mode: the opaque one-time transfer code from the source host's
 	// transferOut endpoint

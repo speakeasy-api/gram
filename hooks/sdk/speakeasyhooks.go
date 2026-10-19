@@ -18,7 +18,7 @@ import (
 
 // ServerList contains the list of servers available to the SDK
 var ServerList = []string{
-	"https://app.getgram.ai",
+	"https://ai.speakeasy.com",
 }
 
 // HTTPClient provides an interface for supplying the SDK with a custom HTTP client

@@ -12,7 +12,7 @@ export default meta;
 type Story = StoryObj<typeof CopyButton>;
 
 export const Default: Story = {
-  args: { text: "https://app.getgram.ai/mcp/petstore", tooltip: "Copy URL" },
+  args: { text: "https://ai.speakeasy.com/mcp/petstore", tooltip: "Copy URL" },
 };
 
 export const Small: Story = {

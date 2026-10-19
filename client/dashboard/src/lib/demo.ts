@@ -9,7 +9,7 @@ export const DEMO_ORG_SLUG = "acme-demo";
 // they see sample data instead of the empty org home.
 const DEMO_PROJECT_SLUG = "default";
 // Non-prod builds (local, previews) link to the canonical prod demo.
-const DEMO_APP_ORIGIN = "https://app.getgram.ai";
+const DEMO_APP_ORIGIN = "https://ai.speakeasy.com";
 
 export const DEMO_LANDING_PATH = `/${DEMO_ORG_SLUG}/projects/${DEMO_PROJECT_SLUG}`;
 

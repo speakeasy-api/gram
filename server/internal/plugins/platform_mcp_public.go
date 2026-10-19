@@ -35,7 +35,7 @@ const (
 // every organization.
 //
 // serverURL is the Speakeasy deployment the package points at (e.g.
-// https://app.getgram.ai). version is the monotonic publish counter mixed into
+// https://ai.speakeasy.com). version is the monotonic publish counter mixed into
 // every plugin.json so clients treat a re-render as newer and refresh; CI
 // supplies the workflow run number. An empty version pins the deterministic
 // default used by tests.

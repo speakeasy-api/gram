@@ -179,9 +179,9 @@ npms:
 #     short_description: Everything you need to build powerful integrations for agents and LLMs.
 #     license_url: https://github.com/speakeasy-api/gram/blob/main/LICENSE
 #     license: "elastic"
-#     publisher_url: https://app.getgram.ai
+#     publisher_url: https://ai.speakeasy.com
 #     publisher_support_url: https://github.com/speakeasy-api/gram/issues
-#     homepage: https://app.getgram.ai
+#     homepage: https://ai.speakeasy.com
 #     description: |-
 #       A command line interface for the Speakeasy platform. Get started at https://docs.getgram.ai/
 #       Bring the functionality of Speakeasy into your development workflow. It can be run locally or in your CI/CD pipeline.

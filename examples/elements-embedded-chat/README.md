@@ -73,7 +73,7 @@ environment: {
 Speakeasy delivers `token` to the MCP server as a header. The environment variable
 name (`MY_MCP_BEARER_TOKEN` in this example) must match the name configured on
 the MCP server's configuration page in the [Speakeasy
-dashboard](https://app.getgram.ai). You can find and configure these names
+dashboard](https://ai.speakeasy.com). You can find and configure these names
 under your MCP server's settings.
 
 ## Setup
@@ -91,7 +91,7 @@ Copy the `.env` file and fill in your values:
 ```bash
 # Client-side (VITE_ prefix — bundled into the browser, so only non-secret values)
 VITE_SPEAKEASY_AI_PROJECT_SLUG=your-project-slug
-VITE_SPEAKEASY_AI_MCP_URL=https://app.getgram.ai/mcp/your-mcp-slug
+VITE_SPEAKEASY_AI_MCP_URL=https://ai.speakeasy.com/mcp/your-mcp-slug
 
 # Server-side only (never sent to the browser)
 SPEAKEASY_AI_API_KEY=your-gram-api-key

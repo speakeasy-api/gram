@@ -981,7 +981,7 @@ func (s *seeder) chfGatewayGoneCalls(ctx context.Context, ch driver.Conn) error 
 // server.
 func (s *seeder) chfGatewayHooks(ctx context.Context, ch driver.Conn) error {
 	gatewaySlug := s.spec.OrgSlug + "-gateway"
-	gatewayURL := "https://app.getgram.ai/mcp/" + gatewaySlug
+	gatewayURL := "https://ai.speakeasy.com/mcp/" + gatewaySlug
 	rows := make([]chfTelemetryRow, 0, 40)
 	for n := range 40 {
 		i := n + 1

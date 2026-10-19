@@ -15,7 +15,7 @@ target="${1:-dev}"
 
 case "$target" in
   dev) url="https://dev.getgram.ai/" ;;
-  prod) url="https://app.getgram.ai/" ;;
+  prod) url="https://ai.speakeasy.com/" ;;
   *) url="$target" ;;
 esac
 

@@ -110,7 +110,7 @@ Use `pull-request-demo` when a user-visible change needs a shareable PR screensh
 
 ### Demo org and seed data
 
-We maintain a demo org (`app.getgram.ai/explore-demo`) that customers use to explore the product before their own org is set up. It is reseeded daily from a SQL seed stored in this repo, and the same seed provisions each developer's local org.
+We maintain a demo org (`ai.speakeasy.com/explore-demo`) that customers use to explore the product before their own org is set up. It is reseeded daily from a SQL seed stored in this repo, and the same seed provisions each developer's local org.
 
 When you add a feature or change an existing one, update the demo seed in the same change so the new data shows up in both the demo org and local dev. Activate the `gram-demo-seed` skill (`.agents/skills/gram-demo-seed/SKILL.md`) for the rules and the workflow.
 

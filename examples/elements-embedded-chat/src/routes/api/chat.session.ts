@@ -11,7 +11,7 @@ export const Route = createFileRoute("/api/chat/session")({
     handlers: {
       POST: async ({ request }: { request: Request }) => {
         const base =
-          process.env.SPEAKEASY_AI_API_URL ?? "https://app.getgram.ai";
+          process.env.SPEAKEASY_AI_API_URL ?? "https://ai.speakeasy.com";
         const body = await request.json();
 
         // Proxy the session creation request to Speakeasy's API, attaching

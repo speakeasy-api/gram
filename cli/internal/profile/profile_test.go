@@ -145,6 +145,7 @@ func TestSave_MigratesLegacyProfilesOnFirstWrite(t *testing.T) { //nolint:parall
 	require.Equal(t, "default", migrated.Current)
 	require.Equal(t, "other", migrated.Profiles["default"].DefaultProjectSlug)
 	require.Equal(t, "legacy-secret", migrated.Profiles["default"].Secret)
+	require.Equal(t, "https://app.getgram.ai", migrated.Profiles["default"].APIUrl)
 	require.Equal(t, "staging-secret", migrated.Profiles["staging"].Secret)
 
 	info, err := os.Stat(path)
@@ -249,4 +250,14 @@ func TestClear_ReportsUnreadableLegacyFile(t *testing.T) { //nolint:paralleltest
 	path, err := DefaultProfilePath()
 	require.NoError(t, err)
 	require.ErrorContains(t, Clear(path), "check legacy profile file")
+}
+
+func TestUpdateOrCreate_CanonicalAPIURL(t *testing.T) { //nolint:paralleltest // sets HOME and XDG_CONFIG_HOME
+	setHome(t)
+	path, err := DefaultProfilePath()
+	require.NoError(t, err)
+	require.NoError(t, UpdateOrCreate("new-key", "https://ai.speakeasy.com", nil, nil, path, "default", ""))
+	saved, err := LoadByName(path, "default")
+	require.NoError(t, err)
+	require.Equal(t, "https://ai.speakeasy.com", saved.APIUrl)
 }

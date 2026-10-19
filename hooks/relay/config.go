@@ -15,14 +15,14 @@ import (
 
 // DefaultServerURL is the production Speakeasy endpoint used when no override is
 // configured in the environment.
-const DefaultServerURL = "https://app.getgram.ai"
+const DefaultServerURL = "https://ai.speakeasy.com"
 
 // Config holds the deployment identity baked into a generated plugin. Every
 // field has an environment override so a single binary can serve any
 // project/org without recompilation, mirroring the env knobs the legacy bash
 // senders read.
 type Config struct {
-	// ServerURL is the Speakeasy API base, e.g. https://app.getgram.ai.
+	// ServerURL is the Speakeasy API base, e.g. https://ai.speakeasy.com.
 	ServerURL string
 	// SiteURL is the dashboard origin the browser sign-in opens. Production
 	// serves the API and dashboard from one domain, so this stays empty and

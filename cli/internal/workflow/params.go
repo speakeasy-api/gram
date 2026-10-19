@@ -9,7 +9,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const DefaultBaseURL = "https://app.getgram.ai"
+const DefaultBaseURL = "https://ai.speakeasy.com"
 
 // ResolveParams extracts and validates parameters using the precedence
 // chain:

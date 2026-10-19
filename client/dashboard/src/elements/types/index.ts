@@ -89,7 +89,7 @@ export type ElementsTransportFactory = (
  *
  * @example
  * const config: ElementsConfig = {
- *   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
+ *   mcp: 'https://ai.speakeasy.com/mcp/your-mcp-slug',
  *   projectSlug: 'my-project',
  *   systemPrompt: 'You are a helpful assistant.',
  * }
@@ -230,14 +230,14 @@ export interface ElementsConfig {
 
   /**
    * The Speakeasy Server URL to use for the Elements library.
-   * Can be retrieved from https://app.getgram.ai/{team}/{project}/mcp/{mcp_slug}
+   * Can be retrieved from https://ai.speakeasy.com/{team}/{project}/mcp/{mcp_slug}
    *
    * For multiple MCP servers in a single chat, use {@link mcps} instead;
    * `mcps` takes precedence when both are provided.
    *
    * @example
    * const config: ElementsConfig = {
-   *   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
+   *   mcp: 'https://ai.speakeasy.com/mcp/your-mcp-slug',
    * }
    */
   mcp?: ServerUrl;
@@ -251,8 +251,8 @@ export interface ElementsConfig {
    * @example
    * const config: ElementsConfig = {
    *   mcps: [
-   *     { url: 'https://app.getgram.ai/mcp/billing', name: 'billing' },
-   *     { url: 'https://app.getgram.ai/mcp/support', name: 'support' },
+   *     { url: 'https://ai.speakeasy.com/mcp/billing', name: 'billing' },
+   *     { url: 'https://ai.speakeasy.com/mcp/support', name: 'support' },
    *   ],
    * }
    */

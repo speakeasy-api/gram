@@ -7,8 +7,8 @@
  * `?redirect=` param carries paths verbatim, so a placeholder segment lets a
  * single URL work for every visitor:
  *
- *   app.getgram.ai/@self/webhooks                  →  /acme/webhooks
- *   app.getgram.ai/@self/projects/default/toolsets →  /acme/projects/default/toolsets
+ *   ai.speakeasy.com/@self/webhooks                  →  /acme/webhooks
+ *   ai.speakeasy.com/@self/projects/default/toolsets →  /acme/projects/default/toolsets
  *
  * The placeholder is resolved client-side by AuthProvider once the session is
  * known. `@` cannot collide with a real org slug (slugs are lowercase

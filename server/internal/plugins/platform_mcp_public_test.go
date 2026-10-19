@@ -175,3 +175,13 @@ func TestLocalPlatformMCPFilesTargetsLocalServer(t *testing.T) {
 	require.Len(t, claude.Plugins, 1)
 	require.Equal(t, platformMCPPluginName, claude.Plugins[0].Name)
 }
+
+func TestPublicPlatformMCPFilesCanonicalOrigin(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://ai.speakeasy.com", "17")
+	require.NoError(t, err)
+	require.Contains(t, string(files["speakeasy/.mcp.json"]), "https://ai.speakeasy.com/platform-mcp")
+	for name, content := range files {
+		require.NotContains(t, string(content), "app.getgram.ai", name)
+	}
+}

@@ -16,7 +16,7 @@ func APIEndpoint() *cli.StringFlag {
 		Name:    "api-url",
 		Usage:   "The base URL to use for API calls.",
 		EnvVars: EnvVars("API_URL"),
-		Value:   "https://app.getgram.ai",
+		Value:   "https://ai.speakeasy.com",
 		Hidden:  true,
 	}
 }

@@ -411,7 +411,7 @@ func main() {
 	ctx := context.Background()
 
 	s := sdk.New(
-		sdk.WithServerURL("https://app.getgram.ai"),
+		sdk.WithServerURL("https://ai.speakeasy.com"),
 		sdk.WithSecurity(components.Security{
 			ApikeyHeaderGramKey:          "<YOUR_API_KEY_HERE>",
 			ProjectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",

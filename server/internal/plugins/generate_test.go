@@ -4157,3 +4157,13 @@ func TestDogfoodPluginFilesIncludesCopilot(t *testing.T) {
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.sh"])
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.ps1"])
 }
+
+func TestDogfoodPluginFilesCanonicalOrigin(t *testing.T) {
+	t.Parallel()
+	files, err := DogfoodPluginFiles()
+	require.NoError(t, err)
+	require.Contains(t, string(files["plugin-pi/speakeasy.json"]), "https://ai.speakeasy.com")
+	for name, content := range files {
+		require.NotContains(t, string(content), "app.getgram.ai", name)
+	}
+}

@@ -4,7 +4,7 @@ info:
   description: Speakeasy is the tools platform for AI agents
   version: 0.0.1
 servers:
-  - url: https://app.getgram.ai
+  - url: https://ai.speakeasy.com
 paths:
   /otel/v1/logs:
     post:
@@ -13771,11 +13771,11 @@ paths:
       operationId: authTransferIn
       parameters:
         - allowEmptyValue: true
-          description: 'Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)'
+          description: 'Start mode: the platform host that holds the session to move here (e.g. ai.speakeasy.com)'
           in: query
           name: source_host
           schema:
-            description: 'Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)'
+            description: 'Start mode: the platform host that holds the session to move here (e.g. ai.speakeasy.com)'
             type: string
         - allowEmptyValue: true
           description: 'Callback mode: the opaque one-time transfer code from the source host''s transferOut endpoint'
