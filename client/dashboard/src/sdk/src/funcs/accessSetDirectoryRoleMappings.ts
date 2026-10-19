@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  SetDirectoryRoleMappingRequest,
-  SetDirectoryRoleMappingRequest$outboundSchema,
-  SetDirectoryRoleMappingSecurity,
-} from "../models/operations/setdirectoryrolemapping.js";
+  SetDirectoryRoleMappingsRequest,
+  SetDirectoryRoleMappingsRequest$outboundSchema,
+  SetDirectoryRoleMappingsSecurity,
+} from "../models/operations/setdirectoryrolemappings.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * setDirectoryRoleMapping access
+ * setDirectoryRoleMappings access
  *
  * @remarks
- * Map a directory group or attribute value to a role, replacing any role it was mapped to before.
+ * Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.
  */
-export function accessSetDirectoryRoleMapping(
+export function accessSetDirectoryRoleMappings(
   client: GramCore,
-  request: SetDirectoryRoleMappingRequest,
-  security?: SetDirectoryRoleMappingSecurity | undefined,
+  request: SetDirectoryRoleMappingsRequest,
+  security?: SetDirectoryRoleMappingsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    DirectoryRoleMapping,
+    Array<DirectoryRoleMapping>,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function accessSetDirectoryRoleMapping(
 
 async function $do(
   client: GramCore,
-  request: SetDirectoryRoleMappingRequest,
-  security?: SetDirectoryRoleMappingSecurity | undefined,
+  request: SetDirectoryRoleMappingsRequest,
+  security?: SetDirectoryRoleMappingsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      DirectoryRoleMapping,
+      Array<DirectoryRoleMapping>,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,18 +95,18 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(SetDirectoryRoleMappingRequest$outboundSchema, value),
+    (value) => z.parse(SetDirectoryRoleMappingsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.SetDirectoryRoleMappingForm, {
+  const body = encodeJSON("body", payload.SetDirectoryRoleMappingsForm, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/access.setDirectoryRoleMapping")();
+  const path = pathToFunc("/rpc/access.setDirectoryRoleMappings")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -141,7 +141,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "setDirectoryRoleMapping",
+    operationID: "setDirectoryRoleMappings",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -185,7 +185,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    DirectoryRoleMapping,
+    Array<DirectoryRoleMapping>,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -196,7 +196,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, DirectoryRoleMapping$inboundSchema),
+    M.json(200, z.array(DirectoryRoleMapping$inboundSchema)),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

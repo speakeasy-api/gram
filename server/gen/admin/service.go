@@ -230,15 +230,17 @@ type Service interface {
 	// version proxies an external MCP attachment on its project's active
 	// deployment, with the blockers that stop each one from migrating.
 	ListExternalMcpMigrationCandidates(context.Context, *ListExternalMcpMigrationCandidatesPayload) (res *AdminListExternalMcpMigrationCandidatesResult, err error)
-	// Runs the migration of each server inside a transaction that is rolled back,
-	// reporting what would happen without changing anything.
+	// Runs each server's migration or deletion inside a transaction that is rolled
+	// back, reporting what would happen without changing anything.
 	PreviewExternalMcpMigration(context.Context, *PreviewExternalMcpMigrationPayload) (res *AdminExternalMcpMigrationResult, err error)
 	// Switches each server in place from its external MCP attachment to a remote
 	// MCP source on the same sign-in provider, keeping its ID, address and
-	// everything that references it, and disables the old toolset. Servers run one
-	// at a time, each in its own transaction, and the run stops at the first
-	// failure. Never creates a sign-in provider or a client and never registers
-	// one with the upstream.
+	// everything that references it, and disables the old toolset. A candidate
+	// left with nothing to migrate is deleted instead, with its server, addresses
+	// and plugin entries, as the toolset delete API does. Servers run one at a
+	// time, each in its own transaction, and the run stops at the first failure.
+	// Never creates a sign-in provider or a client and never registers one with
+	// the upstream.
 	MigrateExternalMcpServers(context.Context, *MigrateExternalMcpServersPayload) (res *AdminExternalMcpMigrationResult, err error)
 	// Staff-only registry administration: Okta application names observed across
 	// synced tenants that plausibly belong to the entry, for confirmation in the
@@ -423,7 +425,8 @@ type AdminDashboardRedirect struct {
 	CacheControl string
 }
 
-// A live server backed by an external MCP attachment.
+// A toolset backed by an external MCP attachment, with what running it does:
+// migrate its server in place, or delete it.
 type AdminExternalMcpMigrationCandidate struct {
 	// The toolset behind the server.
 	ToolsetID string
@@ -456,26 +459,44 @@ type AdminExternalMcpMigrationCandidate struct {
 	// Tool calls over the last tool_call_window_days. Absent when telemetry is
 	// unavailable.
 	ToolCalls *int64
+	// What running the candidate does: migrate switches its server in place to a
+	// remote MCP server; delete removes the toolset because nothing is left to
+	// migrate, along with any server, addresses and plugin entries it still owns.
+	// A server already migrated in place is kept and keeps working.
+	Action string
+	// Why the candidate is deleted rather than migrated. Empty when it migrates.
+	DeleteReasons []string
 	// Why the server cannot be migrated. Empty when it can.
 	Blockers []string
+	// What migrating the server drops or cannot carry over. Warnings do not stop
+	// it.
+	Warnings []string
 }
 
 // What happened, or in a preview what would happen, to one server.
 type AdminExternalMcpMigrationOutcome struct {
 	// The candidate's toolset.
 	ToolsetID string
-	// migrated and previewed completed every step; failed left the server
+	// What the run did, or would do, with the candidate. Absent when it was not
+	// attempted.
+	Action *string
+	// migrated, deleted and previewed completed every step; deleted removed the
+	// toolset and any server it still owned, so mcp_server_id,
+	// remote_mcp_server_id and remote_url are absent; failed left the server
 	// unchanged; not_attempted follows an earlier failure.
 	MigrationStatus string
 	// Why the server failed or was not attempted.
 	Reason *string
-	// The server's /mcp/<slug> address, which does not change.
+	// The server's /mcp/<slug> address. Migrating keeps it; deleting a server the
+	// toolset still owns removes it.
 	McpSlug *string
 	// The server, which keeps its ID.
 	McpServerID *string
-	// The remote MCP source the server now proxies.
+	// The remote MCP source the server proxies once migrated. Absent when the
+	// server failed; a preview's source is rolled back.
 	RemoteMcpServerID *string
-	// The upstream URL the server now dials.
+	// The upstream URL the server dials once migrated. Absent when the server
+	// failed.
 	RemoteURL *string
 	// Each change, in order.
 	Actions []string
@@ -2249,7 +2270,7 @@ type MeterUsageWindow struct {
 // migrateExternalMcpServers method.
 type MigrateExternalMcpServersPayload struct {
 	AdminSessionToken *string
-	// Servers to migrate, in order.
+	// Servers to migrate or delete, in order.
 	Servers []*AdminExternalMcpMigrationRequest
 }
 
@@ -2288,7 +2309,7 @@ type OpenOrganizationInDashboardPayload struct {
 // previewExternalMcpMigration method.
 type PreviewExternalMcpMigrationPayload struct {
 	AdminSessionToken *string
-	// Servers to migrate, in order.
+	// Servers to migrate or delete, in order.
 	Servers []*AdminExternalMcpMigrationRequest
 }
 

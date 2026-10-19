@@ -3020,6 +3020,8 @@ type MetaMcpServer struct {
 	// @access: opaque-restricted
 	Instructions pgtype.Text
 	// @access: confidential
+	DiscoveryMode string
+	// @access: confidential
 	Visibility string
 	// @access: confidential
 	NetworkAccessMode pgtype.Text

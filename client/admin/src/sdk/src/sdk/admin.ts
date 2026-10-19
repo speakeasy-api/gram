@@ -305,7 +305,7 @@ export class Admin extends ClientSDK {
    * migrateExternalMcpServers admin
    *
    * @remarks
-   * Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
+   * Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
    */
   async migrateExternalMcpServers(
     request: MigrateExternalMcpServersRequestBody,
@@ -322,7 +322,7 @@ export class Admin extends ClientSDK {
    * previewExternalMcpMigration admin
    *
    * @remarks
-   * Runs the migration of each server inside a transaction that is rolled back, reporting what would happen without changing anything.
+   * Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.
    */
   async previewExternalMcpMigration(
     request: PreviewExternalMcpMigrationRequestBody,

@@ -182,3 +182,24 @@ func TestApprovalPageEscapesStoredValues(t *testing.T) {
 	require.NotContains(t, page.String(), "<img")
 	require.Contains(t, page.String(), "&lt;script&gt;alert(1)&lt;/script&gt;")
 }
+
+func TestProposalOutputPassesSDKOutputValidation(t *testing.T) {
+	t.Parallel()
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	addProposalTool(server, &mcp.Tool{Name: "prepare"}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, ProposalOutput, error) {
+		return nil, ProposalOutput{ProposalID: "p", Status: "pending_approval", Preview: json.RawMessage(`{"name":"io.example/fixture"}`), Result: json.RawMessage(`{"id":"e"}`)}, nil
+	})
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	_, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "client", Version: "1"}, nil).Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close() })
+
+	res, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "prepare", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	require.False(t, res.IsError, "an object preview must satisfy the inferred output schema")
+	out, err := json.Marshal(res.StructuredContent)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"proposal_id":"p","status":"pending_approval","operation":"","expires_at":"","preview":{"name":"io.example/fixture"},"replay":false,"result":{"id":"e"}}`, string(out))
+}

@@ -20637,6 +20637,15 @@ func marshalAdminAdminExternalMcpMigrationCandidateToAdminExternalMcpMigrationCa
 		ReplacementURL:   v.ReplacementURL,
 		SignInProvider:   v.SignInProvider,
 		ToolCalls:        v.ToolCalls,
+		Action:           v.Action,
+	}
+	if v.DeleteReasons != nil {
+		res.DeleteReasons = make([]string, len(v.DeleteReasons))
+		for i, val := range v.DeleteReasons {
+			res.DeleteReasons[i] = val
+		}
+	} else {
+		res.DeleteReasons = []string{}
 	}
 	if v.Blockers != nil {
 		res.Blockers = make([]string, len(v.Blockers))
@@ -20645,6 +20654,14 @@ func marshalAdminAdminExternalMcpMigrationCandidateToAdminExternalMcpMigrationCa
 		}
 	} else {
 		res.Blockers = []string{}
+	}
+	if v.Warnings != nil {
+		res.Warnings = make([]string, len(v.Warnings))
+		for i, val := range v.Warnings {
+			res.Warnings[i] = val
+		}
+	} else {
+		res.Warnings = []string{}
 	}
 
 	return res
@@ -20667,6 +20684,7 @@ func unmarshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcp
 func marshalAdminAdminExternalMcpMigrationOutcomeToAdminExternalMcpMigrationOutcomeResponseBody(v *admin.AdminExternalMcpMigrationOutcome) *AdminExternalMcpMigrationOutcomeResponseBody {
 	res := &AdminExternalMcpMigrationOutcomeResponseBody{
 		ToolsetID:         v.ToolsetID,
+		Action:            v.Action,
 		MigrationStatus:   v.MigrationStatus,
 		Reason:            v.Reason,
 		McpSlug:           v.McpSlug,

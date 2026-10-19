@@ -550,11 +550,17 @@ func newAdminCommand() *cli.Command {
 				platformAssets = assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage)
 				adminService.SetAssetService(platformAssets)
 			}
-			adminService.SetExternalMCPMigrator(migration.NewMigrator(
-				logger, tracerProvider, db, audit.NewLogger(), guardianPolicy, applicationEncryption,
-				plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)},
-				migration.NewClickHouseToolCalls(chDB),
-			))
+			// The migration copies encrypted environment values into headers,
+			// so it needs the application key.
+			if applicationEncryption != nil {
+				adminService.SetExternalMCPMigrator(migration.NewMigrator(
+					logger, tracerProvider, db, audit.NewLogger(), guardianPolicy, applicationEncryption,
+					plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)},
+					migration.NewClickHouseToolCalls(chDB),
+				))
+			} else {
+				logger.WarnContext(ctx, "External MCP migration unavailable; no application encryption key configured")
+			}
 			admin.Attach(mux, adminService)
 			if c.Bool("admin-mcp-enabled") {
 				key := c.String("admin-mcp-signing-key")

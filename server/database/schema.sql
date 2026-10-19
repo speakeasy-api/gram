@@ -7503,8 +7503,9 @@ WHERE user_id IS NOT NULL;
 -- are added to a user's principals at access-check time, on top of the roles
 -- WorkOS assigns, and are never written back to WorkOS. `source_kind` is
 -- 'group' (directory_group_id set) or 'attribute' (attribute_key and
--- attribute_value set). Each group or attribute value maps to one role. The
--- group reference is pinned to the mapping's organization by a composite FK.
+-- attribute_value set). Each group or attribute value grants a set of roles,
+-- with one live row per source and role. The group reference is pinned to the
+-- mapping's organization by a composite FK.
 -- Directory sync soft-deletes groups, and a mapping to a soft-deleted group
 -- stops matching; the FK cascade only fires when the organization is removed.
 CREATE TABLE IF NOT EXISTS directory_role_mappings (
@@ -7545,12 +7546,12 @@ COMMENT ON COLUMN directory_role_mappings.updated_at IS '@access: confidential';
 COMMENT ON COLUMN directory_role_mappings.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN directory_role_mappings.deleted IS '@access: confidential';
 
-CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_group_key
-ON directory_role_mappings (organization_id, directory_group_id)
+CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_group_role_key
+ON directory_role_mappings (organization_id, directory_group_id, role_urn)
 WHERE deleted IS FALSE AND directory_group_id IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_attribute_key
-ON directory_role_mappings (organization_id, attribute_key, attribute_value)
+CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_attribute_role_key
+ON directory_role_mappings (organization_id, attribute_key, attribute_value, role_urn)
 WHERE deleted IS FALSE AND attribute_key IS NOT NULL;
 
 -- agent_role_assignments stores which roles each agent principal holds within an org.
@@ -9374,6 +9375,8 @@ CREATE TABLE IF NOT EXISTS meta_mcp_servers (
   -- instructions instead, so an unset row keeps the drill-down guidance every
   -- gateway needs. Length is validated in application code.
   instructions TEXT,
+  -- Supported modes are validated in application code.
+  discovery_mode TEXT NOT NULL DEFAULT 'progressive',
   -- Values are validated in application code. Defaults to the closed state so
   -- existing rows require an authenticated caller.
   visibility TEXT NOT NULL DEFAULT 'private',
@@ -9397,6 +9400,7 @@ COMMENT ON COLUMN meta_mcp_servers.project_id IS '@access: confidential';
 COMMENT ON COLUMN meta_mcp_servers.user_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN meta_mcp_servers.name IS '@access: confidential';
 COMMENT ON COLUMN meta_mcp_servers.instructions IS '@access: opaque-restricted';
+COMMENT ON COLUMN meta_mcp_servers.discovery_mode IS '@access: confidential';
 COMMENT ON COLUMN meta_mcp_servers.visibility IS '@access: confidential';
 COMMENT ON COLUMN meta_mcp_servers.network_access_mode IS '@access: confidential';
 COMMENT ON COLUMN meta_mcp_servers.created_at IS '@access: confidential';
