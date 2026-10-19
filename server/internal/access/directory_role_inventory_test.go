@@ -103,7 +103,7 @@ func TestDirectoryRoleInventoryImportDryRunDoesNotWrite(t *testing.T) {
 
 func TestDirectoryRoleInventoryInvalidTargetsWriteNothing(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"missing role", "foreign role", "foreign group", "deleted group", "wrong WorkOS org", "wrong Gram org", "unvalidated session", "revoked operator"} {
+	for _, scenario := range []string{"missing role", "foreign role", "foreign group", "deleted group", "wrong WorkOS org", "wrong Speakeasy org", "unvalidated session", "revoked operator"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestAccessService(t)
@@ -127,7 +127,7 @@ func TestDirectoryRoleInventoryInvalidTargetsWriteNothing(t *testing.T) {
 				deleteMappingDirectoryGroup(t, ctx, ti.conn, group)
 			case "wrong WorkOS org":
 				inventory.WorkOSOrganizationID = "other-workos-org"
-			case "wrong Gram org":
+			case "wrong Speakeasy org":
 				inventory.OrganizationID = "other-org"
 			case "unvalidated session":
 				ctx = contextvalues.SetAuthContext(t.Context(), testAccessAuthContext(t, ctx))

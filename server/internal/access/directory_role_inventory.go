@@ -31,7 +31,7 @@ const maxDirectoryRoleInventoryBytes = 1 << 20 // 1 MiB
 
 // DirectoryRoleInventory records rules manually inventoried in WorkOS.
 type DirectoryRoleInventory struct {
-	// OrganizationID identifies the exact Gram organization.
+	// OrganizationID identifies the exact Speakeasy organization.
 	OrganizationID string `json:"organization_id"`
 	// WorkOSOrganizationID must match the organization's current WorkOS link.
 	WorkOSOrganizationID string `json:"workos_organization_id"`
@@ -48,12 +48,12 @@ type DirectoryRoleInventory struct {
 type DirectoryRoleInventoryAssignment struct {
 	// WorkOSGroupID identifies the source independent of its display name.
 	WorkOSGroupID string `json:"workos_directory_group_id"`
-	// RoleSlug identifies an existing live Gram role.
+	// RoleSlug identifies an existing live Speakeasy role.
 	RoleSlug string `json:"role_slug"`
 }
 
 // DirectoryRoleInventoryDifference lists one member's roles that need review
-// before cutover. Gram stores no provenance for direct roles, so the report
+// before cutover. Speakeasy stores no provenance for direct roles, so the report
 // cannot tell a group-derived role from an independent assignment of the same
 // role; it classifies each case instead of guessing.
 type DirectoryRoleInventoryDifference struct {

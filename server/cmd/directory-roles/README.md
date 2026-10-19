@@ -1,7 +1,7 @@
 # Retire WorkOS group-to-role rules safely
 
-WorkOS group rules arrive in Gram as direct role assignments without provenance.
-Import their rules into Gram's directory mappings before removing them in WorkOS.
+WorkOS group rules arrive in Speakeasy as direct role assignments without provenance.
+Import their rules into Speakeasy's directory mappings before removing them in WorkOS.
 The command creates no roles, changes no grants, and never calls WorkOS.
 
 ## Inventory and credentials
@@ -35,7 +35,7 @@ report uses it to flag members whose default would change, and import ignores
 it. An empty assignment list is valid and does not clear mappings.
 
 Configure `GRAM_DATABASE_URL`, `GRAM_REDIS_CACHE_ADDR`, and, if needed,
-`GRAM_REDIS_CACHE_PASSWORD` for the same environment as the Gram server. For a
+`GRAM_REDIS_CACHE_PASSWORD` for the same environment as the Speakeasy server. For a
 direct remote Redis connection, use `GRAM_DIRECTORY_ROLES_REDIS_URL` with a
 `rediss://` URL instead of the address/password variables; it must verify the
 server certificate. Direct remote PostgreSQL connections require
@@ -133,21 +133,21 @@ giving an incomplete result.
 inventory (explicit rules and default role), and confirmation from WorkOS of when
 removing a rule recomputes membership roles. The code does not clear these gates.
 
-- [ ] Import is committed, and every intended rule is present in Gram.
+- [ ] Import is committed, and every intended rule is present in Speakeasy.
 - [ ] Shadow report (with `target_default_role_slug` set) is empty, or an administrator explicitly approved each difference.
 - [ ] Review the least-privilege built-in default and its permissions separately.
 - [ ] Remove explicit group-to-role assignments in the WorkOS Dashboard.
 - [ ] Set that organisation's default role to the agreed least-privilege built-in role.
 - [ ] Hide Admin Portal role assignment in WorkOS's environment-level Admin Portal settings; inspect the organisation Roles tab for an override that re-enables it.
 - [ ] Confirm the environment default hides the step for new organisations and audit existing overrides.
-- [ ] Observe subsequent membership events and confirm effective access in Gram.
+- [ ] Observe subsequent membership events and confirm effective access in Speakeasy.
 - [ ] Re-run the shadow report and confirm no unexpected differences remain.
 
-The portal setting is owned by WorkOS. Gram's portal-link API has no verified
-visibility parameter, so this change adds no Gram toggle. Its onboarding default
+The portal setting is owned by WorkOS. Speakeasy's portal-link API has no verified
+visibility parameter, so this change adds no Speakeasy toggle. Its onboarding default
 must be configured in WorkOS by the environment owner, not by running this tool.
 
-Do not delete direct assignments in Gram as part of cutover. The existing
+Do not delete direct assignments in Speakeasy as part of cutover. The existing
 membership sync replaces them when WorkOS emits the recomputed membership roles.
 Administrator-assigned direct roles and the default-role channel remain supported.
 If WorkOS emits no immediate recomputation, retain the imported mappings and
