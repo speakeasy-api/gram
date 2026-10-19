@@ -50,7 +50,12 @@ import { Link, Navigate } from "react-router";
 import { toast } from "sonner";
 import { mcpDetailTabHref } from "./MCPDetailsRouting";
 
-type SkillsTabToolset = { id: string; slug: string; name: string };
+type SkillsTabToolset = {
+  id: string;
+  slug: string;
+  name: string;
+  mcpEnabled?: boolean | undefined;
+};
 
 /**
  * The route behind the Skills tab. The tab only exists while skills over MCP
@@ -131,8 +136,10 @@ export function MCPSkillsTab({
     canReadServers && !serversQuery.data && serversQuery.isLoading;
   const hostedIndex = useMemo(
     () =>
-      hostedServerIndex(serversQuery.data?.mcpServers, [{ id: toolset.id }]),
-    [serversQuery.data?.mcpServers, toolset.id],
+      hostedServerIndex(serversQuery.data?.mcpServers, [
+        { id: toolset.id, mcpEnabled: toolset.mcpEnabled },
+      ]),
+    [serversQuery.data?.mcpServers, toolset.id, toolset.mcpEnabled],
   );
   const servingPlugins = useMemo(
     () =>

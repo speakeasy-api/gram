@@ -282,6 +282,23 @@ describe("MCPSkillsTab", () => {
     expect(screen.getByText("Skill 4")).toBeDefined();
   });
 
+  it("does not count the canonical endpoint once MCP is off for the toolset", () => {
+    state.servers = {
+      ...state.servers,
+      data: { mcpServers: [{ id: "toolset-a", toolsetId: "toolset-a" }] },
+    };
+    renderTab(<MCPSkillsTab toolset={{ ...toolset, mcpEnabled: false }} />);
+    expect(screen.queryByText("Finance tools")).toBeNull();
+    expect(screen.queryByText("Everything")).toBeNull();
+    expect(screen.queryByText("Skill 1")).toBeNull();
+  });
+
+  it("keeps serving through another wrapper when MCP is off for the toolset", () => {
+    renderTab(<MCPSkillsTab toolset={{ ...toolset, mcpEnabled: false }} />);
+    expect(screen.getByText("Finance tools")).toBeDefined();
+    expect(screen.getByText("Skill 1")).toBeDefined();
+  });
+
   it("waits for the server list before deciding membership", () => {
     state.servers = { ...state.servers, data: undefined, isLoading: true };
     renderTab();
