@@ -154,7 +154,9 @@ func TestSuggestExclusion_PromptOnly_HeuristicFallback(t *testing.T) {
 	require.Equal(t, "jane.doe@acme.com", result.MatchValue)
 }
 
-func TestSuggestExclusion_FindingIDsOnly_RebuildsClickHouseMatchAndRejectsForeignProject(t *testing.T) {
+// The batch fallback must never surface a finding's raw match: that would
+// bypass the audited risk.unmaskResult path.
+func TestSuggestExclusion_FindingIDsOnly_UsesClickHouseMetadataAndRejectsForeignProject(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -173,10 +175,8 @@ func TestSuggestExclusion_FindingIDsOnly_RebuildsClickHouseMatchAndRejectsForeig
 		FindingIds: []string{findingID.String()},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "exact", result.MatchType)
-	require.Equal(t, "secret", result.MatchValue)
-	require.Equal(t, "secret.generic", *result.RuleIDFilter)
-	require.Equal(t, "gitleaks", *result.SourceFilter)
+	require.Equal(t, "rule_id", result.MatchType)
+	require.Equal(t, "secret.generic", result.MatchValue)
 
 	foreignID := seedSuggestExclusionFinding(t, ti, uuid.New(), authCtx.ActiveOrganizationID, policyID, chatID, messageID, "gitleaks", "secret.generic", "secret", 20)
 	_, err = ti.service.SuggestExclusion(ctx, &gen.SuggestExclusionPayload{

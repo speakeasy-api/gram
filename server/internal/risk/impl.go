@@ -2327,10 +2327,12 @@ func (s *Service) SuggestExclusion(ctx context.Context, payload *gen.SuggestExcl
 	return suggestion, nil
 }
 
+// exclusionSuggestionFinding carries only non-sensitive finding metadata. The
+// matched value is never read here: it would bypass the chat:read gate and
+// audit trail of risk.unmaskResult.
 type exclusionSuggestionFinding struct {
 	RuleID string
 	Source string
-	Match  string
 }
 
 func (s *Service) exclusionSuggestionFindings(ctx context.Context, organizationID string, projectID uuid.UUID, ids []uuid.UUID) ([]exclusionSuggestionFinding, error) {
@@ -2347,27 +2349,15 @@ func (s *Service) exclusionSuggestionFindings(ctx context.Context, organizationI
 		byID[rows[i].ID] = &rows[i]
 	}
 
-	matcher := NewRevealMatcher(s.logger, s.repo, s.assetStorage)
 	findings := make([]exclusionSuggestionFinding, 0, len(ids))
 	for _, id := range ids {
 		row := byID[id]
 		if row == nil {
 			return nil, oops.E(oops.CodeInvalid, nil, "one or more finding ids are unavailable")
 		}
-		anchor := matcher.LoadAnchor(ctx, projectID, row)
-		chatID, consistent := ResolveChatID(row, anchor)
-		if !consistent {
-			return nil, oops.E(oops.CodeInvalid, nil, "one or more finding ids are unavailable")
-		}
-		matcher.HydratePartContent(ctx, &anchor)
-		match, ok := MatchingReconstruction(row.MatchLen, matcher.Candidates(ctx, chatID, row, anchor))
-		if !ok {
-			return nil, oops.E(oops.CodeInvalid, nil, "one or more finding matches are unavailable")
-		}
 		findings = append(findings, exclusionSuggestionFinding{
 			RuleID: row.RuleID,
 			Source: row.Source,
-			Match:  match,
 		})
 	}
 	return findings, nil
@@ -2384,40 +2374,24 @@ func exclusionSuggestionResult(matchType, matchValue, ruleIDFilter, sourceFilter
 	}
 }
 
-// heuristicExclusionSuggestion returns the narrowest deterministic fallback.
+// heuristicExclusionSuggestion is the deterministic fallback when the LLM is
+// unavailable. With a prompt, treats it as the literal value to suppress, since
+// the operator typed and is knowingly disclosing that value. With only a
+// findings batch, never surfaces a finding's raw matched value: that would
+// bypass the audited risk.unmaskResult path. Falls back to a rule_id- or
+// source-scoped exclusion built only from non-sensitive metadata.
 func heuristicExclusionSuggestion(prompt string, findings []exclusionSuggestionFinding) *gen.SuggestExclusionResult {
 	if prompt != "" {
 		return exclusionSuggestionResult("exact", strings.TrimSpace(prompt), "", "")
 	}
-	if len(findings) == 0 {
-		return exclusionSuggestionResult("exact", "", "", "")
+	if len(findings) > 0 {
+		return exclusionSuggestionResultFromFindingMetadata(findings)
 	}
-
-	firstMatch := findings[0].Match
-	firstRuleID := findings[0].RuleID
-	firstSource := findings[0].Source
-	sameMatch := firstMatch != "" && len(firstMatch) <= exclusioncore.RegexMaxLength
-	sameRuleID := firstRuleID != ""
-	sameSource := firstSource != ""
-	for _, finding := range findings[1:] {
-		sameMatch = sameMatch && finding.Match == firstMatch
-		sameRuleID = sameRuleID && finding.RuleID == firstRuleID
-		sameSource = sameSource && finding.Source == firstSource
-	}
-	if sameMatch {
-		ruleIDFilter := ""
-		if sameRuleID {
-			ruleIDFilter = firstRuleID
-		}
-		sourceFilter := ""
-		if sameSource {
-			sourceFilter = firstSource
-		}
-		return exclusionSuggestionResult("exact", firstMatch, ruleIDFilter, sourceFilter)
-	}
-	return exclusionSuggestionResultFromFindingMetadata(findings)
+	return exclusionSuggestionResult("exact", "", "", "")
 }
 
+// exclusionSuggestionResultFromFindingMetadata derives a coarse exclusion from
+// rule_id and source only. Prefers rule_id when every finding shares one.
 func exclusionSuggestionResultFromFindingMetadata(findings []exclusionSuggestionFinding) *gen.SuggestExclusionResult {
 	firstRuleID := findings[0].RuleID
 	sameRuleID := firstRuleID != ""
@@ -2842,7 +2816,7 @@ func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, 
 
 Given a natural-language description of findings an operator wants to stop flagging, a batch of example findings they selected, or both, return a JSON object the dashboard uses to prefill a "create exclusion" form. An exclusion suppresses matching findings retroactively and going forward.
 
-A finding includes the rule id, detector source, and reconstructed matched text. Treat matched text as sensitive input. Use it only to produce the narrowest exclusion that satisfies the operator request: exact for one value, regex for a shared pattern, or rule_id/source when metadata is the intended scope.
+A finding carries the id of the rule that flagged it ("rule_id", e.g. "pii.email_address", "secret.aws_access_token", "custom.acme_token") and the detector source ("source", e.g. "gitleaks", "presidio", "prompt_injection", "custom"). When given a batch of example findings, their actual matched text is deliberately withheld from you: it's sensitive (a detected secret or PII value), and the operator hasn't reviewed or disclosed it to this request. Reason only from what the findings share by rule_id and source and suggest a "rule_id" or "source" match_type that covers them, never "exact"/"regex"/"entity_type" from batch findings alone. If the operator's own natural-language request separately names a specific value, that value came from them directly and may be used for "exact"/"regex"/"entity_type".
 
 Fields:
 - "match_type": how match_value is compared, one of:
@@ -2869,10 +2843,11 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		messageParts = append(messageParts, fmt.Sprintf("Operator request: %s", userPrompt))
 	}
 	if len(findings) > 0 {
+		// Matched values never cross this boundary; see the system prompt.
 		var b strings.Builder
 		b.WriteString("Example findings the operator selected:\n")
 		for _, f := range findings {
-			fmt.Fprintf(&b, "- rule_id=%q source=%q match=%q\n", f.RuleID, f.Source, f.Match)
+			fmt.Fprintf(&b, "- rule_id=%q source=%q\n", f.RuleID, f.Source)
 		}
 		messageParts = append(messageParts, strings.TrimRight(b.String(), "\n"))
 	}
