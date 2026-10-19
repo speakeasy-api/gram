@@ -18,6 +18,10 @@ import (
 // runs on the unverified sub, so unbounded, every forged assertion costs a query.
 var workloadDeviceKeyLookupRate = ratelimit.PerMinute(120).WithBurst(30)
 
+// workloadDeviceKeyLookupTimeout bounds one device key lookup, budget charge
+// included.
+const workloadDeviceKeyLookupTimeout = 5 * time.Second
+
 // errWorkloadDeviceKeyLookupRateLimited reports a device key lookup refused
 // for budget. Nothing was decided about the assertion.
 var errWorkloadDeviceKeyLookupRateLimited = errors.New("workload device key lookups are rate limited for this issuer")
@@ -57,13 +61,17 @@ func budgetedDeviceKeyLookup(lookup workloadDeviceKeyLookup, charge workloadIssu
 		if charge == nil {
 			return workloadidentity.DeviceKey{}, errors.New("workload device key lookup limiter unavailable")
 		}
-		charged, err := charge(ctx, "workload-device-key-lookup:"+issuerID.String())
+		// The sub is unverified, so a stalled store must not hold a forged
+		// request open until the caller's own deadline.
+		lookupCtx, cancel := context.WithTimeout(ctx, workloadDeviceKeyLookupTimeout)
+		defer cancel()
+		charged, err := charge(lookupCtx, "workload-device-key-lookup:"+issuerID.String())
 		if err != nil {
 			return workloadidentity.DeviceKey{}, fmt.Errorf("workload device key lookup limiter unavailable: %w", err)
 		}
 		if !charged.Allowed {
 			return workloadidentity.DeviceKey{}, &workloadDeviceKeyRateLimitedError{retryAfter: charged.RetryAfter}
 		}
-		return lookup(ctx, organizationID, issuerID, subject)
+		return lookup(lookupCtx, organizationID, issuerID, subject)
 	}
 }

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * createDeviceJoinToken workloadIdentities
  *
  * @remarks
- * Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent's policy.
+ * Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Only a person can create one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent's policy.
  */
 export function workloadIdentitiesCreateDeviceJoinToken(
   client: GramCore,

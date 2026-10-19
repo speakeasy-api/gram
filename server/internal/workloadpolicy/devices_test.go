@@ -222,6 +222,39 @@ func TestRegisterDevice_RechecksTheDeviceAgentGrants(t *testing.T) {
 	agentID := newAgent(t, ctx, ti, "grants-removed")
 	token := createJoinToken(t, ctx, ti, agentID)
 
+	removeDeviceAgentSyncGrant(t, ctx, ti, agentID)
+
+	_, err := registerDevice(ctx, ti, token, publicJWK(t, newDeviceKey(t).Public()))
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+	require.ErrorContains(t, err, "org:device_agent_sync")
+
+	seedAgentGrant(t, ctx, ti, agentID, authz.ScopeOrgDeviceAgentSync)
+	_, err = registerDevice(ctx, ti, token, publicJWK(t, newDeviceKey(t).Public()))
+	require.NoError(t, err, "the refused attempt must not have spent the token")
+}
+
+// A same-key retry is not reported as a working enrollment once the grant the
+// device needs to poll has gone.
+func TestRegisterDevice_SameKeyRetryRechecksTheDeviceAgentGrants(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	agentID := newAgent(t, ctx, ti, "retry-grants-removed")
+	token := createJoinToken(t, ctx, ti, agentID)
+	jwk := publicJWK(t, newDeviceKey(t).Public())
+
+	_, err := registerDevice(ctx, ti, token, jwk)
+	require.NoError(t, err)
+
+	removeDeviceAgentSyncGrant(t, ctx, ti, agentID)
+
+	_, err = registerDevice(ctx, ti, token, jwk)
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+	require.ErrorContains(t, err, "org:device_agent_sync")
+}
+
+func removeDeviceAgentSyncGrant(t *testing.T, ctx context.Context, ti *testInstance, agentID uuid.UUID) {
+	t.Helper()
+
 	selectors, err := authz.NewSelector(authz.ScopeOrgDeviceAgentSync, ti.orgID).MarshalJSON()
 	require.NoError(t, err)
 	_, err = accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
@@ -231,14 +264,6 @@ func TestRegisterDevice_RechecksTheDeviceAgentGrants(t *testing.T) {
 		Selectors:      selectors,
 	})
 	require.NoError(t, err)
-
-	_, err = registerDevice(ctx, ti, token, publicJWK(t, newDeviceKey(t).Public()))
-	requireOopsCode(t, err, oops.CodeFailedPrecondition)
-	require.ErrorContains(t, err, "org:device_agent_sync")
-
-	seedAgentGrant(t, ctx, ti, agentID, authz.ScopeOrgDeviceAgentSync)
-	_, err = registerDevice(ctx, ti, token, publicJWK(t, newDeviceKey(t).Public()))
-	require.NoError(t, err, "the refused attempt must not have spent the token")
 }
 
 // A key already live for one device cannot be registered for a second, which
@@ -483,7 +508,7 @@ func TestRegisterDevice_FleetCeilingIsCheckedBeforeThePerTokenBucket(t *testing.
 	_, err = registerDevice(ctx, ti, second, key)
 	requireOopsCode(t, err, oops.CodeRateLimitExceeded)
 
-	res, err := perToken.Allow(ctx, workloadpolicy.HashDeviceJoinTokenForTest(second))
+	res, err := perToken.Allow(ctx, workloadpolicy.HashDeviceJoinToken(second))
 	require.NoError(t, err)
 	require.Equal(t, 4, res.Remaining, "the refused request must not have consumed its per-token bucket")
 }

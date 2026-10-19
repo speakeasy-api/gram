@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -152,10 +153,12 @@ func TestDeviceAssertion_KidMustNameTheRegisteredKey(t *testing.T) {
 func TestDeviceAssertion_RetiredKeyIsRefused(t *testing.T) {
 	t.Parallel()
 	f := newLiveWorkloadFixture(t)
-	device := enrollDevice(t, f, seedDeviceIssuer(t, f))
+	issuerID := seedDeviceIssuer(t, f)
+	device := enrollDevice(t, f, issuerID)
 
-	_, err := testrepo.New(f.conn).SoftDeleteWorkloadDeviceKeyFixture(t.Context(), testrepo.SoftDeleteWorkloadDeviceKeyFixtureParams{OrganizationID: f.organizationID, Subject: device.subject})
+	withdrawn, err := testrepo.New(f.conn).SoftDeleteWorkloadDeviceKeyFixture(t.Context(), testrepo.SoftDeleteWorkloadDeviceKeyFixtureParams{OrganizationID: f.organizationID, WorkloadIssuerID: issuerID, Subject: device.subject})
 	require.NoError(t, err)
+	require.EqualValues(t, 1, withdrawn)
 
 	require.ErrorContains(t, f.presentRaw(t, signDeviceAssertion(t, device.key, device.thumbprint, device.subject)), "device_key_not_registered")
 }
@@ -168,8 +171,9 @@ func TestDeviceAssertion_UnknownKeySourceFailsClosed(t *testing.T) {
 	issuerID := seedDeviceIssuer(t, f)
 	device := enrollDevice(t, f, issuerID)
 
-	_, err := f.conn.Exec(t.Context(), "UPDATE workload_issuers SET key_source = 'device_keyz' WHERE id = $1", issuerID) //nolint:glint // notestingrawsql: an unknown key_source is never written by application code, so no SQLc query exists to produce one
+	updated, err := testrepo.New(f.conn).SetWorkloadIssuerKeySourceFixture(t.Context(), testrepo.SetWorkloadIssuerKeySourceFixtureParams{ID: issuerID, OrganizationID: f.organizationID, KeySource: conv.ToPGText("device_keyz")})
 	require.NoError(t, err)
+	require.EqualValues(t, 1, updated)
 
 	require.ErrorContains(t, f.presentRaw(t, signDeviceAssertion(t, device.key, device.thumbprint, device.subject)), "issuer_key_source_unknown")
 }
@@ -178,10 +182,12 @@ func TestDeviceAssertion_UnknownKeySourceFailsClosed(t *testing.T) {
 func TestDeviceAssertion_UnadmittedDeviceIsRefused(t *testing.T) {
 	t.Parallel()
 	f := newLiveWorkloadFixture(t)
-	device := enrollDevice(t, f, seedDeviceIssuer(t, f))
+	issuerID := seedDeviceIssuer(t, f)
+	device := enrollDevice(t, f, issuerID)
 
-	_, err := testrepo.New(f.conn).SoftDeleteWorkloadAdmissionFixture(t.Context(), testrepo.SoftDeleteWorkloadAdmissionFixtureParams{OrganizationID: f.organizationID, Subject: device.subject})
+	withdrawn, err := testrepo.New(f.conn).SoftDeleteWorkloadAdmissionFixture(t.Context(), testrepo.SoftDeleteWorkloadAdmissionFixtureParams{OrganizationID: f.organizationID, WorkloadIssuerID: issuerID, Subject: device.subject})
 	require.NoError(t, err)
+	require.EqualValues(t, 1, withdrawn)
 
 	require.ErrorContains(t, f.presentRaw(t, signDeviceAssertion(t, device.key, device.thumbprint, device.subject)), "subject_not_admitted")
 }
