@@ -53,12 +53,7 @@ func (g *FeatureSkillsGate) SkillsEnabled(ctx context.Context, organizationID st
 		}
 	}
 
-	on, err := g.features.IsFlagEnabledLocal(ctx, feature.FlagSkillsOverMCP, organizationID, feature.OrgProjectGroups(slug, ""), nil)
-	if err != nil {
-		g.logger.WarnContext(ctx, "skills-over-mcp flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return false
-	}
-	return on
+	return mcpskills.FlagEnabled(ctx, g.logger, g.features, organizationID, slug)
 }
 
 // skillsListParams is the params of skills/list. The catalog fits in one

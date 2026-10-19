@@ -575,16 +575,6 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
 }
 
-// attachShadowInventory keeps the Shadow MCP tools registered on both browser
-// and local-fixture surfaces. Missing dependencies degrade to stable
-// unavailable descriptors, but the capability loss is logged rather than
-// silently hidden.
-//
-// It deliberately does NOT attach the Shadow AI reads. They are
-// organization-scoped and depend on the detection inventory and the scan
-// library, none of which this constructor supplies, so hanging them off its
-// success would report them unavailable whenever an unrelated Shadow MCP
-// dependency is missing. Callers attach the two independently.
 // withPlatformMCPSkills serves the embedded Platform MCP skills over the
 // Skills extension on the external endpoint, behind the skills-over-mcp flag.
 func withPlatformMCPSkills(runtime *platformmcp.Runtime, config platformMCPConfig) (*platformmcp.Runtime, error) {
@@ -595,6 +585,16 @@ func withPlatformMCPSkills(runtime *platformmcp.Runtime, config platformMCPConfi
 	return runtime.WithSkills(catalog, platformmcp.NewFeatureSkillsGate(config.Logger, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB)))
 }
 
+// attachShadowInventory keeps the Shadow MCP tools registered on both browser
+// and local-fixture surfaces. Missing dependencies degrade to stable
+// unavailable descriptors, but the capability loss is logged rather than
+// silently hidden.
+//
+// It deliberately does NOT attach the Shadow AI reads. They are
+// organization-scoped and depend on the detection inventory and the scan
+// library, none of which this constructor supplies, so hanging them off its
+// success would report them unavailable whenever an unrelated Shadow MCP
+// dependency is missing. Callers attach the two independently.
 func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMCPConfig, budget platformmcp.OperationBudget) bool {
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
 	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budget, config.JWTSigningKey)
