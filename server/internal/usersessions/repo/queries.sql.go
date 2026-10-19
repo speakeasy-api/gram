@@ -4290,8 +4290,7 @@ decided AS (
                  OR EXISTS (
                    SELECT 1
                    FROM remote_sessions AS rs
-                   WHERE rs.user_session_issuer_id = gateway_link.user_session_issuer_id
-                     AND rs.remote_session_client_id = gateway_client.id
+                   WHERE rs.remote_session_client_id = gateway_client.id
                      AND rs.deleted IS FALSE
                      AND r.upstream <> ''
                      AND rtrim(rs.resource, '/') = rtrim(r.upstream, '/')
