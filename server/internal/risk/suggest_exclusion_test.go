@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -85,7 +84,6 @@ func seedSuggestExclusionFinding(t *testing.T, ti *testInstance, projectID uuid.
 	finding.MatchLen = uint32(len(match))      // #nosec G115 -- fixture matches are bounded literals.
 	finding.Surface = scanners.SurfaceContent
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	return finding.ID
 }
 
