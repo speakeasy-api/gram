@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,6 +57,7 @@ func TestKitLifecycleCheckpointAdmissionFence(t *testing.T) {
 		{name: "unknown settlement fails closed", backend: runtimeBackendGKE, eventStatus: eventStatusCompleted, stopError: errors.New("settlement unavailable"), wantStop: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			conn, err := assistantsInfra.CloneTestDatabase(t, "kit_lifecycle")
 			require.NoError(t, err)
 			project, assistant, _, thread := insertAssistantFixture(t, conn)
@@ -80,8 +82,7 @@ func TestKitLifecycleCheckpointAdmissionFence(t *testing.T) {
 				called = true
 				require.Equal(t, runtimeID, got.ID)
 				// A competing admission cannot enter while Stop fences/checkpoints.
-				contender, err := conn.Begin(ctx)
-				require.NoError(t, err)
+				contender := testenv.BeginTx(t, ctx, conn)
 				defer func() { _ = contender.Rollback(context.Background()) }()
 				lockCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 				defer cancel()

@@ -502,31 +502,32 @@ func NewServiceCore(
 	}
 
 	return &ServiceCore{
-		identities:        identities,
-		authz:             authzEngine,
-		logger:            logger,
-		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		db:                db,
-		audit:             auditLogger,
-		guardianPolicy:    guardianPolicy,
-		encryptionClient:  encryptionClient,
-		runtime:           newTelemetryRuntimeBackend(runtime, telemetryLogger),
-		slackClient:       slackClient,
-		assistantTokens:   assistantTokens,
-		serverURL:         serverURL,
-		siteURL:           nil,
-		telemetryLogger:   telemetryLogger,
-		contextWindow:     contextWindow,
-		wakeCanceller:     nil,
-		chatWriter:        nil,
-		assetStorage:      nil,
-		assetSigningKey:   "",
-		envLoader:         nil,
-		slackImages:       nil,
-		dashboardIngestor: nil,
-		featureFlags:      nil,
-		turnClassified:    turnClassified,
-		outboundOrigin:    nil,
+		newAssistantRuntimeVersion: 0,
+		identities:                 identities,
+		authz:                      authzEngine,
+		logger:                     logger,
+		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		db:                         db,
+		audit:                      auditLogger,
+		guardianPolicy:             guardianPolicy,
+		encryptionClient:           encryptionClient,
+		runtime:                    newTelemetryRuntimeBackend(runtime, telemetryLogger),
+		slackClient:                slackClient,
+		assistantTokens:            assistantTokens,
+		serverURL:                  serverURL,
+		siteURL:                    nil,
+		telemetryLogger:            telemetryLogger,
+		contextWindow:              contextWindow,
+		wakeCanceller:              nil,
+		chatWriter:                 nil,
+		assetStorage:               nil,
+		assetSigningKey:            "",
+		envLoader:                  nil,
+		slackImages:                nil,
+		dashboardIngestor:          nil,
+		featureFlags:               nil,
+		turnClassified:             turnClassified,
+		outboundOrigin:             nil,
 	}
 }
 
@@ -2103,7 +2104,9 @@ func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params R
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("list pending switch retirements: %w", err)
 	}
 	retirementErrors := 0
+	remaining := params.BatchSize
 	for _, row := range pending {
+		remaining--
 		if err := s.finishRuntimeSwitchRetirement(ctx, assistantRuntimeRecord{
 			ID: row.ID, AssistantThreadID: row.AssistantThreadID, AssistantID: row.AssistantID,
 			ProjectID: row.ProjectID, RuntimeVersion: row.RuntimeVersion, Backend: row.Backend,
@@ -2113,18 +2116,23 @@ func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params R
 		}
 	}
 
+	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: retirementErrors}
+	// Every retirement attempt consumes the shared cleanup budget, even on failure.
+	if remaining <= 0 {
+		return result, nil
+	}
+
 	rows, err := assistantrepo.New(s.db).ListStoppedRuntimesForReap(ctx, assistantrepo.ListStoppedRuntimesForReapParams{
 		StoppedState:  runtimeStateStopped,
 		FailedState:   runtimeStateFailed,
 		StoppedBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.StoppedTTL)),
 		ReapedState:   runtimeStateReaped,
-		LimitCount:    params.BatchSize,
+		LimitCount:    remaining,
 	})
 	if err != nil {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("list stopped assistant runtimes for reap: %w", err)
 	}
 
-	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: retirementErrors}
 	for _, row := range rows {
 		if s.reapStoppedRuntimeRow(ctx, assistantRuntimeRecord{
 			ID:                  row.ID,

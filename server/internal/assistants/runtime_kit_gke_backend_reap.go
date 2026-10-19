@@ -69,12 +69,15 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 		if !ok {
 			return errRuntimeSwitchUnavailable
 		}
-		fence, err := coordinator.PrepareRuntimeSwitch(ctx, assistantRecord{ID: r.AssistantID, ProjectID: r.ProjectID}, []assistantRuntimeRecord{r}, 3)
+		var assistant assistantRecord
+		assistant.ID = r.AssistantID
+		assistant.ProjectID = r.ProjectID
+		fence, err := coordinator.PrepareRuntimeSwitch(ctx, assistant, []assistantRuntimeRecord{r}, 3)
 		if fence.Release != nil {
 			defer fence.Release()
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("kit GKE reap: %w", err)
 		}
 		if fence.Release == nil {
 			return errRuntimeSwitchUnavailable
@@ -135,10 +138,10 @@ func (k *KitGKERuntimeBackend) deleteOwned(ctx context.Context, gvr schema.Group
 			return nil
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("kit GKE deleteOwned: %w", err)
 		}
 		if obj.GetUID() != uid {
-			return fmt.Errorf("Kit GKE resource replaced while waiting for deletion")
+			return fmt.Errorf("kit GKE resource replaced while waiting for deletion")
 		}
 		select {
 		case <-ctx.Done():

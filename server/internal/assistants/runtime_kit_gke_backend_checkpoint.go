@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-var kitGKEAuthorityGVR = schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
+var kitGKEAuthorityGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
 var kitGKETriggerGVR = schema.GroupVersionResource{Group: "podsnapshot.gke.io", Version: "v1", Resource: "podsnapshotmanualtriggers"}
 var kitGKESnapshotGVR = schema.GroupVersionResource{Group: "podsnapshot.gke.io", Version: "v1", Resource: "podsnapshots"}
 
@@ -50,21 +50,39 @@ type KitGKECheckpointDriver interface {
 }
 
 type kitGKECheckpointRef struct {
-	TriggerName  string
-	TriggerUID   types.UID
-	SnapshotName string
-	SnapshotUID  types.UID
+	TriggerName  string    `json:"TriggerName"`
+	TriggerUID   types.UID `json:"TriggerUID"`
+	SnapshotName string    `json:"SnapshotName"`
+	SnapshotUID  types.UID `json:"SnapshotUID"`
+}
+
+// These tagged persistence types preserve the existing authority JSON format
+// without coupling the provisioning input structs to storage serialization.
+type kitGKECheckpointIdentity struct {
+	Namespace               string `json:"Namespace"`
+	AssistantID             string `json:"AssistantID"`
+	Lineage                 string `json:"Lineage"`
+	CompatibilityGeneration string `json:"CompatibilityGeneration"`
+}
+type kitGKECheckpointSource struct {
+	Identity      kitGKECheckpointIdentity `json:"Identity"`
+	SourcePodName string                   `json:"SourcePodName"`
+	SourcePodUID  types.UID                `json:"SourcePodUID"`
+}
+
+func (s kitGKECheckpointSource) binding() KitGKESnapshotBinding {
+	return KitGKESnapshotBinding{Identity: KitGKEIdentity(s.Identity), SourcePodName: s.SourcePodName, SourcePodUID: s.SourcePodUID}
 }
 
 type kitGKEAuthority struct {
-	PriorCheckpoints []kitGKECheckpointRef  `json:"prior_checkpoints,omitempty"`
-	Phase            string                 `json:"phase"`
-	Metadata         kitGKEBackendMetadata  `json:"metadata"`
-	TriggerName      string                 `json:"trigger_name,omitempty"`
-	TriggerUID       types.UID              `json:"trigger_uid,omitempty"`
-	SnapshotName     string                 `json:"snapshot_name,omitempty"`
-	SnapshotUID      types.UID              `json:"snapshot_uid,omitempty"`
-	Source           *KitGKESnapshotBinding `json:"source,omitempty"`
+	PriorCheckpoints []kitGKECheckpointRef   `json:"prior_checkpoints,omitempty"`
+	Phase            string                  `json:"phase"`
+	Metadata         kitGKEBackendMetadata   `json:"metadata"`
+	TriggerName      string                  `json:"trigger_name,omitempty"`
+	TriggerUID       types.UID               `json:"trigger_uid,omitempty"`
+	SnapshotName     string                  `json:"snapshot_name,omitempty"`
+	SnapshotUID      types.UID               `json:"snapshot_uid,omitempty"`
+	Source           *kitGKECheckpointSource `json:"source,omitempty"`
 }
 
 func (k *KitGKERuntimeBackend) createAuthority(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) (kitGKEBackendMetadata, error) {
@@ -73,17 +91,17 @@ func (k *KitGKERuntimeBackend) createAuthority(ctx context.Context, r assistantR
 	labels["gram.ai/project-id"] = r.ProjectID.String()
 	obj.SetLabels(labels)
 	obj.SetAnnotations(map[string]string{"speakeasy.com/kit-spec": k.fingerprint})
-	raw, err := json.Marshal(kitGKEAuthority{Phase: "active", Metadata: m})
+	raw, err := json.Marshal(kitGKEAuthority{PriorCheckpoints: nil, Phase: "active", Metadata: m, TriggerName: "", TriggerUID: "", SnapshotName: "", SnapshotUID: "", Source: nil})
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("kit GKE createAuthority: %w", err)
 	}
 	obj.Object["data"] = map[string]any{"authority.json": string(raw)}
 	obj, err = k.config.GKE.Dynamic.Resource(kitGKEAuthorityGVR).Namespace(k.config.GKE.Namespace).Create(ctx, obj, metav1.CreateOptions{})
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("kit GKE createAuthority: %w", err)
 	}
 	if obj.GetUID() == "" {
-		return m, fmt.Errorf("Kit GKE authority has no UID")
+		return m, fmt.Errorf("kit GKE authority has no UID")
 	}
 	m.AuthorityUID = obj.GetUID()
 	return m, nil
@@ -95,7 +113,7 @@ func (k *KitGKERuntimeBackend) loadAuthority(ctx context.Context, r assistantRun
 		return state, nil, err
 	}
 	if m.AuthorityUID == "" {
-		return state, nil, fmt.Errorf("Kit GKE runtime has no persisted authority UID")
+		return state, nil, fmt.Errorf("kit GKE runtime has no persisted authority UID")
 	}
 	obj, err := k.get(ctx, r, kitGKEAuthorityGVR, kitGKEName(r)+"-authority", m.AuthorityUID)
 	if err != nil {
@@ -103,15 +121,15 @@ func (k *KitGKERuntimeBackend) loadAuthority(ctx context.Context, r assistantRun
 	}
 	raw, found, err := unstructured.NestedString(obj.Object, "data", "authority.json")
 	if err != nil || !found {
-		return state, nil, fmt.Errorf("Kit GKE checkpoint authority is malformed")
+		return state, nil, fmt.Errorf("kit GKE checkpoint authority is malformed")
 	}
 	if err = json.Unmarshal([]byte(raw), &state); err != nil {
-		return state, nil, err
+		return state, nil, fmt.Errorf("kit GKE loadAuthority: %w", err)
 	}
 	state.Metadata.AuthorityUID = m.AuthorityUID
-	copy := r
-	copy.BackendMetadataJSON, _ = json.Marshal(state.Metadata)
-	if _, err = k.metadata(copy); err != nil {
+	record := r
+	record.BackendMetadataJSON, _ = json.Marshal(state.Metadata)
+	if _, err = k.metadata(record); err != nil {
 		return state, nil, err
 	}
 	switch state.Phase {
@@ -123,20 +141,20 @@ func (k *KitGKERuntimeBackend) loadAuthority(ctx context.Context, r assistantRun
 }
 func (k *KitGKERuntimeBackend) saveAuthority(ctx context.Context, obj *unstructured.Unstructured, state kitGKEAuthority) (*unstructured.Unstructured, error) {
 	if obj.GetUID() == "" || obj.GetResourceVersion() == "" {
-		return nil, fmt.Errorf("Kit GKE authority update requires UID and resourceVersion")
+		return nil, fmt.Errorf("kit GKE authority update requires UID and resourceVersion")
 	}
 	raw, err := json.Marshal(state)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("kit GKE saveAuthority: %w", err)
 	}
 	next := obj.DeepCopy()
 	next.Object["data"] = map[string]any{"authority.json": string(raw)}
 	updated, err := k.config.GKE.Dynamic.Resource(kitGKEAuthorityGVR).Namespace(k.config.GKE.Namespace).Update(ctx, next, metav1.UpdateOptions{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("kit GKE saveAuthority: %w", err)
 	}
 	if updated.GetUID() != obj.GetUID() {
-		return nil, fmt.Errorf("Kit GKE checkpoint authority was replaced")
+		return nil, fmt.Errorf("kit GKE checkpoint authority was replaced")
 	}
 	return updated, nil
 }
@@ -167,12 +185,15 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 		if !ok {
 			return errRuntimeSwitchUnavailable
 		}
-		readiness, err := coordinator.PrepareRuntimeSwitch(ctx, assistantRecord{ID: r.AssistantID, ProjectID: r.ProjectID}, []assistantRuntimeRecord{r}, 3)
+		var assistant assistantRecord
+		assistant.ID = r.AssistantID
+		assistant.ProjectID = r.ProjectID
+		readiness, err := coordinator.PrepareRuntimeSwitch(ctx, assistant, []assistantRuntimeRecord{r}, 3)
 		if readiness.Release != nil {
 			defer readiness.Release()
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("kit GKE Stop: %w", err)
 		}
 		if readiness.Release == nil {
 			return errRuntimeSwitchUnavailable
@@ -185,7 +206,7 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 			return e
 		}
 		if e = k.config.Snapshots.VerifySettled(ctx, r, pod); e != nil {
-			return e
+			return fmt.Errorf("kit GKE Stop: %w", e)
 		}
 		// Persist the admission fence before revoking credentials or triggering a
 		// snapshot. Retried operations cannot re-admit a checkpointing process.
@@ -197,7 +218,7 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 		state.SnapshotUID = ""
 		state.Phase = "checkpointing"
 		state.TriggerName = "kit-checkpoint-" + uuid.NewString()
-		state.Source = &KitGKESnapshotBinding{Identity: k.identity(r), SourcePodName: state.Metadata.PodName, SourcePodUID: state.Metadata.PodUID}
+		state.Source = &kitGKECheckpointSource{Identity: kitGKECheckpointIdentity(k.identity(r)), SourcePodName: state.Metadata.PodName, SourcePodUID: state.Metadata.PodUID}
 		obj, err = k.saveAuthority(ctx, obj, state)
 		if err != nil {
 			return err
@@ -205,7 +226,7 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 	}
 	if state.Phase == "checkpointing" {
 		if state.Source == nil || state.TriggerName == "" {
-			return fmt.Errorf("Kit GKE checkpoint source authority missing")
+			return fmt.Errorf("kit GKE checkpoint source authority missing")
 		}
 		if err = k.config.Fence(ctx, r); err != nil {
 			return err
@@ -214,7 +235,7 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 		if err != nil {
 			return err
 		}
-		trigger, err := RenderKitGKEManualTrigger(true, state.TriggerName, *state.Source, pod)
+		trigger, err := RenderKitGKEManualTrigger(true, state.TriggerName, state.Source.binding(), pod)
 		if err != nil {
 			return err
 		}
@@ -224,11 +245,11 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 			// an unrecorded trigger may not be adopted on labels alone.
 			trigger, err = resource.Create(ctx, trigger, metav1.CreateOptions{})
 			if err != nil {
-				return err
+				return fmt.Errorf("kit GKE Stop: %w", err)
 			}
 			state.TriggerUID = trigger.GetUID()
 			if state.TriggerUID == "" {
-				return fmt.Errorf("Kit GKE checkpoint trigger has no UID")
+				return fmt.Errorf("kit GKE checkpoint trigger has no UID")
 			}
 			obj, err = k.saveAuthority(ctx, obj, state)
 			if err != nil {
@@ -237,17 +258,17 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 		} else {
 			trigger, err = resource.Get(ctx, state.TriggerName, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return fmt.Errorf("kit GKE Stop: %w", err)
 			}
 			if trigger.GetUID() != state.TriggerUID {
-				return fmt.Errorf("Kit GKE trigger authority mismatch")
+				return fmt.Errorf("kit GKE trigger authority mismatch")
 			}
 		}
-		selected, err := k.config.Snapshots.Select(ctx, trigger, *state.Source)
+		selected, err := k.config.Snapshots.Select(ctx, trigger, state.Source.binding())
 		if err != nil {
-			return err
+			return fmt.Errorf("kit GKE Stop: %w", err)
 		}
-		verified, err := VerifyKitGKESnapshot(ctx, selected, *state.Source, k.config.Snapshots)
+		verified, err := VerifyKitGKESnapshot(ctx, selected, state.Source.binding(), k.config.Snapshots)
 		if err != nil {
 			return err
 		}
@@ -255,7 +276,7 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 			return err
 		}
 		if selected.GetUID() == "" {
-			return fmt.Errorf("Kit GKE selected snapshot has no UID")
+			return fmt.Errorf("kit GKE selected snapshot has no UID")
 		}
 		state.SnapshotName = verified.Name()
 		state.SnapshotUID = selected.GetUID()
@@ -267,16 +288,16 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 	}
 	// Revalidate selected backing data even on retries after a prior checkpoint.
 	if state.Source == nil || state.SnapshotName == "" || state.SnapshotUID == "" {
-		return fmt.Errorf("Kit GKE checkpoint evidence missing")
+		return fmt.Errorf("kit GKE checkpoint evidence missing")
 	}
 	selected, e := k.config.GKE.Dynamic.Resource(kitGKESnapshotGVR).Namespace(k.config.GKE.Namespace).Get(ctx, state.SnapshotName, metav1.GetOptions{})
 	if e != nil {
-		return e
+		return fmt.Errorf("kit GKE Stop: %w", e)
 	}
 	if selected.GetUID() != state.SnapshotUID {
-		return fmt.Errorf("Kit GKE checkpoint snapshot replaced")
+		return fmt.Errorf("kit GKE checkpoint snapshot replaced")
 	}
-	if _, e = VerifyKitGKESnapshot(ctx, selected, *state.Source, k.config.Snapshots); e != nil {
+	if _, e = VerifyKitGKESnapshot(ctx, selected, state.Source.binding(), k.config.Snapshots); e != nil {
 		return e
 	}
 	// Durable verified authority precedes deletion. Foreground deletion is waited
@@ -293,37 +314,40 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 }
 
 func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRecord, state kitGKEAuthority, obj *unstructured.Unstructured) (RuntimeBackendEnsureResult, error) {
-	empty := RuntimeBackendEnsureResult{}
+	var empty RuntimeBackendEnsureResult
 	if k.config.Snapshots == nil {
 		return empty, fmt.Errorf("%s", kitGKECheckpointUnavailable)
 	}
 	if state.Phase != "stopped" {
-		return empty, fmt.Errorf("Kit GKE phase %s is not safely restorable; finish checkpoint or reconcile fenced attempt", state.Phase)
+		return empty, fmt.Errorf("kit GKE phase %s is not safely restorable; finish checkpoint or reconcile fenced attempt", state.Phase)
 	}
 	if state.Source == nil || state.SnapshotUID == "" || state.SnapshotName == "" {
-		return empty, fmt.Errorf("Kit GKE restore authority missing")
+		return empty, fmt.Errorf("kit GKE restore authority missing")
 	}
 	snapshot, err := k.config.GKE.Dynamic.Resource(kitGKESnapshotGVR).Namespace(k.config.GKE.Namespace).Get(ctx, state.SnapshotName, metav1.GetOptions{})
 	if err != nil {
-		return empty, err
+		return empty, fmt.Errorf("kit GKE restore: %w", err)
 	}
 	if snapshot.GetUID() != state.SnapshotUID {
-		return empty, fmt.Errorf("Kit GKE restore snapshot UID mismatch")
+		return empty, fmt.Errorf("kit GKE restore snapshot UID mismatch")
 	}
-	verified, err := VerifyKitGKESnapshot(ctx, snapshot, *state.Source, k.config.Snapshots)
+	verified, err := VerifyKitGKESnapshot(ctx, snapshot, state.Source.binding(), k.config.Snapshots)
 	if err != nil {
 		return empty, err
 	}
 	if _, err = k.config.GKE.Dynamic.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Get(ctx, kitGKEName(r), metav1.GetOptions{}); !apierrors.IsNotFound(err) {
-		return empty, fmt.Errorf("Kit GKE restore requires source claim deletion: %v", err)
+		if err != nil {
+			return empty, fmt.Errorf("check kit GKE source claim deletion: %w", err)
+		}
+		return empty, fmt.Errorf("kit GKE restore requires source claim deletion")
 	}
 	template, err := k.get(ctx, r, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID)
 	if err != nil {
 		return empty, err
 	}
-	template, err = k.config.Snapshots.PrepareColdRestore(ctx, r, template.DeepCopy(), snapshot, *state.Source)
+	template, err = k.config.Snapshots.PrepareColdRestore(ctx, r, template.DeepCopy(), snapshot, state.Source.binding())
 	if err != nil {
-		return empty, err
+		return empty, fmt.Errorf("kit GKE restore: %w", err)
 	}
 	if template == nil || template.GetUID() != state.Metadata.TemplateUID || template.GetName() != kitGKEName(r) {
 		return empty, fmt.Errorf("cold restore driver changed template authority")
@@ -336,11 +360,11 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	// Pin the selection prepared by the cold-filesystem driver; never accept
 	// automatic snapshot selection or resume process memory with cached tokens.
 	if err = unstructured.SetNestedField(template.Object, verified.Name(), "spec", "podTemplate", "metadata", "annotations", "podsnapshot.gke.io/ps-name"); err != nil {
-		return empty, err
+		return empty, fmt.Errorf("kit GKE restore: %w", err)
 	}
 	_, err = k.config.GKE.Dynamic.Resource(kitTemplateGVR).Namespace(k.config.GKE.Namespace).Update(ctx, template, metav1.UpdateOptions{})
 	if err != nil {
-		return empty, err
+		return empty, fmt.Errorf("kit GKE restore: %w", err)
 	}
 	claim := kitObject("SandboxClaim", "extensions.agents.x-k8s.io/v1alpha1", kitGKEName(r), k.identity(r))
 	labels := claim.GetLabels()
@@ -350,10 +374,10 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	claim.Object["spec"] = map[string]any{"sandboxTemplateRef": map[string]any{"name": kitGKEName(r)}, "lifecycle": map[string]any{"shutdownPolicy": "Delete"}}
 	claim, err = k.config.GKE.Dynamic.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Create(ctx, claim, metav1.CreateOptions{})
 	if err != nil {
-		return empty, err
+		return empty, fmt.Errorf("kit GKE restore: %w", err)
 	}
 	if claim.GetUID() == "" {
-		return empty, fmt.Errorf("Kit GKE restored claim lacks UID")
+		return empty, fmt.Errorf("kit GKE restored claim lacks UID")
 	}
 	state.Metadata.ClaimUID = claim.GetUID()
 	obj, err = k.saveAuthority(ctx, obj, state)
@@ -380,10 +404,10 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if err != nil {
 		return empty, err
 	}
-	if err = k.config.Snapshots.VerifyRestored(ctx, pod, snapshot, *state.Source); err != nil {
-		return empty, err
+	if err = k.config.Snapshots.VerifyRestored(ctx, pod, snapshot, state.Source.binding()); err != nil {
+		return empty, fmt.Errorf("kit GKE restore: %w", err)
 	}
-	if _, err = VerifyKitGKESnapshot(ctx, snapshot, *state.Source, k.config.Snapshots); err != nil {
+	if _, err = VerifyKitGKESnapshot(ctx, snapshot, state.Source.binding(), k.config.Snapshots); err != nil {
 		return empty, err
 	}
 	b, err := k.config.Bootstrap(ctx, r)
@@ -394,7 +418,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 		return empty, err
 	}
 	if err = k.config.Snapshots.RefreshRestored(ctx, r, pod, b); err != nil {
-		return empty, err
+		return empty, fmt.Errorf("kit GKE restore: %w", err)
 	}
 	pod, err = k.get(ctx, r, gkePodGVR, state.Metadata.PodName, state.Metadata.PodUID)
 	if err != nil {
@@ -421,7 +445,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	}
 	raw, err := json.Marshal(state.Metadata)
 	if err != nil {
-		return empty, err
+		return empty, fmt.Errorf("kit GKE restore: %w", err)
 	}
 	r.BackendMetadataJSON = raw
 	if _, err = k.protocol(readyCtx, r); err != nil {

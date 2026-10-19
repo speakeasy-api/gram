@@ -52,8 +52,10 @@ func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.Fak
 	require.NoError(t, err)
 	r := assistantRuntimeRecord{ID: uuid.New(), AssistantID: uuid.New(), ProjectID: uuid.New(), RuntimeVersion: 3, Backend: runtimeBackendGKE, BackendMetadataJSON: []byte("{}")}
 	client.PrependReactor("create", "*", func(action ktesting.Action) (bool, runtime.Object, error) {
-		a := action.(ktesting.CreateAction)
-		obj := a.GetObject().(*unstructured.Unstructured)
+		a, ok := action.(ktesting.CreateAction)
+		require.True(t, ok)
+		obj, ok := a.GetObject().(*unstructured.Unstructured)
+		require.True(t, ok)
 		obj.SetUID(types.UID("uid-" + obj.GetName()))
 		obj.SetResourceVersion("1")
 		if action.GetResource() == gkeSandboxClaimGVR {
@@ -72,6 +74,7 @@ func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.Fak
 	return k, client, r, fences
 }
 func TestKitGKEBackendColdEnsureAndExactReuse(t *testing.T) {
+	t.Parallel()
 	k, client, r, _ := kitGKEBackendFixture(t)
 	result, err := k.Ensure(t.Context(), r)
 	require.NoError(t, err)
@@ -91,6 +94,7 @@ func TestKitGKEBackendColdEnsureAndExactReuse(t *testing.T) {
 	require.ErrorContains(t, err, "authority mismatch")
 }
 func TestKitGKEBackendStopCannotClaimCheckpointSuccess(t *testing.T) {
+	t.Parallel()
 	k, _, r, fences := kitGKEBackendFixture(t)
 	result, err := k.Ensure(t.Context(), r)
 	require.NoError(t, err)
@@ -103,6 +107,7 @@ func TestKitGKEBackendStopCannotClaimCheckpointSuccess(t *testing.T) {
 	require.ErrorContains(t, err, "checkpoint/restore unavailable")
 }
 func TestKitGKEBackendReapRequiresSettlementAndFences(t *testing.T) {
+	t.Parallel()
 	k, client, r, fences := kitGKEBackendFixture(t)
 	result, err := k.Ensure(t.Context(), r)
 	require.NoError(t, err)
@@ -121,13 +126,16 @@ func TestKitGKEBackendReapRequiresSettlementAndFences(t *testing.T) {
 	require.NoError(t, k.Reap(t.Context(), r))
 	for _, a := range client.Actions() {
 		if a.GetVerb() == "delete" {
-			require.NotNil(t, a.(ktesting.DeleteAction).GetDeleteOptions().Preconditions.UID)
+			deletion, ok := a.(ktesting.DeleteAction)
+			require.True(t, ok)
+			require.NotNil(t, deletion.GetDeleteOptions().Preconditions.UID)
 		}
 	}
 	_, err = k.Ensure(t.Context(), r)
 	require.Error(t, err)
 }
 func TestKitGKEBackendRejectsForeignAndUnrecordedAuthority(t *testing.T) {
+	t.Parallel()
 	k, _, r, _ := kitGKEBackendFixture(t)
 	result, err := k.Ensure(t.Context(), r)
 	require.NoError(t, err)
@@ -161,7 +169,7 @@ func (d *kitGKEFakeCheckpointDriver) Select(ctx context.Context, trigger *unstru
 	d.selected = kitObject("PodSnapshot", "podsnapshot.gke.io/v1", "verified-snapshot", binding.Identity)
 	d.selected.SetUID("snapshot-uid")
 	if err := d.client.Tracker().Create(kitGKESnapshotGVR, d.selected, binding.Identity.Namespace); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("kit GKE Select: %w", err)
 	}
 	return d.selected, nil
 }
@@ -183,6 +191,7 @@ func (d *kitGKEFakeCheckpointDriver) RefreshRestored(context.Context, assistantR
 }
 
 func TestKitGKEBackendCheckpointRestorePersistsAuthority(t *testing.T) {
+	t.Parallel()
 	k, client, r, fences := kitGKEBackendFixture(t)
 	k.config.Provision.SnapshotsEnabled = true
 	driver := &kitGKEFakeCheckpointDriver{client: client, restored: true}
@@ -215,6 +224,7 @@ func TestKitGKEBackendCheckpointRestorePersistsAuthority(t *testing.T) {
 	require.Equal(t, "verified-snapshot", selected)
 }
 func TestKitGKEBackendCheckpointRejectsColdFallback(t *testing.T) {
+	t.Parallel()
 	k, client, r, _ := kitGKEBackendFixture(t)
 	k.config.Provision.SnapshotsEnabled = true
 	driver := &kitGKEFakeCheckpointDriver{client: client}
@@ -233,6 +243,7 @@ func TestKitGKEBackendCheckpointRejectsColdFallback(t *testing.T) {
 	require.ErrorContains(t, err, "fenced")
 }
 func TestKitGKEBackendCheckpointUnavailableNeverDeletes(t *testing.T) {
+	t.Parallel()
 	k, client, r, _ := kitGKEBackendFixture(t)
 	k.config.Provision.SnapshotsEnabled = true
 	driver := &kitGKEFakeCheckpointDriver{client: client, unavailable: true}
@@ -254,8 +265,10 @@ func (d *kitGKEFakeCheckpointDriver) PrepareColdRestore(_ context.Context, _ ass
 }
 
 func TestKitGKEBackendObservedProcessIdentity(t *testing.T) {
+	t.Parallel()
 	for _, change := range []string{"image", "restart", "not-ready", "container"} {
 		t.Run(change, func(t *testing.T) {
+			t.Parallel()
 			k, client, r, _ := kitGKEBackendFixture(t)
 			result, err := k.Ensure(t.Context(), r)
 			require.NoError(t, err)
@@ -265,7 +278,8 @@ func TestKitGKEBackendObservedProcessIdentity(t *testing.T) {
 			pod, err := client.Resource(gkePodGVR).Namespace(m.Namespace).Get(t.Context(), m.PodName, metav1.GetOptions{})
 			require.NoError(t, err)
 			statuses, _, _ := unstructured.NestedSlice(pod.Object, "status", "containerStatuses")
-			status := statuses[0].(map[string]any)
+			status, ok := statuses[0].(map[string]any)
+			require.True(t, ok)
 			switch change {
 			case "image":
 				status["imageID"] = "containerd://sha256:" + strings.Repeat("b", 64)
@@ -285,6 +299,7 @@ func TestKitGKEBackendObservedProcessIdentity(t *testing.T) {
 	}
 }
 func TestKitGKEBackendDerivesProductionDefaultsAndAcceptsTags(t *testing.T) {
+	t.Parallel()
 	k, _, _, _ := kitGKEBackendFixture(t)
 	config := k.config
 	config.Provision.Command = nil

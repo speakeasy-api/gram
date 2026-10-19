@@ -23,7 +23,7 @@ func (k *KitGKERuntimeBackend) CheckpointIdleRuntime(ctx context.Context, r assi
 
 func kitIdleCheckpointCapability(backend RuntimeBackend, r assistantRuntimeRecord) (kitIdleCheckpointBackend, error) {
 	if !kitProductionRuntime(r.RuntimeVersion, r.Backend) {
-		return nil, fmt.Errorf("Kit idle checkpoint requires production v3 authority")
+		return nil, fmt.Errorf("kit idle checkpoint requires production v3 authority")
 	}
 	switch b := backend.(type) {
 	case *telemetryRuntimeBackend:
@@ -37,7 +37,7 @@ func kitIdleCheckpointCapability(backend RuntimeBackend, r assistantRuntimeRecor
 	default:
 		capability, ok := backend.(kitIdleCheckpointBackend)
 		if !ok {
-			return nil, fmt.Errorf("Kit idle checkpoint capability unavailable")
+			return nil, fmt.Errorf("kit idle checkpoint capability unavailable")
 		}
 		return capability, nil
 	}

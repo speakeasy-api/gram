@@ -25,16 +25,16 @@ type KitGKECompositionConfig struct {
 
 func validateKitGKEComposition(c KitGKECompositionConfig) error {
 	if c.Environment == "" || c.Environment == "local" {
-		return errors.New("Kit GKE composition requires an explicit non-local environment")
+		return errors.New("kit GKE composition requires an explicit non-local environment")
 	}
 	if c.Network != "" || c.ExtraCACertFile != "" || c.AllowInsecureInference {
-		return errors.New("Kit GKE composition rejects local network and TLS overrides")
+		return errors.New("kit GKE composition rejects local network and TLS overrides")
 	}
 	if err := validateKitComposition(c.KitLocalCompositionConfig); err != nil {
 		return err
 	}
 	if c.GKE.Dynamic == nil || c.GKE.Namespace == "" || len(c.GKE.RunnerCIDRBlocks) == 0 {
-		return errors.New("Kit GKE composition requires Kubernetes, namespace and explicit gateway CIDRs")
+		return errors.New("kit GKE composition requires Kubernetes, namespace and explicit gateway CIDRs")
 	}
 	return nil
 }
@@ -50,10 +50,13 @@ func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
 		return err
 	}
 	if s.guardianPolicy == nil || s.chatWriter == nil || s.assistantTokens == nil || s.encryptionClient == nil {
-		return errors.New("Kit requires guarded HTTP, transcript, inference and encrypted gateway credential services")
+		return errors.New("kit requires guarded HTTP, transcript, inference and encrypted gateway credential services")
 	}
 	if c.GKE.GuestPort == 0 {
 		c.GKE.GuestPort = 8081
+	}
+	if c.GKE.GuestPort < 1 || c.GKE.GuestPort > 65535 {
+		return errors.New("invalid kit gateway port")
 	}
 	c.Provision.Image = c.Image
 	c.Provision.GuestPort = int32(c.GKE.GuestPort)
@@ -85,13 +88,13 @@ func (s *ServiceCore) fenceKitRuntimeAlreadyLocked(ctx context.Context, r assist
 	q := assistantrepo.New(s.db)
 	row, err := q.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ProjectID: r.ProjectID, ID: r.ID})
 	if err != nil {
-		return err
+		return fmt.Errorf("read kit runtime before credential fence: %w", err)
 	}
 	if row.AssistantID != r.AssistantID || row.RuntimeVersion != 3 {
 		return ErrKitRuntimeBinding
 	}
 	if err := s.assistantTokens.RevokeRuntimeInferenceCredentials(ctx, r.ProjectID, r.ID); err != nil {
-		return err
+		return fmt.Errorf("revoke kit runtime inference authority: %w", err)
 	}
 	// Retirement is already a durable admission fence for workload OAuth and
 	// gateway binding reads. Do not try to issue a new gateway key for a row
@@ -101,7 +104,7 @@ func (s *ServiceCore) fenceKitRuntimeAlreadyLocked(ctx context.Context, r assist
 	}
 	a, err := q.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID})
 	if err != nil {
-		return err
+		return fmt.Errorf("read kit assistant before workload fence: %w", err)
 	}
 	_, err = usersessionsrepo.New(s.db).RevokeAssistantRuntimeWorkloadClients(ctx, usersessionsrepo.RevokeAssistantRuntimeWorkloadClientsParams{
 		RuntimeID: uuid.NullUUID{UUID: r.ID, Valid: true}, OrganizationID: conv.ToPGText(a.OrganizationID), ProjectID: r.ProjectID,

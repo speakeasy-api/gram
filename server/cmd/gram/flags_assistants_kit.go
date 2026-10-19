@@ -89,7 +89,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 		}
 	}
 	if serverURL == nil {
-		return fmt.Errorf("Kit requires the deployment server URL")
+		return fmt.Errorf("kit requires the deployment server URL")
 	}
 	authenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, c.String("environment"))
 	if err != nil {
@@ -151,13 +151,13 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 			return fmt.Errorf("decode --assistant-runtime-gke-cluster-ca: %w", decodeErr)
 		}
 		if len(caCert) == 0 || c.String("assistant-runtime-gke-cluster-endpoint") == "" {
-			return fmt.Errorf("Kit GKE requires assistant runtime cluster endpoint and CA")
+			return fmt.Errorf("kit GKE requires assistant runtime cluster endpoint and CA")
 		}
 		base.GKE.Dynamic, err = k8s.NewRemoteDynamicClient(c.Context, c.String("assistant-runtime-gke-cluster-endpoint"), caCert)
 		if err != nil {
 			return fmt.Errorf("build Kit assistant cluster client: %w", err)
 		}
-		err = core.InstallKitGKERuntime(assistants.KitGKECompositionConfig{KitLocalCompositionConfig: config, GKE: base.GKE, Provision: provision})
+		err = core.InstallKitGKERuntime(assistants.KitGKECompositionConfig{KitLocalCompositionConfig: config, GKE: base.GKE, Provision: provision, Snapshots: nil})
 	}
 	if err != nil {
 		return fmt.Errorf("install Kit runtime: %w", err)
@@ -169,7 +169,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 func kitGKEProvisionFromCLI(c *cli.Context) (assistants.KitGKEProvisionInput, error) {
 	var out assistants.KitGKEProvisionInput
 	if c.String("assistant-kit-network") != "" || c.String("assistant-runtime-local-ca-file") != "" || c.Bool("assistant-kit-allow-insecure-inference") {
-		return out, fmt.Errorf("Kit GKE does not permit local network, CA, or insecure inference options")
+		return out, fmt.Errorf("kit GKE does not permit local network, CA, or insecure inference options")
 	}
 	out.IngressCIDR = c.String("assistant-kit-gke-ingress-cidr")
 	if _, _, err := net.ParseCIDR(out.IngressCIDR); err != nil {
@@ -191,6 +191,7 @@ func kitGKEProvisionFromCLI(c *cli.Context) (assistants.KitGKEProvisionInput, er
 	}
 	//nolint:exhaustive // Kit pod budgets intentionally specify CPU and memory only.
 	out.Resources = corev1.ResourceRequirements{
+		Claims:   nil,
 		Requests: corev1.ResourceList{corev1.ResourceCPU: quantities["cpu-request"], corev1.ResourceMemory: quantities["memory-request"]},
 		Limits:   corev1.ResourceList{corev1.ResourceCPU: quantities["cpu-limit"], corev1.ResourceMemory: quantities["memory-limit"]},
 	}

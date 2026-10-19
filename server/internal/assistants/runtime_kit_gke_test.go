@@ -48,9 +48,14 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	var secret corev1.Secret
 	require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(objects.Secret.Object, &secret))
 	require.True(t, *secret.Immutable)
-	require.Equal(t, map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitFileConfig + "model = \"openai/gpt-4.1-mini\"\n"), KitInferenceCredentialFilename: in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}, secret.Data)
+	require.Equal(t, map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitFileConfig + "model = \"openai/gpt-4.1-mini\"\n"), "speakeasy.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}, secret.Data)
 	require.Equal(t, in.Identity.labels(), secret.Labels)
 	pod := kitPodTemplate(t, objects)
+	for _, volume := range pod.Spec.Volumes {
+		if volume.Secret != nil {
+			require.Contains(t, volume.Secret.Items, corev1.KeyToPath{Key: "speakeasy.json", Path: "credentials/" + KitInferenceCredentialFilename})
+		}
+	}
 	require.Equal(t, in.Identity.labels(), pod.Labels)
 	require.NotContains(t, pod.Annotations, "podsnapshot.gke.io/ps-name")
 	require.Equal(t, "false", pod.Annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"])

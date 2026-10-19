@@ -61,7 +61,7 @@ func validateKitComposition(c KitLocalCompositionConfig) error {
 		return errors.New("kit composition requires explicit image, resource issuer, provisioning callback and turn stream")
 	}
 	if c.Origin == nil || c.Origin.String() != "https://ai.speakeasy.com" || c.AllowInsecureInference {
-		return errors.New("Kit requires the HTTPS Speakeasy provider origin")
+		return errors.New("kit requires the HTTPS Speakeasy provider origin")
 	}
 	for _, u := range []*url.URL{c.MCPResource, c.MCPIssuer} {
 		if u == nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -283,7 +283,10 @@ func (s *ServiceCore) rotateKitGatewayTokenAlreadyLocked(ctx context.Context, r 
 func (s *ServiceCore) loadKitGatewayTokenAlreadyLocked(ctx context.Context, r assistantRuntimeRecord) (string, error) {
 	queries := runtimeSwitchQueries(ctx, s.db)
 	if _, err := queries.GetKitRuntimeControlAuthority(ctx, assistantrepo.GetKitRuntimeControlAuthorityParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeID: r.ID}); err != nil {
-		return "", ErrKitRuntimeBinding
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrKitRuntimeBinding
+		}
+		return "", fmt.Errorf("validate Kit runtime authority: %w", err)
 	}
 	ciphertext, err := queries.LoadKitGatewayCredential(ctx, assistantrepo.LoadKitGatewayCredentialParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeID: r.ID})
 	if errors.Is(err, pgx.ErrNoRows) {

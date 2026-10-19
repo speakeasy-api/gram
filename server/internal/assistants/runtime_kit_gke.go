@@ -142,11 +142,14 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		}
 		annotations["podsnapshot.gke.io/ps-name"] = in.Restore.name
 	}
-	data := map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitBootstrapConfig(KitLocalBootstrap{Model: in.Model})), KitInferenceCredentialFilename: in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}
+	data := map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitBootstrapConfig(KitLocalBootstrap{Model: in.Model})), "speakeasy.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}
 	maps.Copy(data, in.MCPFiles)
 	items := make([]corev1.KeyToPath, 0, len(data))
 	for _, name := range slices.Sorted(maps.Keys(data)) {
 		path := "credentials/" + name
+		if name == "speakeasy.json" {
+			path = "credentials/" + KitInferenceCredentialFilename
+		}
 		if name == "AGENTS.md" || name == "config.toml" {
 			path = name
 		}

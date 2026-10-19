@@ -94,7 +94,7 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 				return fmt.Errorf("invalid Kit machine credential filename")
 			}
 		}
-		if name == "" || strings.ContainsAny(name, "/\\") || name == "." || name == ".." || name == KitInferenceCredentialFilename || name == "mcp.json" || name == "gateway-token" || name == "AGENTS.md" || name == "config.toml" || len(name) > 253 || len(data) == 0 {
+		if name == "" || strings.ContainsAny(name, "/\\") || name == "." || name == ".." || name == KitInferenceCredentialFilename || name == "speakeasy.json" || name == "mcp.json" || name == "gateway-token" || name == "AGENTS.md" || name == "config.toml" || len(name) > 253 || len(data) == 0 {
 			return fmt.Errorf("invalid Kit machine credential filename or content")
 		}
 	}

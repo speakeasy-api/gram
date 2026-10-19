@@ -50,7 +50,12 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		{"missing provisioner", func(c *KitGKECompositionConfig) { c.ProvisionMCP = nil }},
 		{"missing transcript", func(c *KitGKECompositionConfig) { c.TurnStream = nil }},
 	} {
-		t.Run(tc.name, func(t *testing.T) { c := valid; tc.mutate(&c); require.Error(t, validateKitGKEComposition(c)) })
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := valid
+			tc.mutate(&c)
+			require.Error(t, validateKitGKEComposition(c))
+		})
 	}
 	core := new(ServiceCore)
 	require.ErrorContains(t, core.InstallKitGKERuntime(valid), "guarded HTTP")
@@ -87,8 +92,10 @@ func TestKitGKEFencePreservesCanonicalSession(t *testing.T) {
 }
 
 func TestKitGKEExplicitVersionTagsRender(t *testing.T) {
+	t.Parallel()
 	for _, image := range []string{"registry.example/kit:0.2.17", "registry.example:5000/kit:release-1"} {
 		t.Run(image, func(t *testing.T) {
+			t.Parallel()
 			in := kitGKEInput()
 			in.Image = image
 			_, err := RenderKitGKEProvision(in)
@@ -98,4 +105,22 @@ func TestKitGKEExplicitVersionTagsRender(t *testing.T) {
 	for _, image := range []string{"registry.example/kit", "registry.example/kit:latest", "registry.example/kit:LATEST"} {
 		require.False(t, kitGKEExplicitImage(image), image)
 	}
+}
+
+func TestKitGKERejectsMalformedOCIReferences(t *testing.T) {
+	t.Parallel()
+	for _, image := range []string{"bad!name:tag", "/kit:tag", "registry.example//kit:tag", "registry.example/kit:", "registry.example/Kit:tag", "registry.example/kit:latest", "registry.example/kit"} {
+		t.Run(image, func(t *testing.T) {
+			t.Parallel()
+			require.False(t, validKitGKEImage(image))
+			in := kitGKEInput()
+			in.Image = image
+			_, err := RenderKitGKEProvision(in)
+			require.Error(t, err)
+		})
+	}
+	in := kitGKEInput()
+	in.MCPFiles = map[string][]byte{"speakeasy.json": []byte("must-not-shadow-inference")}
+	_, err := RenderKitGKEProvision(in)
+	require.Error(t, err)
 }
