@@ -122,6 +122,20 @@ function bashVersionAssign(version: string | null) {
     ? `VERSION="${version}"`
     : `VERSION=$(curl -s ${MANIFEST_URL} | jq -r '.latest.speakeasyd.version')`;
 }
+// linuxDownload fetches only speakeasyd: it serves every agent command
+// (status, enroll, config, ...), so the separate `speakeasy` CLI is no longer
+// installed. That binary shared its name with the Speakeasy CLI and the SDK
+// generator, and moving it into /usr/local/bin overwrote whichever of those
+// was already there. With a resolved version the snippet uses no shell
+// variables, so it also runs in fish and other non-POSIX shells.
+function linuxDownload(version: string | null) {
+  version = inlinableVersion(version);
+  if (version) {
+    return `curl -fSL -o speakeasyd ${RELEASES_BASE}/v${version}/speakeasyd_${version}_linux_amd64`;
+  }
+  return `${bashVersionAssign(version)}
+curl -fSL -o speakeasyd "${RELEASES_BASE}/v$VERSION/speakeasyd_\${VERSION}_linux_amd64"`;
+}
 function psVersionAssign(version: string | null) {
   version = inlinableVersion(version);
   return version
@@ -196,12 +210,9 @@ const OS_CONFIG: {
         on ARM.
       </>
     ),
-    download: (version) => `${bashVersionAssign(version)}
-BASE=${RELEASES_BASE}/v$VERSION
-curl -fSL -o speakeasyd "$BASE/speakeasyd_\${VERSION}_linux_amd64"
-curl -fSL -o speakeasy  "$BASE/speakeasy_\${VERSION}_linux_amd64"`,
-    chmodMove: `chmod +x speakeasyd speakeasy
-sudo mv speakeasyd speakeasy /usr/local/bin/`,
+    download: linuxDownload,
+    chmodMove: `chmod +x speakeasyd
+sudo mv speakeasyd /usr/local/bin/`,
     serviceNote: (
       <>
         Installs <code>speakeasyd</code> as a systemd service.
@@ -339,9 +350,10 @@ function ManualDownload({ os }: { os: "linux" }) {
     );
   }
 
+  // Only the daemon is required: the manifest can stop listing the
+  // deprecated `speakeasy` CLI without breaking this card.
   const daemon = data?.latest?.["speakeasyd"];
-  const cli = data?.latest?.["speakeasy"];
-  if (isError || !daemon || !cli) {
+  if (isError || !daemon) {
     return (
       <Text small muted>
         Couldn't load the latest release — open the{" "}
@@ -370,7 +382,6 @@ function ManualDownload({ os }: { os: "linux" }) {
       <div className="overflow-hidden border text-sm">
         {keys.map((key) => {
           const d = artifactFor(daemon, key);
-          const c = artifactFor(cli, key);
           return (
             <div
               key={key}
@@ -398,15 +409,6 @@ function ManualDownload({ os }: { os: "linux" }) {
                     version={daemon.version}
                   />
                 )}
-                {c && (
-                  <BinaryDownloadButton
-                    href={c.url}
-                    sha256={c.sha256}
-                    role="CLI"
-                    name="speakeasy"
-                    version={cli.version}
-                  />
-                )}
               </div>
             </div>
           );
@@ -421,7 +423,7 @@ function ManualDownload({ os }: { os: "linux" }) {
 }
 
 // DownloadStep is the first setup step on Linux: two ways to get the
-// binaries (script or direct download), separated by an OR so it's clear
+// binary (script or direct download), separated by an OR so it's clear
 // they're alternatives. macOS uses MacInstallStep and Windows WinInstallStep
 // instead.
 function DownloadStep({ os }: { os: "linux" }) {
@@ -442,29 +444,24 @@ function DownloadStep({ os }: { os: "linux" }) {
       </div>
       <OrDivider />
       <div className="flex flex-col gap-2">
-        <SubLabel>Download the binaries directly</SubLabel>
+        <SubLabel>Download the binary directly</SubLabel>
         <ManualDownload os={os} />
       </div>
     </div>
   );
 }
 
-// BinaryLegend explains the two binaries the download steps fetch, since their
-// names differ by a single character (speakeasyd vs speakeasy) but they play
-// different roles.
+// BinaryLegend explains the one binary the download steps fetch: speakeasyd is
+// both the service and the command users run for status and enrollment.
 function BinaryLegend() {
   return (
     <div className="border-border bg-card flex flex-col gap-2 border p-3">
       <div className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5">
         <code className="text-foreground font-mono text-xs">speakeasyd</code>
         <span className="text-muted-foreground text-xs">
-          The background <strong className="font-medium">daemon</strong> — runs
-          as a service and does the enforcement.
-        </span>
-        <code className="text-foreground font-mono text-xs">speakeasy</code>
-        <span className="text-muted-foreground text-xs">
-          The <strong className="font-medium">CLI</strong> — for status checks
-          and enrollment.
+          The <strong className="font-medium">agent</strong>. It runs as a
+          background service that does the enforcement, and its commands handle
+          status checks and enrollment.
         </span>
       </div>
     </div>
@@ -503,7 +500,8 @@ curl -fsSL "$BASE/checksums.txt" | grep " $PKG$" | sha256sum -c - &&
   const verifyNote = (
     <StepNote>
       Detects your architecture and verifies the package's <code>sha256</code>{" "}
-      against the release's <code>checksums.txt</code> before installing.
+      against the release's <code>checksums.txt</code> before installing. Uses
+      bash syntax: in fish or another shell, run <code>bash</code> first.
     </StepNote>
   );
 
@@ -544,14 +542,14 @@ curl -fsSL "$BASE/checksums.txt" | grep " $PKG$" | sha256sum -c - &&
 
 // ManualIdentity is the personal/PoC identity path: sign in once with the CLI.
 function ManualIdentity({ os }: { os: OsKey }) {
-  // macOS and Windows: bare `speakeasy` is command-not-found — neither the
-  // pkg nor the msi puts the CLI on PATH (see MacVerifyStep for the macOS
-  // rationale), so invoke it by its install path. Linux keeps the bare
-  // command: the raw binaries move into /usr/local/bin per the install steps.
+  // macOS and Windows: bare `speakeasyd` is command-not-found because neither
+  // the pkg nor the msi puts the agent on PATH (see MacVerifyStep for the
+  // macOS rationale), so invoke it by its install path. Linux keeps the bare
+  // command: the raw binary moves into /usr/local/bin per the install steps.
   const commands: Record<OsKey, string> = {
-    macos: `"$HOME/Library/Application Support/Speakeasy/bin/speakeasy" enroll`,
-    windows: `& "C:\\Program Files\\Speakeasy\\speakeasy.exe" enroll`,
-    linux: "speakeasy enroll",
+    macos: `"$HOME/Library/Application Support/Speakeasy/bin/speakeasyd" enroll`,
+    windows: `& "C:\\Program Files\\Speakeasy\\speakeasyd.exe" enroll`,
+    linux: "speakeasyd enroll",
   };
   const command = commands[os];
 
@@ -729,8 +727,8 @@ export function ManagedProfileExample(): React.JSX.Element {
         org. <code>email</code> is per-user; have your MDM substitute its
         per-user email variable (Jamf / Iru <code>$EMAIL</code>, or your
         platform's equivalent) so one profile serves the whole fleet, or omit{" "}
-        <code>email</code> and have each user run <code>speakeasy enroll</code>.
-        Click{" "}
+        <code>email</code> and have each user run <code>speakeasyd enroll</code>
+        . Click{" "}
         <strong className="text-foreground">
           {hasExistingAgentKey ? "Re-generate token" : "Generate token"}
         </strong>{" "}
@@ -829,7 +827,7 @@ function FleetIdentity({ os }: { os: OsKey }) {
           scope it to your target device groups. <code>org_token</code> is a
           credential — distribute it the way you'd distribute any API key, and
           don't commit it or paste it into chat. If the agent isn't picking up
-          the file, confirm the path with <code>speakeasy config path</code>,
+          the file, confirm the path with <code>speakeasyd config path</code>,
           check that it's readable by the logged-in user, and validate the JSON.
         </Text>
       </div>
@@ -1008,22 +1006,21 @@ sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
   );
 }
 
-// The pkg deliberately doesn't add the CLI to PATH: it would collide with the
-// Speakeasy SDK generator's own `speakeasy` on a dev machine, and pointing
-// PATH at the pkg's staging copy would serve a stale binary after the first
-// auto-update. Reach it by its per-user seed path instead — every macOS CLI
-// invocation in this file does.
+// The pkg deliberately doesn't add the agent to PATH: pointing PATH at the
+// pkg's staging copy would serve a stale binary after the first auto-update.
+// Reach it by its per-user seed path instead; every macOS agent command in
+// this file does.
 function MacVerifyStep() {
   return (
     <div className="flex flex-col gap-2">
       <StepNote>
         Run these in the enrolled user's own login session, not as root.
       </StepNote>
-      <CodeBlock language="bash">{`AGENT_CLI="$HOME/Library/Application Support/Speakeasy/bin/speakeasy"
+      <CodeBlock language="bash">{`AGENT="$HOME/Library/Application Support/Speakeasy/bin/speakeasyd"
 
 pkgutil --pkg-info com.speakeasy.agent.pkg
 launchctl print "gui/$(id -u)/com.speakeasy.daemon"
-"$AGENT_CLI" status`}</CodeBlock>
+"$AGENT" status`}</CodeBlock>
     </div>
   );
 }
@@ -1084,7 +1081,6 @@ msiexec /i speakeasy-agent.msi`;
         <CodeBlock language="powershell">{`${psVersionAssign(version)}
 $BASE = "${RELEASES_BASE}/v$VERSION"
 Invoke-WebRequest "$BASE/speakeasyd_\${VERSION}_windows_amd64.exe" -OutFile speakeasyd.exe
-Invoke-WebRequest "$BASE/speakeasy_\${VERSION}_windows_amd64.exe"  -OutFile speakeasy.exe
 .\\speakeasyd.exe -service install
 .\\speakeasyd.exe -service start`}</CodeBlock>
       </div>
@@ -1110,13 +1106,13 @@ Invoke-WebRequest "$BASE/speakeasy_\${VERSION}_windows_amd64.exe"  -OutFile spea
 
 // The MSI registers a machine-wide SCM service, so status comes from the SCM
 // rather than a per-user unit. sc.exe is deliberate — bare `sc` is
-// PowerShell's Set-Content alias. The CLI isn't on PATH (see ManualIdentity),
+// PowerShell's Set-Content alias. The agent isn't on PATH (see ManualIdentity),
 // so it's invoked by its install path; the daemon's named pipe grants
 // interactive users client access, so no elevation is needed here.
 function WinVerifyStep() {
   return (
     <CodeBlock language="powershell">{`sc.exe query com.speakeasy.daemon
-& "C:\\Program Files\\Speakeasy\\speakeasy.exe" status`}</CodeBlock>
+& "C:\\Program Files\\Speakeasy\\speakeasyd.exe" status`}</CodeBlock>
   );
 }
 
