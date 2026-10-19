@@ -162,6 +162,11 @@ DELETE FROM remote_session_issuers WHERE project_id = @project_id::uuid OR organ
 -- name: OrgDeleteMCPServers :exec
 DELETE FROM mcp_servers WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
+-- Tunnels cascade with the project too; cleared here, after the MCP servers
+-- that RESTRICT them, so a rerun never depends on that cascade order.
+-- name: OrgDeleteTunneledMCPServers :exec
+DELETE FROM tunneled_mcp_servers WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
+
 -- name: OrgDeleteRemoteProtectedResources :exec
 DELETE FROM remote_protected_resources WHERE project_id = @project_id::uuid;
 

@@ -1,4 +1,6 @@
 import { SettingsSection } from "@/components/detail/settings-section";
+import { SharedTunnelImpact } from "@/components/mcp/shared-tunnel-impact";
+import { useSharedTunnelImpact } from "@/components/mcp/use-shared-tunnel-impact";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
@@ -7,6 +9,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { formatTunneledMcpDisplay } from "@/lib/sources";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { useUpdateTunneledMcpServerMutation } from "@gram/client/react-query/updateTunneledMcpServer.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -35,8 +38,11 @@ function PendingIcon({ pending }: { pending: boolean }) {
 // the retired tunneled source page.
 export function PublicAccessSection({
   tunneledMcpServer,
+  mcpServerId,
 }: {
   tunneledMcpServer: TunneledMcpServer;
+  /** The MCP server whose settings page renders this section. */
+  mcpServerId: string;
 }): JSX.Element {
   const update = useUpdateTunneledMcpServerMutation();
   const queryClient = useQueryClient();
@@ -48,6 +54,10 @@ export function PublicAccessSection({
   const [applying, setApplying] = useState(false);
 
   const allowPublic = tunneledMcpServer.allowPublic;
+  const impact = useSharedTunnelImpact(tunneledMcpServer.id, {
+    active: pending !== null,
+  });
+  const tunnelName = formatTunneledMcpDisplay(tunneledMcpServer);
 
   const closeDialog = () => {
     setPending(null);
@@ -103,11 +113,11 @@ export function PublicAccessSection({
           <ReleaseStageBadge stage="preview" />
         </div>
         <SettingsSection.Description>
-          When enabled, this MCP server can be set to public visibility, serving
-          fully anonymous callers with no login. Anyone who can reach the
-          endpoint URL can call every tool the tunneled source exposes. Leave
-          this off unless the upstream MCP server is safe to expose to the
-          public internet.
+          When enabled, any MCP server on this tunnel can be set to public
+          visibility, serving fully anonymous callers with no login. Anyone who
+          can reach such an endpoint URL can call every tool the tunneled source
+          exposes. Leave this off unless the upstream MCP server is safe to
+          expose to the public internet.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -132,6 +142,7 @@ export function PublicAccessSection({
             <RequireScope
               scope="mcp:write"
               resourceId={tunneledMcpServer.projectId}
+              projectId={tunneledMcpServer.projectId}
               level="component"
             >
               <Button
@@ -152,7 +163,7 @@ export function PublicAccessSection({
       </SettingsSection.Panel>
 
       <Dialog open={pending === "enable"} onOpenChange={handleOpenChange}>
-        <Dialog.Content className="max-w-xl!">
+        <Dialog.Content className="max-w-xl!" closeable={!applying}>
           <Dialog.Header>
             <Dialog.Title>Enable public anonymous access?</Dialog.Title>
             <Dialog.Description>
@@ -165,6 +176,13 @@ export function PublicAccessSection({
             Only enable this for MCP servers that are safe to expose publicly.
             Every tool, resource, and prompt becomes reachable without a login.
           </Alert>
+          <SharedTunnelImpact
+            impact={impact}
+            tunnelName={tunnelName}
+            currentMcpServerId={mcpServerId}
+            effect="Once enabled, any of them can be made public."
+            publicWarning
+          />
           <Stack gap={2}>
             <Text small muted>
               Type{" "}
@@ -196,7 +214,7 @@ export function PublicAccessSection({
             </Button>
             <Button
               variant="destructive-primary"
-              disabled={!enableArmed || applying}
+              disabled={!enableArmed || !impact.isReady || applying}
               onClick={() => void applyAllowPublic(true)}
             >
               <PendingIcon pending={applying} />
@@ -209,7 +227,7 @@ export function PublicAccessSection({
       </Dialog>
 
       <Dialog open={pending === "disable"} onOpenChange={handleOpenChange}>
-        <Dialog.Content className="max-w-md">
+        <Dialog.Content className="max-w-md" closeable={!applying}>
           <Dialog.Header>
             <Dialog.Title>Disable public access?</Dialog.Title>
             <Dialog.Description>
@@ -217,6 +235,13 @@ export function PublicAccessSection({
               public, set its visibility to private or disabled as well.
             </Dialog.Description>
           </Dialog.Header>
+          <SharedTunnelImpact
+            impact={impact}
+            tunnelName={tunnelName}
+            currentMcpServerId={mcpServerId}
+            effect="Public MCP servers on it stop serving anonymous callers."
+            publicWarning
+          />
           {update.isError && (
             <Alert variant="error" dismissible={false}>
               {update.error.message}
@@ -232,7 +257,10 @@ export function PublicAccessSection({
             </Button>
             <Button
               variant="primary"
-              disabled={applying}
+              // Disabling is the rollback for anonymous exposure, so a failed
+              // read of the servers does not block it; only a read in flight
+              // does, so the list shown is the one being confirmed.
+              disabled={impact.isLoading || applying}
               onClick={() => void applyAllowPublic(false)}
             >
               <PendingIcon pending={applying} />

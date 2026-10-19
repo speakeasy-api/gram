@@ -425,6 +425,41 @@ VALUES
   (@id::uuid, @org_id::text, 'https://auth.acme-wiki.example',
    @remote_session_issuer_id::uuid, 0);
 
+-- One tunnel fronted by two MCP servers: a private one and a public one (the
+-- tunnel owner has allowed public serving). Shows the existing-tunnel picker,
+-- the shared-tunnel notices on every tunnel-wide setting, and the split
+-- between deleting one server and deleting the tunnel. No agent ever
+-- connects, so the tunnel reads as never connected; the key hash is a fake
+-- marker, not a hash of any key.
+-- name: ServersInsertSharedTunnel :exec
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix,
+                                  allow_public) VALUES
+  (@tunnel_id::uuid, @project_id::uuid, 'JAMF Inventory',
+   @key_hash::text, 'gram_tun_DEMO', TRUE);
+
+-- name: ServersInsertSharedTunnelIssuers :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration) VALUES
+  (@private_issuer_id::uuid, @project_id::uuid, @org_id::text,
+   'jamf-inventory', 'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
+  (@public_issuer_id::uuid, @project_id::uuid, @org_id::text,
+   'jamf-inventory-public', 'interactive', make_interval(secs => 14 * 24 * 60 * 60));
+
+-- name: ServersInsertSharedTunnelMCPServers :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                         user_session_issuer_id, visibility) VALUES
+  (@private_server_id::uuid, @project_id::uuid, 'JAMF Inventory',
+   'jamf-inventory', @tunnel_id::uuid, @private_issuer_id::uuid, 'private'),
+  (@public_server_id::uuid, @project_id::uuid, 'JAMF Inventory (Public)',
+   'jamf-inventory-public', @tunnel_id::uuid, @public_issuer_id::uuid, 'public');
+
+-- name: ServersInsertSharedTunnelEndpoints :exec
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
+  (@private_endpoint_id::uuid, @project_id::uuid,
+   @private_server_id::uuid, @private_slug::text),
+  (@public_endpoint_id::uuid, @project_id::uuid,
+   @public_server_id::uuid, @public_slug::text);
+
 -- Live connections spread across the MCP servers, not pooled on one issuer.
 -- The identity page's connections tab groups by MCP server, and every
 -- session hanging off the partner gateway collapsed that view to a single

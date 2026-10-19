@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { GatewayAttachmentStatus } from "./GatewayAttachmentStatus";
 import type { GatewayCreationFlow } from "./useGatewayCreation";
@@ -10,6 +11,7 @@ function flow(
     gatewayId: "gateway",
     createdServerId: "server",
     attachmentError: null,
+    attachmentRefused: false,
     isAttaching: false,
     complete: vi.fn(),
     retry: vi.fn().mockResolvedValue(undefined),
@@ -46,4 +48,32 @@ it("announces attachment retry progress after the previous error is cleared", ()
 it("hides status when neither attaching nor failed", () => {
   const { container } = render(<GatewayAttachmentStatus flow={flow()} />);
   expect(container.textContent).toBe("");
+});
+it("offers no retry once the gateway refused the server for good", () => {
+  render(
+    <GatewayAttachmentStatus
+      flow={flow({
+        attachmentError: "Same backend",
+        attachmentRefused: true,
+      })}
+    />,
+  );
+  expect(screen.getByRole("alert").textContent).toContain("Same backend");
+  expect(screen.queryByRole("button")).toBeNull();
+});
+it("links to the created server once the gateway refused it", () => {
+  render(
+    <MemoryRouter>
+      <GatewayAttachmentStatus
+        flow={flow({
+          attachmentError: "Same backend",
+          attachmentRefused: true,
+        })}
+        serverHref={(id) => `/mcp/x/${id}`}
+      />
+    </MemoryRouter>,
+  );
+  expect(
+    screen.getByRole("link", { name: "Open MCP server" }).getAttribute("href"),
+  ).toBe("/mcp/x/server");
 });

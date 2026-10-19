@@ -28,6 +28,28 @@ func (q *Queries) CountActiveServersByOrganizationID(ctx context.Context, organi
 	return count, err
 }
 
+const countLiveMcpServersByTunneledMcpServerID = `-- name: CountLiveMcpServersByTunneledMcpServerID :one
+SELECT COUNT(*)
+FROM mcp_servers
+WHERE tunneled_mcp_server_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type CountLiveMcpServersByTunneledMcpServerIDParams struct {
+	TunneledMcpServerID uuid.NullUUID
+	ProjectID           uuid.UUID
+}
+
+// Every live MCP server on the tunnel, whatever its visibility and whoever can
+// read it: deleting the tunnel is refused while any of them remain.
+func (q *Queries) CountLiveMcpServersByTunneledMcpServerID(ctx context.Context, arg CountLiveMcpServersByTunneledMcpServerIDParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveMcpServersByTunneledMcpServerID, arg.TunneledMcpServerID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createServer = `-- name: CreateServer :one
 INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, resource_identifier)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -126,6 +148,46 @@ type GetServerByIDParams struct {
 
 func (q *Queries) GetServerByID(ctx context.Context, arg GetServerByIDParams) (TunneledMcpServer, error) {
 	row := q.db.QueryRow(ctx, getServerByID, arg.ID, arg.ProjectID)
+	var i TunneledMcpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.KeyHash,
+		&i.KeyPrefix,
+		&i.Status,
+		&i.AllowPublic,
+		&i.AgentVersion,
+		&i.ResourceIdentifier,
+		&i.PublicRequestRatePerSecond,
+		&i.PublicRequestBurst,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getServerByIDForShare = `-- name: GetServerByIDForShare :one
+SELECT id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, public_request_rate_per_second, public_request_burst, last_seen_at, created_at, updated_at, deleted_at, deleted
+FROM tunneled_mcp_servers
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+FOR SHARE
+`
+
+type GetServerByIDForShareParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Held by every MCP server create or repoint that references this tunnel, for
+// the rest of that transaction. It conflicts with the FOR UPDATE lock taken by
+// DeleteServer, so a server can never end up referencing a deleted tunnel and
+// a delete never misses a reference that is about to commit.
+func (q *Queries) GetServerByIDForShare(ctx context.Context, arg GetServerByIDForShareParams) (TunneledMcpServer, error) {
+	row := q.db.QueryRow(ctx, getServerByIDForShare, arg.ID, arg.ProjectID)
 	var i TunneledMcpServer
 	err := row.Scan(
 		&i.ID,

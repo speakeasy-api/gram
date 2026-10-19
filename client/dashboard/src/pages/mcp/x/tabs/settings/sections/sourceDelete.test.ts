@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
-import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import type { UnproxiedMcpServer } from "@gram/client/models/components/unproxiedmcpserver.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
@@ -44,22 +43,6 @@ const unproxied: UnproxiedMcpServer = {
   updatedAt: now,
 };
 
-const tunneled = {
-  id: "tunnel-1",
-  projectId: "proj",
-  name: "  Internal tools  ",
-  keyPrefix: "tk_abc",
-  allowPublic: false,
-  connectionStatus: "never_connected",
-  status: "created",
-  activeConnectionCount: 0,
-  activeConsumerSessionCount: 0,
-  effectivePublicRequestBurst: 100,
-  effectivePublicRequestRatePerSecond: 50,
-  createdAt: now,
-  updatedAt: now,
-} as TunneledMcpServer;
-
 describe("sourceDeleteSpec", () => {
   it("keys remote and unproxied confirmation on the URL", () => {
     expect(sourceDeleteSpec({ kind: "remote", source: remote })).toMatchObject({
@@ -71,15 +54,6 @@ describe("sourceDeleteSpec", () => {
     ).toMatchObject({
       confirmLabel: "the server URL",
       confirmValue: unproxied.url,
-    });
-  });
-
-  it("keys tunneled confirmation on the trimmed display name", () => {
-    expect(
-      sourceDeleteSpec({ kind: "tunneled", source: tunneled }),
-    ).toMatchObject({
-      confirmLabel: "the source name",
-      confirmValue: "Internal tools",
     });
   });
 });

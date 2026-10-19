@@ -568,6 +568,17 @@ func (q *Queries) OrgDeleteTrustedIssuerSessions(ctx context.Context, orgID stri
 	return err
 }
 
+const orgDeleteTunneledMCPServers = `-- name: OrgDeleteTunneledMCPServers :exec
+DELETE FROM tunneled_mcp_servers WHERE project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
+`
+
+// Tunnels cascade with the project too; cleared here, after the MCP servers
+// that RESTRICT them, so a rerun never depends on that cascade order.
+func (q *Queries) OrgDeleteTunneledMCPServers(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteTunneledMCPServers, orgID)
+	return err
+}
+
 const orgDeleteUserSessionIssuers = `-- name: OrgDeleteUserSessionIssuers :exec
 DELETE FROM user_session_issuers WHERE project_id = $1::uuid OR organization_id = $2::text
 `

@@ -1192,6 +1192,117 @@ func (q *Queries) ServersInsertRoleServerMemberships(ctx context.Context, arg Se
 	return result.RowsAffected(), nil
 }
 
+const serversInsertSharedTunnel = `-- name: ServersInsertSharedTunnel :exec
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix,
+                                  allow_public) VALUES
+  ($1::uuid, $2::uuid, 'JAMF Inventory',
+   $3::text, 'gram_tun_DEMO', TRUE)
+`
+
+type ServersInsertSharedTunnelParams struct {
+	TunnelID  uuid.UUID
+	ProjectID uuid.UUID
+	KeyHash   string
+}
+
+// One tunnel fronted by two MCP servers: a private one and a public one (the
+// tunnel owner has allowed public serving). Shows the existing-tunnel picker,
+// the shared-tunnel notices on every tunnel-wide setting, and the split
+// between deleting one server and deleting the tunnel. No agent ever
+// connects, so the tunnel reads as never connected; the key hash is a fake
+// marker, not a hash of any key.
+func (q *Queries) ServersInsertSharedTunnel(ctx context.Context, arg ServersInsertSharedTunnelParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSharedTunnel, arg.TunnelID, arg.ProjectID, arg.KeyHash)
+	return err
+}
+
+const serversInsertSharedTunnelEndpoints = `-- name: ServersInsertSharedTunnelEndpoints :exec
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
+  ($1::uuid, $2::uuid,
+   $3::uuid, $4::text),
+  ($5::uuid, $2::uuid,
+   $6::uuid, $7::text)
+`
+
+type ServersInsertSharedTunnelEndpointsParams struct {
+	PrivateEndpointID uuid.UUID
+	ProjectID         uuid.UUID
+	PrivateServerID   uuid.UUID
+	PrivateSlug       string
+	PublicEndpointID  uuid.UUID
+	PublicServerID    uuid.UUID
+	PublicSlug        string
+}
+
+func (q *Queries) ServersInsertSharedTunnelEndpoints(ctx context.Context, arg ServersInsertSharedTunnelEndpointsParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSharedTunnelEndpoints,
+		arg.PrivateEndpointID,
+		arg.ProjectID,
+		arg.PrivateServerID,
+		arg.PrivateSlug,
+		arg.PublicEndpointID,
+		arg.PublicServerID,
+		arg.PublicSlug,
+	)
+	return err
+}
+
+const serversInsertSharedTunnelIssuers = `-- name: ServersInsertSharedTunnelIssuers :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration) VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   'jamf-inventory', 'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
+  ($4::uuid, $2::uuid, $3::text,
+   'jamf-inventory-public', 'interactive', make_interval(secs => 14 * 24 * 60 * 60))
+`
+
+type ServersInsertSharedTunnelIssuersParams struct {
+	PrivateIssuerID uuid.UUID
+	ProjectID       uuid.UUID
+	OrgID           string
+	PublicIssuerID  uuid.UUID
+}
+
+func (q *Queries) ServersInsertSharedTunnelIssuers(ctx context.Context, arg ServersInsertSharedTunnelIssuersParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSharedTunnelIssuers,
+		arg.PrivateIssuerID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.PublicIssuerID,
+	)
+	return err
+}
+
+const serversInsertSharedTunnelMCPServers = `-- name: ServersInsertSharedTunnelMCPServers :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                         user_session_issuer_id, visibility) VALUES
+  ($1::uuid, $2::uuid, 'JAMF Inventory',
+   'jamf-inventory', $3::uuid, $4::uuid, 'private'),
+  ($5::uuid, $2::uuid, 'JAMF Inventory (Public)',
+   'jamf-inventory-public', $3::uuid, $6::uuid, 'public')
+`
+
+type ServersInsertSharedTunnelMCPServersParams struct {
+	PrivateServerID uuid.UUID
+	ProjectID       uuid.UUID
+	TunnelID        uuid.UUID
+	PrivateIssuerID uuid.UUID
+	PublicServerID  uuid.UUID
+	PublicIssuerID  uuid.UUID
+}
+
+func (q *Queries) ServersInsertSharedTunnelMCPServers(ctx context.Context, arg ServersInsertSharedTunnelMCPServersParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSharedTunnelMCPServers,
+		arg.PrivateServerID,
+		arg.ProjectID,
+		arg.TunnelID,
+		arg.PrivateIssuerID,
+		arg.PublicServerID,
+		arg.PublicIssuerID,
+	)
+	return err
+}
+
 const serversInsertSlackIdentityHeader = `-- name: ServersInsertSlackIdentityHeader :exec
 INSERT INTO remote_mcp_server_headers
   (id, remote_mcp_server_id, name, description, is_required, is_secret, value)

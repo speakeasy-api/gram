@@ -183,6 +183,9 @@ func TestAddMetaMcpMember_RejectsSecondServerOnSameBackend(t *testing.T) {
 				SortOrder:        nil,
 			})
 			requireOopsCode(t, err, oops.CodeConflict)
+			// The dashboard tells this refusal apart from retryable conflicts
+			// by this text (useGatewayCreation.ts); keep the two in step.
+			require.ErrorContains(t, err, "already fronts the same backend")
 		})
 	}
 }

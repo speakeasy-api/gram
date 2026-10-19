@@ -53,6 +53,7 @@ function pageCopy(existing: ExistingDocument | null): {
 
 export default function UploadOpenAPI(): JSX.Element {
   const project = useProject();
+  const routes = useRoutes();
   const [searchParams] = useSearchParams();
   // Reached with a slug, the flow uploads a new version of that document
   // instead of adding one. The list's "Upload new version" action and the
@@ -81,7 +82,10 @@ export default function UploadOpenAPI(): JSX.Element {
       description={copy.description}
     >
       <div>
-        <GatewayAttachmentStatus flow={gateway} />
+        <GatewayAttachmentStatus
+          flow={gateway}
+          serverHref={(id) => routes.mcp.x.overview.href(id)}
+        />
         {/* A lookup that failed is not a slug that isn't there: adding a
             document in its place would replace nothing, so the flow waits. */}
         {slug && isError && (

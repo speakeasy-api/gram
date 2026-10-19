@@ -207,6 +207,7 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 			return s.q.OrgDeleteRemoteSessionIssuers(ctx, repo.OrgDeleteRemoteSessionIssuersParams{ProjectID: proj, OrgID: org})
 		}},
 		{"delete mcp servers", func() error { return s.q.OrgDeleteMCPServers(ctx, org) }},
+		{"delete tunneled mcp servers", func() error { return s.q.OrgDeleteTunneledMCPServers(ctx, org) }},
 		{"delete remote protected resources", func() error { return s.q.OrgDeleteRemoteProtectedResources(ctx, proj) }},
 		{"delete meta mcp servers", func() error { return s.q.OrgDeleteMetaMCPServers(ctx, org) }},
 		// meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
