@@ -39,6 +39,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -62,6 +65,7 @@ type Service struct {
 	audit           *audit.Logger
 	productFeatures ProductFeaturesClient
 	serverURL       string
+	orgHosts        *orghost.Resolver
 	blobStore       assets.BlobStore
 	telemetry       *telemetry.Logger
 	growth          *growthsignals.Emitter
@@ -82,6 +86,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	productFeatures ProductFeaturesClient,
 	serverURL string,
+	orgHosts *orghost.Resolver,
 	blobStore assets.BlobStore,
 	telemetryLogger *telemetry.Logger,
 	growthEmitter *growthsignals.Emitter,
@@ -97,6 +102,7 @@ func NewService(
 		audit:           auditLogger,
 		productFeatures: productFeatures,
 		serverURL:       serverURL,
+		orgHosts:        orgHosts,
 		blobStore:       blobStore,
 		telemetry:       telemetryLogger,
 		growth:          growthEmitter,
@@ -317,9 +323,10 @@ func (s *Service) getAgentPlugins(ctx context.Context, authCtx *contextvalues.Au
 // pluginSetFor builds the poll response for an already-resolved principal set.
 func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthContext, principals []string) (*gen.GetPluginsResult, error) {
 	var (
-		rows             []repo.GetAgentPluginSetRow
-		configurationRow repo.DeviceAgentConfiguration
-		hasConfiguration bool
+		rows                   []repo.GetAgentPluginSetRow
+		configurationRow       repo.DeviceAgentConfiguration
+		hasConfiguration       bool
+		organizationGatewayURL *string
 	)
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.Go(func() error {
@@ -345,6 +352,20 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 			hasConfiguration = true
 			return nil
 		}
+	})
+	group.Go(func() error {
+		organization, err := orgrepo.New(s.db).GetOrganizationMetadata(groupCtx, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return fmt.Errorf("read organization for gateway: %w", err)
+		}
+		_, unavailable, err := orggateway.Availability(groupCtx, s.db, organization)
+		if err != nil {
+			return fmt.Errorf("resolve organization gateway: %w", err)
+		}
+		if unavailable == orggateway.UnavailabilityNone {
+			organizationGatewayURL = new(orggateway.URL(s.orgHosts.ServerURL(organization.DefaultHost), organization.Slug))
+		}
+		return nil
 	})
 	if err := group.Wait(); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent policy").LogError(ctx, s.logger)
@@ -373,6 +394,7 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 		attachAIScanEnvelope(configuration, list.Snapshot)
 	}
 	attachDeviceAgentConfiguration(result, configuration)
+	attachOrganizationGatewayURL(result, organizationGatewayURL)
 
 	return result, nil
 }
