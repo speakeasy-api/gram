@@ -16,6 +16,15 @@ describe("mcp client install", () => {
     );
   });
 
+  it("breaks commands over continued lines for display", () => {
+    expect(claudeCodeAddCommand("acme", URL, { multiline: true })).toBe(
+      `claude mcp add --transport http --scope user \\\n  'acme' \\\n  '${URL}'`,
+    );
+    expect(codexAddCommand("acme", URL, { multiline: true })).toBe(
+      `codex mcp add 'acme' \\\n  --url '${URL}'`,
+    );
+  });
+
   it("builds the Codex commands", () => {
     expect(codexAddCommand("acme", URL)).toBe(
       `codex mcp add 'acme' --url '${URL}'`,

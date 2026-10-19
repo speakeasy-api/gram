@@ -181,26 +181,23 @@ function GatewayBody({
         <Text small muted className="mt-1 mb-4">
           The first time a client connects, it opens your browser to sign in.
         </Text>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
           <InstallCard
             title="Claude Code"
             description="Run this in your terminal, then open /mcp in Claude Code and choose Authenticate."
           >
             <CodeBlock language="bash" copyLabel="command">
-              {claudeCodeAddCommand(serverName, url)}
+              {claudeCodeAddCommand(serverName, url, { multiline: true })}
             </CodeBlock>
           </InstallCard>
 
           <InstallCard
             title="Claude"
-            description="In Claude on the web or desktop, open Settings › Connectors › Add custom connector and paste the endpoint. On Team and Enterprise plans, an owner adds it for the organization first."
+            description="In Claude on the web or desktop, open Settings › Connectors › Add custom connector and paste the endpoint above. On Team and Enterprise plans, an owner adds it for the organization first."
             actions={
-              <>
-                <ExternalButton href="https://claude.ai/settings/connectors">
-                  Open Claude settings
-                </ExternalButton>
-                <CopyButton text={url} size="sm" tooltip="Copy endpoint" />
-              </>
+              <ExternalButton href="https://claude.ai/settings/connectors">
+                Open Claude settings
+              </ExternalButton>
             }
           />
 
@@ -208,12 +205,9 @@ function GatewayBody({
             title="Cursor"
             description="Adds the gateway to your Cursor MCP settings in one click."
             actions={
-              <>
-                <ExternalButton href={cursorInstallLink(serverName, url)}>
-                  Add to Cursor
-                </ExternalButton>
-                <CopyButton text={url} size="sm" tooltip="Copy endpoint" />
-              </>
+              <ExternalButton href={cursorInstallLink(serverName, url)}>
+                Add to Cursor
+              </ExternalButton>
             }
           />
 
@@ -222,16 +216,13 @@ function GatewayBody({
             description="Run these in your terminal. The second one signs you in."
           >
             <CodeBlock language="bash" copyLabel="commands">
-              {`${codexAddCommand(serverName, url)}\n${codexLoginCommand(serverName)}`}
+              {`${codexAddCommand(serverName, url, { multiline: true })}\n${codexLoginCommand(serverName)}`}
             </CodeBlock>
           </InstallCard>
 
           <InstallCard
             title="ChatGPT"
-            description="On the web, turn on developer mode under Settings › Apps › Advanced settings, then create an app with the endpoint as its URL and OAuth as its authentication."
-            actions={
-              <CopyButton text={url} size="sm" tooltip="Copy endpoint" />
-            }
+            description="On the web, turn on developer mode under Settings › Apps › Advanced settings, then create an app with the endpoint above as its URL and OAuth as its authentication."
           />
 
           <InstallCard
@@ -245,10 +236,7 @@ function GatewayBody({
 
           <InstallCard
             title="Other clients"
-            description="Any client that supports remote MCP servers: add the endpoint as a Streamable HTTP server and sign in when asked."
-            actions={
-              <CopyButton text={url} size="sm" tooltip="Copy endpoint" />
-            }
+            description="Any client that supports remote MCP servers: add the endpoint above as a Streamable HTTP server and sign in when asked."
           />
         </div>
       </section>
