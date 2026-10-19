@@ -43,7 +43,8 @@ export function choiceFromValue(value: string): SetupChoice {
     : { kind: "create", name: value.slice("create:".length) };
 }
 
-function proposedChoice(
+/** The role a preview proposes for a source, as a choice. */
+export function proposedChoice(
   item: DirectoryRoleSetupPreviewItem,
 ): SetupChoice | undefined {
   const role = item.proposedRoles[0];

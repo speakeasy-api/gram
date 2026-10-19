@@ -1,0 +1,231 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/Button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
+import { pluralize } from "@/lib/format";
+import type { DirectoryReviewItem } from "@gram/client/models/components/directoryreviewitem.js";
+import type { Role } from "@gram/client/models/components/role.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { useDirectoryReviewItems } from "@gram/client/react-query/directoryReviewItems.js";
+import { useResolveDirectoryReviewItemMutation } from "@gram/client/react-query/resolveDirectoryReviewItem.js";
+
+import {
+  type ReviewDecision,
+  reviewDecisionMessage,
+  reviewDecisionRequest,
+  reviewItemDetail,
+  reviewItemTitle,
+} from "./directoryReview";
+import {
+  choiceFromValue,
+  choiceValue,
+  proposedChoice,
+  type SetupChoice,
+} from "./directoryRoleSetup";
+import { invalidateDirectoryMappingAccess } from "./invalidateDirectoryMappingAccess";
+
+/**
+ * Directory changes waiting for an admin: new groups and attribute values that
+ * have no role, and mapped groups or values that have gone. Shows nothing
+ * when there is nothing to decide. Each decision saves on its own.
+ */
+export function DirectoryReviewPanel({
+  roles,
+}: {
+  /** Roles sorted for display. */
+  roles: Role[];
+}): JSX.Element | null {
+  const { data } = useDirectoryReviewItems(undefined, undefined, {
+    refetchOnMount: "always",
+    throwOnError: false,
+  });
+  const queryClient = useQueryClient();
+  const resolve = useResolveDirectoryReviewItemMutation({
+    retry: false,
+    onError: (error) => {
+      toast.error(
+        error instanceof GramError && error.statusCode === 409
+          ? "This change was already handled or the directory changed. The list is now up to date."
+          : error instanceof Error
+            ? error.message
+            : "Couldn't save the decision. Try again.",
+      );
+      void invalidateDirectoryMappingAccess(queryClient);
+    },
+  });
+  const roleByUrn = useMemo(
+    () => new Map(roles.map((role) => [role.principalUrn, role])),
+    [roles],
+  );
+
+  const items = data?.items ?? [];
+  if (items.length === 0) return null;
+
+  const decide = (
+    item: DirectoryReviewItem,
+    decision: ReviewDecision,
+    choice?: SetupChoice,
+  ) =>
+    resolve.mutate(
+      {
+        request: {
+          resolveDirectoryReviewItemForm: reviewDecisionRequest(
+            item,
+            decision,
+            choice,
+          ),
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success(reviewDecisionMessage(item, decision));
+          void invalidateDirectoryMappingAccess(queryClient);
+        },
+      },
+    );
+
+  return (
+    <section
+      aria-label="Directory changes to review"
+      className="border-border border"
+    >
+      <div className="border-border border-b px-3 py-2">
+        <Text className="font-medium">
+          {pluralize(items.length, "directory change")} to review
+        </Text>
+        <Text muted small>
+          Changes in your directory that may need a role. Nothing changes until
+          you decide.
+        </Text>
+      </div>
+      <ul className="divide-border divide-y">
+        {items.map((item) => (
+          <ReviewRow
+            key={item.id}
+            item={item}
+            roles={roles}
+            roleNames={(urns) =>
+              urns.map((urn) => roleByUrn.get(urn)?.name ?? "a deleted role")
+            }
+            disabled={resolve.isPending}
+            onDecide={(decision, choice) => decide(item, decision, choice)}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ReviewRow({
+  item,
+  roles,
+  roleNames,
+  disabled,
+  onDecide,
+}: {
+  item: DirectoryReviewItem;
+  roles: Role[];
+  roleNames: (urns: string[]) => string[];
+  disabled: boolean;
+  onDecide: (decision: ReviewDecision, choice?: SetupChoice) => void;
+}): JSX.Element {
+  const proposed = proposedChoice(item.item);
+  const [choice, setChoice] = useState<SetupChoice | undefined>(proposed);
+  const missing = item.kind === "source_missing";
+  const title = reviewItemTitle(item);
+
+  return (
+    <li className="flex flex-wrap items-center gap-3 px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <Text className="truncate font-medium">{title}</Text>
+        <Text muted small>
+          {reviewItemDetail(item, roleNames)}
+        </Text>
+      </div>
+      {missing ? (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={disabled}
+            onClick={() => onDecide("dismiss")}
+          >
+            <Button.Text>Keep roles</Button.Text>
+          </Button>
+          <Button
+            variant="destructive-secondary"
+            size="sm"
+            disabled={disabled}
+            onClick={() => onDecide("approve")}
+          >
+            <Button.Text>Remove roles</Button.Text>
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <Select
+            value={choice ? choiceValue(choice) : undefined}
+            onValueChange={(value) => setChoice(choiceFromValue(value))}
+            disabled={disabled}
+          >
+            <SelectTrigger className="w-56" aria-label={`Role for ${title}`}>
+              <SelectValue placeholder="Pick a role" />
+            </SelectTrigger>
+            <SelectContent>
+              {proposed?.kind === "create" && (
+                <SelectItem value={choiceValue(proposed)}>
+                  New role: {proposed.name}
+                </SelectItem>
+              )}
+              {roles.map((role) => (
+                <SelectItem
+                  key={role.principalUrn}
+                  value={`reuse:${role.principalUrn}`}
+                >
+                  {role.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={disabled || !choice}
+            onClick={() => onDecide("approve", choice)}
+          >
+            <Button.Text>Map</Button.Text>
+          </Button>
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={disabled}
+            onClick={() => onDecide("dismiss")}
+          >
+            <Button.Text>Leave unmapped</Button.Text>
+          </Button>
+          {item.kind === "new_attribute_value" && (
+            <Button
+              variant="tertiary"
+              size="sm"
+              disabled={disabled}
+              onClick={() => onDecide("opt_out_key")}
+            >
+              <Button.Text>
+                Stop asking about {item.item.source.attributeKey}
+              </Button.Text>
+            </Button>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
