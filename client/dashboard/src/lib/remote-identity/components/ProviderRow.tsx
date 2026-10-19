@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -377,19 +377,12 @@ export function UserIdentityRow({
             <Alert
               variant="error"
               dismissible={false}
-              className="block min-w-0 [&>div]:block [&>div>div:first-child]:hidden"
+              alignTop
+              className="min-w-0"
             >
-              <div>
-                <AlertTitle className="flex items-center gap-2">
-                  <Info aria-hidden="true" className="size-4 shrink-0" />
-                  Could not discover OAuth metadata
-                </AlertTitle>
-                <AlertDescription className="space-y-2">
-                  <pre className="bg-muted/50 max-w-full overflow-x-auto p-3 font-mono text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">
-                    <code>{draft.discoveryError}</code>
-                  </pre>
-                </AlertDescription>
-              </div>
+              <code className="text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">
+                {draft.discoveryError}
+              </code>
             </Alert>
           ) : null}
           {selected.isNew ? (

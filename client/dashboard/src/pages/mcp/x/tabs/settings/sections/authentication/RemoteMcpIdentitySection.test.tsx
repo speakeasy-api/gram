@@ -1603,7 +1603,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
       fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
 
       const alert = await screen.findByRole("alert");
-      expect(alert.querySelector("pre > code")?.textContent).toBe(message);
+      expect(alert.querySelector("code")?.textContent).toBe(message);
+      expect(alert.textContent).toBe(message);
+      expect(within(alert).queryByRole("heading")).toBeNull();
       expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
       expect(screen.queryByText(/PRIVATE RESPONSE BODY/)).toBeNull();
       expect(
