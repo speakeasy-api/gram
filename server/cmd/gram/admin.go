@@ -525,6 +525,7 @@ func newAdminCommand() *cli.Command {
 			}
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), telemetry.NewMCPServerHealth(db, chDB), siteURL, registryService)
 			adminService.SetMCPServerURL(mcpServerURL)
+			adminService.SetHookClients(telemetry.NewHookClients(chDB))
 			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
 			adminService.SetStripeDashboardMode(c.String("stripe-api-key"))
