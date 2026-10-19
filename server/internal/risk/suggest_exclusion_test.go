@@ -177,6 +177,8 @@ func TestSuggestExclusion_FindingIDsOnly_UsesClickHouseMetadataAndRejectsForeign
 	require.NoError(t, err)
 	require.Equal(t, "rule_id", result.MatchType)
 	require.Equal(t, "secret.generic", result.MatchValue)
+	require.Nil(t, result.RuleIDFilter)
+	require.Nil(t, result.SourceFilter)
 
 	foreignID := seedSuggestExclusionFinding(t, ti, uuid.New(), authCtx.ActiveOrganizationID, policyID, chatID, messageID, "gitleaks", "secret.generic", "secret", 20)
 	_, err = ti.service.SuggestExclusion(ctx, &gen.SuggestExclusionPayload{

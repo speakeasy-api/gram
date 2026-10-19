@@ -187,7 +187,7 @@ func (s *Service) enabledPolicyIDs(ctx context.Context, organizationID string, p
 		return []string{policyID.UUID.String()}, nil
 	}
 
-	policies, err := s.repo.ListEnabledRiskPoliciesByOrganizationProject(ctx, repo.ListEnabledRiskPoliciesByOrganizationProjectParams{
+	policies, err := s.repo.ListEnabledRiskPolicyIDsByOrganizationProject(ctx, repo.ListEnabledRiskPolicyIDsByOrganizationProjectParams{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
 	})
@@ -195,8 +195,8 @@ func (s *Service) enabledPolicyIDs(ctx context.Context, organizationID string, p
 		return nil, fmt.Errorf("list enabled risk policies: %w", err)
 	}
 	ids := make([]string, 0, len(policies))
-	for _, policy := range policies {
-		ids = append(ids, policy.ID.String())
+	for _, id := range policies {
+		ids = append(ids, id.String())
 	}
 	return ids, nil
 }

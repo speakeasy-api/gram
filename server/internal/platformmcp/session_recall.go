@@ -233,7 +233,7 @@ func (s *SessionRecallService) riskFindingMasks(
 	if s.findings == nil {
 		return findingMasks{}, errors.New("clickhouse risk findings for recall are unavailable")
 	}
-	policies, err := riskrepo.New(s.db).ListEnabledRiskPoliciesByOrganizationProject(ctx, riskrepo.ListEnabledRiskPoliciesByOrganizationProjectParams{
+	policies, err := riskrepo.New(s.db).ListEnabledRiskPolicyIDsByOrganizationProject(ctx, riskrepo.ListEnabledRiskPolicyIDsByOrganizationProjectParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      projectID,
 	})
@@ -241,8 +241,8 @@ func (s *SessionRecallService) riskFindingMasks(
 		return findingMasks{}, fmt.Errorf("list enabled risk policies for recall: %w", err)
 	}
 	policyIDs := make([]string, 0, len(policies))
-	for _, policy := range policies {
-		policyIDs = append(policyIDs, policy.ID.String())
+	for _, id := range policies {
+		policyIDs = append(policyIDs, id.String())
 	}
 	findings, err := s.findings.ListRiskFindingSpansForRecall(ctx, chrepo.ListRiskFindingSpansForRecallParams{
 		OrganizationID: principal.OrganizationID,

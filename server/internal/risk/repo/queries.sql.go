@@ -3007,8 +3007,8 @@ func (q *Queries) ListEnabledExclusionsForPolicy(ctx context.Context, arg ListEn
 	return items, nil
 }
 
-const listEnabledRiskPoliciesByOrganizationProject = `-- name: ListEnabledRiskPoliciesByOrganizationProject :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+const listEnabledRiskPolicyIDsByOrganizationProject = `-- name: ListEnabledRiskPolicyIDsByOrganizationProject :many
+SELECT id
 FROM risk_policies
 WHERE organization_id = $1
   AND project_id = $2
@@ -3016,51 +3016,24 @@ WHERE organization_id = $1
   AND deleted IS FALSE
 `
 
-type ListEnabledRiskPoliciesByOrganizationProjectParams struct {
+type ListEnabledRiskPolicyIDsByOrganizationProjectParams struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
 }
 
-func (q *Queries) ListEnabledRiskPoliciesByOrganizationProject(ctx context.Context, arg ListEnabledRiskPoliciesByOrganizationProjectParams) ([]RiskPolicy, error) {
-	rows, err := q.db.Query(ctx, listEnabledRiskPoliciesByOrganizationProject, arg.OrganizationID, arg.ProjectID)
+func (q *Queries) ListEnabledRiskPolicyIDsByOrganizationProject(ctx context.Context, arg ListEnabledRiskPolicyIDsByOrganizationProjectParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listEnabledRiskPolicyIDsByOrganizationProject, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RiskPolicy
+	var items []uuid.UUID
 	for rows.Next() {
-		var i RiskPolicy
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.Enabled,
-			&i.Name,
-			&i.PolicyType,
-			&i.Sources,
-			&i.PresidioEntities,
-			&i.AnalyzerConfig,
-			&i.McpScope,
-			&i.PromptInjectionRules,
-			&i.DisabledRules,
-			&i.CustomRuleIds,
-			&i.Action,
-			&i.AudienceType,
-			&i.ShadowMcpDisposition,
-			&i.AutoName,
-			&i.UserMessage,
-			&i.Prompt,
-			&i.ModelConfig,
-			&i.Score,
-			&i.Version,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
-		); err != nil {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

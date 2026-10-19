@@ -129,8 +129,8 @@ WHERE project_id = @project_id
   AND enabled IS TRUE
   AND deleted IS FALSE;
 
--- name: ListEnabledRiskPoliciesByOrganizationProject :many
-SELECT *
+-- name: ListEnabledRiskPolicyIDsByOrganizationProject :many
+SELECT id
 FROM risk_policies
 WHERE organization_id = @organization_id
   AND project_id = @project_id
