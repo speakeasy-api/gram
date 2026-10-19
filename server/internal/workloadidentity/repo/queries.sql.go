@@ -11,6 +11,35 @@ import (
 	"github.com/google/uuid"
 )
 
+const getWorkloadDeviceKey = `-- name: GetWorkloadDeviceKey :one
+SELECT public_jwk, thumbprint
+FROM workload_device_keys
+WHERE organization_id = $1
+  AND workload_issuer_id = $2
+  AND subject = $3
+  AND deleted IS FALSE
+`
+
+type GetWorkloadDeviceKeyParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+}
+
+type GetWorkloadDeviceKeyRow struct {
+	PublicJwk  []byte
+	Thumbprint string
+}
+
+// The one key registered for a device subject, which alone verifies its
+// assertions. Scoped to the issuer row the assertion already resolved to.
+func (q *Queries) GetWorkloadDeviceKey(ctx context.Context, arg GetWorkloadDeviceKeyParams) (GetWorkloadDeviceKeyRow, error) {
+	row := q.db.QueryRow(ctx, getWorkloadDeviceKey, arg.OrganizationID, arg.WorkloadIssuerID, arg.Subject)
+	var i GetWorkloadDeviceKeyRow
+	err := row.Scan(&i.PublicJwk, &i.Thumbprint)
+	return i, err
+}
+
 const listWorkloadIssuersByIssuerURL = `-- name: ListWorkloadIssuersByIssuerURL :many
 SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
