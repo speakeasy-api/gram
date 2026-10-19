@@ -85,6 +85,10 @@ export const AUDIT_ACTIONS = [
   "directory_role_mapping:set",
   "environment:create",
   "environment:delete",
+  "environment:link-source",
+  "environment:link-toolset",
+  "environment:unlink-source",
+  "environment:unlink-toolset",
   "environment:update",
   "gcp_iam_credential:create",
   "gcp_iam_credential:delete",
@@ -122,6 +126,8 @@ export const AUDIT_ACTIONS = [
   "mcp-endpoint:update",
   "mcp-server:create",
   "mcp-server:delete",
+  "mcp-server:link-environment",
+  "mcp-server:unlink-environment",
   "mcp-server:update",
   "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
@@ -575,6 +581,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated environment";
     case "environment:delete":
       return "deleted environment";
+    case "environment:link-source":
+      return "linked a source to environment";
+    case "environment:unlink-source":
+      return "unlinked a source from environment";
+    case "environment:link-toolset":
+      return "linked a toolset to environment";
+    case "environment:unlink-toolset":
+      return "unlinked a toolset from environment";
 
     case "killswitch:activate":
       return "activated killswitch";
@@ -622,6 +636,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated pinned scopes on MCP server";
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
+    case "mcp-server:link-environment":
+      return "linked an environment to MCP server";
+    case "mcp-server:unlink-environment":
+      return "unlinked the environment from MCP server";
 
     case "mcp_approval_request:approve":
       return "approved MCP access to";

@@ -34,9 +34,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -264,7 +266,25 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, s.logger)
 	}
 
-	return s.tunnelManager.serverView(ctx, s.logger, server), nil
+	// Lets the dashboard explain up front why a key rotation will be refused.
+	// Only booleans: they name no server or environment the caller may not be
+	// able to read.
+	// The answer is advisory: if it cannot be worked out, leave it unset (the
+	// dashboard treats that as unknown and locks) rather than fail the read.
+	view := s.tunnelManager.serverView(ctx, s.logger, server)
+	linked, err := mcpservers.TunnelLinkedEnvironmentIDs(ctx, s.db, *authCtx.ProjectID, server.ID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "check environment-linked mcp servers", attr.SlogError(err))
+		return view, nil
+	}
+	eligibility, err := mcpservers.EvaluateDestinationChange(ctx, s.authz, *authCtx.ProjectID, linked)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "evaluate environment link authority", attr.SlogError(err))
+		return view, nil
+	}
+	view.EnvironmentLinked = &eligibility.Linked
+	view.EnvironmentLinkAuthorized = &eligibility.Authorized
+	return view, nil
 }
 
 func (s *Service) ListServerConnections(ctx context.Context, payload *gen.ListServerConnectionsPayload) (*types.TunneledMcpServerConnections, error) {
@@ -458,8 +478,13 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// The project lock orders rotation against concurrent environment links
+	// (see mcpservers/environment_link.go); it is taken before the tunnel row.
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock project").LogError(ctx, logger)
+	}
 	txRepo := repo.New(dbtx)
-	existing, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+	existing, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -468,6 +493,19 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 			return nil, oops.E(oops.CodeNotFound, err, "tunneled mcp server not found").LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, logger)
+	}
+
+	// Whoever holds the new key operates the tunnel's destination, so a
+	// tunnel fronting an environment-linked server needs the same authority
+	// as linking that environment.
+	linked, err := mcpservers.TunnelLinkedEnvironmentIDs(ctx, dbtx, *authCtx.ProjectID, serverID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check environment-linked mcp servers").LogError(ctx, logger)
+	}
+	if len(linked) > 0 {
+		if err := s.authz.Require(ctx, mcpservers.EnvironmentLinkChecks(*authCtx.ProjectID, linked)...); err != nil {
+			return nil, err
+		}
 	}
 
 	beforeView := s.tunnelManager.serverView(ctx, s.logger, existing)

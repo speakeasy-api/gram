@@ -447,6 +447,8 @@ var TunneledMcpServer = Type("TunneledMcpServer", func() {
 	})
 	Attribute("active_connection_count", Int, "Number of active tunnel connections currently visible in Redis")
 	Attribute("active_consumer_session_count", Int, "Total MCP consumer sessions currently pinned across active tunnel connections")
+	Attribute("environment_linked", Boolean, "Returned by getServer only. True when a non-deleted MCP server on this tunnel, disabled ones included, has a linked environment. Names no server or environment.")
+	Attribute("environment_link_authorized", Boolean, "Returned by getServer only. True when the caller holds the environment authority rotating the key needs: always when nothing is linked; otherwise project-wide environment:read plus read access to every linked environment. It does not cover the source's own mcp:write check.")
 	Attribute("created_at", String, func() {
 		Description("When the tunneled MCP server source was created")
 		Format(FormatDateTime)
