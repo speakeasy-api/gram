@@ -257,6 +257,47 @@ func TestRunSkipsAWriteWhoseEvidenceChanged(t *testing.T) {
 	require.Empty(t, f.associations(server))
 }
 
+func TestRunSkipsAMetadataMatchWriteOnceAnotherClientMatches(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	sharedIssuer := f.userIssuer()
+	linear := f.server(sharedIssuer, "https://mcp.linear.example/mcp")
+	f.server(sharedIssuer, "https://mcp.other.example/mcp")
+	linearClient := f.client(sharedIssuer, "https://linear.example")
+	f.protectedResource("https://mcp.linear.example/mcp", "https://linear.example", "https://linear-alt.example")
+
+	rows, err := New(f.pool).ListUpstreamClientBackfillCandidates(t.Context(), ListUpstreamClientBackfillCandidatesParams{
+		Cursor:         uuid.Nil,
+		OrganizationID: f.orgID,
+		PageSize:       10,
+	})
+	require.NoError(t, err)
+	var decided ServerResult
+	for _, server := range groupByServer(rows) {
+		if server[0].McpServerID == linear {
+			decided = Decide(server)
+		}
+	}
+	require.Equal(t, OutcomeMetadataMatch, decided.Outcome)
+	require.Equal(t, []uuid.UUID{linearClient}, decided.Associate)
+
+	// A second client the server's metadata names is bound between the read
+	// and the write, so a fresh decision would be ambiguous.
+	f.client(sharedIssuer, "https://linear-alt.example")
+
+	n, err := New(f.pool).BackfillUpstreamClientAssociation(t.Context(), BackfillUpstreamClientAssociationParams{
+		RemoteSessionClientID: linearClient,
+		McpServerID:           linear,
+		UserSessionIssuerID:   sharedIssuer,
+		RespectRemoved:        decided.RespectRemoved,
+		RequireMetadataMatch:  true,
+	})
+	require.NoError(t, err)
+	require.Zero(t, n, "a metadata match that is no longer unique proves nothing")
+	require.Empty(t, f.associations(linear))
+}
+
 func TestDecide(t *testing.T) {
 	t.Parallel()
 

@@ -14,6 +14,61 @@ import (
 )
 
 const backfillGatewayAssociation = `-- name: BackfillGatewayAssociation :execrows
+WITH target AS (
+    SELECT s.id, s.project_id, p.organization_id, s.remote_session_issuer_id, r.url AS remote_url
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+    LEFT JOIN remote_mcp_servers AS r
+      ON r.id = s.remote_mcp_server_id
+     AND r.project_id = s.project_id
+     AND r.deleted IS FALSE
+    WHERE s.id = $3::uuid
+),
+evidence AS (
+    SELECT ec.id AS client_id,
+           (target.remote_url IS NOT NULL AND EXISTS (
+             SELECT 1
+             FROM remote_sessions AS rs
+             WHERE rs.user_session_issuer_id = $1::uuid
+               AND rs.remote_session_client_id = ec.id
+               AND rs.deleted IS FALSE
+               AND rtrim(rs.resource, '/') = rtrim(target.remote_url, '/')
+           )) AS grant_match,
+           EXISTS (
+             SELECT 1
+             FROM remote_session_issuers AS derived
+             WHERE derived.id = target.remote_session_issuer_id
+               AND derived.id = ec.remote_session_issuer_id
+               AND derived.deleted IS FALSE
+               AND (derived.project_id = target.project_id
+                    OR (derived.project_id IS NULL AND derived.organization_id = target.organization_id)
+                    OR (derived.project_id IS NULL AND derived.organization_id IS NULL))
+           ) AS derived_match
+    FROM target
+    JOIN remote_session_client_user_session_issuers AS el
+      ON el.user_session_issuer_id = $1::uuid
+    JOIN remote_session_clients AS ec
+      ON ec.id = el.remote_session_client_id
+     AND ec.deleted IS FALSE
+     AND (ec.project_id = target.project_id
+          OR (ec.project_id IS NULL AND ec.organization_id = target.organization_id)
+          OR (ec.project_id IS NULL AND ec.organization_id IS NULL))
+),
+decided AS (
+    SELECT e.client_id
+    FROM evidence AS e
+    WHERE (
+        e.grant_match
+        AND (SELECT count(*) FROM evidence AS g WHERE g.grant_match) = 1
+        AND NOT EXISTS (SELECT 1 FROM evidence AS o WHERE o.derived_match AND o.client_id <> e.client_id)
+      )
+      OR (
+        e.derived_match
+        AND NOT EXISTS (SELECT 1 FROM evidence AS g WHERE g.grant_match)
+        AND (SELECT count(*) FROM evidence AS d WHERE d.derived_match) = 1
+      )
+)
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
 SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
 FROM mcp_servers AS s
@@ -84,6 +139,7 @@ WHERE s.id = $3::uuid
         ) = 1
     )
   )
+  AND c.id IN (SELECT decided.client_id FROM decided)
   AND NOT EXISTS (
     SELECT 1
     FROM mcp_server_remote_session_clients AS recorded
@@ -103,8 +159,10 @@ type BackfillGatewayAssociationParams struct {
 // holding: the server is live with a live source of its own project, the
 // issuer is still a live gateway issuer fronting it (or still the
 // organization's only organization-level issuer), the client is still bound
-// to the issuer and in the server's tenant, and no row was recorded for the
-// pair meanwhile, so an explicit detach is never undone.
+// to the issuer and in the server's tenant, the issuer's clients' grants and
+// derived authorization servers still decide this client the way
+// DecideGateway does, and no row was recorded for the pair meanwhile, so an
+// explicit detach is never undone.
 func (q *Queries) BackfillGatewayAssociation(ctx context.Context, arg BackfillGatewayAssociationParams) (int64, error) {
 	result, err := q.db.Exec(ctx, backfillGatewayAssociation, arg.UserSessionIssuerID, arg.RemoteSessionClientID, arg.McpServerID)
 	if err != nil {
@@ -166,6 +224,47 @@ WHERE s.id = $2::uuid
     WHERE recorded.mcp_server_id = s.id
       AND recorded.remote_session_client_id = c.id
   ))
+  AND (NOT $6::boolean OR (
+    EXISTS (
+      SELECT 1
+      FROM remote_mcp_servers AS rms
+      JOIN remote_protected_resources AS rpr
+        ON rpr.project_id = s.project_id
+       AND rpr.resource_identifier = rms.url
+       AND rpr.deleted IS FALSE
+      JOIN remote_session_issuers AS i
+        ON i.id = c.remote_session_issuer_id
+       AND i.deleted IS FALSE
+       AND i.issuer = ANY (rpr.authorization_servers)
+      WHERE rms.id = s.remote_mcp_server_id
+        AND rms.project_id = s.project_id
+        AND rms.deleted IS FALSE
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS other_link
+      JOIN remote_session_clients AS other
+        ON other.id = other_link.remote_session_client_id
+       AND other.id <> c.id
+       AND other.deleted IS FALSE
+       AND (other.project_id = p.id
+            OR (other.project_id IS NULL AND other.organization_id = p.organization_id)
+            OR (other.project_id IS NULL AND other.organization_id IS NULL))
+      JOIN remote_mcp_servers AS rms
+        ON rms.id = s.remote_mcp_server_id
+       AND rms.project_id = s.project_id
+       AND rms.deleted IS FALSE
+      JOIN remote_protected_resources AS rpr
+        ON rpr.project_id = s.project_id
+       AND rpr.resource_identifier = rms.url
+       AND rpr.deleted IS FALSE
+      JOIN remote_session_issuers AS i
+        ON i.id = other.remote_session_issuer_id
+       AND i.deleted IS FALSE
+       AND i.issuer = ANY (rpr.authorization_servers)
+      WHERE other_link.user_session_issuer_id = usi.id
+    )
+  ))
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
 `
 
@@ -175,13 +274,16 @@ type BackfillUpstreamClientAssociationParams struct {
 	UserSessionIssuerID   uuid.UUID
 	RequireSoleConsumer   bool
 	RespectRemoved        bool
+	RequireMetadataMatch  bool
 }
 
 // Writes one decided association, conditional on the evidence still holding:
 // the server is live on the same tenant issuer, the client is still bound to
 // it and in the server's tenant, with require_sole_consumer the server is
 // still the issuer's only consumer and no gateway fronts it, and with
-// respect_removed no row was recorded for the pair meanwhile. A concurrent
+// respect_removed no row was recorded for the pair meanwhile, and with
+// require_metadata_match the server's upstream still names this client's
+// authorization server and no other client bound to the issuer. A concurrent
 // configuration change therefore wins and the write is skipped.
 func (q *Queries) BackfillUpstreamClientAssociation(ctx context.Context, arg BackfillUpstreamClientAssociationParams) (int64, error) {
 	result, err := q.db.Exec(ctx, backfillUpstreamClientAssociation,
@@ -190,6 +292,7 @@ func (q *Queries) BackfillUpstreamClientAssociation(ctx context.Context, arg Bac
 		arg.UserSessionIssuerID,
 		arg.RequireSoleConsumer,
 		arg.RespectRemoved,
+		arg.RequireMetadataMatch,
 	)
 	if err != nil {
 		return 0, err
@@ -260,8 +363,8 @@ SELECT f.issuer_id::uuid AS issuer_id,
          WHERE rs.user_session_issuer_id = f.issuer_id
            AND rs.remote_session_client_id = c.id
            AND rs.deleted IS FALSE
-           AND COALESCE(r.url, t.resource_identifier, '') <> ''
-           AND rtrim(rs.resource, '/') = rtrim(COALESCE(r.url, t.resource_identifier), '/')
+           AND r.url IS NOT NULL
+           AND rtrim(rs.resource, '/') = rtrim(r.url, '/')
        )::boolean AS grant_match,
        EXISTS (
          SELECT 1
@@ -332,10 +435,12 @@ type ListGatewayAssociationCandidatesRow struct {
 // the organization, as the organization gateway does.
 //
 // grant_match reports that the client holds a live grant under the issuer
-// whose RFC 8707 resource is the server's upstream, the comparison request
-// routing makes. derived_match reports that the client's authorization
-// server is the one derived for the server, the comparison consent claimed
-// members by.
+// whose RFC 8707 resource is the server's remote upstream URL, the
+// comparison request routing makes. A tunnel's resource identifier is only
+// what the tunnel claims, independent of where it dials, so it proves no
+// client: request routing matches tunnels by derived issuer alone, and so
+// does this. derived_match reports that the client's authorization server is
+// the one derived for the server, the comparison consent claimed members by.
 func (q *Queries) ListGatewayAssociationCandidates(ctx context.Context, organizationID string) ([]ListGatewayAssociationCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listGatewayAssociationCandidates, organizationID)
 	if err != nil {
@@ -575,6 +680,15 @@ func (q *Queries) ListUpstreamClientBackfillCandidates(ctx context.Context, arg 
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeGatewayMemberFixture = `-- name: RemoveGatewayMemberFixture :exec
+UPDATE meta_mcp_server_members SET deleted_at = clock_timestamp() WHERE mcp_server_id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) RemoveGatewayMemberFixture(ctx context.Context, mcpServerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, removeGatewayMemberFixture, mcpServerID)
+	return err
 }
 
 const seedAssociationFixture = `-- name: SeedAssociationFixture :exec
@@ -824,6 +938,54 @@ func (q *Queries) SeedRemoteSessionIssuerFixture(ctx context.Context, arg SeedRe
 		arg.ProjectID,
 		arg.Slug,
 		arg.Issuer,
+	)
+	return err
+}
+
+const seedTunneledMCPServerFixture = `-- name: SeedTunneledMCPServerFixture :exec
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, resource_identifier)
+VALUES ($1, $2, $3, $4, 'prefix', $5)
+`
+
+type SeedTunneledMCPServerFixtureParams struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	Name               string
+	KeyHash            string
+	ResourceIdentifier pgtype.Text
+}
+
+func (q *Queries) SeedTunneledMCPServerFixture(ctx context.Context, arg SeedTunneledMCPServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedTunneledMCPServerFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.KeyHash,
+		arg.ResourceIdentifier,
+	)
+	return err
+}
+
+const seedTunneledServerFixture = `-- name: SeedTunneledServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, slug, tunneled_mcp_server_id, user_session_issuer_id, visibility)
+VALUES ($1, $2, $3, $4, $5, 'private')
+`
+
+type SeedTunneledServerFixtureParams struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	Slug                pgtype.Text
+	TunneledMcpServerID uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+}
+
+func (q *Queries) SeedTunneledServerFixture(ctx context.Context, arg SeedTunneledServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedTunneledServerFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.Slug,
+		arg.TunneledMcpServerID,
+		arg.UserSessionIssuerID,
 	)
 	return err
 }

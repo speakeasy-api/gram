@@ -246,6 +246,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 						UserSessionIssuerID:   server[0].UserSessionIssuerID,
 						RequireSoleConsumer:   result.Outcome == OutcomeSoleConsumer,
 						RespectRemoved:        result.RespectRemoved,
+						RequireMetadataMatch:  result.Outcome == OutcomeMetadataMatch,
 					})
 					if err != nil {
 						return report, fmt.Errorf("write association for server %s: %w", result.MCPServerID, err)
