@@ -161,11 +161,14 @@ var localDockerHost = sync.OnceValue(func() bool {
 var loopbackIPv4 = netip.MustParseAddr("127.0.0.1")
 
 // WithLoopbackPorts binds the container's exposed ports to 127.0.0.1 when the
-// Docker daemon is local. testcontainers publishes every exposed port (and
-// every port the image exposes when the request lists none), and Docker binds
-// a published port on all interfaces by default, so a test container would
-// otherwise be reachable from the network while tests run. Remote daemons
+// Docker daemon is local. testcontainers publishes every exposed port, and
+// Docker binds a published port on all interfaces by default, so a test
+// container would otherwise be reachable from the network while tests run.
+// Remote daemons
 // keep the default binding because tests dial the daemon's host.
+//
+// The request must list the ports it uses. When it lists none, testcontainers
+// publishes the image's ports, which this option cannot see.
 //
 // Apply it after any [testcontainers.WithHostConfigModifier], which replaces
 // the modifier this option installs.
@@ -185,6 +188,12 @@ func WithLoopbackPorts() testcontainers.CustomizeRequestOption {
 			if hostConfig.PortBindings == nil {
 				hostConfig.PortBindings = network.PortMap{}
 			}
+			// Bindings from an earlier modifier keep their host port.
+			for _, bindings := range hostConfig.PortBindings {
+				for i := range bindings {
+					bindings[i].HostIP = loopbackIPv4
+				}
+			}
 			// The request is read here rather than when the option runs, so
 			// ports added by later options are bound too.
 			for _, spec := range req.ExposedPorts {
@@ -195,7 +204,9 @@ func WithLoopbackPorts() testcontainers.CustomizeRequestOption {
 					continue
 				}
 				for port := range ports.All() {
-					hostConfig.PortBindings[port] = []network.PortBinding{{HostIP: loopbackIPv4, HostPort: ""}}
+					if len(hostConfig.PortBindings[port]) == 0 {
+						hostConfig.PortBindings[port] = []network.PortBinding{{HostIP: loopbackIPv4, HostPort: ""}}
+					}
 				}
 			}
 		}

@@ -7,7 +7,10 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
 )
 
 func TestRetryDockerInfoRetriesTransientFailures(t *testing.T) {
@@ -65,5 +68,30 @@ func TestTestContainersBindPublishedPortsToLoopback(t *testing.T) {
 			}
 			require.Equal(t, wantLoopback, binding.HostIP.IsLoopback(), "%s is published on %s", port, hostIP)
 		}
+	}
+}
+
+func TestWithLoopbackPortsKeepsEarlierBindingsOnLoopback(t *testing.T) {
+	t.Parallel()
+	// A remote daemon keeps Docker's default binding, since tests dial its host.
+	wantLoopback := localDockerHost()
+
+	pinned := network.MustParsePort("6379/tcp")
+	req := testcontainers.GenericContainerRequest{}
+	req.ExposedPorts = []string{"6379/tcp", "5432/tcp"}
+	req.HostConfigModifier = func(hostConfig *container.HostConfig) {
+		hostConfig.PortBindings = network.PortMap{pinned: {{HostPort: "16379"}}}
+	}
+	require.NoError(t, WithLoopbackPorts()(&req))
+
+	hostConfig := &container.HostConfig{}
+	req.HostConfigModifier(hostConfig)
+
+	require.Equal(t, "16379", hostConfig.PortBindings[pinned][0].HostPort, "an earlier modifier's host port is kept")
+	require.Equal(t, wantLoopback, hostConfig.PortBindings[pinned][0].HostIP.IsLoopback())
+	if wantLoopback {
+		added := hostConfig.PortBindings[network.MustParsePort("5432/tcp")]
+		require.Len(t, added, 1)
+		require.True(t, added[0].HostIP.IsLoopback())
 	}
 }
