@@ -2,6 +2,7 @@ import type { ExplainedAccessLevel } from "@gram/client/models/components/explai
 import type { ExplainedAccessRule } from "@gram/client/models/components/explainedaccessrule.js";
 import type { ExplainResourceAccessResult } from "@gram/client/models/components/explainresourceaccessresult.js";
 import { describe, expect, it } from "vitest";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
   accessDecision,
   directorySourceLabel,
@@ -9,6 +10,7 @@ import {
   groupRules,
   levelStatus,
   ruleAccessLabel,
+  ruleAccessTone,
   whySentence,
 } from "./explainAccess";
 
@@ -464,4 +466,71 @@ describe("groupRules", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0]!.labels).toEqual(["Connect · All tools"]);
   });
+});
+
+describe("rule access types", () => {
+  it.each(["future_level", "blocked_future", "constructor", "__proto__"])(
+    "does not infer access from %s",
+    (value) => {
+      const unknown = rule({
+        displayName: "Analyst",
+        effect: "allows",
+        level: unrecognized(value),
+        tools: ["get_issue"],
+      });
+      expect(ruleAccessLabel(unknown, "view")).toBe("Unknown access");
+      expect(ruleAccessTone(unknown)).toBe("none");
+    },
+  );
+
+  it.each([
+    ["use", "allowed"],
+    ["view", "allowed"],
+    ["manage", "allowed"],
+    ["all", "allowed"],
+    ["blocked", "blocked"],
+    ["blocked_view", "blocked"],
+    ["blocked_manage", "blocked"],
+  ] as const)("keeps the known %s access type", (value, tone) => {
+    expect(
+      ruleAccessTone(
+        rule({ displayName: "Analyst", effect: "allows", level: value }),
+      ),
+    ).toBe(tone);
+  });
+
+  it.each([false, true])(
+    "keeps unknown rules neutral regardless of order (unknown first: %s)",
+    (unknownFirst) => {
+      const known = rule({
+        displayName: "Analyst",
+        effect: "allows",
+        level: "manage",
+      });
+      const unknown = rule({
+        displayName: "Analyst",
+        effect: "allows",
+        level: unrecognized("future_level"),
+      });
+      const unknownBlock = {
+        ...unknown,
+        level: unrecognized("blocked_future"),
+      };
+      const groups = groupRules(
+        unknownFirst
+          ? [unknown, known, unknownBlock]
+          : [known, unknown, unknownBlock],
+        "view",
+      );
+      expect(groups).toHaveLength(2);
+      expect(new Set(groups.map((group) => group.key)).size).toBe(2);
+      expect(
+        groups.find((group) => ruleAccessTone(group.rule) === "allowed")
+          ?.labels,
+      ).toEqual(["Manage · includes View"]);
+      expect(
+        groups.find((group) => ruleAccessTone(group.rule) === "none")?.labels,
+      ).toEqual(["Unknown access"]);
+    },
+  );
 });

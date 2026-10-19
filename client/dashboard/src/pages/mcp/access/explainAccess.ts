@@ -243,6 +243,8 @@ export function ruleAccessLabel(
   rule: ExplainedAccessRule,
   explained: ExplainedLevel,
 ): string {
+  const tone = ruleAccessTone(rule);
+  if (tone === "none") return "Unknown access";
   const access = enumPresentation(
     RULE_LEVEL_NAME,
     rule.level,
@@ -257,7 +259,7 @@ export function ruleAccessLabel(
   const narrowed = leadsWithTool
     ? narrowing
     : `${narrowing.charAt(0).toUpperCase()}${narrowing.slice(1)}`;
-  if (!ruleIsBlock(rule) && rule.level !== explained) {
+  if (tone === "allowed" && rule.level !== explained) {
     const includes = `${access} · includes ${LEVEL_NAME[explained]}`;
     // A grant narrowed to some tools says so, so two such grants on one row
     // are told apart.
@@ -310,6 +312,7 @@ export function groupRules(
     const key = [
       rule.principalUrn,
       rule.effect,
+      ruleAccessTone(rule),
       rule.appliesTo,
       rule.reason ?? "",
     ].join("|");
@@ -333,8 +336,21 @@ export function groupRules(
   });
 }
 
-export function ruleIsBlock(rule: ExplainedAccessRule): boolean {
-  return rule.level.startsWith("blocked");
+/** A rule's own access type, without inferring semantics for future levels. */
+export function ruleAccessTone(rule: ExplainedAccessRule): AccessTone {
+  switch (rule.level) {
+    case "use":
+    case "view":
+    case "manage":
+    case "all":
+      return "allowed";
+    case "blocked":
+    case "blocked_view":
+    case "blocked_manage":
+      return "blocked";
+    default:
+      return "none";
+  }
 }
 
 /** Where a rule applies: this server, its project, or every server. */
