@@ -17,10 +17,11 @@ import (
 )
 
 type stubHookClientsReader struct {
-	sessions  []telemetry.HookClientSessionRow
-	inference []telemetry.InferenceHookTrafficRow
-	err       error
-	reads     *atomic.Int32
+	sessions   []telemetry.HookClientSessionRow
+	inference  []telemetry.InferenceHookTrafficRow
+	err        error
+	reads      *atomic.Int32
+	inferReads *atomic.Int32
 }
 
 func (s stubHookClientsReader) Sessions(context.Context, int) ([]telemetry.HookClientSessionRow, error) {
@@ -31,6 +32,9 @@ func (s stubHookClientsReader) Sessions(context.Context, int) ([]telemetry.HookC
 }
 
 func (s stubHookClientsReader) InferenceTraffic(context.Context, int) ([]telemetry.InferenceHookTrafficRow, error) {
+	if s.inferReads != nil {
+		s.inferReads.Add(1)
+	}
 	return s.inference, s.err
 }
 
@@ -59,8 +63,9 @@ func TestGetHookClients_LabelsOrganizationsFromBothGrids(t *testing.T) {
 	goneID := "org_" + uuid.NewString()
 
 	svc.hookClients = stubHookClientsReader{
-		err:   nil,
-		reads: nil,
+		err:        nil,
+		reads:      nil,
+		inferReads: nil,
 		sessions: []telemetry.HookClientSessionRow{
 			{OrganizationID: knownID, Day: "2026-10-18", Client: "", Machines: 3, Sessions: 5, MachinesAll: 4},
 			{OrganizationID: knownID, Day: "2026-10-18", Client: "curl", Machines: 1, Sessions: 2, MachinesAll: 2},
@@ -96,10 +101,11 @@ func TestGetHookClients_PreservesReaderErrorCode(t *testing.T) {
 
 	ctx, svc, _ := newTestAdminService(t)
 	svc.hookClients = stubHookClientsReader{
-		sessions:  nil,
-		inference: nil,
-		err:       oops.E(oops.CodeInvalid, nil, "bad window"),
-		reads:     nil,
+		sessions:   nil,
+		inference:  nil,
+		err:        oops.E(oops.CodeInvalid, nil, "bad window"),
+		reads:      nil,
+		inferReads: nil,
 	}
 
 	_, err := svc.GetHookClients(ctx, &gen.GetHookClientsPayload{AdminSessionToken: nil, WindowDays: 15, Refresh: true})
@@ -114,11 +120,13 @@ func TestGetHookClients_ServesFromCacheUntilRefresh(t *testing.T) {
 
 	ctx, svc, _ := newTestAdminService(t)
 	reads := &atomic.Int32{}
+	inferReads := &atomic.Int32{}
 	svc.hookClients = stubHookClientsReader{
-		sessions:  []telemetry.HookClientSessionRow{},
-		inference: []telemetry.InferenceHookTrafficRow{},
-		err:       nil,
-		reads:     reads,
+		sessions:   []telemetry.HookClientSessionRow{},
+		inference:  []telemetry.InferenceHookTrafficRow{},
+		err:        nil,
+		reads:      reads,
+		inferReads: inferReads,
 	}
 	// A window no other test uses, so the shared cache starts empty for it.
 	const window = 7
@@ -132,9 +140,11 @@ func TestGetHookClients_ServesFromCacheUntilRefresh(t *testing.T) {
 	require.True(t, cached.FromCache)
 	require.Equal(t, first.QueriedAt, cached.QueriedAt)
 	require.Equal(t, int32(1), reads.Load())
+	require.Equal(t, int32(1), inferReads.Load())
 
 	refreshed, err := svc.GetHookClients(ctx, &gen.GetHookClientsPayload{AdminSessionToken: nil, WindowDays: window, Refresh: true})
 	require.NoError(t, err)
 	require.False(t, refreshed.FromCache)
 	require.Equal(t, int32(2), reads.Load())
+	require.Equal(t, int32(2), inferReads.Load())
 }

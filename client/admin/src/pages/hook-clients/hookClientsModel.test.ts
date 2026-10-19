@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   cacheAgeLabel,
   clientSeries,
+  inferenceRows,
+  surfaceSeries,
   compareVersions,
   latestShares,
   sessionRows,
@@ -82,7 +84,48 @@ const data: HookClients = {
       machines_all: 1,
     },
   ],
-  inference: [],
+  inference: [
+    {
+      organization_id: "org-a",
+      day: "2026-10-19",
+      surface: "",
+      users: 3,
+      events: 10,
+      sessions: 4,
+    },
+    {
+      organization_id: "org-a",
+      day: "2026-10-19",
+      surface: "claude-code",
+      users: 2,
+      events: 7,
+      sessions: 3,
+    },
+    {
+      organization_id: "org-a",
+      day: "2026-10-19",
+      surface: "claude-chat",
+      users: 1,
+      events: 3,
+      sessions: 1,
+    },
+    {
+      organization_id: "org-c",
+      day: "2026-10-18",
+      surface: "",
+      users: 1,
+      events: 20,
+      sessions: 1,
+    },
+    {
+      organization_id: "org-c",
+      day: "2026-10-18",
+      surface: "claude-chat",
+      users: 1,
+      events: 20,
+      sessions: 1,
+    },
+  ],
 };
 
 describe("compareVersions", () => {
@@ -149,5 +192,25 @@ describe("cacheAgeLabel", () => {
     expect(cacheAgeLabel(at, base + 20_000)).toBe("just now");
     expect(cacheAgeLabel(at, base + 12 * 60_000)).toBe("12 min ago");
     expect(cacheAgeLabel(at, base + 75 * 60_000)).toBe("1 h 15 min ago");
+  });
+});
+
+describe("surfaceSeries", () => {
+  it("orders apps by messages across the window", () => {
+    expect(surfaceSeries(data.inference).map((s) => s.key)).toEqual([
+      "claude-chat",
+      "claude-code",
+    ]);
+  });
+});
+
+describe("inferenceRows", () => {
+  it("sorts orgs by messages and labels days with users", () => {
+    const rows = inferenceRows(data);
+    expect(rows.map((r) => r.id)).toEqual(["org-c", "org-a"]);
+    const day = rows[1]?.days.get("2026-10-19");
+    expect(day?.label).toBe(3);
+    expect(day?.parts.get("claude-code")).toBe(7);
+    expect(day?.parts.get("claude-chat")).toBe(3);
   });
 });

@@ -68,6 +68,8 @@ function Bar({
   if (!cell) {
     return (
       <div
+        role="img"
+        aria-label={`${title}: no data`}
         className="h-16 rounded-sm border border-dashed"
         title={`${title}: no data`}
       />
@@ -76,6 +78,8 @@ function Bar({
   if (cell.stale) {
     return (
       <div
+        role="img"
+        aria-label={`${title}: hooks only from sessions started earlier`}
         className="h-16 rounded-sm border border-dashed border-amber-500"
         title={`${title}: hooks only from sessions started earlier`}
       />
@@ -93,11 +97,13 @@ function Bar({
   ].join("\n");
   return (
     <div
+      role="img"
+      aria-label={tooltip.replaceAll("\n", ", ")}
       className="bg-muted flex h-16 flex-col justify-end overflow-hidden rounded-sm"
       title={tooltip}
     >
       <div
-        className="flex w-full flex-col-reverse transition-[height]"
+        className="flex w-full flex-col-reverse transition-[height] motion-reduce:transition-none"
         style={{ height: `${Math.max(height, 0.04) * 100}%` }}
       >
         {series.map((s) => {
@@ -410,7 +416,9 @@ export function HookClients(): JSX.Element {
             title="Read ClickHouse now instead of the one-hour cache"
             onClick={() => refresh.mutate()}
           >
-            <RefreshCw className={busy ? "animate-spin" : ""} />
+            <RefreshCw
+              className={busy ? "animate-spin motion-reduce:animate-none" : ""}
+            />
             Refresh
           </Button>
         </div>

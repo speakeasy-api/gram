@@ -71,21 +71,15 @@ func TestHookClients_SessionsCountOnlyTheStartDay(t *testing.T) {
 		insertHookClientLog(t, ctx, ti.chConn, l)
 	}
 
-	reader := telemetry.NewHookClients(ti.chConn)
-	var rows []telemetry.HookClientSessionRow
-	require.Eventually(t, func() bool {
-		all, err := reader.Sessions(ctx, 15)
-		if err != nil {
-			return false
+	all, err := telemetry.NewHookClients(ti.chConn).Sessions(ctx, 15)
+	require.NoError(t, err)
+	rows := []telemetry.HookClientSessionRow{}
+	for _, row := range all {
+		if row.OrganizationID == orgID && row.Day == todayDay {
+			rows = append(rows, row)
 		}
-		rows = rows[:0]
-		for _, row := range all {
-			if row.OrganizationID == orgID && row.Day == todayDay {
-				rows = append(rows, row)
-			}
-		}
-		return len(rows) == 3
-	}, 10*time.Second, 200*time.Millisecond)
+	}
+	require.Len(t, rows, 3)
 
 	byClient := map[string]telemetry.HookClientSessionRow{}
 	for _, row := range rows {
@@ -101,11 +95,46 @@ func TestHookClients_SessionsCountOnlyTheStartDay(t *testing.T) {
 	require.Equal(t, uint64(1), byClient["0.3.31"].Machines)
 }
 
-func TestHookClients_InferenceTrafficRuns(t *testing.T) {
+func insertInferenceEvent(t *testing.T, ctx context.Context, conn clickhouse.Conn, orgID, recordID, sessionID, surface, email string, at time.Time) {
+	t.Helper()
+
+	err := conn.Exec(ctx, `
+		INSERT INTO agent_events (
+			organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
+			record_id, session_id, event_id, event_type, raw_event_name, source, provider, surface, user_email
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, orgID, uuid.NewString(), at.UnixNano(), at.UnixNano(),
+		recordID, sessionID, uuid.NewString(), "session", "session.observed", "transcript", "anthropic", surface, email)
+	require.NoError(t, err)
+}
+
+func TestHookClients_InferenceTrafficDedupesAndSkipsImports(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+	orgID := "org_" + uuid.NewString()
+	at := time.Now().UTC().Add(-time.Hour)
+	day := at.Format(time.DateOnly)
 
-	_, err := telemetry.NewHookClients(ti.chConn).InferenceTraffic(ctx, 15)
+	// One message written twice by a retried observation, a second message in
+	// another app, and a Compliance API import that must not count.
+	insertInferenceEvent(t, ctx, ti.chConn, orgID, "rec-1", "s-1", "claude-code", "a@example.com", at)
+	insertInferenceEvent(t, ctx, ti.chConn, orgID, "rec-1", "s-1", "claude-code", "a@example.com", at)
+	insertInferenceEvent(t, ctx, ti.chConn, orgID, "rec-2", "s-2", "claude-chat", "b@example.com", at)
+	insertInferenceEvent(t, ctx, ti.chConn, orgID, "rec-3", "claude_chat_import", "claude-chat", "c@example.com", at)
+
+	all, err := telemetry.NewHookClients(ti.chConn).InferenceTraffic(ctx, 15)
 	require.NoError(t, err)
+	bySurface := map[string]telemetry.InferenceHookTrafficRow{}
+	for _, row := range all {
+		if row.OrganizationID == orgID && row.Day == day {
+			bySurface[row.Surface] = row
+		}
+	}
+	require.Len(t, bySurface, 3)
+	require.Equal(t, uint64(2), bySurface[""].Events)
+	require.Equal(t, uint64(2), bySurface[""].Users)
+	require.Equal(t, uint64(2), bySurface[""].Sessions)
+	require.Equal(t, uint64(1), bySurface["claude-code"].Events)
+	require.Equal(t, uint64(1), bySurface["claude-chat"].Events)
 }

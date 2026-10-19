@@ -138,6 +138,11 @@ func (s *Service) hookClientsSnapshot(ctx context.Context, windowDays int, refre
 	}
 
 	snapshot := hookClientsSnapshot{WindowDays: windowDays, QueriedAt: queriedAt, Sessions: sessions, Inference: inference}
+	// Two refreshes can overlap. Keep whichever read started later, so a slow
+	// read never replaces newer data or extends its TTL.
+	if existing, err := s.hookClientsCache.Get(ctx, hookClientsCacheKey(windowDays)); err == nil && existing.QueriedAt.After(queriedAt) {
+		return snapshot, false, nil
+	}
 	if err := s.hookClientsCache.Store(ctx, snapshot); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache hook clients", attr.SlogError(err))
 	}

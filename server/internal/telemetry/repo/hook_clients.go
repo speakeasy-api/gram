@@ -88,14 +88,15 @@ type InferenceHookTrafficRow struct {
 }
 
 // Inference hooks write one session.observed transcript row per stored
-// message. Compliance API imports (claude_chat_ session ids) are left out
+// message. agent_events is append-only and a retried observation lands twice,
+// so messages are counted by distinct record_id. Compliance API imports (claude_chat_ session ids) are left out
 // because they arrive in bulk, not through the hooks.
 const inferenceHookTrafficQuery = `
 SELECT organization_id AS org_id,
        toString(toDate(fromUnixTimestamp64Nano(occurred_at_unix_nano))) AS day,
        surface,
        uniqExact(user_email) AS users,
-       count() AS events,
+       uniqExact(record_id) AS events,
        uniqExact(session_id) AS sessions
 FROM agent_events
 WHERE occurred_at_unix_nano > toUnixTimestamp64Nano(now64(9) - toIntervalDay(?))
