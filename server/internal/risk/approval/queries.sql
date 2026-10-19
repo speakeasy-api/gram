@@ -188,3 +188,78 @@ WHERE organization_id = @organization_id
   AND (sqlc.narg(cursor)::uuid IS NULL OR id < sqlc.narg(cursor)::uuid)
 ORDER BY id DESC
 LIMIT @page_limit;
+
+-- name: ListApprovalRecipientMembers :many
+-- Active organization members who can receive approval requests: the members
+-- in @user_ids, or every member when @all_members is set, which is how role
+-- approvers expand to people. Ordered by id so a capped list is stable.
+SELECT u.id AS user_id, u.email, u.display_name
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+  AND (@all_members::boolean OR u.id = ANY(@user_ids::text[]))
+ORDER BY u.id
+LIMIT @max_rows;
+
+-- name: GetApprovalProjectSlugs :one
+-- What a link to the request's project needs: the slugs, and the
+-- organization's default host for links sent without a request to follow.
+SELECT o.slug AS organization_slug, p.slug AS project_slug, o.default_host
+FROM projects p
+JOIN organization_metadata o ON o.id = p.organization_id
+WHERE p.organization_id = @organization_id
+  AND p.id = @project_id;
+
+-- name: InsertApprovalMessage :one
+-- Records a notification sent for a request. One per recipient and provider,
+-- so a retried send that already recorded its message inserts nothing.
+INSERT INTO risk_policy_approval_messages (
+  organization_id
+  , project_id
+  , approval_id
+  , provider
+  , kind
+  , recipient_user_id
+  , slack_team_id
+  , slack_user_id
+  , slack_channel_id
+  , slack_message_ts
+) VALUES (
+  @organization_id
+  , @project_id
+  , @approval_id
+  , @provider
+  , @kind
+  , @recipient_user_id
+  , @slack_team_id
+  , @slack_user_id
+  , @slack_channel_id
+  , @slack_message_ts
+)
+ON CONFLICT (approval_id, provider, recipient_user_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING *;
+
+-- name: ListApprovalMessages :many
+SELECT *
+FROM risk_policy_approval_messages
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND approval_id = @approval_id
+  AND deleted IS FALSE
+ORDER BY created_at, id;
+
+-- name: GetApprovalMessageBySlackMessage :one
+-- Resolves a Slack click to the DM it was made on. Slack signs the click, and
+-- the click names its workspace, channel and message, so this lookup is not
+-- tenant-scoped; the row it returns carries the tenant.
+SELECT *
+FROM risk_policy_approval_messages
+WHERE provider = 'slack'
+  AND slack_team_id = @slack_team_id
+  AND slack_channel_id = @slack_channel_id
+  AND slack_message_ts = @slack_message_ts
+  AND deleted IS FALSE
+ORDER BY created_at, id
+LIMIT 1;
