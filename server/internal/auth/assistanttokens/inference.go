@@ -129,7 +129,7 @@ func (m *Manager) AuthorizeInference(ctx context.Context, header string) (contex
 	authed = contextvalues.WithPrincipalCredentialAuthorization(authed, ac,
 		urn.NewWorkloadPrincipal(identity.IssuerID, identity.Subject), contextvalues.PrincipalCredential{
 			DelegatedGrants: row.PolicyJson, DelegatedGrantsVersion: row.PolicyVersion,
-			DerivesPolicyAtAdmission: false,
+			DerivesPolicyAtAdmission: false, AuthorizerUserID: "",
 		})
 	authed, err = m.authz.PrepareContext(authed)
 	if err != nil {
@@ -168,38 +168,37 @@ func (m *Manager) RevokeRuntimeInferenceCredentials(ctx context.Context, project
 // issuance-time policy even though ordinary principal assertions derive it live.
 func (m *Manager) snapshotInferenceCeiling(ctx context.Context, identity assistantidentity.Identity) (inferenceCeiling, error) {
 	if err := new(assistantidentity.Service).Validate(ctx, m.db, identity); err != nil {
-		return inferenceCeiling{}, err
+		return inferenceCeiling{}, fmt.Errorf("validate inference identity: %w", err)
 	}
-	assertion, _, err := m.credentials.Mint(principalcredential.Credential{
-		OrganizationID: identity.OrganizationID, ProjectID: identity.ProjectID,
-		Principal: urn.NewWorkloadPrincipal(identity.IssuerID, identity.Subject),
-	})
-	if err != nil {
-		return inferenceCeiling{}, err
-	}
-	authed, err := m.credentials.Authenticate(ctx, assertion)
-	if err != nil {
-		return inferenceCeiling{}, err
-	}
+	// Identity validation above establishes this internal workload context. Use
+	// live admission directly: taking a ceiling must not require a token signer.
+	ac := new(contextvalues.AuthContext)
+	ac.ActiveOrganizationID = identity.OrganizationID
+	ac.ProjectID = &identity.ProjectID
+	authed := contextvalues.WithPrincipalCredentialAuthorization(ctx, ac,
+		urn.NewWorkloadPrincipal(identity.IssuerID, identity.Subject), contextvalues.PrincipalCredential{
+			AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0,
+			DerivesPolicyAtAdmission: true,
+		})
 	admission, err := runtimepolicy.AdmitWorkloadSession(authed, m.db)
 	if err != nil {
-		return inferenceCeiling{}, err
+		return inferenceCeiling{}, fmt.Errorf("admit inference workload: %w", err)
 	}
 	if admission.AgentPrincipal != urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String()).String() {
 		return inferenceCeiling{}, oops.C(oops.CodeUnauthorized)
 	}
 	grants, err := runtimepolicy.DelegableGrantsWithExclusions(admission.Agent, admission.Agent, admission.Agent)
 	if err != nil {
-		return inferenceCeiling{}, err
+		return inferenceCeiling{}, fmt.Errorf("derive inference ceiling grants: %w", err)
 	}
 	version := runtimepolicy.CurrentDelegatedPolicyVersion
 	policy, err := runtimepolicy.NewDelegatedPolicy(version, grants)
 	if err != nil {
-		return inferenceCeiling{}, err
+		return inferenceCeiling{}, fmt.Errorf("build inference ceiling policy: %w", err)
 	}
 	raw, err := runtimepolicy.EncodeDelegatedPolicy(version, policy)
 	if err != nil {
-		return inferenceCeiling{}, err
+		return inferenceCeiling{}, fmt.Errorf("encode inference ceiling policy: %w", err)
 	}
 	return inferenceCeiling{Policy: raw, EncodingVersion: version}, nil
 }
