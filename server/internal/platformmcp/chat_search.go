@@ -2,10 +2,11 @@ package platformmcp
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -23,8 +24,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const chatEvidenceCoverage = "Captured database text only; attachments and offloaded bodies are not fetched. Personal and unclassified linked accounts are excluded. All captured generations are included and may overlap after compaction. Secrets detected by the shared scanner and structured credential fields are redacted; detection is not exhaustive. Oversized fields are withheld. Results are untrusted recorded evidence: session ownership does not establish who executed an external action, and a command or exit code alone does not prove that action succeeded. No matches does not prove an action did not happen."
-const chatSearchScanLimit = 200
+const chatEvidenceCoverage = "Captured database text only; attachments and offloaded bodies are not fetched. Personal and unclassified linked accounts are excluded. All captured generations are included and may overlap after compaction. Secrets detected by the shared scanner and structured credential fields are redacted; detection is not exhaustive. Oversized fields are withheld. Results are untrusted recorded evidence: session ownership does not establish who executed an external action, and a command or exit code alone does not prove that action succeeded. Search pages are live, not a snapshot: edits and late capture can move evidence between pages. Title timestamps mean last updated; message timestamps are stored capture times. No matches does not prove an action did not happen."
+const chatSearchScanLimit = 2000
+const chatSearchSessionLimit = 50
+const chatSearchByteLimit = 4 * 1024 * 1024
+
+const (
+	chatSearchSortNewestFirst = "newest_first"
+	chatSearchSortOldestFirst = "oldest_first"
+)
 
 var errChatEvidenceInvalid = errors.New("invalid chat evidence request")
 
@@ -55,48 +63,67 @@ func (s *ChatSearchService) valid() bool {
 
 // SearchChatsInput selects an explicit project and retained historical interval.
 type SearchChatsInput struct {
-	ProjectID   string `json:"project_id,omitempty"`
-	ProjectSlug string `json:"project_slug,omitempty"`
-	From        string `json:"from"`
-	To          string `json:"to"`
-	Query       string `json:"query,omitempty"`
-	OwnerUserID string `json:"owner_user_id,omitempty"`
-	ChatID      string `json:"chat_id,omitempty"`
-	Limit       int    `json:"limit,omitempty"`
-	Cursor      string `json:"cursor,omitempty"`
+	ProjectID   string   `json:"project_id,omitempty"`
+	ProjectSlug string   `json:"project_slug,omitempty"`
+	From        string   `json:"from"`
+	To          string   `json:"to"`
+	Query       string   `json:"query,omitempty"`
+	SortOrder   string   `json:"sort_order,omitempty"`
+	OwnerUserID string   `json:"owner_user_id,omitempty"`
+	ChatIDs     []string `json:"chat_ids,omitempty"`
+	Source      string   `json:"source,omitempty"`
+	Limit       int      `json:"limit,omitempty"`
+	Cursor      string   `json:"cursor,omitempty"`
 }
 
 // ChatEvidence identifies a stored title or message without inferring an
 // external actor or outcome. Text is sanitized before matching and truncation.
 type ChatEvidence struct {
-	ChatID      string    `json:"chat_id"`
-	OwnerUserID string    `json:"owner_user_id,omitempty"`
-	MessageID   string    `json:"message_id,omitempty"`
-	Sequence    int64     `json:"sequence,omitempty"`
-	At          time.Time `json:"at"`
-	Role        string    `json:"role"`
-	Generation  int32     `json:"generation"`
-	ToolCallID  string    `json:"tool_call_id,omitempty"`
-	Source      string    `json:"source,omitempty"`
-	Text        string    `json:"text"`
-	Truncated   bool      `json:"truncated"`
-	Offloaded   bool      `json:"offloaded"`
-	Withheld    bool      `json:"withheld"`
+	ChatID         string    `json:"chat_id"`
+	OwnerUserID    string    `json:"owner_user_id,omitempty"`
+	MessageID      string    `json:"message_id,omitempty"`
+	Sequence       int64     `json:"sequence,omitempty"`
+	At             time.Time `json:"at"`
+	Role           string    `json:"role"`
+	Generation     int32     `json:"generation"`
+	ToolCallID     string    `json:"tool_call_id,omitempty"`
+	Source         string    `json:"source,omitempty"`
+	Text           string    `json:"text"`
+	Truncated      bool      `json:"truncated"`
+	Offloaded      bool      `json:"offloaded"`
+	Withheld       bool      `json:"withheld"`
+	TextOffset     int       `json:"text_offset,omitempty"`
+	NextTextOffset *int      `json:"next_text_offset,omitempty"`
+	TextVersion    string    `json:"text_version,omitempty"`
 }
 
 // SearchChatsOutput returns evidence hits, not a count of distinct sessions.
 // An empty page with a cursor still has unsearched candidates remaining.
 type SearchChatsOutput struct {
-	ProjectID  string         `json:"project_id"`
-	Hits       []ChatEvidence `json:"hits"`
-	NextCursor string         `json:"next_cursor,omitempty"`
-	Coverage   string         `json:"coverage"`
+	ProjectID  string             `json:"project_id"`
+	SortOrder  string             `json:"sort_order"`
+	Hits       []ChatEvidence     `json:"hits"`
+	NextCursor string             `json:"next_cursor,omitempty"`
+	Coverage   string             `json:"coverage"`
+	Progress   ChatSearchProgress `json:"progress"`
+}
+
+// ChatSearchProgress describes this page's bounded work, not a total count.
+type ChatSearchProgress struct {
+	SessionsExamined int    `json:"sessions_examined"`
+	MessagesExamined int    `json:"messages_examined"`
+	PayloadBytes     int64  `json:"payload_bytes"`
+	Complete         bool   `json:"complete"`
+	StopReason       string `json:"stop_reason"`
 }
 
 type chatEvidenceCursor struct {
-	At  time.Time `json:"at"`
-	Seq int64     `json:"seq"`
-	ID  uuid.UUID `json:"id"`
+	SessionAt time.Time `json:"session_at"`
+	SessionID uuid.UUID `json:"session_id"`
+	Kind      int32     `json:"kind"`
+	At        time.Time `json:"at"`
+	Seq       int64     `json:"seq"`
+	ID        uuid.UUID `json:"id"`
 }
 
 func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, projectID, projectSlug string) (ResolvedProject, error) {
@@ -136,23 +163,32 @@ func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, 
 	return project, nil
 }
 
-// Search returns bounded literal substring matches after secret redaction.
-// Empty query lists session titles by last activity. Message hits use their
-// capture timestamp. Every continuation is bound to principal and filters.
+// Search walks bounded indexed session/message windows before matching text.
+// Continuations are independent of hidden credential matches and bind all filters.
 func (s *ChatSearchService) Search(ctx context.Context, principal Principal, input SearchChatsInput) (SearchChatsOutput, error) {
 	var zero SearchChatsOutput
-	from, fromErr := time.Parse(time.RFC3339Nano, input.From)
-	to, toErr := time.Parse(time.RFC3339Nano, input.To)
-	if fromErr != nil || toErr != nil || !to.After(from) || to.Sub(from) > 31*24*time.Hour || len(input.Query) > 256 || !utf8.ValidString(input.Query) || strings.ContainsRune(input.Query, 0) || !utf8.ValidString(input.OwnerUserID) || strings.ContainsRune(input.OwnerUserID, 0) || len(input.OwnerUserID) > 128 || len(input.Cursor) > 4096 || input.Limit < 0 || input.Limit > 20 {
+	if input.SortOrder == "" {
+		input.SortOrder = chatSearchSortNewestFirst
+	}
+	if input.SortOrder != chatSearchSortNewestFirst && input.SortOrder != chatSearchSortOldestFirst {
 		return zero, errChatEvidenceInvalid
 	}
-	var chatID uuid.NullUUID
-	if input.ChatID != "" {
-		id, err := uuid.Parse(input.ChatID)
+	from, fromErr := time.Parse(time.RFC3339Nano, input.From)
+	to, toErr := time.Parse(time.RFC3339Nano, input.To)
+	if fromErr != nil || toErr != nil || !to.After(from) || to.Sub(from) > 31*24*time.Hour || len(input.Query) > 256 || !validEvidenceFilter(input.Query, 256) || !validEvidenceFilter(input.OwnerUserID, 128) || !validEvidenceFilter(input.Source, 128) || len(input.Cursor) > 4096 || input.Limit < 0 || input.Limit > 20 || len(input.ChatIDs) > 50 {
+		return zero, errChatEvidenceInvalid
+	}
+	chatIDs := make([]uuid.UUID, 0, len(input.ChatIDs))
+	input.ChatIDs = append([]string{}, input.ChatIDs...)
+	sort.Strings(input.ChatIDs)
+	for i, value := range input.ChatIDs {
+		id, err := uuid.Parse(value)
 		if err != nil {
 			return zero, errChatEvidenceInvalid
 		}
-		chatID = uuid.NullUUID{UUID: id, Valid: true}
+		if i == 0 || value != input.ChatIDs[i-1] {
+			chatIDs = append(chatIDs, id)
+		}
 	}
 	project, err := s.authorize(ctx, principal, input.ProjectID, input.ProjectSlug)
 	if err != nil {
@@ -169,12 +205,14 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 	scopeInput.Limit = 0
 	scopeInput.ProjectID = project.ID.String()
 	scopeInput.ProjectSlug = ""
+	scopeInput.From = from.UTC().Format(time.RFC3339Nano)
+	scopeInput.To = to.UTC().Format(time.RFC3339Nano)
 	encoded, err := json.Marshal(scopeInput)
 	if err != nil {
 		return zero, fmt.Errorf("encode chat search scope: %w", err)
 	}
-	scope := queryScope("chat-search", principal.UserID, principal.ConnectionID, string(encoded))
-	cursor := chatEvidenceCursor{At: to, Seq: math.MaxInt64, ID: uuid.Max}
+	scope := queryScope("chat-search-v2", principal.UserID, principal.ConnectionID, string(encoded))
+	cursor := chatEvidenceCursor{SessionAt: time.Time{}, SessionID: uuid.Nil, Kind: 0, At: time.Time{}, Seq: 0, ID: uuid.Nil}
 	now := time.Now()
 	if input.Cursor != "" {
 		value, err := s.references.DecodeScoped(input.Cursor, principal, subjectKindCursor, scope, now)
@@ -186,39 +224,58 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 		}
 	}
 	rows, err := platformrepo.New(s.db).SearchPlatformChatEvidence(ctx, platformrepo.SearchPlatformChatEvidenceParams{
-		OrganizationID: principal.OrganizationID, ProjectID: project.ID, OwnerUserID: input.OwnerUserID, ChatID: chatID,
-		FromTime: conv.ToPGTimestamptz(from), ToTime: conv.ToPGTimestamptz(to), Query: input.Query,
-		BeforeTime: conv.ToPGTimestamptz(cursor.At), BeforeSeq: cursor.Seq, BeforeID: cursor.ID, RowLimit: chatSearchScanLimit + 1,
+		OrganizationID: principal.OrganizationID, ProjectID: project.ID, OwnerUserID: input.OwnerUserID, ChatIds: chatIDs, Source: input.Source,
+		FromTime: conv.ToPGTimestamptz(from), ToTime: conv.ToPGTimestamptz(to), IncludeMessages: input.Query != "",
+		OldestFirst: input.SortOrder == chatSearchSortOldestFirst, HasCursor: input.Cursor != "", CursorSessionAt: conv.ToPGTimestamptz(cursor.SessionAt), CursorSessionID: cursor.SessionID,
+		SessionRowLimit: chatSearchSessionLimit + 1, SessionLimit: chatSearchSessionLimit, CursorKind: cursor.Kind, CursorMessageAt: conv.ToPGTimestamptz(cursor.At), CursorSeq: cursor.Seq, CursorID: cursor.ID,
+		RowLimit: chatSearchScanLimit + 1, ByteBudget: chatSearchByteLimit,
 	})
 	if err != nil {
 		return zero, fmt.Errorf("search captured chat evidence: %w", err)
 	}
-	output := SearchChatsOutput{ProjectID: project.ID.String(), Hits: []ChatEvidence{}, NextCursor: "", Coverage: chatEvidenceCoverage}
+	output := SearchChatsOutput{ProjectID: project.ID.String(), SortOrder: input.SortOrder, Hits: []ChatEvidence{}, NextCursor: "", Coverage: chatEvidenceCoverage, Progress: ChatSearchProgress{SessionsExamined: 0, MessagesExamined: 0, PayloadBytes: 0, Complete: true, StopReason: "complete"}}
 	owners := map[uuid.UUID]string{}
+	sessions := map[uuid.UUID]bool{}
 	consumed := 0
 	for i, row := range rows {
 		if i == chatSearchScanLimit {
+			output.Progress.StopReason = "event_budget"
+			break
+		}
+		if !row.PayloadAvailable {
+			output.Progress.StopReason = "byte_budget"
 			break
 		}
 		consumed++
-		cursor = chatEvidenceCursor{At: row.CreatedAt.Time, Seq: row.Seq, ID: row.EvidenceID}
+		sessions[row.ChatID] = true
+		if row.EventKind == 1 {
+			output.Progress.MessagesExamined++
+		}
+		output.Progress.PayloadBytes += row.PayloadBytes
+		cursor = chatEvidenceCursor{SessionAt: row.SessionAt.Time, SessionID: row.ChatID, Kind: row.EventKind, At: row.CreatedAt.Time, Seq: row.Seq, ID: row.EvidenceID}
+		// Cheap decoded-text matching avoids running the secret scanner over every
+		// event. Public matches are always checked again after full-field redaction.
+		candidate := canonicalEvidenceText(row.Content, row.ToolCalls, row.ContentRaw)
+		if input.Query != "" && !evidenceMatches(candidate, input.Query) {
+			continue
+		}
 		text, withheld, err := s.evidenceText(ctx, row.Content, row.ToolCalls, row.ContentRaw)
 		if err != nil {
 			return zero, err
 		}
-		if input.Query != "" && !strings.Contains(strings.ToLower(text), strings.ToLower(input.Query)) {
+		if input.Query != "" && !evidenceMatches(text, input.Query) {
 			continue
 		}
 		snippet, truncated := evidenceSnippet(text, input.Query, 1200)
-		evidence := ChatEvidence{ChatID: row.ChatID.String(), OwnerUserID: row.UserID.String, MessageID: "", ToolCallID: "", Source: "", Sequence: row.Seq, At: row.CreatedAt.Time, Role: row.Role, Generation: row.Generation, Text: snippet, Truncated: truncated, Offloaded: row.Offloaded, Withheld: withheld || row.Oversized.Bool}
-		if row.Role != "session" {
+		evidence := ChatEvidence{ChatID: row.ChatID.String(), OwnerUserID: row.UserID.String, MessageID: "", ToolCallID: "", Source: "", Sequence: row.Seq, At: row.CreatedAt.Time, Role: row.Role, Generation: row.Generation, Text: snippet, Truncated: truncated, Offloaded: row.Offloaded.Bool, Withheld: withheld || row.Oversized.Bool, TextOffset: 0, NextTextOffset: nil, TextVersion: ""}
+		if row.EventKind == 1 {
 			evidence.MessageID = row.EvidenceID.String()
 		}
-		evidence.ToolCallID, err = s.redact(ctx, row.ToolCallID.String, 0)
+		evidence.ToolCallID, err = s.redact(ctx, row.ToolCallID, 0)
 		if err != nil {
 			return zero, err
 		}
-		evidence.Source, err = s.redact(ctx, row.Source.String, 0)
+		evidence.Source, err = s.redact(ctx, row.Source, 0)
 		if err != nil {
 			return zero, err
 		}
@@ -227,10 +284,19 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 		output.Hits = append(output.Hits, evidence)
 		owners[row.ChatID] = row.UserID.String
 		if len(output.Hits) == limit {
+			if consumed < len(rows) {
+				output.Progress.StopReason = "hit_limit"
+			}
 			break
 		}
 	}
-	if consumed < len(rows) {
+	output.Progress.SessionsExamined = len(sessions)
+	more := consumed < len(rows) || (len(rows) > 0 && rows[len(rows)-1].MoreSessions)
+	output.Progress.Complete = !more
+	if more {
+		if output.Progress.StopReason == "complete" {
+			output.Progress.StopReason = "session_budget"
+		}
 		value, err := json.Marshal(cursor)
 		if err != nil {
 			return zero, fmt.Errorf("encode chat search cursor: %w", err)
@@ -248,16 +314,25 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 	return output, nil
 }
 
-// ReadChatInput anchors a small context window on one captured message.
-type ReadChatInput struct {
-	ProjectID   string `json:"project_id,omitempty"`
-	ProjectSlug string `json:"project_slug,omitempty"`
-	ChatID      string `json:"chat_id"`
-	MessageID   string `json:"message_id,omitempty"`
-	ContextSize *int   `json:"context_size,omitempty"`
+func validEvidenceFilter(value string, limit int) bool {
+	return len(value) <= limit && utf8.ValidString(value) && !strings.ContainsRune(value, 0)
+}
+func evidenceMatches(text, query string) bool {
+	return strings.Contains(strings.ToLower(text), strings.ToLower(query))
 }
 
-// ReadChatOutput carries chronological evidence around the requested anchor.
+// ReadChatInput anchors a small context window on one captured message.
+type ReadChatInput struct {
+	ProjectID           string `json:"project_id,omitempty"`
+	ProjectSlug         string `json:"project_slug,omitempty"`
+	ChatID              string `json:"chat_id"`
+	MessageID           string `json:"message_id,omitempty"`
+	ContextSize         *int   `json:"context_size,omitempty"`
+	TextOffset          int    `json:"text_offset,omitempty"`
+	ExpectedTextVersion string `json:"expected_text_version,omitempty"`
+}
+
+// ReadChatOutput carries capture-sequence evidence around the requested anchor.
 type ReadChatOutput struct {
 	ChatID      string         `json:"chat_id"`
 	OwnerUserID string         `json:"owner_user_id,omitempty"`
@@ -281,7 +356,7 @@ func (s *ChatSearchService) Read(ctx context.Context, principal Principal, input
 	if input.ContextSize != nil {
 		size = *input.ContextSize
 	}
-	if chatErr != nil || size < 0 || size > 5 {
+	if chatErr != nil || size < 0 || size > 5 || input.TextOffset < 0 || input.TextOffset > 2000000 || (input.ExpectedTextVersion != "" && (input.MessageID == "" || size != 0)) || (input.TextOffset > 0 && (input.MessageID == "" || size != 0 || len(input.ExpectedTextVersion) != 64)) {
 		return zero, errChatEvidenceInvalid
 	}
 	project, err := s.authorize(ctx, principal, input.ProjectID, input.ProjectSlug)
@@ -314,8 +389,20 @@ func (s *ChatSearchService) Read(ctx context.Context, principal Principal, input
 		if err != nil {
 			return zero, err
 		}
-		snippet, truncated := evidenceSnippet(text, "", 4000)
-		evidence := ChatEvidence{ChatID: chatID.String(), OwnerUserID: session.UserID.String, MessageID: row.ID.String(), ToolCallID: "", Source: "", Sequence: row.Seq, At: row.CreatedAt.Time, Role: row.Role, Generation: row.Generation, Text: snippet, Truncated: truncated, Offloaded: row.Offloaded.Bool, Withheld: withheld || row.Oversized.Bool}
+		version := fmt.Sprintf("%x", sha256.Sum256([]byte(text)))
+		if input.ExpectedTextVersion != "" && input.ExpectedTextVersion != version {
+			return zero, errChatEvidenceInvalid
+		}
+		runes := []rune(text)
+		if input.TextOffset > len(runes) {
+			return zero, errChatEvidenceInvalid
+		}
+		snippet, truncated := evidenceSnippet(string(runes[input.TextOffset:]), "", 4000)
+		var nextOffset *int
+		if truncated {
+			nextOffset = new(input.TextOffset + utf8.RuneCountInString(snippet))
+		}
+		evidence := ChatEvidence{ChatID: chatID.String(), OwnerUserID: session.UserID.String, MessageID: row.ID.String(), ToolCallID: "", Source: "", Sequence: row.Seq, At: row.CreatedAt.Time, Role: row.Role, Generation: row.Generation, Text: snippet, Truncated: truncated, Offloaded: row.Offloaded.Bool, Withheld: withheld || row.Oversized.Bool, TextOffset: input.TextOffset, NextTextOffset: nextOffset, TextVersion: version}
 		evidence.ToolCallID, err = s.redact(ctx, row.ToolCallID.String, 0)
 		if err != nil {
 			return zero, err
@@ -361,12 +448,14 @@ func (s *ChatSearchService) evidenceText(ctx context.Context, content string, to
 			return "", false, err
 		}
 		withheld = withheld || strings.Contains(text, "[WITHHELD]")
+		text = canonicalEvidenceField(text)
 		if i > 0 {
 			text = "captured payload: " + text
 		}
 		safe = append(safe, text)
 	}
-	return strings.Join(safe, "\n"), withheld, nil
+	result := strings.Join(safe, "\n")
+	return result, withheld || strings.Contains(result, "[WITHHELD]"), nil
 }
 
 func (s *ChatSearchService) redact(ctx context.Context, text string, depth int) (string, error) {
@@ -376,8 +465,8 @@ func (s *ChatSearchService) redact(ctx context.Context, text string, depth int) 
 	if text == "" {
 		return "", nil
 	}
-	var value any
-	if json.Unmarshal([]byte(text), &value) == nil {
+	value, isJSON := decodeEvidenceJSON(text)
+	if isJSON {
 		safe, err := s.redactJSON(ctx, value, depth+1)
 		if err != nil {
 			return "", err

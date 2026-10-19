@@ -3,6 +3,8 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -141,7 +143,7 @@ func TestChatEvidenceEnforcesTranscriptGrantAndScope(t *testing.T) {
 	writeCtx := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeChatWrite, authz.WildcardResource)})
 	output, err := f.service.Search(writeCtx, f.principal, f.search("needle"))
 	require.NoError(t, err)
-	require.Len(t, output.Hits, 1)
+	require.Len(t, output.Hits, 2)
 
 	other, err := projectsrepo.New(f.db).CreateProject(ctx, projectsrepo.CreateProjectParams{OrganizationID: f.principal.OrganizationID, Name: "Other fixture project", Slug: "other-fixture-project"})
 	require.NoError(t, err)
@@ -161,8 +163,10 @@ func TestChatEvidenceEnforcesTranscriptGrantAndScope(t *testing.T) {
 	require.ErrorIs(t, err, ErrRiskReadNotFound)
 	output, err = f.service.Search(ctx, f.principal, f.search("needle"))
 	require.NoError(t, err)
-	require.Len(t, output.Hits, 1)
-	require.Equal(t, chatID.String(), output.Hits[0].ChatID)
+	require.Len(t, output.Hits, 2)
+	for _, hit := range output.Hits {
+		require.Equal(t, chatID.String(), hit.ChatID)
+	}
 }
 
 func TestChatEvidencePaginationRedactionAndExclusions(t *testing.T) {
@@ -209,7 +213,7 @@ func TestChatEvidencePaginationRedactionAndExclusions(t *testing.T) {
 		require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
 		input.Cursor = page.NextCursor
 	}
-	require.ElementsMatch(t, ids, found)
+	require.Equal(t, []string{ids[2], ids[1], ids[0]}, found)
 	// A query must still match after credential redaction. Empty pages can
 	// carry a continuation when the bounded raw candidate scan is exhausted.
 	for i := range chatSearchScanLimit + 1 {
@@ -220,6 +224,10 @@ func TestChatEvidencePaginationRedactionAndExclusions(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, page.Hits)
 	require.NotEmpty(t, page.NextCursor)
+	absent, err := f.service.Search(ctx, f.principal, f.search("definitely_absent_fixture"))
+	require.NoError(t, err)
+	require.Equal(t, page.Progress, absent.Progress)
+	require.NotEmpty(t, absent.NextCursor)
 	hidden.Cursor = page.NextCursor
 	page, err = f.service.Search(ctx, f.principal, hidden)
 	require.NoError(t, err)
@@ -275,5 +283,216 @@ func TestChatEvidenceBoundsAndSecretScanner(t *testing.T) {
 		snippet, truncated := evidenceSnippet(text, "needle", 1200)
 		require.True(t, truncated)
 		require.LessOrEqual(t, len([]rune(snippet)), 1200)
+	}
+}
+
+func TestChatEvidenceProgressiveSortAndNarrowing(t *testing.T) {
+	t.Parallel()
+	f := newChatEvidenceFixture(t)
+	ctx := f.context(t.Context())
+	chats := []string{}
+	messages := [][]string{}
+	for _, name := range []string{"first", "second"} {
+		chat := seedRecallChat(t, ctx, f.db, f.project.ID, f.principal.OrganizationID, "user_fixture_owner", name, "current metadata", uuid.NullUUID{})
+		chats = append(chats, chat.String())
+		ids := []string{}
+		// Equal timestamps require the complete sequence/ID tie-breaker.
+		for range 3 {
+			id := seedRecallMessage(t, ctx, f.db, chat, f.project.ID, recallMessageSeed{role: "tool", content: "sort_needle", at: f.base, source: "codex"})
+			ids = append(ids, id.String())
+		}
+		seedRecallMessage(t, ctx, f.db, chat, f.project.ID, recallMessageSeed{role: "tool", content: "sort_needle", at: f.base.Add(time.Hour), source: "codex"})
+		messages = append(messages, ids)
+	}
+	for _, order := range []string{chatSearchSortNewestFirst, chatSearchSortOldestFirst} {
+		input := f.search("sort_needle")
+		input.SortOrder = order
+		input.Limit = 1
+		found := []string{}
+		for range 10 {
+			page, err := f.service.Search(ctx, f.principal, input)
+			require.NoError(t, err)
+			for _, hit := range page.Hits {
+				found = append(found, hit.MessageID)
+			}
+			require.Equal(t, page.NextCursor == "", page.Progress.Complete)
+			if page.NextCursor == "" {
+				break
+			}
+			input.Cursor = page.NextCursor
+		}
+		want := []string{messages[0][0], messages[0][1], messages[0][2], messages[1][0], messages[1][1], messages[1][2]}
+		if order == chatSearchSortNewestFirst {
+			slices.Reverse(want)
+		}
+		require.Equal(t, want, found)
+	}
+	input := f.search("sort_needle")
+	input.Limit = 1
+	input.ChatIDs = []string{chats[0]}
+	input.Source = "codex"
+	first, err := f.service.Search(ctx, f.principal, input)
+	require.NoError(t, err)
+	require.Len(t, first.Hits, 1)
+	input.Cursor = first.NextCursor
+	input.SortOrder = chatSearchSortNewestFirst
+	_, err = f.service.Search(ctx, f.principal, input)
+	require.NoError(t, err)
+	input.SortOrder = chatSearchSortOldestFirst
+	_, err = f.service.Search(ctx, f.principal, input)
+	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
+	// Browse sessions by historical captured activity even when current metadata
+	// was updated later. Source narrows eligibility, not the current title text.
+	browse := f.search("")
+	browse.Source = "codex"
+	browse.ChatIDs = []string{chats[0]}
+	page, err := f.service.Search(ctx, f.principal, browse)
+	require.NoError(t, err)
+	require.Len(t, page.Hits, 1)
+	require.Equal(t, "session", page.Hits[0].Role)
+	require.True(t, page.Progress.Complete)
+	browse.Source = "unknown-fixture-source"
+	page, err = f.service.Search(ctx, f.principal, browse)
+	require.NoError(t, err)
+	require.Empty(t, page.Hits)
+}
+
+func TestChatEvidenceDecodedCommandsAndRecoverableChunks(t *testing.T) {
+	t.Parallel()
+	f := newChatEvidenceFixture(t)
+	ctx := f.context(t.Context())
+	chat := seedRecallChat(t, ctx, f.db, f.project.ID, f.principal.OrganizationID, "user_fixture_owner", "decoded", "metadata", uuid.NullUUID{})
+	safe, err := f.service.redact(ctx, `{"number":1e1000,"token":"fixture-short-credential"}`, 0)
+	require.NoError(t, err)
+	require.NotContains(t, safe, "fixture-short-credential")
+	require.Contains(t, safe, "1e1000")
+	require.Contains(t, canonicalEvidenceField(`{"id":1234567890123456789012345}`), "1234567890123456789012345")
+	command := "printf \"quoted value\"\nnext-command"
+	args, err := json.Marshal(map[string]string{"command": command, "token": "fixture-hidden-value"})
+	require.NoError(t, err)
+	calls, err := json.Marshal([]any{map[string]any{"function": map[string]any{"arguments": string(args)}}})
+	require.NoError(t, err)
+	seedRecallMessage(t, ctx, f.db, chat, f.project.ID, recallMessageSeed{role: "assistant", toolCalls: string(calls), at: f.base})
+	for _, query := range []string{"printf \"quoted value\"", "\nnext-command", `"command":"printf`} {
+		page, err := f.service.Search(ctx, f.principal, f.search(query))
+		require.NoError(t, err)
+		require.Len(t, page.Hits, 1)
+		require.NotContains(t, page.Hits[0].Text, "fixture-hidden-value")
+	}
+	long := strings.Repeat("🙂 plain evidence ", 400) + "end-of-record"
+	anchor := seedRecallMessage(t, ctx, f.db, chat, f.project.ID, recallMessageSeed{role: "tool", content: long, at: f.base.Add(-time.Minute)})
+	input := ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chat.String(), MessageID: anchor.String(), ContextSize: new(0)}
+	var text strings.Builder
+	for range 20 {
+		page, err := f.service.Read(ctx, f.principal, input)
+		require.NoError(t, err)
+		require.Len(t, page.Messages, 1)
+		hit := page.Messages[0]
+		require.Equal(t, input.TextOffset, hit.TextOffset)
+		text.WriteString(hit.Text)
+		if hit.NextTextOffset == nil {
+			break
+		}
+		require.Greater(t, *hit.NextTextOffset, input.TextOffset)
+		input.TextOffset = *hit.NextTextOffset
+		input.ExpectedTextVersion = hit.TextVersion
+	}
+	require.Equal(t, strings.TrimSpace(long), strings.TrimSpace(text.String()))
+	input.ExpectedTextVersion = strings.Repeat("0", 64)
+	_, err = f.service.Read(ctx, f.principal, input)
+	require.ErrorIs(t, err, errChatEvidenceInvalid)
+	// Read context uses capture sequence even when stored timestamps go backwards.
+	page, err := f.service.Read(ctx, f.principal, ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chat.String(), MessageID: anchor.String()})
+	require.NoError(t, err)
+	require.Len(t, page.Messages, 2)
+	require.Less(t, page.Messages[0].Sequence, page.Messages[1].Sequence)
+	require.True(t, page.Messages[0].At.After(page.Messages[1].At))
+}
+
+func TestChatEvidenceContinuesAcrossSessionAndByteBudgets(t *testing.T) {
+	t.Parallel()
+	f := newChatEvidenceFixture(t)
+	ctx := f.context(t.Context())
+	for i := range chatSearchSessionLimit + 2 {
+		chat := seedRecallChat(t, ctx, f.db, f.project.ID, f.principal.OrganizationID, "user_fixture_owner", fmt.Sprintf("batch-%d", i), "browse_needle", uuid.NullUUID{})
+		seedRecallMessage(t, ctx, f.db, chat, f.project.ID, recallMessageSeed{role: "user", content: "historical event", at: f.base})
+	}
+	browse := f.search("")
+	browse.Limit = 20
+	count := 0
+	for range 10 {
+		page, err := f.service.Search(ctx, f.principal, browse)
+		require.NoError(t, err)
+		count += len(page.Hits)
+		require.Equal(t, page.NextCursor == "", page.Progress.Complete)
+		if page.NextCursor == "" {
+			break
+		}
+		browse.Cursor = page.NextCursor
+	}
+	require.Equal(t, chatSearchSessionLimit+2, count)
+	for _, order := range []string{chatSearchSortNewestFirst, chatSearchSortOldestFirst} {
+		noMatch := f.search("no_such_fixture_text")
+		noMatch.SortOrder = order
+		first, err := f.service.Search(ctx, f.principal, noMatch)
+		require.NoError(t, err)
+		require.Empty(t, first.Hits)
+		require.NotEmpty(t, first.NextCursor)
+		require.Equal(t, "session_budget", first.Progress.StopReason)
+		require.Equal(t, chatSearchSessionLimit, first.Progress.SessionsExamined)
+		noMatch.Cursor = first.NextCursor
+		final, err := f.service.Search(ctx, f.principal, noMatch)
+		require.NoError(t, err)
+		require.Empty(t, final.Hits)
+		require.True(t, final.Progress.Complete)
+		require.Equal(t, 2, final.Progress.SessionsExamined)
+	}
+	chat := seedRecallChat(t, ctx, f.db, f.project.ID, f.principal.OrganizationID, "user_fixture_owner", "bytes", "metadata", uuid.NullUUID{})
+	for range 34 {
+		seedRecallMessage(t, ctx, f.db, chat, f.project.ID, recallMessageSeed{role: "tool", content: strings.Repeat("x", 131072), at: f.base})
+	}
+	input := f.search("absent_in_large_payloads")
+	input.ChatIDs = []string{chat.String()}
+	page, err := f.service.Search(ctx, f.principal, input)
+	require.NoError(t, err)
+	require.Empty(t, page.Hits)
+	require.NotEmpty(t, page.NextCursor)
+	require.Equal(t, "byte_budget", page.Progress.StopReason)
+	require.LessOrEqual(t, page.Progress.PayloadBytes, int64(chatSearchByteLimit))
+	input.Cursor = page.NextCursor
+	last, err := f.service.Search(ctx, f.principal, input)
+	require.NoError(t, err)
+	require.True(t, last.Progress.Complete)
+	require.Equal(t, 34, page.Progress.MessagesExamined+last.Progress.MessagesExamined)
+}
+
+func TestChatEvidenceHeaderThenMessagesAcrossPages(t *testing.T) {
+	t.Parallel()
+	f := newChatEvidenceFixture(t)
+	ctx := f.context(t.Context())
+	chat := seedRecallChat(t, ctx, f.db, f.project.ID, f.principal.OrganizationID, "user_fixture_owner", "header-pages", "shared_fixture_needle", uuid.NullUUID{})
+	older := seedRecallMessage(t, ctx, f.db, chat, f.project.ID, recallMessageSeed{role: "user", content: "shared_fixture_needle", at: f.base})
+	newer := seedRecallMessage(t, ctx, f.db, chat, f.project.ID, recallMessageSeed{role: "tool", content: "shared_fixture_needle", at: f.base.Add(time.Second)})
+	for _, order := range []string{chatSearchSortNewestFirst, chatSearchSortOldestFirst} {
+		input := f.search("shared_fixture_needle")
+		input.SortOrder = order
+		input.Limit = 1
+		ids := []string{}
+		for range 4 {
+			page, err := f.service.Search(ctx, f.principal, input)
+			require.NoError(t, err)
+			for _, hit := range page.Hits {
+				ids = append(ids, hit.MessageID)
+			}
+			if page.NextCursor == "" {
+				break
+			}
+			input.Cursor = page.NextCursor
+		}
+		want := []string{"", older.String(), newer.String()}
+		if order == chatSearchSortNewestFirst {
+			want = []string{"", newer.String(), older.String()}
+		}
+		require.Equal(t, want, ids)
 	}
 }

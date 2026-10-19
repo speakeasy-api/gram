@@ -8512,93 +8512,218 @@ func (q *Queries) RotatePlatformMCPSession(ctx context.Context, arg RotatePlatfo
 }
 
 const searchPlatformChatEvidence = `-- name: SearchPlatformChatEvidence :many
-WITH visible_chats AS (
-    SELECT c.id, c.title, c.user_id, c.updated_at
-    FROM chats c
-    JOIN projects p ON p.id = c.project_id AND p.organization_id = $5 AND p.deleted IS FALSE
-    LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id
-    WHERE c.organization_id = $5 AND c.project_id = $6
-      AND c.deleted IS FALSE
-      AND (c.user_account_id IS NULL OR ua.account_type = 'team')
-      AND ($7::text = '' OR c.user_id = $7)
-      AND ($8::uuid IS NULL OR c.id = $8)
-), candidates AS (
-    SELECT c.id AS chat_id, c.user_id, c.id AS evidence_id, 0::bigint AS seq,
-           c.updated_at AS created_at, 'session'::text AS role, 0::integer AS generation,
-           COALESCE(c.title, '')::text AS content, NULL::jsonb AS tool_calls,
-           NULL::jsonb AS content_raw, NULL::text AS tool_call_id, NULL::text AS source,
-           false AS offloaded
-    FROM visible_chats c
-    WHERE c.updated_at >= $9 AND c.updated_at < $10
-      AND strpos(lower(COALESCE(c.title, '')), lower($11::text)) > 0
-    UNION ALL
-    SELECT c.id, c.user_id, cm.id, cm.seq, cm.created_at, cm.role, cm.generation,
-           cm.content, cm.tool_calls, cm.content_raw, cm.tool_call_id, cm.source,
-           (cm.content_asset_url IS NOT NULL AND cm.content_raw IS NULL) AS offloaded
-    FROM visible_chats c
-    JOIN chat_messages cm ON cm.chat_id = c.id AND cm.project_id = $6
-    WHERE $11::text <> '' AND cm.created_at >= $9 AND cm.created_at < $10
-      AND strpos(lower(cm.content || ' ' || COALESCE(cm.tool_calls::text, '') || ' ' || COALESCE(cm.content_raw::text, '')), lower($11)) > 0
+WITH eligible AS NOT MATERIALIZED (
+ SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at
+ FROM chats c
+ JOIN projects p ON p.id=c.project_id AND p.organization_id=c.organization_id AND p.deleted IS FALSE
+ LEFT JOIN user_accounts ua ON ua.id=c.user_account_id AND ua.organization_id=c.organization_id
+ WHERE c.organization_id=$3 AND p.organization_id=$3 AND c.project_id=$4
+   AND c.deleted IS FALSE AND (c.user_account_id IS NULL OR ua.account_type='team')
+   AND ($5::text='' OR c.user_id=$5)
+   AND (COALESCE(cardinality($6::uuid[]),0)=0 OR c.id=ANY($6::uuid[]))
+   AND (
+     ($7::text='' AND c.updated_at>=$8 AND c.updated_at<$9)
+     OR EXISTS (
+       SELECT 1 FROM chat_messages probe
+       WHERE probe.chat_id=c.id AND probe.project_id=$4
+         AND probe.created_at>=$8 AND probe.created_at<$9
+         AND ($7::text='' OR probe.source=$7)
+     )
+   )
+), newest AS (
+ SELECT id, user_id, title, created_at, updated_at FROM eligible c
+ WHERE NOT $2::boolean
+   AND (NOT $10::boolean OR (c.created_at,c.id)<=($11::timestamptz,$12::uuid))
+ ORDER BY c.created_at DESC,c.id DESC LIMIT $13
+), oldest AS (
+ SELECT id, user_id, title, created_at, updated_at FROM eligible c
+ WHERE $2::boolean
+   AND (NOT $10::boolean OR (c.created_at,c.id)>=($11::timestamptz,$12::uuid))
+ ORDER BY c.created_at ASC,c.id ASC LIMIT $13
+), candidates AS MATERIALIZED (
+ SELECT id, user_id, title, created_at, updated_at FROM newest UNION ALL SELECT id, user_id, title, created_at, updated_at FROM oldest
+), chosen AS MATERIALIZED (
+ SELECT id, user_id, title, created_at, updated_at FROM candidates
+ ORDER BY CASE WHEN $2::boolean THEN created_at END ASC,
+          CASE WHEN $2::boolean THEN id END ASC,
+          CASE WHEN NOT $2::boolean THEN created_at END DESC,
+          CASE WHEN NOT $2::boolean THEN id END DESC
+ LIMIT $14
+), events AS (
+ SELECT c.id AS chat_id,c.user_id,c.created_at AS session_at,c.id AS evidence_id,
+        0::integer AS event_kind,0::bigint AS seq,c.updated_at AS created_at
+ FROM chosen c
+ WHERE NOT $10::boolean OR c.id<>$12::uuid
+ UNION ALL
+ SELECT c.id,c.user_id,c.created_at,m.id,1::integer,m.seq,m.created_at
+ FROM chosen c
+ CROSS JOIN LATERAL (
+   (SELECT m.id,m.seq,m.created_at FROM chat_messages m
+     WHERE $15::boolean AND m.chat_id=c.id AND m.project_id=$4
+       AND m.created_at>=$8 AND m.created_at<$9
+       AND ($7::text='' OR m.source=$7)
+       AND $2::boolean
+       AND (NOT $10::boolean OR c.id<>$12::uuid OR $16::integer=0
+            OR (m.created_at,m.seq,m.id)>($17::timestamptz,$18::bigint,$19::uuid))
+     ORDER BY m.created_at ASC,m.seq ASC,m.id ASC LIMIT $20
+   ) UNION ALL (
+     SELECT m.id,m.seq,m.created_at FROM chat_messages m
+     WHERE $15::boolean AND m.chat_id=c.id AND m.project_id=$4
+       AND m.created_at>=$8 AND m.created_at<$9
+       AND ($7::text='' OR m.source=$7)
+       AND NOT $2::boolean
+       AND (NOT $10::boolean OR c.id<>$12::uuid OR $16::integer=0
+            OR (m.created_at,m.seq,m.id)<($17::timestamptz,$18::bigint,$19::uuid))
+     ORDER BY m.created_at DESC,m.seq DESC,m.id DESC LIMIT $20
+   )
+ ) m
+), ids AS MATERIALIZED (
+ SELECT chat_id, user_id, session_at, evidence_id, event_kind, seq, created_at FROM events
+ ORDER BY CASE WHEN $2::boolean THEN session_at END ASC,
+          CASE WHEN $2::boolean THEN chat_id END ASC,
+          CASE WHEN NOT $2::boolean THEN session_at END DESC,
+          CASE WHEN NOT $2::boolean THEN chat_id END DESC,
+          event_kind ASC,
+          CASE WHEN $2::boolean THEN created_at END ASC,
+          CASE WHEN $2::boolean THEN seq END ASC,
+          CASE WHEN $2::boolean THEN evidence_id END ASC,
+          CASE WHEN NOT $2::boolean THEN created_at END DESC,
+          CASE WHEN NOT $2::boolean THEN seq END DESC,
+          CASE WHEN NOT $2::boolean THEN evidence_id END DESC
+ LIMIT $20
+), payloads AS MATERIALIZED (
+ SELECT i.chat_id, i.user_id, i.session_at, i.evidence_id, i.event_kind, i.seq, i.created_at,
+   CASE WHEN i.event_kind=0 THEN 'session' ELSE cm.role END::text AS role,
+   COALESCE(cm.generation,0)::integer AS generation,
+   CASE WHEN i.event_kind=0 THEN COALESCE(c.title,'') ELSE cm.content END::text AS raw_content,
+   cm.tool_calls,cm.content_raw,cm.tool_call_id,cm.source,
+   (cm.content_asset_url IS NOT NULL AND cm.content_raw IS NULL) AS offloaded
+ FROM ids i JOIN chosen c ON c.id=i.chat_id
+ LEFT JOIN chat_messages cm ON i.event_kind=1 AND cm.id=i.evidence_id AND cm.chat_id=i.chat_id AND cm.project_id=$4
+), capped AS MATERIALIZED (
+ SELECT chat_id,user_id,session_at,evidence_id,event_kind,seq,created_at,role,generation,
+   CASE WHEN octet_length(raw_content)<=131072 THEN raw_content ELSE '' END::text AS content,
+   CASE WHEN octet_length(tool_calls::text)<=131072 THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
+   CASE WHEN octet_length(content_raw::text)<=131072 THEN content_raw ELSE NULL END::jsonb AS content_raw,
+   CASE WHEN octet_length(tool_call_id)<=4096 THEN tool_call_id ELSE NULL END::text AS tool_call_id,
+   CASE WHEN octet_length(source)<=4096 THEN source ELSE NULL END::text AS source,
+   offloaded,
+   (octet_length(raw_content)>131072 OR COALESCE(octet_length(tool_calls::text),0)>131072 OR COALESCE(octet_length(content_raw::text),0)>131072 OR COALESCE(octet_length(tool_call_id),0)>4096 OR COALESCE(octet_length(source),0)>4096) AS oversized
+ FROM payloads
+), sized AS (
+ SELECT chat_id, user_id, session_at, evidence_id, event_kind, seq, created_at, role, generation, content, tool_calls, content_raw, tool_call_id, source, offloaded, oversized, (octet_length(content)+COALESCE(octet_length(tool_calls::text),0)+COALESCE(octet_length(content_raw::text),0)+COALESCE(octet_length(tool_call_id),0)+COALESCE(octet_length(source),0))::bigint AS payload_bytes
+ FROM capped
+), budgeted AS (
+ SELECT chat_id, user_id, session_at, evidence_id, event_kind, seq, created_at, role, generation, content, tool_calls, content_raw, tool_call_id, source, offloaded, oversized, payload_bytes, SUM(payload_bytes) OVER (
+ ORDER BY CASE WHEN $2::boolean THEN session_at END ASC,
+          CASE WHEN $2::boolean THEN chat_id END ASC,
+          CASE WHEN NOT $2::boolean THEN session_at END DESC,
+          CASE WHEN NOT $2::boolean THEN chat_id END DESC,
+          event_kind ASC,
+          CASE WHEN $2::boolean THEN created_at END ASC,
+          CASE WHEN $2::boolean THEN seq END ASC,
+          CASE WHEN $2::boolean THEN evidence_id END ASC,
+          CASE WHEN NOT $2::boolean THEN created_at END DESC,
+          CASE WHEN NOT $2::boolean THEN seq END DESC,
+          CASE WHEN NOT $2::boolean THEN evidence_id END DESC
+ ROWS UNBOUNDED PRECEDING) AS cumulative_bytes
+ FROM sized
 )
-SELECT chat_id, user_id, evidence_id, seq, created_at, role, generation,
-       CASE WHEN octet_length(content) <= 131072 THEN content ELSE '' END::text AS content,
-       CASE WHEN octet_length(tool_calls::text) <= 131072 THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
-       CASE WHEN octet_length(content_raw::text) <= 131072 THEN content_raw ELSE NULL END::jsonb AS content_raw,
-       tool_call_id, source, offloaded,
-       (octet_length(content) > 131072 OR COALESCE(octet_length(tool_calls::text), 0) > 131072 OR COALESCE(octet_length(content_raw::text), 0) > 131072) AS oversized
-FROM candidates
-WHERE (candidates.created_at, candidates.seq, candidates.evidence_id) < ($1::timestamptz, $2::bigint, $3::uuid)
-ORDER BY created_at DESC, seq DESC, evidence_id DESC
-LIMIT $4
+SELECT chat_id,user_id,session_at,evidence_id,event_kind,seq,created_at,role,generation,
+       CASE WHEN cumulative_bytes<=$1::bigint THEN content ELSE '' END::text AS content,
+       CASE WHEN cumulative_bytes<=$1::bigint THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
+       CASE WHEN cumulative_bytes<=$1::bigint THEN content_raw ELSE NULL END::jsonb AS content_raw,
+       CASE WHEN cumulative_bytes<=$1::bigint THEN COALESCE(tool_call_id,'') ELSE '' END::text AS tool_call_id,
+       CASE WHEN cumulative_bytes<=$1::bigint THEN COALESCE(source,'') ELSE '' END::text AS source,
+       offloaded,oversized,payload_bytes,
+       (cumulative_bytes<=$1::bigint)::boolean AS payload_available,
+       ((SELECT count(*) FROM candidates)>(SELECT count(*) FROM chosen))::boolean AS more_sessions
+FROM budgeted
+WHERE cumulative_bytes-payload_bytes<=$1::bigint
+ORDER BY CASE WHEN $2::boolean THEN session_at END ASC,
+          CASE WHEN $2::boolean THEN chat_id END ASC,
+          CASE WHEN NOT $2::boolean THEN session_at END DESC,
+          CASE WHEN NOT $2::boolean THEN chat_id END DESC,
+          event_kind ASC,
+          CASE WHEN $2::boolean THEN created_at END ASC,
+          CASE WHEN $2::boolean THEN seq END ASC,
+          CASE WHEN $2::boolean THEN evidence_id END ASC,
+          CASE WHEN NOT $2::boolean THEN created_at END DESC,
+          CASE WHEN NOT $2::boolean THEN seq END DESC,
+          CASE WHEN NOT $2::boolean THEN evidence_id END DESC
 `
 
 type SearchPlatformChatEvidenceParams struct {
-	BeforeTime     pgtype.Timestamptz
-	BeforeSeq      int64
-	BeforeID       uuid.UUID
-	RowLimit       int32
-	OrganizationID string
-	ProjectID      uuid.UUID
-	OwnerUserID    string
-	ChatID         uuid.NullUUID
-	FromTime       pgtype.Timestamptz
-	ToTime         pgtype.Timestamptz
-	Query          string
+	ByteBudget      int64
+	OldestFirst     bool
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	OwnerUserID     string
+	ChatIds         []uuid.UUID
+	Source          string
+	FromTime        pgtype.Timestamptz
+	ToTime          pgtype.Timestamptz
+	HasCursor       bool
+	CursorSessionAt pgtype.Timestamptz
+	CursorSessionID uuid.UUID
+	SessionRowLimit int32
+	SessionLimit    int32
+	IncludeMessages bool
+	CursorKind      int32
+	CursorMessageAt pgtype.Timestamptz
+	CursorSeq       int64
+	CursorID        uuid.UUID
+	RowLimit        int32
 }
 
 type SearchPlatformChatEvidenceRow struct {
-	ChatID     uuid.UUID
-	UserID     pgtype.Text
-	EvidenceID uuid.UUID
-	Seq        int64
-	CreatedAt  pgtype.Timestamptz
-	Role       string
-	Generation int32
-	Content    string
-	ToolCalls  []byte
-	ContentRaw []byte
-	ToolCallID pgtype.Text
-	Source     pgtype.Text
-	Offloaded  bool
-	Oversized  pgtype.Bool
+	ChatID           uuid.UUID
+	UserID           pgtype.Text
+	SessionAt        pgtype.Timestamptz
+	EvidenceID       uuid.UUID
+	EventKind        int32
+	Seq              int64
+	CreatedAt        pgtype.Timestamptz
+	Role             string
+	Generation       int32
+	Content          string
+	ToolCalls        []byte
+	ContentRaw       []byte
+	ToolCallID       string
+	Source           string
+	Offloaded        pgtype.Bool
+	Oversized        pgtype.Bool
+	PayloadBytes     int64
+	PayloadAvailable bool
+	MoreSessions     bool
 }
 
-// Session titles and captured messages are separate evidence hits. No tokenized
-// matching: identifiers, command names, and punctuation are literal substrings.
-// Raw candidate matches are checked again AFTER redaction by the caller.
+// Traverse indexed sessions, then their captured messages. Query text is never
+// used to choose a scan boundary: hidden credential matches cannot affect a
+// continuation. The caller matches canonical, redacted text after this read.
+// Include one metadata-only overflow sentinel; the caller does not consume it.
 func (q *Queries) SearchPlatformChatEvidence(ctx context.Context, arg SearchPlatformChatEvidenceParams) ([]SearchPlatformChatEvidenceRow, error) {
 	rows, err := q.db.Query(ctx, searchPlatformChatEvidence,
-		arg.BeforeTime,
-		arg.BeforeSeq,
-		arg.BeforeID,
-		arg.RowLimit,
+		arg.ByteBudget,
+		arg.OldestFirst,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.OwnerUserID,
-		arg.ChatID,
+		arg.ChatIds,
+		arg.Source,
 		arg.FromTime,
 		arg.ToTime,
-		arg.Query,
+		arg.HasCursor,
+		arg.CursorSessionAt,
+		arg.CursorSessionID,
+		arg.SessionRowLimit,
+		arg.SessionLimit,
+		arg.IncludeMessages,
+		arg.CursorKind,
+		arg.CursorMessageAt,
+		arg.CursorSeq,
+		arg.CursorID,
+		arg.RowLimit,
 	)
 	if err != nil {
 		return nil, err
@@ -8610,7 +8735,9 @@ func (q *Queries) SearchPlatformChatEvidence(ctx context.Context, arg SearchPlat
 		if err := rows.Scan(
 			&i.ChatID,
 			&i.UserID,
+			&i.SessionAt,
 			&i.EvidenceID,
+			&i.EventKind,
 			&i.Seq,
 			&i.CreatedAt,
 			&i.Role,
@@ -8622,6 +8749,9 @@ func (q *Queries) SearchPlatformChatEvidence(ctx context.Context, arg SearchPlat
 			&i.Source,
 			&i.Offloaded,
 			&i.Oversized,
+			&i.PayloadBytes,
+			&i.PayloadAvailable,
+			&i.MoreSessions,
 		); err != nil {
 			return nil, err
 		}
