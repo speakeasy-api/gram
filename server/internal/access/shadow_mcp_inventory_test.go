@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -1204,6 +1205,20 @@ func insertShadowMCPInventoryTelemetry(t *testing.T, ctx context.Context, ti *te
 		GramChatID:           nil,
 	})
 	require.NoError(t, err)
+
+	// Usage reads trace_summaries, which telemetry_logs feeds through a
+	// materialized view. Under full-suite load a flush can return before the
+	// row is queryable, so poll until the trace shows up.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		if !assert.NoError(c, ti.chConn.Exec(ctx, "SYSTEM FLUSH ASYNC INSERT QUEUE")) {
+			return
+		}
+
+		var count uint64
+		err := ti.chConn.QueryRow(ctx, "SELECT count() FROM trace_summaries WHERE gram_project_id = ? AND trace_id = ?", input.ProjectID, traceID).Scan(&count)
+		assert.NoError(c, err)
+		assert.Equal(c, uint64(1), count)
+	}, 10*time.Second, 50*time.Millisecond)
 }
 
 func seedShadowMCPInventoryServer(t *testing.T, ctx context.Context, ti *testInstance, projectID string, serverName string) {
