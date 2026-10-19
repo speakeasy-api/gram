@@ -219,11 +219,10 @@ func TestAttachToDefaultPlugin_SuffixedNameAlsoTaken_ProbesLadder(t *testing.T) 
 	idStr := second.id.String()
 	suffix := idStr[len(idStr)-4:]
 
-	squatter := createTestToolset(t, ctx, ti.conn, "ladder-squatter")
+	squatter := createTestMcpServer(t, ctx, ti.conn, "Ladder Squatter", mcpservers.VisibilityPublic)
 	_, err = queries.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
 		PluginID:    result.PluginID,
-		ToolsetID:   uuid.NullUUID{UUID: squatter.ID, Valid: true},
-		McpServerID: uuid.NullUUID{},
+		McpServerID: uuid.NullUUID{UUID: squatter.id, Valid: true},
 		DisplayName: fmt.Sprintf("Ladder Test Server (%s)", suffix),
 		Policy:      "required",
 		SortOrder:   0,

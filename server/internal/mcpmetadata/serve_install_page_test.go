@@ -3,6 +3,7 @@ package mcpmetadata_test
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -297,6 +298,8 @@ func TestServeInstallPage_Instructions(t *testing.T) {
 		ProjectID:   toolset.ProjectID,
 	})
 	require.NoError(t, err)
+	toolset.McpIsPublic = true
+	createCanonicalWrapper(t, ctx, testInstance, toolset)
 
 	// Set metadata with instructions
 	instructions := "Test Hub - Search and analyze test data\n\n## Key Capabilities\n\n- Search test records\n- Filter by status\n\n## Usage Patterns\n\nUse search before filtering"
@@ -1373,9 +1376,13 @@ func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T
 	require.NoError(t, err)
 
 	mcpRepo := mcpmetadata_repo.New(ti.conn)
-	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetadata_repo.UpsertMetadataParams{
-		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		ProjectID: projectID,
+	_, err = testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
+		ID: toolset.ID, ProjectID: projectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: mcpservers.VisibilityPublic,
+	})
+	require.NoError(t, err)
+	metadata, err := mcpRepo.UpsertMetadataByMcpServerID(ctx, mcpmetadata_repo.UpsertMetadataByMcpServerIDParams{
+		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID:   projectID,
 	})
 	require.NoError(t, err)
 
@@ -1791,6 +1798,8 @@ func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) 
 		ProjectID:   toolset.ProjectID,
 	})
 	require.NoError(t, err)
+	toolset.McpIsPublic = true
+	createCanonicalWrapper(t, ctx, ti, toolset)
 
 	endpointSlug := "prefer-endpoint-" + uuid.NewString()[:8]
 	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
@@ -1799,7 +1808,7 @@ func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) 
 		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 	})
 
-	// Write toolset-keyed metadata (legacy path).
+	// Write the toolset's metadata, keyed by its canonical wrapper.
 	toolsetDocs := "https://legacy-toolset-docs.example.com"
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
 		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
@@ -1807,7 +1816,7 @@ func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	// Write mcp_server-keyed metadata (new path).
+	// Write the fresh-id server's own metadata.
 	serverDocs := "https://new-mcp-server-docs.example.com"
 	serverID := server.ID.String()
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
@@ -1827,13 +1836,12 @@ func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) 
 
 	body := rr.Body.String()
 	assert.Contains(t, body, serverDocs, "mcp_server-keyed metadata should win")
-	assert.NotContains(t, body, toolsetDocs, "toolset-keyed metadata should not leak when mcp_server-keyed exists")
+	assert.NotContains(t, body, toolsetDocs, "the toolset's metadata should not leak when the server has its own")
 }
 
-// TestServeInstallPage_McpServer_FallsBackToToolsetMetadata covers the
-// migration bridge for AGE-1902: a toolset-backed mcp_server with no
-// mcp_server-keyed metadata row must still render branding from the
-// existing toolset-keyed metadata.
+// TestServeInstallPage_McpServer_FallsBackToToolsetMetadata covers AGE-1902:
+// a toolset-backed mcp_server with no metadata row of its own renders
+// branding from its toolset's metadata.
 func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -1859,6 +1867,8 @@ func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 		ProjectID:   toolset.ProjectID,
 	})
 	require.NoError(t, err)
+	toolset.McpIsPublic = true
+	createCanonicalWrapper(t, ctx, ti, toolset)
 
 	endpointSlug := "fallback-endpoint-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
@@ -1867,7 +1877,7 @@ func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 	})
 
-	// Only toolset-keyed metadata exists.
+	// Only the toolset's metadata exists.
 	legacyDocs := "https://legacy-toolset.example.com"
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
 		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),

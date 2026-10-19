@@ -193,7 +193,8 @@ WHERE id = @id
 -- inserting: a duplicate insert can trip the (plugin_id, display_name)
 -- unique index rather than a backend one, and either way the failed
 -- statement aborts the caller's surrounding transaction. A toolset and its
--- canonical wrapper share one id, so either key finds the other's row.
+-- canonical wrapper share one id, so either key finds the other's row; a
+-- non-canonical server holding a toolset's id does not.
 SELECT * FROM plugin_servers
 WHERE plugin_id = @plugin_id
   AND EXISTS (
@@ -202,8 +203,14 @@ WHERE plugin_id = @plugin_id
       AND plugins.project_id = @project_id
       AND plugins.organization_id = @organization_id
   )
-  AND (toolset_id = COALESCE(sqlc.narg('toolset_id')::uuid, sqlc.narg('mcp_server_id')::uuid)
-    OR mcp_server_id = COALESCE(sqlc.narg('mcp_server_id')::uuid, sqlc.narg('toolset_id')::uuid))
+  AND (toolset_id = sqlc.narg('toolset_id')::uuid
+    OR mcp_server_id = sqlc.narg('mcp_server_id')::uuid
+    OR ((toolset_id = sqlc.narg('mcp_server_id')::uuid OR mcp_server_id = sqlc.narg('toolset_id')::uuid)
+      AND EXISTS (
+        SELECT 1 FROM mcp_servers c
+        WHERE c.id = COALESCE(plugin_servers.toolset_id, plugin_servers.mcp_server_id)
+          AND c.toolset_id = c.id AND c.project_id = @project_id
+      )))
   AND deleted IS FALSE
 ORDER BY created_at, id
 LIMIT 1;
@@ -275,13 +282,12 @@ SELECT EXISTS (
 )::bool;
 
 -- name: AddPluginServer :one
--- Legacy insert for toolset and MCP server backends only. Gateway attachments
--- must use AddGatewayPluginServer, which supplies the project scope explicitly.
-INSERT INTO plugin_servers (plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order)
+-- MCP server backends only. Gateway attachments must use
+-- AddGatewayPluginServer, which supplies the project scope explicitly.
+INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name, policy, sort_order)
 VALUES (
   @plugin_id,
-  sqlc.narg('toolset_id'),
-  sqlc.narg('mcp_server_id'),
+  @mcp_server_id,
   @display_name,
   @policy,
   @sort_order
@@ -289,11 +295,11 @@ VALUES (
 RETURNING *;
 
 -- name: HasCanonicalWrapper :one
--- A hosted entry is stored under its enabled canonical wrapper (same id); a drifted, disabled one keeps the toolset key.
+-- A hosted entry is stored under its toolset's live canonical wrapper, which shares the toolset id.
 SELECT EXISTS (
   SELECT 1 FROM mcp_servers
   WHERE id = @toolset_id AND toolset_id = @toolset_id AND project_id = @project_id
-    AND deleted IS FALSE AND visibility <> 'disabled'
+    AND deleted IS FALSE
 )::bool;
 
 -- name: ListCanonicalWrapperIDs :many
@@ -388,7 +394,9 @@ FROM plugins p
 WHERE ps.plugin_id = p.id
   AND p.project_id = @project_id
   AND p.deleted IS FALSE
-  AND (ps.mcp_server_id = @mcp_server_id OR ps.toolset_id = @mcp_server_id)
+  AND (ps.mcp_server_id = @mcp_server_id OR (ps.toolset_id = @mcp_server_id AND EXISTS (
+    SELECT 1 FROM mcp_servers c WHERE c.id = @mcp_server_id AND c.toolset_id = c.id AND c.project_id = p.project_id
+  )))
   AND ps.display_name = @old_display_name
   AND ps.deleted IS FALSE
   AND NOT EXISTS (
@@ -536,7 +544,8 @@ ORDER BY pa.principal_urn;
 -- name: ListPluginEnvironmentConfigsForProject :many
 -- Batch companion to ListPluginsWithMcpServersForProject. A hosted entry's
 -- environment comes from its toolset, keyed by toolset id or by the canonical
--- wrapper id (the same uuid), with metadata keyed either way.
+-- wrapper id (the same uuid), with metadata keyed either way. A server-keyed
+-- row counts only when that server is the toolset's canonical wrapper.
 SELECT DISTINCT
   t.id AS toolset_id,
   ec.variable_name,
@@ -544,9 +553,10 @@ SELECT DISTINCT
 FROM plugin_servers ps
 JOIN plugins p ON p.id = ps.plugin_id AND p.deleted IS FALSE
 JOIN toolsets t ON t.id = COALESCE(ps.toolset_id, ps.mcp_server_id) AND t.project_id = p.project_id AND t.deleted IS FALSE
+  AND (ps.toolset_id IS NOT NULL OR EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = ps.mcp_server_id AND c.toolset_id = c.id AND c.project_id = p.project_id))
 JOIN LATERAL (
   SELECT m.id FROM mcp_metadata m
-  WHERE (m.toolset_id = t.id OR m.mcp_server_id = t.id) AND m.project_id = p.project_id
+  WHERE (m.toolset_id = t.id OR (m.mcp_server_id = t.id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = t.id AND c.toolset_id = c.id AND c.project_id = p.project_id))) AND m.project_id = p.project_id
   ORDER BY (m.toolset_id IS NOT NULL) DESC, m.updated_at DESC
   LIMIT 1
 ) md ON TRUE
@@ -730,7 +740,7 @@ WITH intended AS (
         SELECT 1 FROM mcp_environment_configs ec
         WHERE ec.project_id = p.project_id AND ec.provided_by = 'user' AND ec.mcp_metadata_id = (
           SELECT m.id FROM mcp_metadata m
-          WHERE (m.toolset_id = lt.id OR m.mcp_server_id = lt.id) AND m.project_id = p.project_id
+          WHERE (m.toolset_id = lt.id OR (m.mcp_server_id = lt.id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = lt.id AND c.toolset_id = c.id AND c.project_id = p.project_id))) AND m.project_id = p.project_id
           ORDER BY (m.toolset_id IS NOT NULL) DESC, m.updated_at DESC
           LIMIT 1
         )
@@ -759,7 +769,7 @@ WITH intended AS (
         SELECT 1 FROM mcp_environment_configs ec
         WHERE ec.project_id = p.project_id AND ec.provided_by = 'user' AND ec.mcp_metadata_id = (
           SELECT m.id FROM mcp_metadata m
-          WHERE (m.toolset_id = s.toolset_id OR m.mcp_server_id = s.toolset_id) AND m.project_id = p.project_id
+          WHERE (m.toolset_id = s.toolset_id OR (m.mcp_server_id = s.toolset_id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = s.toolset_id AND c.toolset_id = c.id AND c.project_id = p.project_id))) AND m.project_id = p.project_id
           ORDER BY (m.toolset_id IS NOT NULL) DESC, m.updated_at DESC
           LIMIT 1
         )
@@ -774,7 +784,7 @@ WITH intended AS (
 		SELECT 1
 		FROM mcp_metadata md
 		JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
-		WHERE (md.toolset_id = mts.id OR md.mcp_server_id = mts.id) AND md.project_id = p.project_id AND ec.provided_by = 'user'
+		WHERE (md.toolset_id = mts.id OR (md.mcp_server_id = mts.id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = mts.id AND c.toolset_id = c.id AND c.project_id = p.project_id))) AND md.project_id = p.project_id AND ec.provided_by = 'user'
 	  ) THEN 'toolset_backing_requires_user_header'
       WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.unproxied_mcp_server_id IS NOT NULL AND s.network_access_mode IN ('dual', 'private_only') THEN 'unproxied_private_network_unsupported'
       WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.unproxied_mcp_server_id IS NOT NULL AND NOT EXISTS (
@@ -1300,10 +1310,8 @@ LEFT JOIN LATERAL (
 WHERE p.organization_id = @organization_id AND p.id = @project_id
   AND p.deleted IS FALSE AND m.deleted IS FALSE
 UNION ALL
-SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id,
-  (t.mcp_enabled AND COALESCE(t.mcp_slug, '') <> '' AND NOT EXISTS (
-    SELECT 1 FROM mcp_servers m WHERE m.toolset_id = t.id AND m.project_id = p.id AND m.deleted IS FALSE
-  ))::boolean, latest.tool_urns
+-- A toolset with no MCP server is a removal candidate only; it is never delivered.
+SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id, FALSE::boolean, latest.tool_urns
 FROM toolsets t JOIN projects p ON p.id = t.project_id
 LEFT JOIN LATERAL (
   SELECT v.tool_urns FROM toolset_versions v

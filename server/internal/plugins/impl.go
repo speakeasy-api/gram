@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
@@ -836,8 +837,6 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		}
 	}
 
-	// Resolved before the transaction so flag latency never holds its locks.
-	serverKey := s.hostedServerKeyWrites(ctx, ac)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -886,20 +885,24 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	}
 
 	if !backend.metaMcpServerID.Valid {
+		legacyToolsetID := backend.toolsetID
+		backend.mcpServerID, err = hostedEntryKey(ctx, s.repo.WithTx(tx), *ac.ProjectID, backend.toolsetID, backend.mcpServerID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve plugin server key").LogError(ctx, s.logger)
+		}
+		if !backend.mcpServerID.Valid {
+			return nil, oops.E(oops.CodeBadRequest, nil, hostedmcp.NoServerMessage).LogWarn(ctx, s.logger)
+		}
+		backend.toolsetID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		exists, err := s.repo.WithTx(tx).HasRoleDeliveryMembership(ctx, repo.HasRoleDeliveryMembershipParams{
 			PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
-			ToolsetID: backend.toolsetID, McpServerID: backend.mcpServerID,
-			LegacyToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PreserveRemoval: false,
+			ToolsetID: legacyToolsetID, McpServerID: backend.mcpServerID, LegacyToolsetID: legacyToolsetID, PreserveRemoval: false,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check plugin server identity").LogError(ctx, s.logger)
 		}
 		if exists {
 			return nil, oops.E(oops.CodeConflict, nil, "this server has already been added to the plugin")
-		}
-		backend.toolsetID, backend.mcpServerID, err = hostedEntryKey(ctx, s.repo.WithTx(tx), *ac.ProjectID, backend.toolsetID, backend.mcpServerID, serverKey)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "resolve plugin server key").LogError(ctx, s.logger)
 		}
 	}
 
@@ -916,7 +919,6 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	} else {
 		row, err = s.repo.WithTx(tx).AddPluginServer(ctx, repo.AddPluginServerParams{
 			PluginID:    pluginID,
-			ToolsetID:   backend.toolsetID,
 			McpServerID: backend.mcpServerID,
 			DisplayName: displayName,
 			Policy:      payload.Policy,
@@ -927,7 +929,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			switch pgErr.ConstraintName {
-			case "plugin_servers_plugin_id_toolset_id_key", "plugin_servers_plugin_id_mcp_server_id_key", "plugin_servers_plugin_id_meta_mcp_server_id_key":
+			case "plugin_servers_plugin_id_mcp_server_id_key", "plugin_servers_plugin_id_meta_mcp_server_id_key":
 				return nil, oops.E(oops.CodeConflict, nil, "this server has already been added to the plugin")
 			default:
 				return nil, oops.E(oops.CodeConflict, nil, "a server with this display name already exists in the plugin")
@@ -3598,15 +3600,6 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, wrappers map[uuid.U
 	}
 
 	return result
-}
-
-// hostedServerKeyWrites reports whether this organization's hosted writes use the canonical server key; errors keep the toolset key.
-func (s *Service) hostedServerKeyWrites(ctx context.Context, ac *contextvalues.AuthContext) bool {
-	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.features, ac.ActiveOrganizationID, ac.OrganizationSlug)
-	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
-	}
-	return enabled
 }
 
 // canonicalWrapperIDs returns which of the servers' hosted backends are a live canonical wrapper in the project.
