@@ -18,9 +18,9 @@ import {
 } from "./useEmaServices";
 
 /**
- * The services identity chaining reaches, one row each: which identity
- * providers vouch to it, whether it has accepted them, and how many servers
- * go through it. The place an admin does the per-service trust step once.
+ * The services identity chaining connects to, one row each: which identity
+ * providers are enabled for it, whether each has worked, and how many servers
+ * connect to it. The place an admin does the per-service trust step once.
  */
 export function EmaServices(): JSX.Element {
   const services = useEmaServices();
@@ -32,9 +32,9 @@ export function EmaServices(): JSX.Element {
       <div className="flex flex-col gap-1">
         <Heading variant="h3">Connected services</Heading>
         <Text muted small>
-          Each service your MCP servers reach has to trust an identity provider
-          above before Enterprise Managed Authorization works. Do that once per
-          service here. {DEFAULT_ACCEPTS_RULE}
+          Each service your MCP servers connect to must trust one of the
+          identity providers above before Enterprise Managed Authorization
+          works. Set that up once per service. {DEFAULT_ACCEPTS_RULE}
         </Text>
       </div>
       {services.isPending ? (
@@ -55,7 +55,7 @@ export function EmaServices(): JSX.Element {
         <InlineEmptyState
           icon="link"
           heading="No services yet"
-          description="Turn on Enterprise Managed Authorization on an MCP server and the service behind it shows up here."
+          description="Turn on Enterprise Managed Authorization for an MCP server. The service behind it then shows up here."
         />
       ) : (
         <ServicesTable rows={services.rows} />
@@ -85,7 +85,7 @@ function ServicesTable({ rows }: { rows: ServiceRow[] }): JSX.Element {
     },
     {
       key: "providers",
-      header: "Trusts",
+      header: "Identity providers",
       width: "1fr",
       render: (row) => (
         <ul
@@ -102,7 +102,7 @@ function ServicesTable({ rows }: { rows: ServiceRow[] }): JSX.Element {
     },
     {
       key: "servers",
-      header: "Reached by",
+      header: "Servers",
       width: "190px",
       render: (row) => <Text small>{serversSummary(row)}</Text>,
     },

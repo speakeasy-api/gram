@@ -56,10 +56,9 @@ function Shell({ children }: { children: ReactNode }): JSX.Element {
           Enterprise Managed Authorization
         </SettingsSection.Title>
         <SettingsSection.Description>
-          Gets people into the service behind this server with a sign-in they
-          already have, from your identity provider or Speakeasy, so they
-          don&apos;t connect it separately. Only works with services that
-          support Enterprise Managed Authorization for MCP.
+          Signs people in to the service behind this server automatically, using
+          their existing login. The service must support Enterprise Managed
+          Authorization for MCP.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>{children}</SettingsSection.Panel>
@@ -158,7 +157,14 @@ export function IdentityChainingSection({
     userSessionIssuer.projectId !== "" &&
     !!chainingVouchers(userSessionIssuer, rollouts);
 
-  const applies = !!userSessionIssuerId && remoteMcpServerId !== "";
+  // With neither rollout on nothing can vouch, so stay off the page entirely.
+  const rolloutsOff =
+    externalFlag.status !== "loading" &&
+    emaProvidersFlag.status !== "loading" &&
+    !rollouts.externalRollout &&
+    !speakeasyRollout;
+  const applies =
+    !!userSessionIssuerId && remoteMcpServerId !== "" && !rolloutsOff;
   const failed =
     issuerQuery.isError ||
     sourceQuery.isError ||

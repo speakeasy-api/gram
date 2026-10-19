@@ -162,9 +162,7 @@ describe("IdentityChainingSection", () => {
     expect(
       screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
     ).toBeTruthy();
-    expect(
-      screen.getByText(/from your identity provider or Speakeasy/),
-    ).toBeTruthy();
+    expect(screen.getByText(/using their existing login/)).toBeTruthy();
     expect(
       JSON.parse(screen.getByTestId("identity-chaining").textContent!),
     ).toEqual({
@@ -325,6 +323,32 @@ describe("IdentityChainingSection", () => {
         name: "Enterprise Managed Authorization",
       }),
     ).toBe(null);
+  });
+
+  it.each([
+    [
+      "loading",
+      () => {
+        state.clientsLoading = true;
+      },
+    ],
+    [
+      "failing",
+      () => {
+        state.url = undefined;
+        state.sourceError = true;
+      },
+    ],
+  ])("stays off the page while %s with both rollouts off", (_name, arrange) => {
+    state.flags = { oktaConnections: false, emaProviders: false };
+    arrange();
+    render(<IdentityChainingSection mcpServer={server} />);
+    expect(
+      screen.queryByRole("heading", {
+        name: "Enterprise Managed Authorization",
+      }),
+    ).toBe(null);
+    expect(screen.queryByRole("status")).toBe(null);
   });
 
   it.each([

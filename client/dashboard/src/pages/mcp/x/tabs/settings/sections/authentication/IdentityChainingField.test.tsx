@@ -375,9 +375,7 @@ describe("identity chaining client for this service", () => {
         resource="https://example.com/mcp"
       />,
     );
-    expect(
-      screen.getByText(/still on through client wiki-client/),
-    ).toBeTruthy();
+    expect(screen.getByText(/still on for client wiki-client/)).toBeTruthy();
     expect(
       screen.getByText(
         /Link a client registered with this server’s authorization server/,
@@ -450,7 +448,7 @@ describe("identity chaining client for this service", () => {
     );
     expect(screen.queryByText(/still on through client/)).toBeNull();
     expect(
-      screen.getByText(/Couldn’t check which authorization server/),
+      screen.getByText(/couldn’t check their authorization server/),
     ).toBeTruthy();
   });
 
@@ -459,7 +457,7 @@ describe("identity chaining client for this service", () => {
     issuerNames.isError = true;
     render(field());
     expect(
-      screen.queryByText(/Couldn’t check which authorization server/),
+      screen.queryByText(/couldn’t check their authorization server/),
     ).toBeNull();
   });
 });
@@ -475,7 +473,7 @@ describe("identity chaining bound client", () => {
   it("says whether chaining is on, next to the action that changes it", () => {
     read.data = bound("second");
     const { rerender } = render(field());
-    expect(screen.getByText("On, not proven yet")).toBeTruthy();
+    expect(screen.getByText("On, waiting for a first connection")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
     read.data = unlinked;
     rerender(field());
@@ -555,7 +553,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       .map((item) => ({
         name: within(item).getAllByText(/./)[0]?.textContent,
         accepted: item.textContent?.match(
-          /Last worked [^I]*|Not accepted yet/,
+          /Last worked [^I]*|Hasn’t worked yet/,
         )?.[0],
         url: item.querySelector("code")?.textContent,
       }));
@@ -635,11 +633,13 @@ describe("identity chaining vouched for by Speakeasy", () => {
     };
     render(speakeasyField({ userSessionIssuer: trusting }));
     expect(
-      screen.getByText(/Set by the identity providers example\.com accepts\./),
+      screen.getByText(
+        /Set in the identity providers enabled for example\.com\./,
+      ),
     ).toBeTruthy();
     expect(
       screen.queryByRole("link", {
-        name: "the identity providers example.com accepts",
+        name: "the identity providers enabled for example.com",
       }),
     ).toBeNull();
   });
@@ -656,13 +656,13 @@ describe("identity chaining vouched for by Speakeasy", () => {
         (_, el) =>
           el?.tagName === "P" &&
           el.textContent ===
-            "Set by the identity providers example.com accepts.",
+            "Set in the identity providers enabled for example.com.",
       ),
     ).toBeTruthy();
     expect(
       screen
         .getByRole("link", {
-          name: "the identity providers example.com accepts",
+          name: "the identity providers enabled for example.com",
         })
         .getAttribute("href"),
     ).toBe(
@@ -689,11 +689,11 @@ describe("identity chaining vouched for by Speakeasy", () => {
         .getByRole("link", { name: "Change in Sessions" })
         .getAttribute("href"),
     ).toBe("#sessions");
-    expect(vouchers()).toEqual(["Oktafor people who signed in with Okta"]);
+    expect(vouchers()).toEqual(["Oktafor people who log in with Okta"]);
     expect(trusts()).toEqual([
       {
         name: "Okta",
-        accepted: "Not accepted yet",
+        accepted: "Hasn’t worked yet",
         url: undefined,
       },
     ]);
@@ -709,7 +709,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
     );
     expect(
       screen
-        .getByRole("link", { name: "Every server that reaches example.com" })
+        .getByRole("link", {
+          name: "Every server that connects to example.com",
+        })
         .getAttribute("href"),
     ).toBe(
       "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com#servers",
@@ -719,11 +721,11 @@ describe("identity chaining vouched for by Speakeasy", () => {
   it("folds the issuer URL once the vendor trusts a provider, but says Working only for this server", () => {
     read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
     const { rerender } = render(speakeasyField());
-    expect(screen.getByText("On, not proven yet")).toBeTruthy();
+    expect(screen.getByText("On, waiting for a first connection")).toBeTruthy();
     expect(trusts()).toEqual([
       {
         name: "Speakeasy",
-        accepted: "Not accepted yet",
+        accepted: "Hasn’t worked yet",
         url: "https://speakeasy.example.com/issuer",
       },
     ]);
@@ -736,8 +738,10 @@ describe("identity chaining vouched for by Speakeasy", () => {
       }),
     };
     rerender(speakeasyField());
-    expect(screen.getByText("On, not proven yet")).toBeTruthy();
-    expect(screen.getByText(/already trusts Speakeasy/)).toBeTruthy();
+    expect(screen.getByText("On, waiting for a first connection")).toBeTruthy();
+    expect(
+      screen.getByText(/no one has connected through this server yet/),
+    ).toBeTruthy();
     expect(trusts()).toEqual([
       { name: "Speakeasy", accepted: "Last worked 2h ago", url: undefined },
     ]);
@@ -751,9 +755,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     };
     rerender(speakeasyField());
     expect(screen.getByText("Working")).toBeTruthy();
-    expect(
-      screen.getByText("example.com accepted a sign-in here 30m ago"),
-    ).toBeTruthy();
+    expect(screen.getByText("Last worked 30m ago")).toBeTruthy();
   });
 
   it("keeps the chain after Turn on succeeds", () => {
@@ -772,9 +774,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
     const { rerender } = render(speakeasyField());
     fireEvent.click(enableButton());
     rerender(speakeasyField());
-    expect(screen.getByText("On, not proven yet")).toBeTruthy();
+    expect(screen.getByText("On, waiting for a first connection")).toBeTruthy();
     expect(vouchers()).toEqual([
-      "Speakeasyfor everyone who signs in to this server",
+      "Speakeasyfor everyone who logs in to this server",
     ]);
     expect(trusts().map((row) => row.name)).toEqual(["Speakeasy"]);
   });
@@ -800,7 +802,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     render(speakeasyField());
     expect(
       screen.queryByRole("link", {
-        name: "Every server that reaches example.com",
+        name: "Every server that connects to example.com",
       }),
     ).toBeNull();
   });
@@ -832,7 +834,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     render(speakeasyField());
     expect(
       screen.getByText(
-        "People sign in to this server with Speakeasy, so Speakeasy vouches for them.",
+        "People log in to this server with Speakeasy, so Speakeasy vouches for them.",
       ),
     ).toBeTruthy();
     expect(
@@ -850,7 +852,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     };
     render(speakeasyField());
     expect(vouchers()).toEqual([
-      "Speakeasyfor everyone who signs in to this server",
+      "Speakeasyfor everyone who logs in to this server",
     ]);
     expect(screen.queryByText(/Okta/)).toBeNull();
     expect(trusts().map((row) => row.name)).toEqual(["Speakeasy"]);
@@ -859,8 +861,8 @@ describe("identity chaining vouched for by Speakeasy", () => {
   it.each([
     ["setup_required", "Not set up"],
     ["disabled", "Not set up"],
-    ["signing_paused", "Can’t sign right now"],
-    ["keyless", "Can’t sign right now"],
+    ["signing_paused", "Not working right now"],
+    ["keyless", "Not working right now"],
     [
       "sign_in_enforcement_required",
       "Needs sign-in enforcement for the organization",
@@ -912,7 +914,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     read.data = { ...unlinked, generation: 0, emaProviders: savedSpeakeasy };
     render(speakeasyField({ userSessionIssuer: trusting }));
     expect(vouchers()).toEqual([
-      "SpeakeasyCan’t vouch for people who sign in through Okta",
+      "SpeakeasyCan’t vouch for people who log in with Okta",
     ]);
     expect(screen.queryByRole("link", { name: "Fix in Speakeasy" })).toBeNull();
     expect(enableButton().disabled).toBe(true);
@@ -924,7 +926,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(
       screen
         .getByRole("link", {
-          name: "change which identity providers example.com accepts",
+          name: "change the identity providers enabled for example.com",
         })
         .getAttribute("href"),
     ).toBe(
@@ -955,12 +957,12 @@ describe("identity chaining vouched for by Speakeasy", () => {
     render(speakeasyField({ userSessionIssuer: trusting }));
     expect(
       screen.getByText(
-        /ask an organization admin to change which identity providers example\.com accepts/,
+        /ask an organization admin to change the identity providers enabled for example\.com/,
       ),
     ).toBeTruthy();
     expect(
       screen.queryByRole("link", {
-        name: "change which identity providers example.com accepts",
+        name: "change the identity providers enabled for example.com",
       }),
     ).toBeNull();
   });
@@ -985,7 +987,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     ).toBeTruthy();
     expect(
       screen.getByRole("link", {
-        name: "change which identity providers example.com accepts",
+        name: "change the identity providers enabled for example.com",
       }),
     ).toBeTruthy();
   });
@@ -1003,10 +1005,10 @@ describe("identity chaining vouched for by Speakeasy", () => {
       },
     };
     render(speakeasyField({ userSessionIssuer: trusting }));
-    expect(vouchers()).toEqual(["Oktafor people who signed in with Okta"]);
+    expect(vouchers()).toEqual(["Oktafor people who log in with Okta"]);
     expect(
       screen.queryByRole("link", {
-        name: "change which identity providers example.com accepts",
+        name: "change the identity providers enabled for example.com",
       }),
     ).toBeNull();
   });
@@ -1044,7 +1046,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     render(speakeasyField());
     expect(screen.getByText("Off")).toBeTruthy();
     expect(vouchers()).toEqual([
-      "Speakeasyfor everyone who signs in to this server",
+      "Speakeasyfor everyone who logs in to this server",
     ]);
     expect(
       screen.getByText("https://speakeasy.example.com/issuer"),
@@ -1194,9 +1196,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         onlyWhenOn
       />,
     );
-    expect(
-      screen.getByText(/still on through client wiki-client/),
-    ).toBeTruthy();
+    expect(screen.getByText(/still on for client wiki-client/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
   });
@@ -1263,7 +1263,7 @@ describe("identity chaining connection scopes", () => {
   it("says nothing while the recorded scopes match the connection", () => {
     read.data = { ...outOfDate, scopesOutOfDate: false };
     render(field());
-    expect(screen.queryByText(/scopes changed/)).toBeNull();
+    expect(screen.queryByText(/connection now asks for/)).toBeNull();
     expect(applyButton()).toBeNull();
   });
 
@@ -1272,7 +1272,7 @@ describe("identity chaining connection scopes", () => {
     render(field());
     expect(
       screen.getByText(
-        "The server connection’s scopes changed. Enterprise Managed Authorization still requests read; the connection now asks for read, write.",
+        "This server’s connection now asks for read, write. Enterprise Managed Authorization still asks for read.",
       ),
     ).toBeTruthy();
     expect(applyButton()).toBeTruthy();
@@ -1301,7 +1301,7 @@ describe("identity chaining connection scopes", () => {
       },
     });
     expect(
-      screen.queryByText("Someone else changed this; review and try again."),
+      screen.queryByText("Someone else changed this. Review it and try again."),
     ).toBeNull();
   });
 
@@ -1311,7 +1311,7 @@ describe("identity chaining connection scopes", () => {
     render(field());
     fireEvent.click(applyButton()!);
     expect(
-      screen.getByText("Someone else changed this; review and try again."),
+      screen.getByText("Someone else changed this. Review it and try again."),
     ).toBeTruthy();
   });
 
@@ -1319,7 +1319,7 @@ describe("identity chaining connection scopes", () => {
     state.projectWrite = false;
     read.data = outOfDate;
     render(field());
-    expect(screen.getByText(/scopes changed/)).toBeTruthy();
+    expect(screen.getByText(/connection now asks for/)).toBeTruthy();
     expect(
       screen.getByText("Someone who can edit this project can apply them."),
     ).toBeTruthy();
@@ -1350,7 +1350,7 @@ describe("identity chaining connection scopes", () => {
         .disabled,
     ).toBe(false);
     expect(applyButton()).toBeNull();
-    expect(screen.getByText("Turning it on again applies them.")).toBeTruthy();
+    expect(screen.getByText("Turn it on again to apply them.")).toBeTruthy();
   });
 
   it("checks the recorded scopes when Turn on can't follow the connection", () => {

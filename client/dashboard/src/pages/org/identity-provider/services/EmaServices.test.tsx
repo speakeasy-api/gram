@@ -26,7 +26,7 @@ const linear: ServiceRow = {
     {
       key: "external-default",
       kind: "external",
-      name: "Each server’s own identity provider",
+      name: "Your identity providers",
       placeholder: true,
       usable: true,
       unavailable: "",
@@ -74,13 +74,13 @@ describe("Services", () => {
     expect(screen.getByText(/once per service/)).toBeTruthy();
     expect(
       screen.getByText(
-        /By default, each server is vouched for by whatever signs its people in: their identity provider, such as Okta, or Speakeasy itself once it’s set up\. Choose which identity providers a service accepts to narrow that\./,
+        /By default, all identity providers are enabled for every service\. Select Manage to change that\./,
       ),
     ).toBeTruthy();
     expect(screen.getByText("No services yet")).toBeTruthy();
     expect(
       screen.getByText(
-        /Turn on Enterprise Managed Authorization on an MCP server/,
+        /Turn on Enterprise Managed Authorization for an MCP server/,
       ),
     ).toBeTruthy();
   });
@@ -96,8 +96,8 @@ describe("Services", () => {
       screen.getByRole("list", { name: "Linear identity providers" }),
     ).getAllByRole("listitem");
     expect(providers.map((item) => item.textContent)).toEqual([
-      "Each server’s own identity providerNot accepted yet · for servers whose people sign in through one",
-      "SpeakeasyLast worked 3h ago · for servers whose people sign in with Speakeasy",
+      "Your identity providersHasn’t worked yet · for servers with identity provider sign-in",
+      "SpeakeasyLast worked 3h ago · for servers with Speakeasy sign-in",
     ]);
     expect(screen.getByText("3 MCP servers · 2 ready")).toBeTruthy();
     expect(
@@ -116,7 +116,7 @@ describe("Services", () => {
             name: "Speakeasy",
             placeholder: false,
             usable: false,
-            unavailable: "Can’t sign right now",
+            unavailable: "Not working right now",
             fix: "speakeasy",
             unusedBySignIn: false,
           },
@@ -128,7 +128,7 @@ describe("Services", () => {
     show();
     expect(
       screen.getByText(
-        "Can’t sign right now · for servers whose people sign in with Speakeasy",
+        "Not working right now · for servers with Speakeasy sign-in",
       ),
     ).toBeTruthy();
     expect(screen.getByText("No MCP servers yet")).toBeTruthy();

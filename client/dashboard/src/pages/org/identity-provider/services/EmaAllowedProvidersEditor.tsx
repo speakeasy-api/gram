@@ -37,7 +37,7 @@ export type ProviderCandidate = {
 };
 
 /**
- * Which identity providers a service accepts. Each server is vouched for only
+ * Which identity providers are enabled for a service. Each server is vouched for only
  * by the provider its sign-in goes through, so the saved list works as a set:
  * it's stored in order, but the order never changes who vouches. Key it by
  * service so a draft never carries over to another one.
@@ -124,7 +124,7 @@ export function EmaAllowedProvidersEditor({
         : "Speakeasy was set up again. An organization admin needs to save this list again to use it.";
     const provider = current.find((p) => p.key === key);
     return provider && !provider.usable && !provider.placeholder
-      ? `${provider.unavailable}. It’s skipped until it can vouch again.`
+      ? `${provider.unavailable}. It’s skipped until it works again.`
       : undefined;
   };
   const startEditing = (keys: string[]) => {
@@ -182,8 +182,8 @@ export function EmaAllowedProvidersEditor({
       stopEditing();
       toast.success(
         result.isDefault
-          ? `${serviceName} accepts every identity provider`
-          : `Saved the identity providers ${serviceName} accepts`,
+          ? `All identity providers are enabled for ${serviceName}`
+          : `Saved enabled identity providers for ${serviceName}`,
       );
     },
     onError: (error) => {
@@ -223,7 +223,7 @@ export function EmaAllowedProvidersEditor({
         ? candidates.map((c) => c.key)
         : saved.map((entry) => entry.key),
     );
-  // In the default every provider is accepted. Before the candidates load,
+  // In the default every provider is enabled. Before the candidates load,
   // or for someone who can't load them, show what the service lists today.
   const defaultRows: { key: string; name: string }[] =
     candidatesReady && candidates.length > 0 ? candidates : current;
@@ -232,23 +232,23 @@ export function EmaAllowedProvidersEditor({
     <SettingsSection id="accepted-providers">
       <SettingsSection.Header>
         <SettingsSection.Title>
-          Identity providers {serviceName} accepts
+          Enabled identity providers for {serviceName}
         </SettingsSection.Title>
         <SettingsSection.Description>
-          Each server is vouched for by the identity provider its sign-in goes
-          through, and only if {serviceName} accepts it here. By default every
-          identity provider is accepted.
+          When someone uses a server that connects to {serviceName}, Speakeasy
+          vouches for them using their existing login, such as Okta or
+          Speakeasy’s own sign-in. By default, all identity providers are
+          enabled. Uncheck an identity provider to require an authentication
+          method outside Enterprise Managed Authorization for people who log in
+          with it, such as signing in to their own {serviceName} account.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
           {!custom ? (
             <div className="space-y-3">
-              <Text small>Default: accepts every identity provider</Text>
-              <ul
-                aria-label="Accepted identity providers"
-                className="space-y-1"
-              >
+              <Text small>Default: all identity providers enabled</Text>
+              <ul aria-label="Enabled identity providers" className="space-y-1">
                 {defaultRows.map((row) => (
                   <AcceptedRow key={row.key} name={row.name} accepted />
                 ))}
@@ -261,13 +261,13 @@ export function EmaAllowedProvidersEditor({
                   <div className="flex flex-col items-start gap-2">
                     <Text small className="block">
                       {editing
-                        ? `What ${serviceName} accepts changed since you started editing.`
-                        : `Another admin changed what ${serviceName} accepts, so it wasn’t reset to the default.`}{" "}
+                        ? `The enabled identity providers for ${serviceName} changed since you started editing.`
+                        : `Another admin changed the enabled identity providers for ${serviceName}, so it wasn’t reset to the default.`}{" "}
                       {refreshing
                         ? "Loading the current choice…"
                         : saved.length > 0
-                          ? `It now accepts ${joinNames(saved.map((entry) => entry.name))}.`
-                          : "It accepts every identity provider now."}
+                          ? `Now enabled: ${joinNames(saved.map((entry) => entry.name))}.`
+                          : "All identity providers are enabled now."}
                     </Text>
                     <div className="flex flex-wrap gap-2">
                       {editing && (
@@ -297,7 +297,7 @@ export function EmaAllowedProvidersEditor({
               )}
               {editing && canEdit ? (
                 <ul
-                  aria-label="Identity providers to accept"
+                  aria-label="Identity providers to enable"
                   className="space-y-2"
                 >
                   {rows.map((row) => {
@@ -335,7 +335,7 @@ export function EmaAllowedProvidersEditor({
                 </ul>
               ) : (
                 <ul
-                  aria-label="Accepted identity providers"
+                  aria-label="Enabled identity providers"
                   className="space-y-1"
                 >
                   {rows.map((row) => {
@@ -359,13 +359,12 @@ export function EmaAllowedProvidersEditor({
               )}
               {editing && checked.length === 0 && (
                 <Text muted small>
-                  Accept at least one identity provider.
+                  Enable at least one identity provider.
                 </Text>
               )}
               {editing && checked.length > MAX_ACCEPTED && (
                 <Text muted small>
-                  A service can accept at most {MAX_ACCEPTED} identity
-                  providers.
+                  You can enable up to {MAX_ACCEPTED} identity providers.
                 </Text>
               )}
               {stranded.map((note) => (
@@ -377,7 +376,7 @@ export function EmaAllowedProvidersEditor({
           )}
           {(canEdit || canRestore) && !remoteSessionIssuerId && (
             <Text muted small>
-              This can be changed once a server reaches {serviceName}.
+              You can change this once a server connects to {serviceName}.
             </Text>
           )}
           {readOnlyReason && (
@@ -389,8 +388,8 @@ export function EmaAllowedProvidersEditor({
             <Alert variant="error" alignTop>
               <div className="flex flex-col items-start gap-2">
                 <Text small className="block">
-                  Couldn’t load the identity providers you can choose from, so
-                  this can’t be changed right now.
+                  Couldn’t load the identity providers you can choose from. You
+                  can’t change this right now.
                 </Text>
                 <Button
                   variant="secondary"
@@ -416,8 +415,8 @@ export function EmaAllowedProvidersEditor({
             {(editing || custom) && (
               <SettingsSection.FooterHint>
                 {editing
-                  ? "Applies to each person’s next request. People already connected through a provider you remove lose access."
-                  : "Go back to the default to accept every identity provider."}
+                  ? `Applies to each person’s next request. People who log in with a provider you remove will need to sign in to their own ${serviceName} account.`
+                  : "Use default to enable every identity provider again."}
               </SettingsSection.FooterHint>
             )}
             <SettingsSection.FooterActions>
@@ -477,7 +476,7 @@ export function EmaAllowedProvidersEditor({
   );
 }
 
-/** One provider and whether the service accepts it, outside the editor. */
+/** One provider and whether it's enabled for the service, outside the editor. */
 function AcceptedRow({
   name,
   accepted,
@@ -501,7 +500,7 @@ function AcceptedRow({
           {name}
         </Text>
         <Text as="span" muted small>
-          {accepted ? "Accepted" : "Not accepted"}
+          {accepted ? "Enabled" : "Not enabled"}
         </Text>
         {children}
       </span>

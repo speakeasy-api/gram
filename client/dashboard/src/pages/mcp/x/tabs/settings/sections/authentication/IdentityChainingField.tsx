@@ -110,13 +110,13 @@ function stateCopy(
     case "published_acceptance_unverified":
       return {
         label: `Waiting for ${vendor}`,
-        next: `Speakeasy published the client’s settings. ${vendor} hasn’t confirmed them yet; try connecting from your MCP client.`,
+        next: `Speakeasy published the client’s settings. ${vendor} hasn’t confirmed them yet. Try connecting from your MCP client.`,
         tone: "information",
       };
     case "configuration_required":
       return {
         label: "Needs setup",
-        next: "This server’s client needs a change before this can turn on. Check the client in Identity above.",
+        next: "This server’s client needs a change first. Check the client in Identity above.",
         tone: "warning",
       };
     case "manual_setup_required":
@@ -128,7 +128,7 @@ function stateCopy(
     case "unknown_grants":
       return {
         label: "Couldn’t check the client",
-        next: "Speakeasy couldn’t tell which sign-in methods the client allows. Confirm its grants below, then turn this on again.",
+        next: "Speakeasy couldn’t tell which sign-in methods the client allows. Confirm them below, then turn this on again.",
         tone: "warning",
       };
     case "incomplete_metadata":
@@ -152,13 +152,13 @@ function stateCopy(
     case "unsupported_profile":
       return {
         label: "Not supported",
-        next: `${vendor} doesn’t support Enterprise Managed Authorization the way Speakeasy needs.`,
+        next: `${vendor} doesn’t support the kind of Enterprise Managed Authorization that Speakeasy uses.`,
         tone: "destructive",
       };
     case "provider_rejection":
       return {
         label: `${vendor} refused`,
-        next: `${vendor} turned the request down. Check its admin settings, then try again.`,
+        next: `${vendor} refused the request. Check its admin settings, then try again.`,
         tone: "destructive",
       };
   }
@@ -619,8 +619,8 @@ export function IdentityChainingField({
   const lookupNotice =
     clientIssuers.isError && !!authorizationServers?.length ? (
       <Text key="issuer-lookup" muted small className="block">
-        Couldn’t check which authorization server some clients belong to, so
-        they aren’t offered here. Reload the page to try again.
+        Some clients aren’t shown, because Speakeasy couldn’t check their
+        authorization server. Reload the page to try again.
       </Text>
     ) : null;
   const staleNotices = [lookupNotice].concat(
@@ -789,7 +789,7 @@ export function IdentityChainingField({
             </Text>
           ) : vouchers.length === 0 ? (
             <Text small>
-              Nobody yet.{" "}
+              None yet.{" "}
               {orgAdmin ? (
                 <>
                   <Link
@@ -798,11 +798,11 @@ export function IdentityChainingField({
                   >
                     Set up Speakeasy as an identity provider
                   </Link>
-                  , or have people sign in through an identity provider you’ve
-                  connected.
+                  , or change this server’s sign-in to an identity provider
+                  you’ve connected.
                 </>
               ) : (
-                "An organization admin can set up Speakeasy as an identity provider, or connect one people sign in through."
+                "An organization admin can set up Speakeasy as an identity provider."
               )}
             </Text>
           ) : (
@@ -824,8 +824,8 @@ export function IdentityChainingField({
                   <Text muted small>
                     {row.usable
                       ? row.kind === "speakeasy"
-                        ? "for everyone who signs in to this server"
-                        : `for people who signed in with ${row.name}`
+                        ? "for everyone who logs in to this server"
+                        : `for people who log in with ${row.name}`
                       : row.unavailable}
                   </Text>
                   {row.fix &&
@@ -862,10 +862,10 @@ export function IdentityChainingField({
                     ),
                   )}
                 >
-                  change which identity providers {vendor} accepts
+                  change the identity providers enabled for {vendor}
                 </Link>
               ) : (
-                `ask an organization admin to change which identity providers ${vendor} accepts`
+                `ask an organization admin to change the identity providers enabled for ${vendor}`
               )}{" "}
               or{" "}
               <Link
@@ -883,7 +883,7 @@ export function IdentityChainingField({
                 defaultVoucherLine(trustedIssuerId ? signIn.name : undefined)
               ) : (
                 <>
-                  Set by{" "}
+                  Set in{" "}
                   {orgAdmin ? (
                     <Link
                       className="underline underline-offset-4"
@@ -894,10 +894,10 @@ export function IdentityChainingField({
                         ),
                       )}
                     >
-                      the identity providers {vendor} accepts
+                      the identity providers enabled for {vendor}
                     </Link>
                   ) : (
-                    `the identity providers ${vendor} accepts`
+                    `the identity providers enabled for ${vendor}`
                   )}
                   .
                 </>
@@ -924,8 +924,8 @@ export function IdentityChainingField({
             </Text>
           ) : trusts.length === 0 ? (
             <Text muted small>
-              Nothing to set up at {vendor} until an identity provider can
-              vouch.
+              Nothing to set up at {vendor} yet. First, an identity provider
+              must be able to vouch.
             </Text>
           ) : (
             <ul aria-label={`${vendor} trusts`} className="space-y-3">
@@ -1012,7 +1012,7 @@ export function IdentityChainingField({
                 emaServiceHref(emaProviders.vendorIssuer, "servers"),
               )}
             >
-              Every server that reaches {vendor}
+              Every server that connects to {vendor}
             </SettingsLink>
           )}
         </ChainLink>
@@ -1045,15 +1045,15 @@ export function IdentityChainingField({
           {switchingClient && (
             <Text muted small className="block">
               Enterprise Managed Authorization uses client{" "}
-              {boundClient?.clientId ?? read.data?.externalClientId}. Using this
-              client instead replaces it.
+              {boundClient?.clientId ?? read.data?.externalClientId} now. Using
+              this client replaces it.
             </Text>
           )}
           {publicClient && selected && (
             <Text muted small className="block">
               Client {selected.clientId} is a public client. Enterprise Managed
-              Authorization needs a confidential client that authenticates to
-              the authorization server’s token endpoint.
+              Authorization needs a confidential client, one with its own secret
+              or key for the authorization server.
             </Text>
           )}
           {!publicClient && grantsBlocked && (
@@ -1101,8 +1101,8 @@ export function IdentityChainingField({
               Turn off Enterprise Managed Authorization?
             </Dialog.Title>
             <Dialog.Description>
-              People will connect {vendor} themselves the next time they use
-              this server.
+              People will sign in to their own {vendor} account the next time
+              they use this server.
             </Dialog.Description>
           </Dialog.Header>
           <Dialog.Footer>
@@ -1130,8 +1130,8 @@ export function IdentityChainingField({
 /** Who vouches on this server by default, in the words the Services page uses. */
 function defaultVoucherLine(identityProvider: string | undefined): string {
   return identityProvider
-    ? `People sign in to this server through ${identityProvider}, so ${identityProvider} vouches for them.`
-    : "People sign in to this server with Speakeasy, so Speakeasy vouches for them.";
+    ? `People log in to this server with ${identityProvider}, so ${identityProvider} vouches for them.`
+    : "People log in to this server with Speakeasy, so Speakeasy vouches for them.";
 }
 
 function scopeList(scopes: string[]): string {
@@ -1197,20 +1197,19 @@ function ScopesOutOfDateNotice({
   return (
     <div className="space-y-2 pt-2">
       <Text small className="block">
-        The server connection’s scopes changed. Enterprise Managed Authorization
-        still requests {scopeList(recorded)}; the connection now asks for{" "}
-        {scopeList(connection)}.
+        This server’s connection now asks for {scopeList(connection)}.
+        Enterprise Managed Authorization still asks for {scopeList(recorded)}.
       </Text>
       <Text muted small className="block">
         {canApply
           ? "Applying them changes everyone’s next request."
           : canWrite
-            ? "Turning it on again applies them."
+            ? "Turn it on again to apply them."
             : "Someone who can edit this project can apply them."}
       </Text>
       {conflict && (
         <Text small className="text-warning block">
-          Someone else changed this; review and try again.
+          Someone else changed this. Review it and try again.
         </Text>
       )}
       {canApply && (
@@ -1285,10 +1284,10 @@ function StaleBinding({
       <Alert variant="warning" alignTop>
         <div className="flex flex-col items-start gap-2">
           <Text small className="block">
-            Enterprise Managed Authorization is still on through client{" "}
-            {clientLabel ?? "an earlier client"}, which belongs to an
-            authorization server this server no longer uses. Turn it off before
-            you replace or remove that client.
+            Enterprise Managed Authorization is still on for client{" "}
+            {clientLabel ?? "an earlier client"}. This server no longer uses
+            that client’s authorization server. Turn it off before you replace
+            or remove the client.
           </Text>
           <RequireScope
             scope="project:write"
@@ -1310,7 +1309,7 @@ function StaleBinding({
         open={confirming}
         onOpenChange={setConfirming}
         title="Turn off Enterprise Managed Authorization for the old client?"
-        description={`People will connect ${vendor} themselves until it’s turned on for this server’s current client.`}
+        description={`People will sign in to their own ${vendor} account until you turn it on for this server’s current client.`}
         confirmLabel="Turn off"
         pendingLabel="Turning off…"
         isPending={unlink.isPending}
@@ -1387,22 +1386,22 @@ function chainingStatus({
   if (ready && lastAccepted)
     return {
       title: "Working",
-      detail: `People reach ${vendor} through their sign-in.`,
-      aside: `${vendor} accepted a sign-in here ${formatRelativeTime(lastAccepted)}`,
+      detail: `People are signed in to ${vendor} automatically.`,
+      aside: `Last worked ${formatRelativeTime(lastAccepted)}`,
       tone: "success",
     };
   if (ready)
     return {
-      title: "On, not proven yet",
+      title: "On, waiting for a first connection",
       detail: trustedName
-        ? `Speakeasy’s side is set up and ${vendor} already trusts ${trustedName}. It shows as working once someone connects through this server. Try it from your MCP client.`
-        : `Speakeasy’s side is set up. It starts working once ${vendor} trusts an identity provider below and someone connects through this server. Try it from your MCP client.`,
+        ? "Everything is set up, but no one has connected through this server yet to confirm it works. Try it from your MCP client."
+        : `Speakeasy’s side is set up. Next, ${vendor} must trust an identity provider below. Then try it from your MCP client.`,
       tone: "warning",
     };
   if (off || !state)
     return {
       title: "Off",
-      detail: `People connect ${vendor} themselves the first time they use this server.`,
+      detail: `People sign in to their own ${vendor} account the first time they use this server.`,
       tone: "neutral",
     };
   const copy = stateCopy(state, vendor);

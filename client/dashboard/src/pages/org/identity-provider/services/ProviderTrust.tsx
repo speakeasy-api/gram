@@ -7,7 +7,7 @@ import {
   type ProviderView,
 } from "./emaServiceView";
 
-/** Whether the service has accepted this provider, as a dot plus a few words. */
+/** Whether this provider has worked at the service, as a dot plus a few words. */
 export function ProviderTrust({
   provider,
   isDefault = false,
@@ -30,7 +30,7 @@ export function ProviderTrust({
       ? SPEAKEASY_DEFAULT_SCOPE.charAt(0).toLowerCase() +
         SPEAKEASY_DEFAULT_SCOPE.slice(1)
       : provider.placeholder
-        ? "for servers whose people sign in through one"
+        ? "for servers with identity provider sign-in"
         : undefined;
   return (
     <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">

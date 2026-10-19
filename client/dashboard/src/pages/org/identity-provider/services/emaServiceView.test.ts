@@ -18,7 +18,7 @@ const oktaServer: Server = {
 };
 const ownServer: Server = { name: "Wiki" };
 
-describe("who the accepted providers can vouch for", () => {
+describe("who the enabled providers can vouch for", () => {
   it("covers every server when nothing is saved", () => {
     expect(strandedServers(null, [oktaServer, ownServer])).toEqual([]);
   });
@@ -46,17 +46,17 @@ describe("who the accepted providers can vouch for", () => {
         strandedServers([speakeasy], [oktaServer, another, ownServer]),
       ),
     ).toEqual([
-      "Tracker and Docs sign people in through Okta, so they have nobody to vouch. Accept Okta, or go back to the default.",
+      "Tracker and Docs can’t use Enterprise Managed Authorization, because they use Okta sign-in. Enable Okta, or go back to the default.",
     ]);
     expect(strandedNotes(strandedServers([okta], [ownServer]))).toEqual([
-      "Wiki uses Speakeasy’s own sign-in, so it has nobody to vouch. Accept Speakeasy, or go back to the default.",
+      "Wiki can’t use Enterprise Managed Authorization, because it uses Speakeasy sign-in. Enable Speakeasy, or go back to the default.",
     ]);
     expect(
       strandedNotes(strandedServers([speakeasy], [oktaServer]), {
         draft: true,
       }),
     ).toEqual([
-      "Tracker signs people in through Okta, so it would have nobody to vouch.",
+      "Tracker would lose Enterprise Managed Authorization, because it uses Okta sign-in.",
     ]);
   });
 });

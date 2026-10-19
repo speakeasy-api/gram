@@ -152,7 +152,7 @@ const speakeasy = view({ issuerUrl: "https://speakeasy.example.com/issuer" });
 const placeholder = view({
   key: "external-default",
   kind: "external",
-  name: "Each server’s own identity provider",
+  name: "Your identity providers",
   placeholder: true,
 });
 const okta = view({
@@ -198,14 +198,14 @@ const trustRows = () =>
     "listitem",
   );
 const checkboxes = () =>
-  within(screen.getByRole("list", { name: "Identity providers to accept" }))
+  within(screen.getByRole("list", { name: "Identity providers to enable" }))
     .getAllByRole("checkbox")
     .map((box) => ({
       name: box.closest("li")?.querySelector("label")?.textContent,
       checked: box.getAttribute("aria-checked") === "true",
     }));
 const accepted = () =>
-  within(screen.getByRole("list", { name: "Accepted identity providers" }))
+  within(screen.getByRole("list", { name: "Enabled identity providers" }))
     .getAllByRole("listitem")
     .map((item) => item.textContent);
 const box = (name: string) => screen.getByRole("checkbox", { name });
@@ -313,18 +313,16 @@ describe("one service", () => {
   it("gives the issuer URL to paste once per identity provider, and says who the default entries cover", () => {
     show();
     expect(
-      screen.getByText(/Linear has to trust each identity provider once/),
+      screen.getByText(/Set this up once in Linear for each identity provider/),
     ).toBeTruthy();
     const rows = trustRows();
+    expect(rows[0]?.textContent).toContain("Your identity providers");
     expect(rows[0]?.textContent).toContain(
-      "Each server’s own identity provider",
-    );
-    expect(rows[0]?.textContent).toContain(
-      "Its issuer URL is on that server’s Enterprise Managed Authorization settings.",
+      "Set this up in that identity provider’s Cross App Access.",
     );
     expect(rows[1]?.textContent).toContain("Speakeasy");
     expect(rows[1]?.textContent).toContain(
-      "for servers whose people sign in with Speakeasy",
+      "for servers with Speakeasy sign-in",
     );
     expect(rows[1]?.querySelector("code")?.textContent).toBe(
       "https://speakeasy.example.com/issuer",
@@ -336,13 +334,13 @@ describe("one service", () => {
     show();
     expect(
       screen.getByRole("heading", {
-        name: "Identity providers Linear accepts",
+        name: "Enabled identity providers for Linear",
       }),
     ).toBeTruthy();
     expect(
-      screen.getByText("Default: accepts every identity provider"),
+      screen.getByText("Default: all identity providers enabled"),
     ).toBeTruthy();
-    expect(accepted()).toEqual(["OktaAccepted", "SpeakeasyAccepted"]);
+    expect(accepted()).toEqual(["OktaEnabled", "SpeakeasyEnabled"]);
     expect(screen.queryByText(strandedNote)).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
@@ -397,7 +395,7 @@ describe("one service", () => {
     fireEvent.click(box("Okta"));
     expect(
       screen.getByText(
-        "Linear (Okta team) signs people in through Okta, so it would have nobody to vouch.",
+        "Linear (Okta team) would lose Enterprise Managed Authorization, because it uses Okta sign-in.",
       ),
     ).toBeTruthy();
     expect(saveButton().disabled).toBe(false);
@@ -421,7 +419,7 @@ describe("one service", () => {
     fireEvent.click(box("Speakeasy"));
     expect(saveButton().disabled).toBe(true);
     expect(
-      screen.getByText("Accept at least one identity provider."),
+      screen.getByText("Enable at least one identity provider."),
     ).toBeTruthy();
   });
 
@@ -435,10 +433,10 @@ describe("one service", () => {
       },
     ];
     show();
-    expect(accepted()).toEqual(["OktaAccepted", "SpeakeasyNot accepted"]);
+    expect(accepted()).toEqual(["OktaEnabled", "SpeakeasyNot enabled"]);
     expect(
       screen.getByText(
-        "Linear (Speakeasy) uses Speakeasy’s own sign-in, so it has nobody to vouch. Accept Speakeasy, or go back to the default.",
+        "Linear (Speakeasy) can’t use Enterprise Managed Authorization, because it uses Speakeasy sign-in. Enable Speakeasy, or go back to the default.",
       ),
     ).toBeTruthy();
   });
@@ -497,7 +495,7 @@ describe("one service", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(
       screen.getByText(
-        /Choosing which identity providers a service accepts isn’t available for your organization yet/,
+        /Choosing enabled identity providers isn’t available for your organization yet/,
       ),
     ).toBeTruthy();
   });
@@ -518,7 +516,7 @@ describe("one service", () => {
     expect(checkboxes()).toHaveLength(12);
     expect(saveButton().disabled).toBe(true);
     expect(
-      screen.getByText("A service can accept at most 10 identity providers."),
+      screen.getByText("You can enable up to 10 identity providers."),
     ).toBeTruthy();
     fireEvent.click(box("IdP idp-0"));
     fireEvent.click(box("Speakeasy"));
@@ -581,14 +579,14 @@ describe("one service", () => {
     show();
     expect(
       screen.getByText(
-        "Only organization admins can change which identity providers a service accepts.",
+        "Only organization admins can change which identity providers are enabled for a service.",
       ),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(accepted()).toEqual([
-      "Each server’s own identity providerAccepted",
-      "SpeakeasyAccepted",
+      "Your identity providersEnabled",
+      "SpeakeasyEnabled",
     ]);
   });
 
@@ -600,7 +598,7 @@ describe("one service", () => {
     show();
     expect(
       screen.getByText(
-        /can’t be changed from a support or impersonated session/,
+        /can’t change this from a support or impersonated session/,
       ),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Use default" })).toBeNull();
@@ -610,7 +608,7 @@ describe("one service", () => {
     mocks.rows = [];
     show();
     expect(
-      screen.getByText(/No server reaches this service any more/),
+      screen.getByText(/No servers connect to this service anymore/),
     ).toBeTruthy();
   });
   it("stops a stale draft when the saved choice changes underneath it", () => {
@@ -626,9 +624,11 @@ describe("one service", () => {
     mocks.rows = [{ ...linear, isDefault: false, providers: [okta] }];
     rerender(tree());
     expect(
-      screen.getByText(/What Linear accepts changed since you started editing/),
+      screen.getByText(
+        /The enabled identity providers for Linear changed since you started editing/,
+      ),
     ).toBeTruthy();
-    expect(screen.getByText(/It now accepts Okta\./)).toBeTruthy();
+    expect(screen.getByText(/Now enabled: Okta\./)).toBeTruthy();
     expect(saveButton().disabled).toBe(true);
 
     fireEvent.click(
@@ -673,7 +673,9 @@ describe("one service", () => {
     fireEvent.click(saveButton());
     expect(mocks.invalidate).toHaveBeenCalledWith("services");
     expect(
-      screen.getByText(/What Linear accepts changed since you started editing/),
+      screen.getByText(
+        /The enabled identity providers for Linear changed since you started editing/,
+      ),
     ).toBeTruthy();
     expect(saveButton().disabled).toBe(true);
   });
@@ -703,7 +705,7 @@ describe("one service", () => {
     rerender(tree());
     refreshed();
     await waitFor(() => expect(review().disabled).toBe(false));
-    expect(screen.getByText(/It now accepts Okta\./)).toBeTruthy();
+    expect(screen.getByText(/Now enabled: Okta\./)).toBeTruthy();
     fireEvent.click(review());
     mocks.saveError = null;
     fireEvent.click(saveButton());
@@ -733,7 +735,7 @@ describe("one service", () => {
       screen.queryByText("No longer available. Uncheck it to save."),
     ).toBeNull();
     expect(
-      screen.getByText(/Not set up\. It’s skipped until it can vouch again\./),
+      screen.getByText(/Not set up\. It’s skipped until it works again\./),
     ).toBeTruthy();
     fireEvent.click(editButton());
     fireEvent.click(box("Okta"));
@@ -799,7 +801,7 @@ describe("one service", () => {
         .disabled,
     ).toBe(true);
     expect(
-      within(screen.getByRole("list", { name: "Identity providers to accept" }))
+      within(screen.getByRole("list", { name: "Identity providers to enable" }))
         .getAllByRole("checkbox")
         .every((checkbox) => checkbox.hasAttribute("disabled")),
     ).toBe(true);
@@ -837,7 +839,7 @@ describe("one service", () => {
     expect(
       screen.queryByText("No longer available. Uncheck it to save."),
     ).toBeNull();
-    expect(accepted()).toContain("SpeakeasyAccepted");
+    expect(accepted()).toContain("SpeakeasyEnabled");
     expect(editButton().disabled).toBe(true);
     expect(
       screen.getByText(
@@ -877,7 +879,7 @@ describe("one service", () => {
       within(entraRow!).getByText("Set up Linear in Entra’s Cross App Access"),
     ).toBeTruthy();
     expect(within(speakeasyRow!).queryByText(/Cross App Access/)).toBeNull();
-    expect(within(placeholderRow!).queryByText(/Cross App Access/)).toBeNull();
+    expect(within(placeholderRow!).queryByRole("link")).toBeNull();
   });
 
   it("doesn't link to Okta when its view isn't available", () => {
@@ -937,7 +939,7 @@ describe("one service", () => {
     expect(mocks.invalidate).toHaveBeenCalledWith("services");
     expect(
       screen.getByText(
-        /Another admin changed what Linear accepts, so it wasn’t reset to the default\./,
+        /Another admin changed the enabled identity providers for Linear, so it wasn’t reset to the default\./,
       ),
     ).toBeTruthy();
     expect(
@@ -955,7 +957,7 @@ describe("one service", () => {
     fireEvent.click(editButton());
     expect(
       screen.getByText(
-        "Applies to each person’s next request. People already connected through a provider you remove lose access.",
+        "Applies to each person’s next request. People who log in with a provider you remove will need to sign in to their own Linear account.",
       ),
     ).toBeTruthy();
   });

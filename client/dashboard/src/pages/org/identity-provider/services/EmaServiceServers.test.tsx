@@ -89,8 +89,8 @@ describe("Servers on a service page", () => {
       screen.getByRole("link", { name: "Wiki" }).getAttribute("href"),
     ).toBe("/example/projects/docs/mcp/x/wiki/settings#identity-chaining");
     expect(screen.getByRole("link", { name: "broken" })).toBeTruthy();
-    expect(screen.getByText("On and working")).toBeTruthy();
-    expect(screen.getByText("On, not proven yet")).toBeTruthy();
+    expect(screen.getByText("Working")).toBeTruthy();
+    expect(screen.getByText("On, waiting for a first connection")).toBeTruthy();
     expect(screen.getByText("Needs attention")).toBeTruthy();
     expect(screen.getByText("Docs")).toBeTruthy();
     expect(screen.queryByText(/0198f5b2/)).toBeNull();
@@ -106,7 +106,7 @@ describe("Servers on a service page", () => {
         ],
       }),
     );
-    expect(screen.getByText("Last accepted a sign-in 2h ago")).toBeTruthy();
+    expect(screen.getByText("Last worked 2h ago")).toBeTruthy();
   });
 
   it("counts servers the viewer can't see without naming them", () => {
@@ -120,7 +120,7 @@ describe("Servers on a service page", () => {
 
   it("leads with the first action when no server reaches the service", () => {
     show(row({}));
-    expect(screen.getByText("No servers reach Linear yet")).toBeTruthy();
+    expect(screen.getByText("No servers connect to Linear yet")).toBeTruthy();
     expect(
       screen.getByText(
         /Turn on Enterprise Managed Authorization in an MCP server’s settings/,
@@ -131,10 +131,10 @@ describe("Servers on a service page", () => {
   it("says every server is hidden when the viewer can see none", () => {
     show(row({ serverCount: 1, hiddenServerCount: 1 }));
     expect(
-      screen.getByText("No servers you can see reach Linear"),
+      screen.getByText("No servers you can see connect to Linear"),
     ).toBeTruthy();
     expect(
-      screen.getByText("1 server you don’t have access to reaches it."),
+      screen.getByText("1 server you don’t have access to connects to it."),
     ).toBeTruthy();
   });
 
@@ -166,9 +166,9 @@ describe("Servers on a service page", () => {
       }),
     );
     expect(screen.getByText("Needs attention")).toBeTruthy();
-    expect(screen.getByText("Linear doesn’t accept Okta")).toBeTruthy();
-    expect(screen.queryByText("On and working")).toBeNull();
-    expect(screen.getByText("On, not proven yet")).toBeTruthy();
+    expect(screen.getByText("Okta isn’t enabled for Linear")).toBeTruthy();
+    expect(screen.queryByText("Working")).toBeNull();
+    expect(screen.getByText("On, waiting for a first connection")).toBeTruthy();
   });
 
   it("never flags a server under the default", () => {
@@ -178,7 +178,7 @@ describe("Servers on a service page", () => {
         servers: [server({ signInIssuerId: "okta", signInIssuerName: "Okta" })],
       }),
     );
-    expect(screen.getByText("On and working")).toBeTruthy();
+    expect(screen.getByText("Working")).toBeTruthy();
     expect(screen.queryByText(/doesn’t accept/)).toBeNull();
   });
 });

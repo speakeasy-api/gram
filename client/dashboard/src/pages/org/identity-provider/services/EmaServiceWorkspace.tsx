@@ -38,7 +38,7 @@ import {
 import { EmaServiceServers } from "./EmaServiceServers";
 import { useEmaServices, useOktaIssuerId } from "./useEmaServices";
 
-/** Who may change which identity providers a service accepts, and why not when they can't. */
+/** Who may change which identity providers are enabled for a service, and why not when they can't. */
 function useAcceptedProviderPermissions(): {
   canEdit: boolean;
   canRestore: boolean;
@@ -60,7 +60,7 @@ function useAcceptedProviderPermissions(): {
       canEdit: false,
       canRestore: false,
       readOnlyReason:
-        "Only organization admins can change which identity providers a service accepts.",
+        "Only organization admins can change which identity providers are enabled for a service.",
     };
   }
   if (session.organizationOverride || session.impersonatorEmail) {
@@ -68,7 +68,7 @@ function useAcceptedProviderPermissions(): {
       canEdit: false,
       canRestore: false,
       readOnlyReason:
-        "This can’t be changed from a support or impersonated session.",
+        "You can’t change this from a support or impersonated session.",
     };
   }
   if (providersFlag.status !== "enabled") {
@@ -76,13 +76,13 @@ function useAcceptedProviderPermissions(): {
       canEdit: false,
       canRestore: true,
       readOnlyReason:
-        "Choosing which identity providers a service accepts isn’t available for your organization yet. You can still go back to the default.",
+        "Choosing enabled identity providers isn’t available for your organization yet. You can still go back to the default.",
     };
   }
   return { canEdit: true, canRestore: true };
 }
 
-/** One service: what it has to trust, which providers it accepts, and who reaches it. */
+/** One service: what it has to trust, which providers are enabled for it, and which servers connect to it. */
 export function EmaServiceWorkspace({
   vendorIssuer,
 }: {
@@ -140,7 +140,7 @@ export function EmaServiceWorkspace({
       )}
       {!services.isPending && !services.isError && !row && (
         <Text muted>
-          No server reaches this service any more.{" "}
+          No servers connect to this service anymore.{" "}
           <Link
             to={identityProvidersHref()}
             className="underline underline-offset-4"

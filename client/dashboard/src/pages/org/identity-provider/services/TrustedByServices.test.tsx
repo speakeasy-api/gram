@@ -62,7 +62,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe("Services that use Speakeasy as their identity provider", () => {
+describe("Services that trust Speakeasy", () => {
   it("splits services that accepted Speakeasy from those that haven't yet", () => {
     mocks.rows = [
       service("Linear", new Date(Date.now() - 2 * 60 * 60 * 1000)),
@@ -71,17 +71,17 @@ describe("Services that use Speakeasy as their identity provider", () => {
     show();
     expect(
       screen.getByRole("heading", {
-        name: "Services that use Speakeasy as their identity provider",
+        name: "Services that trust Speakeasy",
       }),
     ).toBeTruthy();
     const accepted = within(
-      screen.getByRole("list", { name: "Accepted Speakeasy" }),
+      screen.getByRole("list", { name: "Working" }),
     ).getAllByRole("listitem");
     expect(accepted.map((item) => item.textContent)).toEqual([
       "LinearLast worked 2h ago",
     ]);
     const waiting = within(
-      screen.getByRole("list", { name: "Not accepted yet" }),
+      screen.getByRole("list", { name: "Hasn’t worked yet" }),
     ).getAllByRole("listitem");
     expect(waiting.map((item) => item.textContent)).toEqual(["Notion"]);
     expect(
@@ -97,15 +97,15 @@ describe("Services that use Speakeasy as their identity provider", () => {
         providers: row.providers.map((provider) => ({
           ...provider,
           usable: false,
-          unavailable: "Can’t sign right now",
+          unavailable: "Not working right now",
         })),
       },
     ];
     show();
     const [item] = within(
-      screen.getByRole("list", { name: "Accepted Speakeasy" }),
+      screen.getByRole("list", { name: "Working" }),
     ).getAllByRole("listitem");
-    expect(item?.textContent).toBe("LinearCan’t sign right now");
+    expect(item?.textContent).toBe("LinearNot working right now");
     expect(item?.querySelector("[data-tone]")?.getAttribute("data-tone")).toBe(
       "warning",
     );
@@ -122,7 +122,7 @@ describe("Services that use Speakeasy as their identity provider", () => {
     show();
     expect(
       screen.getByText(
-        /Once an MCP server whose people sign in with Speakeasy turns on Enterprise Managed Authorization/,
+        /A service shows up here once an MCP server with Speakeasy sign-in turns on Enterprise Managed Authorization/,
       ),
     ).toBeTruthy();
   });
@@ -140,7 +140,7 @@ describe("Services that use Speakeasy as their identity provider", () => {
     show();
     expect(
       screen.getByRole("heading", {
-        name: "Services that use Speakeasy as their identity provider",
+        name: "Services that trust Speakeasy",
       }),
     ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe("Loading services…");

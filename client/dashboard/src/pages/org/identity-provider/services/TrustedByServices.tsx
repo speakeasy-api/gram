@@ -30,11 +30,11 @@ export function TrustedByServices(): JSX.Element {
     <SettingsSection id="services">
       <SettingsSection.Header>
         <SettingsSection.Title>
-          Services that use Speakeasy as their identity provider
+          Services that trust Speakeasy
         </SettingsSection.Title>
         <SettingsSection.Description>
-          Services where Speakeasy can vouch for people. Each one has to trust
-          Speakeasy’s issuer once, in its own admin settings, before it works.
+          Each service must trust the issuer above once, in its own admin
+          settings, before Enterprise Managed Authorization works.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -60,14 +60,13 @@ export function TrustedByServices(): JSX.Element {
             </Alert>
           ) : entries.length === 0 ? (
             <Text small muted>
-              None yet. Once an MCP server whose people sign in with Speakeasy
-              turns on Enterprise Managed Authorization, its service shows up
-              here.
+              None yet. A service shows up here once an MCP server with
+              Speakeasy sign-in turns on Enterprise Managed Authorization.
             </Text>
           ) : (
             <div className="space-y-5">
-              <EntryList label="Accepted Speakeasy" entries={accepted} />
-              <EntryList label="Not accepted yet" entries={waiting} />
+              <EntryList label="Working" entries={accepted} />
+              <EntryList label="Hasn’t worked yet" entries={waiting} />
             </div>
           )}
         </SettingsSection.Body>

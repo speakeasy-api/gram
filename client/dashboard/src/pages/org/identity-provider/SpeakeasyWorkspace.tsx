@@ -220,10 +220,10 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                     RFC 7523
                   </a>
                   . It never changes, even when signing keys are replaced.
-                  Speakeasy vouches only on MCP servers whose sign-in has no
-                  identity provider, at services that accept it. Registering the
-                  URI alone changes nothing: also turn on Enterprise Managed
-                  Authorization in the MCP server's Settings.
+                  Speakeasy only vouches on MCP servers with Speakeasy sign-in.
+                  Registering the URI isn’t enough on its own. Also turn on
+                  Enterprise Managed Authorization in each MCP server’s
+                  settings.
                 </SettingsSection.Description>
               </SettingsSection.Header>
               <SettingsSection.Panel>
@@ -508,7 +508,7 @@ function IssuerStatus({
   switch (issuer.state) {
     case "enabled":
       message =
-        "The issuer is ready. Speakeasy vouches for your team on MCP servers that use Speakeasy’s own sign-in, at services that accept it.";
+        "The issuer is ready. Speakeasy vouches for people on MCP servers with Speakeasy sign-in, at each service that trusts it.";
       break;
     case "setup_required":
       message = issuer.canEnable

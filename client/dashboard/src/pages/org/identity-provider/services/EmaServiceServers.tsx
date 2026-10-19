@@ -37,9 +37,9 @@ function serverStatus(
     };
   switch (server.status) {
     case "working":
-      return { label: "On and working", tone: "success" };
+      return { label: "Working", tone: "success" };
     case "not_proven":
-      return { label: "On, not proven yet", tone: "warning" };
+      return { label: "On, waiting for a first connection", tone: "warning" };
     case "needs_attention":
       return { label: "Needs attention", tone: "destructive" };
   }
@@ -60,7 +60,7 @@ function ServerLink({ server }: { server: EMAServiceServer }): JSX.Element {
   );
 }
 
-/** Which servers reach a service, each linking to where it is turned on or off. */
+/** Which servers connect to a service, each linking to where it is turned on or off. */
 export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
   const stranded = new Set(
     strandedServers(row.isDefault ? null : row.providers, row.servers).map(
@@ -110,8 +110,7 @@ export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
             )}
             {server.lastAcceptedAt && (
               <Text as="span" muted small className="truncate pl-4">
-                Last accepted a sign-in{" "}
-                {formatRelativeTime(server.lastAcceptedAt)}
+                Last worked {formatRelativeTime(server.lastAcceptedAt)}
               </Text>
             )}
           </span>
@@ -125,10 +124,9 @@ export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
       <SettingsSection.Header>
         <SettingsSection.Title>Affected servers</SettingsSection.Title>
         <SettingsSection.Description>
-          MCP servers that reach {row.name} through Enterprise Managed
-          Authorization. What {row.name} trusts and the identity providers it
-          accepts on this page apply to all of them. Turn it on or off in each
-          server’s settings.
+          MCP servers that connect to {row.name} through Enterprise Managed
+          Authorization. The settings on this page apply to all of them. Turn
+          Enterprise Managed Authorization on or off in each server’s settings.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -138,13 +136,13 @@ export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
               icon="server"
               heading={
                 hidden > 0
-                  ? `No servers you can see reach ${row.name}`
-                  : `No servers reach ${row.name} yet`
+                  ? `No servers you can see connect to ${row.name}`
+                  : `No servers connect to ${row.name} yet`
               }
               description={
                 hidden > 0
-                  ? `${pluralize(hidden, "server")} you don’t have access to ${hidden === 1 ? "reaches" : "reach"} it.`
-                  : "Turn on Enterprise Managed Authorization in an MCP server’s settings and it shows up here."
+                  ? `${pluralize(hidden, "server")} you don’t have access to ${hidden === 1 ? "connects" : "connect"} to it.`
+                  : "Turn on Enterprise Managed Authorization in an MCP server’s settings. The server then shows up here."
               }
             />
           </SettingsSection.Body>
