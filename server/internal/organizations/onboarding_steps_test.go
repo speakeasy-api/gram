@@ -20,7 +20,7 @@ func TestSyncOnboardingStepsMirrorsTheCatalog(t *testing.T) {
 
 	steps, err := organizations.ListOnboardingSteps(ctx, ti.conn)
 	require.NoError(t, err)
-	require.Len(t, steps, 15, "thirteen cards and two groups")
+	require.Len(t, steps, 16, "fourteen cards and two groups")
 	position := make(map[string]int, len(steps))
 	bySlug := make(map[string]*admingen.AdminOnboardingStep, len(steps))
 	for index, step := range steps {
@@ -49,6 +49,7 @@ func TestSyncOnboardingStepsMirrorsTheCatalog(t *testing.T) {
 
 	require.Equal(t, []string{"inference"}, bySlug["anthropic-observability"].MethodSlugs)
 	require.Equal(t, []string{"settings", "plugins"}, bySlug["anthropic-admin-controls"].MethodSlugs, "support matrix order")
+	require.True(t, bySlug["cursor-admin-controls"].HiddenByDefault, "the device agent covers Cursor by default")
 	require.Equal(t, []string{"anthropic-api", "cursor-api", "openai-api", "conversations"}, bySlug["additional-agent-config"].MethodSlugs)
 	require.Equal(t, "manual", bySlug["configure-policies"].Completion)
 	require.Empty(t, bySlug["configure-policies"].MethodSlugs, "a step with no method applies to every stack")
