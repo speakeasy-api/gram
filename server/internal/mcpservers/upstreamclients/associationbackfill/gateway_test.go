@@ -306,3 +306,131 @@ func TestRunTreatsAServerWhoseSourceIsDeletedAsUnproxied(t *testing.T) {
 	report := f.run(false)
 	require.Equal(t, OutcomeUnproxied, resultFor(t, report, server).Outcome, "a server without a live source serves nothing through a client")
 }
+
+// tunnel creates a tunnel-backed server on userIssuerID whose tunnel claims
+// resource.
+func (f *fixture) tunnel(userIssuerID uuid.UUID, resource string) uuid.UUID {
+	f.t.Helper()
+	ctx := f.t.Context()
+	tunnelID, serverID := uuid.New(), uuid.New()
+	require.NoError(f.t, f.q.SeedTunneledMCPServerFixture(ctx, SeedTunneledMCPServerFixtureParams{
+		ID:                 tunnelID,
+		ProjectID:          f.projectID,
+		Name:               "tunnel-" + tunnelID.String()[:8],
+		KeyHash:            "hash-" + tunnelID.String(),
+		ResourceIdentifier: pgtype.Text{String: resource, Valid: true},
+	}))
+	require.NoError(f.t, f.q.SeedTunneledServerFixture(ctx, SeedTunneledServerFixtureParams{
+		ID:                  serverID,
+		ProjectID:           f.projectID,
+		Slug:                pgtype.Text{String: "t-" + serverID.String()[:8], Valid: true},
+		TunneledMcpServerID: uuid.NullUUID{UUID: tunnelID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuerID, Valid: true},
+	}))
+	return serverID
+}
+
+func TestRunDecidesTunnelsByDerivedIssuerNotClaimedResource(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+
+	// A tunnel claiming the resource another client holds grants for proves
+	// nothing about that client.
+	claimed := f.tunnel(f.userIssuer(), "https://shared.internal.example/mcp")
+	grantedClient, _ := f.gatewayClient(gatewayIssuer)
+	f.grant(gatewayIssuer, grantedClient, "https://shared.internal.example/mcp")
+
+	// Its derived authorization server still decides it, whatever grants for
+	// its claimed resource say.
+	derived := f.tunnel(f.userIssuer(), "https://derived.internal.example/mcp")
+	derivedClient, derivedIssuer := f.gatewayClient(gatewayIssuer)
+	f.derive(derived, derivedIssuer)
+	otherClient, _ := f.gatewayClient(gatewayIssuer)
+	f.grant(gatewayIssuer, otherClient, "https://derived.internal.example/mcp")
+
+	f.gateway(gatewayIssuer, claimed, derived)
+
+	report := f.run(true)
+	require.Equal(t, GatewayOutcomeUnserved, gatewayResultFor(t, report, claimed).Outcome)
+	require.Equal(t, GatewayOutcomeDerived, gatewayResultFor(t, report, derived).Outcome)
+	require.Empty(t, f.associations(claimed))
+	require.Equal(t, []uuid.UUID{derivedClient}, f.associations(derived))
+}
+
+func TestReconcileCapturesATunnelWhoseClaimedResourceAnotherClientHoldsGrantsFor(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+	member := f.tunnel(f.userIssuer(), "https://member.internal.example/mcp")
+	client, remoteIssuer := f.gatewayClient(gatewayIssuer)
+	f.derive(member, remoteIssuer)
+	other, _ := f.gatewayClient(gatewayIssuer)
+	f.grant(gatewayIssuer, other, "https://member.internal.example/mcp")
+	f.gateway(gatewayIssuer, member)
+
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
+	require.Equal(t, []uuid.UUID{client}, f.associations(member))
+}
+
+func TestReconcileRecapturesAMemberThatRejoinsItsGateway(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+	member := f.server(f.userIssuer(), "https://member.example.com/mcp")
+	client, remoteIssuer := f.gatewayClient(gatewayIssuer)
+	f.derive(member, remoteIssuer)
+	f.gateway(gatewayIssuer, member)
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
+	require.Equal(t, []uuid.UUID{client}, f.associations(member))
+
+	require.NoError(t, f.q.RemoveGatewayMemberFixture(t.Context(), member))
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
+	require.Empty(t, f.associations(member), "leaving the gateway prunes the association")
+
+	f.gateway(gatewayIssuer, member)
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
+	require.Equal(t, []uuid.UUID{client}, f.associations(member), "a pruned association is not a detach")
+}
+
+func TestReconcileKeepsAnExplicitGatewayDetach(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+	member := f.server(f.userIssuer(), "https://member.example.com/mcp")
+	client, remoteIssuer := f.gatewayClient(gatewayIssuer)
+	f.derive(member, remoteIssuer)
+	f.associate(member, client, true)
+	f.gateway(gatewayIssuer, member)
+
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
+	require.Empty(t, f.associations(member))
+}
+
+func TestRunSkipsAGatewayWriteWhoseDecisionChanged(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+	member := f.server(f.userIssuer(), "https://member.example.com/mcp")
+	derivedClient, remoteIssuer := f.gatewayClient(gatewayIssuer)
+	f.derive(member, remoteIssuer)
+	otherClient, _ := f.gatewayClient(gatewayIssuer)
+	f.gateway(gatewayIssuer, member)
+
+	decided := gatewayResultFor(t, f.run(false), member)
+	require.Equal(t, GatewayOutcomeDerived, decided.Outcome)
+	require.Equal(t, derivedClient, decided.Associate.UUID)
+
+	// A grant for another client lands between the read and the write, so a
+	// fresh decision would be a conflict.
+	f.grant(gatewayIssuer, otherClient, "https://member.example.com/mcp")
+
+	n, err := f.q.BackfillGatewayAssociation(t.Context(), BackfillGatewayAssociationParams{
+		UserSessionIssuerID:   gatewayIssuer,
+		RemoteSessionClientID: derivedClient,
+		McpServerID:           member,
+	})
+	require.NoError(t, err)
+	require.Zero(t, n)
+	require.Empty(t, f.associations(member))
+}

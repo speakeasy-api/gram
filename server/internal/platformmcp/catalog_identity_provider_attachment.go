@@ -150,22 +150,11 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("lock identity-provider issuer attachment: %w", err)
 	}
 
-	if attachedClient, err := s.matchingAttachment(ctx, principal.OrganizationID, project, registration.UserSessionIssuerID.UUID, metadata.Issuer); err != nil {
+	if attachedClient, err := s.matchingAttachment(ctx, s.db, principal.OrganizationID, project, registration.UserSessionIssuerID.UUID, metadata.Issuer); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, err
 	} else if attachedClient.Valid {
-		// An attachment made before associations were recorded, or a retry
-		// after a partial one, still records the server's own client.
-		associated, err := upstreamclientsrepo.New(s.db).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
-			OrganizationID:        principal.OrganizationID,
-			RemoteSessionClientID: attachedClient.UUID,
-			McpServerID:           registration.McpServerID.UUID,
-			ProjectID:             project.ID,
-		})
-		if err != nil {
-			return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("associate registered mcp server with its client: %w", err)
-		}
-		if associated == 0 {
-			return CatalogIdentityProviderAttachmentResult{}, ErrRegistrationInvalid
+		if err := s.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, attachedClient.UUID); err != nil {
+			return CatalogIdentityProviderAttachmentResult{}, err
 		}
 		return CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: metadata.Issuer}, nil
 	}
@@ -267,12 +256,62 @@ func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetada
 	return remotesessions.DiscoveredIssuerMetadata{}, ErrIdentityProviderAttachmentUnsupported
 }
 
+// associateExistingAttachment records the server's association with the
+// client its issuer already binds, for an attachment made before associations
+// were recorded or a retry after a partial one. The binding was read unlocked,
+// so under the server lock the server must still front the registered source
+// through the registered issuer, and that issuer must still bind the same
+// client, before the association is written in the same transaction.
+func (s *CatalogIdentityProviderAttachmentService) associateExistingAttachment(ctx context.Context, principal Principal, project ResolvedProject, registration platformrepo.PlatformMcpCatalogRegistration, issuerURL string, clientID uuid.UUID) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin identity-provider association: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	locked, err := mcpserversrepo.New(tx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
+		ID:        registration.McpServerID.UUID,
+		ProjectID: project.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrRegistrationInvalid
+	}
+	if err != nil {
+		return fmt.Errorf("lock registered mcp server: %w", err)
+	}
+	if locked.RemoteMcpServerID != registration.RemoteMcpServerID || locked.UserSessionIssuerID != registration.UserSessionIssuerID {
+		return ErrIdentityProviderAttachmentConflict
+	}
+	current, err := s.matchingAttachment(ctx, tx, principal.OrganizationID, project, registration.UserSessionIssuerID.UUID, issuerURL)
+	if err != nil {
+		return err
+	}
+	if !current.Valid || current.UUID != clientID {
+		return ErrIdentityProviderAttachmentConflict
+	}
+	associated, err := upstreamclientsrepo.New(tx).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+		OrganizationID:        principal.OrganizationID,
+		RemoteSessionClientID: clientID,
+		McpServerID:           registration.McpServerID.UUID,
+		ProjectID:             project.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("associate registered mcp server with its client: %w", err)
+	}
+	if associated == 0 {
+		return ErrRegistrationInvalid
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit identity-provider association: %w", err)
+	}
+	return nil
+}
+
 // matchingAttachment returns the client the user session issuer already binds
 // for issuerURL, or an invalid id when it binds none. Any other binding is a
 // conflict this flow does not resolve.
-func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, organizationID string, project ResolvedProject, userSessionIssuerID uuid.UUID, issuerURL string) (uuid.NullUUID, error) {
+func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, db remotesessionsrepo.DBTX, organizationID string, project ResolvedProject, userSessionIssuerID uuid.UUID, issuerURL string) (uuid.NullUUID, error) {
 	var none uuid.NullUUID
-	clients, err := remotesessionsrepo.New(s.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
+	clients, err := remotesessionsrepo.New(db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           conv.ToNullUUID(project.ID),
 		OrganizationID:      conv.ToPGText(organizationID),
