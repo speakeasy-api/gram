@@ -155,7 +155,7 @@ export function useIdentityIsKnown(identity: IdentityModel | undefined): {
   isPending: boolean;
   /**
    * Whether the roster read failed. `known` is false either way, and callers
-   * that word that as a finding — "no activity recorded", "not enrolled" —
+   * that word that as a finding — "no activity recorded", "not seen" —
    * need to tell the two apart.
    */
   isError: boolean;

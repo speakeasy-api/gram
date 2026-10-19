@@ -18,6 +18,7 @@ import {
   retryFailed,
   useIdentityDevices,
   useIdentityIsKnown,
+  useIdentityMember,
   useIdentityPeers,
   useIdentityWindow,
 } from "./useIdentityQueries";
@@ -81,8 +82,8 @@ export default function IdentityDevices(): JSX.Element {
   const routes = useRoutes();
   const { identity } = useIdentityOutlet();
   const orgRoutes = useOrgRoutes();
-  // No handoff on this page filters by principal, so the member list this
-  // would otherwise fetch is not worth the request.
+  // No handoff on this page filters by principal, so none needs the member
+  // row.
   const handoffs = identityHandoffs(
     identity,
     routes,
@@ -119,20 +120,24 @@ export default function IdentityDevices(): JSX.Element {
     (account) => account.accountType === "personal",
   ).length;
 
-  // Enrollment, spelled out rather than asserted. The identities list reduces
-  // it to one word per row, and the word carries no definition — someone is
-  // "enrolled" once the directory knows them AND we have seen them work. Each
-  // step below is one half of that, plus the two things that make the rest of
-  // this tab worth reading.
-  const hasDirectoryRow = identity.userIds.length > 0;
-  // All-time, not the page's window: enrollment is a standing fact about a
+  // Three separate facts, each answered on its own, the same three the
+  // identities list filters on. None implies another: a directory profile can
+  // belong to someone who never signed in, and activity can come from someone
+  // with no account here. Then the two things that make the rest of this tab
+  // worth reading.
+  //
+  // The member row is matched the way every other panel here matches it, so
+  // "member" agrees with the access and challenge panels.
+  const { member, query: membersQuery } = useIdentityMember(identity);
+  const isMember = member !== undefined;
+  const inDirectory = member?.inDirectory ?? false;
+  // All-time, not the page's window: being seen is a standing fact about a
   // person, and the identities list reports it that way. Reading it off the
-  // windowed roster marked someone "not enrolled" for having been quiet for
-  // the last seven days.
+  // windowed roster marked someone unseen for having been quiet for the last
+  // seven days.
   const knownAllTime = useIdentityIsKnown(identity);
   const seenWorking = knownAllTime.known;
-  const enrolled = hasDirectoryRow && seenWorking;
-  const enrollmentSteps: {
+  const statusSteps: {
     key: string;
     title: string;
     detail: string;
@@ -140,15 +145,25 @@ export default function IdentityDevices(): JSX.Element {
   }[] = [
     {
       key: "directory",
-      title: "Known to the directory",
-      detail: hasDirectoryRow
-        ? "Has an account in this organization."
-        : "Seen in telemetry, but matches no member of this organization.",
-      met: hasDirectoryRow,
+      title: "In directory",
+      detail: inDirectory
+        ? "Has a live profile in the organization's synced directory."
+        : isMember
+          ? "No live profile in a synced directory."
+          : "Matches no member, so there is no directory profile to read.",
+      met: inDirectory,
+    },
+    {
+      key: "member",
+      title: "Member",
+      detail: isMember
+        ? "Is a member of this organization."
+        : "Matches no member of this organization.",
+      met: isMember,
     },
     {
       key: "activity",
-      title: "Seen working",
+      title: "Seen",
       detail: seenWorking
         ? "Has recorded tool or agent-session activity."
         : "No tool calls or agent sessions recorded yet.",
@@ -194,24 +209,32 @@ export default function IdentityDevices(): JSX.Element {
     >
       <div className="flex flex-col gap-4">
         <IdentityWorkIdentities identity={identity} />
-        {/* Explain the enrollment status shown in the identities list. */}
+        {/* The facts the identities list filters on, one row each. */}
         <IdentityPanel
-          title="Enrollment"
+          title="Status"
           loading={
-            peersPending || devicesQuery.isLoading || knownAllTime.isPending
+            peersPending ||
+            devicesQuery.isLoading ||
+            knownAllTime.isPending ||
+            membersQuery.isLoading
           }
-          // Every step below reads off data that failed to arrive as a "No",
-          // and the footer then concludes "Not enrolled" — the worst possible
-          // wrong answer on this page.
-          error={peersFailed || devicesQuery.isError || knownAllTime.isError}
-          onRetry={retryFailed(peersRetry, devicesQuery, knownAllTime)}
-          footer={
-            enrolled
-              ? "Enrolled: the directory knows this person and we have seen them work."
-              : "Not enrolled: enrollment needs both a directory account and recorded activity."
+          // Every row below reads data that failed to arrive as a "No", which
+          // states something about the person that we do not know.
+          error={
+            peersFailed ||
+            devicesQuery.isError ||
+            knownAllTime.isError ||
+            membersQuery.isError
           }
+          onRetry={retryFailed(
+            peersRetry,
+            devicesQuery,
+            knownAllTime,
+            membersQuery,
+          )}
+          footer="Directory, membership and activity are separate facts. None of them implies another."
         >
-          {enrollmentSteps.map((step) => (
+          {statusSteps.map((step) => (
             <IdentityPanelRow
               key={step.key}
               accent={step.met ? undefined : "warning"}
