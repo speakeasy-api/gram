@@ -287,3 +287,34 @@ func TestUpstreamClientSelection_ConsentOffersOnlyTheServersOwnClients(t *testin
 	require.NotNil(t, location)
 	require.Equal(t, "sel-own-as.example.com", location.Host, "only the server's own client is offered")
 }
+
+// A server offering two clients serves each person through the one they
+// connected at consent, recorded when their credential is issued. Someone
+// who connected neither is asked to reconnect.
+func TestUpstreamClientSelection_ServerOfferingSeveralClientsServesTheConnectedOne(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSelectionFixture(t)
+
+	issuerID := createUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
+	upstream := newRecordingUpstream(t, "ping")
+	slug := "sel-choice-" + uuid.NewString()[:8]
+	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
+	first := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-first", "", []uuid.UUID{issuerID})
+	second := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-second", "", []uuid.UUID{issuerID})
+	f.associate(t, ctx, server.ID, first)
+	f.associate(t, ctx, server.ID, second)
+
+	connected := createTestUser(t, ctx, f.ti, "sel-connected-"+uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, f.ti, issuerID, second, connected, "token-second", upstream.url)
+	resp, err := callTool(t, f.ti, slug, f.issue(t, ctx, slug, issuerID, connected), "ping")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	upstream.requireToolCallAuth(t, "Bearer token-second")
+	upstream.awaitMetadataProbe(t)
+
+	unconnected := createTestUser(t, ctx, f.ti, "sel-unconnected-"+uuid.NewString())
+	before := upstream.requestCount()
+	resp, err = callTool(t, f.ti, slug, f.issue(t, ctx, slug, issuerID, unconnected), "ping")
+	requireReconnect(t, resp, err, slug)
+	require.Equal(t, before, upstream.requestCount())
+}
