@@ -443,6 +443,8 @@ func TestClassifyMatchesTheRecordedChoice(t *testing.T) {
 		{"already chosen", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: true, EligibleClients: 2, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeSelected},
 		{"one eligible client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 1, AssociatedClients: 2, IssuerBoundClients: 3}, OutcomeClient},
 		{"several eligible clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeAmbiguous},
+		{"several eligible clients, one connected", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, ConnectedClients: 1, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeClient},
+		{"several eligible clients, several connected", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, ConnectedClients: 2, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeAmbiguous},
 		{"associated but not through this issuer", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 1, IssuerBoundClients: 1}, OutcomeUnreachableClient},
 		{"unassociated with bound clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0, IssuerBoundClients: 1}, OutcomeUnassociated},
 		{"unassociated with a gateway client tied to it", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0, IssuerBoundClients: 0, EvidenceClients: 2}, OutcomeUnassociated},
@@ -546,4 +548,97 @@ func TestRunReportsCoverageFromWhatWasRecorded(t *testing.T) {
 	require.Zero(t, report.FullyCovered, "an unrecorded pair is not covered")
 	require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: server, Outcome: OutcomeAmbiguous}}, report.Gaps)
 	require.Empty(t, f.selections(credential))
+}
+
+// connect records subject's live grant for clientID, as connecting its card
+// at consent does.
+func (f *fixture) connect(userIssuerID, clientID uuid.UUID, subject urn.SessionSubject) {
+	f.t.Helper()
+	require.NoError(f.t, f.q.SeedGrantFixture(f.t.Context(), SeedGrantFixtureParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   userIssuerID,
+		RemoteSessionClientID: clientID,
+		Resource:              pgtype.Text{String: "https://upstream.example.com/mcp", Valid: true},
+	}))
+}
+
+// When a server offers several clients, the card the person connected at
+// consent is the credential's choice; connecting none or several leaves it to
+// a reconnection.
+func TestRecordUpstreamClientSelectionsChoosesTheConnectedClient(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	first, second := f.client(issuer), f.client(issuer)
+	server := f.server(issuer, first, second)
+
+	connectedOne := urn.NewUserSubject("connected-one")
+	f.connect(issuer, second, connectedOne)
+	one := f.sessionFor(issuer, connectedOne)
+
+	connectedBoth := urn.NewUserSubject("connected-both")
+	f.connect(issuer, first, connectedBoth)
+	f.connect(issuer, second, connectedBoth)
+	both := f.sessionFor(issuer, connectedBoth)
+
+	none := f.session(issuer)
+
+	preview, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 1, preview.Pairs[OutcomeClient], "the prediction agrees with what is recorded")
+	require.Equal(t, 2, preview.Pairs[OutcomeAmbiguous])
+
+	f.record(issuer, one)
+	f.record(issuer, both)
+	f.record(issuer, none)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{server: second}, f.selections(one))
+	require.Empty(t, f.selections(both))
+	require.Empty(t, f.selections(none))
+}
+
+// A platform client is shared by every organization, so grants for it minted
+// in another organization never keep this organization's member from no-auth.
+func TestRecordUpstreamClientSelectionsIgnoresGrantsMintedInAnotherOrganization(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := t.Context()
+	gatewayIssuer := f.projectIssuer()
+	member := f.server(f.projectIssuer())
+	remoteIssuerID, clientID := uuid.New(), uuid.New()
+	require.NoError(t, f.q.SeedRemoteSessionIssuerFixture(ctx, SeedRemoteSessionIssuerFixtureParams{
+		ID:        remoteIssuerID,
+		ProjectID: uuid.NullUUID{},
+		Slug:      "rsi-" + remoteIssuerID.String()[:8],
+		Issuer:    "https://" + remoteIssuerID.String()[:8] + ".example.com",
+	}))
+	require.NoError(t, f.q.SeedRemoteSessionClientFixture(ctx, SeedRemoteSessionClientFixtureParams{
+		ID:                    clientID,
+		ProjectID:             uuid.NullUUID{},
+		OrganizationID:        pgtype.Text{},
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              "cid-" + clientID.String()[:8],
+	}))
+	require.NoError(t, f.q.SeedClientBindingFixture(ctx, SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: gatewayIssuer}))
+	otherOrg, otherIssuer := "org_"+uuid.NewString(), uuid.New()
+	require.NoError(t, f.q.SeedOrganizationFixture(ctx, otherOrg))
+	require.NoError(t, f.q.SeedUserSessionIssuerFixture(ctx, SeedUserSessionIssuerFixtureParams{
+		ID:             otherIssuer,
+		ProjectID:      uuid.NullUUID{},
+		OrganizationID: pgtype.Text{String: otherOrg, Valid: true},
+		Slug:           "usi-" + otherIssuer.String()[:8],
+	}))
+	f.connect(otherIssuer, clientID, urn.NewUserSubject("elsewhere"))
+	gatewayID := uuid.New()
+	require.NoError(t, f.q.SeedMetaMCPServerFixture(ctx, SeedMetaMCPServerFixtureParams{
+		ID:                  gatewayID,
+		OrganizationID:      f.orgID,
+		ProjectID:           f.projectID,
+		Name:                "gateway",
+		UserSessionIssuerID: uuid.NullUUID{UUID: gatewayIssuer, Valid: true},
+	}))
+	require.NoError(t, f.q.SeedMetaMCPServerMemberFixture(ctx, SeedMetaMCPServerMemberFixtureParams{ProjectID: f.projectID, MetaMcpServerID: gatewayID, McpServerID: member}))
+	credential := f.session(gatewayIssuer)
+
+	f.record(gatewayIssuer, credential)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{member: uuid.Nil}, f.selections(credential))
 }

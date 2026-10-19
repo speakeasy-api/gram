@@ -29,15 +29,17 @@ const (
 	OutcomeSelected Outcome = "selected"
 
 	// OutcomeClient is a pair whose server has exactly one associated client
-	// the credential's issuer also binds; that client is chosen.
+	// the credential's issuer also binds, or several of which the
+	// credential's subject has connected exactly one; that client is chosen.
 	OutcomeClient Outcome = "client"
 
 	// OutcomeNoAuth is a pair whose server has no associated client and whose
 	// own issuer binds none; an explicit no-auth choice is recorded.
 	OutcomeNoAuth Outcome = "no_auth"
 
-	// OutcomeAmbiguous is a pair with several eligible clients. The credential
-	// must reconnect to choose one.
+	// OutcomeAmbiguous is a pair with several eligible clients the subject
+	// has connected none or several of. The credential must reconnect with
+	// exactly one connected to choose it.
 	OutcomeAmbiguous Outcome = "ambiguous"
 
 	// OutcomeUnreachableClient is a pair whose server's associated clients
@@ -68,7 +70,7 @@ func Classify(row ListUpstreamClientSelectionCoverageRow) Outcome {
 	switch {
 	case row.Selected:
 		return OutcomeSelected
-	case row.EligibleClients == 1:
+	case row.EligibleClients == 1, row.EligibleClients > 1 && row.ConnectedClients == 1:
 		return OutcomeClient
 	case row.EligibleClients > 1:
 		return OutcomeAmbiguous
