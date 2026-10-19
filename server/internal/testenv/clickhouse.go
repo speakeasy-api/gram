@@ -46,7 +46,7 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 			wait.ForExec([]string{"clickhouse-client", "--host", clickhouseTestHostname, "--user", "gram", "--password", "gram", "--query", "SELECT 1"}),
 		),
 		WithPublishedPortWait("9000/tcp"),
-		WithoutPublishedPorts(),
+		WithLoopbackPorts(),
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 	)
 	if err != nil {

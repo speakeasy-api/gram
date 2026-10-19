@@ -12,7 +12,7 @@ import (
 )
 
 const listWorkloadIssuersByIssuerURL = `-- name: ListWorkloadIssuersByIssuerURL :many
-SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE issuer = ANY($1::text[])
   AND organization_id = $2
@@ -71,6 +71,7 @@ func (q *Queries) ListWorkloadIssuersByIssuerURL(ctx context.Context, arg ListWo
 			&i.Issuer,
 			&i.JwksUri,
 			&i.AllowWildcardAdmission,
+			&i.KeySource,
 			&i.Metadata,
 			&i.CreatedAt,
 			&i.UpdatedAt,
