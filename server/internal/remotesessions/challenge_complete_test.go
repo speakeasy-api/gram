@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // CompleteRemoteLogin returns the committed grant addressed the way the consent page is, alongside the redirect.
@@ -55,4 +57,17 @@ func TestCompleteRemoteLogin_ReturnsToTheGatewayServerPage(t *testing.T) {
 	require.NoError(t, spy.handlerErr)
 
 	require.True(t, strings.HasSuffix(result.RedirectURL, "/mcp/"+parent.McpSlug+"/connect?state="+url.QueryEscape(parent.ID)+"&server=eng.github"), result.RedirectURL)
+}
+
+// An authorization server with no authorization endpoint can't be signed in to.
+func TestBuildAuthorizationUrl_NoAuthorizationEndpoint(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "noauthz", &spy)
+	client := fx.clients[0]
+	client.AuthorizationEndpoint = ""
+
+	_, err := fx.mgr.BuildAuthorizationUrl(ctx, fx.parent, client)
+	require.ErrorIs(t, err, remotesessions.ErrIssuerNoAuthorizationEndpoint)
 }

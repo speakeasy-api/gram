@@ -213,7 +213,7 @@ func TestConsentPage_CachedChainedCredentialRendersConnected(t *testing.T) {
 
 	code, page, _ := render(t, fx)
 	require.Equal(t, http.StatusOK, code)
-	require.Contains(t, page, "Connected through your identity provider")
+	require.Contains(t, page, "Service connected through your identity provider")
 	require.Contains(t, page, `data-chain-check="connected"`)
 	require.Contains(t, page, "1 of 1 connected")
 	require.Contains(t, page, "Use a separate sign-in instead")

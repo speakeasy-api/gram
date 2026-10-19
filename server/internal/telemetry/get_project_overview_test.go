@@ -8,7 +8,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestGetProjectOverviewSessionMode(t *testing.T) {
@@ -71,7 +70,6 @@ func TestGetProjectOverviewCountsHostedServers(t *testing.T) {
 		projectID: projectID, timestamp: to.Add(-time.Minute), toolsetSlug: "support",
 		toolName: "lookup", userEmail: "user-2@example.com", statusCode: 200,
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.GetProjectOverview(ctx, &gen.GetProjectOverviewPayload{
 		From: to.Add(-24 * time.Hour).Format(time.RFC3339),

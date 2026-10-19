@@ -37,7 +37,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
@@ -482,10 +481,7 @@ func newWorkerCommand() *cli.Command {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: using local fixture publisher")
 			}
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
-			var featureFlags feature.Provider = posthogClient
-			if c.String("environment") == "local" {
-				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
-			}
+			featureFlags := newFeatureFlags(ctx, c, logger, posthogClient)
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			var pluginPublisher *plugins.Service

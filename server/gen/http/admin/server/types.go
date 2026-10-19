@@ -1968,6 +1968,24 @@ type GetMcpServerToolCallsResponseBody struct {
 	Daily []*AdminMcpServerToolCallBucketResponseBody `form:"daily,omitempty" json:"daily,omitempty" xml:"daily,omitempty"`
 }
 
+// GetHookClientsResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body.
+type GetHookClientsResponseBody struct {
+	// Length of the window in days.
+	WindowDays int `form:"window_days" json:"window_days" xml:"window_days"`
+	// When the grids were read from ClickHouse.
+	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
+	// True when the grids came from the one-hour cache rather than a fresh
+	// ClickHouse read.
+	FromCache bool `form:"from_cache" json:"from_cache" xml:"from_cache"`
+	// Every organization that appears in either grid.
+	Organizations []*AdminHookClientOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+	// The hook client grid, new sessions only.
+	Sessions []*AdminHookClientSessionCellResponseBody `form:"sessions" json:"sessions" xml:"sessions"`
+	// The inference hook traffic grid.
+	Inference []*AdminInferenceHookCellResponseBody `form:"inference" json:"inference" xml:"inference"`
+}
+
 // ListExternalMcpMigrationCandidatesResponseBody is the type of the "admin"
 // service "listExternalMcpMigrationCandidates" endpoint HTTP response body.
 type ListExternalMcpMigrationCandidatesResponseBody struct {
@@ -13870,6 +13888,188 @@ type GetMcpServerToolCallsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetHookClientsUnauthorizedResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "unauthorized" error.
+type GetHookClientsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsForbiddenResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "forbidden" error.
+type GetHookClientsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsBadRequestResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "bad_request" error.
+type GetHookClientsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsNotFoundResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "not_found" error.
+type GetHookClientsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsConflictResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "conflict" error.
+type GetHookClientsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsUnsupportedMediaResponseBody is the type of the "admin"
+// service "getHookClients" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetHookClientsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsInvalidResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "invalid" error.
+type GetHookClientsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsInvariantViolationResponseBody is the type of the "admin"
+// service "getHookClients" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetHookClientsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsUnexpectedResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "unexpected" error.
+type GetHookClientsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsGatewayErrorResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "gateway_error" error.
+type GetHookClientsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListExternalMcpMigrationCandidatesUnavailableResponseBody is the type of the
 // "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
 // body for the "unavailable" error.
@@ -20585,6 +20785,53 @@ type AdminMcpServerToolCallBucketResponseBody struct {
 	Failed int64 `form:"failed" json:"failed" xml:"failed"`
 }
 
+// AdminHookClientOrganizationResponseBody is used to define fields on response
+// body types.
+type AdminHookClientOrganizationResponseBody struct {
+	// The organization ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The organization name. Absent when the organization no longer exists.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The organization slug. Absent when the organization no longer exists.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
+// AdminHookClientSessionCellResponseBody is used to define fields on response
+// body types.
+type AdminHookClientSessionCellResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The UTC day, as YYYY-MM-DD.
+	Day string `form:"day" json:"day" xml:"day"`
+	// curl for the legacy curl hooks, a hooks binary version, binary for binary
+	// rows that record no version, or empty for the organization-day total.
+	Client string `form:"client" json:"client" xml:"client"`
+	// Machines that started a session on this day.
+	Machines int64 `form:"machines" json:"machines" xml:"machines"`
+	// Sessions started on this day.
+	Sessions int64 `form:"sessions" json:"sessions" xml:"sessions"`
+	// Machines that sent any hook on this day, including sessions started earlier.
+	MachinesAll int64 `form:"machines_all" json:"machines_all" xml:"machines_all"`
+}
+
+// AdminInferenceHookCellResponseBody is used to define fields on response body
+// types.
+type AdminInferenceHookCellResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The UTC day, as YYYY-MM-DD.
+	Day string `form:"day" json:"day" xml:"day"`
+	// The Claude app that sent the transcript, or empty for the organization-day
+	// total.
+	Surface string `form:"surface" json:"surface" xml:"surface"`
+	// Distinct users.
+	Users int64 `form:"users" json:"users" xml:"users"`
+	// Stored transcript messages.
+	Events int64 `form:"events" json:"events" xml:"events"`
+	// Distinct sessions.
+	Sessions int64 `form:"sessions" json:"sessions" xml:"sessions"`
+}
+
 // AdminExternalMcpMigrationCandidateResponseBody is used to define fields on
 // response body types.
 type AdminExternalMcpMigrationCandidateResponseBody struct {
@@ -22377,6 +22624,53 @@ func NewGetMcpServerToolCallsResponseBody(res *admin.AdminMcpServerToolCalls) *G
 			}
 			body.Daily[i] = marshalAdminAdminMcpServerToolCallBucketToAdminMcpServerToolCallBucketResponseBody(val)
 		}
+	}
+	return body
+}
+
+// NewGetHookClientsResponseBody builds the HTTP response body from the result
+// of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsResponseBody(res *admin.AdminHookClientsResult) *GetHookClientsResponseBody {
+	body := &GetHookClientsResponseBody{
+		WindowDays: res.WindowDays,
+		QueriedAt:  res.QueriedAt,
+		FromCache:  res.FromCache,
+	}
+	if res.Organizations != nil {
+		body.Organizations = make([]*AdminHookClientOrganizationResponseBody, len(res.Organizations))
+		for i, val := range res.Organizations {
+			if val == nil {
+				body.Organizations[i] = nil
+				continue
+			}
+			body.Organizations[i] = marshalAdminAdminHookClientOrganizationToAdminHookClientOrganizationResponseBody(val)
+		}
+	} else {
+		body.Organizations = []*AdminHookClientOrganizationResponseBody{}
+	}
+	if res.Sessions != nil {
+		body.Sessions = make([]*AdminHookClientSessionCellResponseBody, len(res.Sessions))
+		for i, val := range res.Sessions {
+			if val == nil {
+				body.Sessions[i] = nil
+				continue
+			}
+			body.Sessions[i] = marshalAdminAdminHookClientSessionCellToAdminHookClientSessionCellResponseBody(val)
+		}
+	} else {
+		body.Sessions = []*AdminHookClientSessionCellResponseBody{}
+	}
+	if res.Inference != nil {
+		body.Inference = make([]*AdminInferenceHookCellResponseBody, len(res.Inference))
+		for i, val := range res.Inference {
+			if val == nil {
+				body.Inference[i] = nil
+				continue
+			}
+			body.Inference[i] = marshalAdminAdminInferenceHookCellToAdminInferenceHookCellResponseBody(val)
+		}
+	} else {
+		body.Inference = []*AdminInferenceHookCellResponseBody{}
 	}
 	return body
 }
@@ -32080,6 +32374,146 @@ func NewGetMcpServerToolCallsGatewayErrorResponseBody(res *goa.ServiceError) *Ge
 	return body
 }
 
+// NewGetHookClientsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsUnauthorizedResponseBody(res *goa.ServiceError) *GetHookClientsUnauthorizedResponseBody {
+	body := &GetHookClientsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsForbiddenResponseBody builds the HTTP response body from
+// the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsForbiddenResponseBody(res *goa.ServiceError) *GetHookClientsForbiddenResponseBody {
+	body := &GetHookClientsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsBadRequestResponseBody builds the HTTP response body from
+// the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsBadRequestResponseBody(res *goa.ServiceError) *GetHookClientsBadRequestResponseBody {
+	body := &GetHookClientsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsNotFoundResponseBody builds the HTTP response body from the
+// result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsNotFoundResponseBody(res *goa.ServiceError) *GetHookClientsNotFoundResponseBody {
+	body := &GetHookClientsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsConflictResponseBody builds the HTTP response body from the
+// result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsConflictResponseBody(res *goa.ServiceError) *GetHookClientsConflictResponseBody {
+	body := &GetHookClientsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetHookClientsUnsupportedMediaResponseBody {
+	body := &GetHookClientsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsInvalidResponseBody builds the HTTP response body from the
+// result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsInvalidResponseBody(res *goa.ServiceError) *GetHookClientsInvalidResponseBody {
+	body := &GetHookClientsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsInvariantViolationResponseBody(res *goa.ServiceError) *GetHookClientsInvariantViolationResponseBody {
+	body := &GetHookClientsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsUnexpectedResponseBody(res *goa.ServiceError) *GetHookClientsUnexpectedResponseBody {
+	body := &GetHookClientsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsGatewayErrorResponseBody(res *goa.ServiceError) *GetHookClientsGatewayErrorResponseBody {
+	body := &GetHookClientsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListExternalMcpMigrationCandidatesUnavailableResponseBody builds the HTTP
 // response body from the result of the "listExternalMcpMigrationCandidates"
 // endpoint of the "admin" service.
@@ -37584,6 +38018,17 @@ func NewGetMcpServerToolCallsPayload(organizationID string, projectID string, mc
 	v.ProjectID = projectID
 	v.McpServerID = mcpServerID
 	v.WindowDays = windowDays
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetHookClientsPayload builds a admin service getHookClients endpoint
+// payload.
+func NewGetHookClientsPayload(windowDays int, refresh bool, adminSessionToken *string) *admin.GetHookClientsPayload {
+	v := &admin.GetHookClientsPayload{}
+	v.WindowDays = windowDays
+	v.Refresh = refresh
 	v.AdminSessionToken = adminSessionToken
 
 	return v

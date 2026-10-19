@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
@@ -289,22 +288,16 @@ func TestGetTokensUnderManagementQuery_ExcludesCacheReads(t *testing.T) {
 	// Observed rows outside the window. Excluded.
 	insertObservedClaudeRow(t, chConn, projectID.String(), now.Add(-5*24*time.Hour), 9000, 0, 0, 0)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:          []string{projectID.String()},
-			StartUnixNano:       windowStart.UnixNano(),
-			EndUnixNano:         windowEnd.UnixNano(),
-			ExcludedHookSources: nil,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Equal(c, int64(575), sumTumBuckets(res), "input + output + cache writes — never cache reads")
-		if !assert.Len(c, res, 1, "all in-window rows share one day bucket") {
-			return
-		}
-		assert.Equal(c, dayStart, res[0].Day.UTC())
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+		ProjectIDs:          []string{projectID.String()},
+		StartUnixNano:       windowStart.UnixNano(),
+		EndUnixNano:         windowEnd.UnixNano(),
+		ExcludedHookSources: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(575), sumTumBuckets(res), "input + output + cache writes — never cache reads")
+	require.Len(t, res, 1, "all in-window rows share one day bucket")
+	require.Equal(t, dayStart, res[0].Day.UTC())
 }
 
 func sumTumBuckets(buckets []telemetryrepo.TumDayBucket) int64 {
@@ -355,18 +348,14 @@ func TestGetTokensUnderManagementQuery_CountsClaudeChatAnalyticsUsage(t *testing
 		"gram.hook.source":          "claude-code",
 	})
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:          []string{projectID.String()},
-			StartUnixNano:       windowStart.UnixNano(),
-			EndUnixNano:         windowEnd.UnixNano(),
-			ExcludedHookSources: nil,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Equal(c, int64(175), sumTumBuckets(res), "claude_chat usage counts input + output + cache writes; cost rows add no tokens; claude-code:usage rows stay excluded")
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+		ProjectIDs:          []string{projectID.String()},
+		StartUnixNano:       windowStart.UnixNano(),
+		EndUnixNano:         windowEnd.UnixNano(),
+		ExcludedHookSources: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(175), sumTumBuckets(res), "claude_chat usage counts input + output + cache writes; cost rows add no tokens; claude-code:usage rows stay excluded")
 }
 
 func TestGetTokensUnderManagementQuery_DailyBreakdown(t *testing.T) {
@@ -384,24 +373,18 @@ func TestGetTokensUnderManagementQuery_DailyBreakdown(t *testing.T) {
 	insertObservedClaudeRow(t, chConn, projectID.String(), now, 200, 100, 0, 0)
 	insertObservedClaudeRow(t, chConn, projectID.String(), now.Add(-24*time.Hour), 200, 0, 0, 0)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:          []string{projectID.String()},
-			StartUnixNano:       windowStart.UnixNano(),
-			EndUnixNano:         windowEnd.UnixNano(),
-			ExcludedHookSources: nil,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.Len(c, res, 2) {
-			return
-		}
-		assert.Equal(c, dayStart.Add(-24*time.Hour), res[0].Day.UTC())
-		assert.Equal(c, int64(200), res[0].Tokens)
-		assert.Equal(c, dayStart, res[1].Day.UTC())
-		assert.Equal(c, int64(300), res[1].Tokens)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+		ProjectIDs:          []string{projectID.String()},
+		StartUnixNano:       windowStart.UnixNano(),
+		EndUnixNano:         windowEnd.UnixNano(),
+		ExcludedHookSources: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, res, 2)
+	require.Equal(t, dayStart.Add(-24*time.Hour), res[0].Day.UTC())
+	require.Equal(t, int64(200), res[0].Tokens)
+	require.Equal(t, dayStart, res[1].Day.UTC())
+	require.Equal(t, int64(300), res[1].Tokens)
 }
 
 func TestGetTokensUnderManagementQuery_NoProjects(t *testing.T) {
@@ -465,25 +448,19 @@ func TestGetTokensUnderManagement_CountsObservedTraffic(t *testing.T) {
 	insertRetainedGramAggregateRow(t, chConn, projectID.String(), now, "playground", 9000)
 	insertRetainedGramAggregateRow(t, chConn, projectID.String(), now, "", 7000)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := svc.GetTokensUnderManagement(testAuthContext(orgID), &gen.GetTokensUnderManagementPayload{})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Equal(c, int64(450), res.Tokens)
+	res, err := svc.GetTokensUnderManagement(testAuthContext(orgID), &gen.GetTokensUnderManagementPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, int64(450), res.Tokens)
 
-		// The active cycle's daily points sum to the headline number.
-		last := res.History[len(res.History)-1]
-		assert.Equal(c, int64(450), last.Tokens)
-		var daySum int64
-		for _, day := range last.Days {
-			daySum += day.Tokens
-		}
-		assert.Equal(c, int64(450), daySum)
-	}, 10*time.Second, 200*time.Millisecond)
+	// The active cycle's daily points sum to the headline number.
+	last := res.History[len(res.History)-1]
+	require.Equal(t, int64(450), last.Tokens)
+	var daySum int64
+	for _, day := range last.Days {
+		daySum += day.Tokens
+	}
+	require.Equal(t, int64(450), daySum)
 }
 
 func TestSetBillingMetadata_RequiresPlatformAdmin(t *testing.T) {
@@ -714,18 +691,14 @@ func TestGetTokensUnderManagementQuery_ExcludesGramHostedSources(t *testing.T) {
 	// Confirm everything materialized (an unscoped read sees all five rows),
 	// THEN assert the scoped read excludes exactly the Speakeasy-hosted tokens —
 	// the exclusion cannot pass vacuously against a half-ingested view.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:          []string{projectID.String()},
-			StartUnixNano:       windowStart.UnixNano(),
-			EndUnixNano:         windowEnd.UnixNano(),
-			ExcludedHookSources: nil,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Equal(c, int64(5500), sumTumBuckets(res))
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+		ProjectIDs:          []string{projectID.String()},
+		StartUnixNano:       windowStart.UnixNano(),
+		EndUnixNano:         windowEnd.UnixNano(),
+		ExcludedHookSources: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(5500), sumTumBuckets(res))
 
 	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
 		ProjectIDs:          []string{projectID.String()},

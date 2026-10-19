@@ -226,6 +226,10 @@ type Service interface {
 	// view, no auth scoping). Returns logging:disabled without reading telemetry
 	// when the organization's logs are off.
 	GetMcpServerToolCalls(context.Context, *GetMcpServerToolCallsPayload) (res *AdminMcpServerToolCalls, err error)
+	// Fleet-wide hook client grids: which hook client (legacy curl or hooks binary
+	// version) each organization's new sessions use per day, and inference hook
+	// traffic per Claude app.
+	GetHookClients(context.Context, *GetHookClientsPayload) (res *AdminHookClientsResult, err error)
 	// Lists every live server across all organizations whose latest toolset
 	// version proxies an external MCP attachment on its project's active
 	// deployment, with the blockers that stop each one from migrating.
@@ -344,7 +348,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [91]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
+var MethodNames = [92]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -514,6 +518,69 @@ type AdminExternalMcpMigrationRequest struct {
 type AdminExternalMcpMigrationResult struct {
 	// One outcome per requested server, in request order.
 	Outcomes []*AdminExternalMcpMigrationOutcome
+}
+
+// An organization that appears in either hook client grid.
+type AdminHookClientOrganization struct {
+	// The organization ID.
+	ID string
+	// The organization name. Absent when the organization no longer exists.
+	Name *string
+	// The organization slug. Absent when the organization no longer exists.
+	Slug *string
+}
+
+// One (organization, day, client) cell of the hook client grid. Sessions count
+// on the UTC day of their first hook.
+type AdminHookClientSessionCell struct {
+	// The organization ID.
+	OrganizationID string
+	// The UTC day, as YYYY-MM-DD.
+	Day string
+	// curl for the legacy curl hooks, a hooks binary version, binary for binary
+	// rows that record no version, or empty for the organization-day total.
+	Client string
+	// Machines that started a session on this day.
+	Machines int64
+	// Sessions started on this day.
+	Sessions int64
+	// Machines that sent any hook on this day, including sessions started earlier.
+	MachinesAll int64
+}
+
+// AdminHookClientsResult is the result type of the admin service
+// getHookClients method.
+type AdminHookClientsResult struct {
+	// Length of the window in days.
+	WindowDays int
+	// When the grids were read from ClickHouse.
+	QueriedAt string
+	// True when the grids came from the one-hour cache rather than a fresh
+	// ClickHouse read.
+	FromCache bool
+	// Every organization that appears in either grid.
+	Organizations []*AdminHookClientOrganization
+	// The hook client grid, new sessions only.
+	Sessions []*AdminHookClientSessionCell
+	// The inference hook traffic grid.
+	Inference []*AdminInferenceHookCell
+}
+
+// One (organization, day, surface) cell of the inference hook grid.
+type AdminInferenceHookCell struct {
+	// The organization ID.
+	OrganizationID string
+	// The UTC day, as YYYY-MM-DD.
+	Day string
+	// The Claude app that sent the transcript, or empty for the organization-day
+	// total.
+	Surface string
+	// Distinct users.
+	Users int64
+	// Stored transcript messages.
+	Events int64
+	// Distinct sessions.
+	Sessions int64
 }
 
 // Current usage and configured state for one materialized platform-managed
@@ -1728,6 +1795,16 @@ type GetGlobalIssuerPayload struct {
 	// The remote_session_issuer id.
 	ID                string
 	AdminSessionToken *string
+}
+
+// GetHookClientsPayload is the payload type of the admin service
+// getHookClients method.
+type GetHookClientsPayload struct {
+	AdminSessionToken *string
+	// Window in days.
+	WindowDays int
+	// Skip the one-hour cache and read ClickHouse now.
+	Refresh bool
 }
 
 // GetInferenceKeysPayload is the payload type of the admin service

@@ -19,7 +19,7 @@ import (
 const eventMCPInitialized = "mcp_initialized"
 
 // InitializePostHogEventInterceptor emits the [eventMCPInitialized] PostHog
-// event for every JSON-RPC `initialize` request observed by `/x/mcp`. It is
+// event for every JSON-RPC `initialize` request observed by the remote MCP proxy. It is
 // a [proxy.InitializeRequestInterceptor]: the proxy routes only initialize
 // requests to it, so the interceptor never has to dispatch on method.
 // Analytics emission is best-effort and never rejects.
