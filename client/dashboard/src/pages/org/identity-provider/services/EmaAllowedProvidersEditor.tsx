@@ -50,6 +50,7 @@ export function EmaAllowedProvidersEditor({
   candidates,
   candidatesReady,
   candidatesError,
+  refreshCandidates,
   canEdit,
   canRestore,
   readOnlyReason,
@@ -65,6 +66,8 @@ export function EmaAllowedProvidersEditor({
   candidatesReady: boolean;
   /** Why the candidates couldn't load, with a retry; editing waits for them. */
   candidatesError?: { retry: () => void };
+  /** Reload the candidates, so a provider another admin just added can be kept. */
+  refreshCandidates?: () => Promise<unknown>;
   /** Choose and save the accepted providers. */
   canEdit: boolean;
   /** Go back to the default. */
@@ -190,9 +193,10 @@ export function EmaAllowedProvidersEditor({
       if (error instanceof GramError && error.statusCode === 409) {
         setConflict(true);
         setRefreshing(true);
-        void invalidateAllOrganizationRemoteSessionIssuerEMAServices(
-          queryClient,
-        ).finally(() => setRefreshing(false));
+        void Promise.all([
+          invalidateAllOrganizationRemoteSessionIssuerEMAServices(queryClient),
+          refreshCandidates?.(),
+        ]).finally(() => setRefreshing(false));
       }
     },
   });

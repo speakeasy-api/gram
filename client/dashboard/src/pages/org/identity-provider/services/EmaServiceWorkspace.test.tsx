@@ -672,6 +672,9 @@ describe("one service", () => {
     mocks.saveError = conflict();
     fireEvent.click(saveButton());
     expect(mocks.invalidate).toHaveBeenCalledWith("services");
+    // A provider the other admin just set up must be a candidate to keep it.
+    expect(mocks.signInsRefetch).toHaveBeenCalled();
+    expect(mocks.speakeasyRefetch).toHaveBeenCalled();
     expect(
       screen.getByText(
         /The enabled identity providers for Linear changed since you started editing/,
@@ -880,6 +883,30 @@ describe("one service", () => {
     ).toBeTruthy();
     expect(within(speakeasyRow!).queryByText(/Cross App Access/)).toBeNull();
     expect(within(placeholderRow!).queryByRole("link")).toBeNull();
+  });
+
+  it("shows the fix, not the Cross App Access step, for a provider that can't vouch", () => {
+    mocks.rows = [
+      {
+        ...linear,
+        isDefault: false,
+        providers: [
+          {
+            ...okta,
+            usable: false,
+            unavailable: "No longer available",
+            unavailableReason: "deleted",
+            fix: "okta",
+          },
+        ],
+      },
+    ];
+    show();
+    const [oktaRow] = trustRows();
+    expect(within(oktaRow!).queryByText(/Cross App Access/)).toBeNull();
+    expect(
+      within(oktaRow!).getByRole("link", { name: "Fix in Okta" }),
+    ).toBeTruthy();
   });
 
   it("doesn't link to Okta when its view isn't available", () => {

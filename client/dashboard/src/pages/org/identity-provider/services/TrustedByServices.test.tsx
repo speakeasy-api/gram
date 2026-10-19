@@ -89,7 +89,7 @@ describe("Services that trust Speakeasy", () => {
     ).toBe("/?tab=identity-providers&service=https%3A%2F%2FLinear.example.com");
   });
 
-  it("warns, not succeeds, when an accepting service's Speakeasy can't sign", () => {
+  it("lists a service under Not working when Speakeasy can't sign, even if it worked before", () => {
     const row = service("Linear", new Date(Date.now() - 2 * 60 * 60 * 1000));
     mocks.rows = [
       {
@@ -102,8 +102,9 @@ describe("Services that trust Speakeasy", () => {
       },
     ];
     show();
+    expect(screen.queryByRole("list", { name: "Working" })).toBeNull();
     const [item] = within(
-      screen.getByRole("list", { name: "Working" }),
+      screen.getByRole("list", { name: "Not working" }),
     ).getAllByRole("listitem");
     expect(item?.textContent).toBe("LinearNot working right now");
     expect(item?.querySelector("[data-tone]")?.getAttribute("data-tone")).toBe(

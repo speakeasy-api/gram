@@ -183,6 +183,7 @@ export function EmaServiceWorkspace({
             candidates={candidates.items}
             candidatesReady={candidates.ready}
             candidatesError={candidates.error}
+            refreshCandidates={candidates.refresh}
             canEdit={permissions.canEdit}
             canRestore={permissions.canRestore}
             readOnlyReason={permissions.readOnlyReason}
@@ -227,6 +228,7 @@ function TrustRow({
       )}
       {!provider.placeholder &&
         provider.kind !== "speakeasy" &&
+        provider.usable &&
         (oktaIssuerId && provider.remoteSessionIssuerId === oktaIssuerId ? (
           <Link
             className="text-muted-foreground block text-sm underline underline-offset-4"
@@ -278,6 +280,8 @@ function useProviderCandidates(enabled: boolean): {
   items: ProviderCandidate[];
   ready: boolean;
   error?: { retry: () => void };
+  /** Reload the candidates, after another admin's change. */
+  refresh: () => Promise<unknown>;
 } {
   const speakeasy = useEnterpriseIssuer();
   const signIns = useOrganizationUserSessionIssuersInfinite(
@@ -328,7 +332,11 @@ function useProviderCandidates(enabled: boolean): {
           },
         }
       : undefined;
-  return { items, ready, error };
+  const refresh = () =>
+    enabled
+      ? Promise.all([signIns.refetch(), speakeasy.refetch()])
+      : Promise.resolve();
+  return { items, ready, error, refresh };
 }
 
 // Sections mount once the service loads, so a deep link waits for it.

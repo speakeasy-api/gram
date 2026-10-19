@@ -14,8 +14,8 @@ import { useEmaServices, type ServiceRow } from "./useEmaServices";
 type Entry = { row: ServiceRow; provider: ProviderView };
 
 /**
- * On Speakeasy's page: the services that accept Speakeasy, split by
- * whether the service has accepted it yet.
+ * On Speakeasy's page: the services that trust Speakeasy, split by
+ * whether it works there now.
  */
 export function TrustedByServices(): JSX.Element {
   const services = useEmaServices();
@@ -23,8 +23,13 @@ export function TrustedByServices(): JSX.Element {
     const provider = row.providers.find((p) => p.kind === "speakeasy");
     return provider ? [{ row, provider }] : [];
   });
-  const accepted = entries.filter((entry) => entry.provider.lastAcceptedAt);
-  const waiting = entries.filter((entry) => !entry.provider.lastAcceptedAt);
+  const broken = entries.filter((entry) => !entry.provider.usable);
+  const accepted = entries.filter(
+    (entry) => entry.provider.usable && entry.provider.lastAcceptedAt,
+  );
+  const waiting = entries.filter(
+    (entry) => entry.provider.usable && !entry.provider.lastAcceptedAt,
+  );
 
   return (
     <SettingsSection id="services">
@@ -65,6 +70,7 @@ export function TrustedByServices(): JSX.Element {
             </Text>
           ) : (
             <div className="space-y-5">
+              <EntryList label="Not working" entries={broken} />
               <EntryList label="Working" entries={accepted} />
               <EntryList label="Hasn’t worked yet" entries={waiting} />
             </div>

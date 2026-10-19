@@ -21,6 +21,10 @@ export const CHECKLIST_SECTION_ID = "checklist";
 export const CLIENT_ID_SECTION_ID = "client-id";
 export const READINESS_SECTION_ID = "readiness";
 
+export function singleSignOnHref(): string {
+  return "?tab=sso";
+}
+
 export function identityProvidersHref(): string {
   return "?tab=identity-providers";
 }

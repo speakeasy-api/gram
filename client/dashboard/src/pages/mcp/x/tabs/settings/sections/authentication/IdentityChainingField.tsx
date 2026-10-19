@@ -295,10 +295,12 @@ export function IdentityChainingField({
         ),
       ].filter(
         (id) =>
-          !candidates.some((client) => client.remoteSessionIssuerId === id) &&
-          // A failed lookup proves nothing about what the metadata names.
-          clientIssuers.items.some((issuer) => issuer.id === id),
+          !candidates.some((client) => client.remoteSessionIssuerId === id),
       );
+  // A failed lookup proves nothing about what the metadata names, but a
+  // binding on that client must still be possible to turn off.
+  const unchecked = (id: string) =>
+    !clientIssuers.items.some((issuer) => issuer.id === id);
   const [selectedId, setSelectedIdState] = useState<string | null>(null);
   // A prepare that returned a blocker; kept until the next action.
   const [prepareOutcome, setPrepareOutcome] =
@@ -631,6 +633,7 @@ export function IdentityChainingField({
         target={binding.target}
         generation={binding.generation}
         clientLabel={binding.clientLabel}
+        unchecked={unchecked(binding.target.remoteSessionIssuerId)}
         vendor={vendor}
         projectId={project.id}
       />
@@ -1250,6 +1253,7 @@ function StaleBinding({
   target,
   generation,
   clientLabel,
+  unchecked,
   vendor,
   projectId,
 }: {
@@ -1261,6 +1265,8 @@ function StaleBinding({
   };
   generation: number;
   clientLabel: string | undefined;
+  /** Its authorization server couldn't be checked, so it may still be current. */
+  unchecked: boolean;
   vendor: string;
   projectId: string;
 }): JSX.Element {
@@ -1285,9 +1291,10 @@ function StaleBinding({
         <div className="flex flex-col items-start gap-2">
           <Text small className="block">
             Enterprise Managed Authorization is still on for client{" "}
-            {clientLabel ?? "an earlier client"}. This server no longer uses
-            that client’s authorization server. Turn it off before you replace
-            or remove the client.
+            {clientLabel ?? "an earlier client"}.{" "}
+            {unchecked
+              ? "Speakeasy couldn’t check that client’s authorization server. You can still turn it off."
+              : "This server no longer uses that client’s authorization server. Turn it off before you replace or remove the client."}
           </Text>
           <RequireScope
             scope="project:write"

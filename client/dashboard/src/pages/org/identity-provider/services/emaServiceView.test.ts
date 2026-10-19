@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  providerFixLink,
+  providerView,
   vouchedFor,
   strandedNotes,
   strandedServers,
@@ -58,5 +60,20 @@ describe("who the enabled providers can vouch for", () => {
     ).toEqual([
       "Tracker would lose Enterprise Managed Authorization, because it uses Okta sign-in.",
     ]);
+  });
+});
+
+describe("providerView", () => {
+  it("sends a Speakeasy that needs a verified domain to the Single sign-on tab", () => {
+    const view = providerView(
+      { kind: "speakeasy", unavailableReason: "verified_domain_required" },
+      { issuer: undefined, speakeasyIssuerUrl: undefined },
+    );
+    expect(view.usable).toBe(false);
+    expect(view.unavailable).toBe("Needs a verified domain");
+    expect(view.fix && providerFixLink(view.fix)).toEqual({
+      href: "?tab=sso",
+      label: "Verify a domain on the Single sign-on tab",
+    });
   });
 });

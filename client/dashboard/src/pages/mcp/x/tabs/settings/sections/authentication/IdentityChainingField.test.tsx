@@ -421,10 +421,10 @@ describe("identity chaining client for this service", () => {
         resource="https://example.com/mcp"
       />,
     );
-    expect(screen.queryByText(/still on through client/)).toBeNull();
+    expect(screen.queryByText(/still on for client/)).toBeNull();
   });
 
-  it("doesn't call a client old when its authorization server couldn't be looked up", () => {
+  it("still offers Turn off, without calling the client old, when its authorization server couldn't be looked up", () => {
     prmMock.value = {
       metadata: { authorizationServers: ["https://tracker.example.com/"] },
     };
@@ -446,7 +446,12 @@ describe("identity chaining client for this service", () => {
         resource="https://example.com/mcp"
       />,
     );
-    expect(screen.queryByText(/still on through client/)).toBeNull();
+    expect(screen.getByText(/still on for client wiki-client/)).toBeTruthy();
+    expect(
+      screen.getByText(/couldn’t check that client’s authorization server/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/no longer uses/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
     expect(
       screen.getByText(/couldn’t check their authorization server/),
     ).toBeTruthy();

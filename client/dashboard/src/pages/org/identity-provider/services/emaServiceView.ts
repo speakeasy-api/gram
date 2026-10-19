@@ -5,11 +5,16 @@ import { formatRelativeTime } from "@/lib/dates";
 import {
   identityProvidersHref,
   oktaViewHref,
+  singleSignOnHref,
   speakeasyProviderHref,
 } from "../tabs";
 
 /** Where an admin fixes a provider that can't vouch. */
-type ProviderFix = "speakeasy" | "okta" | "identity-providers";
+type ProviderFix =
+  | "speakeasy"
+  | "okta"
+  | "identity-providers"
+  | "verify-domain";
 
 /**
  * One identity provider as it appears wherever identity chaining is explained:
@@ -176,11 +181,18 @@ export function providerView(
         usable: false,
         unavailable: `Can’t vouch for people who log in with ${signInName ?? "an identity provider"}`,
       };
+    case "verified_domain_required":
+      return {
+        ...base,
+        name,
+        usable: false,
+        unavailable: "Needs a verified domain",
+        fix: "verify-domain",
+      };
     case "deleted":
     case "disabled":
     case "not_rolled_out":
     case "setup_required":
-    case "verified_domain_required":
       return {
         ...base,
         name,
@@ -203,6 +215,11 @@ export function providerFixLink(fix: ProviderFix): {
       return { href: oktaViewHref("setup"), label: "Fix in Okta" };
     case "identity-providers":
       return { href: identityProvidersHref(), label: "Identity providers" };
+    case "verify-domain":
+      return {
+        href: singleSignOnHref(),
+        label: "Verify a domain on the Single sign-on tab",
+      };
   }
 }
 
