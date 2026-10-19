@@ -99319,12 +99319,16 @@ components:
                     $ref: '#/components/schemas/DeviceAgentConfiguration'
                 etag:
                     type: string
-                    description: Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.
+                    description: Opaque revision identifier covering the marketplace, plugin, remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
                 marketplaces:
                     type: array
                     items:
                         $ref: '#/components/schemas/AgentMarketplace'
                     description: Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
+                organization_gateway_url:
+                    type: string
+                    description: URL of the active organization's gateway. Absent when the organization gateway is unavailable.
+                    format: uri
                 plugins:
                     type: array
                     items:
