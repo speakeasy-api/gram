@@ -142,18 +142,23 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "webhook identity mismatch", http.StatusForbidden)
 		return
 	}
-	verdict := Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
+	verdict := allowVerdict()
 	if frame.Type == "prompt" {
 		verdict, err = h.processor.Process(r.Context(), h.config, frame)
-		if err != nil {
+		switch {
+		case err == nil:
+		case errors.Is(err, context.Canceled) && errors.Is(r.Context().Err(), context.Canceled):
+			h.logger.ErrorContext(r.Context(), "Anthropic closed the inference hook before a verdict", attr.SlogError(err))
+			return
+		default:
 			h.logger.ErrorContext(r.Context(), "process Anthropic inference hook", attr.SlogError(err))
 			// A failed evaluation must not silently allow inference, including when
 			// Anthropic's administrator selected allow-on-webhook-failure.
-			verdict = Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}
+			verdict = denyVerdict(unavailableDenyReason)
 		}
 	}
 	if verdict.Action != "allow" && verdict.Action != "deny" {
-		verdict = Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}
+		verdict = denyVerdict(unavailableDenyReason)
 	}
 	verdict.DenyReason = string([]rune(verdict.DenyReason)[:min(len([]rune(verdict.DenyReason)), 500)])
 	w.Header().Set("Content-Type", "application/json")

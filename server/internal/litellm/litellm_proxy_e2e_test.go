@@ -403,6 +403,7 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 	container, err := testcontainers.Run(t.Context(), manifest.Image,
 		testcontainers.WithLogger(testenv.NewTestcontainersLogger()),
 		testcontainers.WithExposedPorts("4000/tcp"),
+		testenv.WithLoopbackPorts(),
 		testcontainers.WithHostPortAccess(hostPorts...),
 		testcontainers.WithFiles(testcontainers.ContainerFile{
 			Reader: bytes.NewReader(configBytes), ContainerFilePath: "/app/e2e-config.yaml", FileMode: 0o644,
@@ -805,7 +806,8 @@ func (h *proxyHarness) materializeFinding(messageID uuid.UUID) {
 		gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
-		gcp.NewNoopPublisher[*riskv1.Finding](),
+		gcp.NewNoopPublisher[*riskv1.ToolCallAnalysis](),
+		gcp.NewNoopPublisher[*riskv1.AccountIdentityAnalysis](),
 		customRules, celEngine, nil, nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		false,

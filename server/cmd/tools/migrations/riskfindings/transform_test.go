@@ -258,6 +258,7 @@ func TestTransformExplodesSpans(t *testing.T) {
 	for i := 1; i < len(spans); i++ {
 		want := uuid.NewSHA1(uuid.NameSpaceURL, fmt.Appendf(nil, "gram:risk:finding:pgspan:%s:%d", pgID, i))
 		require.Equal(t, want, out[i].ID, "span %d id", i)
+		require.Equal(t, pgID, out[i].sourceID, "span %d source id", i)
 	}
 
 	wantSurfaces := []string{surfaceContent, surfaceToolArgs, surfaceJSONPath}
@@ -507,4 +508,28 @@ func TestTransformNilTagsBecomeEmptySlice(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, out[0].Tags)
 	require.Empty(t, out[0].Tags)
+}
+
+func TestFindingMatchKeyIgnoresStorageIDAndState(t *testing.T) {
+	t.Parallel()
+
+	base := FindingRow{
+		ID:                uuid.New(),
+		ChatMessageID:     uuid.NewString(),
+		RiskPolicyID:      uuid.NewString(),
+		RiskPolicyVersion: 3,
+		Source:            "custom",
+		RuleID:            "custom.rule",
+		StartPos:          4,
+		EndPos:            12,
+	}
+	candidate := base
+	candidate.ID = uuid.New()
+	falsePositiveAt := time.Now().UTC()
+	candidate.FalsePositiveAt = &falsePositiveAt
+
+	require.Equal(t, base.matchKey(), candidate.matchKey())
+
+	candidate.EndPos++
+	require.NotEqual(t, base.matchKey(), candidate.matchKey())
 }

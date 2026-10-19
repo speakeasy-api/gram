@@ -706,6 +706,99 @@ paths:
             tags:
                 - admin
             x-speakeasy-name-override: previewExternalMcpMigration
+    /admin/hookClients.get:
+        get:
+            description: 'Fleet-wide hook client grids: which hook client (legacy curl or hooks binary version) each organization''s new sessions use per day, and inference hook traffic per Claude app.'
+            operationId: adminGetHookClients
+            parameters:
+                - allowEmptyValue: true
+                  description: Window in days.
+                  in: query
+                  name: window_days
+                  schema:
+                    default: 15
+                    description: Window in days.
+                    format: int64
+                    maximum: 30
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Skip the one-hour cache and read ClickHouse now.
+                  in: query
+                  name: refresh
+                  schema:
+                    default: false
+                    description: Skip the one-hour cache and read ClickHouse now.
+                    type: boolean
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminHookClientsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getHookClients admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getHookClients
+            x-speakeasy-react-hook:
+                name: AdminGetHookClients
     /admin/onboarding.playbooks:
         get:
             description: Read every playbook, or, when an organization is named, the shared ones and its own.
@@ -86098,6 +86191,109 @@ paths:
             x-speakeasy-name-override: admitSubject
             x-speakeasy-react-hook:
                 name: AdmitWorkloadSubject
+    /rpc/workloadIdentities.createDeviceJoinToken:
+        post:
+            description: 'Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Only a person can create one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent''s policy.'
+            operationId: createWorkloadDeviceJoinToken
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateDeviceJoinTokenRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkloadDeviceJoinToken'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createDeviceJoinToken workloadIdentities
+            tags:
+                - workloadIdentities
+            x-speakeasy-name-override: createDeviceJoinToken
+            x-speakeasy-react-hook:
+                name: CreateWorkloadDeviceJoinToken
     /rpc/workloadIdentities.getCustomFlows:
         get:
             description: 'Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.'
@@ -86486,6 +86682,81 @@ paths:
             x-speakeasy-name-override: listTokenEndpoints
             x-speakeasy-react-hook:
                 name: WorkloadTokenEndpoints
+    /rpc/workloadIdentities.registerDevice:
+        post:
+            description: 'Enroll a device with its public key, redeeming a join token. No session or API key: the single-use join token is the credential, and an unknown, expired, or already redeemed token returns 401. A key already registered to another device returns 409, and an agent whose policy no longer grants org:device_agent_sync returns a failed precondition without spending the token. In one transaction the device''s key is registered, the device is admitted under the organization''s Speakeasy device issuer, and it is assigned the token''s agent.'
+            operationId: registerWorkloadDevice
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RegisterDeviceRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkloadDeviceRegistration'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            summary: registerDevice workloadIdentities
+            tags:
+                - workloadIdentities
+            x-speakeasy-name-override: registerDevice
     /rpc/workloadIdentities.registerIssuer:
         post:
             description: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
@@ -88465,6 +88736,124 @@ components:
                     description: One outcome per requested server, in request order.
             required:
                 - outcomes
+        AdminHookClientOrganization:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The organization ID.
+                name:
+                    type: string
+                    description: The organization name. Absent when the organization no longer exists.
+                slug:
+                    type: string
+                    description: The organization slug. Absent when the organization no longer exists.
+            description: An organization that appears in either hook client grid.
+            required:
+                - id
+        AdminHookClientSessionCell:
+            type: object
+            properties:
+                client:
+                    type: string
+                    description: curl for the legacy curl hooks, a hooks binary version, binary for binary rows that record no version, or empty for the organization-day total.
+                day:
+                    type: string
+                    description: The UTC day, as YYYY-MM-DD.
+                    format: date
+                machines:
+                    type: integer
+                    description: Machines that started a session on this day.
+                    format: int64
+                machines_all:
+                    type: integer
+                    description: Machines that sent any hook on this day, including sessions started earlier.
+                    format: int64
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                sessions:
+                    type: integer
+                    description: Sessions started on this day.
+                    format: int64
+            description: One (organization, day, client) cell of the hook client grid. Sessions count on the UTC day of their first hook.
+            required:
+                - organization_id
+                - day
+                - client
+                - machines
+                - sessions
+                - machines_all
+        AdminHookClientsResult:
+            type: object
+            properties:
+                from_cache:
+                    type: boolean
+                    description: True when the grids came from the one-hour cache rather than a fresh ClickHouse read.
+                inference:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminInferenceHookCell'
+                    description: The inference hook traffic grid.
+                organizations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminHookClientOrganization'
+                    description: Every organization that appears in either grid.
+                queried_at:
+                    type: string
+                    description: When the grids were read from ClickHouse.
+                    format: date-time
+                sessions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminHookClientSessionCell'
+                    description: The hook client grid, new sessions only.
+                window_days:
+                    type: integer
+                    description: Length of the window in days.
+                    format: int64
+            description: Fleet-wide hook client grids over a fixed window.
+            required:
+                - window_days
+                - queried_at
+                - from_cache
+                - organizations
+                - sessions
+                - inference
+        AdminInferenceHookCell:
+            type: object
+            properties:
+                day:
+                    type: string
+                    description: The UTC day, as YYYY-MM-DD.
+                    format: date
+                events:
+                    type: integer
+                    description: Stored transcript messages.
+                    format: int64
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                sessions:
+                    type: integer
+                    description: Distinct sessions.
+                    format: int64
+                surface:
+                    type: string
+                    description: The Claude app that sent the transcript, or empty for the organization-day total.
+                users:
+                    type: integer
+                    description: Distinct users.
+                    format: int64
+            description: One (organization, day, surface) cell of the inference hook grid.
+            required:
+                - organization_id
+                - day
+                - surface
+                - users
+                - events
+                - sessions
         AdminInferenceKey:
             type: object
             properties:
@@ -93947,6 +94336,22 @@ components:
             required:
                 - name
                 - destination_type
+        CreateDeviceJoinTokenRequestBody:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: The agent the enrolled device inherits its policy from.
+                    format: uuid
+                expires_in_seconds:
+                    type: integer
+                    description: How long the token stays redeemable. Defaults to one hour.
+                    default: 3600
+                    format: int64
+                    minimum: 60
+                    maximum: 86400
+            required:
+                - agent_id
         CreateDomainRequestBody:
             type: object
             properties:
@@ -99766,12 +100171,16 @@ components:
                     $ref: '#/components/schemas/DeviceAgentConfiguration'
                 etag:
                     type: string
-                    description: Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.
+                    description: Opaque revision identifier covering the marketplace, plugin, remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
                 marketplaces:
                     type: array
                     items:
                         $ref: '#/components/schemas/AgentMarketplace'
                     description: Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
+                organization_gateway_url:
+                    type: string
+                    description: URL of the active organization's gateway. Absent when the organization gateway is unavailable.
+                    format: uri
                 plugins:
                     type: array
                     items:
@@ -105796,6 +106205,12 @@ components:
                     type: string
                     description: When the meta MCP server was created
                     format: date-time
+                discovery_mode:
+                    type: string
+                    description: The effective default discovery mode. Unconfigured connections follow this value.
+                    enum:
+                        - progressive
+                        - direct
                 id:
                     type: string
                     description: The ID of the meta MCP server
@@ -105846,6 +106261,7 @@ components:
                 - name
                 - visibility
                 - network_access_mode
+                - discovery_mode
                 - created_at
                 - updated_at
         MeterUsageBreakdown:
@@ -106123,6 +106539,12 @@ components:
         MintUserSessionRequestBody:
             type: object
             properties:
+                discovery_mode:
+                    type: string
+                    description: An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.
+                    enum:
+                        - progressive
+                        - direct
                 mcp_server_id:
                     type: string
                     description: Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
@@ -106140,7 +106562,7 @@ components:
             properties:
                 access_token:
                     type: string
-                    description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.'
+                    description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} surface.'
                 expires_in:
                     type: integer
                     description: Lifetime of the access token in seconds.
@@ -109993,6 +110415,29 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        RegisterDeviceRequestBody:
+            type: object
+            properties:
+                hostname:
+                    type: string
+                    description: The device's hostname, shown to administrators. Self-reported.
+                    maxLength: 255
+                join_token:
+                    type: string
+                    description: The join token from createDeviceJoinToken.
+                    minLength: 1
+                    maxLength: 512
+                public_jwk:
+                    type: object
+                    description: 'The device''s public signing key as a JWK: EC P-256 (ES256) or OKP Ed25519 (EdDSA). Private key material is refused.'
+                    additionalProperties: true
+                serial:
+                    type: string
+                    description: The device's serial number, shown to administrators. Self-reported.
+                    maxLength: 255
+            required:
+                - join_token
+                - public_jwk
         RegisterRequestBody:
             type: object
             properties:
@@ -121504,6 +121949,12 @@ components:
         UpdateMetaMcpServerForm:
             type: object
             properties:
+                discovery_mode:
+                    type: string
+                    description: The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+                    enum:
+                        - progressive
+                        - direct
                 id:
                     type: string
                     description: The ID of the meta MCP server to update
@@ -124377,6 +124828,40 @@ components:
                 - edit_platform
                 - allow_access
                 - edit_access
+        WorkloadDeviceJoinToken:
+            type: object
+            properties:
+                expires_at:
+                    type: string
+                    description: When the token stops being redeemable.
+                    format: date-time
+                token:
+                    type: string
+                    description: The join token. Shown once; only its hash is stored.
+            required:
+                - token
+                - expires_at
+        WorkloadDeviceRegistration:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: The agent the device inherits its policy from.
+                    format: uuid
+                device_subject:
+                    type: string
+                    description: The device's workload subject, device:<uuid>. Its assertions carry this as sub.
+                issuer:
+                    type: string
+                    description: The issuer its assertions carry as iss.
+                organization_id:
+                    type: string
+                    description: The organization the device enrolled in.
+            required:
+                - device_subject
+                - issuer
+                - agent_id
+                - organization_id
         WorkloadForm:
             type: object
             properties:

@@ -240,7 +240,7 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
 		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
-		"list_my_sessions", "continue_session",
+		"list_my_sessions", "continue_session", searchChatsToolName, readChatToolName,
 		// The analytics reads hold the caller to project:read in the handler.
 		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
 		// The widget tools hold the caller to project:read in the handler; the
@@ -435,6 +435,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		operationRepublishPlugin,
 		"list_my_sessions",
 		"continue_session",
+		searchChatsToolName, readChatToolName,
 		"list_data_exports",
 		"create_data_export",
 		pauseDataExportToolName,
