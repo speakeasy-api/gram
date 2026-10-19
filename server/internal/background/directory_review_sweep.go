@@ -58,7 +58,8 @@ func (a *Activities) SweepDirectoryReviews(ctx context.Context) error {
 // sweep's results drive admin notifications.
 func AddDirectoryReviewSweepSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
 	id := fmt.Sprintf("v1:directory-review-sweep:%s", temporalEnv.Queue())
-	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
+	sc := temporalEnv.Client().ScheduleClient()
+	options := client.ScheduleOptions{
 		ID:            id,
 		CatchupWindow: time.Hour - time.Second,
 		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
@@ -69,8 +70,35 @@ func AddDirectoryReviewSweepSchedule(ctx context.Context, temporalEnv *tenv.Envi
 			TaskQueue:          string(temporalEnv.Queue()),
 			WorkflowRunTimeout: directoryReviewSweepRunTimeout,
 		},
-	})
-	if err != nil && !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+	}
+	_, err := sc.Create(ctx, options)
+	if errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+		// Bring an existing schedule's policy up to date without touching its
+		// state, so an operator's pause and note survive a deploy.
+		err = sc.GetHandle(ctx, id).Update(ctx, client.ScheduleUpdateOptions{
+			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+				schedule := input.Description.Schedule
+				action, ok := schedule.Action.(*client.ScheduleWorkflowAction)
+				if !ok || action.TaskQueue != string(temporalEnv.Queue()) {
+					return nil, fmt.Errorf("directory review sweep schedule is owned by another task queue")
+				}
+				if action.WorkflowRunTimeout == directoryReviewSweepRunTimeout &&
+					schedule.Policy != nil && schedule.Policy.CatchupWindow == options.CatchupWindow {
+					return nil, temporal.ErrSkipScheduleUpdate
+				}
+				action.WorkflowRunTimeout = directoryReviewSweepRunTimeout
+				if schedule.Policy == nil {
+					var policy client.SchedulePolicies
+					schedule.Policy = &policy
+				}
+				schedule.Policy.CatchupWindow = options.CatchupWindow
+				return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("update directory review sweep schedule: %w", err)
+		}
+	} else if err != nil {
 		return fmt.Errorf("create directory review sweep schedule: %w", err)
 	}
 	return nil

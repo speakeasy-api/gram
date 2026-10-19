@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	temporalmocks "go.temporal.io/sdk/mocks"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
 
@@ -51,31 +50,25 @@ func TestDirectoryReviewSweepWorkflow(t *testing.T) {
 	}
 }
 
+// Updating an existing schedule is covered with the other schedules by
+// TestWorkers_RegisterSchedulesPreservesManualPauses.
 func TestDirectoryReviewSweepSchedule(t *testing.T) {
 	t.Parallel()
-	for _, existing := range []bool{false, true} {
-		t.Run(map[bool]string{false: "create", true: "already running"}[existing], func(t *testing.T) {
-			t.Parallel()
-			c := &temporalmocks.Client{}
-			sc := &temporalmocks.ScheduleClient{}
-			env := tenv.NewEnvironment(c, "test", "sweep-test")
-			var createErr error
-			if existing {
-				createErr = temporal.ErrScheduleAlreadyRunning
-			}
-			c.On("ScheduleClient").Return(sc).Once()
-			sc.On("Create", mock.Anything, mock.MatchedBy(func(options client.ScheduleOptions) bool {
-				require.Equal(t, "v1:directory-review-sweep:sweep-test", options.ID)
-				require.Equal(t, time.Hour, options.Spec.Intervals[0].Every)
-				action, ok := options.Action.(*client.ScheduleWorkflowAction)
-				require.True(t, ok)
-				require.Equal(t, "sweep-test", action.TaskQueue)
-				return true
-			})).Return(nil, createErr).Once()
+	c := &temporalmocks.Client{}
+	sc := &temporalmocks.ScheduleClient{}
+	env := tenv.NewEnvironment(c, "test", "sweep-test")
+	c.On("ScheduleClient").Return(sc).Once()
+	sc.On("Create", mock.Anything, mock.MatchedBy(func(options client.ScheduleOptions) bool {
+		require.Equal(t, "v1:directory-review-sweep:sweep-test", options.ID)
+		require.Equal(t, time.Hour, options.Spec.Intervals[0].Every)
+		require.Equal(t, time.Hour-time.Second, options.CatchupWindow)
+		action, ok := options.Action.(*client.ScheduleWorkflowAction)
+		require.True(t, ok)
+		require.Equal(t, "sweep-test", action.TaskQueue)
+		return true
+	})).Return(nil, nil).Once()
 
-			require.NoError(t, AddDirectoryReviewSweepSchedule(t.Context(), env))
-			c.AssertExpectations(t)
-			sc.AssertExpectations(t)
-		})
-	}
+	require.NoError(t, AddDirectoryReviewSweepSchedule(t.Context(), env))
+	c.AssertExpectations(t)
+	sc.AssertExpectations(t)
 }
