@@ -5,8 +5,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * How the device agent installs the plugin for this audience. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on.
+ */
+export const PluginAssignmentInstallMode = {
+  Required: "required",
+  Default: "default",
+  Available: "available",
+} as const;
+/**
+ * How the device agent installs the plugin for this audience. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on.
+ */
+export type PluginAssignmentInstallMode = ClosedEnum<
+  typeof PluginAssignmentInstallMode
+>;
 
 export type PluginAssignment = {
   createdAt: Date;
@@ -15,10 +31,19 @@ export type PluginAssignment = {
    */
   id: string;
   /**
+   * How the device agent installs the plugin for this audience. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on.
+   */
+  installMode: PluginAssignmentInstallMode;
+  /**
    * Principal URN (e.g. role:organization:<uuid>, user:id, or *).
    */
   principalUrn: string;
 };
+
+/** @internal */
+export const PluginAssignmentInstallMode$inboundSchema: z.ZodMiniEnum<
+  typeof PluginAssignmentInstallMode
+> = z.enum(PluginAssignmentInstallMode);
 
 /** @internal */
 export const PluginAssignment$inboundSchema: z.ZodMiniType<
@@ -31,11 +56,13 @@ export const PluginAssignment$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    install_mode: PluginAssignmentInstallMode$inboundSchema,
     principal_urn: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "install_mode": "installMode",
       "principal_urn": "principalUrn",
     });
   }),

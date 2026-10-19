@@ -74,11 +74,20 @@ type DuplicateDashboardRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 }
 
+// DuplicateBuiltInDashboardRequestBody is the type of the "dashboards" service
+// "duplicateBuiltInDashboard" endpoint HTTP request body.
+type DuplicateBuiltInDashboardRequestBody struct {
+	// The built-in dashboard to copy
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+}
+
 // ListDashboardsResponseBody is the type of the "dashboards" service
 // "listDashboards" endpoint HTTP response body.
 type ListDashboardsResponseBody struct {
 	// Dashboards in the project, most recently updated first
 	Dashboards []*DashboardResponseBody `form:"dashboards,omitempty" json:"dashboards,omitempty" xml:"dashboards,omitempty"`
+	// The dashboards Speakeasy ships, the same in every project
+	BuiltIn []*BuiltInDashboardResponseBody `form:"built_in,omitempty" json:"built_in,omitempty" xml:"built_in,omitempty"`
 }
 
 // GetDashboardResponseBody is the type of the "dashboards" service
@@ -224,6 +233,26 @@ type SaveDashboardFiltersResponseBody struct {
 // DuplicateDashboardResponseBody is the type of the "dashboards" service
 // "duplicateDashboard" endpoint HTTP response body.
 type DuplicateDashboardResponseBody struct {
+	ID             *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	ProjectID      *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Who made it, when known
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// Display name. Not unique.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// What the dashboard is for, when its creator said
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The saved date range and filter values it opens on
+	Filters *DashboardFiltersResponseBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+	// Its cards, in no particular order; the grid places them by position
+	Widgets   []*DashboardPlacementResponseBody `form:"widgets,omitempty" json:"widgets,omitempty" xml:"widgets,omitempty"`
+	CreatedAt *string                           `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string                           `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// DuplicateBuiltInDashboardResponseBody is the type of the "dashboards"
+// service "duplicateBuiltInDashboard" endpoint HTTP response body.
+type DuplicateBuiltInDashboardResponseBody struct {
 	ID             *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	ProjectID      *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
@@ -1929,6 +1958,196 @@ type DuplicateDashboardGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DuplicateBuiltInDashboardUnauthorizedResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "unauthorized" error.
+type DuplicateBuiltInDashboardUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateBuiltInDashboardForbiddenResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "forbidden" error.
+type DuplicateBuiltInDashboardForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateBuiltInDashboardBadRequestResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "bad_request" error.
+type DuplicateBuiltInDashboardBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateBuiltInDashboardNotFoundResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "not_found" error.
+type DuplicateBuiltInDashboardNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateBuiltInDashboardConflictResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "conflict" error.
+type DuplicateBuiltInDashboardConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateBuiltInDashboardUnsupportedMediaResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "unsupported_media" error.
+type DuplicateBuiltInDashboardUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateBuiltInDashboardInvalidResponseBody is the type of the "dashboards"
+// service "duplicateBuiltInDashboard" endpoint HTTP response body for the
+// "invalid" error.
+type DuplicateBuiltInDashboardInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateBuiltInDashboardInvariantViolationResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "invariant_violation" error.
+type DuplicateBuiltInDashboardInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateBuiltInDashboardUnexpectedResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "unexpected" error.
+type DuplicateBuiltInDashboardUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateBuiltInDashboardGatewayErrorResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "gateway_error" error.
+type DuplicateBuiltInDashboardGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DeleteDashboardUnauthorizedResponseBody is the type of the "dashboards"
 // service "deleteDashboard" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -2170,6 +2389,41 @@ type DashboardPlacementResponseBody struct {
 	H *int `form:"h,omitempty" json:"h,omitempty" xml:"h,omitempty"`
 }
 
+// BuiltInDashboardResponseBody is used to define fields on response body types.
+type BuiltInDashboardResponseBody struct {
+	// Names the dashboard in links and when duplicating it
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Display name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// What the dashboard is for
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Its cards, in no particular order; the grid places them by position
+	Cards []*BuiltInCardResponseBody `form:"cards,omitempty" json:"cards,omitempty" xml:"cards,omitempty"`
+}
+
+// BuiltInCardResponseBody is used to define fields on response body types.
+type BuiltInCardResponseBody struct {
+	// What the card is called
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// What the card shows, when there is more to say
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The catalog dataset the card asks
+	Dataset *string `form:"dataset,omitempty" json:"dataset,omitempty" xml:"dataset,omitempty"`
+	// The question: window, grain, dimensions, measures, filters, order and limit,
+	// in the shape a saved widget stores.
+	Query map[string]any `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// How the question is drawn: a chart type and its options.
+	Visualization map[string]any `form:"visualization,omitempty" json:"visualization,omitempty" xml:"visualization,omitempty"`
+	// Column the card starts at, from 0
+	X *int `form:"x,omitempty" json:"x,omitempty" xml:"x,omitempty"`
+	// Row the card starts at, from 0
+	Y *int `form:"y,omitempty" json:"y,omitempty" xml:"y,omitempty"`
+	// Width in columns
+	W *int `form:"w,omitempty" json:"w,omitempty" xml:"w,omitempty"`
+	// Height in rows
+	H *int `form:"h,omitempty" json:"h,omitempty" xml:"h,omitempty"`
+}
+
 // PlacementInputRequestBody is used to define fields on request body types.
 type PlacementInputRequestBody struct {
 	// The placement being moved or resized
@@ -2289,6 +2543,16 @@ func NewDuplicateDashboardRequestBody(p *dashboards.DuplicateDashboardPayload) *
 	return body
 }
 
+// NewDuplicateBuiltInDashboardRequestBody builds the HTTP request body from
+// the payload of the "duplicateBuiltInDashboard" endpoint of the "dashboards"
+// service.
+func NewDuplicateBuiltInDashboardRequestBody(p *dashboards.DuplicateBuiltInDashboardPayload) *DuplicateBuiltInDashboardRequestBody {
+	body := &DuplicateBuiltInDashboardRequestBody{
+		Slug: p.Slug,
+	}
+	return body
+}
+
 // NewListDashboardsResultOK builds a "dashboards" service "listDashboards"
 // endpoint result from a HTTP "OK" response.
 func NewListDashboardsResultOK(body *ListDashboardsResponseBody) *dashboards.ListDashboardsResult {
@@ -2300,6 +2564,14 @@ func NewListDashboardsResultOK(body *ListDashboardsResponseBody) *dashboards.Lis
 			continue
 		}
 		v.Dashboards[i] = unmarshalDashboardResponseBodyToDashboardsDashboard(val)
+	}
+	v.BuiltIn = make([]*dashboards.BuiltInDashboard, len(body.BuiltIn))
+	for i, val := range body.BuiltIn {
+		if val == nil {
+			v.BuiltIn[i] = nil
+			continue
+		}
+		v.BuiltIn[i] = unmarshalBuiltInDashboardResponseBodyToDashboardsBuiltInDashboard(val)
 	}
 
 	return v
@@ -3863,6 +4135,182 @@ func NewDuplicateDashboardGatewayError(body *DuplicateDashboardGatewayErrorRespo
 	return v
 }
 
+// NewDuplicateBuiltInDashboardDashboardOK builds a "dashboards" service
+// "duplicateBuiltInDashboard" endpoint result from a HTTP "OK" response.
+func NewDuplicateBuiltInDashboardDashboardOK(body *DuplicateBuiltInDashboardResponseBody) *dashboards.Dashboard {
+	v := &dashboards.Dashboard{
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		OrganizationID:  *body.OrganizationID,
+		CreatedByUserID: body.CreatedByUserID,
+		Name:            *body.Name,
+		Description:     body.Description,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
+	}
+	v.Filters = unmarshalDashboardFiltersResponseBodyToDashboardsDashboardFilters(body.Filters)
+	v.Widgets = make([]*dashboards.DashboardPlacement, len(body.Widgets))
+	for i, val := range body.Widgets {
+		if val == nil {
+			v.Widgets[i] = nil
+			continue
+		}
+		v.Widgets[i] = unmarshalDashboardPlacementResponseBodyToDashboardsDashboardPlacement(val)
+	}
+
+	return v
+}
+
+// NewDuplicateBuiltInDashboardUnauthorized builds a dashboards service
+// duplicateBuiltInDashboard endpoint unauthorized error.
+func NewDuplicateBuiltInDashboardUnauthorized(body *DuplicateBuiltInDashboardUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateBuiltInDashboardForbidden builds a dashboards service
+// duplicateBuiltInDashboard endpoint forbidden error.
+func NewDuplicateBuiltInDashboardForbidden(body *DuplicateBuiltInDashboardForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateBuiltInDashboardBadRequest builds a dashboards service
+// duplicateBuiltInDashboard endpoint bad_request error.
+func NewDuplicateBuiltInDashboardBadRequest(body *DuplicateBuiltInDashboardBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateBuiltInDashboardNotFound builds a dashboards service
+// duplicateBuiltInDashboard endpoint not_found error.
+func NewDuplicateBuiltInDashboardNotFound(body *DuplicateBuiltInDashboardNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateBuiltInDashboardConflict builds a dashboards service
+// duplicateBuiltInDashboard endpoint conflict error.
+func NewDuplicateBuiltInDashboardConflict(body *DuplicateBuiltInDashboardConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateBuiltInDashboardUnsupportedMedia builds a dashboards service
+// duplicateBuiltInDashboard endpoint unsupported_media error.
+func NewDuplicateBuiltInDashboardUnsupportedMedia(body *DuplicateBuiltInDashboardUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateBuiltInDashboardInvalid builds a dashboards service
+// duplicateBuiltInDashboard endpoint invalid error.
+func NewDuplicateBuiltInDashboardInvalid(body *DuplicateBuiltInDashboardInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateBuiltInDashboardInvariantViolation builds a dashboards service
+// duplicateBuiltInDashboard endpoint invariant_violation error.
+func NewDuplicateBuiltInDashboardInvariantViolation(body *DuplicateBuiltInDashboardInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateBuiltInDashboardUnexpected builds a dashboards service
+// duplicateBuiltInDashboard endpoint unexpected error.
+func NewDuplicateBuiltInDashboardUnexpected(body *DuplicateBuiltInDashboardUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateBuiltInDashboardGatewayError builds a dashboards service
+// duplicateBuiltInDashboard endpoint gateway_error error.
+func NewDuplicateBuiltInDashboardGatewayError(body *DuplicateBuiltInDashboardGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDeleteDashboardUnauthorized builds a dashboards service deleteDashboard
 // endpoint unauthorized error.
 func NewDeleteDashboardUnauthorized(body *DeleteDashboardUnauthorizedResponseBody) *goa.ServiceError {
@@ -4019,9 +4467,19 @@ func ValidateListDashboardsResponseBody(body *ListDashboardsResponseBody) (err e
 	if body.Dashboards == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("dashboards", "body"))
 	}
+	if body.BuiltIn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("built_in", "body"))
+	}
 	for _, e := range body.Dashboards {
 		if e != nil {
 			if err2 := ValidateDashboardResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.BuiltIn {
+		if e != nil {
+			if err2 := ValidateBuiltInDashboardResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -4410,6 +4868,60 @@ func ValidateSaveDashboardFiltersResponseBody(body *SaveDashboardFiltersResponse
 // ValidateDuplicateDashboardResponseBody runs the validations defined on
 // DuplicateDashboardResponseBody
 func ValidateDuplicateDashboardResponseBody(body *DuplicateDashboardResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Filters == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("filters", "body"))
+	}
+	if body.Widgets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("widgets", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.Filters != nil {
+		if err2 := ValidateDashboardFiltersResponseBody(body.Filters); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Widgets {
+		if e != nil {
+			if err2 := ValidateDashboardPlacementResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDuplicateBuiltInDashboardResponseBody runs the validations defined
+// on DuplicateBuiltInDashboardResponseBody
+func ValidateDuplicateBuiltInDashboardResponseBody(body *DuplicateBuiltInDashboardResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -6622,6 +7134,248 @@ func ValidateDuplicateDashboardGatewayErrorResponseBody(body *DuplicateDashboard
 	return
 }
 
+// ValidateDuplicateBuiltInDashboardUnauthorizedResponseBody runs the
+// validations defined on duplicateBuiltInDashboard_unauthorized_response_body
+func ValidateDuplicateBuiltInDashboardUnauthorizedResponseBody(body *DuplicateBuiltInDashboardUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateBuiltInDashboardForbiddenResponseBody runs the validations
+// defined on duplicateBuiltInDashboard_forbidden_response_body
+func ValidateDuplicateBuiltInDashboardForbiddenResponseBody(body *DuplicateBuiltInDashboardForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateBuiltInDashboardBadRequestResponseBody runs the validations
+// defined on duplicateBuiltInDashboard_bad_request_response_body
+func ValidateDuplicateBuiltInDashboardBadRequestResponseBody(body *DuplicateBuiltInDashboardBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateBuiltInDashboardNotFoundResponseBody runs the validations
+// defined on duplicateBuiltInDashboard_not_found_response_body
+func ValidateDuplicateBuiltInDashboardNotFoundResponseBody(body *DuplicateBuiltInDashboardNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateBuiltInDashboardConflictResponseBody runs the validations
+// defined on duplicateBuiltInDashboard_conflict_response_body
+func ValidateDuplicateBuiltInDashboardConflictResponseBody(body *DuplicateBuiltInDashboardConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateBuiltInDashboardUnsupportedMediaResponseBody runs the
+// validations defined on
+// duplicateBuiltInDashboard_unsupported_media_response_body
+func ValidateDuplicateBuiltInDashboardUnsupportedMediaResponseBody(body *DuplicateBuiltInDashboardUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateBuiltInDashboardInvalidResponseBody runs the validations
+// defined on duplicateBuiltInDashboard_invalid_response_body
+func ValidateDuplicateBuiltInDashboardInvalidResponseBody(body *DuplicateBuiltInDashboardInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateBuiltInDashboardInvariantViolationResponseBody runs the
+// validations defined on
+// duplicateBuiltInDashboard_invariant_violation_response_body
+func ValidateDuplicateBuiltInDashboardInvariantViolationResponseBody(body *DuplicateBuiltInDashboardInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateBuiltInDashboardUnexpectedResponseBody runs the validations
+// defined on duplicateBuiltInDashboard_unexpected_response_body
+func ValidateDuplicateBuiltInDashboardUnexpectedResponseBody(body *DuplicateBuiltInDashboardUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateBuiltInDashboardGatewayErrorResponseBody runs the
+// validations defined on duplicateBuiltInDashboard_gateway_error_response_body
+func ValidateDuplicateBuiltInDashboardGatewayErrorResponseBody(body *DuplicateBuiltInDashboardGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDeleteDashboardUnauthorizedResponseBody runs the validations defined
 // on deleteDashboard_unauthorized_response_body
 func ValidateDeleteDashboardUnauthorizedResponseBody(body *DeleteDashboardUnauthorizedResponseBody) (err error) {
@@ -6968,6 +7722,61 @@ func ValidateDashboardPlacementResponseBody(body *DashboardPlacementResponseBody
 	}
 	if body.WidgetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.widget_id", *body.WidgetID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateBuiltInDashboardResponseBody runs the validations defined on
+// BuiltInDashboardResponseBody
+func ValidateBuiltInDashboardResponseBody(body *BuiltInDashboardResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Cards == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cards", "body"))
+	}
+	for _, e := range body.Cards {
+		if e != nil {
+			if err2 := ValidateBuiltInCardResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateBuiltInCardResponseBody runs the validations defined on
+// BuiltInCardResponseBody
+func ValidateBuiltInCardResponseBody(body *BuiltInCardResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Dataset == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dataset", "body"))
+	}
+	if body.Query == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("query", "body"))
+	}
+	if body.Visualization == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("visualization", "body"))
+	}
+	if body.X == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("x", "body"))
+	}
+	if body.Y == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("y", "body"))
+	}
+	if body.W == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("w", "body"))
+	}
+	if body.H == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("h", "body"))
 	}
 	return
 }

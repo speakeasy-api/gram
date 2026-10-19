@@ -74,6 +74,8 @@ func (w verdictTimeoutWriter) WriteHeader(status int) {
 
 // Attach mounts the webhook once. Configuration changes take effect on the next request.
 func Attach(mux goahttp.Muxer, logger *slog.Logger, processor Processor, resolver ConfigResolver) {
+	logger = logger.With(attr.SlogComponent("anthropic-inference"))
+
 	endpoint := http.TimeoutHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		config, err := resolver.Resolve(r.Context(), mux.Vars(r)["id"])
 		if err != nil {

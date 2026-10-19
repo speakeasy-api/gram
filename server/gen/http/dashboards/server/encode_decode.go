@@ -2014,6 +2014,231 @@ func EncodeDuplicateDashboardError(encoder func(context.Context, http.ResponseWr
 	}
 }
 
+// EncodeDuplicateBuiltInDashboardResponse returns an encoder for responses
+// returned by the dashboards duplicateBuiltInDashboard endpoint.
+func EncodeDuplicateBuiltInDashboardResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*dashboards.Dashboard)
+		enc := encoder(ctx, w)
+		body := NewDuplicateBuiltInDashboardResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeDuplicateBuiltInDashboardRequest returns a decoder for requests sent
+// to the dashboards duplicateBuiltInDashboard endpoint.
+func DecodeDuplicateBuiltInDashboardRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*dashboards.DuplicateBuiltInDashboardPayload, error) {
+	return func(r *http.Request) (*dashboards.DuplicateBuiltInDashboardPayload, error) {
+		var payload *dashboards.DuplicateBuiltInDashboardPayload
+		var (
+			body DuplicateBuiltInDashboardRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateDuplicateBuiltInDashboardRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewDuplicateBuiltInDashboardPayload(&body, sessionToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeDuplicateBuiltInDashboardError returns an encoder for errors returned
+// by the duplicateBuiltInDashboard dashboards endpoint.
+func EncodeDuplicateBuiltInDashboardError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDuplicateBuiltInDashboardUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDuplicateBuiltInDashboardForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDuplicateBuiltInDashboardBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDuplicateBuiltInDashboardNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDuplicateBuiltInDashboardConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDuplicateBuiltInDashboardUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDuplicateBuiltInDashboardInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDuplicateBuiltInDashboardInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDuplicateBuiltInDashboardUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDuplicateBuiltInDashboardGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeDeleteDashboardResponse returns an encoder for responses returned by
 // the dashboards deleteDashboard endpoint.
 func EncodeDeleteDashboardResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -2309,6 +2534,63 @@ func marshalDashboardsDashboardPlacementToDashboardPlacementResponseBody(v *dash
 		Y:        v.Y,
 		W:        v.W,
 		H:        v.H,
+	}
+
+	return res
+}
+
+// marshalDashboardsBuiltInDashboardToBuiltInDashboardResponseBody builds a
+// value of type *BuiltInDashboardResponseBody from a value of type
+// *dashboards.BuiltInDashboard.
+func marshalDashboardsBuiltInDashboardToBuiltInDashboardResponseBody(v *dashboards.BuiltInDashboard) *BuiltInDashboardResponseBody {
+	res := &BuiltInDashboardResponseBody{
+		Slug:        v.Slug,
+		Name:        v.Name,
+		Description: v.Description,
+	}
+	if v.Cards != nil {
+		res.Cards = make([]*BuiltInCardResponseBody, len(v.Cards))
+		for i, val := range v.Cards {
+			if val == nil {
+				res.Cards[i] = nil
+				continue
+			}
+			res.Cards[i] = marshalDashboardsBuiltInCardToBuiltInCardResponseBody(val)
+		}
+	} else {
+		res.Cards = []*BuiltInCardResponseBody{}
+	}
+
+	return res
+}
+
+// marshalDashboardsBuiltInCardToBuiltInCardResponseBody builds a value of type
+// *BuiltInCardResponseBody from a value of type *dashboards.BuiltInCard.
+func marshalDashboardsBuiltInCardToBuiltInCardResponseBody(v *dashboards.BuiltInCard) *BuiltInCardResponseBody {
+	res := &BuiltInCardResponseBody{
+		Name:        v.Name,
+		Description: v.Description,
+		Dataset:     v.Dataset,
+		X:           v.X,
+		Y:           v.Y,
+		W:           v.W,
+		H:           v.H,
+	}
+	if v.Query != nil {
+		res.Query = make(map[string]any, len(v.Query))
+		for key, val := range v.Query {
+			tk := key
+			tv := val
+			res.Query[tk] = tv
+		}
+	}
+	if v.Visualization != nil {
+		res.Visualization = make(map[string]any, len(v.Visualization))
+		for key, val := range v.Visualization {
+			tk := key
+			tv := val
+			res.Visualization[tk] = tv
+		}
 	}
 
 	return res

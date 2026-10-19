@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -22,7 +23,7 @@ type credentialEntry struct {
 	AccessTokenEncrypted string
 
 	// Scheme is how the access token is presented upstream.
-	Scheme Scheme
+	Scheme remotesessions.ClientCredentialScheme
 
 	// ExpiresAt is when the entry stops being served.
 	ExpiresAt time.Time
@@ -44,7 +45,7 @@ type failureEntry struct {
 	// Key is the entry's cache key.
 	Key string
 
-	// Configuration reports a registration Gram cannot authenticate with.
+	// Configuration reports a registration Speakeasy cannot authenticate with.
 	Configuration bool
 
 	// StatusCode is the token endpoint's HTTP status for a provider rejection.

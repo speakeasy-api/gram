@@ -1,8 +1,12 @@
 package llmanalyzer_test
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -368,6 +372,47 @@ func TestAnalyze_ParseErrorIsDeadLetter(t *testing.T) {
 	require.Equal(t, llmanalyzer.DeadLetterResult(llmanalyzer.ReasonParseError), analysis.Result)
 	require.False(t, analysis.Result.Completed)
 	require.Equal(t, "I cannot help with that.", analysis.Completion.Content)
+}
+
+func TestAnalyze_ParseErrorLogsRawCompletion(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	stub := &llmanalyzer.StubCompleter{
+		Response:         `{"destructive_tool_call": 0, "prompt_injection": "unsure`,
+		Err:              nil,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		Model:            "",
+		Calls:            nil,
+		ParseFailures:    0,
+	}
+	analysis := llmanalyzer.NewAnalyzer(logger, testenv.NewTracerProvider(t), stub).Analyze(t.Context(), userRequest("hello"))
+	require.ErrorIs(t, analysis.Err, llmanalyzer.ErrParse)
+
+	var entry map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &entry), logs.String())
+	require.Equal(t, "risk llm analysis failed; returning dead-letter result", entry["msg"])
+	require.Equal(t, stub.Response, entry["gram.risk.llm.completion"], "the unparsable reply is logged verbatim")
+}
+
+func TestAnalyze_UpstreamErrorDoesNotLogCompletion(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	stub := &llmanalyzer.StubCompleter{
+		Response:         "",
+		Err:              context.DeadlineExceeded,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		Model:            "",
+		Calls:            nil,
+		ParseFailures:    0,
+	}
+	llmanalyzer.NewAnalyzer(logger, testenv.NewTracerProvider(t), stub).Analyze(t.Context(), userRequest("hello"))
+	require.NotContains(t, logs.String(), "gram.risk.llm.completion")
 }
 
 func TestAnalyze_TimeoutIsDeadLetter(t *testing.T) {

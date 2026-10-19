@@ -497,7 +497,7 @@ func TestDeleteOrganizationUserSessionIssuer_RevokesLegacyProjectClient(t *testi
 }
 
 // A failing upstream revocation endpoint does not undo the local tombstone:
-// fail-secure means the grant is dead in Gram even when the POST is rejected.
+// fail-secure means the grant is dead in Speakeasy even when the POST is rejected.
 func TestDeleteUserSessionIssuer_UpstreamFailureKeepsLocalTombstone(t *testing.T) {
 	t.Parallel()
 

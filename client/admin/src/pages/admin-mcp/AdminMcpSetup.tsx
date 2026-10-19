@@ -48,7 +48,7 @@ export function AdminMcpSetup(): JSX.Element {
           <h1 className="text-2xl font-semibold">Connect Admin MCP</h1>
         </div>
         <p className="text-muted-foreground">
-          Use Gram’s staff-only tools from an MCP client on your
+          Use Speakeasy’s staff-only tools from an MCP client on your
           tailnet-connected machine. This connection uses your own staff login,
           not an API key.
         </p>

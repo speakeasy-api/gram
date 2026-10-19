@@ -30,7 +30,20 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { useProductTier } from "@/hooks/useProductTier";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import tailscaleLogo from "@/assets/tailscale-logo.webp";
 import { useUpdateNetworkIngressMutation } from "@gram/client/react-query/updateNetworkIngress.js";
+
+function TailscaleLogo(): JSX.Element {
+  return (
+    <img
+      src={tailscaleLogo}
+      alt="Tailscale"
+      width={134}
+      height={24}
+      className="h-6 w-auto shrink-0 dark:invert"
+    />
+  );
+}
 
 function statusVariant(
   status: string,
@@ -78,7 +91,7 @@ function PrivateNetworkCleanup({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <Text variant="subheading">Tailscale</Text>
+              <TailscaleLogo />
               {credentialsRejected ? (
                 <Badge variant="destructive" background>
                   Cleanup blocked
@@ -100,22 +113,23 @@ function PrivateNetworkCleanup({
         {credentialsRejected ? (
           <Alert variant="error" dismissible={false}>
             Tailscale rejected the credentials saved for this connection, so
-            Gram can't remove its devices from your tailnet. If you disabled the
-            OAuth client or removed its scopes, restore them in the Tailscale
-            admin console, then retry cleanup. If the client or its secret was
-            deleted or regenerated, contact support to finish cleanup.
+            Speakeasy can't remove its devices from your tailnet. If you
+            disabled the OAuth client or removed its scopes, restore them in the
+            Tailscale admin console, then retry cleanup. If the client or its
+            secret was deleted or regenerated, contact support to finish
+            cleanup.
           </Alert>
         ) : (
           <Alert variant="info" dismissible={false}>
-            Gram is removing the private route and its provider resources. You
-            can connect another tailnet after cleanup completes. This page
+            Speakeasy is removing the private route and its provider resources.
+            You can connect another tailnet after cleanup completes. This page
             checks for completion automatically.
           </Alert>
         )}
         {statusStale && (
           <Alert variant="warning" dismissible={false}>
             Cleanup status may be out of date because the latest check failed.
-            You can retry cleanup while Gram continues polling.
+            You can retry cleanup while Speakeasy continues polling.
           </Alert>
         )}
       </SettingsSection.Body>
@@ -199,7 +213,7 @@ function ConfiguredPrivateNetwork({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <Text variant="subheading">Tailscale</Text>
+              <TailscaleLogo />
               <Badge variant={statusVariant(ingress.status)} background>
                 {statusLabel(ingress.status)}
               </Badge>
@@ -235,7 +249,7 @@ function ConfiguredPrivateNetwork({
             <dd className="mt-1 text-sm">
               {ingress.endpointNamespaceKind === "custom_domain"
                 ? "Custom domain"
-                : "Gram platform"}
+                : "Speakeasy platform"}
             </dd>
           </div>
           <div>

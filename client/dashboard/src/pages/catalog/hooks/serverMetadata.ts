@@ -42,7 +42,7 @@ export function isPulseMcpServer(
 /**
  * Whether connecting to a server requires manual auth setup. A server is
  * "automatic" only when its OAuth authorization server advertises a dynamic
- * client registration endpoint (DCR, RFC 7591), which Gram registers a client
+ * client registration endpoint (DCR, RFC 7591), which Speakeasy registers a client
  * against on the fly. Everything else — OAuth 2.0 without DCR, API-key servers,
  * etc. — needs the user to supply credentials manually. Backed by the
  * server-computed `supports_dcr` flag from the Pulse catalog payload.

@@ -714,16 +714,44 @@ func TestService_SetResourceAudience_AllowsBlockingEveryonesViewWhileKeepingNarr
 	require.NoError(t, err)
 }
 
-// Restricting a server to one team is written as "everyone else: no access",
-// which stores a block — and a role block outranks every grant except one made
-// to a person by name for this resource. Naming the
-// administrator role there takes the server's own access page away from every
-// administrator, including the ones who would undo it, so it is refused at all
-// three block levels rather than only the one covering the caller.
-func TestService_SetResourceAudience_RefusesBlockingTheAdminRole(t *testing.T) {
+// A role block outranks every grant except one made to a person by name for
+// this resource. Blocking the administrator role's view takes the server's own
+// access page away from every administrator, including the ones who would undo
+// it, so it is refused even when the caller is not an administrator.
+func TestService_SetResourceAudience_RefusesBlockingTheAdminRoleView(t *testing.T) {
 	t.Parallel()
 
-	for _, level := range []string{"blocked", "blocked_view", "blocked_manage"} {
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", authz.SystemRoleAdmin))
+	adminPrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authz.SystemRoleAdmin)
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: adminPrincipal.String(), Level: "blocked_view"},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
+// Blocks on connect and manage leave the access page readable, so
+// administrators can still be taken off a server's use or management.
+func TestService_SetResourceAudience_AllowsBlockingTheAdminRoleUseAndManage(t *testing.T) {
+	t.Parallel()
+
+	for _, level := range []string{"blocked", "blocked_manage"} {
 		t.Run(level, func(t *testing.T) {
 			t.Parallel()
 
@@ -735,7 +763,7 @@ func TestService_SetResourceAudience_RefusesBlockingTheAdminRole(t *testing.T) {
 			adminPrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authz.SystemRoleAdmin)
 			serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 
-			_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+			result, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 				ResourceKind: "mcp",
 				ResourceID:   serverID,
 				Entries: []*gen.SetResourceAudienceEntry{
@@ -745,13 +773,49 @@ func TestService_SetResourceAudience_RefusesBlockingTheAdminRole(t *testing.T) {
 				SessionToken:    nil,
 				ApikeyToken:     nil,
 			})
-			require.Error(t, err)
-
-			var oopsErr *oops.ShareableError
-			require.ErrorAs(t, err, &oopsErr)
-			require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+			require.NoError(t, err)
+			require.Len(t, result.Entries, 1)
+			require.Equal(t, level, result.Entries[0].Level)
 		})
 	}
+}
+
+// A use block on the administrator role leaves the access page readable, so an
+// administrator can lift it again from the same page.
+func TestService_SetResourceAudience_RestoresTheAdminRoleAfterAUseBlock(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", authz.SystemRoleAdmin))
+	adminPrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authz.SystemRoleAdmin)
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	blocked, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: adminPrincipal.String(), Level: "blocked"},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, blocked.Entries, 1)
+
+	restored, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         []*gen.SetResourceAudienceEntry{},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, restored.Entries)
 }
 
 // Taking a team off a server is what this surface is for, so every role other

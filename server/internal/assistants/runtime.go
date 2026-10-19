@@ -70,8 +70,7 @@ func runtimeImageRef(image, tag string) string {
 }
 
 // runnerClient speaks the runner HTTP protocol for backends that dial the
-// runner directly by base URL (GKE pod IPs, local containers). Fly keeps its
-// own request layer for machine pinning and response-size limits.
+// runner directly by base URL (GKE pod IPs, local containers).
 type runnerClient struct {
 	do      runtimeHTTPDoer
 	backend string
@@ -432,8 +431,7 @@ type runtimeTurnRequest struct {
 	MCPServers []runtimeMCPServer   `json:"mcp_servers,omitempty"`
 	// AssistantID lets a runner that booted without GRAM_ASSISTANT_ID env
 	// (e.g. a generic warm-pool sandbox on GKE) learn which assistant it serves
-	// from the turn. Boot env wins when present, so it is harmless and unused
-	// on Fly.
+	// from the turn. Boot env wins when present.
 	AssistantID string `json:"assistant_id,omitempty"`
 	// ProjectID travels with AssistantID under the same set-once discipline.
 	// The runner stamps it on exported trace spans so traces filter per
@@ -519,8 +517,8 @@ var runnerHistoryRejectMarkers = []string{
 // is in the chain) the VM is alive and must not be torn down on its own; only
 // a transport failure — or a 5xx we cannot attribute to a deterministic cause —
 // is treated as unhealthy. "provider error" is agentkit-provider-openrouter's
-// prefix; "completion failed" is Gram's gateway-stamped variant;
-// chat.IsHistoryCorrupted detects the Gram marker stamped on upstream 400/422.
+// prefix; "completion failed" is Speakeasy's gateway-stamped variant;
+// chat.IsHistoryCorrupted detects the Speakeasy marker stamped on upstream 400/422.
 func classifyTurnError(err error) error {
 	if err == nil {
 		return nil
@@ -582,4 +580,45 @@ func turnErrorBucket(err error) turnOutcome {
 	default:
 		return turnOutcomeTransient
 	}
+}
+
+// runnerStateResponse mirrors agents/runner/src/wire.rs::RunnerStateResponse.
+// One VM serves every thread under an assistant, so the runner reports per-
+// thread idle clocks rather than a single VM-wide value. Threads is empty
+// when the VM has booted but is not yet driving any thread.
+type runnerStateResponse struct {
+	AssistantID   string              `json:"assistant_id"`
+	UptimeSeconds uint64              `json:"uptime_seconds"`
+	Threads       []runnerThreadState `json:"threads"`
+}
+
+type runnerThreadState struct {
+	ThreadID    string `json:"thread_id"`
+	ChatID      string `json:"chat_id"`
+	IdleSeconds uint64 `json:"idle_seconds"`
+}
+
+// minThreadIdle returns the minimum idle_seconds across the runner's threads,
+// or nil when no threads exist. A nil signal means "no per-thread activity to
+// gate on" — callers treat that as fully idle (safe to recycle, no warm
+// remaining).
+func (r runnerStateResponse) minThreadIdle() *uint64 {
+	if len(r.Threads) == 0 {
+		return nil
+	}
+	minIdle := r.Threads[0].IdleSeconds
+	for _, t := range r.Threads[1:] {
+		if t.IdleSeconds < minIdle {
+			minIdle = t.IdleSeconds
+		}
+	}
+	return &minIdle
+}
+
+// turnInFlight reports whether any thread has a turn in flight: the runner
+// clears a thread's idle clock synchronously on /turn enqueue, so a min idle
+// of zero means a turn is running right now.
+func (r runnerStateResponse) turnInFlight() bool {
+	idle := r.minThreadIdle()
+	return idle != nil && *idle == 0
 }

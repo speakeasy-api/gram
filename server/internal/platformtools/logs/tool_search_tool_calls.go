@@ -33,7 +33,7 @@ func (s *SearchToolCalls) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "logs",
 		HandlerName: "search_tool_calls",
 		Name:        "platform_search_tool_calls",
-		Description: "Search individual tool-call executions (MCP and agent tool invocations) for the current project.",
+		Description: "Search individual tool-call executions (MCP and agent tool invocations) for the current project. Requires log:read on the project.",
 		InputSchema: core.BuildInputSchema[searchToolCallsInput](
 			core.WithTypeSchema(reflect.TypeFor[telemetry.SearchToolCallsFilter](), core.PermissiveObjectSchema()),
 			core.WithPropertyEnum("sort", "asc", "desc"),
@@ -75,6 +75,9 @@ func (s *SearchToolCalls) Call(ctx context.Context, _ toolconfig.ToolCallEnv, pa
 	if err != nil {
 		if errors.Is(err, telemetryerrs.ErrLogsDisabled) {
 			return writeLogsDisabledResponse(wr)
+		}
+		if isForbidden(err) {
+			return writeLogReadRequiredResponse(wr)
 		}
 		return fmt.Errorf("search tool calls: %w", err)
 	}

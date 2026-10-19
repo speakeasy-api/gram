@@ -29,8 +29,8 @@ type TunneledMcpServer struct {
 	AgentVersion *string
 	// RFC 9728 protected resource identifier of the tunneled server, used for
 	// credential routing and as the signed caller assertion audience; never dialed
-	// by Gram. The exact identifier is preserved, including trailing slashes. When
-	// unset, caller assertions use tunneled-mcp-server:<ID>
+	// by Speakeasy. The exact identifier is preserved, including trailing slashes.
+	// When unset, caller assertions use tunneled-mcp-server:<ID>
 	ResourceIdentifier *string
 	// Sustained anonymous MCP requests per second admitted for this tunnel when it
 	// is served through a public MCP endpoint. Applies to every MCP interaction.

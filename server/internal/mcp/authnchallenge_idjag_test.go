@@ -60,11 +60,11 @@ func newIDJAGTestAssertion(t *testing.T) idJAGTestAssertion {
 	return idJAGTestAssertion{signer: signer, jwks: jwks}
 }
 
-func (a idJAGTestAssertion) sign(t *testing.T, issuer, resource, clientID, email, assertionID string) string {
+func (a idJAGTestAssertion) sign(t *testing.T, issuer, audience, resource, clientID, email, assertionID string) string {
 	t.Helper()
 	now := time.Now()
 	claims := jwt.Claims{
-		Issuer: issuer, Subject: "external-user", Audience: jwt.Audience{resource},
+		Issuer: issuer, Subject: "external-user", Audience: jwt.Audience{audience},
 		Expiry: jwt.NewNumericDate(now.Add(2 * time.Minute)), IssuedAt: jwt.NewNumericDate(now.Add(-time.Minute)), ID: assertionID,
 	}
 	extra := struct {
@@ -208,7 +208,7 @@ func TestTokenIDJAGExchangeMintsResourceBoundAccessOnlySession(t *testing.T) {
 
 	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
 	assertionID := uuid.NewString()
-	assertion := assertionSigner.sign(t, upstreamIssuer, resource, client.ClientID, mockidp.MockUserEmail, assertionID)
+	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, client.ClientID, mockidp.MockUserEmail, assertionID)
 	w := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
@@ -267,7 +267,7 @@ func TestTokenIDJAGExchangeRejectsMismatchedResourceWithoutConsumingAssertion(t 
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
 
 	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
-	assertion := assertionSigner.sign(t, upstreamIssuer, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
+	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
 	rejected := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion, resource, "https://other.example.test/mcp")
 	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
 	require.JSONEq(t, `{"error":"invalid_target","error_description":"resource does not identify this MCP server (expected \"`+resource+`\")"}`, rejected.Body.String())
@@ -298,7 +298,7 @@ func TestTokenIDJAGExchangeAppliesCurrentCIMDAdmissionBeforeConsumingAssertion(t
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
 
 	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
-	assertion := assertionSigner.sign(t, upstreamIssuer, resource, ds.clientID, mockidp.MockUserEmail, uuid.NewString())
+	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, ds.clientID, mockidp.MockUserEmail, uuid.NewString())
 	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModePresets)
 	rejected := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, ds.clientID, assertion, resource)
 	require.Equal(t, http.StatusUnauthorized, rejected.Code, rejected.Body.String())
@@ -336,7 +336,7 @@ func TestTokenIDJAGExchangeAuthorizesMetaMCPMembers(t *testing.T) {
 	endpoint.UserSessionIssuerID = issuer.ID
 	resource, err := endpoint.RootURL(ti.serverURL.String())
 	require.NoError(t, err)
-	assertion := assertionSigner.sign(t, upstreamIssuer, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
+	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
 	form := url.Values{
 		"grant_type": {oauthwire.GrantTypeJWTBearer},
 		"client_id":  {client.ClientID},
@@ -377,7 +377,7 @@ func TestTokenIDJAGExchangeRejectsTrustedIssuerFromAnotherOrganization(t *testin
 	endpoint.UserSessionIssuerID = otherIssuer.ID
 	resource, err := endpoint.RootURL(ti.serverURL.String())
 	require.NoError(t, err)
-	assertion := assertionSigner.sign(t, upstreamIssuer, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
+	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
 	form := url.Values{
 		"grant_type": {oauthwire.GrantTypeJWTBearer},
 		"client_id":  {client.ClientID},

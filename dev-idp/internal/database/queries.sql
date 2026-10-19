@@ -66,7 +66,7 @@ RETURNING *;
 
 -- GetOrganizationByWorkosID looks up an organization by its workos_id
 -- text field. Used by mock-workos handlers to resolve external org IDs
--- (e.g. Gram KSUIDs like "org_01KMD...") to the internal dev-idp org.
+-- (e.g. Speakeasy KSUIDs like "org_01KMD...") to the internal dev-idp org.
 -- name: GetOrganizationByWorkosID :one
 SELECT * FROM organizations WHERE workos_id = @workos_id;
 
@@ -106,7 +106,7 @@ LIMIT @max_rows;
 
 -- ListMembershipsWithOrgName joins memberships with organizations so the
 -- WorkOS-shaped response can include `organization_name` and the external
--- `workos_id` (the WorkOS-style org ID that Gram stores in
+-- `workos_id` (the WorkOS-style org ID that Speakeasy stores in
 -- organization_metadata.workos_id).
 -- name: ListMembershipsWithOrgName :many
 SELECT

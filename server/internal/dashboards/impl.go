@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -159,7 +161,7 @@ func (s *Service) ListDashboards(ctx context.Context, _ *gen.ListDashboardsPaylo
 		byDashboard[placement.DashboardID] = append(byDashboard[placement.DashboardID], placement)
 	}
 
-	result := &gen.ListDashboardsResult{Dashboards: make([]*gen.Dashboard, 0, len(rows))}
+	result := &gen.ListDashboardsResult{Dashboards: make([]*gen.Dashboard, 0, len(rows)), BuiltIn: builtInViews()}
 	for _, row := range rows {
 		result.Dashboards = append(result.Dashboards, mv.BuildDashboardView(row, byDashboard[row.ID]))
 	}
@@ -190,6 +192,14 @@ func (s *Service) GetDashboard(ctx context.Context, payload *gen.GetDashboardPay
 
 // CreateDashboard makes an empty dashboard.
 func (s *Service) CreateDashboard(ctx context.Context, payload *gen.CreateDashboardPayload) (*gen.Dashboard, error) {
+	return inTx(ctx, s, "creation", func(dbtx pgx.Tx) (*gen.Dashboard, error) {
+		return s.CreateDashboardInTx(ctx, dbtx, payload.Name, payload.Description)
+	})
+}
+
+// CreateDashboardInTx makes an empty dashboard inside the caller's
+// transaction, audited in it. The caller commits.
+func (s *Service) CreateDashboardInTx(ctx context.Context, dbtx pgx.Tx, name string, description *string) (*gen.Dashboard, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
 	if err != nil {
 		return nil, err
@@ -197,16 +207,10 @@ func (s *Service) CreateDashboard(ctx context.Context, payload *gen.CreateDashbo
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "making a dashboard requires a user identity")
 	}
-	details, reason := checkDetails(payload.Name, payload.Description)
+	details, reason := checkDetails(name, description)
 	if reason != "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin dashboard creation").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).CreateDashboard(ctx, repo.CreateDashboardParams{
 		ProjectID:       *authCtx.ProjectID,
@@ -221,22 +225,28 @@ func (s *Service) CreateDashboard(ctx context.Context, payload *gen.CreateDashbo
 	}
 
 	view := mv.BuildDashboardView(row, nil)
-	if err := s.audit.LogDashboardCreate(ctx, dbtx, audit.LogDashboardCreateEvent{DashboardEventBase: s.auditBase(authCtx, row), Snapshot: view, DuplicatedFrom: nil}); err != nil {
+	if err := s.audit.LogDashboardCreate(ctx, dbtx, audit.LogDashboardCreateEvent{DashboardEventBase: s.auditBase(authCtx, row), Snapshot: view, DuplicatedFrom: nil, DuplicatedFromBuiltIn: ""}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit dashboard creation").LogError(ctx, s.logger)
-	}
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit dashboard creation").LogError(ctx, s.logger)
 	}
 	return view, nil
 }
 
 // UpdateDashboard renames a dashboard or changes its description.
 func (s *Service) UpdateDashboard(ctx context.Context, payload *gen.UpdateDashboardPayload) (*gen.Dashboard, error) {
-	details, reason := checkDetails(payload.Name, payload.Description)
+	return inTx(ctx, s, "update", func(dbtx pgx.Tx) (*gen.Dashboard, error) {
+		return s.UpdateDashboardInTx(ctx, dbtx, payload.ID, "", payload.Name, payload.Description)
+	})
+}
+
+// UpdateDashboardInTx renames a dashboard or changes its description inside
+// the caller's transaction. A non-empty expectedVersion refuses the change
+// with ErrStaleVersion when the dashboard has changed since that version.
+func (s *Service) UpdateDashboardInTx(ctx context.Context, dbtx pgx.Tx, id, expectedVersion, name string, description *string) (*gen.Dashboard, error) {
+	details, reason := checkDetails(name, description)
 	if reason != "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 	}
-	return s.edit(ctx, payload.ID, "update", func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, before repo.Dashboard) (repo.Dashboard, error) {
+	return s.editInTx(ctx, dbtx, id, expectedVersion, editDetails, func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, before repo.Dashboard) (repo.Dashboard, error) {
 		row, err := queries.UpdateDashboard(ctx, repo.UpdateDashboardParams{
 			Name:        details.name,
 			Description: conv.PtrToPGTextEmpty(details.description),
@@ -259,7 +269,7 @@ func (s *Service) SaveDashboardLayout(ctx context.Context, payload *gen.SaveDash
 	if len(payload.Placements) > maxCards {
 		return nil, oops.E(oops.CodeBadRequest, nil, "a dashboard holds at most %d cards", maxCards)
 	}
-	return s.edit(ctx, payload.ID, "layout", func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, dashboard repo.Dashboard) (repo.Dashboard, error) {
+	return s.edit(ctx, payload.ID, editLayout, func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, dashboard repo.Dashboard) (repo.Dashboard, error) {
 		existing, err := queries.ListPlacements(ctx, repo.ListPlacementsParams{ProjectID: *authCtx.ProjectID, DashboardID: dashboard.ID})
 		if err != nil {
 			return repo.Dashboard{}, fmt.Errorf("list dashboard cards: %w", err)
@@ -371,7 +381,7 @@ func (s *Service) AddDashboardWidget(ctx context.Context, payload *gen.AddDashbo
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid widget id")
 	}
-	return s.edit(ctx, payload.ID, "add card", func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, dashboard repo.Dashboard) (repo.Dashboard, error) {
+	return s.edit(ctx, payload.ID, editAddCard, func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, dashboard repo.Dashboard) (repo.Dashboard, error) {
 		widget, err := queries.GetWidgetForPlacement(ctx, repo.GetWidgetForPlacementParams{ProjectID: *authCtx.ProjectID, ID: widgetID})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -417,7 +427,7 @@ func (s *Service) RemoveDashboardWidget(ctx context.Context, payload *gen.Remove
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid placement id")
 	}
-	return s.edit(ctx, payload.ID, "remove card", func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, dashboard repo.Dashboard) (repo.Dashboard, error) {
+	return s.edit(ctx, payload.ID, editRemoveCard, func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, dashboard repo.Dashboard) (repo.Dashboard, error) {
 		if _, err := queries.DeletePlacement(ctx, repo.DeletePlacementParams{ProjectID: *authCtx.ProjectID, DashboardID: dashboard.ID, ID: placementID}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return repo.Dashboard{}, oops.E(oops.CodeNotFound, err, "card not found")
@@ -431,14 +441,23 @@ func (s *Service) RemoveDashboardWidget(ctx context.Context, payload *gen.Remove
 // SaveDashboardFilters stores the date range and filter values a dashboard
 // opens on, for everyone.
 func (s *Service) SaveDashboardFilters(ctx context.Context, payload *gen.SaveDashboardFiltersPayload) (*gen.Dashboard, error) {
-	if reason := checkFilters(s.catalog, payload.Filters); reason != "" {
+	return inTx(ctx, s, "filters", func(dbtx pgx.Tx) (*gen.Dashboard, error) {
+		return s.SaveDashboardFiltersInTx(ctx, dbtx, payload.ID, "", payload.Filters)
+	})
+}
+
+// SaveDashboardFiltersInTx stores a dashboard's saved filters inside the
+// caller's transaction. A non-empty expectedVersion refuses the change with
+// ErrStaleVersion when the dashboard has changed since that version.
+func (s *Service) SaveDashboardFiltersInTx(ctx context.Context, dbtx pgx.Tx, id, expectedVersion string, filters *gen.DashboardFilters) (*gen.Dashboard, error) {
+	if reason := checkFilters(s.catalog, filters); reason != "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 	}
-	encoded, err := mv.EncodeDashboardFilters(payload.Filters)
+	encoded, err := mv.EncodeDashboardFilters(filters)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "filters are not encodable as JSON")
 	}
-	return s.edit(ctx, payload.ID, "filters", func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, dashboard repo.Dashboard) (repo.Dashboard, error) {
+	return s.editInTx(ctx, dbtx, id, expectedVersion, editFilters, func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, dashboard repo.Dashboard) (repo.Dashboard, error) {
 		row, err := queries.UpdateDashboardFilters(ctx, repo.UpdateDashboardFiltersParams{Filters: encoded, ProjectID: *authCtx.ProjectID, ID: dashboard.ID})
 		if err != nil {
 			return repo.Dashboard{}, fmt.Errorf("save dashboard filters: %w", err)
@@ -452,6 +471,15 @@ func (s *Service) SaveDashboardFilters(ctx context.Context, payload *gen.SaveDas
 // Like every widget save the copies are validated, so a dashboard with a
 // broken widget cannot be duplicated until the widget is fixed.
 func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.DuplicateDashboardPayload) (*gen.Dashboard, error) {
+	return inTx(ctx, s, "duplication", func(dbtx pgx.Tx) (*gen.Dashboard, error) {
+		return s.DuplicateDashboardInTx(ctx, dbtx, payload.ID, "")
+	})
+}
+
+// DuplicateDashboardInTx copies a project dashboard inside the caller's
+// transaction. A non-empty expectedVersion refuses the copy with
+// ErrStaleVersion when the source has changed since that version.
+func (s *Service) DuplicateDashboardInTx(ctx context.Context, dbtx pgx.Tx, rawID, expectedVersion string) (*gen.Dashboard, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
 	if err != nil {
 		return nil, err
@@ -459,17 +487,15 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "making a dashboard requires a user identity")
 	}
-	id, err := uuid.Parse(payload.ID)
+	id, err := uuid.Parse(rawID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid dashboard id")
 	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin dashboard duplication").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := repo.New(dbtx)
+	// The copy reads the source's widgets and makes new ones.
+	if err := s.lockProject(ctx, queries, *authCtx.ProjectID); err != nil {
+		return nil, err
+	}
 
 	// Held for the copy, so a layout save on the source waits and the cards
 	// and widgets read here agree with each other.
@@ -480,6 +506,9 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "load dashboard").LogError(ctx, s.logger)
 	}
+	if err := checkVersion(source, expectedVersion); err != nil {
+		return nil, err
+	}
 	sourceWidgets, err := queries.ListWidgetsForDashboard(ctx, repo.ListWidgetsForDashboardParams{ProjectID: *authCtx.ProjectID, DashboardID: source.ID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load dashboard widgets").LogError(ctx, s.logger)
@@ -489,34 +518,157 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 		return nil, oops.E(oops.CodeUnexpected, err, "load dashboard cards").LogError(ctx, s.logger)
 	}
 
-	// Each widget is copied once, however many cards show it, and the copy
-	// is the caller's. A widget the catalog has broken is refused by name,
-	// as duplicating it on its own would be.
-	now := s.now()
-	widgetQueries := widgetsrepo.New(dbtx)
-	copies := make(map[uuid.UUID]uuid.UUID, len(sourceWidgets))
+	sourceURN := urn.NewDashboard(source.ID)
+	from := copySource{
+		name:        source.Name,
+		description: source.Description,
+		filters:     source.Filters,
+		widgets:     make([]copyWidget, 0, len(sourceWidgets)),
+		placements:  make([]copyPlacement, 0, len(placements)),
+		from:        &sourceURN,
+		fromBuiltIn: "",
+	}
 	for _, widget := range sourceWidgets {
-		reason, err := widgets.Validate(s.catalog, widget.Dataset, widget.Query, widget.Visualization, now)
+		widgetURN := urn.NewWidget(widget.ID)
+		from.widgets = append(from.widgets, copyWidget{
+			key:           widget.ID.String(),
+			name:          widget.Name,
+			description:   widget.Description,
+			dataset:       widget.Dataset,
+			query:         widget.Query,
+			visualization: widget.Visualization,
+			from:          &widgetURN,
+		})
+	}
+	for _, placement := range placements {
+		from.placements = append(from.placements, copyPlacement{key: placement.WidgetID.String(), x: placement.X, y: placement.Y, w: placement.W, h: placement.H})
+	}
+
+	return s.copyInto(ctx, dbtx, authCtx, from)
+}
+
+// DuplicateBuiltInDashboard copies a built-in dashboard into a new one the
+// caller owns, with a new saved widget per card, so the copy can be changed
+// while the built-in stays as it is.
+func (s *Service) DuplicateBuiltInDashboard(ctx context.Context, payload *gen.DuplicateBuiltInDashboardPayload) (*gen.Dashboard, error) {
+	return inTx(ctx, s, "duplication", func(dbtx pgx.Tx) (*gen.Dashboard, error) {
+		return s.DuplicateBuiltInDashboardInTx(ctx, dbtx, payload.Slug)
+	})
+}
+
+// DuplicateBuiltInDashboardInTx copies a built-in dashboard inside the
+// caller's transaction. The caller commits.
+func (s *Service) DuplicateBuiltInDashboardInTx(ctx context.Context, dbtx pgx.Tx, slug string) (*gen.Dashboard, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return nil, err
+	}
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "making a dashboard requires a user identity")
+	}
+	page, ok := builtInBySlug(slug)
+	if !ok {
+		return nil, oops.E(oops.CodeNotFound, nil, "built-in dashboard not found")
+	}
+
+	// A built-in saves no filters: the copy opens on the defaults, as a new
+	// dashboard does. Each card becomes its own widget, keyed by its place
+	// in the layout.
+	from := copySource{
+		name:        page.Name,
+		description: conv.ToPGTextEmpty(page.Description),
+		filters:     []byte("{}"),
+		widgets:     make([]copyWidget, 0, len(page.Cards)),
+		placements:  make([]copyPlacement, 0, len(page.Cards)),
+		from:        nil,
+		fromBuiltIn: page.Slug,
+	}
+	for i, card := range page.Cards {
+		key := strconv.Itoa(i)
+		from.widgets = append(from.widgets, copyWidget{
+			key:           key,
+			name:          card.Name,
+			description:   conv.ToPGTextEmpty(card.Description),
+			dataset:       card.Dataset,
+			query:         card.Query,
+			visualization: card.Visualization,
+			from:          nil,
+		})
+		from.placements = append(from.placements, copyPlacement{
+			key: key,
+			x:   conv.SafeInt32(card.X),
+			y:   conv.SafeInt32(card.Y),
+			w:   conv.SafeInt32(card.W),
+			h:   conv.SafeInt32(card.H),
+		})
+	}
+
+	return s.copyInto(ctx, dbtx, authCtx, from)
+}
+
+// copySource is what a dashboard copy is made from: a project dashboard's
+// rows, or a built-in's cards. A placement names its widget by key, so one
+// widget shown on several cards is copied once.
+type copySource struct {
+	name        string
+	description pgtype.Text
+	filters     []byte
+	widgets     []copyWidget
+	placements  []copyPlacement
+	// Where the copy came from, for the audit trail: the dashboard, or the
+	// built-in's slug.
+	from        *urn.Dashboard
+	fromBuiltIn string
+}
+
+type copyWidget struct {
+	key           string
+	name          string
+	description   pgtype.Text
+	dataset       string
+	query         []byte
+	visualization []byte
+	// The saved widget this is a copy of, when it is one; a built-in card is
+	// not a widget.
+	from *urn.Widget
+}
+
+type copyPlacement struct {
+	key        string
+	x, y, w, h int32
+}
+
+// copyInto makes the caller's copy of a source inside the given transaction:
+// each widget copied once, however many cards show it, then the dashboard
+// and its cards, every step audited. The caller commits. A widget the
+// catalog has broken is refused by name, as duplicating it on its own would
+// be.
+func (s *Service) copyInto(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, source copySource) (*gen.Dashboard, error) {
+	queries := repo.New(dbtx)
+	widgetQueries := widgetsrepo.New(dbtx)
+	now := s.now()
+	copies := make(map[string]uuid.UUID, len(source.widgets))
+	for _, widget := range source.widgets {
+		reason, err := widgets.Validate(s.catalog, widget.dataset, widget.query, widget.visualization, now)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "validate widget").LogError(ctx, s.logger)
 		}
 		if reason != "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "widget %q cannot be copied until it is fixed: %s", widget.Name, reason)
+			return nil, oops.E(oops.CodeBadRequest, nil, "widget %q cannot be copied until it is fixed: %s", widget.name, reason)
 		}
 		copied, err := widgetQueries.CreateWidget(ctx, widgetsrepo.CreateWidgetParams{
 			ProjectID:       *authCtx.ProjectID,
 			OrganizationID:  authCtx.ActiveOrganizationID,
 			CreatedByUserID: conv.ToPGTextEmpty(authCtx.UserID),
-			Name:            copyName(widget.Name),
-			Description:     widget.Description,
-			Dataset:         widget.Dataset,
-			Query:           widget.Query,
-			Visualization:   widget.Visualization,
+			Name:            copyName(widget.name),
+			Description:     widget.description,
+			Dataset:         widget.dataset,
+			Query:           widget.query,
+			Visualization:   widget.visualization,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "copy widget").LogError(ctx, s.logger)
 		}
-		sourceURN := urn.NewWidget(widget.ID)
 		if err := s.audit.LogWidgetCreate(ctx, dbtx, audit.LogWidgetCreateEvent{
 			WidgetEventBase: audit.WidgetEventBase{
 				OrganizationID:   authCtx.ActiveOrganizationID,
@@ -527,34 +679,34 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 				Name:             copied.Name,
 			},
 			Snapshot:       mv.BuildWidgetView(copied, "", nil),
-			DuplicatedFrom: &sourceURN,
+			DuplicatedFrom: widget.from,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "audit widget copy").LogError(ctx, s.logger)
 		}
-		copies[widget.ID] = copied.ID
+		copies[widget.key] = copied.ID
 	}
 
 	row, err := queries.CreateDashboard(ctx, repo.CreateDashboardParams{
 		ProjectID:       *authCtx.ProjectID,
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		CreatedByUserID: conv.ToPGTextEmpty(authCtx.UserID),
-		Name:            copyName(source.Name),
-		Description:     source.Description,
-		Filters:         source.Filters,
+		Name:            copyName(source.name),
+		Description:     source.description,
+		Filters:         source.filters,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create dashboard copy").LogError(ctx, s.logger)
 	}
-	for _, placement := range placements {
+	for _, placement := range source.placements {
 		if _, err := queries.InsertPlacement(ctx, repo.InsertPlacementParams{
 			ProjectID:      *authCtx.ProjectID,
 			OrganizationID: authCtx.ActiveOrganizationID,
 			DashboardID:    row.ID,
-			WidgetID:       copies[placement.WidgetID],
-			X:              placement.X,
-			Y:              placement.Y,
-			W:              placement.W,
-			H:              placement.H,
+			WidgetID:       copies[placement.key],
+			X:              placement.x,
+			Y:              placement.y,
+			W:              placement.w,
+			H:              placement.h,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "copy dashboard card").LogError(ctx, s.logger)
 		}
@@ -564,12 +716,8 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 	if err != nil {
 		return nil, err
 	}
-	sourceURN := urn.NewDashboard(source.ID)
-	if err := s.audit.LogDashboardCreate(ctx, dbtx, audit.LogDashboardCreateEvent{DashboardEventBase: s.auditBase(authCtx, row), Snapshot: view, DuplicatedFrom: &sourceURN}); err != nil {
+	if err := s.audit.LogDashboardCreate(ctx, dbtx, audit.LogDashboardCreateEvent{DashboardEventBase: s.auditBase(authCtx, row), Snapshot: view, DuplicatedFrom: source.from, DuplicatedFromBuiltIn: source.fromBuiltIn}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit dashboard copy").LogError(ctx, s.logger)
-	}
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit dashboard duplication").LogError(ctx, s.logger)
 	}
 	return view, nil
 }
@@ -577,21 +725,31 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 // DeleteDashboard soft-deletes a dashboard. Its cards go with it; its
 // widgets stay saved.
 func (s *Service) DeleteDashboard(ctx context.Context, payload *gen.DeleteDashboardPayload) error {
+	_, err := inTx(ctx, s, "deletion", func(dbtx pgx.Tx) (struct{}, error) {
+		return struct{}{}, s.DeleteDashboardInTx(ctx, dbtx, payload.ID, "")
+	})
+	return err
+}
+
+// DeleteDashboardInTx soft-deletes a dashboard inside the caller's
+// transaction. A non-empty expectedVersion refuses the deletion with
+// ErrStaleVersion when the dashboard has changed since that version.
+func (s *Service) DeleteDashboardInTx(ctx context.Context, dbtx pgx.Tx, rawID, expectedVersion string) error {
 	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
 	if err != nil {
 		return err
 	}
-	id, err := uuid.Parse(payload.ID)
+	id, err := uuid.Parse(rawID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid dashboard id")
 	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin dashboard deletion").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := repo.New(dbtx)
+	// A widget delete lists the widget's dashboards and then touches each;
+	// taken here, it finds this one either still there or already gone, never
+	// deleted between the two.
+	if err := s.lockProject(ctx, queries, *authCtx.ProjectID); err != nil {
+		return err
+	}
 
 	existing, err := queries.GetDashboardForUpdate(ctx, repo.GetDashboardForUpdateParams{ProjectID: *authCtx.ProjectID, ID: id})
 	if err != nil {
@@ -603,6 +761,9 @@ func (s *Service) DeleteDashboard(ctx context.Context, payload *gen.DeleteDashbo
 	if err := s.requireOwnerOrWrite(ctx, authCtx, existing); err != nil {
 		return err
 	}
+	if err := checkVersion(existing, expectedVersion); err != nil {
+		return err
+	}
 
 	row, err := queries.DeleteDashboard(ctx, repo.DeleteDashboardParams{ProjectID: *authCtx.ProjectID, ID: id})
 	if err != nil {
@@ -611,22 +772,57 @@ func (s *Service) DeleteDashboard(ctx context.Context, payload *gen.DeleteDashbo
 	if err := s.audit.LogDashboardDelete(ctx, dbtx, audit.LogDashboardDeleteEvent{DashboardEventBase: s.auditBase(authCtx, row)}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "audit dashboard deletion").LogError(ctx, s.logger)
 	}
-	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit dashboard deletion").LogError(ctx, s.logger)
+	return nil
+}
+
+// change is one edit to a dashboard, run inside editInTx with the dashboard
+// row locked and the caller's right to change it checked. It returns the
+// dashboard row as it stands afterwards. An oops error is returned to the
+// caller as is; any other error is a server error.
+type change func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, dashboard repo.Dashboard) (repo.Dashboard, error)
+
+// lockProject serializes the project's writes that reach both dashboards and
+// widgets; see LockProjectDashboards. Every such write takes it: a change to
+// a dashboard's cards, a copy, a delete, and the widgets service's delete of
+// a widget off its dashboards. A rename or a filter save locks only its
+// dashboard row and does not take it, so it never waits behind those.
+func (s *Service) lockProject(ctx context.Context, queries *repo.Queries, projectID uuid.UUID) error {
+	if err := queries.LockProjectDashboards(ctx, projectID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock project dashboards").LogError(ctx, s.logger)
 	}
 	return nil
 }
 
-// change is one edit to a dashboard, run inside edit's transaction with the
-// dashboard row locked and the caller's right to change it checked. It
-// returns the dashboard row as it stands afterwards. An oops error is
-// returned to the caller as is; any other error is a server error.
-type change func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, dashboard repo.Dashboard) (repo.Dashboard, error)
+// editKind is one kind of change to a dashboard that keeps it: how error
+// messages name it, and whether it changes the cards. A change to the cards
+// reaches the widgets behind them, so it takes the project lock, and it is
+// audited as a layout change.
+type editKind struct {
+	name  string
+	cards bool
+}
 
-// edit is the shape of every change to a dashboard that keeps it: lock the
-// row, check who may change it, apply the change, audit before and after,
-// commit. what names the change in error messages.
-func (s *Service) edit(ctx context.Context, rawID string, what string, apply change) (*gen.Dashboard, error) {
+var (
+	editDetails    = editKind{name: "update", cards: false}
+	editFilters    = editKind{name: "filters", cards: false}
+	editLayout     = editKind{name: "layout", cards: true}
+	editAddCard    = editKind{name: "add card", cards: true}
+	editRemoveCard = editKind{name: "remove card", cards: true}
+)
+
+// edit runs one change in its own transaction, with no expected version: a
+// dashboard API save is the last save and wins.
+func (s *Service) edit(ctx context.Context, rawID string, kind editKind, apply change) (*gen.Dashboard, error) {
+	return inTx(ctx, s, kind.name, func(dbtx pgx.Tx) (*gen.Dashboard, error) {
+		return s.editInTx(ctx, dbtx, rawID, "", kind, apply)
+	})
+}
+
+// editInTx is the shape of every change to a dashboard that keeps it: lock
+// the row, check who may change it and, when expectedVersion is set, that it
+// has not changed since, apply the change, audit before and after. The
+// caller commits.
+func (s *Service) editInTx(ctx context.Context, dbtx pgx.Tx, rawID, expectedVersion string, kind editKind, apply change) (*gen.Dashboard, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
 	if err != nil {
 		return nil, err
@@ -635,13 +831,12 @@ func (s *Service) edit(ctx context.Context, rawID string, what string, apply cha
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid dashboard id")
 	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin dashboard %s", what).LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := repo.New(dbtx)
+	if kind.cards {
+		if err := s.lockProject(ctx, queries, *authCtx.ProjectID); err != nil {
+			return nil, err
+		}
+	}
 
 	before, err := queries.GetDashboardForUpdate(ctx, repo.GetDashboardForUpdateParams{ProjectID: *authCtx.ProjectID, ID: id})
 	if err != nil {
@@ -651,6 +846,9 @@ func (s *Service) edit(ctx context.Context, rawID string, what string, apply cha
 		return nil, oops.E(oops.CodeUnexpected, err, "load dashboard").LogError(ctx, s.logger)
 	}
 	if err := s.requireOwnerOrWrite(ctx, authCtx, before); err != nil {
+		return nil, err
+	}
+	if err := checkVersion(before, expectedVersion); err != nil {
 		return nil, err
 	}
 	beforeView, err := s.view(ctx, queries, before)
@@ -663,7 +861,7 @@ func (s *Service) edit(ctx context.Context, rawID string, what string, apply cha
 		if _, ok := errors.AsType[*oops.ShareableError](err); ok {
 			return nil, err
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "dashboard %s", what).LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "dashboard %s", kind.name).LogError(ctx, s.logger)
 	}
 	afterView, err := s.view(ctx, queries, after)
 	if err != nil {
@@ -674,18 +872,35 @@ func (s *Service) edit(ctx context.Context, rawID string, what string, apply cha
 	// alone: the grid autosaves every drag, so a full dashboard snapshot per
 	// move would swamp the log.
 	var audited error
-	if what == "layout" || what == "add card" || what == "remove card" {
+	if kind.cards {
 		audited = s.audit.LogDashboardLayout(ctx, dbtx, audit.LogDashboardLayoutEvent{DashboardEventBase: s.auditBase(authCtx, after), Before: beforeView.Widgets, After: afterView.Widgets})
 	} else {
 		audited = s.audit.LogDashboardUpdate(ctx, dbtx, audit.LogDashboardUpdateEvent{DashboardEventBase: s.auditBase(authCtx, after), Before: beforeView, After: afterView})
 	}
 	if audited != nil {
-		return nil, oops.E(oops.CodeUnexpected, audited, "audit dashboard %s", what).LogError(ctx, s.logger)
-	}
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit dashboard %s", what).LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, audited, "audit dashboard %s", kind.name).LogError(ctx, s.logger)
 	}
 	return afterView, nil
+}
+
+// inTx runs one dashboard API write in its own transaction. what names the
+// write in error messages.
+func inTx[T any](ctx context.Context, s *Service, what string, write func(pgx.Tx) (T, error)) (T, error) {
+	var zero T
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return zero, oops.E(oops.CodeUnexpected, err, "begin dashboard %s", what).LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	result, err := write(dbtx)
+	if err != nil {
+		return zero, err
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return zero, oops.E(oops.CodeUnexpected, err, "commit dashboard %s", what).LogError(ctx, s.logger)
+	}
+	return result, nil
 }
 
 // touch marks a dashboard changed after an edit to its cards, so it moves

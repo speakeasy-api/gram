@@ -303,7 +303,7 @@ ORDER BY email, attribute.key, attribute.value;
 -- name: ResolveIDJAGUsersByEmail :many
 -- The directory row is the provisioning gate. A stored user_id wins; only a
 -- NULL link falls back to live email matching. Both paths require an active
--- Gram user and active membership in the same organization. Two distinct
+-- Speakeasy user and active membership in the same organization. Two distinct
 -- matches are returned so the caller can fail closed on ambiguity.
 SELECT DISTINCT candidate.id AS user_id
 FROM directory_users AS du
@@ -429,7 +429,7 @@ WHERE values_per_key <= sqlc.arg(max_values_per_key)::bigint
 ORDER BY attribute_key, attribute_value;
 
 -- name: ClearOrganizationDirectoryUserLinksFixture :exec
--- Test fixture: exercise email fallback without a direct Gram user link.
+-- Test fixture: exercise email fallback without a direct Speakeasy user link.
 UPDATE directory_users SET user_id = NULL WHERE organization_id = @organization_id;
 
 -- name: SetOrganizationDirectoryUserDeletionFixture :exec
@@ -529,3 +529,56 @@ SELECT 'group'::text AS kind, dg.workos_directory_group_id AS workos_id
 FROM directory_groups dg
 WHERE dg.organization_id = @organization_id AND dg.directory_id IS NULL
 ORDER BY kind, workos_id;
+
+-- name: InsertListedDirectoryUser :exec
+-- Saves a directory user read from a live WorkOS listing when no row exists
+-- for it yet. Events stay the source of truth: an existing row, live or
+-- deleted, is left as it is. The listing names the user's directory, so the
+-- row is attributed from the start.
+INSERT INTO directory_users (
+  organization_id,
+  user_id,
+  workos_directory_user_id,
+  directory_id,
+  email,
+  attributes,
+  workos_created_at,
+  workos_updated_at
+)
+VALUES (
+  @organization_id,
+  @user_id,
+  @workos_directory_user_id,
+  sqlc.narg(directory_id),
+  @email,
+  @attributes,
+  @workos_created_at,
+  @workos_updated_at
+)
+ON CONFLICT (workos_directory_user_id) DO NOTHING;
+
+-- name: LockOrganizationDirectoryGroupByWorkOSID :one
+SELECT id
+FROM directory_groups
+WHERE organization_id = @organization_id
+  AND workos_directory_group_id = @workos_directory_group_id
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+FOR UPDATE;
+
+-- name: GetOrganizationDirectoryUserIDByWorkOSID :one
+SELECT id
+FROM directory_users
+WHERE organization_id = @organization_id
+  AND workos_directory_user_id = @workos_directory_user_id
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE;
+
+-- name: ListOpenOrganizationDirectoryGroupMemberships :many
+SELECT m.workos_directory_user_id, m.workos_created_at
+FROM directory_user_group_memberships AS m
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+WHERE dg.organization_id = @organization_id
+  AND m.directory_group_id = @directory_group_id
+  AND m.deleted IS FALSE;

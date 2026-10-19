@@ -25,7 +25,8 @@ const testDeveloperEmail = "dev@example.com"
 func seedLocalPostgres(ctx context.Context, t *testing.T, db *pgxpool.Pool, spec Spec) {
 	t.Helper()
 
-	require.NoError(t, demoseedtest.ExecPostgresScript(ctx, db, spec.Rewrite(postgresSQL)))
+	_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), spec)
+	require.NoError(t, err)
 }
 
 // TestLocalFixturesAfterLogin covers the database a developer actually has

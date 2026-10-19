@@ -980,6 +980,260 @@ func EncodeGetUserSessionIssuerError(encoder func(context.Context, http.Response
 	}
 }
 
+// EncodeGetAttachImpactResponse returns an encoder for responses returned by
+// the userSessionIssuers getAttachImpact endpoint.
+func EncodeGetAttachImpactResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*usersessionissuers.UserSessionIssuerAttachImpact)
+		enc := encoder(ctx, w)
+		body := NewGetAttachImpactResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetAttachImpactRequest returns a decoder for requests sent to the
+// userSessionIssuers getAttachImpact endpoint.
+func DecodeGetAttachImpactRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*usersessionissuers.GetAttachImpactPayload, error) {
+	return func(r *http.Request) (*usersessionissuers.GetAttachImpactPayload, error) {
+		var payload *usersessionissuers.GetAttachImpactPayload
+		var (
+			mcpServerID         *string
+			toolsetID           *string
+			metaMcpServerID     *string
+			userSessionIssuerID *string
+			sessionToken        *string
+			apikeyToken         *string
+			projectSlugInput    *string
+			err                 error
+		)
+		qp := r.URL.Query()
+		mcpServerIDRaw := qp.Get("mcp_server_id")
+		if mcpServerIDRaw != "" {
+			mcpServerID = &mcpServerIDRaw
+		}
+		if mcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+		}
+		toolsetIDRaw := qp.Get("toolset_id")
+		if toolsetIDRaw != "" {
+			toolsetID = &toolsetIDRaw
+		}
+		if toolsetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", *toolsetID, goa.FormatUUID))
+		}
+		metaMcpServerIDRaw := qp.Get("meta_mcp_server_id")
+		if metaMcpServerIDRaw != "" {
+			metaMcpServerID = &metaMcpServerIDRaw
+		}
+		if metaMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", *metaMcpServerID, goa.FormatUUID))
+		}
+		userSessionIssuerIDRaw := qp.Get("user_session_issuer_id")
+		if userSessionIssuerIDRaw != "" {
+			userSessionIssuerID = &userSessionIssuerIDRaw
+		}
+		if userSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", *userSessionIssuerID, goa.FormatUUID))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetAttachImpactPayload(mcpServerID, toolsetID, metaMcpServerID, userSessionIssuerID, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetAttachImpactError returns an encoder for errors returned by the
+// getAttachImpact userSessionIssuers endpoint.
+func EncodeGetAttachImpactError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetAttachImpactUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetAttachImpactForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetAttachImpactBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetAttachImpactNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetAttachImpactConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetAttachImpactUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetAttachImpactInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetAttachImpactInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetAttachImpactUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetAttachImpactGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeDeleteUserSessionIssuerResponse returns an encoder for responses
 // returned by the userSessionIssuers deleteUserSessionIssuer endpoint.
 func EncodeDeleteUserSessionIssuerResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1209,17 +1463,25 @@ func EncodeDeleteUserSessionIssuerError(encoder func(context.Context, http.Respo
 // *types.UserSessionIssuer.
 func marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(v *types.UserSessionIssuer) *UserSessionIssuerResponseBody {
 	res := &UserSessionIssuerResponseBody{
-		ID:                            v.ID,
-		ProjectID:                     v.ProjectID,
-		OrganizationID:                v.OrganizationID,
-		Slug:                          v.Slug,
-		AuthnChallengeMode:            v.AuthnChallengeMode,
-		SessionDurationHours:          v.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: v.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  v.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  v.TrustedRemoteSessionClientID,
-		CreatedAt:                     v.CreatedAt,
-		UpdatedAt:                     v.UpdatedAt,
+		ID:                                   v.ID,
+		ProjectID:                            v.ProjectID,
+		OrganizationID:                       v.OrganizationID,
+		Slug:                                 v.Slug,
+		AuthnChallengeMode:                   v.AuthnChallengeMode,
+		SessionDurationHours:                 v.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        v.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         v.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         v.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              v.AuthorizationServerMode,
+		UseAuthenticationHost:                v.UseAuthenticationHost,
+		IssuerURLPinned:                      v.IssuerURLPinned,
+		IssuerURL:                            v.IssuerURL,
+		TokenEndpoint:                        v.TokenEndpoint,
+		AuthorizationServerUnavailableReason: v.AuthorizationServerUnavailableReason,
+		ProjectName:                          v.ProjectName,
+		AuthenticationHostAvailable:          v.AuthenticationHostAvailable,
+		CreatedAt:                            v.CreatedAt,
+		UpdatedAt:                            v.UpdatedAt,
 	}
 
 	return res

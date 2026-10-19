@@ -5,10 +5,10 @@ import "fmt"
 const (
 	DataSourceProductTelemetry = "product_telemetry"
 	DataSourceRiskFindings     = "risk_findings"
-	// DataSourceToolCallLogs exports the tool call records Gram writes itself
+	// DataSourceToolCallLogs exports the tool call records Speakeasy writes itself
 	// when it executes a tool — the rows behind the Tool Logs pages. Product
 	// telemetry cannot carry them: it relays what reached the OTLP ingest
-	// endpoints, and a tool Gram runs never passes through those.
+	// endpoints, and a tool Speakeasy runs never passes through those.
 	DataSourceToolCallLogs = "tool_call_logs"
 )
 

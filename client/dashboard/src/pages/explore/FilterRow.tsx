@@ -51,14 +51,18 @@ export function FilterRow({
     });
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-1.5">
       <Select value={filter.field} onValueChange={changeField}>
-        <SelectTrigger className="w-56" aria-label="Filter field">
+        <SelectTrigger size="sm" className="w-48" aria-label="Filter field">
           <SelectValue placeholder="Pick a field" />
         </SelectTrigger>
         <SelectContent>
           {filterableFields(dataset).map((candidate) => (
-            <SelectItem key={candidate.name} value={candidate.name}>
+            <SelectItem
+              key={candidate.name}
+              value={candidate.name}
+              description={candidate.description}
+            >
               {candidate.name}
             </SelectItem>
           ))}
@@ -69,7 +73,11 @@ export function FilterRow({
           value={filter.operator}
           onValueChange={(value) => changeOperator(value as FilterOperator)}
         >
-          <SelectTrigger className="w-36" aria-label="Filter operator">
+          <SelectTrigger
+            size="sm"
+            className="w-28"
+            aria-label="Filter operator"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

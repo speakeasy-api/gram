@@ -123,6 +123,19 @@ type ListPlatformsResponseBody struct {
 	Platforms []*WorkloadPlatformResponseBody `form:"platforms,omitempty" json:"platforms,omitempty" xml:"platforms,omitempty"`
 }
 
+// GetCustomFlowsResponseBody is the type of the "workloadIdentities" service
+// "getCustomFlows" endpoint HTTP response body.
+type GetCustomFlowsResponseBody struct {
+	// Trusts a new platform; submits registerIssuer.
+	RegisterPlatform *WorkloadFormResponseBody `form:"register_platform,omitempty" json:"register_platform,omitempty" xml:"register_platform,omitempty"`
+	// Edits a trusted platform; submits updateIssuer.
+	EditPlatform *WorkloadFormResponseBody `form:"edit_platform,omitempty" json:"edit_platform,omitempty" xml:"edit_platform,omitempty"`
+	// Allows a subject under a trusted platform; submits admitSubject.
+	AllowAccess *WorkloadFormResponseBody `form:"allow_access,omitempty" json:"allow_access,omitempty" xml:"allow_access,omitempty"`
+	// Edits allowed access; submits updateSubject.
+	EditAccess *WorkloadFormResponseBody `form:"edit_access,omitempty" json:"edit_access,omitempty" xml:"edit_access,omitempty"`
+}
+
 // ListTokenEndpointsResponseBody is the type of the "workloadIdentities"
 // service "listTokenEndpoints" endpoint HTTP response body.
 type ListTokenEndpointsResponseBody struct {
@@ -538,6 +551,195 @@ type ListPlatformsUnexpectedResponseBody struct {
 // "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
 // the "gateway_error" error.
 type ListPlatformsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetCustomFlowsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsForbiddenResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "forbidden"
+// error.
+type GetCustomFlowsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsBadRequestResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "bad_request"
+// error.
+type GetCustomFlowsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsNotFoundResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "not_found"
+// error.
+type GetCustomFlowsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsConflictResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "conflict"
+// error.
+type GetCustomFlowsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetCustomFlowsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsInvalidResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "invalid" error.
+type GetCustomFlowsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetCustomFlowsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsUnexpectedResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "unexpected"
+// error.
+type GetCustomFlowsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetCustomFlowsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2039,6 +2241,60 @@ type WorkloadPlatformBlockResponseBody struct {
 	Help *string `form:"help,omitempty" json:"help,omitempty" xml:"help,omitempty"`
 }
 
+// WorkloadFormResponseBody is used to define fields on response body types.
+type WorkloadFormResponseBody struct {
+	// Heads the form.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Shown under the title.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The submit button's label.
+	SubmitLabel *string `form:"submit_label,omitempty" json:"submit_label,omitempty" xml:"submit_label,omitempty"`
+	// The submit button's label while the form submits.
+	PendingLabel *string `form:"pending_label,omitempty" json:"pending_label,omitempty" xml:"pending_label,omitempty"`
+	// The form's steps, in order.
+	Steps []*WorkloadFormStepResponseBody `form:"steps,omitempty" json:"steps,omitempty" xml:"steps,omitempty"`
+}
+
+// WorkloadFormStepResponseBody is used to define fields on response body types.
+type WorkloadFormStepResponseBody struct {
+	// Stable within the form.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Heads the step.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Rendered in order.
+	Blocks []*WorkloadFormBlockResponseBody `form:"blocks,omitempty" json:"blocks,omitempty" xml:"blocks,omitempty"`
+}
+
+// WorkloadFormBlockResponseBody is used to define fields on response body
+// types.
+type WorkloadFormBlockResponseBody struct {
+	// The kind of content. wildcard_caution marks where the form warns that a
+	// wildcard rule admits more than one identity; the dashboard writes that
+	// warning, since it names the rule and the agent.
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// A text block's Markdown. Raw HTML in it must not be rendered.
+	Markdown *string `form:"markdown,omitempty" json:"markdown,omitempty" xml:"markdown,omitempty"`
+	// A link's https target.
+	Href *string `form:"href,omitempty" json:"href,omitempty" xml:"href,omitempty"`
+	// A link's label, or a form control's.
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// The form value an input collects. label is submitted as an admission's name.
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// Shown in an empty form control.
+	Placeholder *string `form:"placeholder,omitempty" json:"placeholder,omitempty" xml:"placeholder,omitempty"`
+	// Markdown shown under a form control while it has no validation message. Raw
+	// HTML in it must not be rendered.
+	Help *string `form:"help,omitempty" json:"help,omitempty" xml:"help,omitempty"`
+	// Whether an input is a text area.
+	Multiline *bool `form:"multiline,omitempty" json:"multiline,omitempty" xml:"multiline,omitempty"`
+	// Whether an input shows its value without letting it change. A read-only
+	// value is not submitted.
+	ReadOnly *bool `form:"read_only,omitempty" json:"read_only,omitempty" xml:"read_only,omitempty"`
+	// The dashboard validator an input's value must pass. The server applies the
+	// same rules when the form is submitted.
+	Format *string `form:"format,omitempty" json:"format,omitempty" xml:"format,omitempty"`
+}
+
 // WorkloadTokenEndpointResponseBody is used to define fields on response body
 // types.
 type WorkloadTokenEndpointResponseBody struct {
@@ -2481,6 +2737,168 @@ func NewListPlatformsUnexpected(body *ListPlatformsUnexpectedResponseBody) *goa.
 // NewListPlatformsGatewayError builds a workloadIdentities service
 // listPlatforms endpoint gateway_error error.
 func NewListPlatformsGatewayError(body *ListPlatformsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsWorkloadCustomFlowsOK builds a "workloadIdentities" service
+// "getCustomFlows" endpoint result from a HTTP "OK" response.
+func NewGetCustomFlowsWorkloadCustomFlowsOK(body *GetCustomFlowsResponseBody) *workloadidentities.WorkloadCustomFlows {
+	v := &workloadidentities.WorkloadCustomFlows{}
+	v.RegisterPlatform = unmarshalWorkloadFormResponseBodyToWorkloadidentitiesWorkloadForm(body.RegisterPlatform)
+	v.EditPlatform = unmarshalWorkloadFormResponseBodyToWorkloadidentitiesWorkloadForm(body.EditPlatform)
+	v.AllowAccess = unmarshalWorkloadFormResponseBodyToWorkloadidentitiesWorkloadForm(body.AllowAccess)
+	v.EditAccess = unmarshalWorkloadFormResponseBodyToWorkloadidentitiesWorkloadForm(body.EditAccess)
+
+	return v
+}
+
+// NewGetCustomFlowsUnauthorized builds a workloadIdentities service
+// getCustomFlows endpoint unauthorized error.
+func NewGetCustomFlowsUnauthorized(body *GetCustomFlowsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsForbidden builds a workloadIdentities service
+// getCustomFlows endpoint forbidden error.
+func NewGetCustomFlowsForbidden(body *GetCustomFlowsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsBadRequest builds a workloadIdentities service
+// getCustomFlows endpoint bad_request error.
+func NewGetCustomFlowsBadRequest(body *GetCustomFlowsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsNotFound builds a workloadIdentities service getCustomFlows
+// endpoint not_found error.
+func NewGetCustomFlowsNotFound(body *GetCustomFlowsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsConflict builds a workloadIdentities service getCustomFlows
+// endpoint conflict error.
+func NewGetCustomFlowsConflict(body *GetCustomFlowsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsUnsupportedMedia builds a workloadIdentities service
+// getCustomFlows endpoint unsupported_media error.
+func NewGetCustomFlowsUnsupportedMedia(body *GetCustomFlowsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsInvalid builds a workloadIdentities service getCustomFlows
+// endpoint invalid error.
+func NewGetCustomFlowsInvalid(body *GetCustomFlowsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsInvariantViolation builds a workloadIdentities service
+// getCustomFlows endpoint invariant_violation error.
+func NewGetCustomFlowsInvariantViolation(body *GetCustomFlowsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsUnexpected builds a workloadIdentities service
+// getCustomFlows endpoint unexpected error.
+func NewGetCustomFlowsUnexpected(body *GetCustomFlowsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsGatewayError builds a workloadIdentities service
+// getCustomFlows endpoint gateway_error error.
+func NewGetCustomFlowsGatewayError(body *GetCustomFlowsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3744,6 +4162,44 @@ func ValidateListPlatformsResponseBody(body *ListPlatformsResponseBody) (err err
 	return
 }
 
+// ValidateGetCustomFlowsResponseBody runs the validations defined on
+// GetCustomFlowsResponseBody
+func ValidateGetCustomFlowsResponseBody(body *GetCustomFlowsResponseBody) (err error) {
+	if body.RegisterPlatform == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("register_platform", "body"))
+	}
+	if body.EditPlatform == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("edit_platform", "body"))
+	}
+	if body.AllowAccess == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("allow_access", "body"))
+	}
+	if body.EditAccess == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("edit_access", "body"))
+	}
+	if body.RegisterPlatform != nil {
+		if err2 := ValidateWorkloadFormResponseBody(body.RegisterPlatform); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.EditPlatform != nil {
+		if err2 := ValidateWorkloadFormResponseBody(body.EditPlatform); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.AllowAccess != nil {
+		if err2 := ValidateWorkloadFormResponseBody(body.AllowAccess); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.EditAccess != nil {
+		if err2 := ValidateWorkloadFormResponseBody(body.EditAccess); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateListTokenEndpointsResponseBody runs the validations defined on
 // ListTokenEndpointsResponseBody
 func ValidateListTokenEndpointsResponseBody(body *ListTokenEndpointsResponseBody) (err error) {
@@ -4375,6 +4831,246 @@ func ValidateListPlatformsUnexpectedResponseBody(body *ListPlatformsUnexpectedRe
 // ValidateListPlatformsGatewayErrorResponseBody runs the validations defined
 // on listPlatforms_gateway_error_response_body
 func ValidateListPlatformsGatewayErrorResponseBody(body *ListPlatformsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsUnauthorizedResponseBody runs the validations defined
+// on getCustomFlows_unauthorized_response_body
+func ValidateGetCustomFlowsUnauthorizedResponseBody(body *GetCustomFlowsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsForbiddenResponseBody runs the validations defined on
+// getCustomFlows_forbidden_response_body
+func ValidateGetCustomFlowsForbiddenResponseBody(body *GetCustomFlowsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsBadRequestResponseBody runs the validations defined on
+// getCustomFlows_bad_request_response_body
+func ValidateGetCustomFlowsBadRequestResponseBody(body *GetCustomFlowsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsNotFoundResponseBody runs the validations defined on
+// getCustomFlows_not_found_response_body
+func ValidateGetCustomFlowsNotFoundResponseBody(body *GetCustomFlowsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsConflictResponseBody runs the validations defined on
+// getCustomFlows_conflict_response_body
+func ValidateGetCustomFlowsConflictResponseBody(body *GetCustomFlowsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsUnsupportedMediaResponseBody runs the validations
+// defined on getCustomFlows_unsupported_media_response_body
+func ValidateGetCustomFlowsUnsupportedMediaResponseBody(body *GetCustomFlowsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsInvalidResponseBody runs the validations defined on
+// getCustomFlows_invalid_response_body
+func ValidateGetCustomFlowsInvalidResponseBody(body *GetCustomFlowsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsInvariantViolationResponseBody runs the validations
+// defined on getCustomFlows_invariant_violation_response_body
+func ValidateGetCustomFlowsInvariantViolationResponseBody(body *GetCustomFlowsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsUnexpectedResponseBody runs the validations defined on
+// getCustomFlows_unexpected_response_body
+func ValidateGetCustomFlowsUnexpectedResponseBody(body *GetCustomFlowsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsGatewayErrorResponseBody runs the validations defined
+// on getCustomFlows_gateway_error_response_body
+func ValidateGetCustomFlowsGatewayErrorResponseBody(body *GetCustomFlowsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6392,6 +7088,107 @@ func ValidateWorkloadPlatformBlockResponseBody(body *WorkloadPlatformBlockRespon
 	if body.Value != nil {
 		if !(*body.Value == "" || *body.Value == "token_endpoint" || *body.Value == "issuer_url" || *body.Value == "mcp_host") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.value", *body.Value, []any{"", "token_endpoint", "issuer_url", "mcp_host"}))
+		}
+	}
+	return
+}
+
+// ValidateWorkloadFormResponseBody runs the validations defined on
+// WorkloadFormResponseBody
+func ValidateWorkloadFormResponseBody(body *WorkloadFormResponseBody) (err error) {
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.SubmitLabel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("submit_label", "body"))
+	}
+	if body.PendingLabel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_label", "body"))
+	}
+	if body.Steps == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("steps", "body"))
+	}
+	for _, e := range body.Steps {
+		if e != nil {
+			if err2 := ValidateWorkloadFormStepResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateWorkloadFormStepResponseBody runs the validations defined on
+// WorkloadFormStepResponseBody
+func ValidateWorkloadFormStepResponseBody(body *WorkloadFormStepResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Blocks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("blocks", "body"))
+	}
+	for _, e := range body.Blocks {
+		if e != nil {
+			if err2 := ValidateWorkloadFormBlockResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateWorkloadFormBlockResponseBody runs the validations defined on
+// WorkloadFormBlockResponseBody
+func ValidateWorkloadFormBlockResponseBody(body *WorkloadFormBlockResponseBody) (err error) {
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.Markdown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("markdown", "body"))
+	}
+	if body.Href == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("href", "body"))
+	}
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
+	if body.Field == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("field", "body"))
+	}
+	if body.Placeholder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("placeholder", "body"))
+	}
+	if body.Help == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("help", "body"))
+	}
+	if body.Multiline == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("multiline", "body"))
+	}
+	if body.ReadOnly == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("read_only", "body"))
+	}
+	if body.Format == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("format", "body"))
+	}
+	if body.Type != nil {
+		if !(*body.Type == "text" || *body.Type == "link" || *body.Type == "input" || *body.Type == "agent_picker" || *body.Type == "tags" || *body.Type == "wildcard_caution") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"text", "link", "input", "agent_picker", "tags", "wildcard_caution"}))
+		}
+	}
+	if body.Field != nil {
+		if !(*body.Field == "" || *body.Field == "name" || *body.Field == "description" || *body.Field == "issuer" || *body.Field == "jwks_uri" || *body.Field == "subject" || *body.Field == "label") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.field", *body.Field, []any{"", "name", "description", "issuer", "jwks_uri", "subject", "label"}))
+		}
+	}
+	if body.Format != nil {
+		if !(*body.Format == "" || *body.Format == "issuer_url" || *body.Format == "jwks_uri" || *body.Format == "platform_name" || *body.Format == "platform_description" || *body.Format == "subject_rule" || *body.Format == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.format", *body.Format, []any{"", "issuer_url", "jwks_uri", "platform_name", "platform_description", "subject_rule", "none"}))
 		}
 	}
 	return

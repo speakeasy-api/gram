@@ -430,7 +430,7 @@ const getMCPServerByToolsetID = `-- name: GetMCPServerByToolsetID :one
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE toolset_id = $1::uuid AND project_id = $2 AND deleted IS FALSE
-ORDER BY created_at, id
+ORDER BY (visibility = 'disabled'), (id = toolset_id) DESC, created_at, id
 LIMIT 1
 `
 
@@ -439,7 +439,7 @@ type GetMCPServerByToolsetIDParams struct {
 	ProjectID uuid.UUID
 }
 
-// Deterministic pick until a partial unique index enforces one wrapper per toolset.
+// Enabled first, then the canonical wrapper (id = toolset id), then oldest.
 func (q *Queries) GetMCPServerByToolsetID(ctx context.Context, arg GetMCPServerByToolsetIDParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, getMCPServerByToolsetID, arg.ToolsetID, arg.ProjectID)
 	var i McpServer
@@ -702,12 +702,19 @@ func (q *Queries) ListEffectiveMCPServerToolAnnotations(ctx context.Context, arg
 
 const listEnabledMCPServersByToolsetID = `-- name: ListEnabledMCPServersByToolsetID :many
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
-FROM mcp_servers
-WHERE toolset_id = $1::uuid
-  AND project_id = $2
-  AND deleted IS FALSE
-  AND visibility <> 'disabled'
-ORDER BY created_at, id
+FROM mcp_servers ms
+WHERE ms.toolset_id = $1::uuid
+  AND ms.project_id = $2
+  AND ms.deleted IS FALSE
+  AND ms.visibility <> 'disabled'
+  AND (
+    ms.id = ms.toolset_id
+    OR NOT EXISTS (
+      SELECT 1 FROM mcp_servers c
+      WHERE c.id = ms.toolset_id AND c.project_id = ms.project_id AND c.deleted IS FALSE
+    )
+  )
+ORDER BY ms.created_at, ms.id
 LIMIT 2
 `
 
@@ -718,6 +725,8 @@ type ListEnabledMCPServersByToolsetIDParams struct {
 
 // At most two rows are needed: zero means the legacy route has no attributable
 // wrapper, one is unambiguous, and two means callers must reject attribution.
+// A live canonical wrapper (id = toolset id) is the toolset's hosting wrapper,
+// so other toolset-backed servers are candidates only when it is absent.
 func (q *Queries) ListEnabledMCPServersByToolsetID(ctx context.Context, arg ListEnabledMCPServersByToolsetIDParams) ([]McpServer, error) {
 	rows, err := q.db.Query(ctx, listEnabledMCPServersByToolsetID, arg.ToolsetID, arg.ProjectID)
 	if err != nil {
@@ -1190,7 +1199,11 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
-    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier,
+    EXISTS (
+      SELECT 1 FROM unnest(latest.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:platform:%'
+    )::boolean AS has_platform_tool
 FROM mcp_servers s
 JOIN projects p
   ON p.id = s.project_id
@@ -1199,6 +1212,15 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = s.project_id
  AND t.deleted IS FALSE
+LEFT JOIN toolsets backing
+  ON backing.id = s.toolset_id
+ AND backing.project_id = s.project_id
+ AND backing.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = backing.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
 WHERE p.organization_id = $1
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
@@ -1222,6 +1244,7 @@ type ListServableMCPServersByOrganizationIDRow struct {
 	McpServerToolVariationsGroupID uuid.NullUUID
 	McpServerRemoteSessionIssuerID uuid.NullUUID
 	TunneledResourceIdentifier     string
+	HasPlatformTool                bool
 }
 
 // Candidate members for a gateway whose membership is derived rather than
@@ -1240,9 +1263,14 @@ type ListServableMCPServersByOrganizationIDRow struct {
 // and dispatch columns that path needs, plus each member's project, since
 // members no longer share one, and each member's network access mode, which
 // the caller matches against the request's ingress surface so a private_only
-// server stays invisible on the public one. Ordered by project then slug: a derived
-// gateway has no operator-authored order, and slugs are unique only within a
-// project, so the pair is what makes the listing stable.
+// server stays invisible on the public one. Also reports whether the backing
+// toolset's latest live version contains a Platform tool, so the organization
+// gateway can drop those toolsets the same way automatic plugin delivery does
+// (roledelivery.HasPlatformTool). The check runs here rather than in Go because
+// this query serves every gateway request, and returning every tool URN only to
+// reduce it to one flag would scale with toolset size. Ordered by project then
+// slug: a derived gateway has no operator-authored order, and slugs are unique
+// only within a project, so the pair is what makes the listing stable.
 func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, organizationID string) ([]ListServableMCPServersByOrganizationIDRow, error) {
 	rows, err := q.db.Query(ctx, listServableMCPServersByOrganizationID, organizationID)
 	if err != nil {
@@ -1268,6 +1296,103 @@ func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, or
 			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
 			&i.TunneledResourceIdentifier,
+			&i.HasPlatformTool,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolsetSummariesByIDs = `-- name: ListToolsetSummariesByIDs :many
+SELECT
+    t.id
+  , t.slug
+  , t.name
+  , t.tool_selection_mode
+  , t.external_oauth_server_id
+  , (
+      SELECT COUNT(DISTINCT u.urn)
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy'
+    )::bigint AS tool_count
+  , ARRAY(
+      SELECT DISTINCT split_part(u.urn, ':', 3) AS slug
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:externalmcp:%'
+      ORDER BY slug
+    )::text[] AS external_mcp_slugs
+  , (
+      EXISTS (SELECT 1 FROM unnest(lv.tool_urns) AS u(urn) WHERE u.urn LIKE 'tools:externalmcp:%:proxy')
+      AND NOT EXISTS (SELECT 1 FROM unnest(lv.tool_urns) AS u(urn) WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy')
+    )::boolean AS external_mcp_proxy_only
+  , COALESCE(origin.origin_registry_specifier, '')::text AS registry_specifier
+FROM toolsets t
+LEFT JOIN LATERAL (
+  SELECT tv.tool_urns
+  FROM toolset_versions tv
+  WHERE tv.toolset_id = t.id
+    AND tv.deleted IS FALSE
+  ORDER BY tv.version DESC
+  LIMIT 1
+) lv ON TRUE
+LEFT JOIN LATERAL (
+  SELECT o.origin_registry_specifier
+  FROM toolset_origins o
+  WHERE o.toolset_id = t.id
+    AND o.organization_id = t.organization_id
+    AND o.deleted IS FALSE
+  ORDER BY o.created_at DESC
+  LIMIT 1
+) origin ON TRUE
+WHERE t.id = ANY($1::uuid[])
+  AND t.organization_id = $2
+  AND t.project_id = ANY($3::uuid[])
+  AND t.deleted IS FALSE
+`
+
+type ListToolsetSummariesByIDsParams struct {
+	ToolsetIds     []uuid.UUID
+	OrganizationID string
+	ProjectIds     []uuid.UUID
+}
+
+type ListToolsetSummariesByIDsRow struct {
+	ID                    uuid.UUID
+	Slug                  string
+	Name                  string
+	ToolSelectionMode     string
+	ExternalOauthServerID uuid.NullUUID
+	ToolCount             int64
+	ExternalMcpSlugs      []string
+	ExternalMcpProxyOnly  bool
+	RegistrySpecifier     string
+}
+
+// Proxy URNs are tools:externalmcp:<slug>:proxy; tool_count skips them.
+func (q *Queries) ListToolsetSummariesByIDs(ctx context.Context, arg ListToolsetSummariesByIDsParams) ([]ListToolsetSummariesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetSummariesByIDs, arg.ToolsetIds, arg.OrganizationID, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetSummariesByIDsRow
+	for rows.Next() {
+		var i ListToolsetSummariesByIDsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.ToolSelectionMode,
+			&i.ExternalOauthServerID,
+			&i.ToolCount,
+			&i.ExternalMcpSlugs,
+			&i.ExternalMcpProxyOnly,
+			&i.RegistrySpecifier,
 		); err != nil {
 			return nil, err
 		}
@@ -1640,6 +1765,75 @@ func (q *Queries) SetMCPServerToolMetadata(ctx context.Context, arg SetMCPServer
 		return nil, err
 	}
 	return items, nil
+}
+
+const syncHostedMCPServer = `-- name: SyncHostedMCPServer :one
+UPDATE mcp_servers
+SET
+    name = $1,
+    slug = $2,
+    visibility = $3,
+    user_session_issuer_id = $4,
+    remote_session_issuer_id = CASE
+        WHEN $4::uuid IS NULL THEN NULL
+        ELSE remote_session_issuer_id
+    END,
+    tool_variations_group_id = $5,
+    network_access_mode = $6,
+    updated_at = clock_timestamp()
+WHERE id = $7
+  AND project_id = $8
+  AND toolset_id = $7
+  AND deleted IS FALSE
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+`
+
+type SyncHostedMCPServerParams struct {
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
+	Visibility            string
+	UserSessionIssuerID   uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
+	NetworkAccessMode     pgtype.Text
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+// Projects a toolset's hosting columns onto its canonical wrapper (id = toolset id).
+// Unsetting the issuer clears the derived remote issuer, which no resync can reach.
+func (q *Queries) SyncHostedMCPServer(ctx context.Context, arg SyncHostedMCPServerParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, syncHostedMCPServer,
+		arg.Name,
+		arg.Slug,
+		arg.Visibility,
+		arg.UserSessionIssuerID,
+		arg.ToolVariationsGroupID,
+		arg.NetworkAccessMode,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.ToolsetID,
+		&i.UnproxiedMcpServerID,
+		&i.ToolVariationsGroupID,
+		&i.Visibility,
+		&i.NetworkAccessMode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const updateMCPServer = `-- name: UpdateMCPServer :one

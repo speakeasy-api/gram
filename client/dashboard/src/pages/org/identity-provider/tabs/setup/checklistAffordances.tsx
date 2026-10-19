@@ -4,6 +4,7 @@ import type { StepAffordances } from "./ConnectionChecklist";
 import { connectionStep, type LiveConnection } from "../../connectionView";
 import { CopyableValue } from "./OktaConnectionDetails";
 import { AgentSetupForm, ClientIdForm } from "./OktaConnectionForms";
+import { OKTA_SIGN_IN_SECTION_ID } from "./OktaSignInSection";
 import {
   oktaAdminConsoleUrl,
   oktaApiServiceIntegrationsUrl,
@@ -61,6 +62,13 @@ export const STEP_AFFORDANCES: StepAffordances = {
       key={`${connection.agentId ?? ""}|${connection.agentAppId ?? ""}`}
       connection={connection}
     />
+  ),
+  add_agent_public_key: () => (
+    <div>
+      <Button asChild variant="secondary">
+        <a href={`#${OKTA_SIGN_IN_SECTION_ID}`}>Go to Okta sign-in</a>
+      </Button>
+    </div>
   ),
   first_resource_connection: () => (
     <div>

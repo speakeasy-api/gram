@@ -1,4 +1,4 @@
-// The seeded Gram Function backing the playground's MCP App example. It is
+// The seeded Speakeasy Function backing the playground's MCP App example. It is
 // zipped alongside a generated manifest.json by the local seed and uploaded as
 // the function asset; the runner executes this module directly.
 //
@@ -22,7 +22,7 @@ export default {
     const query =
       typeof input?.query === "string" && input.query.trim().length > 0
         ? input.query.trim()
-        : "Gram MCP Apps";
+        : "Speakeasy MCP Apps";
 
     const payload = {
       slug: FUNCTION_SLUG,

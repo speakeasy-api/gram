@@ -103,7 +103,7 @@ type CreatedSigningKey struct {
 	// KeyName is the crypto key resource name, the target for IAM bindings.
 	KeyName string
 
-	// KeyVersionName is the first version's resource name, the value Gram
+	// KeyVersionName is the first version's resource name, the value Speakeasy
 	// records and signs with.
 	KeyVersionName string
 }

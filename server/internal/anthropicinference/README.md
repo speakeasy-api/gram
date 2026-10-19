@@ -1,6 +1,6 @@
 # Anthropic inference hooks
 
-Receives Anthropic Enterprise's signed pre-inference transcript, stores conversation history through Gram's shared chat writer, and evaluates project security policies before returning an allow/deny verdict.
+Receives Anthropic Enterprise's signed pre-inference transcript, stores conversation history through Speakeasy's shared chat writer, and evaluates project security policies before returning an allow/deny verdict.
 
 Protocol: https://platform.claude.com/docs/en/manage-claude/inference-hooks-endpoint
 

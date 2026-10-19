@@ -13,7 +13,7 @@ Developer-friendly & type-safe Go SDK specifically catered to leverage _sdk_ API
 <!-- Start Summary [summary] -->
 ## Summary
 
-Gram API Description: Gram is the tools platform for AI agents
+Speakeasy API Description: Speakeasy is the tools platform for AI agents
 <!-- End Summary [summary] -->
 
 <!-- Start Table of Contents [toc] -->

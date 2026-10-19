@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	access "github.com/speakeasy-api/gram/server/gen/access"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -7511,16 +7512,16 @@ func marshalAccessAIDetectionToAIDetectionResponseBody(v *access.AIDetection) *A
 		res.Versions = []string{}
 	}
 	if v.Access != nil {
-		res.Access = marshalAccessAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v.Access)
+		res.Access = marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v.Access)
 	}
 
 	return res
 }
 
-// marshalAccessAIToolAccessSummaryToAIToolAccessSummaryResponseBody builds a
+// marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody builds a
 // value of type *AIToolAccessSummaryResponseBody from a value of type
-// *access.AIToolAccessSummary.
-func marshalAccessAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v *access.AIToolAccessSummary) *AIToolAccessSummaryResponseBody {
+// *types.AIToolAccessSummary.
+func marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v *types.AIToolAccessSummary) *AIToolAccessSummaryResponseBody {
 	if v == nil {
 		return nil
 	}
@@ -7559,6 +7560,23 @@ func marshalAccessAIDetectionUserToAIDetectionUserResponseBody(v *access.AIDetec
 		}
 	} else {
 		res.Versions = []string{}
+	}
+
+	return res
+}
+
+// marshalAccessResourceAudienceRolePluginToResourceAudienceRolePluginResponseBody
+// builds a value of type *ResourceAudienceRolePluginResponseBody from a value
+// of type *access.ResourceAudienceRolePlugin.
+func marshalAccessResourceAudienceRolePluginToResourceAudienceRolePluginResponseBody(v *access.ResourceAudienceRolePlugin) *ResourceAudienceRolePluginResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ResourceAudienceRolePluginResponseBody{
+		PrincipalUrn: v.PrincipalUrn,
+		PluginID:     v.PluginID,
+		Name:         v.Name,
+		Slug:         v.Slug,
 	}
 
 	return res

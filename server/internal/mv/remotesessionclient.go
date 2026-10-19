@@ -65,11 +65,13 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		Scope:                           row.Scope,
 		Audience:                        conv.FromPGText[string](row.Audience),
 		LegacyCallbackURL:               row.LegacyCallbackUrl,
+		CredentialOwner:                 row.CredentialOwner,
 		CreatedAt:                       row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                       row.UpdatedAt.Time.Format(time.RFC3339),
 		GrantTypes:                      row.GrantTypes,
 		// The owning service fills this in from its pinned callback origins.
-		CallbackURL: nil,
+		CallbackURL:          nil,
+		FederatedCallbackURL: nil,
 	}, nil
 }
 
@@ -122,10 +124,12 @@ func BuildGlobalRemoteSessionClientView(row repo.RemoteSessionClient) *types.Rem
 		Scope:                           row.Scope,
 		Audience:                        conv.FromPGText[string](row.Audience),
 		LegacyCallbackURL:               row.LegacyCallbackUrl,
+		CredentialOwner:                 row.CredentialOwner,
 		CreatedAt:                       row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                       row.UpdatedAt.Time.Format(time.RFC3339),
 		GrantTypes:                      row.GrantTypes,
 		// Global clients are shared and keep the pinned outbound origin.
-		CallbackURL: nil,
+		CallbackURL:          nil,
+		FederatedCallbackURL: nil,
 	}
 }

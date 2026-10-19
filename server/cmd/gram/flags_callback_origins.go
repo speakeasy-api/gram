@@ -17,7 +17,7 @@ const (
 )
 
 // callbackOriginFlags configure the origins of the redirect_uri and client
-// identity URLs Gram registers with upstream OAuth providers.
+// identity URLs Speakeasy registers with upstream OAuth providers.
 func callbackOriginFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{
@@ -31,6 +31,20 @@ func callbackOriginFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_REGISTRATION_CALLBACK_URL"},
 		},
 	}
+}
+
+// outboundCallbackOriginFromCLI parses only the outbound origin, defaulting to
+// the server URL.
+func outboundCallbackOriginFromCLI(c *cli.Context, serverURL *url.URL, environment string, platformHosts map[string]string) (*url.URL, error) {
+	raw := c.String(outboundCallbackURLFlag)
+	if raw == "" {
+		return remotesessions.DefaultCallbackOrigins(serverURL).Outbound, nil
+	}
+	outbound, err := parseCallbackOrigin(raw, serverURL, environment, platformHosts)
+	if err != nil {
+		return nil, fmt.Errorf("invalid --%s: %w", outboundCallbackURLFlag, err)
+	}
+	return outbound, nil
 }
 
 // callbackOriginsFromCLI parses the callback origin flags. Both must be

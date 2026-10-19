@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// The seeded MCP App: a Gram Function exposing one tool whose result renders
+// The seeded MCP App: a Speakeasy Function exposing one tool whose result renders
 // in an HTML UI resource. It exists so the Playground's MCP Apps surface has
 // something to run locally without hand-deploying a function first.
 //

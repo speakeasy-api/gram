@@ -251,17 +251,25 @@ type LogPluginServerUpdateEvent struct {
 	ServerDisplayName string
 	ServerPolicy      string
 	ServerSortOrder   int32
+
+	// McpServerURN and PreviousToolsetURN record a backend re-key; nil for ordinary updates.
+	McpServerURN       *urn.McpServer
+	PreviousToolsetURN *urn.Toolset
 }
 
 func (l *Logger) LogPluginServerUpdate(ctx context.Context, dbtx repo.DBTX, event LogPluginServerUpdateEvent) error {
 	action := ActionPluginServerUpdate
 
-	metadata, err := marshalAuditPayload(map[string]any{
+	base := map[string]any{
 		"server_id":           event.ServerID.String(),
 		"server_display_name": event.ServerDisplayName,
 		"server_policy":       event.ServerPolicy,
 		"server_sort_order":   event.ServerSortOrder,
-	})
+	}
+	if event.PreviousToolsetURN != nil {
+		base["previous_toolset_urn"] = event.PreviousToolsetURN.String()
+	}
+	metadata, err := marshalAuditPayload(pluginServerBackendMetadata(base, nil, event.McpServerURN, nil))
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
@@ -355,14 +363,22 @@ type LogPluginAssignmentsSetEvent struct {
 	PluginSlug string
 
 	PrincipalURNs []string
+
+	// InstallModes maps each principal URN in PrincipalURNs to its install
+	// mode. Omitted from the record when nil.
+	InstallModes map[string]string
 }
 
 func (l *Logger) LogPluginAssignmentsSet(ctx context.Context, dbtx repo.DBTX, event LogPluginAssignmentsSetEvent) error {
 	action := ActionPluginAssignmentsSet
 
-	metadata, err := marshalAuditPayload(map[string]any{
+	payload := map[string]any{
 		"principal_urns": event.PrincipalURNs,
-	})
+	}
+	if event.InstallModes != nil {
+		payload["install_modes"] = event.InstallModes
+	}
+	metadata, err := marshalAuditPayload(payload)
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}

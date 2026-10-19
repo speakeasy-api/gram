@@ -10,7 +10,7 @@ package remotesessionmetrics
 // a monitor cares about: whose fault it is. invalid_grant, invalid_client,
 // rejected, and rejected_unparsed are configuration or credential problems an
 // operator can act on; upstream_error, rate_limited, and unreachable are the upstream
-// having a bad minute; internal_error is a Gram bug; canceled is the caller
+// having a bad minute; internal_error is a Speakeasy bug; canceled is the caller
 // going away.
 type RefreshOutcome string
 
@@ -42,7 +42,7 @@ const (
 	// package recognizes) and the dead grant was cleared. Subsequent attempts
 	// on the same session record no_grant. Recorded on any HTTP status,
 	// because the grant is cleared on any status: the outcome describes what
-	// Gram did, not the response class.
+	// Speakeasy did, not the response class.
 	RefreshOutcomeInvalidGrant RefreshOutcome = "invalid_grant"
 
 	// RefreshOutcomeInvalidClient: the upstream answered RFC 6749 §5.2
@@ -68,7 +68,7 @@ const (
 	// RefreshOutcomeUpstreamError: a 5xx that carried neither invalid_grant
 	// nor invalid_client. A
 	// parsed server_error or temporarily_unavailable body lands here too, as
-	// the signal is the same either way: the upstream, not Gram's
+	// the signal is the same either way: the upstream, not Speakeasy's
 	// configuration, is at fault.
 	RefreshOutcomeUpstreamError RefreshOutcome = "upstream_error"
 
@@ -85,10 +85,10 @@ const (
 	// own deadline while the attempt was in flight, most often an MCP client
 	// disconnecting mid-refresh or a worker activity timing out. Its own
 	// outcome so that neither unreachable (upstream health) nor
-	// internal_error (Gram faults) absorbs routine client disconnects.
+	// internal_error (Speakeasy faults) absorbs routine client disconnects.
 	RefreshOutcomeCanceled RefreshOutcome = "canceled"
 
-	// RefreshOutcomeInternalError: Gram could not build or persist the request.
+	// RefreshOutcomeInternalError: Speakeasy could not build or persist the request.
 	// No token endpoint configured, an unreadable stored token or secret, an
 	// invalid client authentication method, an empty upstream response, a
 	// database or encryption failure, or a lost compare-and-swap on persist.

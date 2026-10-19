@@ -100,10 +100,15 @@ func ingestTransport() http.RoundTripper {
 		return &deviceTransport{base: http.DefaultTransport}
 	}
 	transport := base.Clone()
-	transport.DialContext = (&net.Dialer{Timeout: connectTimeout, KeepAlive: 30 * time.Second}).DialContext
+	transport.DialContext = ingestDialContext
 	transport.TLSHandshakeTimeout = connectTimeout
 	return &deviceTransport{base: transport}
 }
+
+// ingestDialContext opens the connection under ingestTransport. A package var
+// so tests can substitute in-memory connections: real sockets never count as
+// idle inside a synctest bubble, so the fake clock could not advance.
+var ingestDialContext = (&net.Dialer{Timeout: connectTimeout, KeepAlive: 30 * time.Second}).DialContext
 
 // maxCauseDetail bounds the diagnostic written to the debug log. The text
 // comes from the transport, and the SDK's APIError stringifies the whole

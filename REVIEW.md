@@ -7,12 +7,17 @@ This document consolidates the project's coding conventions and review rules so 
 - `server/` — Go backend (Goa HTTP-RPC API, Temporal workflows)
 - `client/dashboard/` — React frontend (TypeScript, Tailwind, Moonshine design system)
 - `functions/` — Serverless function runner
-- `cli/` — CLI for Gram
+- `cli/` — CLI for Speakeasy
 - `server/database/schema.sql` — DDL-only schema definition
 - `server/migrations/` — Atlas-generated migration files (never hand-edit)
 - `server/design/` — Goa API design files
 - `server/gen/` — Generated code (DO NOT EDIT)
 - `server/internal/*/repo/` — SQLc-generated code (DO NOT EDIT)
+
+## Product Naming
+
+- The product is called Speakeasy, not Gram. Flag any new "Gram" in user-facing text, error messages, comments, docs, or changesets. `mise run lint:brand` enforces this on added lines. <!-- brand-ok: states the naming rule -->
+- Still allowed until their own renames land: HTTP headers (`Gram-Key`, `X-Gram-*`), `GRAM_*` environment variables, import lines, and code uses of the SDK/Functions `Gram` class in code files. Lowercase `gram` (package names, URLs) is not checked. Other intentional uses need a `brand-ok: <reason>` comment on the line.
 
 ---
 

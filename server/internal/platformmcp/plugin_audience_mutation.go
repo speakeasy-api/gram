@@ -16,7 +16,6 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -75,6 +74,11 @@ type SetPluginAssignmentsReceiptResult struct {
 type SetPluginAssignmentsOutput struct {
 	SetPluginAssignmentsReceiptResult
 	Receipt RiskMutationToolReceipt `json:"receipt"`
+	// DistributionAdmission is the plugin's standing with the project's Shadow
+	// MCP policy after the write, read fresh on every call including replays:
+	// covered means every server added by URL in it is approved for the whole
+	// audience, which an administrator's own widening records.
+	DistributionAdmission *DistributionAdmission `json:"distribution_admission,omitempty" jsonschema:"the plugin's standing with the project's Shadow MCP policy after this write, read fresh; state covered: every server added by URL in this plugin is approved for its whole audience, which an organization administrator's own widening records; not_required: no block policy; not_applicable: no server added by URL; repair_required: an audience is uncovered; absent when the standing could not be read"`
 }
 
 type normalizedSetPluginAssignments struct {
@@ -142,14 +146,10 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	if evaluation != feature.EvaluationEnabled {
 		return SetPluginAssignmentsOutput{}, pluginAssignmentMutationUnavailable(nil)
 	}
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	rollout, rolloutErr = s.distributionAdmission.Resolve(ctx, principal.OrganizationID, organizationSlug, project.Slug)
-	ctx = roledelivery.WithProjectAdmission(ctx, principal.OrganizationID, project.ID, rollout, rolloutErr)
-	if err := s.mutationBudget.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		if errors.Is(err, ErrOperationRateLimited) {
-			return SetPluginAssignmentsOutput{}, &PluginAssignmentMutationError{Code: "rate_limited", Message: "The plugin assignment mutation rate limit was reached.", Cause: err}
-		}
+	// An organization administrator widening a plugin's audience is the review
+	// a Shadow MCP block policy would otherwise demand for the servers in it.
+	ctx, err = admission.AdministratorWriteContext(ctx, s.authorization, principal.OrganizationID)
+	if err != nil {
 		return SetPluginAssignmentsOutput{}, pluginAssignmentMutationUnavailable(err)
 	}
 	references, err := normalizePluginAssignmentReferences(input.AssignmentReferences)
@@ -157,7 +157,18 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 		return SetPluginAssignmentsOutput{}, err
 	}
 	normalized := normalizedPluginAssignmentMutationInput(project.ID, input.Plugin, references, input.ExpectedAssignmentVersion)
-	receipt, err := s.mutationReceipts.Execute(ctx, principal, project, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
+	// Charged only when no completed receipt answers the request; see
+	// executeChargedMutationReceipt.
+	charge := func(ctx context.Context) error {
+		if err := s.mutationBudget.AllowConnectionOrOrganization(ctx, principal); err != nil {
+			if errors.Is(err, ErrOperationRateLimited) {
+				return &PluginAssignmentMutationError{Code: "rate_limited", Message: "The plugin assignment mutation rate limit was reached.", Cause: err}
+			}
+			return pluginAssignmentMutationUnavailable(err)
+		}
+		return nil
+	}
+	receipt, err := s.mutationReceipts.Execute(ctx, principal, project, input.IdempotencyKey, normalized, charge, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
 		if err := admission.LockProject(ctx, tx, project.ID); err != nil {
 			return SetPluginAssignmentsReceiptResult{}, pluginAssignmentMutationUnavailable(err)
 		}
@@ -177,10 +188,12 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 			return SetPluginAssignmentsReceiptResult{}, err
 		}
 		result, err := pluginassignments.Replace(ctx, tx, s.audit, locked, pluginassignments.Input{
-			OrganizationID:   principal.OrganizationID,
-			ProjectID:        project.ID,
-			PluginID:         target.ID,
-			PrincipalURNs:    principalURNs,
+			OrganizationID: principal.OrganizationID,
+			ProjectID:      project.ID,
+			PluginID:       target.ID,
+			PrincipalURNs:  principalURNs,
+			// Keeps each principal's current install mode.
+			InstallModes:     nil,
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 			ActorDisplayName: nil,
 			ActorSlug:        nil,
@@ -190,7 +203,7 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 				if pluginassignments.IsSubset(desired, current) {
 					return nil
 				}
-				return pluginAssignmentAdmissionError(s.distributionAdmission.CheckPluginAudience(ctx, tx, rollout, rolloutErr, principal.OrganizationID, project.ID, plugin.ID, desired))
+				return pluginAssignmentAdmissionError(s.distributionAdmission.CheckPluginAudience(ctx, tx, principal.OrganizationID, project.ID, plugin.ID, desired))
 			},
 			BeforeReplace: func(ctx context.Context, _ pluginsrepo.Plugin, current, _ []string) error {
 				if pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, current) != input.ExpectedAssignmentVersion {
@@ -215,7 +228,7 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 			switch {
 			case errors.Is(err, pluginassignments.ErrNotFound):
 				return SetPluginAssignmentsReceiptResult{}, pluginAssignmentMutationNotFound()
-			case errors.Is(err, admission.ErrApprovalRequired), errors.Is(err, admission.ErrPrivateGatewayAudience), errors.Is(err, admission.ErrDistributionDisabled), errors.Is(err, admission.ErrUnavailable):
+			case errors.Is(err, admission.ErrApprovalRequired), errors.Is(err, admission.ErrPrivateGatewayAudience), errors.Is(err, admission.ErrUnavailable):
 				return SetPluginAssignmentsReceiptResult{}, pluginAssignmentAdmissionError(err)
 			case errors.Is(err, pluginassignments.ErrInvalid):
 				return SetPluginAssignmentsReceiptResult{}, pluginAssignmentMutationInvalid("The selected plugin assignments are no longer valid.")
@@ -260,17 +273,37 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	if err := json.Unmarshal(receipt.ResultPayload, &result); err != nil {
 		return SetPluginAssignmentsOutput{}, fmt.Errorf("decode plugin assignment mutation receipt: %w", err)
 	}
-	return SetPluginAssignmentsOutput{SetPluginAssignmentsReceiptResult: result, Receipt: riskMutationToolReceipt(receipt)}, nil
+	return SetPluginAssignmentsOutput{
+		SetPluginAssignmentsReceiptResult: result,
+		Receipt:                           riskMutationToolReceipt(receipt),
+		DistributionAdmission:             s.pluginDistributionAdmission(ctx, principal.OrganizationID, project.ID, result.Plugin.ID),
+	}, nil
+}
+
+// pluginDistributionAdmission reads the plugin's Shadow MCP standing after a
+// write, on the fresh path and on a replay alike, so the caller is told what
+// the write meant for the policy rather than only that it happened.
+func (s *PluginsService) pluginDistributionAdmission(ctx context.Context, organizationID string, projectID uuid.UUID, pluginID string) *DistributionAdmission {
+	if s == nil || s.distributionAdmissionRead == nil {
+		return nil
+	}
+	id, err := uuid.Parse(pluginID)
+	if err != nil || id == uuid.Nil {
+		return nil
+	}
+	standing := s.distributionAdmissionRead.ForPlugin(ctx, organizationID, projectID, id)
+	if !standing.Complete {
+		return nil
+	}
+	return &standing
 }
 
 func pluginAssignmentAdmissionError(err error) error {
 	switch {
 	case errors.Is(err, admission.ErrApprovalRequired):
-		return &PluginAssignmentMutationError{Code: "approval_required", Message: "This MCP server does not have approval for the plugin's complete audience. Review the current audience and approval, then try again.", Cause: err}
+		return &PluginAssignmentMutationError{Code: "approval_required", Message: "This organisation's Shadow MCP policy blocks an MCP server in this plugin for the new audience, and the change could not be recorded as its approval. Review the server in the dashboard, then try again.", Cause: err}
 	case errors.Is(err, admission.ErrPrivateGatewayAudience):
 		return &PluginAssignmentMutationError{Code: "conflict", Message: "A private-only gateway cannot be distributed to Everyone. Choose a scoped plugin audience or change the gateway's network access.", Cause: err}
-	case errors.Is(err, admission.ErrDistributionDisabled):
-		return &PluginAssignmentMutationError{Code: "distribution_disabled", Message: "Direct-remote distribution is temporarily disabled. Existing audiences can still be narrowed.", Cause: err}
 	case errors.Is(err, admission.ErrUnavailable):
 		return pluginAssignmentMutationUnavailable(err)
 	default:

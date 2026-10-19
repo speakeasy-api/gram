@@ -32,7 +32,7 @@ export const ProbeOutcome = {
 export type ProbeOutcome = ClosedEnum<typeof ProbeOutcome>;
 
 /**
- * Result of a live probe that Gram can reach an external key and use it to sign.
+ * Result of a live probe that Speakeasy can reach an external key and use it to sign.
  */
 export type VerifyKmsKeyResult = {
   /**

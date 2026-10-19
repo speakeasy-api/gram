@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * serveImage assets
  *
  * @remarks
- * Serve an image from Gram.
+ * Serve an image from Speakeasy.
  */
 export function assetsServeImage(
   client: GramCore,

@@ -14,6 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -40,7 +42,9 @@ type ToolExposureResult struct {
 	// than a failure.
 	Applied   []urn.Tool
 	Unchanged []urn.Tool
-	Changed   bool
+	// RemovedPluginIDs records automatic memberships removed by this content edit.
+	RemovedPluginIDs []uuid.UUID
+	Changed          bool
 }
 
 // ChangeToolsetToolsInTransaction adds or removes named tools on one toolset
@@ -61,6 +65,10 @@ func ChangeToolsetToolsInTransaction(ctx context.Context, tx pgx.Tx, logger *slo
 	}
 	if len(change.Add) > 0 && len(change.Remove) > 0 {
 		return ToolExposureResult{}, oops.E(oops.CodeBadRequest, nil, "a single call adds or removes tools, never both")
+	}
+
+	if err := admission.LockProject(ctx, tx, *actor.ProjectID); err != nil {
+		return ToolExposureResult{}, oops.E(oops.CodeUnexpected, err, "lock project admission")
 	}
 
 	toolsetRepo := repo.New(tx)
@@ -140,6 +148,11 @@ func ChangeToolsetToolsInTransaction(ctx context.Context, tx pgx.Tx, logger *slo
 		return ToolExposureResult{}, oops.E(oops.CodeUnexpected, err, "failed to record the toolset tool change")
 	}
 
+	removed, err := roledelivery.ContentChanged(ctx, tx, actor.ActiveOrganizationID, *actor.ProjectID, toolsetID, nil)
+	if err != nil {
+		return ToolExposureResult{}, oops.E(oops.CodeUnexpected, err, "update automatic plugin distribution")
+	}
+	result.RemovedPluginIDs = removed
 	result.VersionAfter = latest.Version + 1
 	result.Changed = true
 	return result, nil

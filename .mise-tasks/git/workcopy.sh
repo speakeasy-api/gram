@@ -91,7 +91,10 @@ for item in "${items[@]}"; do
   fi
 
   if [ -d "$src" ]; then
-    tools/rclone copy --metadata --links --create-empty-src-dirs "$src" "$dest"
+    exclude=()
+    # Agent worktrees in main's .claude are dead copies elsewhere and can be many GB.
+    [ "$item" = "./.claude" ] && exclude=(--exclude '/worktrees/**')
+    tools/rclone copy --metadata --links --create-empty-src-dirs "${exclude[@]}" "$src" "$dest"
   else
     tools/rclone copyto --metadata --links "$src" "$dest"
   fi
