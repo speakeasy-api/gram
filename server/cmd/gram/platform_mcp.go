@@ -195,6 +195,11 @@ type platformMCPConfig struct {
 	LocalFixture    *platformMCPLocalFixtureConfig
 }
 
+func recallRiskFindingReader(reader platformmcp.RiskFindingListReader) platformmcp.RecallRiskFindingReader {
+	recall, _ := reader.(platformmcp.RecallRiskFindingReader)
+	return recall
+}
+
 var platformMCPLocalFixtureLoopbackCIDRBlocks = []string{"127.0.0.0/8", "::1/128"}
 
 const platformMCPLocalFixtureReadinessLifetime = 15 * time.Minute
@@ -522,7 +527,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
 		WithUserSearch(config.UserSearch).
 		WithToolCallSearch(config.ToolCallSearch)
-	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
+	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), recallRiskFindingReader(config.RiskFindingList), budgets.SensitiveSessionRecall)
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP risk mutation controls: %w", err)
@@ -1161,7 +1166,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
 		WithUserSearch(config.UserSearch).
 		WithToolCallSearch(config.ToolCallSearch)
-	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
+	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), recallRiskFindingReader(config.RiskFindingList), budgets.SensitiveSessionRecall)
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP risk mutation controls: %w", err)
