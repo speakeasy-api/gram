@@ -1,0 +1,63 @@
+server/internal/background/worker.go
+  h_9630b74bdac540 630
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.tsx
+  h_9630b74bdac540 383
+  h_9630b74bdac540 384-386
+server/internal/directoryreview/queries.sql
+  h_9630b74bdac540 218-220,222-223,225-241
+  s_14b4b80e041fb2::t_feb30260b14052 224
+client/dashboard/src/pages/org/identity-provider/DirectoryReviewPanel.test.tsx
+  h_9630b74bdac540 13,15,20-22,106,129,152
+  h_9630b74bdac540 19,23-32,107-119,157-181
+server/internal/access/directory_review.go
+  h_9630b74bdac540 135-139,167,250-251
+  s_14b4b80e041fb2::t_7e08df98be2ab0 140-145,252-253
+server/internal/directoryreview/review_test.go
+  h_9630b74bdac540 155,424,426,428-429,432-433,435-436,438,440-455
+  s_14b4b80e041fb2::t_a5bdac51e8cc8f 431
+server/internal/background/directory_review_sweep_test.go
+  h_9630b74bdac540 68
+server/internal/access/directory_review_test.go
+  h_9630b74bdac540 109-110,113
+  s_14b4b80e041fb2::t_5d24703fbca4d5 114
+server/internal/directoryreview/review.go
+  h_9630b74bdac540 15,162-176,178-179,181-186,188-190,192
+server/internal/background/activities/process_workos_directory_attributes_events_test.go
+  h_9630b74bdac540 13,22,27,654-703
+  s_14b4b80e041fb2::t_4932e9c0b3fbbc 704
+client/dashboard/src/pages/org/identity-provider/directoryReview.ts
+  h_9630b74bdac540 41
+client/dashboard/src/pages/org/identity-provider/DirectoryReviewPanel.tsx
+  h_9630b74bdac540 43,47-51,53,59,80-99,104-109,154,190-194
+  s_14b4b80e041fb2::t_8a5fcadbb85d41 54-58,60,100,110
+server/internal/background/activities/process_workos_directory_attributes_events.go
+  h_9630b74bdac540 71-73,77-82,87-88,90,100-106,109,111,113,116-119,121,127-137,144,212,550
+  s_14b4b80e041fb2::t_f486a7d7e564ae 89,94-95,114-115,123
+server/internal/testenv/queries.sql
+  h_9630b74bdac540 2077-2078,2081,2090,2092-2093
+server/internal/directoryreview/repo/queries.sql.go
+  h_9630b74bdac540 47-48,50-51,54-56,59-64,134-158,238-279
+server/internal/testenv/testrepo/queries.sql.go
+  h_9630b74bdac540 5533,5542-5543,5567-5568,5572
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "55f047948093bb19f28da03c682ecb8d9171d8d0",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_14b4b80e041fb2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f8d780f-1eb4-407c-8717-b212b05ddda1",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
