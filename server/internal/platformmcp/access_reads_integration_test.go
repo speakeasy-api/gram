@@ -339,11 +339,11 @@ func TestListRolesNamesDirectorySourcesAndWithholdsSmallCounts(t *testing.T) {
 		require.NoError(t, err)
 	}
 	mappings := accessrepo.New(conn)
-	_, err = mappings.UpsertDirectoryGroupRoleMapping(ctx, accessrepo.UpsertDirectoryGroupRoleMappingParams{
+	_, err = mappings.InsertDirectoryGroupRoleMapping(ctx, accessrepo.InsertDirectoryGroupRoleMappingParams{
 		OrganizationID: org, DirectoryGroupID: uuid.NullUUID{UUID: groupID, Valid: true}, RoleUrn: analysts.String(),
 	})
 	require.NoError(t, err)
-	_, err = mappings.UpsertDirectoryAttributeRoleMapping(ctx, accessrepo.UpsertDirectoryAttributeRoleMappingParams{
+	_, err = mappings.InsertDirectoryAttributeRoleMapping(ctx, accessrepo.InsertDirectoryAttributeRoleMappingParams{
 		OrganizationID: org, AttributeKey: conv.ToPGText("department_name"), AttributeValue: conv.ToPGText("Research"), RoleUrn: analysts.String(),
 	})
 	require.NoError(t, err)
