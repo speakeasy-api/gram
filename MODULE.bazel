@@ -1,0 +1,30 @@
+module(name = "gram")
+
+bazel_dep(name = "rules_go", version = "0.64.2")
+bazel_dep(name = "gazelle", version = "0.54.0")
+
+# The Go SDK version comes from the go directive in go.mod, the same file that
+# mise.toml's go pin and the go toolchain read.
+go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
+go_sdk.from_file(go_mod = "//:go.mod")
+
+# Third-party modules come from go.mod/go.sum. Run `mise run bazel:gazelle`
+# after changing go.mod to refresh the use_repo list below.
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+go_deps.from_file(go_mod = "//:go.mod")
+
+# Go modules ship generated .pb.go files. Building from those, rather than
+# regenerating them from .proto sources, keeps protoc and a C++ toolchain out of
+# the build.
+go_deps.gazelle_default_attributes(
+    directives = ["gazelle:proto disable"],
+)
+
+# Gazelle's built-in override for this module keeps its proto rules, so
+# regenerate its BUILD files without them.
+go_deps.gazelle_override(
+    build_file_generation = "clean",
+    directives = ["gazelle:proto disable"],
+    path = "github.com/envoyproxy/protoc-gen-validate",
+)
+use_repo(go_deps, "com_github_agenthooksprotocol_go_sdk", "com_github_alicebob_miniredis_v2", "com_github_aws_aws_sdk_go_v2", "com_github_aws_aws_sdk_go_v2_config", "com_github_aws_aws_sdk_go_v2_credentials", "com_github_aws_aws_sdk_go_v2_service_s3", "com_github_aws_smithy_go", "com_github_burntsushi_toml", "com_github_cbroglie_mustache", "com_github_cenkalti_backoff_v5", "com_github_charmbracelet_lipgloss", "com_github_charmbracelet_log", "com_github_clickhouse_ch_go", "com_github_clickhouse_clickhouse_go_v2", "com_github_coder_websocket", "com_github_coreos_go_oidc_v3", "com_github_distribution_reference", "com_github_docker_go_connections", "com_github_ettle_strcase", "com_github_exaring_otelpgx", "com_github_failsafe_go_failsafe_go", "com_github_gitleaks_go_gitdiff", "com_github_go_chi_chi_v5", "com_github_go_jose_go_jose_v4", "com_github_go_logr_logr", "com_github_go_redis_cache_v9", "com_github_go_redis_redis_rate_v10", "com_github_gobwas_glob", "com_github_golang_jwt_jwt_v5", "com_github_gomarkdown_markdown", "com_github_google_cel_go", "com_github_google_jsonschema_go", "com_github_google_uuid", "com_github_googlecloudplatform_k8s_config_connector", "com_github_hashicorp_go_cleanhttp", "com_github_hashicorp_go_retryablehttp", "com_github_hashicorp_golang_lru_v2", "com_github_hashicorp_yamux", "com_github_itchyny_gojq", "com_github_jackc_pgerrcode", "com_github_jackc_pgx_v5", "com_github_kimmachinegun_automemlimit", "com_github_masterminds_semver_v3", "com_github_masterminds_squirrel", "com_github_microcosm_cc_bluemonday", "com_github_microsoft_go_winio", "com_github_moby_moby_api", "com_github_moby_moby_client", "com_github_modelcontextprotocol_go_sdk", "com_github_openrouterteam_go_sdk", "com_github_oschwald_maxminddb_golang", "com_github_parquet_go_parquet_go", "com_github_pgvector_pgvector_go", "com_github_pgx_contrib_pgxotel", "com_github_pmezard_go_difflib", "com_github_polarsource_polar_go", "com_github_posthog_posthog_go", "com_github_redis_go_redis_extra_redisotel_v9", "com_github_redis_go_redis_v9", "com_github_robfig_cron", "com_github_samber_lo", "com_github_samber_slog_multi", "com_github_santhosh_tekuri_jsonschema_v6", "com_github_sourcegraph_conc", "com_github_speakeasy_api_agenthooks", "com_github_speakeasy_api_mcp_setup_docs_go", "com_github_speakeasy_api_openapi", "com_github_standard_webhooks_standard_webhooks_libraries", "com_github_stretchr_testify", "com_github_stripe_stripe_go_v85", "com_github_superfly_fly_go", "com_github_svix_svix_webhooks", "com_github_testcontainers_testcontainers_go", "com_github_testcontainers_testcontainers_go_modules_clickhouse", "com_github_testcontainers_testcontainers_go_modules_postgres", "com_github_testcontainers_testcontainers_go_modules_redis", "com_github_tidwall_gjson", "com_github_tiktoken_go_tokenizer", "com_github_urfave_cli_v2", "com_github_workos_workos_go_v6", "com_github_zricethezav_gitleaks_v8", "com_google_cloud_go_compute_metadata", "com_google_cloud_go_iam", "com_google_cloud_go_kms", "com_google_cloud_go_pubsub_v2", "com_google_cloud_go_storage", "design_goa_clue", "design_goa_goa_v3", "in_gopkg_yaml_v3", "in_yaml_go_yaml_v4", "io_k8s_api", "io_k8s_apimachinery", "io_k8s_client_go", "io_k8s_sigs_yaml", "io_opentelemetry_go_contrib_instrumentation_net_http_otelhttp", "io_opentelemetry_go_contrib_instrumentation_runtime", "io_opentelemetry_go_otel", "io_opentelemetry_go_otel_exporters_otlp_otlpmetric_otlpmetricgrpc", "io_opentelemetry_go_otel_exporters_otlp_otlptrace_otlptracegrpc", "io_opentelemetry_go_otel_log", "io_opentelemetry_go_otel_metric", "io_opentelemetry_go_otel_sdk", "io_opentelemetry_go_otel_sdk_metric", "io_opentelemetry_go_otel_trace", "io_opentelemetry_go_proto_otlp", "io_temporal_go_api", "io_temporal_go_sdk", "io_temporal_go_sdk_contrib_opentelemetry", "org_golang_google_api", "org_golang_google_grpc", "org_golang_google_protobuf", "org_golang_x_crypto", "org_golang_x_mod", "org_golang_x_net", "org_golang_x_oauth2", "org_golang_x_sync", "org_golang_x_sys", "org_golang_x_term", "org_golang_x_text", "org_golang_x_time", "org_modernc_sqlite")

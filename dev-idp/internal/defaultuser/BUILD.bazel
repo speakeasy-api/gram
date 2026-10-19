@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "defaultuser",
+    srcs = ["defaultuser.go"],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/internal/defaultuser",
+    visibility = ["//dev-idp:__subpackages__"],
+    deps = [
+        "//dev-idp/internal/database/repo",
+        "//dev-idp/pkg/devidentity",
+        "@com_github_google_uuid//:uuid",
+    ],
+)

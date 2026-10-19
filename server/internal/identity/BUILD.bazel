@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "identity",
+    srcs = ["resolver.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/identity",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/conv",
+        "//server/internal/directory",
+        "//server/internal/hooks/repo",
+        "//server/internal/urn",
+        "//server/internal/users/repo",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "identity_test",
+    srcs = ["resolver_test.go"],
+    embed = [":identity"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

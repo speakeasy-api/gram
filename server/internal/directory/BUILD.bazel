@@ -1,0 +1,45 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "directory",
+    srcs = [
+        "directory.go",
+        "group_members.go",
+        "principal.go",
+        "profile.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/directory",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/conv",
+        "//server/internal/database",
+        "//server/internal/directory/repo",
+        "//server/internal/thirdparty/workos",
+        "//server/internal/users/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_workos_workos_go_v6//pkg/directorysync",
+    ],
+)
+
+go_test(
+    name = "directory_test",
+    srcs = [
+        "directory_test.go",
+        "principal_test.go",
+        "profile_test.go",
+        "setup_test.go",
+    ],
+    deps = [
+        ":directory",
+        "//server/internal/conv",
+        "//server/internal/directory/repo",
+        "//server/internal/organizations/repo",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

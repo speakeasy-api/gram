@@ -1,0 +1,59 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "protectedresource",
+    srcs = [
+        "endpoint.go",
+        "prober.go",
+        "record.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/oauth/protectedresource",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/conv",
+        "//server/internal/guardian",
+        "//server/internal/oauth/wellknown",
+        "//server/internal/remotemcp/repo",
+        "//server/internal/urls",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgerrcode//:pgerrcode",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "protectedresource_test",
+    srcs = [
+        "endpoint_internal_test.go",
+        "endpoint_test.go",
+        "prober_internal_test.go",
+        "prober_login_internal_test.go",
+        "prober_recovery_internal_test.go",
+        "record_internal_test.go",
+        "setup_test.go",
+    ],
+    embed = [":protectedresource"],
+    deps = [
+        "//server/internal/authztest",
+        "//server/internal/billing",
+        "//server/internal/cache",
+        "//server/internal/contextvalues",
+        "//server/internal/guardian",
+        "//server/internal/oauth/wellknown",
+        "//server/internal/remotemcp/repo",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgerrcode//:pgerrcode",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,34 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "orgprovision",
+    srcs = ["orgprovision.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/organizations/orgprovision",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/oops",
+        "//server/internal/organizations/id",
+        "@org_golang_x_net//publicsuffix",
+    ],
+)
+
+go_test(
+    name = "orgprovision_test",
+    srcs = [
+        "hostname_test.go",
+        "mockworkos_test.go",
+        "name_test.go",
+        "setup_test.go",
+        "unavailable_test.go",
+    ],
+    deps = [
+        ":orgprovision",
+        "//dev-idp/pkg/devidptest",
+        "//server/internal/guardian",
+        "//server/internal/organizations/id",
+        "//server/internal/testenv",
+        "//server/internal/thirdparty/workos",
+        "@com_github_stretchr_testify//require",
+    ],
+)

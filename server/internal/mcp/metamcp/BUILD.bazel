@@ -1,0 +1,35 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "metamcp",
+    srcs = [
+        "connection_status.go",
+        "describe_server.go",
+        "describe_tools.go",
+        "discovery_mode.go",
+        "initialize.go",
+        "list_servers.go",
+        "metamcp.go",
+        "qualifiedname.go",
+        "server_discover.go",
+        "tools_list.go",
+    ],
+    embedsrcs = ["connection_status.html"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcp/metamcp",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "metamcp_test",
+    srcs = [
+        "builtin_instructions_test.go",
+        "initialize_test.go",
+    ],
+    data = [
+        # keep
+        "//client/dashboard:src/pages/mcp/gateway/builtin-gateway-instructions.txt",
+    ],
+    embed = [":metamcp"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

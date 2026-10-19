@@ -1,0 +1,62 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "gcpkms",
+    srcs = [
+        "algorithm.go",
+        "doc.go",
+        "keyring.go",
+        "kms_key_provisioning.go",
+        "kms_signing_client.go",
+        "local_signing_client.go",
+        "resource.go",
+        "signature.go",
+        "signer.go",
+        "signing_client.go",
+        "verify.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_google_cloud_go_iam//:iam",
+        "@com_google_cloud_go_kms//apiv1",
+        "@com_google_cloud_go_kms//apiv1/kmspb",
+        "@org_golang_google_api//option",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+        "@org_golang_google_protobuf//types/known/fieldmaskpb",
+        "@org_golang_google_protobuf//types/known/wrapperspb",
+        "@org_golang_x_oauth2//:oauth2",
+    ],
+)
+
+go_test(
+    name = "gcpkms_test",
+    srcs = [
+        "algorithm_test.go",
+        "kms_key_provisioning_test.go",
+        "kms_signing_client_test.go",
+        "local_signing_client_test.go",
+        "resource_test.go",
+        "signature_test.go",
+        "signer_test.go",
+        "verify_test.go",
+    ],
+    embed = [":gcpkms"],
+    deps = [
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_stretchr_testify//require",
+        "@com_google_cloud_go_iam//apiv1/iampb",
+        "@com_google_cloud_go_kms//apiv1",
+        "@com_google_cloud_go_kms//apiv1/kmspb",
+        "@org_golang_google_api//option",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//credentials/insecure",
+        "@org_golang_google_grpc//status",
+        "@org_golang_google_grpc//test/bufconn",
+        "@org_golang_google_protobuf//types/known/wrapperspb",
+    ],
+)

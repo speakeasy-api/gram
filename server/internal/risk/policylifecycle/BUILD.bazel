@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "policylifecycle",
+    srcs = ["cleanup.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/policylifecycle",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/audit",
+        "//server/internal/authz",
+        "//server/internal/conv",
+        "//server/internal/o11y",
+        "//server/internal/risk/repo",
+        "//server/internal/shadowmcp/admission",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)

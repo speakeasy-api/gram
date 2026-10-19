@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "auditlogs",
+    srcs = [
+        "client.go",
+        "endpoints.go",
+        "service.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/gen/auditlogs",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@design_goa_goa_v3//pkg",
+        "@design_goa_goa_v3//security",
+    ],
+)

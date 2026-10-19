@@ -1,0 +1,56 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "workos",
+    srcs = [
+        "client.go",
+        "connection.go",
+        "events.go",
+        "invitation.go",
+        "organization.go",
+        "passwordless.go",
+        "portal.go",
+        "role.go",
+        "sso.go",
+        "stub.go",
+        "user.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/workos",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+        "@com_github_workos_workos_go_v6//pkg/common",
+        "@com_github_workos_workos_go_v6//pkg/directorysync",
+        "@com_github_workos_workos_go_v6//pkg/events",
+        "@com_github_workos_workos_go_v6//pkg/organizations",
+        "@com_github_workos_workos_go_v6//pkg/passwordless",
+        "@com_github_workos_workos_go_v6//pkg/sso",
+        "@com_github_workos_workos_go_v6//pkg/usermanagement",
+        "@com_github_workos_workos_go_v6//pkg/workos_errors",
+    ],
+)
+
+go_test(
+    name = "workos_test",
+    srcs = [
+        "client_partition_test.go",
+        "client_test.go",
+        "connection_test.go",
+        "organization_test.go",
+    ],
+    embed = [":workos"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/organizations/id",
+        "//server/internal/organizations/orgprovision",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+        "@com_github_workos_workos_go_v6//pkg/common",
+        "@com_github_workos_workos_go_v6//pkg/organizations",
+        "@com_github_workos_workos_go_v6//pkg/roles",
+        "@com_github_workos_workos_go_v6//pkg/usermanagement",
+        "@com_github_workos_workos_go_v6//pkg/workos_errors",
+    ],
+)

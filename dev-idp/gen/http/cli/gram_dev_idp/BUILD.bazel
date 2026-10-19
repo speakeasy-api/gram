@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "gram_dev_idp",
+    srcs = ["cli.go"],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/gen/http/cli/gram_dev_idp",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//dev-idp/gen/http/dev_idp/client",
+        "//dev-idp/gen/http/ema_app_assignments/client",
+        "//dev-idp/gen/http/ema_apps/client",
+        "//dev-idp/gen/http/ema_resources/client",
+        "//dev-idp/gen/http/ema_trust_rules/client",
+        "//dev-idp/gen/http/invitations/client",
+        "//dev-idp/gen/http/memberships/client",
+        "//dev-idp/gen/http/organization_roles/client",
+        "//dev-idp/gen/http/organizations/client",
+        "//dev-idp/gen/http/users/client",
+        "@design_goa_goa_v3//http",
+        "@design_goa_goa_v3//pkg",
+    ],
+)

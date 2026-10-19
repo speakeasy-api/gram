@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "trials",
+    srcs = ["arm.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/trials",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/billing",
+        "//server/internal/trials/repo",
+        "@com_github_jackc_pgx_v5//:pgx",
+    ],
+)

@@ -1,0 +1,34 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "core",
+    srcs = [
+        "io.go",
+        "schema.go",
+        "types.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/core",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/constants",
+        "//server/internal/toolconfig",
+        "//server/internal/urn",
+        "@com_github_google_jsonschema_go//jsonschema",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "core_test",
+    srcs = [
+        "io_test.go",
+        "schema_test.go",
+    ],
+    embed = [":core"],
+    deps = [
+        "@com_github_google_jsonschema_go//jsonschema",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "cataloggen",
+    srcs = [
+        "gen.go",
+        "yaml.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/outbox/cataloggen",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/outbox",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
+
+go_test(
+    name = "cataloggen_test",
+    srcs = ["gen_test.go"],
+    deps = [
+        ":cataloggen",
+        "@com_github_stretchr_testify//require",
+    ],
+)

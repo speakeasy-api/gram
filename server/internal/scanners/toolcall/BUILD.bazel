@@ -1,0 +1,37 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "toolcall",
+    srcs = ["handler.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/scanners/toolcall",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/internal/attr",
+        "//server/internal/metering",
+        "//server/internal/scanners",
+        "//server/internal/scanners/clidestructive",
+        "//server/internal/scanners/destructivetool",
+        "//server/internal/scanners/shadowmcpscan",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "toolcall_test",
+    srcs = ["handler_test.go"],
+    embed = [":toolcall"],
+    deps = [
+        "//infra/gen/gram/metering/v1:metering",
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/internal/metering",
+        "//server/internal/scanners/clidestructive",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+    ],
+)

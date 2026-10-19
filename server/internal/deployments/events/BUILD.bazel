@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "events",
+    srcs = ["log.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/deployments/events",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/conv",
+        "//server/internal/deployments/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)

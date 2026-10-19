@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "roledelivery",
+    srcs = [
+        "admission.go",
+        "audit.go",
+        "delivery.go",
+        "eligible.go",
+        "platform.go",
+        "platform_cleanup.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/plugins/roledelivery",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/audit",
+        "//server/internal/authz",
+        "//server/internal/plugins/repo",
+        "//server/internal/shadowmcp/admission",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+    ],
+)

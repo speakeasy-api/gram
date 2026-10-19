@@ -1,0 +1,67 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "idjag",
+    srcs = [
+        "additional_claims.go",
+        "assertion.go",
+        "cache.go",
+        "claims.go",
+        "doc.go",
+        "error.go",
+        "issuer_cache_identity.go",
+        "keys.go",
+        "postgres_store.go",
+        "reason.go",
+        "request.go",
+        "result.go",
+        "store.go",
+        "trusted_issuer.go",
+        "validator.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/directory/repo",
+        "//server/internal/remotesessions/repo",
+        "//server/internal/urn",
+        "//server/internal/usersessions/assertion",
+        "//server/internal/usersessions/jwks",
+        "//server/internal/usersessions/replay",
+        "//server/internal/usersessions/repo",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_go_jose_go_jose_v4//jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "idjag_test",
+    srcs = [
+        "cache_test.go",
+        "keys_test.go",
+        "setup_test.go",
+        "validator_test.go",
+    ],
+    embed = [":idjag"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/remotesessions/repo",
+        "//server/internal/testenv",
+        "//server/internal/urn",
+        "//server/internal/usersessions/assertion",
+        "//server/internal/usersessions/jwks",
+        "//server/internal/usersessions/replay",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_go_jose_go_jose_v4//jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

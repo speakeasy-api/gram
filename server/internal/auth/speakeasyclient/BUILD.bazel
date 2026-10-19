@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "speakeasyclient",
+    srcs = ["client.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/agentownership",
+        "//server/internal/attr",
+        "//server/internal/conv",
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+        "//server/internal/organizations/repo",
+        "//server/internal/thirdparty/posthog",
+        "//server/internal/thirdparty/workos",
+        "//server/internal/users/repo",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)

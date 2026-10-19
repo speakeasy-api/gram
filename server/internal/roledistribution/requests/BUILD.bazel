@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "requests",
+    srcs = ["requests.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/roledistribution/requests",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/gen/gram/role_distribution/v1:role_distribution",
+        "//server/internal/outbox",
+        "//server/internal/projects/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+    ],
+)

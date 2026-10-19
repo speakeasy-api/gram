@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "interceptors",
+    srcs = ["figma.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/conv",
+        "//server/internal/remotemcp/proxy",
+    ],
+)
+
+go_test(
+    name = "interceptors_test",
+    srcs = ["figma_test.go"],
+    deps = [
+        ":interceptors",
+        "//server/internal/remotemcp/proxy",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

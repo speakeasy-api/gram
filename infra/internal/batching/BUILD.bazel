@@ -1,0 +1,20 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "batching",
+    srcs = ["receive.go"],
+    importpath = "github.com/speakeasy-api/gram/infra/internal/batching",
+    visibility = ["//infra:__subpackages__"],
+    deps = [
+        "@org_golang_google_api//support/bundler",
+        "@org_golang_x_sync//semaphore",
+    ],
+)
+
+go_test(
+    name = "batching_test",
+    srcs = ["receive_test.go"],
+    embed = [":batching"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

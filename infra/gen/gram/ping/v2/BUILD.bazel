@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ping",
+    srcs = [
+        "ping.pb.go",
+        "processor.pb.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//runtime/protoimpl",
+    ],
+)
+
+filegroup(
+    name = "go_sources",
+    srcs = glob(["*.go"]),
+    visibility = ["//infra:__subpackages__"],
+)

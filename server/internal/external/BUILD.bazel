@@ -1,0 +1,31 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "external",
+    srcs = ["impl.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/external",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/external",
+        "//server/gen/http/external/server",
+        "//server/internal/attr",
+        "//server/internal/background",
+        "//server/internal/middleware",
+        "//server/internal/o11y",
+        "//server/internal/oops",
+        "//server/internal/temporal",
+        "//server/internal/thirdparty/workos",
+        "@com_github_workos_workos_go_v6//pkg/webhooks",
+        "@design_goa_goa_v3//http",
+        "@design_goa_goa_v3//pkg",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "external_test",
+    srcs = ["parseorganizationid_test.go"],
+    embed = [":external"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

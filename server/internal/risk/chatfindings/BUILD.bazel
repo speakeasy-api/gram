@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "chatfindings",
+    srcs = ["reader.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/chatfindings",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/risk/chrepo",
+        "//server/internal/risk/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)

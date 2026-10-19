@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "externalmcptest",
+    srcs = ["registryclient.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/externalmcptest",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/cache",
+        "//server/internal/conv",
+        "//server/internal/externalmcp",
+        "//server/internal/guardian",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)

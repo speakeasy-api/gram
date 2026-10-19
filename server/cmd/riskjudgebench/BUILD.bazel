@@ -1,0 +1,27 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "riskjudgebench_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/riskjudgebench",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//server/internal/billing",
+        "//server/internal/guardian",
+        "//server/internal/judgemessage",
+        "//server/internal/message",
+        "//server/internal/scanners/promptpolicy",
+        "//server/internal/scanners/promptpolicy/openrouter",
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+        "@io_opentelemetry_go_otel_metric//noop",
+        "@io_opentelemetry_go_otel_trace//noop",
+    ],
+)
+
+go_binary(
+    name = "riskjudgebench",
+    embed = [":riskjudgebench_lib"],
+    visibility = ["//visibility:public"],
+)

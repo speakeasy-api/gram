@@ -127,3 +127,5 @@ storybook-static/
 
 # Compiled one-off backfill binary; build with `go build ./cmd/workos-backfill`.
 /server/workos-backfill
+/bazel-*
+/.bazelrc.user

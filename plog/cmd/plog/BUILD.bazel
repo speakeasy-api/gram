@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "plog_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/plog/cmd/plog",
+    visibility = ["//visibility:private"],
+    deps = ["//plog"],
+)
+
+go_binary(
+    name = "plog",
+    embed = [":plog_lib"],
+    visibility = ["//visibility:public"],
+)

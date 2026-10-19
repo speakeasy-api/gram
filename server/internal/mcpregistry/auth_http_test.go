@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -293,7 +292,7 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 		if _, err := exec.LookPath("mise"); err != nil {
 			t.Fatal("dashboard SDK wire test requires mise")
 		}
-		root, err := filepath.Abs("../../..")
+		root, err := testenv.FindCheckoutRoot(ctx)
 		require.NoError(t, err)
 		probeCtx, probeCancel := context.WithTimeout(ctx, 15*time.Second)
 		defer probeCancel()

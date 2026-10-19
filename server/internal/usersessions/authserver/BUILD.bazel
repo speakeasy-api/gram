@@ -1,0 +1,26 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "authserver",
+    srcs = ["authserver.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/usersessions/authserver",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/requestorigin",
+        "//server/internal/usersessions/repo",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "authserver_test",
+    srcs = ["authserver_test.go"],
+    deps = [
+        ":authserver",
+        "//server/internal/conv",
+        "//server/internal/usersessions/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,49 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "remotesessionmetrics",
+    srcs = [
+        "authorize.go",
+        "doc.go",
+        "issuer_metadata_refresh.go",
+        "pkce_support.go",
+        "refresh.go",
+        "refresh_outcome.go",
+        "refresh_trigger.go",
+        "revoke.go",
+        "revoke_outcome.go",
+        "scope_resolution.go",
+        "validation.go",
+        "validation_trigger.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/oauth/protectedresource",
+        "@io_opentelemetry_go_otel_metric//:metric",
+    ],
+)
+
+go_test(
+    name = "remotesessionmetrics_test",
+    srcs = [
+        "authorize_test.go",
+        "issuer_metadata_refresh_test.go",
+        "refresh_test.go",
+        "scope_resolution_test.go",
+        "validation_test.go",
+    ],
+    embed = [":remotesessionmetrics"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/oauth/protectedresource",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata/metricdatatest",
+    ],
+)

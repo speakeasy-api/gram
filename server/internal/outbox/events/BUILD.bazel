@@ -1,0 +1,28 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "events",
+    srcs = [
+        "audit_log.go",
+        "catalog_gen.go",
+        "risk_finding_created.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/outbox/events",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/outbox",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "events_test",
+    srcs = ["catalog_test.go"],
+    deps = [
+        ":events",
+        "//server/internal/outbox",
+        "//server/internal/outbox/cataloggen",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,40 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "redisinbox",
+    srcs = [
+        "inbox.go",
+        "requester.go",
+        "writer.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/redisinbox",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/pkg/gcp",
+        "//server/internal/attr",
+        "//server/internal/requestreply",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@io_opentelemetry_go_otel_trace//:trace",
+        "@org_golang_google_protobuf//proto",
+    ],
+)
+
+go_test(
+    name = "redisinbox_test",
+    srcs = ["inbox_test.go"],
+    embed = [":redisinbox"],
+    deps = [
+        "@com_github_alicebob_miniredis_v2//:miniredis",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel//:otel",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata",
+    ],
+)

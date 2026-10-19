@@ -1,0 +1,21 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "urls",
+    srcs = ["urls.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/urls",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "urls_test",
+    srcs = [
+        "url_diagnostic_test.go",
+        "urls_test.go",
+    ],
+    deps = [
+        ":urls",
+        "@com_github_stretchr_testify//require",
+    ],
+)

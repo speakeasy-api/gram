@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "registryclient",
+    srcs = ["plugin.go"],
+    importpath = "github.com/speakeasy-api/gram/server/design/registryclient",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@design_goa_goa_v3//codegen",
+        "@design_goa_goa_v3//eval",
+        "@design_goa_goa_v3//http/codegen",
+    ],
+)

@@ -1,0 +1,13 @@
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_test(
+    name = "e2e_test",
+    srcs = ["tunnel_test.go"],
+    deps = [
+        "//tunnel/agent",
+        "//tunnel/gateway",
+        "//tunnel/route",
+        "//tunnel/wire",
+        "@com_github_stretchr_testify//require",
+    ],
+)

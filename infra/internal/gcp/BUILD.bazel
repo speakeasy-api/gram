@@ -1,0 +1,68 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "gcp",
+    srcs = [
+        "cc.go",
+        "cc_pubsub.go",
+        "cc_storage.go",
+        "pubsub_discover.go",
+        "pubsub_schema.go",
+        "storage_codegen.go",
+        "storage_discover.go",
+        "topic_bindings.go",
+        "topic_bindings_render.go",
+        "values.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/infra/internal/gcp",
+    visibility = ["//infra:__subpackages__"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "//infra/internal/attr",
+        "@com_github_ettle_strcase//:strcase",
+        "@com_github_googlecloudplatform_k8s_config_connector//pkg/clients/generated/apis/k8s/v1alpha1",
+        "@com_github_googlecloudplatform_k8s_config_connector//pkg/clients/generated/apis/pubsub/v1beta1",
+        "@com_github_googlecloudplatform_k8s_config_connector//pkg/clients/generated/apis/storage/v1beta1",
+        "@com_github_parquet_go_parquet_go//:parquet-go",
+        "@io_k8s_sigs_yaml//:yaml",
+        "@org_golang_google_protobuf//compiler/protogen",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protodesc",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//reflect/protoregistry",
+        "@org_golang_google_protobuf//types/descriptorpb",
+        "@org_golang_google_protobuf//types/known/durationpb",
+        "@org_golang_google_protobuf//types/pluginpb",
+    ],
+)
+
+go_test(
+    name = "gcp_test",
+    srcs = [
+        "cc_pubsub_test.go",
+        "pubsub_schema_test.go",
+        "storage_codegen_test.go",
+        "storage_discover_test.go",
+        "topic_bindings_test.go",
+    ],
+    data = [
+        # keep
+        "//infra/internal/storagefixture:descriptors.pb",
+        "//infra/internal/storagefixture:storage_gen.go",
+        "//infra/internal/storagefixture:storage_manifest.json",
+        "//infra/pkg/topics:topics_gen.go",
+    ],
+    embed = [":gcp"],
+    deps = [
+        "//infra/gen",
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "@com_github_stretchr_testify//require",
+        "@io_k8s_sigs_yaml//:yaml",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protodesc",
+        "@org_golang_google_protobuf//types/descriptorpb",
+        "@org_golang_google_protobuf//types/known/durationpb",
+        "@org_golang_google_protobuf//types/known/timestamppb",
+    ],
+)

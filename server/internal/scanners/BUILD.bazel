@@ -1,0 +1,42 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "scanners",
+    srcs = [
+        "async_scan_metrics.go",
+        "models.go",
+        "publish.go",
+        "ruleid.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/scanners",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/internal/attr",
+        "//server/internal/conv",
+        "//server/internal/metering",
+        "//server/internal/risk/chrepo",
+        "@com_github_google_uuid//:uuid",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_metric//:metric",
+    ],
+)
+
+go_test(
+    name = "scanners_test",
+    srcs = [
+        "models_test.go",
+        "publish_test.go",
+        "ruleid_test.go",
+    ],
+    deps = [
+        ":scanners",
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

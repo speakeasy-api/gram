@@ -1,0 +1,49 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "privatekeyjwt",
+    srcs = [
+        "assertion.go",
+        "audience_kind.go",
+        "audiences.go",
+        "doc.go",
+        "error.go",
+        "expectation.go",
+        "reason.go",
+        "result.go",
+        "verifier.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/oauthwire",
+        "//server/internal/usersessions/assertion",
+        "//server/internal/usersessions/jwks",
+        "//server/internal/usersessions/replay",
+        "@com_github_go_jose_go_jose_v4//jwt",
+    ],
+)
+
+go_test(
+    name = "privatekeyjwt_test",
+    srcs = [
+        "assertion_test.go",
+        "audiences_test.go",
+        "setup_test.go",
+        "verifier_test.go",
+    ],
+    deps = [
+        ":privatekeyjwt",
+        "//server/internal/guardian",
+        "//server/internal/ratelimit",
+        "//server/internal/testenv",
+        "//server/internal/usersessions/jwks",
+        "//server/internal/usersessions/replay",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_go_jose_go_jose_v4//jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@com_github_stretchr_testify//require",
+    ],
+)

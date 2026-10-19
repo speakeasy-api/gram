@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "deployments",
+    srcs = [
+        "shared.go",
+        "tool_get_deployment_logs.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/deployments",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/deployments",
+        "//server/internal/platformtools/core",
+        "//server/internal/toolconfig",
+    ],
+)

@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "optionalnullable",
+    srcs = ["optionalnullable.go"],
+    importpath = "github.com/speakeasy-api/gram/hooks/sdk/optionalnullable",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "optionalnullable_test",
+    srcs = ["optionalnullable_test.go"],
+    embed = [":optionalnullable"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

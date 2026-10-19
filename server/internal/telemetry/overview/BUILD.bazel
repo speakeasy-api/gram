@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "overview",
+    srcs = ["clickhouse.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/telemetry/overview",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/oops",
+        "//server/internal/telemetry/repo",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "overview_test",
+    srcs = ["clickhouse_test.go"],
+    embed = [":overview"],
+    deps = [
+        "//server/internal/telemetry/repo",
+        "@com_github_stretchr_testify//require",
+    ],
+)

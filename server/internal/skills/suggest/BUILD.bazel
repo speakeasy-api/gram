@@ -1,0 +1,52 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "suggest",
+    srcs = [
+        "changes.go",
+        "config.go",
+        "engine.go",
+        "judge.go",
+        "signal.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/skills/suggest",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/billing",
+        "//server/internal/o11y",
+        "//server/internal/projects/repo",
+        "//server/internal/ratelimit",
+        "//server/internal/skills",
+        "//server/internal/skills/efficacy",
+        "//server/internal/skills/repo",
+        "//server/internal/skills/skilldiff",
+        "//server/internal/telemetry/repo",
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+    ],
+)
+
+go_test(
+    name = "suggest_test",
+    srcs = [
+        "changes_test.go",
+        "engine_test.go",
+    ],
+    embed = [":suggest"],
+    deps = [
+        "//server/internal/skills",
+        "//server/internal/skills/efficacy",
+        "//server/internal/skills/repo",
+        "//server/internal/telemetry/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//require",
+    ],
+)

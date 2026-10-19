@@ -1,0 +1,55 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "cimd",
+    srcs = [
+        "cache_outcome.go",
+        "cache_policy.go",
+        "cache_result.go",
+        "cache_state.go",
+        "canonical.go",
+        "cimd.go",
+        "inspection.go",
+        "metrics.go",
+        "outcome.go",
+        "validate.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/usersessions/cimd",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/guardian",
+        "//server/internal/httpcache",
+        "//server/internal/o11y",
+        "//server/internal/oauthwire",
+        "//server/internal/usersessions/cimd/admission",
+        "//server/internal/usersessions/jwks",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_metric//:metric",
+    ],
+)
+
+go_test(
+    name = "cimd_test",
+    srcs = [
+        "cache_test.go",
+        "canonical_test.go",
+        "cimd_test.go",
+        "inspect_test.go",
+        "metrics_test.go",
+        "validate_test.go",
+    ],
+    embed = [":cimd"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/guardian",
+        "//server/internal/oauthwire",
+        "//server/internal/testenv",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata",
+    ],
+)

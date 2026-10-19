@@ -1,0 +1,34 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "about",
+    srcs = [
+        "globals.go",
+        "impl.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/about",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/about",
+        "//server/gen/http/about/server",
+        "//server/internal/attr",
+        "//server/internal/guardian",
+        "//server/internal/middleware",
+        "//server/internal/o11y",
+        "@design_goa_goa_v3//http",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "about_test",
+    srcs = ["impl_test.go"],
+    embed = [":about"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

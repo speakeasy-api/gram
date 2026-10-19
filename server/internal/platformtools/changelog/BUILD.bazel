@@ -1,0 +1,30 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "changelog",
+    srcs = [
+        "changelog.go",
+        "tool_get_changelog.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/changelog",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/conv",
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+        "//server/internal/platformtools/core",
+        "//server/internal/toolconfig",
+        "@org_golang_x_sync//singleflight",
+    ],
+)
+
+go_test(
+    name = "changelog_test",
+    srcs = ["changelog_test.go"],
+    embed = [":changelog"],
+    deps = [
+        "//server/internal/toolconfig",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "orgslug",
+    srcs = ["orgslug.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/auth/orgslug",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/conv",
+        "//server/internal/organizations/repo",
+        "@com_github_jackc_pgx_v5//:pgx",
+    ],
+)
+
+go_test(
+    name = "orgslug_test",
+    srcs = ["orgslug_test.go"],
+    deps = [
+        ":orgslug",
+        "@com_github_stretchr_testify//require",
+    ],
+)

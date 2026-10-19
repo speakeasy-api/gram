@@ -1,0 +1,30 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "o11y",
+    srcs = [
+        "setup.go",
+        "slog.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/mock-oidc/internal/o11y",
+    visibility = ["//mock-oidc:__subpackages__"],
+    deps = [
+        "//plog",
+        "@com_github_go_logr_logr//:logr",
+        "@design_goa_clue//clue",
+        "@io_opentelemetry_go_contrib_instrumentation_runtime//:runtime",
+        "@io_opentelemetry_go_otel//:otel",
+        "@io_opentelemetry_go_otel//propagation",
+        "@io_opentelemetry_go_otel//semconv/v1.41.0:v1_41_0",
+        "@io_opentelemetry_go_otel_exporters_otlp_otlpmetric_otlpmetricgrpc//:otlpmetricgrpc",
+        "@io_opentelemetry_go_otel_exporters_otlp_otlptrace_otlptracegrpc//:otlptracegrpc",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@io_opentelemetry_go_otel_metric//noop",
+        "@io_opentelemetry_go_otel_sdk//resource",
+        "@io_opentelemetry_go_otel_sdk//trace",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata",
+        "@io_opentelemetry_go_otel_trace//:trace",
+        "@io_opentelemetry_go_otel_trace//noop",
+    ],
+)

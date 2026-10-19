@@ -1,0 +1,34 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "temporal",
+    srcs = [
+        "env.go",
+        "errors.go",
+        "tracing.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/temporal",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_trace//:trace",
+        "@io_temporal_go_sdk//client",
+        "@io_temporal_go_sdk//workflow",
+    ],
+)
+
+go_test(
+    name = "temporal_test",
+    srcs = ["tracing_test.go"],
+    embed = [":temporal"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_sdk//trace",
+        "@io_opentelemetry_go_otel_sdk//trace/tracetest",
+        "@io_temporal_go_sdk//interceptor",
+        "@io_temporal_go_sdk//workflow",
+        "@io_temporal_go_sdk_contrib_opentelemetry//:opentelemetry",
+    ],
+)

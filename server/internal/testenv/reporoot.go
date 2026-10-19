@@ -10,6 +10,24 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
+// FindCheckoutRoot locates the source checkout itself, for the few tests that
+// must see all of it, such as repository-wide scans or the dashboard's
+// node_modules. Under go test it is FindRepoRoot. Under Bazel, FindRepoRoot is
+// the test's runfiles tree, which holds only declared inputs, and its go.mod
+// links back to the checkout. Such tests depend on undeclared files, so their
+// targets are tagged "external" to keep Bazel from caching their results.
+func FindCheckoutRoot(ctx context.Context) (string, error) {
+	root, err := FindRepoRoot(ctx)
+	if err != nil {
+		return "", err
+	}
+	goMod, err := filepath.EvalSymlinks(filepath.Join(root, "go.mod"))
+	if err != nil {
+		return "", fmt.Errorf("resolve checkout go.mod: %w", err)
+	}
+	return filepath.Dir(goMod), nil
+}
+
 // FindRepoRoot locates the checkout for tests and local development helpers.
 // It walks up from the working directory to the Speakeasy module root and uses
 // filesystem state rather than compiler source paths so it works with -trimpath

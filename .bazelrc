@@ -1,0 +1,58 @@
+common --lockfile_mode=update
+
+# Match the go toolchain flags used by mise tasks (GOFLAGS=-trimpath,
+# CGO_ENABLED=0): rules_go always trims paths; this disables cgo.
+common --@rules_go//go/config:pure
+# Nothing links C, so skip host C toolchain detection: it fails on machines
+# without gcc and would otherwise make builds depend on the host compiler.
+common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+
+build --incompatible_strict_action_env
+build --workspace_status_command=tools/bazel/workspace_status.sh
+build --test_output=errors
+
+# Same build tag the go test task has always applied to server tests.
+test --@rules_go//go/config:tags=inv.debug
+# Container-heavy packages run far slower under a full parallel suite than
+# alone; the go test task gave each package 20 minutes for the same reason.
+test --test_timeout=-1,1200,-1,-1
+# Tests write to HOME (Docker, uv and Go caches) and some run tools against the
+# checkout, which the stricter linux-sandbox and darwin-sandbox would refuse.
+# This sandbox still gives each test only its declared files in its runfiles.
+test --strategy=TestRunner=processwrapper-sandbox
+
+# Server tests start Postgres, ClickHouse, Redis and Temporal containers through
+# the host Docker daemon, so they need its socket and testcontainers settings.
+test --test_env=DOCKER_HOST
+test --test_env=TESTCONTAINERS_RYUK_DISABLED
+test --test_env=TESTCONTAINERS_HOST_OVERRIDE
+test --test_env=TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE
+test --test_env=HOME
+# Tests run mise-managed tools from PATH: the temporal dev server, and uv, node
+# and python3 for the packages that drive them. Builds keep the strict
+# environment above.
+test --test_env=PATH
+
+# The race detector needs cgo, so --config=race turns it back on along with
+# host C toolchain detection. CI's Ubuntu runners and macOS (Xcode command line
+# tools) have a compiler.
+build:race --@rules_go//go/config:race
+build:race --@rules_go//go/config:pure=false
+build:race --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=0
+
+# Coverage writes Go profiles (merged into cover.out by test:server --cover).
+# Bazel's coverage post-processing needs a C toolchain, as -race does.
+coverage --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=0
+coverage --@rules_go//go/config:cover_format=go_cover
+coverage --combined_report=none
+
+# CI (see .github/workflows/composite/bazel-cache) keeps Bazel's caches where
+# actions/cache restores them, and logs progress without a terminal UI.
+common:ci --disk_cache=~/.cache/bazel-disk
+common:ci --repository_cache=~/.cache/bazel-repo
+common:ci --color=yes
+common:ci --curses=no
+common:ci --show_progress_rate_limit=30
+common:ci --lockfile_mode=error
+
+try-import %workspace%/.bazelrc.user

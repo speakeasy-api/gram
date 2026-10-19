@@ -1,0 +1,11 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "types",
+    srcs = [
+        "transporttype.go",
+        "type.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types",
+    visibility = ["//server:__subpackages__"],
+)

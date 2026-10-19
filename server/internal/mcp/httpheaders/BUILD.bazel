@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "httpheaders",
+    srcs = [
+        "http_headers.go",
+        "mirrored.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcp/httpheaders",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/constants",
+        "//server/internal/mcp/mcpversions",
+    ],
+)
+
+go_test(
+    name = "httpheaders_test",
+    srcs = [
+        "http_headers_test.go",
+        "mirrored_test.go",
+    ],
+    deps = [
+        ":httpheaders",
+        "//server/internal/constants",
+        "@com_github_stretchr_testify//require",
+    ],
+)

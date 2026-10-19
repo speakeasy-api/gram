@@ -1,0 +1,26 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "mcpidentity",
+    srcs = ["identity.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpidentity",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/sessiontokens",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "mcpidentity_test",
+    srcs = ["identity_test.go"],
+    deps = [
+        ":mcpidentity",
+        "//server/internal/sessiontokens",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

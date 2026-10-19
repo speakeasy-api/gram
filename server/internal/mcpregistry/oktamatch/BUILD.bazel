@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "oktamatch",
+    srcs = ["oktamatch.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpregistry/oktamatch",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "oktamatch_test",
+    srcs = ["oktamatch_test.go"],
+    embed = [":oktamatch"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

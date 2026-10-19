@@ -1,0 +1,68 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "analysis",
+    srcs = [
+        "analysis.go",
+        "enqueue.go",
+        "judge.go",
+        "publish.go",
+        "reserve.go",
+        "settings.go",
+        "sweep.go",
+        "workunits.go",
+    ],
+    embedsrcs = ["workunits_prompt.md"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/chat/analysis",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/billing",
+        "//server/internal/chat",
+        "//server/internal/chat/analysis/repo",
+        "//server/internal/chat/repo",
+        "//server/internal/conv",
+        "//server/internal/o11y",
+        "//server/internal/ratelimit",
+        "//server/internal/skills/efficacy",
+        "//server/internal/telemetry",
+        "//server/internal/telemetry/repo",
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "analysis_test",
+    srcs = [
+        "pipeline_test.go",
+        "setup_test.go",
+        "workunits_test.go",
+    ],
+    embed = [":analysis"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/chat/analysis/repo",
+        "//server/internal/chat/repo",
+        "//server/internal/conv",
+        "//server/internal/organizations/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/telemetry",
+        "//server/internal/telemetry/repo",
+        "//server/internal/testenv",
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

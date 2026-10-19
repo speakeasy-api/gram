@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "requestreply",
+    srcs = ["contracts.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/requestreply",
+    visibility = ["//server:__subpackages__"],
+    deps = ["@org_golang_google_protobuf//proto"],
+)

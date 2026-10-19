@@ -70,10 +70,11 @@ Contains the main application code for the Speakeasy server:
 <commands>
 
 - `mise go:tidy`: Run `go mod tidy` across the codebase
-- `mise build:server`: Build the server binary
+- `mise build:server`: Build the server binary with Bazel into `server/bin/gram`
+- `mise run bazel:gazelle`: Regenerate Bazel `BUILD.bazel` files and `MODULE.bazel` repos after adding Go packages, imports or modules. `build:server` runs it for you; CI fails when they are stale (`--check`). Tests read files from their own package directory freely, but a test that opens a file in another package needs it in its `data` attribute (add `# keep` so Gazelle leaves it alone).
 - `mise build:tunnel-gateway`: Build the tunnel gateway binary
 - `mise lint:server`: Run linters on the server code
-- `mise run test:server`: Run server tests; accepts the same extra arguments as `go test` and runs from `server/`, so package paths are relative to `server/` (for example, `mise run test:server ./internal/thirdparty/openrouter/`)
+- `mise run test:server`: Run server tests with Bazel; accepts `go test` style arguments (packages, `-run`, `-count`, `-race`, `-tags`, `-p`, `-timeout`, `-v`, `-args`) and runs from `server/`, so package paths are relative to `server/` (for example, `mise run test:server ./internal/thirdparty/openrouter/`). Bazel caches passing results, so unchanged packages are not re-run; pass `-count=1` to force a run. Raw Bazel flags go after `--bazel`.
 - `mise run start`: Run the process manager that spins up local servers (server, worker, idp, ...)
 - `mise run wake`: Start this worktree's stack (containers, then daemons). A new worktree is booted and then left paused, so run this before you need the dashboard or API.
 - `mise run pause` (alias `mise run sleep`): Stop the daemons and containers again, keeping their data. It also parks a placeholder server on the site port, so opening the dashboard URL wakes the stack.

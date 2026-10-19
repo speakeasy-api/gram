@@ -1,0 +1,20 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sdk",
+    srcs = [
+        "hooks.go",
+        "speakeasyhooks.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/hooks/sdk",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//hooks/sdk/internal/config",
+        "//hooks/sdk/internal/hooks",
+        "//hooks/sdk/internal/utils",
+        "//hooks/sdk/models/apierrors",
+        "//hooks/sdk/models/components",
+        "//hooks/sdk/models/operations",
+        "//hooks/sdk/retry",
+    ],
+)

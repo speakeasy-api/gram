@@ -1,0 +1,11 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "wire",
+    srcs = [
+        "blockeffect.go",
+        "wire.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/hooks/wire",
+    visibility = ["//visibility:public"],
+)

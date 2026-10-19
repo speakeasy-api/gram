@@ -1,0 +1,54 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "localfixture",
+    srcs = [
+        "config.go",
+        "configurator.go",
+        "mcp.go",
+        "oauth.go",
+        "publisher.go",
+        "registry.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/conv",
+        "//server/internal/externalmcp",
+        "//server/internal/guardian",
+        "//server/internal/oauthwire",
+        "//server/internal/platformmcp",
+        "//server/internal/platformmcp/remotesessionprovider",
+        "//server/internal/plugins",
+        "//server/internal/remotesessions/repo",
+        "//server/internal/thirdparty/github",
+        "//server/internal/usersessions",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "localfixture_test",
+    srcs = [
+        "config_test.go",
+        "configurator_test.go",
+        "mcp_test.go",
+        "oauth_test.go",
+        "publisher_test.go",
+        "registry_test.go",
+    ],
+    embed = [":localfixture"],
+    deps = [
+        "//server/internal/cache",
+        "//server/internal/externalmcp",
+        "//server/internal/guardian",
+        "//server/internal/platformmcp",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

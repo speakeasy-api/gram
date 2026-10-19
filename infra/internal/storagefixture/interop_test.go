@@ -66,7 +66,13 @@ func TestGeneratedEncoding_DuckDBInteroperability(t *testing.T) {
 	writeFixture(t, filepath.Join(root, "external/region=eu-west1/account=001/file.parquet"), FixtureV1Archive(), populated)
 	writeFixture(t, filepath.Join(root, "open/file.parquet"), FixtureOpenArchive(), &openpb.Event{}, &openpb.Event{OptionalValue: new(uint64(0)), Choice: &openpb.Event_Text{Text: ""}, Child: &openpb.Event_Child{}})
 
-	cmd := exec.CommandContext(t.Context(), "uv", "run", "--package", "gram-infra", "--no-sync", "python", "interop.py", root)
+	// uv finds the gram-infra workspace and its environment from the script's
+	// directory in the checkout. Under Bazel the test runs from its runfiles,
+	// where interop.py links back there.
+	script, err := filepath.EvalSymlinks("interop.py")
+	require.NoError(t, err)
+	cmd := exec.CommandContext(t.Context(), "uv", "run", "--package", "gram-infra", "--no-sync", "python", script, root)
+	cmd.Dir = filepath.Dir(script)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, "%s", output)
 }

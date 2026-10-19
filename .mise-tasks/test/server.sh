@@ -1,154 +1,231 @@
 #!/usr/bin/env bash
 
+#MISE description="Test the server with Bazel. Takes go test style arguments (packages relative to server/, -run, -count, -race, -tags, -p, -timeout, -v, -args) plus --cover, --shard and --rerun-fails."
 #MISE dir="{{ config_root }}/server"
-#MISE description="Test the server with optional coverage generation. It takes the same arguments as 'go test'."
 
-# Check if flags are provided
+# Arguments keep the 'go test' shape so existing docs and habits still work;
+# each is translated to its Bazel equivalent below. Anything Bazel-specific can
+# be passed after '--bazel', e.g. 'mise run test:server ./internal/oops --bazel --test_output=all'.
+
+set -uo pipefail
+
 cover=false
 open_html=false
 shard=""
 shard_isolate=""
 rerun_fails=""
-args=()
+verbose=false
+patterns=()
+tags=""
+tags_given=false
+bazel_args=()
+test_args=()
 
-for arg in "$@"; do
+die() {
+  echo "test:server: $*" >&2
+  exit 2
+}
+
+# go_duration_seconds turns a Go duration such as 20m, 90s or 1h30m into whole
+# seconds for --test_timeout.
+go_duration_seconds() {
+  local rest=$1 total=0 num unit
+  while [ -n "$rest" ]; do
+    num=${rest%%[!0-9]*}
+    rest=${rest#"$num"}
+    unit=${rest%%[0-9]*}
+    rest=${rest#"$unit"}
+    [ -n "$num" ] || die "unsupported duration: $1"
+    case $unit in
+      h) total=$((total + num * 3600)) ;;
+      m) total=$((total + num * 60)) ;;
+      s) total=$((total + num)) ;;
+      *) die "unsupported duration: $1" ;;
+    esac
+  done
+  echo "$total"
+}
+
+# to_target maps a package pattern as 'go test' takes it from server/ to a Bazel
+# target pattern.
+to_target() {
+  local p=$1
+  case $p in
+    github.com/speakeasy-api/gram/*) p="//${p#github.com/speakeasy-api/gram/}" ;;
+    github.com/speakeasy-api/gram) p="//" ;;
+    .|./) p="//server" ;;
+    ./*) p="//server/${p#./}" ;;
+    *) p="//server/$p" ;;
+  esac
+  p=${p%/}
+  case $p in
+    */...) echo "$p" ;;
+    *) echo "$p:all" ;;
+  esac
+}
+
+needs_value() {
+  [ $# -ge 2 ] || die "$1 needs a value"
+}
+
+while [ $# -gt 0 ]; do
+  arg=$1
+  shift
   case $arg in
-    --cover)
-      cover=true
+    --cover) cover=true ;;
+    --html) open_html=true ;;
+    --shard=*) shard="${arg#--shard=}" ;;
+    --shard-isolate=*) shard_isolate="${arg#--shard-isolate=}" ;;
+    --rerun-fails=*) rerun_fails="${arg#--rerun-fails=}" ;;
+    --bazel)
+      bazel_args+=("$@")
+      break ;;
+    -args|--args)
+      for a in "$@"; do
+        test_args+=("--test_arg=$a")
+      done
+      break ;;
+    -race|--race) bazel_args+=(--config=race) ;;
+    -v|--v|-v=true) verbose=true ;;
+    -run=*|--run=*) bazel_args+=("--test_filter=${arg#*=}") ;;
+    -run|--run)
+      needs_value "$arg" "$@"
+      bazel_args+=("--test_filter=$1")
       shift ;;
-    --html)
-      open_html=true
+    -count=*|--count=*)
+      bazel_args+=(--nocache_test_results)
+      count=${arg#*=}
+      [ "$count" = 1 ] || test_args+=("--test_arg=-test.count=$count") ;;
+    -p=*|--p=*) bazel_args+=("--local_test_jobs=${arg#*=}") ;;
+    -p|--p)
+      needs_value "$arg" "$@"
+      bazel_args+=("--local_test_jobs=$1")
       shift ;;
-    --shard=*)
-      shard="${arg#--shard=}"
+    -tags=*|--tags=*)
+      tags=${arg#*=}
+      tags_given=true ;;
+    -tags|--tags)
+      needs_value "$arg" "$@"
+      tags=$1
+      tags_given=true
       shift ;;
-    --shard-isolate=*)
-      shard_isolate="${arg#--shard-isolate=}"
+    -timeout=*|--timeout=*)
+      bazel_args+=("--test_timeout=$(go_duration_seconds "${arg#*=}")") ;;
+    -timeout|--timeout)
+      needs_value "$arg" "$@"
+      bazel_args+=("--test_timeout=$(go_duration_seconds "$1")")
       shift ;;
-    --rerun-fails=*)
-      rerun_fails="${arg#--rerun-fails=}"
-      shift ;;
-    *)
-      args+=("$arg") ;;
+    # Relative paths, anything ending in "..." and import paths.
+    ./*|../*|.|*...|*.*/*) patterns+=("$arg") ;;
+    # Other test binary flags (-short, -failfast, -shuffle=on, ...) go to every
+    # test binary as -test.<flag>.
+    -*) test_args+=("--test_arg=-test.${arg#-}") ;;
+    *) patterns+=("$arg") ;;
   esac
 done
 
-if [ ${#args[@]} -eq 0 ]; then
-  args=("-tags=inv.debug" "./...")
+if [ ${#patterns[@]} -eq 0 ]; then
+  patterns=("./...")
 fi
 
-# The container-heavy packages run an order of magnitude slower under a full
-# parallel suite than they do alone. Go's 10m default kills the whole test
-# binary with a panic, so every result in that package is lost; a higher
-# ceiling keeps the run reporting real pass/fail.
-has_timeout=false
-for arg in "${args[@]}"; do
-  case $arg in
-    -timeout|-timeout=*|--timeout|--timeout=*)
-      has_timeout=true ;;
-  esac
-done
-
-if [ "$has_timeout" = false ]; then
-  args=("-timeout=20m" "${args[@]}")
-fi
-
-# A rerun invokes 'go test' again for the failed package alone, which overwrites
-# cover.out with a profile covering only that package. Rather than report
-# coverage that is quietly missing everything else, refuse the combination.
-if [ "$cover" = true ] && [ -n "$rerun_fails" ]; then
-  echo "--cover and --rerun-fails cannot be combined: a rerun overwrites the coverage profile." >&2
-  exit 1
+# Without -tags the .bazelrc default (inv.debug) applies, matching what this
+# task has always defaulted to. An explicit -tags replaces it, as it did with
+# 'go test'.
+if [ "$tags_given" = true ]; then
+  bazel_args+=("--@rules_go//go/config:tags=$tags")
 fi
 
 # --shard=<index>/<total> runs a deterministic subset of the packages that have
 # tests, so CI can spread the suite over several runners. See ci/cmd/shard for
 # how packages are distributed. --shard-isolate=<import path>[,...] gives each
 # listed package a shard of its own, taking the last shards.
-if [ -n "$shard" ] || [ -n "$rerun_fails" ]; then
-  # Only package patterns are sharded. Everything else reaches 'go test' in the
-  # order it was given, including values that follow a flag — the 'TestFoo' in
-  # '-run TestFoo' is not a package. Build tags also go to the shard tool so it
-  # and 'go test' agree on which packages and test files exist.
-  flags=()
-  patterns=()
-  tags=()
-  tags_next=false
-  for arg in "${args[@]}"; do
-    if [ "$tags_next" = true ]; then
-      tags_next=false
-      tags+=("-tags=$arg")
-      flags+=("$arg")
-      continue
-    fi
-
-    case $arg in
-      -tags=*|--tags=*)
-        tags+=("$arg")
-        flags+=("$arg") ;;
-      -tags|--tags)
-        tags_next=true
-        flags+=("$arg") ;;
-      # Relative paths, anything ending in "..." and import paths such as
-      # example.com/mod/pkg. A bare word like "TestFoo" is a flag value.
-      ./*|../*|/*|.|*...|*.*/*)
-        patterns+=("$arg") ;;
-      *)
-        flags+=("$arg") ;;
-    esac
-  done
-
-  packages=("${patterns[@]}")
-
-  if [ -n "$shard" ]; then
-    shard_packages=$(go run -buildvcs=false github.com/speakeasy-api/gram/ci/cmd/shard \
-      -i "$shard" -isolate "$shard_isolate" "${tags[@]}" "${patterns[@]}") || exit $?
-
-    packages=()
-    while IFS= read -r line; do
-      [ -n "$line" ] && packages+=("$line")
-    done <<< "$shard_packages"
-
-    if [ ${#packages[@]} -eq 0 ]; then
-      echo "Shard $shard: no packages to test."
-      exit 0
-    fi
+if [ -n "$shard" ]; then
+  shard_tags=()
+  if [ -n "$tags" ]; then
+    shard_tags=("-tags=$tags")
+  elif [ "$tags_given" = false ]; then
+    shard_tags=("-tags=inv.debug")
   fi
+  shard_packages=$(go run -buildvcs=false github.com/speakeasy-api/gram/ci/cmd/shard \
+    -i "$shard" -isolate "$shard_isolate" ${shard_tags[@]+"${shard_tags[@]}"} "${patterns[@]}") || exit $?
 
-  args=("${flags[@]}" "${packages[@]}")
+  patterns=()
+  while IFS= read -r line; do
+    [ -n "$line" ] && patterns+=("$line")
+  done <<< "$shard_packages"
+
+  if [ ${#patterns[@]} -eq 0 ]; then
+    echo "Shard $shard: no packages to test."
+    exit 0
+  fi
 fi
 
-if [ "$cover" = true ]; then
-  args=("-coverprofile=cover.out" "-covermode=atomic" "${args[@]}")
-fi
+targets=()
+for p in "${patterns[@]}"; do
+  targets+=("$(to_target "$p")")
+done
 
-gotestsum_flags=(--junitfile junit-report.xml --format-hide-empty-pkg)
-
-# --rerun-fails=<n> re-runs only the tests that failed, up to n more times, so a
-# flaky test does not fail the run on its own. gotestsum needs the packages
-# separately from the 'go test' flags to do that, and skips reruns entirely when
-# the first attempt failed more than --rerun-fails-max-failures times (i.e. the
-# suite is broken rather than flaky).
+# --rerun-fails=<n> retries a failing test target up to n more times, so a
+# flaky test does not fail the run on its own. Tests that only passed on a
+# retry are listed in rerun-report.txt; without it a flake is invisible.
 if [ -n "$rerun_fails" ]; then
-  gotestsum_flags+=(
-    --rerun-fails="$rerun_fails"
-    --packages="${packages[*]}"
-    # Names the tests that only passed on a retry. Without it a flake is
-    # invisible: the run is green and nothing says a test had to be re-run.
-    --rerun-fails-report=rerun-report.txt
-  )
-  # gotestsum builds the 'go test' command itself for every attempt, so the
-  # packages move to --packages and only the flags stay behind.
-  args=("${flags[@]}")
+  bazel_args+=("--flaky_test_attempts=$((rerun_fails + 1))")
 fi
 
-gotestsum "${gotestsum_flags[@]}" -- "${args[@]}"
+if [ "$verbose" = true ]; then
+  bazel_args+=(--test_output=all --test_arg=-test.v)
+else
+  # Failures are printed below from the JUnit conversion, gotestsum style.
+  bazel_args+=(--test_output=summary)
+fi
+
+scratch=$(mktemp -d)
+trap 'rm -rf "$scratch"' EXIT
+
+command=test
+if [ "$cover" = true ]; then
+  # The coverage settings live in .bazelrc.
+  command=coverage
+fi
+
+# GO_TEST_WRAP_TESTV makes rules_go log every test with test2json framing, which
+# ci/cmd/testlogs needs to rebuild the 'go test -json' stream.
+bazel "$command" \
+  --build_tests_only \
+  --keep_going \
+  --test_env=GO_TEST_WRAP_TESTV=1 \
+  --build_event_json_file="$scratch/bep.json" \
+  ${bazel_args[@]+"${bazel_args[@]}"} \
+  ${test_args[@]+"${test_args[@]}"} \
+  -- "${targets[@]}"
 test_exit_code=$?
 
-if [ "$cover" = true ] && [ -f "cover.out" ]; then
-  grep -v "/gen/" cover.out > coverage_filtered.out
-  mv coverage_filtered.out cover.out
+# 0: passed, 3: some tests failed, 4: no tests matched. Anything else is a build
+# or infrastructure failure with no test logs to report.
+case $test_exit_code in
+  0|3) ;;
+  4)
+    echo "No test targets matched: ${targets[*]}"
+    exit 0 ;;
+  *) exit $test_exit_code ;;
+esac
 
+report_flags=()
+if [ -n "$rerun_fails" ]; then
+  report_flags+=(-rerun-report rerun-report.txt)
+fi
+if [ "$cover" = true ]; then
+  report_flags+=(-coverprofile cover.out)
+fi
+go run -buildvcs=false github.com/speakeasy-api/gram/ci/cmd/testlogs \
+  -bep "$scratch/bep.json" -o "$scratch/events.json" ${report_flags[@]+"${report_flags[@]}"} || exit $?
+
+# gotestsum replays the events: it prints failures the way this task always
+# has, writes junit-report.xml for CI, and honours GOTESTSUM_JSONFILE_TIMING_EVENTS.
+gotestsum --junitfile junit-report.xml --format-hide-empty-pkg --format pkgname-and-test-fails \
+  --raw-command -- cat "$scratch/events.json" || true
+
+if [ "$cover" = true ]; then
   go tool cover -html=cover.out -o cover.html
   echo "Coverage report generated: cover.html"
 

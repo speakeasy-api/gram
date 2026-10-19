@@ -1,0 +1,37 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "jev",
+    srcs = [
+        "answers.go",
+        "compile.go",
+        "jev.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/classifier/jev",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/classifier",
+        "//server/internal/conv",
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+    ],
+)
+
+go_test(
+    name = "jev_test",
+    srcs = [
+        "answers_test.go",
+        "jev_test.go",
+        "review_test.go",
+    ],
+    embed = [":jev"],
+    deps = [
+        "//server/internal/classifier",
+        "//server/internal/conv",
+        "//server/internal/guardian",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "genaiconv",
+    srcs = ["messages.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/genaiconv",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "genaiconv_test",
+    srcs = ["messages_test.go"],
+    embed = [":genaiconv"],
+    deps = [
+        "//server/internal/jsonschema",
+        "@com_github_stretchr_testify//require",
+    ],
+)

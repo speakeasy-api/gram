@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "gen-workload-catalog-fixture_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/gen-workload-catalog-fixture",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//server/gen/http/workload_identities/server",
+        "//server/internal/mv",
+        "//server/internal/workloadpolicy/catalog",
+    ],
+)
+
+go_binary(
+    name = "gen-workload-catalog-fixture",
+    embed = [":gen-workload-catalog-fixture_lib"],
+    visibility = ["//visibility:public"],
+)

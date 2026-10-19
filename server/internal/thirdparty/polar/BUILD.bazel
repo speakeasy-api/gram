@@ -1,0 +1,43 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "polar",
+    srcs = [
+        "cache.go",
+        "client.go",
+        "utils.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/polar",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/usage",
+        "//server/internal/attr",
+        "//server/internal/billing",
+        "//server/internal/cache",
+        "//server/internal/conv",
+        "//server/internal/guardian",
+        "@com_github_polarsource_polar_go//:polar-go",
+        "@com_github_polarsource_polar_go//models/apierrors",
+        "@com_github_polarsource_polar_go//models/components",
+        "@com_github_polarsource_polar_go//models/operations",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@com_github_standard_webhooks_standard_webhooks_libraries//go",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_trace//:trace",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "polar_test",
+    srcs = ["client_test.go"],
+    embed = [":polar"],
+    deps = [
+        "//server/internal/billing",
+        "//server/internal/guardian",
+        "//server/internal/testenv",
+        "@com_github_polarsource_polar_go//models/components",
+        "@com_github_stretchr_testify//require",
+    ],
+)

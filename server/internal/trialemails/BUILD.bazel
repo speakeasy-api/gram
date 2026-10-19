@@ -1,0 +1,42 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "trialemails",
+    srcs = [
+        "notifier.go",
+        "service.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/trialemails",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/access/repo",
+        "//server/internal/attr",
+        "//server/internal/conv",
+        "//server/internal/organizations/repo",
+        "//server/internal/orghost",
+        "//server/internal/thirdparty/loops",
+        "//server/internal/trials/repo",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "trialemails_test",
+    srcs = ["service_test.go"],
+    embed = [":trialemails"],
+    deps = [
+        "//server/internal/access/repo",
+        "//server/internal/conv",
+        "//server/internal/organizations/repo",
+        "//server/internal/orghost",
+        "//server/internal/testenv",
+        "//server/internal/testenv/testrepo",
+        "//server/internal/thirdparty/loops",
+        "//server/internal/trials/repo",
+        "//server/internal/users/repo",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "server",
+    srcs = [
+        "encode_decode.go",
+        "paths.go",
+        "server.go",
+        "types.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/gen/http/mcp_approval/server",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//server/gen/mcp_approval",
+        "@design_goa_goa_v3//http",
+        "@design_goa_goa_v3//pkg",
+    ],
+)

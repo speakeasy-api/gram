@@ -1,0 +1,39 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "celenv",
+    srcs = [
+        "celenv.go",
+        "completion.go",
+        "reference.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/celenv",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/celeval",
+        "//server/internal/message",
+        "@com_github_gobwas_glob//:glob",
+        "@com_github_google_cel_go//cel",
+        "@com_github_google_cel_go//common/types",
+        "@com_github_google_cel_go//common/types/ref",
+        "@com_github_google_cel_go//ext",
+        "@com_github_tidwall_gjson//:gjson",
+    ],
+)
+
+go_test(
+    name = "celenv_test",
+    srcs = [
+        "celenv_test.go",
+        "completion_test.go",
+        "dashboard_examples_test.go",
+        "reference_test.go",
+    ],
+    data = [
+        # keep
+        "//client/dashboard:src/pages/security/cel-examples.json",
+    ],
+    embed = [":celenv"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

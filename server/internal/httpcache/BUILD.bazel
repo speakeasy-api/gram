@@ -1,0 +1,30 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "httpcache",
+    srcs = [
+        "freshness.go",
+        "http_header_age.go",
+        "http_header_cache_control.go",
+        "http_header_etag.go",
+        "httpcache.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/httpcache",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/oops"],
+)
+
+go_test(
+    name = "httpcache_test",
+    srcs = [
+        "freshness_test.go",
+        "http_header_etag_test.go",
+        "httpcache_test.go",
+    ],
+    embed = [":httpcache"],
+    deps = [
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

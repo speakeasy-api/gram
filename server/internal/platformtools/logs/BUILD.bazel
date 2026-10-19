@@ -1,0 +1,42 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "logs",
+    srcs = [
+        "shared.go",
+        "tool_get_observability_overview.go",
+        "tool_get_project_metrics_summary.go",
+        "tool_get_tool_usage_summary.go",
+        "tool_get_user_metrics_summary.go",
+        "tool_list_attribute_keys.go",
+        "tool_search_chats.go",
+        "tool_search_logs.go",
+        "tool_search_tool_calls.go",
+        "tool_search_users.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/logs",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/telemetry",
+        "//server/internal/oops",
+        "//server/internal/platformtools/core",
+        "//server/internal/telemetry/telemetryerrs",
+        "//server/internal/toolconfig",
+    ],
+)
+
+go_test(
+    name = "logs_test",
+    srcs = [
+        "log_read_refusal_test.go",
+        "shared_test.go",
+    ],
+    embed = [":logs"],
+    deps = [
+        "//server/gen/telemetry",
+        "//server/internal/oops",
+        "//server/internal/toolconfig",
+        "@com_github_stretchr_testify//require",
+    ],
+)

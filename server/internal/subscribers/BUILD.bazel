@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "subscribers",
+    srcs = ["noop.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/subscribers",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//infra/pkg/gcp"],
+)

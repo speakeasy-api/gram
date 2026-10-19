@@ -1,0 +1,40 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "toolfilter",
+    srcs = [
+        "policy.go",
+        "selection.go",
+        "session_tool_witness.go",
+        "toolfilter.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcp/toolfilter",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/attr",
+        "//server/internal/cache",
+        "//server/internal/conv",
+        "//server/internal/mcp/metamcp",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "toolfilter_test",
+    srcs = [
+        "policy_test.go",
+        "selection_test.go",
+        "session_tool_witness_test.go",
+        "toolfilter_test.go",
+    ],
+    embed = [":toolfilter"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/mcp/metamcp",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

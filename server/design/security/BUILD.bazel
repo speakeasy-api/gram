@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "security",
+    srcs = [
+        "admin.go",
+        "api_key.go",
+        "chat_sessions_token.go",
+        "functions.go",
+        "gram_session.go",
+        "projects.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/design/security",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//server/internal/constants",
+        "@design_goa_goa_v3//dsl",
+    ],
+)

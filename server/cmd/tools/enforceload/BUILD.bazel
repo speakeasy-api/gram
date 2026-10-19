@@ -1,0 +1,30 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "enforceload_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/tools/enforceload",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//infra/gen",
+        "//infra/gen/gram/metering/v1:metering",
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/internal/metering",
+        "//server/internal/risk",
+        "//server/internal/risk/enforcereply",
+        "//server/internal/scanners/gitleaks",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@com_google_cloud_go_pubsub_v2//:pubsub",
+        "@io_opentelemetry_go_otel//:otel",
+        "@org_golang_google_api//option",
+        "@org_golang_google_protobuf//proto",
+    ],
+)
+
+go_binary(
+    name = "enforceload",
+    embed = [":enforceload_lib"],
+    visibility = ["//visibility:public"],
+)

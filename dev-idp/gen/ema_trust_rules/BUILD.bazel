@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ema_trust_rules",
+    srcs = [
+        "client.go",
+        "endpoints.go",
+        "service.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/gen/ema_trust_rules",
+    visibility = ["//visibility:public"],
+    deps = ["@design_goa_goa_v3//pkg"],
+)

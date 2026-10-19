@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "money",
+    srcs = ["money.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/spendrules/money",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "money_test",
+    srcs = ["money_test.go"],
+    deps = [
+        ":money",
+        "@com_github_stretchr_testify//require",
+    ],
+)

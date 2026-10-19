@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "maskdisplay",
+    srcs = ["maskdisplay.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/maskdisplay",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/risk/categories"],
+)
+
+go_test(
+    name = "maskdisplay_test",
+    srcs = ["maskdisplay_test.go"],
+    deps = [
+        ":maskdisplay",
+        "@com_github_stretchr_testify//require",
+    ],
+)

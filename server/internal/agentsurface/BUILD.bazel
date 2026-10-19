@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "agentsurface",
+    srcs = ["surface.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/agentsurface",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "agentsurface_test",
+    srcs = ["surface_test.go"],
+    deps = [
+        ":agentsurface",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "endpointaddr",
+    srcs = ["primary.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/mcpendpoints/repo",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "endpointaddr_test",
+    srcs = ["primary_test.go"],
+    deps = [
+        ":endpointaddr",
+        "//server/internal/mcpendpoints/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//require",
+    ],
+)

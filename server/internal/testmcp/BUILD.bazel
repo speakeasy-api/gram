@@ -1,0 +1,26 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "testmcp",
+    srcs = [
+        "server.go",
+        "tool.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/testmcp",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "testmcp_test",
+    srcs = ["tool_test.go"],
+    embed = [":testmcp"],
+    deps = [
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+        "@com_github_stretchr_testify//require",
+    ],
+)

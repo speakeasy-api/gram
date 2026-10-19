@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "shard_lib",
+    srcs = [
+        "main.go",
+        "timings.go",
+    ],
+    embedsrcs = ["timings.txt"],
+    importpath = "github.com/speakeasy-api/gram/ci/cmd/shard",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "shard",
+    embed = [":shard_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "shard_test",
+    srcs = [
+        "main_test.go",
+        "timings_test.go",
+    ],
+    embed = [":shard_lib"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

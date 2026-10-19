@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "oauthwire",
+    srcs = ["oauthwire.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/oauthwire",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "oauthwire_test",
+    srcs = ["oauthwire_test.go"],
+    deps = [
+        ":oauthwire",
+        "@com_github_stretchr_testify//require",
+    ],
+)

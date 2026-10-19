@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "svix",
+    srcs = ["stub.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/svix",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/conv",
+        "//server/internal/inv",
+        "//server/internal/must",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_svix_svix_webhooks//go/models",
+    ],
+)

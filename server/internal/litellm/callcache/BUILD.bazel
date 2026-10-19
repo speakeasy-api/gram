@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "callcache",
+    srcs = ["callcache.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/litellm/callcache",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/cache",
+        "@com_github_go_redis_cache_v9//:cache",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "callcache_test",
+    srcs = ["callcache_test.go"],
+    embed = [":callcache"],
+    deps = [
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

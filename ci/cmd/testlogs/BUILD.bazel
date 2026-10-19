@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "testlogs_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/ci/cmd/testlogs",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "testlogs",
+    embed = [":testlogs_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "testlogs_test",
+    srcs = ["main_test.go"],
+    embed = [":testlogs_lib"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

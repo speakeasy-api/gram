@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "keybillinglock",
+    srcs = ["lock.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/background/activities/repo",
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)

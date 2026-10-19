@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "speakeasy-hooks_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/hooks/cmd/speakeasy-hooks",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//hooks/relay",
+        "@com_github_speakeasy_api_agenthooks//:agenthooks",
+    ],
+)
+
+go_binary(
+    name = "speakeasy-hooks",
+    embed = [":speakeasy-hooks_lib"],
+    visibility = ["//visibility:public"],
+)

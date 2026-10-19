@@ -1,0 +1,39 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "chat_resolutions",
+    srcs = [
+        "analyze_segment.go",
+        "chat_formatting.go",
+        "delete_chat_resolutions.go",
+        "errors.go",
+        "get_user_feedback.go",
+        "segment_chat.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/billing",
+        "//server/internal/chat/repo",
+        "//server/internal/conv",
+        "//server/internal/telemetry",
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@io_temporal_go_sdk//temporal",
+    ],
+)
+
+go_test(
+    name = "chat_resolutions_test",
+    srcs = ["errors_test.go"],
+    embed = [":chat_resolutions"],
+    deps = [
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

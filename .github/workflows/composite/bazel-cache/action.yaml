@@ -1,0 +1,42 @@
+name: "Bazel cache"
+description: "Restore Bazel's disk and repository caches and point Bazel at them with --config=ci."
+
+# Restore only. Jobs save with actions/cache/save at their end on main, so pull
+# requests read the main branch's cache without each writing a copy of their own.
+
+inputs:
+  key-prefix:
+    description: "Cache key prefix; jobs that build different configurations (race, no race) keep separate caches"
+    required: true
+
+outputs:
+  key:
+    description: "Exact cache key, for actions/cache/save"
+    value: ${{ steps.restore.outputs.cache-primary-key }}
+  path:
+    description: "Cache paths, for actions/cache/save"
+    value: ${{ steps.paths.outputs.paths }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: paths
+      shell: bash
+      run: |
+        {
+          echo "paths<<EOF"
+          echo "$HOME/.cache/bazel-disk"
+          echo "$HOME/.cache/bazel-repo"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+        # .bazelrc imports .bazelrc.user; --config=ci uses the cache paths above.
+        echo "common --config=ci" > .bazelrc.user
+
+    - id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.paths.outputs.paths }}
+        key: bazel-${{ inputs.key-prefix }}-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion') }}-${{ github.sha }}
+        restore-keys: |
+          bazel-${{ inputs.key-prefix }}-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion') }}-
+          bazel-${{ inputs.key-prefix }}-${{ runner.os }}-

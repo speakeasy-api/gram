@@ -1,0 +1,66 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "netingress",
+    srcs = [
+        "attestation.go",
+        "attestor.go",
+        "identity.go",
+        "lookup.go",
+        "middleware.go",
+        "routes.go",
+        "tailscale_identity.go",
+        "telemetry.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/netingress",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/middleware",
+        "//server/internal/netingress/repo",
+        "//server/internal/networkingress",
+        "//server/internal/oauth/wellknown",
+        "//server/internal/requestorigin",
+        "@com_github_go_chi_chi_v5//:chi",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@io_k8s_api//authentication/v1:authentication",
+        "@io_k8s_apimachinery//pkg/apis/meta/v1:meta",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@org_golang_x_sync//singleflight",
+        "@org_golang_x_time//rate",
+    ],
+)
+
+go_test(
+    name = "netingress_test",
+    srcs = [
+        "attestation_test.go",
+        "attestor_test.go",
+        "lookup_test.go",
+        "middleware_test.go",
+        "tailscale_identity_test.go",
+        "telemetry_test.go",
+    ],
+    embed = [":netingress"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/netingress/repo",
+        "//server/internal/networkingress",
+        "//server/internal/requestorigin",
+        "//server/internal/testenv",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//require",
+        "@io_k8s_api//authentication/v1:authentication",
+        "@io_k8s_apimachinery//pkg/apis/meta/v1:meta",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata",
+        "@org_golang_x_time//rate",
+    ],
+)

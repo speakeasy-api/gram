@@ -1,0 +1,42 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "aitargets",
+    srcs = [
+        "aitargets.go",
+        "configdir.go",
+        "decision.go",
+        "gatewaycaller.go",
+        "organization.go",
+        "validate.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/agent/aitargets",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/agent/repo",
+        "//server/internal/aivendors",
+        "//server/internal/conv",
+        "@com_github_jackc_pgx_v5//pgtype",
+    ],
+)
+
+go_test(
+    name = "aitargets_test",
+    srcs = [
+        "aitargets_test.go",
+        "configdir_test.go",
+        "gatewaycaller_test.go",
+        "organization_test.go",
+        "validate_test.go",
+    ],
+    deps = [
+        ":aitargets",
+        "//server/internal/agent/repo",
+        "//server/internal/aivendors",
+        "//server/internal/usersessions/cimd",
+        "//server/internal/usersessions/cimd/admission",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "falsepositivesweep",
+    srcs = ["apply.go"],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/tools/internal/falsepositivesweep",
+    visibility = ["//server/cmd/tools:__subpackages__"],
+    deps = [
+        "//server/internal/risk/chrepo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)

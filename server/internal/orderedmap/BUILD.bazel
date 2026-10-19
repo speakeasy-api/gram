@@ -1,0 +1,8 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "orderedmap",
+    srcs = ["map.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/orderedmap",
+    visibility = ["//server:__subpackages__"],
+)

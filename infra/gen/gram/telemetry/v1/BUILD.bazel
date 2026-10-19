@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "telemetry",
+    srcs = [
+        "log_record.pb.go",
+        "noop.pb.go",
+        "session_observed.pb.go",
+        "session_observed_ch_writer.pb.go",
+        "tool_call_log_relay.pb.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//runtime/protoimpl",
+    ],
+)

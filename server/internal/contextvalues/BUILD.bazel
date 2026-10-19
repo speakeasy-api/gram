@@ -1,0 +1,33 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "contextvalues",
+    srcs = [
+        "actor_telemetry.go",
+        "consent_binding.go",
+        "context.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/contextvalues",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/mcpjsonrpc",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "contextvalues_test",
+    srcs = [
+        "actor_telemetry_test.go",
+        "consent_binding_test.go",
+        "context_test.go",
+    ],
+    embed = [":contextvalues"],
+    deps = [
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

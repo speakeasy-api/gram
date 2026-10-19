@@ -1,0 +1,33 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "cache",
+    srcs = [
+        "cache.go",
+        "noop.go",
+        "redis.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/cache",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "@com_github_go_redis_cache_v9//:cache",
+        "@com_github_redis_go_redis_v9//:go-redis",
+    ],
+)
+
+go_test(
+    name = "cache_test",
+    srcs = [
+        "noop_test.go",
+        "redis_test.go",
+    ],
+    deps = [
+        ":cache",
+        "//server/internal/testenv",
+        "@com_github_alicebob_miniredis_v2//:miniredis",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@com_github_stretchr_testify//require",
+    ],
+)

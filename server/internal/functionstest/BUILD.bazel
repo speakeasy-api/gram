@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "functionstest",
+    srcs = ["orchestrator.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/functionstest",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/assets",
+        "//server/internal/functions",
+        "//server/internal/testenv",
+    ],
+)

@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "recommendedscopes",
+    srcs = ["registry.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/risk/categories"],
+)
+
+go_test(
+    name = "recommendedscopes_test",
+    srcs = ["registry_test.go"],
+    data = [
+        # keep
+        "//server/internal/scanners/promptinjection:testdata",
+    ],
+    embed = [":recommendedscopes"],
+    deps = [
+        "//server/internal/risk/categories",
+        "//server/internal/risk/celenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

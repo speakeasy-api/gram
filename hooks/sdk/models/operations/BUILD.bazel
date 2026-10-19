@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "operations",
+    srcs = [
+        "ingesthookevent.go",
+        "options.go",
+        "skillfeedback.go",
+        "uploadskillcontent.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/hooks/sdk/models/operations",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//hooks/sdk/internal/utils",
+        "//hooks/sdk/models/components",
+        "//hooks/sdk/retry",
+    ],
+)

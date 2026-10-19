@@ -1,0 +1,32 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "bootstrap",
+    srcs = [
+        "bootstrap.go",
+        "evolve.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/internal/bootstrap",
+    visibility = ["//dev-idp:__subpackages__"],
+    deps = [
+        "//dev-idp/internal/config",
+        "//dev-idp/internal/database",
+        "@org_modernc_sqlite//:sqlite",
+    ],
+)
+
+go_test(
+    name = "bootstrap_test",
+    srcs = [
+        "bootstrap_test.go",
+        "evolve_test.go",
+    ],
+    deps = [
+        ":bootstrap",
+        "//dev-idp/internal/config",
+        "//plog",
+        "@com_github_stretchr_testify//require",
+        "@org_modernc_sqlite//:sqlite",
+    ],
+)

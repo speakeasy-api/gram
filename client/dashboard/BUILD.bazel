@@ -1,0 +1,20 @@
+# Dashboard files that server tests check the backend against. Gazelle skips
+# client/, so this file is maintained by hand.
+
+exports_files(
+    [
+        "src/elements/prompts/chart.txt",
+        "src/elements/prompts/generative-ui.txt",
+        "src/elements/prompts/system.txt",
+        "src/pages/mcp/gateway/builtin-gateway-instructions.txt",
+        "src/pages/org/identity-provider/tabs/setup/oktaSignIn.ts",
+        "src/pages/security/cel-examples.json",
+    ],
+    visibility = ["//server:__subpackages__"],
+)
+
+filegroup(
+    name = "sdk_sources",
+    srcs = glob(["src/sdk/src/**"]),
+    visibility = ["//server:__subpackages__"],
+)

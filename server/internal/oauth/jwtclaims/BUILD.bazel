@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "jwtclaims",
+    srcs = ["claims.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims",
+    visibility = ["//server:__subpackages__"],
+    deps = ["@com_github_golang_jwt_jwt_v5//:jwt"],
+)
+
+go_test(
+    name = "jwtclaims_test",
+    srcs = ["claims_test.go"],
+    embed = [":jwtclaims"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

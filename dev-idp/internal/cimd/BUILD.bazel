@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "cimd",
+    srcs = ["cimd.go"],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/internal/cimd",
+    visibility = ["//dev-idp:__subpackages__"],
+    deps = ["//dev-idp/internal/jwks"],
+)
+
+go_test(
+    name = "cimd_test",
+    srcs = [
+        "cache_test.go",
+        "cimd_test.go",
+    ],
+    embed = [":cimd"],
+    deps = [
+        "//dev-idp/internal/jwks",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,45 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "gateway",
+    srcs = [
+        "gateway.go",
+        "keystore.go",
+        "pgkeystore.go",
+        "reconciler.go",
+        "registry.go",
+        "yamuxlog.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/tunnel/gateway",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tunnel/jwks",
+        "//tunnel/route",
+        "//tunnel/wire",
+        "@com_github_coder_websocket//:websocket",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_hashicorp_yamux//:yamux",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "gateway_test",
+    srcs = [
+        "gateway_test.go",
+        "jwks_test.go",
+        "reconciler_test.go",
+    ],
+    embed = [":gateway"],
+    deps = [
+        "//tunnel/jwks",
+        "//tunnel/route",
+        "//tunnel/wire",
+        "@com_github_coder_websocket//:websocket",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_hashicorp_yamux//:yamux",
+        "@com_github_stretchr_testify//require",
+    ],
+)

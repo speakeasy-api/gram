@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "celwasm_lib",
+    srcs = [
+        "main.go",
+        "stub.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/celwasm",
+    visibility = ["//visibility:private"],
+    deps = select({
+        "@rules_go//go/platform:js_wasm": [
+            "//server/internal/risk/celenv",
+            "@com_github_google_cel_go//cel",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+go_binary(
+    name = "celwasm",
+    embed = [":celwasm_lib"],
+    visibility = ["//visibility:public"],
+)

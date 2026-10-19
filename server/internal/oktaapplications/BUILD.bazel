@@ -1,0 +1,56 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "oktaapplications",
+    srcs = [
+        "metrics.go",
+        "reconcile.go",
+        "sync.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/oktaapplications",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/o11y",
+        "//server/internal/oktaapplications/repo",
+        "//server/internal/oktacredentials",
+        "//server/internal/remotesessions",
+        "//server/internal/thirdparty/okta",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_metric//:metric",
+    ],
+)
+
+go_test(
+    name = "oktaapplications_test",
+    srcs = [
+        "credentials_test.go",
+        "reconcile_test.go",
+        "setup_test.go",
+        "sync_test.go",
+    ],
+    embed = [":oktaapplications"],
+    deps = [
+        "//server/internal/conv",
+        "//server/internal/encryption",
+        "//server/internal/guardian",
+        "//server/internal/identityproviderconnections",
+        "//server/internal/identityproviderconnections/provisiontest",
+        "//server/internal/identityproviderconnections/repo",
+        "//server/internal/oktacredentials",
+        "//server/internal/organizations/repo",
+        "//server/internal/remotesessions",
+        "//server/internal/testenv",
+        "//server/internal/testenv/testrepo",
+        "//server/internal/thirdparty/okta",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

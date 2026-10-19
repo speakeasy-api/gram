@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "semver",
+    srcs = ["semver.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/packages/semver",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/conv",
+        "//server/internal/packages/repo",
+        "@com_github_masterminds_semver_v3//:semver",
+    ],
+)

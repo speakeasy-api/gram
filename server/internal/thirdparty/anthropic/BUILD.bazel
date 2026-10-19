@@ -1,0 +1,27 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "anthropic",
+    srcs = [
+        "analytics.go",
+        "client.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/guardian"],
+)
+
+go_test(
+    name = "anthropic_test",
+    srcs = [
+        "analytics_test.go",
+        "client_test.go",
+    ],
+    embed = [":anthropic"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

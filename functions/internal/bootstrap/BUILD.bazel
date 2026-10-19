@@ -1,0 +1,21 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "bootstrap",
+    srcs = [
+        "paths.go",
+        "prepare.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/functions/internal/bootstrap",
+    visibility = ["//functions:__subpackages__"],
+    deps = [
+        "//functions/internal/attr",
+        "//functions/internal/auth",
+        "//functions/internal/javascript",
+        "//functions/internal/o11y",
+        "//functions/internal/python",
+        "//server/gen/functions",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@com_github_hashicorp_go_cleanhttp//:go-cleanhttp",
+    ],
+)

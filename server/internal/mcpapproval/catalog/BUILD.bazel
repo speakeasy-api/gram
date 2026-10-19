@@ -1,0 +1,38 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "catalog",
+    srcs = ["catalog.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/externalmcp",
+        "//server/internal/mcpapproval/capability",
+        "//server/internal/mcpapproval/provenance",
+        "//server/internal/organizations/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/shadowmcp",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "catalog_test",
+    srcs = [
+        "catalog_test.go",
+        "lookup_test.go",
+    ],
+    embed = [":catalog"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/externalmcp",
+        "//server/internal/organizations/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

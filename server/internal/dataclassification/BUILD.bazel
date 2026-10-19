@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "dataclassification",
+    srcs = ["classification.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/dataclassification",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "dataclassification_test",
+    srcs = ["classification_test.go"],
+    deps = [
+        ":dataclassification",
+        "@com_github_stretchr_testify//require",
+    ],
+)

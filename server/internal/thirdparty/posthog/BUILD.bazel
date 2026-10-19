@@ -1,0 +1,33 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "posthog",
+    srcs = [
+        "posthog.go",
+        "sdk_logger.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/posthog",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/contextvalues",
+        "//server/internal/feature",
+        "@com_github_posthog_posthog_go//:posthog-go",
+    ],
+)
+
+go_test(
+    name = "posthog_test",
+    srcs = [
+        "posthog_test.go",
+        "sdk_logger_test.go",
+    ],
+    embed = [":posthog"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/feature",
+        "@com_github_posthog_posthog_go//:posthog-go",
+        "@com_github_stretchr_testify//require",
+    ],
+)

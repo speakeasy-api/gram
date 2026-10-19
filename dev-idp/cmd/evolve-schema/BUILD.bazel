@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "evolve-schema_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/cmd/evolve-schema",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//dev-idp/internal/bootstrap",
+        "//dev-idp/internal/config",
+        "//plog",
+    ],
+)
+
+go_binary(
+    name = "evolve-schema",
+    embed = [":evolve-schema_lib"],
+    visibility = ["//visibility:public"],
+)

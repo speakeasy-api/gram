@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tombstone",
+    srcs = ["tombstone.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/audit",
+        "//server/internal/contextvalues",
+        "//server/internal/customdomains/repo",
+        "//server/internal/mcpendpoints/repo",
+        "//server/internal/mcpservers/repo",
+        "//server/internal/metamcp/repo",
+        "//server/internal/mv",
+        "//server/internal/plugins/repo",
+        "//server/internal/risk/policylifecycle",
+        "//server/internal/shadowmcp/admission",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)

@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "tunnel-agent_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/tunnel/cmd/tunnel-agent",
+    visibility = ["//visibility:private"],
+    deps = ["//tunnel/agent"],
+)
+
+go_binary(
+    name = "tunnel-agent",
+    embed = [":tunnel-agent_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,49 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "billing",
+    srcs = [
+        "local_profiles.go",
+        "repository.go",
+        "stub.go",
+        "tier_limits.go",
+        "tracking.go",
+        "tum_components.go",
+        "unavailable.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/billing",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/usage",
+        "//server/internal/attr",
+        "//server/internal/conv",
+        "//server/internal/localaccounts/repo",
+        "//server/internal/must",
+        "//server/internal/o11y",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "billing_test",
+    srcs = [
+        "local_profiles_test.go",
+        "tracking_test.go",
+        "tum_components_test.go",
+        "usage_tiers_test.go",
+    ],
+    embed = [":billing"],
+    deps = [
+        "//server/internal/mv",
+        "//server/internal/testenv",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+    ],
+)

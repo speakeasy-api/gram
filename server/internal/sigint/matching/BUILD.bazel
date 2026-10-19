@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "matching",
+    srcs = ["matching.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/sigint/matching",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/celeval",
+        "@com_github_google_cel_go//cel",
+        "@com_github_google_cel_go//ext",
+    ],
+)
+
+go_test(
+    name = "matching_test",
+    srcs = ["matching_test.go"],
+    deps = [
+        ":matching",
+        "//server/internal/celeval",
+        "@com_github_stretchr_testify//require",
+    ],
+)

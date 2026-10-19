@@ -1,0 +1,49 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "admission",
+    srcs = [
+        "admission.go",
+        "admit_reason.go",
+        "catalog.go",
+        "decision.go",
+        "denial_error.go",
+        "denial_reason.go",
+        "doc.go",
+        "metrics.go",
+        "mode.go",
+        "outcome.go",
+        "pattern.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/aivendors",
+        "//server/internal/attr",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_metric//:metric",
+    ],
+)
+
+go_test(
+    name = "admission_test",
+    srcs = [
+        "admission_test.go",
+        "catalog_golden_test.go",
+        "catalog_test.go",
+        "denial_error_test.go",
+        "metrics_test.go",
+        "mode_test.go",
+        "pattern_test.go",
+    ],
+    embed = [":admission"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata",
+    ],
+)

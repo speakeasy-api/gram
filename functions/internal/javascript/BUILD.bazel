@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "javascript",
+    srcs = ["js.go"],
+    embedsrcs = ["gram-start.mjs"],
+    importpath = "github.com/speakeasy-api/gram/functions/internal/javascript",
+    visibility = ["//functions:__subpackages__"],
+)

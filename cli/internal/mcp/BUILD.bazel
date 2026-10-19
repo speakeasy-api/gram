@@ -1,0 +1,36 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "mcp",
+    srcs = [
+        "browser.go",
+        "claude_cli.go",
+        "config.go",
+        "gemini_cli.go",
+        "mcpb.go",
+        "resolver.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/cli/internal/mcp",
+    visibility = ["//cli:__subpackages__"],
+    deps = [
+        "//cli/internal/api",
+        "//cli/internal/secret",
+        "//server/gen/types",
+    ],
+)
+
+go_test(
+    name = "mcp_test",
+    srcs = [
+        "config_test.go",
+        "mcpb_test.go",
+        "resolver_test.go",
+    ],
+    embed = [":mcp"],
+    deps = [
+        "//cli/internal/secret",
+        "//server/gen/types",
+        "@com_github_stretchr_testify//require",
+    ],
+)

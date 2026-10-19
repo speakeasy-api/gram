@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "lake",
+    srcs = ["filesystem.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/lake",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/pkg/storage",
+        "//server/internal/o11y",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "lake_test",
+    srcs = ["filesystem_test.go"],
+    deps = [
+        ":lake",
+        "//infra/pkg/storage",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

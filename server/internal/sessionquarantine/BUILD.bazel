@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sessionquarantine",
+    srcs = ["quarantine.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/sessionquarantine",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/cache",
+        "//server/internal/risk/repo",
+        "@com_github_go_redis_cache_v9//:cache",
+    ],
+)

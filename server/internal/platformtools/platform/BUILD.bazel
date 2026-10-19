@@ -1,0 +1,37 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "platform",
+    srcs = [
+        "tool_find_mcp.go",
+        "tool_get_mcp.go",
+        "tool_get_platform_context.go",
+        "tool_list_projects.go",
+        "tools.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/platform",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/contextvalues",
+        "//server/internal/oops",
+        "//server/internal/platformmcp",
+        "//server/internal/platformtools",
+        "//server/internal/platformtools/core",
+        "//server/internal/toolconfig",
+    ],
+)
+
+go_test(
+    name = "platform_test",
+    srcs = ["tools_test.go"],
+    embed = [":platform"],
+    deps = [
+        "//server/internal/contextvalues",
+        "//server/internal/oops",
+        "//server/internal/platformmcp",
+        "//server/internal/toolconfig",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

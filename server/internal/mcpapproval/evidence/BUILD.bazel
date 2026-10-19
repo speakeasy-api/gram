@@ -1,0 +1,41 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "evidence",
+    srcs = ["evidence.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/mcpapproval/advisories",
+        "//server/internal/mcpapproval/authority",
+        "//server/internal/mcpapproval/capability",
+        "//server/internal/mcpapproval/catalog",
+        "//server/internal/mcpapproval/domainmeta",
+        "//server/internal/mcpapproval/exposure",
+        "//server/internal/mcpapproval/identity",
+        "//server/internal/mcpapproval/packagemeta",
+        "//server/internal/mcpapproval/repometa",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "evidence_test",
+    srcs = ["evidence_test.go"],
+    deps = [
+        ":evidence",
+        "//server/internal/mcpapproval/advisories",
+        "//server/internal/mcpapproval/authority",
+        "//server/internal/mcpapproval/capability",
+        "//server/internal/mcpapproval/catalog",
+        "//server/internal/mcpapproval/domainmeta",
+        "//server/internal/mcpapproval/identity",
+        "//server/internal/mcpapproval/packagemeta",
+        "//server/internal/mcpapproval/provenance",
+        "//server/internal/mcpapproval/repometa",
+        "//server/internal/telemetry/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

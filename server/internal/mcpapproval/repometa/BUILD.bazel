@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "repometa",
+    srcs = ["repometa.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/o11y"],
+)
+
+go_test(
+    name = "repometa_test",
+    srcs = ["repometa_test.go"],
+    deps = [
+        ":repometa",
+        "@com_github_stretchr_testify//require",
+    ],
+)

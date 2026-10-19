@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "repo",
+    srcs = [
+        "db.go",
+        "models.go",
+        "queries.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/authz/repo",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "@com_github_clickhouse_clickhouse_go_v2//:clickhouse-go",
+        "@com_github_clickhouse_clickhouse_go_v2//ext",
+        "@com_github_clickhouse_clickhouse_go_v2//lib/driver",
+        "@com_github_masterminds_squirrel//:squirrel",
+    ],
+)
+
+go_test(
+    name = "repo_test",
+    srcs = [
+        "challenge_buckets_test.go",
+        "challenge_window_test.go",
+    ],
+    embed = [":repo"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

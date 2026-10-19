@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "chatsessions",
+    srcs = ["impl.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/chatsessions",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/chat_sessions",
+        "//server/gen/http/chat_sessions/server",
+        "//server/internal/attr",
+        "//server/internal/auth",
+        "//server/internal/auth/chatsessions",
+        "//server/internal/auth/sessions",
+        "//server/internal/authz",
+        "//server/internal/contextvalues",
+        "//server/internal/middleware",
+        "//server/internal/oops",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@design_goa_goa_v3//http",
+        "@design_goa_goa_v3//security",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)

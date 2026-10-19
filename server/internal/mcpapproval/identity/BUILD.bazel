@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "identity",
+    srcs = ["identity.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpapproval/identity",
+    visibility = ["//server:__subpackages__"],
+    deps = ["@org_golang_x_net//publicsuffix"],
+)
+
+go_test(
+    name = "identity_test",
+    srcs = ["identity_test.go"],
+    deps = [
+        ":identity",
+        "@com_github_stretchr_testify//require",
+    ],
+)

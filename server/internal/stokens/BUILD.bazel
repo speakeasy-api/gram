@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "stokens",
+    srcs = ["codec.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/stokens",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/genaiconv",
+        "@com_github_tiktoken_go_tokenizer//:tokenizer",
+    ],
+)
+
+go_test(
+    name = "stokens_test",
+    srcs = ["codec_test.go"],
+    embed = [":stokens"],
+    deps = [
+        "//server/internal/genaiconv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

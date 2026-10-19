@@ -1,0 +1,24 @@
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_test(
+    name = "otlp_test",
+    srcs = [
+        "compat_test.go",
+        "drift_test.go",
+        "log_copies_test.go",
+        "metric_compat_test.go",
+        "metric_copies_test.go",
+        "span_copies_test.go",
+    ],
+    deps = [
+        "//infra/gen/gram/otel/v1:otel",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_proto_otlp//common/v1:common",
+        "@io_opentelemetry_go_proto_otlp//logs/v1:logs",
+        "@io_opentelemetry_go_proto_otlp//metrics/v1:metrics",
+        "@io_opentelemetry_go_proto_otlp//resource/v1:resource",
+        "@io_opentelemetry_go_proto_otlp//trace/v1:trace",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+    ],
+)

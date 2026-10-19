@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "storagebindings",
+    srcs = ["storage_gen.go"],
+    importpath = "github.com/speakeasy-api/gram/infra/pkg/storagebindings",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "//infra/gen/gram/sigint/v1:sigint",
+        "//infra/pkg/storage",
+        "@com_github_parquet_go_parquet_go//:parquet-go",
+        "@org_golang_google_protobuf//proto",
+    ],
+)

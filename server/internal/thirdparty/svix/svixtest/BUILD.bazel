@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "svixtest",
+    srcs = ["server.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/svix/svixtest",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/conv",
+        "//server/internal/must",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_svix_svix_webhooks//go/models",
+    ],
+)
+
+go_test(
+    name = "svixtest_test",
+    srcs = ["server_test.go"],
+    deps = [
+        ":svixtest",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+        "@com_github_svix_svix_webhooks//go",
+        "@com_github_svix_svix_webhooks//go/models",
+    ],
+)

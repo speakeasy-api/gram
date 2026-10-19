@@ -1,0 +1,45 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "platformtools",
+    srcs = [
+        "registry.go",
+        "toolsets.go",
+        "types.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/audit",
+        "//server/internal/background/triggers",
+        "//server/internal/encryption",
+        "//server/internal/guardian",
+        "//server/internal/platformtools/core",
+        "//server/internal/platformtools/logs",
+        "//server/internal/platformtools/slack",
+        "//server/internal/platformtools/triggers",
+        "//server/internal/platformtools/usersessions",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "platformtools_test",
+    srcs = [
+        "impl_test.go",
+        "registry_test.go",
+    ],
+    embed = [":platformtools"],
+    deps = [
+        "//server/gen/telemetry",
+        "//server/internal/platformtools/logs",
+        "//server/internal/toolconfig",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

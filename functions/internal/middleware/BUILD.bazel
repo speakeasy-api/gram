@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "middleware",
+    srcs = [
+        "recovery.go",
+        "version.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/functions/internal/middleware",
+    visibility = ["//functions:__subpackages__"],
+    deps = [
+        "//functions/buildinfo",
+        "//functions/internal/attr",
+    ],
+)

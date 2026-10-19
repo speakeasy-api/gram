@@ -1,0 +1,32 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "policyflags",
+    srcs = ["policyflags.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/policyflags",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/feature",
+        "//server/internal/risk/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+    ],
+)
+
+go_test(
+    name = "policyflags_test",
+    srcs = ["policyflags_test.go"],
+    embed = [":policyflags"],
+    deps = [
+        "//server/internal/feature",
+        "//server/internal/organizations/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/risk/repo",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//require",
+    ],
+)

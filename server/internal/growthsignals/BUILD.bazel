@@ -1,0 +1,62 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "growthsignals",
+    srcs = [
+        "actionmap.go",
+        "activity.go",
+        "cache.go",
+        "emitter.go",
+        "enricher.go",
+        "event.go",
+        "handler.go",
+        "interfaces.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/growthsignals",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/gen/gram/webhooks/v1:webhooks",
+        "//infra/pkg/gcp",
+        "//server/internal/attr",
+        "//server/internal/audit",
+        "//server/internal/constants",
+        "//server/internal/conv",
+        "//server/internal/organizations/repo",
+        "//server/internal/outbox/events",
+        "//server/internal/projects/repo",
+        "//server/internal/urn",
+        "//server/internal/users/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_hashicorp_golang_lru_v2//expirable",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@org_golang_x_sync//singleflight",
+    ],
+)
+
+go_test(
+    name = "growthsignals_test",
+    srcs = [
+        "actionmap_test.go",
+        "cache_internal_test.go",
+        "emitter_test.go",
+        "event_test.go",
+        "handler_test.go",
+        "setup_test.go",
+    ],
+    embed = [":growthsignals"],
+    deps = [
+        "//infra/gen/gram/webhooks/v1:webhooks",
+        "//infra/pkg/gcp",
+        "//server/internal/audit",
+        "//server/internal/constants",
+        "//server/internal/outbox/events",
+        "//server/internal/testenv",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_hashicorp_golang_lru_v2//expirable",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "networkaccess",
+    srcs = ["mode.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/networkaccess",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+    ],
+)
+
+go_test(
+    name = "networkaccess_test",
+    srcs = ["mode_test.go"],
+    embed = [":networkaccess"],
+    deps = [
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//require",
+    ],
+)

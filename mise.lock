@@ -100,6 +100,45 @@ checksum = "sha256:3eadbe826a79184792f423c52e6ad3a20575f0c408ede66612f6db175339a
 url = "https://github.com/aubepkg/aube/releases/download/v1.38.1/aube-v1.38.1-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/508093335"
 
+[[tools.bazel]]
+version = "9.3.0"
+backend = "aqua:bazelbuild/bazel"
+
+[tools.bazel."platforms.linux-arm64"]
+checksum = "sha256:615cc2509819047e4930fe6643c5f01ebd705ccadf75e8f0b85f9b83cc6a6ca0"
+url = "https://github.com/bazelbuild/bazel/releases/download/9.3.0/bazel-9.3.0-linux-arm64"
+url_api = "https://api.github.com/repos/bazelbuild/bazel/releases/assets/619248098"
+
+[tools.bazel."platforms.linux-arm64-musl"]
+checksum = "sha256:615cc2509819047e4930fe6643c5f01ebd705ccadf75e8f0b85f9b83cc6a6ca0"
+url = "https://github.com/bazelbuild/bazel/releases/download/9.3.0/bazel-9.3.0-linux-arm64"
+url_api = "https://api.github.com/repos/bazelbuild/bazel/releases/assets/619248098"
+
+[tools.bazel."platforms.linux-x64"]
+checksum = "sha256:d302d22ed77ee5658b87857249baa579db84300ecebe0a1e9a357b5b20f80eb8"
+url = "https://github.com/bazelbuild/bazel/releases/download/9.3.0/bazel-9.3.0-linux-x86_64"
+url_api = "https://api.github.com/repos/bazelbuild/bazel/releases/assets/619248138"
+
+[tools.bazel."platforms.linux-x64-musl"]
+checksum = "sha256:d302d22ed77ee5658b87857249baa579db84300ecebe0a1e9a357b5b20f80eb8"
+url = "https://github.com/bazelbuild/bazel/releases/download/9.3.0/bazel-9.3.0-linux-x86_64"
+url_api = "https://api.github.com/repos/bazelbuild/bazel/releases/assets/619248138"
+
+[tools.bazel."platforms.macos-arm64"]
+checksum = "sha256:f29ca3f3bf577eb1619aeeed401b64a10901c8da8031aaa4add54a4ad0e99e3a"
+url = "https://github.com/bazelbuild/bazel/releases/download/9.3.0/bazel-9.3.0-darwin-arm64"
+url_api = "https://api.github.com/repos/bazelbuild/bazel/releases/assets/619247856"
+
+[tools.bazel."platforms.macos-x64"]
+checksum = "sha256:ab0c51f2d51cb86c82b12be4901c7f4aa088afc39a7d71f610ed0f1d54f76de4"
+url = "https://github.com/bazelbuild/bazel/releases/download/9.3.0/bazel-9.3.0-darwin-x86_64"
+url_api = "https://api.github.com/repos/bazelbuild/bazel/releases/assets/619247864"
+
+[tools.bazel."platforms.windows-x64"]
+checksum = "sha256:297d55398260396da2b7d7bc30ef29ff87a2d1e458b7ef372db56835db11ce6c"
+url = "https://github.com/bazelbuild/bazel/releases/download/9.3.0/bazel-9.3.0-windows-x86_64.zip"
+url_api = "https://api.github.com/repos/bazelbuild/bazel/releases/assets/619248298"
+
 [[tools.buf]]
 version = "1.72.0"
 backend = "aqua:bufbuild/buf"
@@ -1189,6 +1228,9 @@ url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-arm64-musl"]
+checksum = "sha256:7ff1dce33bdd18fd2a4affe63bdd47efcccca97b2cec1c1863ec26e9e2647540"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067643"
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-x64"]
@@ -1198,6 +1240,9 @@ url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-x64-musl"]
+checksum = "sha256:e65324f4430c2717591937edcec90ccbefaf14c174f8ec9415e03ca875b46e1a"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067642"
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.macos-arm64"]

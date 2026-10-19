@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "clickhouseconn",
+    srcs = ["open.go"],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/tools/internal/clickhouseconn",
+    visibility = ["//server/cmd/tools:__subpackages__"],
+    deps = ["@com_github_clickhouse_clickhouse_go_v2//:clickhouse-go"],
+)

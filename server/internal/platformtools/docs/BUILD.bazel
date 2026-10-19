@@ -1,0 +1,33 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "docs",
+    srcs = [
+        "docs.go",
+        "tool_get_doc.go",
+        "tool_list_docs.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/docs",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+        "//server/internal/platformtools/core",
+        "//server/internal/toolconfig",
+        "@org_golang_x_sync//singleflight",
+    ],
+)
+
+go_test(
+    name = "docs_test",
+    srcs = [
+        "docs_test.go",
+        "tools_test.go",
+    ],
+    embed = [":docs"],
+    deps = [
+        "//server/internal/toolconfig",
+        "@com_github_stretchr_testify//require",
+    ],
+)

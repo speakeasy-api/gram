@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "config",
+    srcs = ["sdkconfiguration.go"],
+    importpath = "github.com/speakeasy-api/gram/hooks/sdk/internal/config",
+    visibility = ["//hooks/sdk:__subpackages__"],
+    deps = ["//hooks/sdk/retry"],
+)

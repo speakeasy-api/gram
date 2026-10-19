@@ -1,0 +1,55 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "openrouter",
+    srcs = [
+        "judge.go",
+        "metrics.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/billing",
+        "//server/internal/judgemessage",
+        "//server/internal/o11y",
+        "//server/internal/ratelimit",
+        "//server/internal/scanners/promptpolicy",
+        "//server/internal/stokens",
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "openrouter_test",
+    srcs = [
+        "judge_test.go",
+        "setup_test.go",
+    ],
+    embed = [":openrouter"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/billing",
+        "//server/internal/judgemessage",
+        "//server/internal/message",
+        "//server/internal/o11y",
+        "//server/internal/ratelimit",
+        "//server/internal/scanners/promptpolicy",
+        "//server/internal/testenv",
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_alicebob_miniredis_v2//:miniredis",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata",
+    ],
+)

@@ -1,0 +1,30 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "otel",
+    srcs = [
+        "agent_event_log_ch_writer.pb.go",
+        "agent_event_span_ch_writer.pb.go",
+        "inbound_log_record.pb.go",
+        "inbound_log_record_transformer.pb.go",
+        "inbound_metric.pb.go",
+        "inbound_metric_transformer.pb.go",
+        "inbound_span.pb.go",
+        "inbound_span_transformer.pb.go",
+        "log_event_ch_writer.pb.go",
+        "log_record.pb.go",
+        "log_relay.pb.go",
+        "metric.pb.go",
+        "metric_relay.pb.go",
+        "span.pb.go",
+        "span_event_ch_writer.pb.go",
+        "span_relay.pb.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//runtime/protoimpl",
+    ],
+)

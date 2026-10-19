@@ -1,0 +1,46 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "policycatalog",
+    srcs = [
+        "catalog.go",
+        "descriptions.go",
+        "detection_scopes.go",
+        "presidio.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/policycatalog",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/message",
+        "//server/internal/risk/categories",
+        "//server/internal/scanners/accountidentity",
+        "//server/internal/scanners/clidestructive",
+        "//server/internal/scanners/destructivetool",
+        "//server/internal/scanners/gitleaks",
+        "//server/internal/scanners/promptinjection",
+        "//server/internal/scanners/shadowmcpscan",
+        "//server/internal/shadowmcp",
+    ],
+)
+
+go_test(
+    name = "policycatalog_test",
+    srcs = [
+        "catalog_test.go",
+        "descriptions_test.go",
+        "detection_scopes_test.go",
+    ],
+    embed = [":policycatalog"],
+    deps = [
+        "//server/internal/risk/categories",
+        "//server/internal/scanners",
+        "//server/internal/scanners/accountidentity",
+        "//server/internal/scanners/clidestructive",
+        "//server/internal/scanners/destructivetool",
+        "//server/internal/scanners/gitleaks",
+        "//server/internal/scanners/promptinjection",
+        "//server/internal/scanners/shadowmcpscan",
+        "@com_github_stretchr_testify//require",
+    ],
+)

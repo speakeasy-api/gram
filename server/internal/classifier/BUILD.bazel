@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "classifier",
+    srcs = [
+        "classifier.go",
+        "constructors.go",
+        "entry.go",
+        "noop.go",
+        "questions.go",
+        "results.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/classifier",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "classifier_test",
+    srcs = [
+        "entry_test.go",
+        "results_test.go",
+    ],
+    deps = [
+        ":classifier",
+        "//server/internal/classifier/classifiertest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

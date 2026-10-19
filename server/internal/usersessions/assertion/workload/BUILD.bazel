@@ -1,0 +1,44 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "workload",
+    srcs = [
+        "error.go",
+        "expectation.go",
+        "replayid.go",
+        "verifier.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/usersessions/assertion",
+        "//server/internal/usersessions/jwks",
+        "//server/internal/usersessions/replay",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_go_jose_go_jose_v4//jwt",
+    ],
+)
+
+go_test(
+    name = "workload_test",
+    srcs = [
+        "verifier_test.go",
+        "workloadissuer_test.go",
+    ],
+    embed = [":workload"],
+    deps = [
+        "//dev-idp/pkg/devidptest",
+        "//server/internal/guardian",
+        "//server/internal/oauthtest",
+        "//server/internal/ratelimit",
+        "//server/internal/testenv",
+        "//server/internal/usersessions/assertion",
+        "//server/internal/usersessions/jwks",
+        "//server/internal/usersessions/replay",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_go_jose_go_jose_v4//jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

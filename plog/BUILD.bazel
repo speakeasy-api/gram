@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "plog",
+    srcs = [
+        "config.go",
+        "formatter.go",
+        "handler.go",
+        "omit.go",
+        "parser.go",
+        "plog.go",
+        "source.go",
+        "timestamp.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/plog",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_charmbracelet_lipgloss//:lipgloss"],
+)
+
+go_test(
+    name = "plog_test",
+    srcs = ["snapshot_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":plog",
+        "@com_github_charmbracelet_lipgloss//:lipgloss",
+    ],
+)

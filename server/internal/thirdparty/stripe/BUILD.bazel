@@ -1,0 +1,47 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "stripe",
+    srcs = [
+        "client.go",
+        "partner_checkout.go",
+        "sdk_logger.go",
+        "subscription_discount.go",
+        "v2_meter_event.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/constants",
+        "//server/internal/guardian",
+        "@com_github_hashicorp_go_retryablehttp//:go-retryablehttp",
+        "@com_github_stripe_stripe_go_v85//:stripe-go",
+        "@com_github_stripe_stripe_go_v85//webhook",
+    ],
+)
+
+go_test(
+    name = "stripe_test",
+    srcs = [
+        "client_test.go",
+        "customer_test.go",
+        "partner_checkout_test.go",
+        "partner_checkout_wire_test.go",
+        "subscription_discount_test.go",
+        "v2_meter_event_test.go",
+    ],
+    embed = [":stripe"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+        "@com_github_stripe_stripe_go_v85//:stripe-go",
+        "@com_github_stripe_stripe_go_v85//webhook",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)

@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "servernames",
+    srcs = ["servernames.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformmcp/servernames",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/conv",
+        "//server/internal/toolref",
+    ],
+)
+
+go_test(
+    name = "servernames_test",
+    srcs = ["servernames_test.go"],
+    deps = [
+        ":servernames",
+        "@com_github_stretchr_testify//require",
+    ],
+)

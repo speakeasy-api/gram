@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "access",
+    srcs = ["design.go"],
+    importpath = "github.com/speakeasy-api/gram/server/design/access",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//server/design/security",
+        "//server/design/shared",
+        "@design_goa_goa_v3//dsl",
+    ],
+)
+
+exports_files(
+    ["design.go"],
+    visibility = ["//server:__subpackages__"],
+)

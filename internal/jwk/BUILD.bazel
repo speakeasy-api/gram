@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "jwk",
+    srcs = ["jwk.go"],
+    importpath = "github.com/speakeasy-api/gram/internal/jwk",
+    visibility = ["//:__subpackages__"],
+    deps = ["@com_github_go_jose_go_jose_v4//:go-jose"],
+)

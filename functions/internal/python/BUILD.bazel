@@ -1,0 +1,8 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "python",
+    srcs = ["py.go"],
+    importpath = "github.com/speakeasy-api/gram/functions/internal/python",
+    visibility = ["//functions:__subpackages__"],
+)

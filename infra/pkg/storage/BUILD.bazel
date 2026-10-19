@@ -1,0 +1,66 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "storage",
+    srcs = [
+        "buckets.go",
+        "definition.go",
+        "partition.go",
+        "runner.go",
+        "store.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/infra/pkg/storage",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "//infra/internal/attr",
+        "//infra/internal/batching",
+        "//infra/internal/gcp",
+        "@com_github_ettle_strcase//:strcase",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_parquet_go_parquet_go//:parquet-go",
+        "@com_github_parquet_go_parquet_go//compress/zstd",
+        "@com_google_cloud_go_pubsub_v2//:pubsub",
+        "@com_google_cloud_go_storage//:storage",
+        "@io_opentelemetry_go_otel//:otel",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "storage_test",
+    srcs = [
+        "integration_test.go",
+        "page_buffers_test.go",
+        "partition_test.go",
+        "runner_test.go",
+        "store_test.go",
+    ],
+    embed = [":storage"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "//infra/internal/gcp",
+        "//infra/internal/storagefixture",
+        "//infra/internal/storagefixture/pb/fixture/v1:fixture",
+        "//infra/pkg/gcp",
+        "@com_github_parquet_go_parquet_go//:parquet-go",
+        "@com_github_stretchr_testify//require",
+        "@com_google_cloud_go_pubsub_v2//:pubsub",
+        "@com_google_cloud_go_pubsub_v2//pstest",
+        "@com_google_cloud_go_storage//:storage",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata",
+        "@org_golang_google_api//option",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//connectivity",
+        "@org_golang_google_grpc//credentials/insecure",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protodesc",
+        "@org_golang_google_protobuf//reflect/protoregistry",
+        "@org_golang_google_protobuf//types/descriptorpb",
+        "@org_golang_google_protobuf//types/dynamicpb",
+    ],
+)

@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "users",
+    srcs = ["identifier.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/users",
+    visibility = ["//server:__subpackages__"],
+    deps = ["@com_github_google_uuid//:uuid"],
+)
+
+go_test(
+    name = "users_test",
+    srcs = ["identifier_test.go"],
+    embed = [":users"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

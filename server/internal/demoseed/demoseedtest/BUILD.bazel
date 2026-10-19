@@ -1,0 +1,20 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "demoseedtest",
+    srcs = [
+        "db.go",
+        "demoseedtest.go",
+        "models.go",
+        "queries.sql.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "@com_github_clickhouse_clickhouse_go_v2//lib/driver",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)

@@ -1,0 +1,73 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "killswitchapi",
+    srcs = ["service.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/killswitchapi",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/http/killswitches/server",
+        "//server/gen/killswitches",
+        "//server/internal/audit",
+        "//server/internal/auth",
+        "//server/internal/auth/sessions",
+        "//server/internal/authz",
+        "//server/internal/constants",
+        "//server/internal/conv",
+        "//server/internal/killswitches",
+        "//server/internal/killswitches/mcptoolexecution",
+        "//server/internal/killswitches/repo",
+        "//server/internal/management/readmodel",
+        "//server/internal/middleware",
+        "//server/internal/oops",
+        "//server/internal/projects/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@design_goa_goa_v3//http",
+        "@design_goa_goa_v3//security",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "killswitchapi_test",
+    srcs = [
+        "service_test.go",
+        "setup_test.go",
+    ],
+    data = [
+        # keep
+        "//:.speakeasy/out.openapi.yaml",
+        "//client/dashboard:sdk_sources",
+        "//server:gen/http/openapi3.yaml",
+    ],
+    embed = [":killswitchapi"],
+    deps = [
+        "//server/gen/http/killswitches/server",
+        "//server/gen/killswitches",
+        "//server/internal/access/repo",
+        "//server/internal/audit",
+        "//server/internal/authz",
+        "//server/internal/constants",
+        "//server/internal/contextvalues",
+        "//server/internal/killswitches",
+        "//server/internal/killswitches/mcptoolexecution",
+        "//server/internal/killswitches/repo",
+        "//server/internal/mcpservers/repo",
+        "//server/internal/mcpservers/visibility",
+        "//server/internal/oops",
+        "//server/internal/organizations/repo",
+        "//server/internal/testenv",
+        "//server/internal/testenv/testrepo",
+        "//server/internal/thirdparty/workos",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+        "@design_goa_goa_v3//pkg",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)

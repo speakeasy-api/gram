@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "domainmeta",
+    srcs = ["domainmeta.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/o11y"],
+)
+
+go_test(
+    name = "domainmeta_test",
+    srcs = ["domainmeta_test.go"],
+    deps = [
+        ":domainmeta",
+        "@com_github_stretchr_testify//require",
+    ],
+)

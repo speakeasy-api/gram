@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "blobio",
+    srcs = ["blobio.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/assets/blobio",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/o11y"],
+)

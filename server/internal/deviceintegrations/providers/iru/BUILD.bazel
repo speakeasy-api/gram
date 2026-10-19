@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "iru",
+    srcs = ["iru.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers/iru",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/deviceintegrations/providers",
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+    ],
+)
+
+go_test(
+    name = "iru_test",
+    srcs = ["iru_test.go"],
+    embed = [":iru"],
+    deps = [
+        "//server/internal/deviceintegrations/providers",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

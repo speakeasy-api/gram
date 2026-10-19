@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "celenv",
+    srcs = ["celenv.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/spendrules/celenv",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "@com_github_google_cel_go//cel",
+        "@com_github_google_cel_go//common/types",
+        "@com_github_google_cel_go//ext",
+    ],
+)
+
+go_test(
+    name = "celenv_test",
+    srcs = ["celenv_test.go"],
+    deps = [
+        ":celenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

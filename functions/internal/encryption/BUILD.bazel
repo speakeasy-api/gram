@@ -1,0 +1,8 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "encryption",
+    srcs = ["encryption.go"],
+    importpath = "github.com/speakeasy-api/gram/functions/internal/encryption",
+    visibility = ["//functions:__subpackages__"],
+)

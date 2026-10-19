@@ -1,0 +1,54 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "policycore",
+    srcs = [
+        "core.go",
+        "mutation.go",
+        "types.go",
+        "validation.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/policycore",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/authz",
+        "//server/internal/background/activities/risk_analysis",
+        "//server/internal/conv",
+        "//server/internal/mcp/toolfilter",
+        "//server/internal/risk/categories",
+        "//server/internal/risk/celenv",
+        "//server/internal/risk/policybypass",
+        "//server/internal/risk/recommendedscopes",
+        "//server/internal/risk/repo",
+        "//server/internal/shadowmcp",
+        "//server/internal/shadowmcp/admission",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+    ],
+)
+
+go_test(
+    name = "policycore_test",
+    srcs = [
+        "mutation_test.go",
+        "types_test.go",
+        "validation_test.go",
+    ],
+    embed = [":policycore"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/background/activities/risk_analysis",
+        "//server/internal/risk/categories",
+        "//server/internal/risk/celenv",
+        "//server/internal/risk/recommendedscopes",
+        "//server/internal/risk/repo",
+        "//server/internal/shadowmcp",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,53 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "promptinjection",
+    srcs = [
+        "handler.go",
+        "scanner.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/internal/attr",
+        "//server/internal/judgemessage",
+        "//server/internal/metering",
+        "//server/internal/scanners",
+        "@com_github_google_uuid//:uuid",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "promptinjection_test",
+    srcs = [
+        "handler_context_test.go",
+        "handler_test.go",
+        "scanner_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":promptinjection"],
+    deps = [
+        "//infra/gen/gram/metering/v1:metering",
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/internal/judgemessage",
+        "//server/internal/message",
+        "//server/internal/metering",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//server:__subpackages__"],
+)

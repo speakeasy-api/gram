@@ -1,0 +1,12 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "attr",
+    srcs = ["conventions.go"],
+    importpath = "github.com/speakeasy-api/gram/functions/internal/attr",
+    visibility = ["//functions:__subpackages__"],
+    deps = [
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//semconv/v1.41.0:v1_41_0",
+    ],
+)

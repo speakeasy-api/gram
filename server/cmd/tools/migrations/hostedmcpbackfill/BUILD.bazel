@@ -1,0 +1,59 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "hostedmcpbackfill",
+    srcs = [
+        "db.go",
+        "dependents.go",
+        "models.go",
+        "queries.sql.go",
+        "runner.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/tools/migrations/hostedmcpbackfill",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/audit",
+        "//server/internal/conv",
+        "//server/internal/hostedmcp",
+        "//server/internal/mcpendpoints/repo",
+        "//server/internal/mcpservers/repo",
+        "//server/internal/o11y",
+        "//server/internal/oops",
+        "//server/internal/shadowmcp/admission",
+        "//server/internal/toolsets/repo",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgerrcode//:pgerrcode",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "hostedmcpbackfill_test",
+    srcs = [
+        "classify_test.go",
+        "dependents_test.go",
+        "runner_test.go",
+        "setup_test.go",
+    ],
+    embed = [":hostedmcpbackfill"],
+    deps = [
+        "//server/internal/audit",
+        "//server/internal/conv",
+        "//server/internal/hostedmcp",
+        "//server/internal/oops",
+        "//server/internal/testenv",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgerrcode//:pgerrcode",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

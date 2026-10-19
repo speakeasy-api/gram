@@ -1,0 +1,33 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "exclusioncore",
+    srcs = [
+        "core.go",
+        "redaction.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/exclusioncore",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/inv",
+        "//server/internal/risk/repo",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+    ],
+)
+
+go_test(
+    name = "exclusioncore_test",
+    srcs = ["core_test.go"],
+    embed = [":exclusioncore"],
+    deps = [
+        "//server/internal/risk/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//require",
+    ],
+)

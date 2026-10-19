@@ -1,0 +1,49 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "sessions",
+    srcs = [
+        "sessions.go",
+        "transfer.go",
+        "types.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/auth/sessions",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/billing",
+        "//server/internal/cache",
+        "//server/internal/constants",
+        "//server/internal/contextvalues",
+        "//server/internal/feature",
+        "//server/internal/mv",
+        "//server/internal/oops",
+        "//server/internal/organizations/repo",
+        "//server/internal/users/repo",
+        "@com_github_go_redis_cache_v9//:cache",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "sessions_test",
+    srcs = [
+        "authenticate_external_test.go",
+        "sessions_test.go",
+        "transfer_test.go",
+    ],
+    embed = [":sessions"],
+    deps = [
+        "//server/internal/cache",
+        "//server/internal/constants",
+        "//server/internal/oops",
+        "//server/internal/testenv",
+        "@com_github_go_redis_cache_v9//:cache",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@com_github_stretchr_testify//require",
+    ],
+)

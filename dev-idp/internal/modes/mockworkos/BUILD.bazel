@@ -1,0 +1,45 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "mockworkos",
+    srcs = [
+        "directory.go",
+        "evidence.go",
+        "handler.go",
+        "workos.go",
+        "workos_types.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos",
+    visibility = ["//dev-idp:__subpackages__"],
+    deps = [
+        "//dev-idp/internal/database/repo",
+        "//dev-idp/internal/defaultuser",
+        "//dev-idp/internal/modes/workos",
+        "//dev-idp/pkg/devidentity",
+        "@com_github_google_uuid//:uuid",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "mockworkos_test",
+    srcs = [
+        "directory_test.go",
+        "magic_auth_test.go",
+        "organization_test.go",
+        "sessions_test.go",
+        "setup_test.go",
+    ],
+    deps = [
+        ":mockworkos",
+        "//dev-idp/internal/bootstrap",
+        "//dev-idp/internal/config",
+        "//dev-idp/internal/modes/workos",
+        "//plog",
+        "@com_github_stretchr_testify//require",
+        "@com_github_workos_workos_go_v6//pkg/directorysync",
+        "@com_github_workos_workos_go_v6//pkg/usermanagement",
+        "@io_opentelemetry_go_otel_trace//noop",
+    ],
+)

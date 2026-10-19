@@ -1,0 +1,20 @@
+load("@gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/speakeasy-api/gram
+# gazelle:go_naming_convention import
+# gazelle:proto disable_global
+# Tests ship their package directory; see tools/bazel/go_test.bzl.
+# gazelle:map_kind go_test go_test //tools/bazel:go_test.bzl
+# gazelle:exclude client
+# gazelle:exclude glint
+# gazelle:exclude local
+# gazelle:exclude ts-framework
+# gazelle:exclude **/node_modules
+
+gazelle(name = "gazelle")
+
+exports_files([
+    ".mise-tasks/account.sh",
+    ".speakeasy/out.openapi.yaml",
+    "go.mod",
+])

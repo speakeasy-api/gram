@@ -545,7 +545,9 @@ func (l *LocalRunner) ensureRunnerBinary(ctx context.Context) (string, error) {
 		}
 
 		l.binaryPath = filepath.Join(binDir, localRunnerBinaryName)
-		root, err := testenv.FindRepoRoot(ctx)
+		// The checkout itself rather than FindRepoRoot, which under Bazel is the
+		// test's runfiles tree and holds no runner sources.
+		root, err := testenv.FindCheckoutRoot(ctx)
 		if err != nil {
 			l.binaryErr = fmt.Errorf("locate local runner source: %w", err)
 			return

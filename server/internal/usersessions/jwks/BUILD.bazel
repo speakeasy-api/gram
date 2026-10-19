@@ -1,0 +1,59 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "jwks",
+    srcs = [
+        "algorithms.go",
+        "cache.go",
+        "cache_outcome.go",
+        "cache_result.go",
+        "cache_state.go",
+        "doc.go",
+        "jwks.go",
+        "keyresolver.go",
+        "keyset.go",
+        "keysource.go",
+        "metrics.go",
+        "resolver.go",
+        "source.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/usersessions/jwks",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/guardian",
+        "//server/internal/httpcache",
+        "//server/internal/o11y",
+        "//server/internal/oauthwire",
+        "//server/internal/ratelimit",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@org_golang_x_sync//singleflight",
+    ],
+)
+
+go_test(
+    name = "jwks_test",
+    srcs = [
+        "cache_test.go",
+        "keyresolver_test.go",
+        "keyset_algorithm_test.go",
+        "keyset_key_operations_test.go",
+        "keyset_test.go",
+        "keysource_test.go",
+        "resolver_test.go",
+        "setup_test.go",
+        "source_test.go",
+    ],
+    embed = [":jwks"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/oauthwire",
+        "//server/internal/ratelimit",
+        "//server/internal/testenv",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_stretchr_testify//require",
+    ],
+)

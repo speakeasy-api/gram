@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "setupcorpus",
+    srcs = ["corpus.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformmcp/setupcorpus",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/platformmcp",
+        "@com_github_speakeasy_api_mcp_setup_docs_go//:go",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
+
+go_test(
+    name = "setupcorpus_test",
+    srcs = ["corpus_test.go"],
+    deps = [
+        ":setupcorpus",
+        "//server/internal/platformmcp",
+        "@com_github_speakeasy_api_mcp_setup_docs_go//:go",
+        "@com_github_stretchr_testify//require",
+    ],
+)

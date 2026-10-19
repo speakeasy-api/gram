@@ -1,0 +1,48 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "workloadidentity",
+    srcs = [
+        "admissionlookup.go",
+        "agentassignmentlookup.go",
+        "issuerlookup.go",
+        "matchkind.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/workloadidentity",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/issuerurl",
+        "//server/internal/urn",
+        "//server/internal/workloadidentity/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+    ],
+)
+
+go_test(
+    name = "workloadidentity_test",
+    srcs = [
+        "admissionlookup_test.go",
+        "agentassignmentlookup_test.go",
+        "issuerlookup_test.go",
+        "setup_test.go",
+        "wildcardmatch_test.go",
+    ],
+    deps = [
+        ":workloadidentity",
+        "//server/internal/agents/repo",
+        "//server/internal/conv",
+        "//server/internal/issuerurl",
+        "//server/internal/organizations/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/testenv",
+        "//server/internal/testenv/testrepo",
+        "//server/internal/urn",
+        "//server/internal/users/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

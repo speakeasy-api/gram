@@ -1,0 +1,58 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "billingnotifications",
+    srcs = [
+        "handler.go",
+        "recipients.go",
+        "service.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/billingnotifications",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/gen/gram/webhooks/v1:webhooks",
+        "//infra/pkg/gcp",
+        "//server/internal/access/repo",
+        "//server/internal/attr",
+        "//server/internal/audit",
+        "//server/internal/authz",
+        "//server/internal/billing",
+        "//server/internal/email",
+        "//server/internal/feature",
+        "//server/internal/organizations/repo",
+        "//server/internal/orghost",
+        "//server/internal/outbox/events",
+        "//server/internal/trials/repo",
+        "//server/internal/usage/repo",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "billingnotifications_test",
+    srcs = [
+        "handler_test.go",
+        "service_test.go",
+        "setup_test.go",
+    ],
+    embed = [":billingnotifications"],
+    deps = [
+        "//infra/gen/gram/webhooks/v1:webhooks",
+        "//infra/pkg/gcp",
+        "//server/internal/access/repo",
+        "//server/internal/audit",
+        "//server/internal/billing",
+        "//server/internal/email",
+        "//server/internal/feature",
+        "//server/internal/organizations/repo",
+        "//server/internal/orghost",
+        "//server/internal/outbox/events",
+        "//server/internal/testenv",
+        "//server/internal/trials/repo",
+        "//server/internal/usage/repo",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,66 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "admission",
+    srcs = [
+        "admission.go",
+        "approver.go",
+        "guard.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/authz",
+        "//server/internal/contextvalues",
+        "//server/internal/directory",
+        "//server/internal/mcpapproval/repo",
+        "//server/internal/networkaccess",
+        "//server/internal/platformmcp/repo",
+        "//server/internal/plugins/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/risk/repo",
+        "//server/internal/shadowmcp",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+    ],
+)
+
+go_test(
+    name = "admission_test",
+    srcs = [
+        "admission_integration_test.go",
+        "admission_test.go",
+        "guard_integration_test.go",
+        "guard_test.go",
+        "setup_test.go",
+    ],
+    embed = [":admission"],
+    deps = [
+        "//server/internal/authz",
+        "//server/internal/authztest",
+        "//server/internal/contextvalues",
+        "//server/internal/conv",
+        "//server/internal/directory",
+        "//server/internal/mcpapproval/repo",
+        "//server/internal/mcpservers/repo",
+        "//server/internal/metamcp/repo",
+        "//server/internal/networkaccess",
+        "//server/internal/organizations/repo",
+        "//server/internal/platformmcp/repo",
+        "//server/internal/plugins/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/remotemcp/repo",
+        "//server/internal/risk/repo",
+        "//server/internal/shadowmcp",
+        "//server/internal/testenv",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

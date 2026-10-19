@@ -1,0 +1,43 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "agents",
+    srcs = [
+        "lifecycle.go",
+        "resolve.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/agents",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/agents/lifecycle",
+        "//server/internal/agents/repo",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+    ],
+)
+
+go_test(
+    name = "agents_test",
+    srcs = [
+        "lifecycle_test.go",
+        "persistence_test.go",
+        "resolve_test.go",
+        "setup_test.go",
+    ],
+    embed = [":agents"],
+    deps = [
+        "//server/internal/agents/repo",
+        "//server/internal/conv",
+        "//server/internal/organizations/repo",
+        "//server/internal/testenv",
+        "//server/internal/testenv/testrepo",
+        "//server/internal/urn",
+        "//server/internal/users/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

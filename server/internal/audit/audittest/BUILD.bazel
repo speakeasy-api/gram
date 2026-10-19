@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "audittest",
+    srcs = ["helpers.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/audit/audittest",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/audit",
+        "//server/internal/audit/audittest/repo",
+        "//server/internal/conv",
+        "@com_github_google_uuid//:uuid",
+    ],
+)

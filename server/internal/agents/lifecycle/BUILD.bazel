@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "lifecycle",
+    srcs = ["state.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/agents/lifecycle",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/agents/repo"],
+)

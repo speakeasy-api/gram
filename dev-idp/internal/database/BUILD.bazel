@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "database",
+    srcs = ["schema.go"],
+    embedsrcs = ["schema.sql"],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/internal/database",
+    visibility = ["//dev-idp:__subpackages__"],
+)
+
+go_test(
+    name = "database_test",
+    srcs = ["ema_queries_test.go"],
+    deps = [
+        "//dev-idp/internal/bootstrap",
+        "//dev-idp/internal/config",
+        "//dev-idp/internal/database/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

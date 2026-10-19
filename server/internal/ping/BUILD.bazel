@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ping",
+    srcs = [
+        "handler.go",
+        "publisher.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/ping",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/gen/gram/ping/v2:ping",
+        "//infra/pkg/gcp",
+        "//server/internal/attr",
+        "@com_github_google_uuid//:uuid",
+    ],
+)

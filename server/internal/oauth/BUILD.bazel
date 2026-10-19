@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "oauth",
+    srcs = ["pkce.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/oauth",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/attr"],
+)

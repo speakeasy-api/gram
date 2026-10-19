@@ -1,0 +1,50 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "devidptest",
+    srcs = [
+        "ema.go",
+        "keystore.go",
+        "launch.go",
+        "membership.go",
+        "organization.go",
+        "refresh_token.go",
+        "user.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/pkg/devidptest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//dev-idp/internal/bootstrap",
+        "//dev-idp/internal/config",
+        "//dev-idp/internal/conv",
+        "//dev-idp/internal/database/repo",
+        "//dev-idp/internal/ema",
+        "//dev-idp/internal/keystore",
+        "//dev-idp/internal/modes/mockworkos",
+        "//dev-idp/internal/modes/oauth21",
+        "//dev-idp/internal/modes/resourceas",
+        "//dev-idp/internal/modes/workos",
+        "//plog",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel_trace//:trace",
+        "@io_opentelemetry_go_otel_trace//noop",
+    ],
+)
+
+go_test(
+    name = "devidptest_test",
+    srcs = [
+        "ema_acceptance_test.go",
+        "launch_test.go",
+        "login_acceptance_test.go",
+        "login_handoff_test.go",
+    ],
+    deps = [
+        ":devidptest",
+        "//dev-idp/internal/ema",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

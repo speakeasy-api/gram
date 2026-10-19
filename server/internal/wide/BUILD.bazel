@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "wide",
+    srcs = [
+        "context.go",
+        "doc.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/wide",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "wide_test",
+    srcs = [
+        "context_batch_test.go",
+        "context_concurrent_test.go",
+        "context_test.go",
+    ],
+    deps = [
+        ":wide",
+        "@com_github_stretchr_testify//require",
+    ],
+)

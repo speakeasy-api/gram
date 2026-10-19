@@ -1,0 +1,28 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "presetlib",
+    srcs = [
+        "catalog.go",
+        "classify.go",
+    ],
+    embedsrcs = ["data/catalog.yaml"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/presetlib",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/risk/presidiofp",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
+
+go_test(
+    name = "presetlib_test",
+    srcs = [
+        "catalog_data_test.go",
+        "catalog_test.go",
+        "classify_test.go",
+    ],
+    embed = [":presetlib"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

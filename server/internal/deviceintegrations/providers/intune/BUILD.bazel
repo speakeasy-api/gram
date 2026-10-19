@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "intune",
+    srcs = ["intune.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers/intune",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/deviceintegrations/providers",
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+    ],
+)
+
+go_test(
+    name = "intune_test",
+    srcs = ["intune_test.go"],
+    embed = [":intune"],
+    deps = [
+        "//server/internal/deviceintegrations/providers",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

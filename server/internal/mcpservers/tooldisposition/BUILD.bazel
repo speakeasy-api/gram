@@ -1,0 +1,30 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "tooldisposition",
+    srcs = ["cache.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpservers/tooldisposition",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/attr",
+        "//server/internal/cache",
+        "//server/internal/conv",
+        "//server/internal/mcpservers/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "tooldisposition_test",
+    srcs = ["cache_test.go"],
+    embed = [":tooldisposition"],
+    deps = [
+        "//server/internal/cache",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

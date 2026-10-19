@@ -1,0 +1,41 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "catalog",
+    srcs = [
+        "catalog.go",
+        "custom.go",
+        "generate.go",
+    ],
+    embedsrcs = [
+        "custom.yaml",
+        "platforms/claude-tag.yaml",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/workloadpolicy/catalog",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/issuerurl",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
+
+go_test(
+    name = "catalog_test",
+    srcs = [
+        "catalog_test.go",
+        "contract_test.go",
+        "custom_test.go",
+        "guard_test.go",
+    ],
+    embed = [":catalog"],
+    # Reads files in the checkout that are not declared inputs
+    # (testenv.FindCheckoutRoot), so Bazel must not cache its results.
+    tags = ["external"],
+    deps = [
+        "//server/gen/http/workload_identities/server",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)

@@ -1,0 +1,62 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "mcpriskscan",
+    srcs = [
+        "decision.go",
+        "policy_evaluator.go",
+        "response_payload.go",
+        "scan.go",
+        "subject.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpriskscan",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/gen/types",
+        "//server/internal/attr",
+        "//server/internal/conv",
+        "//server/internal/mcpidentity",
+        "//server/internal/message",
+        "//server/internal/risk",
+        "//server/internal/risk/policycore",
+        "//server/internal/scanners",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_modelcontextprotocol_go_sdk//jsonrpc",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "mcpriskscan_test",
+    srcs = [
+        "policy_evaluator_test.go",
+        "response_payload_test.go",
+        "scan_test.go",
+    ],
+    deps = [
+        ":mcpriskscan",
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/internal/attr",
+        "//server/internal/contextvalues",
+        "//server/internal/mcpidentity",
+        "//server/internal/message",
+        "//server/internal/risk",
+        "//server/internal/risk/policycore",
+        "//server/internal/scanners",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_modelcontextprotocol_go_sdk//jsonrpc",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_sdk//trace",
+        "@io_opentelemetry_go_otel_sdk//trace/tracetest",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata",
+    ],
+)

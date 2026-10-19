@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "packagemeta",
+    srcs = ["packagemeta.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/mcpapproval/identity",
+        "//server/internal/o11y",
+    ],
+)
+
+go_test(
+    name = "packagemeta_test",
+    srcs = ["packagemeta_test.go"],
+    deps = [
+        ":packagemeta",
+        "//server/internal/mcpapproval/identity",
+        "@com_github_stretchr_testify//require",
+    ],
+)

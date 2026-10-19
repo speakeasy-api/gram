@@ -1,0 +1,32 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "api",
+    srcs = [
+        "assets.go",
+        "creds.go",
+        "deployments.go",
+        "doer.go",
+        "keys.go",
+        "mcpendpoints.go",
+        "toolsets.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/cli/internal/api",
+    visibility = ["//cli:__subpackages__"],
+    deps = [
+        "//cli/internal/secret",
+        "//server/gen/assets",
+        "//server/gen/deployments",
+        "//server/gen/http/assets/client",
+        "//server/gen/http/deployments/client",
+        "//server/gen/http/keys/client",
+        "//server/gen/http/mcp_endpoints/client",
+        "//server/gen/http/toolsets/client",
+        "//server/gen/keys",
+        "//server/gen/mcp_endpoints",
+        "//server/gen/toolsets",
+        "//server/gen/types",
+        "@com_github_google_uuid//:uuid",
+        "@design_goa_goa_v3//http",
+    ],
+)

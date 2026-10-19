@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "remotemcptest",
+    srcs = ["seed.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/remotemcp/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

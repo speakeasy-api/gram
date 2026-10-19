@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "database",
+    srcs = [
+        "db.go",
+        "models.go",
+        "stub.sql.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/database",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/conv",
+        "//server/internal/externalmcp/repo/types",
+        "//server/internal/tools/repo/models",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_pgvector_pgvector_go//:pgvector-go",
+    ],
+)

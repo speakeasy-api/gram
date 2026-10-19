@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "profile",
+    srcs = [
+        "profile.go",
+        "writer.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/cli/internal/profile",
+    visibility = ["//cli:__subpackages__"],
+    deps = ["//server/gen/keys"],
+)
+
+go_test(
+    name = "profile_test",
+    srcs = ["profile_test.go"],
+    embed = [":profile"],
+    deps = [
+        "//server/gen/keys",
+        "@com_github_stretchr_testify//require",
+    ],
+)

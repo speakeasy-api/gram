@@ -1,0 +1,31 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "auth",
+    srcs = [
+        "context.go",
+        "id.go",
+        "jwt.go",
+        "middleware.go",
+        "v1.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/functions/internal/auth",
+    visibility = ["//functions:__subpackages__"],
+    deps = [
+        "//functions/internal/attr",
+        "//functions/internal/encryption",
+        "//functions/internal/svc",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+    ],
+)
+
+go_test(
+    name = "auth_test",
+    srcs = ["middleware_test.go"],
+    deps = [
+        ":auth",
+        "//functions/internal/encryption",
+        "@com_github_stretchr_testify//require",
+    ],
+)

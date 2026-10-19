@@ -10,18 +10,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// repositoryRoot is the checkout root, relative to this package's directory,
-// where go test runs.
-const repositoryRoot = "../../../.."
-
 // definitionsDir holds the only platform definitions in the repository,
-// relative to repositoryRoot.
+// relative to the checkout root.
 const definitionsDir = "server/internal/workloadpolicy/catalog/platforms"
 
 // customFlowsPath is the only custom flows file in the repository, relative
-// to repositoryRoot.
+// to the checkout root.
 const customFlowsPath = "server/internal/workloadpolicy/catalog/custom.yaml"
 
 // customFlowKeys are the custom flows file's top-level keys.
@@ -42,13 +40,16 @@ var skippedDirs = map[string]bool{
 func TestNoPlatformDefinitionsOutsideTheCatalog(t *testing.T) {
 	t.Parallel()
 
+	repositoryRoot, err := testenv.FindCheckoutRoot(t.Context())
+	require.NoError(t, err)
+
 	var copies []string
-	err := filepath.WalkDir(repositoryRoot, func(path string, entry fs.DirEntry, err error) error {
+	err = filepath.WalkDir(repositoryRoot, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
-			if skippedDirs[entry.Name()] || isNestedCheckout(path) {
+			if skippedDirs[entry.Name()] || isNestedCheckout(repositoryRoot, path) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -93,7 +94,7 @@ func TestLooksLikeCustomFlows(t *testing.T) {
 // isNestedCheckout reports whether dir, below the repository root, is another
 // checkout of the repository, such as a git worktree or a submodule. Its files
 // belong to that checkout, not this one.
-func isNestedCheckout(dir string) bool {
+func isNestedCheckout(repositoryRoot string, dir string) bool {
 	if filepath.Clean(dir) == filepath.Clean(repositoryRoot) {
 		return false
 	}

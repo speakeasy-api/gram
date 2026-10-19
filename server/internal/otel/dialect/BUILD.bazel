@@ -1,0 +1,67 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "dialect",
+    srcs = [
+        "log.go",
+        "log_claude_code.go",
+        "log_codex.go",
+        "log_fallback.go",
+        "log_gateway.go",
+        "log_hook.go",
+        "log_nil.go",
+        "log_semconv.go",
+        "log_shared.go",
+        "metric.go",
+        "metric_claude_code.go",
+        "metric_codex.go",
+        "metric_fallback.go",
+        "metric_nil.go",
+        "metric_semconv.go",
+        "metric_shared.go",
+        "sensitivity.go",
+        "span.go",
+        "span_claude_code.go",
+        "span_fallback.go",
+        "span_nil.go",
+        "span_semconv.go",
+        "span_shared.go",
+        "vocabulary.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/otel/dialect",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/gen/gram/otel/v1:otel",
+        "//server/internal/genaiconv",
+        "//server/internal/toolref",
+    ],
+)
+
+go_test(
+    name = "dialect_test",
+    srcs = [
+        "log_accessors_test.go",
+        "log_claude_code_test.go",
+        "log_codex_test.go",
+        "log_fallback_test.go",
+        "log_gateway_test.go",
+        "log_hook_test.go",
+        "log_nil_test.go",
+        "log_semconv_test.go",
+        "log_shared_test.go",
+        "metric_test.go",
+        "sensitivity_test.go",
+        "span_claude_code_test.go",
+        "span_fallback_test.go",
+        "span_nil_test.go",
+        "span_semconv_test.go",
+        "span_shared_test.go",
+    ],
+    embed = [":dialect"],
+    deps = [
+        "//infra/gen/gram/otel/v1:otel",
+        "//server/internal/genaiconv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

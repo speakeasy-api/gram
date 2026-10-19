@@ -1,0 +1,52 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "okta",
+    srcs = [
+        "client.go",
+        "credentials.go",
+        "factory.go",
+        "fake.go",
+        "types.go",
+        "wire.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/okta",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/dpop",
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+        "//server/internal/oautherr",
+        "//server/internal/oauthwire",
+        "//server/internal/remotesessions",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "okta_test",
+    srcs = [
+        "client_regression_test.go",
+        "client_secret_test.go",
+        "client_test.go",
+        "setup_test.go",
+        "users_test.go",
+    ],
+    embed = [":okta"],
+    deps = [
+        "//server/internal/dpop",
+        "//server/internal/guardian",
+        "//server/internal/oauthwire",
+        "//server/internal/remotesessions",
+        "//server/internal/testenv",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_go_jose_go_jose_v4//jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel_sdk//trace",
+        "@io_opentelemetry_go_otel_sdk//trace/tracetest",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)

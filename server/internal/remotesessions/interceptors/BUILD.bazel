@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "interceptors",
+    srcs = [
+        "google.go",
+        "interceptor.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/attr"],
+)
+
+go_test(
+    name = "interceptors_test",
+    srcs = ["google_test.go"],
+    deps = [
+        ":interceptors",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

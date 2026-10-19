@@ -1,0 +1,30 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "shadowmcpscan",
+    srcs = ["scanner.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/scanners",
+        "//server/internal/shadowmcp",
+        "//server/internal/telemetry/repo",
+        "//server/internal/toolref",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "shadowmcpscan_test",
+    srcs = ["scanner_test.go"],
+    embed = [":shadowmcpscan"],
+    deps = [
+        "//server/internal/scanners",
+        "//server/internal/shadowmcp",
+        "//server/internal/telemetry/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

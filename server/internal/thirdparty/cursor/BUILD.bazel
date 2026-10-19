@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "cursor",
+    srcs = [
+        "client.go",
+        "errors.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/guardian"],
+)
+
+go_test(
+    name = "cursor_test",
+    srcs = ["client_test.go"],
+    embed = [":cursor"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,43 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "memory",
+    srcs = [
+        "forget.go",
+        "memory.go",
+        "recall.go",
+        "remember.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/memory",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/contextvalues",
+        "//server/internal/memory",
+        "//server/internal/oops",
+        "//server/internal/platformtools",
+        "//server/internal/platformtools/core",
+        "//server/internal/toolconfig",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "memory_test",
+    srcs = [
+        "forget_test.go",
+        "memory_test.go",
+        "recall_test.go",
+        "remember_test.go",
+    ],
+    embed = [":memory"],
+    deps = [
+        "//server/internal/contextvalues",
+        "//server/internal/memory",
+        "//server/internal/oops",
+        "//server/internal/toolconfig",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

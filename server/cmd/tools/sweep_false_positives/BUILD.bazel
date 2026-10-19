@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "sweep_false_positives_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/tools/sweep_false_positives",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//server/cmd/tools/internal/clickhouseconn",
+        "//server/cmd/tools/internal/falsepositivesweep",
+        "//server/internal/risk/chrepo",
+        "//server/internal/risk/presidiofp",
+        "//server/internal/uuidv7",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_binary(
+    name = "sweep_false_positives",
+    embed = [":sweep_false_positives_lib"],
+    visibility = ["//visibility:public"],
+)

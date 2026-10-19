@@ -1,0 +1,27 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "sessionclientinfo",
+    srcs = ["store.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "@com_github_google_uuid//:uuid",
+        "@com_github_redis_go_redis_v9//:go-redis",
+    ],
+)
+
+go_test(
+    name = "sessionclientinfo_test",
+    srcs = [
+        "setup_test.go",
+        "store_test.go",
+    ],
+    embed = [":sessionclientinfo"],
+    deps = [
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

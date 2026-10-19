@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "route",
+    srcs = [
+        "redis.go",
+        "store.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/tunnel/route",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_redis_go_redis_v9//:go-redis"],
+)
+
+go_test(
+    name = "route_test",
+    srcs = ["store_test.go"],
+    embed = [":route"],
+    deps = [
+        "@com_github_alicebob_miniredis_v2//:miniredis",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@com_github_stretchr_testify//require",
+    ],
+)

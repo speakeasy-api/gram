@@ -1,0 +1,54 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "memory",
+    srcs = [
+        "contradiction.go",
+        "rerank.go",
+        "service.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/memory",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/audit",
+        "//server/internal/billing",
+        "//server/internal/contextvalues",
+        "//server/internal/memory/repo",
+        "//server/internal/o11y",
+        "//server/internal/oops",
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+        "@com_github_pgvector_pgvector_go//:pgvector-go",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "memory_test",
+    srcs = [
+        "contradiction_test.go",
+        "forget_selection_test.go",
+        "rerank_test.go",
+    ],
+    embed = [":memory"],
+    deps = [
+        "//server/internal/billing",
+        "//server/internal/memory/repo",
+        "//server/internal/testenv",
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+    ],
+)

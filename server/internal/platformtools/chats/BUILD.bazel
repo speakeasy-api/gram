@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "chats",
+    srcs = [
+        "shared.go",
+        "tool_list_chats.go",
+        "tool_load_chat.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/chats",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/chat",
+        "//server/internal/platformtools/core",
+        "//server/internal/toolconfig",
+    ],
+)

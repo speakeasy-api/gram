@@ -1,0 +1,37 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "chrepo",
+    srcs = [
+        "agent_events.go",
+        "db.go",
+        "events.go",
+        "queries.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/otel/chrepo",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "@com_github_clickhouse_clickhouse_go_v2//:clickhouse-go",
+        "@com_github_clickhouse_clickhouse_go_v2//lib/driver",
+        "@com_github_masterminds_squirrel//:squirrel",
+    ],
+)
+
+go_test(
+    name = "chrepo_test",
+    srcs = [
+        "agent_events_ch_test.go",
+        "events_ch_test.go",
+        "events_test.go",
+        "queries_test.go",
+        "setup_test.go",
+    ],
+    embed = [":chrepo"],
+    deps = [
+        "//server/internal/testenv",
+        "@com_github_clickhouse_clickhouse_go_v2//:clickhouse-go",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

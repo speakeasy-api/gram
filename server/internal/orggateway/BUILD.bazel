@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "orggateway",
+    srcs = ["orggateway.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/orggateway",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/customdomains/repo",
+        "//server/internal/organizations/repo",
+        "//server/internal/productfeatures",
+        "//server/internal/productfeatures/repo",
+        "//server/internal/usersessions/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+    ],
+)

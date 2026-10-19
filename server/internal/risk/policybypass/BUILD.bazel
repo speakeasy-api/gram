@@ -1,0 +1,35 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "policybypass",
+    srcs = ["url_grants.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/policybypass",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/authz",
+        "//server/internal/risk/repo",
+        "//server/internal/shadowmcp",
+        "//server/internal/urn",
+    ],
+)
+
+go_test(
+    name = "policybypass_test",
+    srcs = [
+        "setup_test.go",
+        "url_grants_test.go",
+    ],
+    embed = [":policybypass"],
+    deps = [
+        "//server/internal/authz",
+        "//server/internal/conv",
+        "//server/internal/organizations/repo",
+        "//server/internal/risk/repo",
+        "//server/internal/testenv",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

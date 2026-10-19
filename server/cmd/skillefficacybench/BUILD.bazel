@@ -1,0 +1,36 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "skillefficacybench_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/skillefficacybench",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//server/internal/billing",
+        "//server/internal/guardian",
+        "//server/internal/skills",
+        "//server/internal/skills/efficacy",
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+        "@io_opentelemetry_go_otel_trace//noop",
+    ],
+)
+
+go_binary(
+    name = "skillefficacybench",
+    embed = [":skillefficacybench_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "skillefficacybench_test",
+    srcs = ["main_test.go"],
+    embed = [":skillefficacybench_lib"],
+    deps = [
+        "//server/internal/skills",
+        "//server/internal/skills/efficacy",
+        "@com_github_stretchr_testify//require",
+    ],
+)

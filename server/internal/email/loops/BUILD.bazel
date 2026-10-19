@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "loops",
+    srcs = ["manifest.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/email/loops",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "loops_test",
+    srcs = [
+        "manifest_contract_test.go",
+        "manifest_test.go",
+    ],
+    embed = [":loops"],
+    deps = [
+        "//server/internal/email",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "admin",
+    srcs = [
+        "client.go",
+        "endpoints.go",
+        "service.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/gen/admin",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//server/gen/admin/views",
+        "//server/gen/types",
+        "@design_goa_goa_v3//pkg",
+        "@design_goa_goa_v3//security",
+    ],
+)

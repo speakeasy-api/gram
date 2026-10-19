@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "diagram",
+    srcs = ["diagram.go"],
+    importpath = "github.com/speakeasy-api/gram/infra/internal/diagram",
+    visibility = ["//infra:__subpackages__"],
+    deps = [
+        "//infra/internal/gcp",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//types/descriptorpb",
+    ],
+)
+
+go_test(
+    name = "diagram_test",
+    srcs = ["diagram_test.go"],
+    data = [
+        # keep
+        "//infra/gen/gram/ping/v2:go_sources",
+    ],
+    embed = [":diagram"],
+)

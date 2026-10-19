@@ -54,11 +54,13 @@ func TestCurrentUserProvenanceReportsOpenedDatabaseAndProcessOrigin(t *testing.T
 	t.Parallel()
 	db, path := diskProvenanceDB(t)
 	svc, selected := provenanceService(t, db, workos.BackendLocal)
-	cwd, err := os.Getwd()
+	// A marker checkout rather than the test's working directory, which is not
+	// inside a git checkout when Bazel runs the test from its runfiles.
+	root, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)
-	root := discoverWorktreeRoot(cwd)
-	require.NotEmpty(t, root)
-	require.True(t, filepath.IsAbs(root))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: /unused/test-marker\n"), 0o600))
+	svc.worktreeRoot = discoverWorktreeRoot(root)
+	require.Equal(t, root, svc.worktreeRoot)
 	view, err := svc.GetCurrentUser(t.Context(), &gen.GetCurrentUserPayload{Mode: modeOAuth21})
 	require.NoError(t, err)
 	require.Equal(t, selected.Mode, view.Mode)

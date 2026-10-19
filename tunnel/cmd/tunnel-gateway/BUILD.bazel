@@ -1,0 +1,28 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "tunnel-gateway_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/tunnel/cmd/tunnel-gateway",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//tunnel/gateway",
+        "//tunnel/route",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_redis_go_redis_v9//:go-redis",
+    ],
+)
+
+go_binary(
+    name = "tunnel-gateway",
+    embed = [":tunnel-gateway_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "tunnel-gateway_test",
+    srcs = ["main_test.go"],
+    embed = [":tunnel-gateway_lib"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

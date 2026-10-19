@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "requestorigin",
+    srcs = ["origin.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/requestorigin",
+    visibility = ["//server:__subpackages__"],
+    deps = ["@com_github_google_uuid//:uuid"],
+)
+
+go_test(
+    name = "requestorigin_test",
+    srcs = ["origin_test.go"],
+    embed = [":requestorigin"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

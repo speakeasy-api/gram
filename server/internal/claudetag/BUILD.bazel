@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "claudetag",
+    srcs = ["parse.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/claudetag",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "claudetag_test",
+    srcs = ["parse_test.go"],
+    deps = [
+        ":claudetag",
+        "@com_github_stretchr_testify//require",
+    ],
+)

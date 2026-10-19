@@ -1,0 +1,26 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "dpop",
+    srcs = ["dpop.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/dpop",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/oautherr",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_go_jose_go_jose_v4//jwt",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "dpop_test",
+    srcs = ["dpop_test.go"],
+    embed = [":dpop"],
+    deps = [
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

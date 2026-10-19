@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "clidestructive",
+    srcs = ["scanner.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/scanners/clidestructive",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/scanners",
+        "//server/internal/stokens",
+    ],
+)
+
+go_test(
+    name = "clidestructive_test",
+    srcs = ["scanner_test.go"],
+    embed = [":clidestructive"],
+    deps = [
+        "//server/internal/scanners",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

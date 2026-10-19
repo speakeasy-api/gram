@@ -1,0 +1,40 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "gcpauth",
+    srcs = [
+        "credential.go",
+        "doc.go",
+        "identity.go",
+        "principal.go",
+        "resolver.go",
+        "source.go",
+        "stored_credential.go",
+        "stub_resolver.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "@com_google_cloud_go_compute_metadata//:metadata",
+        "@org_golang_google_api//impersonate",
+        "@org_golang_x_oauth2//:oauth2",
+        "@org_golang_x_oauth2//google",
+    ],
+)
+
+go_test(
+    name = "gcpauth_test",
+    srcs = [
+        "credential_test.go",
+        "identity_test.go",
+        "resolver_test.go",
+        "stored_credential_test.go",
+    ],
+    embed = [":gcpauth"],
+    deps = [
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

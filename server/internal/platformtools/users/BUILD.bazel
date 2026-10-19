@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "users",
+    srcs = [
+        "shared.go",
+        "tool_list_organization_users.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/users",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/organizations",
+        "//server/internal/platformtools/core",
+        "//server/internal/toolconfig",
+    ],
+)

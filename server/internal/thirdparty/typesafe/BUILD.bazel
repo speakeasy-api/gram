@@ -1,0 +1,33 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "typesafe",
+    srcs = ["client.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/guardian",
+        "//server/internal/thirdparty/openrouter",
+        "@io_opentelemetry_go_otel//:otel",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "typesafe_test",
+    srcs = ["client_test.go"],
+    embed = [":typesafe"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_sdk//trace",
+        "@io_opentelemetry_go_otel_sdk//trace/tracetest",
+    ],
+)

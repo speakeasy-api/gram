@@ -1,0 +1,20 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "flags",
+    srcs = [
+        "env.go",
+        "flags.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/cli/internal/flags",
+    visibility = ["//cli:__subpackages__"],
+    deps = ["@com_github_urfave_cli_v2//:cli"],
+)
+
+go_test(
+    name = "flags_test",
+    srcs = ["env_test.go"],
+    embed = [":flags"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

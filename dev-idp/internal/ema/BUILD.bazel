@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "ema",
+    srcs = ["ema.go"],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/internal/ema",
+    visibility = ["//dev-idp:__subpackages__"],
+    deps = ["@com_github_golang_jwt_jwt_v5//:jwt"],
+)
+
+go_test(
+    name = "ema_test",
+    srcs = ["scope_test.go"],
+    deps = [
+        ":ema",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,36 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "marketplace",
+    srcs = [
+        "db_resolver.go",
+        "handler.go",
+        "local_handler.go",
+        "resolver.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/marketplace",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+        "//server/internal/plugins/repo",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "marketplace_test",
+    srcs = [
+        "handler_test.go",
+        "local_handler_test.go",
+    ],
+    embed = [":marketplace"],
+    deps = [
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

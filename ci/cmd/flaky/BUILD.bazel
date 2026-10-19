@@ -1,0 +1,28 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "flaky_lib",
+    srcs = [
+        "analyze.go",
+        "failures.go",
+        "gate.go",
+        "linear.go",
+        "main.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/ci/cmd/flaky",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "flaky",
+    embed = [":flaky_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "flaky_test",
+    srcs = ["flaky_test.go"],
+    embed = [":flaky_lib"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

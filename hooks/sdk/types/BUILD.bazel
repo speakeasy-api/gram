@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "types",
+    srcs = [
+        "bigint.go",
+        "date.go",
+        "datetime.go",
+        "pointers.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/hooks/sdk/types",
+    visibility = ["//visibility:public"],
+)

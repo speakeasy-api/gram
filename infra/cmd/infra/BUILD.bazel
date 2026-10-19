@@ -1,0 +1,48 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "infra",
+    srcs = [
+        "demo.go",
+        "gen_cc.go",
+        "gen_diagram.go",
+        "gen_storage.go",
+        "gen_topics.go",
+        "logger.go",
+        "root.go",
+        "shutdown.go",
+        "vars.go",
+        "version.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/infra/cmd/infra",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//infra/gen",
+        "//infra/gen/gram/ping/v2:ping",
+        "//infra/internal/attr",
+        "//infra/internal/diagram",
+        "//infra/internal/gcp",
+        "//infra/internal/o11y",
+        "//infra/pkg/gcp",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_kimmachinegun_automemlimit//memlimit",
+        "@com_github_sourcegraph_conc//pool",
+        "@com_github_urfave_cli_v2//:cli",
+        "@com_google_cloud_go_compute_metadata//:metadata",
+        "@com_google_cloud_go_pubsub_v2//:pubsub",
+        "@org_golang_google_api//option",
+    ],
+)
+
+go_test(
+    name = "infra_test",
+    srcs = ["gen_storage_test.go"],
+    embed = [":infra"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+        "@com_github_urfave_cli_v2//:cli",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//types/descriptorpb",
+    ],
+)

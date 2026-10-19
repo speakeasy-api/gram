@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "provenance",
+    srcs = ["provenance.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpapproval/provenance",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "provenance_test",
+    srcs = ["provenance_test.go"],
+    deps = [
+        ":provenance",
+        "@com_github_stretchr_testify//require",
+    ],
+)

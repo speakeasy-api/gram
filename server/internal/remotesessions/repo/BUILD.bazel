@@ -1,0 +1,40 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "repo",
+    srcs = [
+        "db.go",
+        "models.go",
+        "queries.sql.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/remotesessions/repo",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgtype",
+    ],
+)
+
+go_test(
+    name = "repo_test",
+    srcs = [
+        "delegation_test.go",
+        "ema_binding_sql_test.go",
+    ],
+    deps = [
+        ":repo",
+        "//server/internal/conv",
+        "//server/internal/projects/repo",
+        "//server/internal/testenv",
+        "//server/internal/testenv/testrepo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

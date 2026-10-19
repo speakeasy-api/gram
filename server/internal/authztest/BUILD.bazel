@@ -1,0 +1,26 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "authztest",
+    srcs = ["helpers.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/authztest",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/auth/sessions",
+        "//server/internal/authz",
+        "//server/internal/testenv",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "authztest_test",
+    srcs = ["helpers_test.go"],
+    embed = [":authztest"],
+    deps = [
+        "//server/internal/authz",
+        "//server/internal/contextvalues",
+        "@com_github_stretchr_testify//require",
+    ],
+)

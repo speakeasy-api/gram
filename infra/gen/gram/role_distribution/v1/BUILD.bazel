@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "role_distribution",
+    srcs = [
+        "setup_handler.pb.go",
+        "setup_requested.pb.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//runtime/protoimpl",
+    ],
+)

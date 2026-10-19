@@ -1,0 +1,11 @@
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_test(
+    name = "schematest_test",
+    srcs = ["schema_test.go"],
+    deps = [
+        "//server/internal/dataclassification",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

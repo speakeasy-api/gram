@@ -1,0 +1,38 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "deploy",
+    srcs = [
+        "config.go",
+        "read.go",
+        "retry_client.go",
+        "source_reader.go",
+        "upload.go",
+        "validate.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/cli/internal/deploy",
+    visibility = ["//cli:__subpackages__"],
+    deps = [
+        "//cli/internal/api",
+        "//cli/internal/secret",
+        "//server/gen/assets",
+        "//server/gen/types",
+        "@com_github_burntsushi_toml//:toml",
+        "@com_github_hashicorp_go_retryablehttp//:go-retryablehttp",
+        "@in_yaml_go_yaml_v4//:yaml",
+    ],
+)
+
+go_test(
+    name = "deploy_test",
+    srcs = [
+        "example_usage_test.go",
+        "source_reader_test.go",
+    ],
+    embed = [":deploy"],
+    deps = [
+        "//cli/internal/must",
+        "@com_github_stretchr_testify//require",
+    ],
+)

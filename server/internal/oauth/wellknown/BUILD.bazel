@@ -1,0 +1,45 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "wellknown",
+    srcs = [
+        "authorization_server_discovery.go",
+        "discover.go",
+        "wellknown.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/oauth/wellknown",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/cache",
+        "//server/internal/guardian",
+        "//server/internal/mv",
+        "//server/internal/o11y",
+        "//server/internal/oauth/repo",
+        "//server/internal/toolsets/repo",
+        "//server/internal/urls",
+    ],
+)
+
+go_test(
+    name = "wellknown_test",
+    srcs = [
+        "authorization_server_discovery_test.go",
+        "discover_test.go",
+        "discovery_diagnostics_test.go",
+        "protected_resource_validation_test.go",
+        "wellknown_rewrite_test.go",
+    ],
+    embed = [":wellknown"],
+    deps = [
+        "//server/internal/dns",
+        "//server/internal/guardian",
+        "//server/internal/oauth/repo",
+        "//server/internal/testenv",
+        "//server/internal/toolsets/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

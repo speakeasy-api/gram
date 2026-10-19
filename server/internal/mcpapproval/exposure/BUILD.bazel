@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "exposure",
+    srcs = ["exposure.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpapproval/exposure",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/shadowmcp",
+        "//server/internal/telemetry/repo",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "exposure_test",
+    srcs = ["exposure_test.go"],
+    deps = [
+        ":exposure",
+        "//server/internal/telemetry/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

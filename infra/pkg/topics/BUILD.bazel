@@ -1,0 +1,51 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "topics",
+    srcs = [
+        "encoded.go",
+        "topics_gen.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/infra/pkg/topics",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//infra/gen/gram/authz/v1:authz",
+        "//infra/gen/gram/conversation/v1:conversation",
+        "//infra/gen/gram/metering/v1:metering",
+        "//infra/gen/gram/networkingress/v1:networkingress",
+        "//infra/gen/gram/otel/v1:otel",
+        "//infra/gen/gram/ping/v2:ping",
+        "//infra/gen/gram/plugins/v1:plugins",
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/gen/gram/role_distribution/v1:role_distribution",
+        "//infra/gen/gram/sigint/v1:sigint",
+        "//infra/gen/gram/telemetry/v1:telemetry",
+        "//infra/gen/gram/webhooks/v1:webhooks",
+        "//infra/pkg/gcp",
+        "@com_google_cloud_go_pubsub_v2//:pubsub",
+    ],
+)
+
+go_test(
+    name = "topics_test",
+    srcs = ["encoded_test.go"],
+    embed = [":topics"],
+    deps = [
+        "//infra/gen/gram/ping/v2:ping",
+        "//infra/pkg/gcp",
+        "@com_github_stretchr_testify//require",
+        "@com_google_cloud_go_pubsub_v2//:pubsub",
+        "@org_golang_google_api//option",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//credentials/insecure",
+        "@org_golang_google_grpc//status",
+        "@org_golang_google_protobuf//proto",
+    ],
+)
+
+exports_files(
+    ["topics_gen.go"],
+    visibility = ["//infra:__subpackages__"],
+)

@@ -1,0 +1,45 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "storagefixture",
+    srcs = ["storage_gen.go"],
+    importpath = "github.com/speakeasy-api/gram/infra/internal/storagefixture",
+    visibility = ["//infra:__subpackages__"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "//infra/internal/storagefixture/pb/fixture/open",
+        "//infra/internal/storagefixture/pb/fixture/v1:fixture",
+        "//infra/internal/storagefixture/pb/fixture/v2:fixture",
+        "//infra/pkg/storage",
+        "@com_github_parquet_go_parquet_go//:parquet-go",
+        "@org_golang_google_protobuf//proto",
+    ],
+)
+
+go_test(
+    name = "storagefixture_test",
+    srcs = ["interop_test.go"],
+    embed = [":storagefixture"],
+    # Reads files in the checkout that are not declared inputs
+    # (testenv.FindCheckoutRoot), so Bazel must not cache its results.
+    tags = ["external"],
+    deps = [
+        "//infra/internal/storagefixture/pb/fixture/open",
+        "//infra/internal/storagefixture/pb/fixture/v1:fixture",
+        "//infra/internal/storagefixture/pb/fixture/v2:fixture",
+        "//infra/pkg/storage",
+        "@com_github_parquet_go_parquet_go//:parquet-go",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_protobuf//proto",
+    ],
+)
+
+exports_files(
+    [
+        "descriptors.pb",
+        "storage_gen.go",
+        "storage_manifest.json",
+    ],
+    visibility = ["//infra:__subpackages__"],
+)

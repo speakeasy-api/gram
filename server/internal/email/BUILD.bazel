@@ -1,0 +1,48 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "email",
+    srcs = [
+        "service.go",
+        "template_access_paused.go",
+        "template_access_request.go",
+        "template_custom_domain_unhealthy.go",
+        "template_enterprise_admin_onboarding.go",
+        "template_openrouter_chat_credits_threshold.go",
+        "template_openrouter_internal_credits_threshold.go",
+        "template_payg_activated.go",
+        "template_setup_task_assignment.go",
+        "template_team_invite.go",
+        "template_trial_ending_soon.go",
+        "template_weekly_usage_summary.go",
+        "templates.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/email",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/thirdparty/loops",
+    ],
+)
+
+go_test(
+    name = "email_test",
+    srcs = [
+        "service_test.go",
+        "template_access_paused_test.go",
+        "template_custom_domain_unhealthy_test.go",
+        "template_openrouter_credits_thresholds_test.go",
+        "template_setup_task_assignment_test.go",
+        "template_trial_ending_soon_test.go",
+        "template_weekly_usage_summary_test.go",
+        "templates_test.go",
+    ],
+    embed = [":email"],
+    deps = [
+        "//server/internal/testenv",
+        "//server/internal/thirdparty/loops",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+    ],
+)

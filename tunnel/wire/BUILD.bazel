@@ -1,0 +1,21 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "wire",
+    srcs = [
+        "affinity.go",
+        "control.go",
+        "key.go",
+        "version.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/tunnel/wire",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "wire_test",
+    srcs = ["affinity_test.go"],
+    embed = [":wire"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

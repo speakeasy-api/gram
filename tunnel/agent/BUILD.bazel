@@ -1,0 +1,21 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "agent",
+    srcs = ["agent.go"],
+    importpath = "github.com/speakeasy-api/gram/tunnel/agent",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tunnel/wire",
+        "@com_github_coder_websocket//:websocket",
+        "@com_github_hashicorp_yamux//:yamux",
+    ],
+)
+
+go_test(
+    name = "agent_test",
+    srcs = ["agent_test.go"],
+    embed = [":agent"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

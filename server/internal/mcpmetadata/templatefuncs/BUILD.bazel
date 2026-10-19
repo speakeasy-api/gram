@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "templatefuncs",
+    srcs = ["funcs.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpmetadata/templatefuncs",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/toolconfig"],
+)

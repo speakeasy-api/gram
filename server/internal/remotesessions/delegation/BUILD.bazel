@@ -1,0 +1,42 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "delegation",
+    srcs = [
+        "contracts.go",
+        "repository.go",
+        "service.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/remotesessions/delegation",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/conv",
+        "//server/internal/encryption",
+        "//server/internal/remotesessions/repo",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "delegation_test",
+    srcs = [
+        "fixtures_test.go",
+        "repository_test.go",
+        "review_regression_test.go",
+        "service_test.go",
+    ],
+    embed = [":delegation"],
+    deps = [
+        "//server/internal/encryption",
+        "//server/internal/remotesessions/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//require",
+    ],
+)

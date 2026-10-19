@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "sync-loops-email-templates_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/sync-loops-email-templates",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "sync-loops-email-templates",
+    embed = [":sync-loops-email-templates_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "assertion",
+    srcs = ["assertion.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/usersessions/assertion",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/usersessions/jwks",
+        "//server/internal/usersessions/replay",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_go_jose_go_jose_v4//jwt",
+    ],
+)

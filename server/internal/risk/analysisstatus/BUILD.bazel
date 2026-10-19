@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "analysisstatus",
+    srcs = ["status.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/analysisstatus",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "@com_github_google_uuid//:uuid",
+        "@io_temporal_go_api//enums/v1:enums",
+        "@io_temporal_go_api//serviceerror",
+        "@io_temporal_go_api//workflowservice/v1:workflowservice",
+    ],
+)
+
+go_test(
+    name = "analysisstatus_test",
+    srcs = ["status_test.go"],
+    embed = [":analysisstatus"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+        "@io_temporal_go_api//enums/v1:enums",
+        "@io_temporal_go_api//serviceerror",
+        "@io_temporal_go_api//workflow/v1:workflow",
+        "@io_temporal_go_api//workflowservice/v1:workflowservice",
+        "@org_golang_google_protobuf//types/known/timestamppb",
+    ],
+)

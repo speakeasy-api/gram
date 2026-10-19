@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "presidiotest",
+    srcs = ["server.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidiotest",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/attr"],
+)
+
+go_test(
+    name = "presidiotest_test",
+    srcs = ["server_test.go"],
+    deps = [
+        ":presidiotest",
+        "//server/internal/background/activities/risk_analysis",
+        "//server/internal/scanners",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

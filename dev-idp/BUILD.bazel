@@ -1,0 +1,41 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "dev-idp_lib",
+    srcs = [
+        "main.go",
+        "retired.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/dev-idp",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//dev-idp/internal/bootstrap",
+        "//dev-idp/internal/config",
+        "//dev-idp/internal/keystore",
+        "//dev-idp/internal/middleware",
+        "//dev-idp/internal/modes/mockworkos",
+        "//dev-idp/internal/modes/oauth21",
+        "//dev-idp/internal/modes/resourceas",
+        "//dev-idp/internal/modes/workos",
+        "//dev-idp/internal/service",
+        "//dev-idp/internal/workos",
+        "//plog",
+        "@design_goa_goa_v3//http",
+        "@io_opentelemetry_go_otel_trace//:trace",
+        "@io_opentelemetry_go_otel_trace//noop",
+    ],
+)
+
+go_binary(
+    name = "dev-idp",
+    embed = [":dev-idp_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "dev-idp_test",
+    srcs = ["retired_test.go"],
+    embed = [":dev-idp_lib"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

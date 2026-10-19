@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "authority",
+    srcs = ["authority.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpapproval/authority",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "authority_test",
+    srcs = ["authority_test.go"],
+    deps = [
+        ":authority",
+        "@com_github_stretchr_testify//require",
+    ],
+)

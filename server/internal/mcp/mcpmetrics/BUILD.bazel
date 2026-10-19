@@ -1,0 +1,47 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "mcpmetrics",
+    srcs = [
+        "doc.go",
+        "identitycoverage.go",
+        "legacyfallback.go",
+        "metrics.go",
+        "requestcounter.go",
+        "surface.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/mcp/mcprequests",
+        "//server/internal/mcp/mcpversions",
+        "//server/internal/requestorigin",
+        "@com_github_google_uuid//:uuid",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_metric//:metric",
+    ],
+)
+
+go_test(
+    name = "mcpmetrics_test",
+    srcs = [
+        "identitycoverage_test.go",
+        "legacyfallback_test.go",
+        "metrics_test.go",
+    ],
+    embed = [":mcpmetrics"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/mcp/mcprequests",
+        "//server/internal/mcp/mcpversions",
+        "//server/internal/requestorigin",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata/metricdatatest",
+    ],
+)

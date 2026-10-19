@@ -1,0 +1,37 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "chrepo",
+    srcs = [
+        "queries.go",
+        "spend.go",
+        "usage.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/metering/chrepo",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/o11y",
+        "@com_github_clickhouse_clickhouse_go_v2//:clickhouse-go",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_masterminds_squirrel//:squirrel",
+    ],
+)
+
+go_test(
+    name = "chrepo_test",
+    srcs = [
+        "queries_test.go",
+        "setup_test.go",
+        "spend_test.go",
+        "usage_test.go",
+    ],
+    deps = [
+        ":chrepo",
+        "//server/internal/metering",
+        "//server/internal/testenv",
+        "@com_github_clickhouse_clickhouse_go_v2//:clickhouse-go",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

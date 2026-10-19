@@ -1,0 +1,30 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "oauthtest",
+    srcs = [
+        "issuergated.go",
+        "oauthtest.go",
+        "protectedresource.go",
+        "workloadissuer.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/oauthtest",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//dev-idp/pkg/devidptest",
+        "//server/internal/contextvalues",
+        "//server/internal/conv",
+        "//server/internal/encryption",
+        "//server/internal/oauth/repo",
+        "//server/internal/oauth/wellknown",
+        "//server/internal/remotesessions/repo",
+        "//server/internal/toolsets/repo",
+        "//server/internal/usersessions/repo",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_go_jose_go_jose_v4//jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

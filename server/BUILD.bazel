@@ -1,0 +1,34 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "server_lib",
+    srcs = ["main.go"],
+    embedsrcs = ["gen/http/openapi3.yaml"],
+    importpath = "github.com/speakeasy-api/gram/server",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//server/cmd/gram",
+        "//server/internal/about",
+    ],
+)
+
+go_binary(
+    name = "server",
+    embed = [":server_lib"],
+    gc_linkopts = [
+        # keep
+        "-s",
+    ],
+    visibility = ["//visibility:public"],
+    # Filled in only with --stamp; see tools/bazel/workspace_status.sh.
+    x_defs = {
+        "github.com/speakeasy-api/gram/server/cmd/gram.GitSHA": "{STABLE_GIT_SHA}",
+        "github.com/speakeasy-api/gram/server/cmd/gram.AssistantRuntimeImageHash": "{STABLE_ASSISTANT_RUNTIME_IMAGE_HASH}",
+        "goa.design/clue/health.Version": "{STABLE_GIT_SHA}",
+    },
+)
+
+exports_files(
+    ["gen/http/openapi3.yaml"],
+    visibility = ["//server:__subpackages__"],
+)

@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "constants",
+    srcs = [
+        "accounts.go",
+        "auth.go",
+        "bytes.go",
+        "demo.go",
+        "functions.go",
+        "http.go",
+        "pagination.go",
+        "spend_cap.go",
+        "tools.go",
+        "trials.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/constants",
+    visibility = ["//server:__subpackages__"],
+)

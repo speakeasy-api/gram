@@ -1,0 +1,67 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "risk-pi-report_lib",
+    srcs = [
+        "code.go",
+        "credit.go",
+        "evaluate_two_stage.go",
+        "gate.go",
+        "main.go",
+        "records.go",
+        "view.go",
+    ],
+    embedsrcs = ["view.html"],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/risk-pi-report",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/judgemessage",
+        "//server/internal/message",
+        "//server/internal/o11y",
+        "//server/internal/scanners",
+        "//server/internal/scanners/promptinjection",
+        "//server/internal/scanners/promptinjection/openrouter",
+        "//server/internal/thirdparty/openrouter",
+        "//server/internal/thirdparty/typesafedecisions",
+        "@io_opentelemetry_go_otel_metric//noop",
+        "@io_opentelemetry_go_otel_trace//noop",
+    ],
+)
+
+go_binary(
+    name = "risk-pi-report",
+    embed = [":risk-pi-report_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "risk-pi-report_test",
+    srcs = [
+        "code_test.go",
+        "credit_test.go",
+        "evaluate_two_stage_test.go",
+        "gate_test.go",
+        "main_test.go",
+        "records_test.go",
+        "view_test.go",
+    ],
+    data = [
+        # keep
+        "//server/internal/scanners/promptinjection:testdata",
+    ],
+    embed = [":risk-pi-report_lib"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/scanners",
+        "//server/internal/scanners/promptinjection",
+        "//server/internal/scanners/promptinjection/openrouter",
+        "//server/internal/testenv",
+        "//server/internal/thirdparty/openrouter",
+        "//server/internal/thirdparty/typesafedecisions",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+        "@com_github_stretchr_testify//require",
+    ],
+)

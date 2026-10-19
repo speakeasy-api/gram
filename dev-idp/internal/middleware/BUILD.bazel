@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "middleware",
+    srcs = ["middleware.go"],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/internal/middleware",
+    visibility = ["//dev-idp:__subpackages__"],
+    deps = [
+        "//dev-idp/internal/oops",
+        "@design_goa_goa_v3//pkg",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)

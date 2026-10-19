@@ -1,0 +1,48 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "publish_outbox",
+    srcs = [
+        "errors.go",
+        "relay.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/pkg/gcp",
+        "//infra/pkg/topics",
+        "//server/internal/attr",
+        "//server/internal/background/activities/repo",
+        "//server/internal/oops",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "publish_outbox_test",
+    srcs = [
+        "relay_test.go",
+        "setup_test.go",
+    ],
+    deps = [
+        ":publish_outbox",
+        "//infra/gen/gram/webhooks/v1:webhooks",
+        "//infra/pkg/gcp",
+        "//infra/pkg/topics",
+        "//server/internal/background/activities/repo",
+        "//server/internal/oops",
+        "//server/internal/testenv",
+        "//server/internal/testenv/testrepo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_protobuf//proto",
+    ],
+)

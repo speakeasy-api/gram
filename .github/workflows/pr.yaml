@@ -1233,6 +1233,12 @@ jobs:
       - name: Restore Go module cache
         uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
+      - name: Restore Bazel cache
+        id: bazel-cache
+        uses: $/.github/workflows/composite/bazel-cache
+        with:
+          key-prefix: server-build
+
       - name: Compute runtime image content hash
         id: assistant-runtime-hash
         shell: bash
@@ -1259,6 +1265,13 @@ jobs:
           name: server-bin
           path: server/bin
           retention-days: 2
+
+      - name: Save Bazel cache
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ steps.bazel-cache.outputs.key }}
+          path: ${{ steps.bazel-cache.outputs.path }}
 
   server-checks:
     name: server-checks
@@ -1318,6 +1331,9 @@ jobs:
 
       - name: Run "go mod tidy"
         run: mise run go:tidy
+
+      - name: Check Bazel BUILD files
+        run: mise run bazel:gazelle --check
 
       - name: Run migrations
         env:
@@ -1659,6 +1675,12 @@ jobs:
       - name: Install Go deps
         run: mise run install:go
 
+      - name: Restore Bazel cache
+        id: bazel-cache
+        uses: $/.github/workflows/composite/bazel-cache
+        with:
+          key-prefix: server-test-${{ matrix.shard }}
+
       - name: Install discovery wire-test dependencies on its shard
         shell: bash
         run: |
@@ -1689,9 +1711,10 @@ jobs:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
           RACE_FLAG: ${{ (github.event_name == 'merge_group' || github.ref == 'refs/heads/main') && '-race' || '' }}
-          # Alongside junit-report.xml, gotestsum writes only the pass, skip,
-          # and fail events of 'go test -json' (no output lines) to this file,
-          # relative to server/. Each event carries its time and elapsed.
+          # Alongside junit-report.xml, gotestsum (replaying the events of the
+          # Bazel test logs) writes only the pass, skip, and fail events of
+          # 'go test -json' (no output lines) to this file, relative to
+          # server/. Each event carries its elapsed time.
           GOTESTSUM_JSONFILE_TIMING_EVENTS: test-timings.json
 
       - name: Upload test timings
@@ -1722,6 +1745,13 @@ jobs:
           go run github.com/speakeasy-api/gram/ci/cmd/flaky gate
           -junit server/junit-report.xml
           -run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+      - name: Save Bazel cache
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ steps.bazel-cache.outputs.key }}
+          path: ${{ steps.bazel-cache.outputs.path }}
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
@@ -1755,8 +1785,21 @@ jobs:
       - name: Install Go deps
         run: mise run install:go
 
+      - name: Restore Bazel cache
+        id: bazel-cache
+        uses: $/.github/workflows/composite/bazel-cache
+        with:
+          key-prefix: demo-seed-safety
+
       - name: Test
         run: mise run test:server -race -count=1 -tags=demoseed_safety ./internal/demoseed/...
+
+      - name: Save Bazel cache
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ steps.bazel-cache.outputs.key }}
+          path: ${{ steps.bazel-cache.outputs.path }}
 
   docker-build-client:
     name: docker-build-client

@@ -1,0 +1,28 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "destructivetool",
+    srcs = ["scanner.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/scanners/destructivetool",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/mcpapproval/capability",
+        "//server/internal/scanners",
+        "//server/internal/shadowmcp",
+        "//server/internal/toolref",
+    ],
+)
+
+go_test(
+    name = "destructivetool_test",
+    srcs = ["scanner_test.go"],
+    embed = [":destructivetool"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/scanners",
+        "//server/internal/shadowmcp",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

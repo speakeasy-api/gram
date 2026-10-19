@@ -1,0 +1,31 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "api",
+    srcs = [
+        "client.go",
+        "errors.go",
+        "files.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+        "//server/internal/toolconfig",
+    ],
+)
+
+go_test(
+    name = "api_test",
+    srcs = [
+        "errors_test.go",
+        "files_test.go",
+    ],
+    embed = [":api"],
+    deps = [
+        "//server/internal/oops",
+        "@com_github_stretchr_testify//require",
+    ],
+)

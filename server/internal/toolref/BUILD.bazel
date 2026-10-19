@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "toolref",
+    srcs = ["toolref.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/toolref",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "toolref_test",
+    srcs = ["toolref_test.go"],
+    deps = [
+        ":toolref",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,57 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "riskfindings",
+    srcs = [
+        "gapfill.go",
+        "sink.go",
+        "source.go",
+        "transform.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/tools/migrations/riskfindings",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//server/cmd/tools/migrations/pipeline",
+        "//server/internal/background/activities/risk_analysis",
+        "//server/internal/conv",
+        "//server/internal/risk",
+        "//server/internal/risk/categories",
+        "//server/internal/risk/chrepo",
+        "//server/internal/risk/maskdisplay",
+        "@com_github_clickhouse_clickhouse_go_v2//:clickhouse-go",
+        "@com_github_clickhouse_clickhouse_go_v2//lib/driver",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "riskfindings_test",
+    srcs = [
+        "e2e_test.go",
+        "gapfill_test.go",
+        "setup_test.go",
+        "sink_test.go",
+        "transform_test.go",
+    ],
+    embed = [":riskfindings"],
+    deps = [
+        "//server/cmd/tools/migrations/pipeline",
+        "//server/internal/assistants/repo",
+        "//server/internal/background/activities/risk_analysis",
+        "//server/internal/chat/repo",
+        "//server/internal/conv",
+        "//server/internal/projects/repo",
+        "//server/internal/risk",
+        "//server/internal/risk/chrepo",
+        "//server/internal/risk/repo",
+        "//server/internal/testenv",
+        "//server/internal/testenv/testrepo",
+        "@com_github_clickhouse_clickhouse_go_v2//:clickhouse-go",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

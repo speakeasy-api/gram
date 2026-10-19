@@ -1,0 +1,32 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "presidiofp",
+    srcs = [
+        "classify.go",
+        "email.go",
+        "ip.go",
+        "ip_asn.go",
+        "nhs.go",
+        "retired.go",
+    ],
+    embedsrcs = ["data/dbip-asn.mmdb"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/presidiofp",
+    visibility = ["//server:__subpackages__"],
+    deps = ["@com_github_oschwald_maxminddb_golang//:maxminddb-golang"],
+)
+
+go_test(
+    name = "presidiofp_test",
+    srcs = [
+        "classify_test.go",
+        "nhs_test.go",
+        "retired_test.go",
+    ],
+    embed = [":presidiofp"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

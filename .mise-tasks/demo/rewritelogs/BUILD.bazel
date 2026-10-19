@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "rewritelogs_lib",
+    srcs = [
+        "main.go",
+        "rewrite.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/.mise-tasks/demo/rewritelogs",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "rewritelogs",
+    embed = [":rewritelogs_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "rewritelogs_test",
+    srcs = ["rewrite_test.go"],
+    embed = [":rewritelogs_lib"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

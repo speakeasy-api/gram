@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "plugins",
+    srcs = [
+        "organization_publication_requested.pb.go",
+        "organization_publication_scheduler.pb.go",
+        "publication_requested.pb.go",
+        "publication_scheduler.pb.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//runtime/protoimpl",
+    ],
+)

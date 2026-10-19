@@ -1,0 +1,51 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "localaccounts",
+    srcs = [
+        "expiry.go",
+        "guards.go",
+        "lifecycle.go",
+        "profiles.go",
+    ],
+    embedsrcs = ["schema.sql"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/localaccounts",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//dev-idp/pkg/devidentity",
+        "//server/internal/conv",
+        "//server/internal/localaccounts/repo",
+        "//server/internal/o11y",
+        "//server/internal/productfeatures",
+        "//server/internal/productfeatures/repo",
+        "@com_github_burntsushi_toml//:toml",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@io_temporal_go_api//workflowservice/v1:workflowservice",
+        "@io_temporal_go_sdk//client",
+        "@org_golang_google_grpc//:grpc",
+    ],
+)
+
+go_test(
+    name = "localaccounts_test",
+    srcs = [
+        "guards_test.go",
+        "lifecycle_test.go",
+        "profiles_test.go",
+    ],
+    embed = [":localaccounts"],
+    deps = [
+        "//dev-idp/pkg/devidentity",
+        "//server/internal/productfeatures",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+    ],
+)

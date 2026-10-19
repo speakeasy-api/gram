@@ -1,6 +1,7 @@
 package loops_test
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -19,7 +20,11 @@ const (
 func TestManifestMatchesApplicationTemplateContract(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := loops.LoadManifest("manifest.json")
+	// The manifest's directory is opened with os.Root, which refuses the
+	// symlinks Bazel runs tests through, so read it from where they point.
+	path, err := filepath.EvalSymlinks("manifest.json")
+	require.NoError(t, err)
+	manifest, err := loops.LoadManifest(path)
 	require.NoError(t, err)
 	require.Len(t, manifest.Templates, len(email.RegisteredTemplates))
 

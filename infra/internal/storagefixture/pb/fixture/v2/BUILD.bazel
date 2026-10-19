@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "fixture",
+    srcs = [
+        "archive.pb.go",
+        "event.pb.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/infra/internal/storagefixture/pb/fixture/v2",
+    visibility = ["//infra:__subpackages__"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//runtime/protoimpl",
+    ],
+)

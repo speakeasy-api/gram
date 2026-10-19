@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "skilldiff",
+    srcs = ["skilldiff.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/skills/skilldiff",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "@com_github_gitleaks_go_gitdiff//gitdiff",
+        "@com_github_pmezard_go_difflib//difflib",
+    ],
+)
+
+go_test(
+    name = "skilldiff_test",
+    srcs = ["skilldiff_test.go"],
+    deps = [
+        ":skilldiff",
+        "@com_github_stretchr_testify//require",
+    ],
+)

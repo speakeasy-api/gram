@@ -1,0 +1,33 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "interceptors",
+    srcs = [
+        "context.go",
+        "log.go",
+        "recover.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/background/interceptors",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/o11y",
+        "@io_temporal_go_sdk//activity",
+        "@io_temporal_go_sdk//interceptor",
+        "@io_temporal_go_sdk//log",
+        "@io_temporal_go_sdk//temporal",
+        "@io_temporal_go_sdk//workflow",
+    ],
+)
+
+go_test(
+    name = "interceptors_test",
+    srcs = ["log_test.go"],
+    embed = [":interceptors"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+        "@io_temporal_go_sdk//log",
+        "@io_temporal_go_sdk//temporal",
+        "@io_temporal_go_sdk//workflow",
+    ],
+)

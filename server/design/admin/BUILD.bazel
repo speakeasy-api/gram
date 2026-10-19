@@ -1,0 +1,32 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "admin",
+    srcs = [
+        "assets.go",
+        "design.go",
+        "externalmcpmigration.go",
+        "mcpserverhealth.go",
+        "onboarding.go",
+        "registry.go",
+        "remotesessions.go",
+        "signupoffers.go",
+        "supportcoverage.go",
+        "supportmatrix.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/design/admin",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//server/design/assets",
+        "//server/design/auditlogs",
+        "//server/design/platformadmin/remotesessions",
+        "//server/design/remotesessionissuers",
+        "//server/design/security",
+        "//server/design/shared",
+        "//server/design/usage",
+        "//server/internal/constants",
+        "//server/internal/conv",
+        "//server/internal/oops",
+        "@design_goa_goa_v3//dsl",
+    ],
+)

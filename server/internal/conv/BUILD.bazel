@@ -1,0 +1,41 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "conv",
+    srcs = [
+        "from.go",
+        "markdown.go",
+        "secrets.go",
+        "strings.go",
+        "tools.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/conv",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/constants",
+        "//server/internal/urn",
+        "@com_github_gomarkdown_markdown//:markdown",
+        "@com_github_gomarkdown_markdown//html",
+        "@com_github_gomarkdown_markdown//parser",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_microcosm_cc_bluemonday//:bluemonday",
+    ],
+)
+
+go_test(
+    name = "conv_test",
+    srcs = [
+        "from_test.go",
+        "secrets_test.go",
+        "strings_test.go",
+    ],
+    deps = [
+        ":conv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//require",
+    ],
+)

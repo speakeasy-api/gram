@@ -1,0 +1,12 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "customrules",
+    srcs = ["customrules.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/customrules",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/risk/repo",
+        "@com_github_google_uuid//:uuid",
+    ],
+)

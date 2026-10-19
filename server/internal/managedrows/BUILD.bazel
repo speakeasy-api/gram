@@ -1,0 +1,26 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "managedrows",
+    srcs = ["managedrows.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/managedrows",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/managedrows/repo",
+        "//server/internal/oops",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+    ],
+)
+
+go_test(
+    name = "managedrows_test",
+    srcs = ["managedrows_test.go"],
+    deps = [
+        ":managedrows",
+        "//server/internal/oops",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "inv",
+    srcs = [
+        "check.go",
+        "debug_prod.go",
+        "require.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/inv",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "inv_test",
+    srcs = [
+        "check_test.go",
+        "require_test.go",
+    ],
+    deps = [
+        ":inv",
+        "@com_github_stretchr_testify//require",
+    ],
+)

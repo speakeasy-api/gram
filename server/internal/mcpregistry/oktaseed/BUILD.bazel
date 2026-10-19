@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "oktaseed",
+    srcs = ["oktaseed.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpregistry/oktaseed",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/mcpregistry",
+    ],
+)
+
+go_test(
+    name = "oktaseed_test",
+    srcs = [
+        "oktaseed_test.go",
+        "version_test.go",
+    ],
+    embed = [":oktaseed"],
+    deps = [
+        "//server/internal/mcpregistry",
+        "//server/internal/mcpregistry/repo",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

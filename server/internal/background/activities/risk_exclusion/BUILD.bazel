@@ -1,0 +1,48 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "risk_exclusion",
+    srcs = ["reconcile.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/assets/blobio",
+        "//server/internal/attr",
+        "//server/internal/conv",
+        "//server/internal/risk",
+        "//server/internal/risk/chrepo",
+        "//server/internal/risk/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@io_opentelemetry_go_otel_trace//:trace",
+        "@io_temporal_go_sdk//activity",
+    ],
+)
+
+go_test(
+    name = "risk_exclusion_test",
+    srcs = [
+        "reconcile_test.go",
+        "setup_test.go",
+    ],
+    deps = [
+        ":risk_exclusion",
+        "//server/internal/organizations/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/risk",
+        "//server/internal/risk/chrepo",
+        "//server/internal/risk/repo",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+        "@io_temporal_go_sdk//testsuite",
+    ],
+)

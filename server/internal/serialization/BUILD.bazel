@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "serialization",
+    srcs = [
+        "deepobject.go",
+        "form.go",
+        "parsing.go",
+        "simple.go",
+        "utils.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/serialization",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/attr"],
+)
+
+go_test(
+    name = "serialization_test",
+    srcs = ["utils_test.go"],
+    embed = [":serialization"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

@@ -1,0 +1,31 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "replay",
+    srcs = [
+        "doc.go",
+        "guard.go",
+        "key.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/usersessions/replay",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/cache",
+        "@com_github_redis_go_redis_v9//:go-redis",
+    ],
+)
+
+go_test(
+    name = "replay_test",
+    srcs = [
+        "replay_test.go",
+        "setup_test.go",
+    ],
+    embed = [":replay"],
+    deps = [
+        "//server/internal/testenv",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@com_github_stretchr_testify//require",
+    ],
+)

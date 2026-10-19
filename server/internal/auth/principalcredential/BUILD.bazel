@@ -1,0 +1,50 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "principalcredential",
+    srcs = ["principalcredential.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/auth/principalcredential",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/agents/runtimepolicy",
+        "//server/internal/authz",
+        "//server/internal/contextvalues",
+        "//server/internal/mcpauthz",
+        "//server/internal/organizations/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/urn",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "principalcredential_test",
+    srcs = [
+        "authenticate_test.go",
+        "principalcredential_test.go",
+        "setup_test.go",
+    ],
+    deps = [
+        ":principalcredential",
+        "//server/internal/access/repo",
+        "//server/internal/admin/repo",
+        "//server/internal/auth/assistanttokens",
+        "//server/internal/authz",
+        "//server/internal/contextvalues",
+        "//server/internal/mcpauthz",
+        "//server/internal/organizations/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/testenv",
+        "//server/internal/urn",
+        "//server/internal/users/repo",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

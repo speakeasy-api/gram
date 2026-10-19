@@ -1,0 +1,20 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cmd",
+    srcs = [
+        "auth.go",
+        "logging.go",
+        "profile.go",
+        "push.go",
+        "stage.go",
+        "whoami.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/cli/pkg/cmd",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cli/internal/app",
+        "//cli/internal/app/logging",
+        "//cli/internal/profile",
+    ],
+)

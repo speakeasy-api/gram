@@ -1,0 +1,64 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "shadowmcp",
+    srcs = [
+        "cache.go",
+        "decision_conflicts.go",
+        "disposition.go",
+        "hosted.go",
+        "inventory_url.go",
+        "match.go",
+        "schema.go",
+        "validator.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/shadowmcp",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/attr",
+        "//server/internal/cache",
+        "//server/internal/conv",
+        "//server/internal/customdomains/repo",
+        "//server/internal/matchvalue",
+        "//server/internal/mv",
+        "//server/internal/risk/repo",
+        "//server/internal/toolsets/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "shadowmcp_test",
+    srcs = [
+        "cache_test.go",
+        "disposition_test.go",
+        "hosted_test.go",
+        "inventory_url_test.go",
+        "match_test.go",
+        "schema_test.go",
+        "setup_test.go",
+        "validator_test.go",
+    ],
+    embed = [":shadowmcp"],
+    deps = [
+        "//server/internal/cache",
+        "//server/internal/deployments/repo",
+        "//server/internal/organizations/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/risk/repo",
+        "//server/internal/testenv",
+        "//server/internal/toolsets/repo",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

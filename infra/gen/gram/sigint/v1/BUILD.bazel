@@ -1,0 +1,20 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sigint",
+    srcs = [
+        "evaluator.pb.go",
+        "lake_primary.pb.go",
+        "outcome.pb.go",
+        "outcome_ch_writer.pb.go",
+        "reading.pb.go",
+        "reading_ch_writer.pb.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//runtime/protoimpl",
+    ],
+)

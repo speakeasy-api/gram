@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "externalcredentials",
+    srcs = ["design.go"],
+    importpath = "github.com/speakeasy-api/gram/server/design/platformadmin/externalcredentials",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//server/design/externalcredentials",
+        "//server/design/security",
+        "//server/design/shared",
+        "@design_goa_goa_v3//dsl",
+    ],
+)

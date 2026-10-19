@@ -1,0 +1,43 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "mcpauthz",
+    srcs = [
+        "issuer.go",
+        "sign.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpauthz",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/contextvalues",
+        "//server/internal/mcpidentity",
+        "//server/internal/urn",
+        "//tunnel/jwks",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "mcpauthz_test",
+    srcs = [
+        "issuer_test.go",
+        "setup_test.go",
+    ],
+    embed = [":mcpauthz"],
+    deps = [
+        "//server/internal/contextvalues",
+        "//server/internal/mcpidentity",
+        "//server/internal/sessiontokens",
+        "//server/internal/testenv",
+        "//server/internal/urn",
+        "//tunnel/gateway",
+        "//tunnel/jwks",
+        "//tunnel/route",
+        "@com_github_go_jose_go_jose_v4//:go-jose",
+        "@com_github_go_jose_go_jose_v4//jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

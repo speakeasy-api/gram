@@ -1,0 +1,40 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "assignments",
+    srcs = [
+        "command.go",
+        "role_deletion.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/plugins/assignments",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/audit",
+        "//server/internal/authz",
+        "//server/internal/conv",
+        "//server/internal/directory",
+        "//server/internal/plugins/installmode",
+        "//server/internal/plugins/repo",
+        "//server/internal/plugins/roledelivery",
+        "//server/internal/shadowmcp/admission",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+    ],
+)
+
+go_test(
+    name = "assignments_test",
+    srcs = [
+        "role_deletion_test.go",
+        "subset_test.go",
+    ],
+    embed = [":assignments"],
+    deps = [
+        "//server/internal/audit",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

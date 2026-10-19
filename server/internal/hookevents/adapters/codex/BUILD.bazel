@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "codex",
+    srcs = ["events.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/codex",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/hooks",
+        "//server/internal/contextvalues",
+        "//server/internal/conv",
+        "//server/internal/hookevents",
+    ],
+)
+
+go_test(
+    name = "codex_test",
+    srcs = ["events_test.go"],
+    embed = [":codex"],
+    deps = [
+        "//server/gen/hooks",
+        "//server/internal/contextvalues",
+        "//server/internal/hookevents",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,33 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "cmd_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/infra/internal/storagefixture/cmd",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//infra/internal/storagefixture",
+        "//infra/internal/storagefixture/pb/fixture/v1:fixture",
+        "//infra/pkg/gcp",
+        "//infra/pkg/storage",
+        "@com_google_cloud_go_pubsub_v2//:pubsub",
+        "@com_google_cloud_go_pubsub_v2//pstest",
+        "@org_golang_google_api//option",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//credentials/insecure",
+    ],
+)
+
+go_binary(
+    name = "cmd",
+    embed = [":cmd_lib"],
+    visibility = ["//infra:__subpackages__"],
+)
+
+go_test(
+    name = "cmd_test",
+    srcs = ["main_test.go"],
+    embed = [":cmd_lib"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

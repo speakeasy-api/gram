@@ -1,0 +1,55 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "customruleanalyzer",
+    srcs = [
+        "evaluator.go",
+        "handler.go",
+        "scanner.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/internal/attr",
+        "//server/internal/celeval",
+        "//server/internal/metering",
+        "//server/internal/risk/celenv",
+        "//server/internal/risk/customrules",
+        "//server/internal/risk/repo",
+        "//server/internal/scanners",
+        "//server/internal/stokens",
+        "//server/internal/toolref",
+        "@com_github_google_uuid//:uuid",
+    ],
+)
+
+go_test(
+    name = "customruleanalyzer_test",
+    srcs = [
+        "evaluator_test.go",
+        "handler_test.go",
+        "scanner_test.go",
+        "setup_test.go",
+    ],
+    embed = [":customruleanalyzer"],
+    deps = [
+        "//infra/gen/gram/metering/v1:metering",
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/internal/celeval",
+        "//server/internal/metering",
+        "//server/internal/organizations/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/risk/celenv",
+        "//server/internal/risk/repo",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+    ],
+)

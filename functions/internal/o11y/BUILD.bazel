@@ -1,0 +1,21 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "o11y",
+    srcs = [
+        "exec.go",
+        "logger.go",
+        "setup.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/functions/internal/o11y",
+    visibility = ["//functions:__subpackages__"],
+    deps = [
+        "//functions/internal/attr",
+        "@com_github_go_logr_logr//:logr",
+        "@io_opentelemetry_go_otel//:otel",
+        "@io_opentelemetry_go_otel//propagation",
+        "@io_opentelemetry_go_otel_metric//noop",
+        "@io_opentelemetry_go_otel_trace//:trace",
+        "@io_opentelemetry_go_otel_trace//noop",
+    ],
+)

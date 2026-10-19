@@ -1,25 +1,24 @@
 #!/usr/bin/env bash
 
-#MISE description="Build the gram server"
-#MISE dir="{{ config_root }}/server"
-#MISE depends=["go:tidy"]
+#MISE description="Build the gram server with Bazel into server/bin/gram"
 
-#USAGE flag "--readonly" help="Build with -mod=readonly"
+#USAGE flag "--readonly" help="Fail instead of updating BUILD files or MODULE.bazel.lock"
 
-set -e
+set -euo pipefail
 
-args=()
+args=(--stamp)
 if [ "${usage_readonly:-false}" = "true" ]; then
-    args+=("-mod=readonly")
+  args+=(--lockfile_mode=error)
+else
+  # A new package or import needs its BUILD file before Bazel can build it.
+  mise run -q bazel:gazelle
 fi
 
-git_sha=$(git rev-parse HEAD)
-runtime_image_hash=${GRAM_ASSISTANT_RUNTIME_IMAGE_HASH:-dev}
+# The git SHA and GRAM_ASSISTANT_RUNTIME_IMAGE_HASH are stamped in by
+# tools/bazel/workspace_status.sh.
+bazel build "${args[@]}" //server:server
 
-CGO_ENABLED=0 go \
-    build \
-    "${args[@]}" \
-    -trimpath \
-    -ldflags="-s -w -X github.com/speakeasy-api/gram/server/cmd/gram.GitSHA=${git_sha} -X github.com/speakeasy-api/gram/server/cmd/gram.AssistantRuntimeImageHash=${runtime_image_hash} -X goa.design/clue/health.Version=${git_sha}" \
-    -o bin/gram \
-    ./main.go
+out=$(bazel cquery "${args[@]}" --output=files //server:server 2>/dev/null)
+mkdir -p server/bin
+install -m 0755 "$out" server/bin/gram
+echo "Built server/bin/gram"

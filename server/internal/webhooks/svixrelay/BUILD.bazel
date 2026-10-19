@@ -1,0 +1,51 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "svixrelay",
+    srcs = [
+        "allowset.go",
+        "handler.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/gen/gram/webhooks/v1:webhooks",
+        "//infra/pkg/gcp",
+        "//server/internal/attr",
+        "//server/internal/webhooks/svixrelay/repo",
+        "@com_github_hashicorp_golang_lru_v2//expirable",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_svix_svix_webhooks//go",
+        "@com_github_svix_svix_webhooks//go/models",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@org_golang_x_sync//singleflight",
+    ],
+)
+
+go_test(
+    name = "svixrelay_test",
+    srcs = [
+        "allowset_test.go",
+        "handler_test.go",
+        "setup_test.go",
+    ],
+    deps = [
+        ":svixrelay",
+        "//infra/gen/gram/webhooks/v1:webhooks",
+        "//infra/pkg/gcp",
+        "//server/internal/conv",
+        "//server/internal/organizations/repo",
+        "//server/internal/testenv",
+        "//server/internal/testenv/testrepo",
+        "//server/internal/thirdparty/svix/svixtest",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+        "@com_github_svix_svix_webhooks//go",
+        "@com_github_svix_svix_webhooks//go/models",
+    ],
+)

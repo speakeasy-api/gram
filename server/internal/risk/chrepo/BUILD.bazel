@@ -1,0 +1,44 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "chrepo",
+    srcs = [
+        "chat.go",
+        "db.go",
+        "dismissed.go",
+        "false_positive.go",
+        "finding_groups.go",
+        "list.go",
+        "overview.go",
+        "queries.go",
+        "retro_exclusion.go",
+        "signals.go",
+        "unmask.go",
+        "watchdog.go",
+        "watchdog_alerts.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/risk/chrepo",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "@com_github_clickhouse_clickhouse_go_v2//:clickhouse-go",
+        "@com_github_clickhouse_clickhouse_go_v2//lib/driver",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_masterminds_squirrel//:squirrel",
+    ],
+)
+
+go_test(
+    name = "chrepo_test",
+    srcs = [
+        "finding_groups_internal_test.go",
+        "nullable_internal_test.go",
+        "retro_exclusion_internal_test.go",
+        "watchdog_alerts_internal_test.go",
+    ],
+    embed = [":chrepo"],
+    deps = [
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

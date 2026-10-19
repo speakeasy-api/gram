@@ -1,0 +1,45 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "resourceas",
+    srcs = [
+        "accesstoken.go",
+        "handler.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/internal/modes/resourceas",
+    visibility = ["//dev-idp:__subpackages__"],
+    deps = [
+        "//dev-idp/internal/cimd",
+        "//dev-idp/internal/database/repo",
+        "//dev-idp/internal/ema",
+        "//dev-idp/internal/jwks",
+        "//dev-idp/internal/keystore",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@com_github_google_uuid//:uuid",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "resourceas_test",
+    srcs = [
+        "discovery_test.go",
+        "handler_test.go",
+        "setup_test.go",
+    ],
+    embed = [":resourceas"],
+    deps = [
+        "//dev-idp/internal/bootstrap",
+        "//dev-idp/internal/config",
+        "//dev-idp/internal/database/repo",
+        "//dev-idp/internal/ema",
+        "//dev-idp/internal/jwks",
+        "//dev-idp/internal/keystore",
+        "//plog",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel_trace//noop",
+    ],
+)

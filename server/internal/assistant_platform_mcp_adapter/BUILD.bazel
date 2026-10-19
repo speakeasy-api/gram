@@ -1,0 +1,33 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "assistant_platform_mcp_adapter",
+    srcs = ["adapter.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/authz",
+        "//server/internal/contextvalues",
+        "//server/internal/platformmcp",
+        "//server/internal/platformtools",
+        "//server/internal/platformtools/core",
+        "//server/internal/toolconfig",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+    ],
+)
+
+go_test(
+    name = "assistant_platform_mcp_adapter_test",
+    srcs = ["adapter_test.go"],
+    embed = [":assistant_platform_mcp_adapter"],
+    deps = [
+        "//server/internal/authz",
+        "//server/internal/platformmcp",
+        "//server/internal/platformtools",
+        "//server/internal/testenv",
+        "@com_github_google_jsonschema_go//jsonschema",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "workos",
+    srcs = ["workos.go"],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/internal/workos",
+    visibility = ["//dev-idp:__subpackages__"],
+    deps = [
+        "@com_github_workos_workos_go_v6//pkg/organizations",
+        "@com_github_workos_workos_go_v6//pkg/usermanagement",
+        "@com_github_workos_workos_go_v6//pkg/workos_errors",
+    ],
+)

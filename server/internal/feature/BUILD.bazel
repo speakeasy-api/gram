@@ -1,0 +1,27 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "feature",
+    srcs = [
+        "catalog.go",
+        "flags.go",
+        "hostedmcp.go",
+        "provider.go",
+        "signins.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/feature",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "feature_test",
+    srcs = [
+        "catalog_test.go",
+        "provider_test.go",
+    ],
+    deps = [
+        ":feature",
+        "@com_github_stretchr_testify//require",
+    ],
+)

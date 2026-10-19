@@ -16,6 +16,13 @@ func TestFindRepoRootCurrentCheckout(t *testing.T) {
 	require.NoError(t, err)
 	require.FileExists(t, filepath.Join(root, "server", "database", "schema.sql"))
 	require.FileExists(t, filepath.Join(root, "server", "clickhouse", "schema.sql"))
+}
+
+func TestFindCheckoutRootCurrentCheckout(t *testing.T) {
+	t.Parallel()
+	root, err := testenv.FindCheckoutRoot(t.Context())
+	require.NoError(t, err)
+	// The local functions runner builds from here.
 	require.DirExists(t, filepath.Join(root, "functions", "cmd", "runner"))
 }
 

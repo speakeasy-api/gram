@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "dev-mcp_lib",
+    srcs = [
+        "client.go",
+        "main.go",
+        "tools.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/dev-mcp",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//server/internal/attr",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+    ],
+)
+
+go_binary(
+    name = "dev-mcp",
+    embed = [":dev-mcp_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,30 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "plugins",
+    srcs = [
+        "shared.go",
+        "tool_list_plugins.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/plugins",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/plugins",
+        "//server/gen/types",
+        "//server/internal/conv",
+        "//server/internal/platformtools/core",
+        "//server/internal/toolconfig",
+    ],
+)
+
+go_test(
+    name = "plugins_test",
+    srcs = ["tool_list_plugins_test.go"],
+    embed = [":plugins"],
+    deps = [
+        "//server/gen/plugins",
+        "//server/internal/toolconfig",
+        "@com_github_stretchr_testify//require",
+    ],
+)

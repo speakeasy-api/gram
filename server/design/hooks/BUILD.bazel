@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "hooks",
+    srcs = [
+        "design.go",
+        "otel_types.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/design/hooks",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//server/design/security",
+        "//server/design/shared",
+        "@design_goa_goa_v3//dsl",
+    ],
+)

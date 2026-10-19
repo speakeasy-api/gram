@@ -1,0 +1,44 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "promptpolicy",
+    srcs = [
+        "handler.go",
+        "judge.go",
+        "scanner.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/internal/attr",
+        "//server/internal/judgemessage",
+        "//server/internal/metering",
+        "//server/internal/scanners",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "promptpolicy_test",
+    srcs = [
+        "handler_test.go",
+        "judge_test.go",
+        "scanner_test.go",
+    ],
+    embed = [":promptpolicy"],
+    deps = [
+        "//infra/gen/gram/metering/v1:metering",
+        "//infra/gen/gram/risk/v1:risk",
+        "//infra/pkg/gcp",
+        "//server/internal/judgemessage",
+        "//server/internal/message",
+        "//server/internal/metering",
+        "//server/internal/testenv",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+    ],
+)

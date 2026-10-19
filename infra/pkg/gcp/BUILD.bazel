@@ -1,0 +1,64 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "gcp",
+    srcs = [
+        "publisher.go",
+        "publisher_encoded.go",
+        "publisher_mock.go",
+        "publisher_noop.go",
+        "pubsub_gcp.go",
+        "pubsub_local.go",
+        "storage_subscriber.go",
+        "subscriber.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/infra/pkg/gcp",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "//infra/internal/attr",
+        "//infra/internal/batching",
+        "//infra/internal/gcp",
+        "@com_github_stretchr_testify//mock",
+        "@com_google_cloud_go_pubsub_v2//:pubsub",
+        "@com_google_cloud_go_pubsub_v2//apiv1/pubsubpb",
+        "@io_opentelemetry_go_otel//:otel",
+        "@io_opentelemetry_go_otel//propagation",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//types/known/durationpb",
+    ],
+)
+
+go_test(
+    name = "gcp_test",
+    srcs = [
+        "publisher_encoded_test.go",
+        "publisher_test.go",
+        "storage_marker_test.go",
+        "storage_subscriber_test.go",
+        "subscriber_bounded_test.go",
+        "subscriber_test.go",
+    ],
+    embed = [":gcp"],
+    deps = [
+        "//infra/gen/gcp/pubsub/v1:pubsub",
+        "//infra/gen/gram/ping/v2:ping",
+        "@com_github_stretchr_testify//require",
+        "@com_google_cloud_go_pubsub_v2//:pubsub",
+        "@com_google_cloud_go_pubsub_v2//pstest",
+        "@io_opentelemetry_go_otel//propagation",
+        "@io_opentelemetry_go_otel_trace//:trace",
+        "@org_golang_google_api//option",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//credentials/insecure",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protodesc",
+        "@org_golang_google_protobuf//reflect/protoregistry",
+        "@org_golang_google_protobuf//types/descriptorpb",
+        "@org_golang_google_protobuf//types/dynamicpb",
+        "@org_golang_google_protobuf//types/known/emptypb",
+    ],
+)

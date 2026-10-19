@@ -1,0 +1,35 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "triggers",
+    srcs = [
+        "thread_tools.go",
+        "tools.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/triggers",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/types",
+        "//server/internal/assistants/repo",
+        "//server/internal/audit",
+        "//server/internal/background/triggers",
+        "//server/internal/contextvalues",
+        "//server/internal/conv",
+        "//server/internal/environments/repo",
+        "//server/internal/platformtools/core",
+        "//server/internal/toolconfig",
+        "//server/internal/triggers/repo",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "triggers_test",
+    srcs = ["tools_test.go"],
+    embed = [":triggers"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

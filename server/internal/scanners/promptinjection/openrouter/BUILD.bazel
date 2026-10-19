@@ -1,0 +1,63 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "openrouter",
+    srcs = [
+        "cascade.go",
+        "judge.go",
+        "judge_v2.go",
+        "metrics.go",
+        "prefilter_payload.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/billing",
+        "//server/internal/judgemessage",
+        "//server/internal/o11y",
+        "//server/internal/scanners/promptinjection",
+        "//server/internal/stokens",
+        "//server/internal/thirdparty/openrouter",
+        "//server/internal/thirdparty/typesafedecisions",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_metric//:metric",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "openrouter_test",
+    srcs = [
+        "cascade_test.go",
+        "judge_test.go",
+        "judge_v2_test.go",
+        "prefilter_payload_test.go",
+    ],
+    embed = [":openrouter"],
+    deps = [
+        "//server/internal/billing",
+        "//server/internal/judgemessage",
+        "//server/internal/message",
+        "//server/internal/o11y",
+        "//server/internal/scanners/promptinjection",
+        "//server/internal/testenv",
+        "//server/internal/thirdparty/openrouter",
+        "//server/internal/thirdparty/typesafedecisions",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel_sdk//trace",
+        "@io_opentelemetry_go_otel_sdk//trace/tracetest",
+        "@io_opentelemetry_go_otel_sdk_metric//:metric",
+        "@io_opentelemetry_go_otel_sdk_metric//metricdata",
+    ],
+)

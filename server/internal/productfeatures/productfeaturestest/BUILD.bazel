@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "productfeaturestest",
+    srcs = [
+        "doc.go",
+        "features.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/productfeatures",
+        "//server/internal/productfeatures/repo",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

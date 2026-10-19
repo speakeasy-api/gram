@@ -1,0 +1,28 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "components",
+    srcs = [
+        "hookingestdata.go",
+        "hookingestevent.go",
+        "hookingestsession.go",
+        "hookingestsource.go",
+        "hookmcpattributionentry.go",
+        "hookmcpdata.go",
+        "hookmessagedata.go",
+        "hooknotificationdata.go",
+        "hookpromptattachmententry.go",
+        "hookpromptdata.go",
+        "hookskilldata.go",
+        "hooktoolcalldata.go",
+        "hookusagedata.go",
+        "ingesthookresult.go",
+        "ingestrequestbody.go",
+        "security.go",
+        "skillfeedbackpayload.go",
+        "uploadskillcontentpayload.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/hooks/sdk/models/components",
+    visibility = ["//visibility:public"],
+    deps = ["//hooks/sdk/internal/utils"],
+)

@@ -1,0 +1,53 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "assistantmemories",
+    srcs = [
+        "impl.go",
+        "mv.go",
+        "service.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/assistantmemories",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/assistant_memories",
+        "//server/gen/http/assistant_memories/server",
+        "//server/gen/types",
+        "//server/internal/attr",
+        "//server/internal/auth",
+        "//server/internal/auth/sessions",
+        "//server/internal/authz",
+        "//server/internal/contextvalues",
+        "//server/internal/conv",
+        "//server/internal/memory",
+        "//server/internal/memory/repo",
+        "//server/internal/middleware",
+        "//server/internal/oops",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@design_goa_goa_v3//http",
+        "@design_goa_goa_v3//security",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "assistantmemories_test",
+    srcs = ["impl_test.go"],
+    embed = [":assistantmemories"],
+    deps = [
+        "//server/gen/assistant_memories",
+        "//server/internal/authz",
+        "//server/internal/authztest",
+        "//server/internal/contextvalues",
+        "//server/internal/memory",
+        "//server/internal/memory/repo",
+        "//server/internal/oops",
+        "//server/internal/testenv",
+        "//server/internal/thirdparty/workos",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,37 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "tunnelrouting",
+    srcs = [
+        "httpclient.go",
+        "routing.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/mcp/httpheaders",
+        "//server/internal/remotemcp/proxy",
+        "//tunnel/route",
+        "//tunnel/wire",
+    ],
+)
+
+go_test(
+    name = "tunnelrouting_test",
+    srcs = [
+        "httpclient_test.go",
+        "routing_test.go",
+    ],
+    embed = [":tunnelrouting"],
+    deps = [
+        "//server/internal/constants",
+        "//server/internal/guardian",
+        "//server/internal/remotemcp/proxy",
+        "//server/internal/testenv",
+        "//tunnel/route",
+        "//tunnel/wire",
+        "@com_github_stretchr_testify//require",
+    ],
+)

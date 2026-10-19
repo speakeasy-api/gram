@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "runner_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/functions/cmd/runner",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//functions/buildinfo",
+        "//functions/internal/attr",
+        "//functions/internal/auth",
+        "//functions/internal/bootstrap",
+        "//functions/internal/encryption",
+        "//functions/internal/middleware",
+        "//functions/internal/o11y",
+        "//functions/internal/runner",
+        "//functions/internal/svc",
+        "//server/gen/functions",
+        "//server/gen/http/functions/client",
+        "@design_goa_goa_v3//http",
+        "@io_opentelemetry_go_contrib_instrumentation_net_http_otelhttp//:otelhttp",
+    ],
+)
+
+go_binary(
+    name = "runner",
+    embed = [":runner_lib"],
+    visibility = ["//visibility:public"],
+)

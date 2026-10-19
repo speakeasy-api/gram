@@ -1,0 +1,45 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "risk",
+    srcs = [
+        "shared.go",
+        "tool_create_risk_exclusion.go",
+        "tool_get_risk_rule_breakdown.go",
+        "tool_list_risk_exclusions.go",
+        "tool_list_risk_policies.go",
+        "tool_list_risk_results_by_chat.go",
+        "tool_list_risk_results_for_agent.go",
+        "tool_mark_risk_results_false_positive.go",
+        "tool_unmark_risk_results_false_positive.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/risk",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/gen/risk",
+        "//server/gen/types",
+        "//server/internal/platformtools/core",
+        "//server/internal/risk",
+        "//server/internal/risk/categories",
+        "//server/internal/risk/exclusioncore",
+        "//server/internal/toolconfig",
+    ],
+)
+
+go_test(
+    name = "risk_test",
+    srcs = [
+        "tool_create_risk_exclusion_test.go",
+        "tool_get_risk_rule_breakdown_test.go",
+        "tool_list_risk_exclusions_test.go",
+    ],
+    embed = [":risk"],
+    deps = [
+        "//server/gen/risk",
+        "//server/gen/types",
+        "//server/internal/risk/exclusioncore",
+        "//server/internal/toolconfig",
+        "@com_github_stretchr_testify//require",
+    ],
+)

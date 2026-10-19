@@ -1,0 +1,12 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "must",
+    srcs = [
+        "helpers.go",
+        "uuid.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/must",
+    visibility = ["//server:__subpackages__"],
+    deps = ["@com_github_google_uuid//:uuid"],
+)

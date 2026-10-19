@@ -1,0 +1,31 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "contract",
+    srcs = ["contract.go"],
+    embedsrcs = [
+        "record.schema.json",
+        "speakeasy-registry.schema.json",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpregistry/contract",
+    visibility = ["//server:__subpackages__"],
+    deps = ["@com_github_santhosh_tekuri_jsonschema_v6//:jsonschema"],
+)
+
+go_test(
+    name = "contract_test",
+    srcs = [
+        "contract_test.go",
+        "speakeasy_registry_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":contract"],
+    deps = ["@com_github_stretchr_testify//require"],
+)
+
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//server/internal/mcpregistry:__pkg__"],
+)

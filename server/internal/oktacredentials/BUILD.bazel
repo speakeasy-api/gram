@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "oktacredentials",
+    srcs = ["provider.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/oktacredentials",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/conv",
+        "//server/internal/identityproviderconnections/repo",
+        "//server/internal/remotesessions",
+        "//server/internal/thirdparty/okta",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)

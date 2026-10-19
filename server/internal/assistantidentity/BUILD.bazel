@@ -1,0 +1,38 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "assistantidentity",
+    srcs = [
+        "actor.go",
+        "identity.go",
+        "provision.go",
+        "resolve.go",
+        "service.go",
+        "triggers.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/assistantidentity",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/agentownership",
+        "//server/internal/agents",
+        "//server/internal/agents/lifecycle",
+        "//server/internal/agents/repo",
+        "//server/internal/assistantidentity/repo",
+        "//server/internal/audit",
+        "//server/internal/authz",
+        "//server/internal/background/triggers",
+        "//server/internal/contextvalues",
+        "//server/internal/conv",
+        "//server/internal/issuerurl",
+        "//server/internal/o11y",
+        "//server/internal/organizations/repo",
+        "//server/internal/triggers/repo",
+        "//server/internal/urn",
+        "//server/internal/workloadidentity",
+        "//server/internal/workloadpolicy",
+        "//server/internal/workloadpolicy/repo",
+        "//tunnel/jwks",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+    ],
+)

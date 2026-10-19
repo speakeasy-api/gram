@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "main_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/mock-oidc/main",
+    visibility = ["//visibility:private"],
+    deps = ["//mock-oidc"],
+)
+
+go_binary(
+    name = "main",
+    embed = [":main_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,57 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "migrations_lib",
+    srcs = [
+        "hosted_mcp_wrappers_cmd.go",
+        "main.go",
+        "openrouter_disable_causes_cmd.go",
+        "pro_entitlements_cmd.go",
+        "riskfindingscols_cmd.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/tools/migrations",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//server/cmd/tools/migrations/hostedmcpbackfill",
+        "//server/cmd/tools/migrations/openrouterdisablecauses",
+        "//server/cmd/tools/migrations/pipeline",
+        "//server/cmd/tools/migrations/riskfindings",
+        "//server/cmd/tools/migrations/riskfindingscols",
+        "//server/internal/o11y",
+        "//server/internal/productfeatures",
+        "//server/internal/productfeatures/repo",
+        "//server/internal/risk",
+        "@com_github_clickhouse_clickhouse_go_v2//:clickhouse-go",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_binary(
+    name = "migrations",
+    embed = [":migrations_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "migrations_test",
+    srcs = [
+        "hosted_mcp_wrappers_cmd_test.go",
+        "main_test.go",
+        "openrouter_disable_causes_cmd_test.go",
+        "pro_entitlements_cmd_test.go",
+    ],
+    embed = [":migrations_lib"],
+    deps = [
+        "//server/cmd/tools/migrations/hostedmcpbackfill",
+        "//server/cmd/tools/migrations/openrouterdisablecauses",
+        "//server/cmd/tools/migrations/riskfindings",
+        "//server/internal/productfeatures",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_stretchr_testify//require",
+    ],
+)

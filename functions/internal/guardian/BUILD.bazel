@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "guardian",
+    srcs = ["exec.go"],
+    importpath = "github.com/speakeasy-api/gram/functions/internal/guardian",
+    visibility = ["//functions:__subpackages__"],
+)
+
+go_test(
+    name = "guardian_test",
+    srcs = ["exec_test.go"],
+    deps = [
+        ":guardian",
+        "@com_github_stretchr_testify//require",
+    ],
+)

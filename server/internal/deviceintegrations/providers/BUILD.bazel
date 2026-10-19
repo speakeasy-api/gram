@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "providers",
+    srcs = [
+        "providers.go",
+        "readbody.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers",
+    visibility = ["//server:__subpackages__"],
+    deps = ["//server/internal/guardian"],
+)
+
+go_test(
+    name = "providers_test",
+    srcs = [
+        "providers_test.go",
+        "readbody_test.go",
+    ],
+    embed = [":providers"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

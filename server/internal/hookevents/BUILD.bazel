@@ -1,0 +1,12 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "hookevents",
+    srcs = ["event.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/hookevents",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/contextvalues",
+        "@com_github_google_uuid//:uuid",
+    ],
+)

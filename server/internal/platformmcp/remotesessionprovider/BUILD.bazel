@@ -1,0 +1,51 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "remotesessionprovider",
+    srcs = ["adapter.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformmcp/remotesessionprovider",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/networkingress",
+        "//server/internal/platformmcp",
+        "//server/internal/remotesessions",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+    ],
+)
+
+go_test(
+    name = "remotesessionprovider_test",
+    srcs = [
+        "adapter_test.go",
+        "vertical_integration_test.go",
+    ],
+    embed = [":remotesessionprovider"],
+    deps = [
+        "//server/internal/cache",
+        "//server/internal/conv",
+        "//server/internal/guardian",
+        "//server/internal/mcpendpoints/repo",
+        "//server/internal/mcpservers/repo",
+        "//server/internal/organizations/repo",
+        "//server/internal/platformmcp",
+        "//server/internal/platformmcp/repo",
+        "//server/internal/projects/repo",
+        "//server/internal/remotemcp/repo",
+        "//server/internal/remotesessions",
+        "//server/internal/remotesessions/identitychaining",
+        "//server/internal/remotesessions/repo",
+        "//server/internal/testenv",
+        "//server/internal/testenv/testrepo",
+        "//server/internal/urn",
+        "//server/internal/usersessions/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+        "@com_github_stretchr_testify//require",
+    ],
+)

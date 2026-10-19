@@ -9,6 +9,15 @@ server:
   - "infra/**"
   - ".mise-tasks/test/ci.sh"
   - ".mise-tasks/test/server.sh"
+  - ".mise-tasks/build/server.sh"
+  - ".mise-tasks/bazel/**"
+  - ".bazelrc"
+  - ".bazelversion"
+  - "MODULE.bazel"
+  - "MODULE.bazel.lock"
+  - "REPO.bazel"
+  - "BUILD.bazel"
+  - "tools/bazel/**"
 
 client:
   - ".github/**"

@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "gen",
+    srcs = ["descriptors.go"],
+    embedsrcs = ["descriptors.pb"],
+    importpath = "github.com/speakeasy-api/gram/infra/gen",
+    visibility = ["//visibility:public"],
+)

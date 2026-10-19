@@ -1,0 +1,35 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "agentownership",
+    srcs = ["ownership.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/agentownership",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/agents/lifecycle",
+        "//server/internal/agents/repo",
+        "//server/internal/audit",
+        "//server/internal/conv",
+        "//server/internal/urn",
+        "@com_github_jackc_pgx_v5//:pgx",
+    ],
+)
+
+go_test(
+    name = "agentownership_test",
+    srcs = ["ownership_test.go"],
+    deps = [
+        ":agentownership",
+        "//server/internal/agents/repo",
+        "//server/internal/audit",
+        "//server/internal/audit/audittest",
+        "//server/internal/conv",
+        "//server/internal/organizations/repo",
+        "//server/internal/testenv",
+        "//server/internal/users/repo",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

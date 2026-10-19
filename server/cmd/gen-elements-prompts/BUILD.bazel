@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "gen-elements-prompts_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/gen-elements-prompts",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "gen-elements-prompts",
+    embed = [":gen-elements-prompts_lib"],
+    visibility = ["//visibility:public"],
+)

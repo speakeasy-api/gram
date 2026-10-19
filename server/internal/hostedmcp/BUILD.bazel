@@ -1,0 +1,42 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "hostedmcp",
+    srcs = ["hostedmcp.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/hostedmcp",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/audit",
+        "//server/internal/mcpendpoints/repo",
+        "//server/internal/mcpservers/repo",
+        "//server/internal/mcpservers/tombstone",
+        "//server/internal/mcpservers/visibility",
+        "//server/internal/mv",
+        "//server/internal/networkaccess",
+        "//server/internal/networkingress/repo",
+        "//server/internal/oops",
+        "//server/internal/plugins/repo",
+        "//server/internal/remotesessions",
+        "//server/internal/toolsets/repo",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgerrcode//:pgerrcode",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@io_opentelemetry_go_otel_trace//:trace",
+    ],
+)
+
+go_test(
+    name = "hostedmcp_test",
+    srcs = ["hostedmcp_test.go"],
+    embed = [":hostedmcp"],
+    deps = [
+        "//server/internal/oops",
+        "@com_github_jackc_pgerrcode//:pgerrcode",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_stretchr_testify//require",
+    ],
+)

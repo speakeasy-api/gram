@@ -1,0 +1,40 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "chatsessions",
+    srcs = [
+        "jwt.go",
+        "manager.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/auth/chatsessions",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/cache",
+        "//server/internal/contextvalues",
+        "//server/internal/oops",
+        "//server/internal/urn",
+        "@com_github_go_redis_cache_v9//:cache",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_redis_go_redis_v9//:go-redis",
+    ],
+)
+
+go_test(
+    name = "chatsessions_test",
+    srcs = [
+        "manager_test.go",
+        "setup_test.go",
+    ],
+    deps = [
+        ":chatsessions",
+        "//server/internal/contextvalues",
+        "//server/internal/oops",
+        "//server/internal/testenv",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_redis_go_redis_v9//:go-redis",
+        "@com_github_stretchr_testify//require",
+    ],
+)

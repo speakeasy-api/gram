@@ -1,0 +1,54 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "clientcredentials",
+    srcs = [
+        "cache.go",
+        "doc.go",
+        "grant.go",
+        "minter.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/remotesessions/clientcredentials",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/cache",
+        "//server/internal/conv",
+        "//server/internal/encryption",
+        "//server/internal/o11y",
+        "//server/internal/oautherr",
+        "//server/internal/oauthwire",
+        "//server/internal/remotesessions",
+        "//server/internal/remotesessions/repo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "clientcredentials_test",
+    srcs = [
+        "minter_test.go",
+        "setup_test.go",
+    ],
+    embed = [":clientcredentials"],
+    deps = [
+        "//server/internal/cache",
+        "//server/internal/encryption",
+        "//server/internal/guardian",
+        "//server/internal/jsonwebkeysets/repo",
+        "//server/internal/oautherr",
+        "//server/internal/oauthwire",
+        "//server/internal/remotesessions",
+        "//server/internal/remotesessions/repo",
+        "//server/internal/testenv",
+        "//server/internal/testenv/testrepo",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)

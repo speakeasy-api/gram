@@ -109,7 +109,7 @@ require (
 	goa.design/clue v1.2.5
 	goa.design/goa/v3 v3.25.3
 	golang.org/x/crypto v0.54.0
-	golang.org/x/mod v0.37.0
+	golang.org/x/mod v0.38.0
 	golang.org/x/net v0.57.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.22.0

@@ -1,0 +1,35 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "oautherr",
+    srcs = [
+        "doc.go",
+        "ietf_registry.go",
+        "rfc_6749_codes.go",
+        "rfc_6749_error.go",
+        "rfc_6750_codes.go",
+        "rfc_7009_codes.go",
+        "rfc_7591_codes.go",
+        "rfc_8628_codes.go",
+        "rfc_8707_codes.go",
+        "rfc_9200_codes.go",
+        "rfc_9396_codes.go",
+        "rfc_9449_codes.go",
+        "rfc_9470_codes.go",
+        "vendor_error.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/oautherr",
+    visibility = ["//server:__subpackages__"],
+)
+
+go_test(
+    name = "oautherr_test",
+    srcs = [
+        "ietf_registry_test.go",
+        "rfc_6749_error_test.go",
+        "vendor_error_test.go",
+    ],
+    embed = [":oautherr"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

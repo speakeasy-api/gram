@@ -1,0 +1,27 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "skillsuggestbench_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/skillsuggestbench",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//server/internal/billing",
+        "//server/internal/guardian",
+        "//server/internal/skills",
+        "//server/internal/skills/repo",
+        "//server/internal/skills/suggest",
+        "//server/internal/thirdparty/openrouter",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+        "@io_opentelemetry_go_otel_trace//noop",
+    ],
+)
+
+go_binary(
+    name = "skillsuggestbench",
+    embed = [":skillsuggestbench_lib"],
+    visibility = ["//visibility:public"],
+)

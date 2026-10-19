@@ -1,0 +1,67 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "researchagent",
+    srcs = [
+        "capability.go",
+        "judge.go",
+        "redact.go",
+        "report.go",
+        "researchagent.go",
+        "trusted_sources.go",
+    ],
+    embedsrcs = [
+        "extraction_prompt.txt",
+        "prompt.txt",
+        "report_schema.json",
+        "trusted_sources.json",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/billing",
+        "//server/internal/contextvalues",
+        "//server/internal/judgemessage",
+        "//server/internal/message",
+        "//server/internal/metering",
+        "//server/internal/platformtools/core",
+        "//server/internal/platformtools/research",
+        "//server/internal/scanners/promptinjection",
+        "//server/internal/thirdparty/openrouter",
+        "//server/internal/toolconfig",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@com_github_openrouterteam_go_sdk//optionalnullable",
+    ],
+)
+
+go_test(
+    name = "researchagent_test",
+    srcs = [
+        "capability_golden_test.go",
+        "judge_test.go",
+        "redact_internal_test.go",
+        "researchagent_test.go",
+        "sealed_runner_test.go",
+        "trusted_sources_internal_test.go",
+    ],
+    embed = [":researchagent"],
+    deps = [
+        "//infra/gen/gram/metering/v1:metering",
+        "//infra/pkg/gcp",
+        "//server/internal/contextvalues",
+        "//server/internal/message",
+        "//server/internal/metering",
+        "//server/internal/platformtools/core",
+        "//server/internal/platformtools/research",
+        "//server/internal/scanners/promptinjection",
+        "//server/internal/testenv",
+        "//server/internal/thirdparty/openrouter",
+        "//server/internal/toolconfig",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+    ],
+)

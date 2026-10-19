@@ -1,0 +1,38 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "mock-oidc",
+    srcs = [
+        "cli.go",
+        "config.go",
+        "handlers.go",
+        "provider.go",
+        "templates.go",
+    ],
+    embedsrcs = ["templates/challenge.html"],
+    importpath = "github.com/speakeasy-api/gram/mock-oidc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//mock-oidc/internal/o11y",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@com_github_sourcegraph_conc//pool",
+        "@com_github_urfave_cli_v2//:cli",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+        "@io_opentelemetry_go_contrib_instrumentation_net_http_otelhttp//:otelhttp",
+    ],
+)
+
+go_test(
+    name = "mock-oidc_test",
+    srcs = [
+        "config_test.go",
+        "integration_test.go",
+    ],
+    deps = [
+        ":mock-oidc",
+        "@com_github_coreos_go_oidc_v3//oidc",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_oauth2//:oauth2",
+    ],
+)

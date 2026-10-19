@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "github",
+    srcs = [
+        "client.go",
+        "repo.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/thirdparty/github",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@org_golang_x_sync//singleflight",
+    ],
+)
+
+go_test(
+    name = "github_test",
+    srcs = ["repo_test.go"],
+    embed = [":github"],
+)

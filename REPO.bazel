@@ -1,0 +1,7 @@
+# Directories Bazel never loads packages from. node_modules can hold BUILD
+# files from published packages, and the nested Go modules build with go.
+ignore_directories([
+    "**/node_modules",
+    "glint",
+    "local",
+])

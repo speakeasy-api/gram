@@ -1,0 +1,56 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "runtime",
+    srcs = ["service.go"],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/runtime",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/attr",
+        "//server/internal/audit",
+        "//server/internal/authz",
+        "//server/internal/background/triggers",
+        "//server/internal/contextvalues",
+        "//server/internal/encryption",
+        "//server/internal/gateway",
+        "//server/internal/guardian",
+        "//server/internal/memory",
+        "//server/internal/oops",
+        "//server/internal/platformmcp",
+        "//server/internal/platformtools",
+        "//server/internal/platformtools/changelog",
+        "//server/internal/platformtools/chats",
+        "//server/internal/platformtools/deployments",
+        "//server/internal/platformtools/docs",
+        "//server/internal/platformtools/logs",
+        "//server/internal/platformtools/memory",
+        "//server/internal/platformtools/platform",
+        "//server/internal/platformtools/plugins",
+        "//server/internal/platformtools/risk",
+        "//server/internal/platformtools/skills",
+        "//server/internal/platformtools/triggers",
+        "//server/internal/platformtools/users",
+        "//server/internal/toolconfig",
+        "@com_github_jackc_pgx_v5//pgxpool",
+    ],
+)
+
+go_test(
+    name = "runtime_test",
+    srcs = ["service_test.go"],
+    embed = [":runtime"],
+    deps = [
+        "//server/internal/audit",
+        "//server/internal/contextvalues",
+        "//server/internal/gateway",
+        "//server/internal/oops",
+        "//server/internal/platformtools",
+        "//server/internal/platformtools/slack",
+        "//server/internal/testenv",
+        "//server/internal/toolconfig",
+        "//server/internal/urn",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,50 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "functions",
+    srcs = [
+        "dev.go",
+        "init.go",
+        "packagejson.go",
+        "packagemanager.go",
+        "runner.go",
+        "sdk.go",
+    ],
+    embedsrcs = [
+        "templates/functions/CONTRIBUTING.md",
+        "templates/functions/NEXT_STEPS.txt",
+        "templates/functions/README.md",
+        "templates/functions/gitignore",
+        "templates/functions/package.json",
+        "templates/functions/src/functions.ts",
+        "templates/functions/src/server.ts",
+        "templates/functions/tsconfig.json",
+        "templates/mcp/NEXT_STEPS.txt",
+        "templates/mcp/README.md",
+        "templates/mcp/gitignore",
+        "templates/mcp/package.json",
+        "templates/mcp/src/functions.ts",
+        "templates/mcp/src/mcp.ts",
+        "templates/mcp/src/server.ts",
+        "templates/mcp/tsconfig.json",
+    ],
+    importpath = "github.com/speakeasy-api/gram/cli/internal/functions",
+    visibility = ["//cli:__subpackages__"],
+    deps = ["@com_github_masterminds_semver_v3//:semver"],
+)
+
+go_test(
+    name = "functions_test",
+    srcs = [
+        "dev_test.go",
+        "helpers_test.go",
+        "init_test.go",
+        "packagejson_test.go",
+        "packagemanager_test.go",
+        "sdk_test.go",
+        "templates_test.go",
+    ],
+    embed = [":functions"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "export-hook-plugin_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/speakeasy-api/gram/server/cmd/export-hook-plugin",
+    visibility = ["//visibility:private"],
+    deps = ["//server/internal/plugins"],
+)
+
+go_binary(
+    name = "export-hook-plugin",
+    embed = [":export-hook-plugin_lib"],
+    visibility = ["//visibility:public"],
+)

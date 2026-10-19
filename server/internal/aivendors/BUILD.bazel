@@ -1,0 +1,11 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "aivendors",
+    srcs = [
+        "aivendors.go",
+        "registry.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/aivendors",
+    visibility = ["//server:__subpackages__"],
+)

@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "design",
+    srcs = [
+        "api.go",
+        "devidp.go",
+        "ema.go",
+        "ema_types.go",
+        "invitations.go",
+        "memberships.go",
+        "organization_roles.go",
+        "organizations.go",
+        "types.go",
+        "users.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/dev-idp/design",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@design_goa_goa_v3//dsl",
+        "@design_goa_goa_v3//expr",
+    ],
+)

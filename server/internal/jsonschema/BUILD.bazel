@@ -1,0 +1,30 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "jsonschema",
+    srcs = [
+        "jsonschema.go",
+        "static_values.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/jsonschema",
+    visibility = ["//server:__subpackages__"],
+    deps = ["@com_github_santhosh_tekuri_jsonschema_v6//:jsonschema"],
+)
+
+go_test(
+    name = "jsonschema_test",
+    srcs = [
+        "jsonschema_test.go",
+        "static_values_test.go",
+    ],
+    data = [
+        # keep
+        "//server/internal/deployments:fixtures",
+    ],
+    embed = [":jsonschema"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)

@@ -11,6 +11,14 @@ local linters = new Mapping<String, Step> {
     glob = List("**/go.mod", "**/go.sum", "**/*.go")
     fix = "mise run -q go:tidy"
   }
+  ["gazelle"] {
+    // Keeps Bazel BUILD files and the MODULE.bazel repo list in step with Go
+    // packages, imports and go.mod. After gomodtidy, which rewrites go.mod.
+    glob = List("**/go.mod", "**/go.sum", "**/*.go", "**/BUILD.bazel", "MODULE.bazel")
+    depends = "gomodtidy"
+    check = "mise run -q bazel:gazelle --check"
+    fix = "mise run -q bazel:gazelle"
+  }
   ["gofmt"] {
     batch = true
     glob = "**/*.go"

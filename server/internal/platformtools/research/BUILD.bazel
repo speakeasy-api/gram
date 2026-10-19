@@ -1,0 +1,43 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("//tools/bazel:go_test.bzl", "go_test")
+
+go_library(
+    name = "research",
+    srcs = [
+        "research.go",
+        "tool_fetch_page.go",
+        "tool_web_search.go",
+        "url_menu.go",
+    ],
+    importpath = "github.com/speakeasy-api/gram/server/internal/platformtools/research",
+    visibility = ["//server:__subpackages__"],
+    deps = [
+        "//server/internal/billing",
+        "//server/internal/contextvalues",
+        "//server/internal/guardian",
+        "//server/internal/o11y",
+        "//server/internal/oops",
+        "//server/internal/platformtools/core",
+        "//server/internal/thirdparty/openrouter",
+        "//server/internal/toolconfig",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_openrouterteam_go_sdk//models/components",
+        "@org_golang_x_net//html",
+    ],
+)
+
+go_test(
+    name = "research_test",
+    srcs = [
+        "tool_fetch_page_internal_test.go",
+        "tools_test.go",
+    ],
+    embed = [":research"],
+    deps = [
+        "//server/internal/contextvalues",
+        "//server/internal/thirdparty/openrouter",
+        "//server/internal/toolconfig",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

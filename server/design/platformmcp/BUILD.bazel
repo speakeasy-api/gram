@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "platformmcp",
+    srcs = ["design.go"],
+    importpath = "github.com/speakeasy-api/gram/server/design/platformmcp",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//server/design/security",
+        "//server/design/shared",
+        "//server/internal/oops",
+        "@design_goa_goa_v3//dsl",
+    ],
+)
