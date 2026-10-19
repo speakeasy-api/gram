@@ -514,6 +514,14 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	}, nil
 }
 
+// newFeatureFlags returns PostHog, or the CSV-backed in-memory provider in local dev.
+func newFeatureFlags(ctx context.Context, c *cli.Context, logger *slog.Logger, posthogClient feature.Provider) feature.Provider {
+	if c.String("environment") == "local" {
+		return newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+	}
+	return posthogClient
+}
+
 func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath string) *feature.InMemory {
 	inmem := &feature.InMemory{}
 	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
