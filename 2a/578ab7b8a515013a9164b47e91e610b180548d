@@ -1,0 +1,34 @@
+client/dashboard/src/pages/org/identity-provider/chipOverflow.test.ts
+  h_9630b74bdac540 1-22
+client/dashboard/src/pages/org/identity-provider/chipOverflow.ts
+  h_9630b74bdac540 1-23
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.tsx
+  h_9630b74bdac540 21,41-45,92,96-103,407,426,528-529,532,536-537,570-572,697-702,704-706,708,726-877,882-917
+  s_0c69587cfc91f0::t_cc476faa66e118 538-569,707,709,918-920
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.test.tsx
+  h_9630b74bdac540 12,21,144-147,325-345,347-360
+  s_0c69587cfc91f0::t_7d0a760835d496 346,361-362
+.changeset/directory-role-set-controls.md
+  h_9630b74bdac540 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2a578ab7b8a515013a9164b47e91e610b180548d",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_0c69587cfc91f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7f1dd305-9c34-47ea-8829-9793ba8813c0",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
