@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
@@ -114,14 +113,14 @@ func newFixture(t *testing.T) fixture {
 }
 
 // call is a held call by the fixture's agent.
-func (f fixture) call(arguments string) mcpriskscan.ApprovalCall {
-	return mcpriskscan.ApprovalCall{
+func (f fixture) call(arguments string) HoldInput {
+	return HoldInput{
 		Policy:          f.policy,
 		OrganizationID:  f.organizationID,
 		ProjectID:       f.projectID,
 		RequesterURN:    f.agentURN,
 		RequesterUserID: "",
-		Surface:         mcpriskscan.SurfaceHostedMCP,
+		Surface:         "hosted_mcp",
 		ToolsetID:       "",
 		ServerID:        uuid.NewSHA1(uuid.Nil, []byte("server")).String(),
 		ToolName:        "create_issue",
@@ -131,7 +130,7 @@ func (f fixture) call(arguments string) mcpriskscan.ApprovalCall {
 }
 
 // hold holds a call and returns its token.
-func (f fixture) hold(t *testing.T, call mcpriskscan.ApprovalCall) string {
+func (f fixture) hold(t *testing.T, call HoldInput) string {
 	t.Helper()
 	outcome, err := f.service.HoldCall(t.Context(), call)
 	require.NoError(t, err)

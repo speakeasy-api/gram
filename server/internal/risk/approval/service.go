@@ -31,7 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -135,8 +135,6 @@ type Service struct {
 	now       func() time.Time
 }
 
-var _ mcpriskscan.ApprovalGate = (*Service)(nil)
-
 // NewService creates an approval service. serverURL is the public base URL
 // that request instructions point agents at.
 func NewService(logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL) *Service {
@@ -158,13 +156,82 @@ func (s *Service) MCPServerURL() string {
 	return s.serverURL.JoinPath(MCPPath).String()
 }
 
+// HoldInput is one MCP tool call a require_approval policy covers.
+type HoldInput struct {
+	// Policy is the require_approval policy that covers the call.
+	Policy policycore.Policy
+
+	// OrganizationID is the organization the call belongs to.
+	OrganizationID string
+
+	// ProjectID is the project the call belongs to.
+	ProjectID uuid.UUID
+
+	// RequesterURN is the principal that made the call: an agent or a user.
+	RequesterURN string
+
+	// RequesterUserID is set when a person called through their own session.
+	RequesterUserID string
+
+	// Surface is the MCP surface that received the call.
+	Surface string
+
+	// ToolsetID is the hosted toolset that served the call, when known.
+	ToolsetID string
+
+	// ServerID is the MCP server the call targets, when known.
+	ServerID string
+
+	// ToolName is the called tool.
+	ToolName string
+
+	// ChatID is the chat the call belongs to, when known.
+	ChatID string
+
+	// Arguments is the raw JSON arguments object of the call.
+	Arguments []byte
+}
+
+// HoldOutcome is the result of holding one call.
+type HoldOutcome struct {
+	// Allowed reports that an approval covered the call and was used.
+	Allowed bool
+
+	// Token is the request token the agent passes to request_approval and
+	// watches with. Empty when Allowed.
+	Token string
+
+	// UserMessage tells the agent how to request approval and resume.
+	UserMessage string
+}
+
+// Requester maps validated MCP provenance to the principal an approval
+// request binds to. Only agents and people signed in through their own session
+// can request approval.
+func Requester(identity mcpidentity.Identity) (requesterURN, requesterUserID string, ok bool) {
+	switch identity.Kind() {
+	case mcpidentity.KindAgent:
+		if identity.AgentID() == "" {
+			return "", "", false
+		}
+		return urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID()).String(), "", true
+	case mcpidentity.KindUserSession:
+		if identity.UserID() == "" {
+			return "", "", false
+		}
+		return urn.NewPrincipal(urn.PrincipalTypeUser, identity.UserID()).String(), identity.UserID(), true
+	default:
+		return "", "", false
+	}
+}
+
 // HoldCall lets the call through when an approved exact-once request covers
 // it, consuming that approval. Otherwise it records the held call, or finds
 // its still-open request, and returns the token with instructions.
-func (s *Service) HoldCall(ctx context.Context, call mcpriskscan.ApprovalCall) (mcpriskscan.ApprovalOutcome, error) {
+func (s *Service) HoldCall(ctx context.Context, call HoldInput) (HoldOutcome, error) {
 	fingerprint, err := CallFingerprint(call.ServerID, call.ToolName, call.Arguments)
 	if err != nil {
-		return mcpriskscan.ApprovalOutcome{}, fmt.Errorf("fingerprint call: %w", err)
+		return HoldOutcome{}, fmt.Errorf("fingerprint call: %w", err)
 	}
 
 	queries := repo.New(s.db)
@@ -178,9 +245,9 @@ func (s *Service) HoldCall(ctx context.Context, call mcpriskscan.ApprovalCall) (
 	switch {
 	case err == nil:
 		s.logger.InfoContext(ctx, "approved call released", attr.SlogRiskPolicyApprovalID(consumed.ID.String()))
-		return mcpriskscan.ApprovalOutcome{Allowed: true, Token: "", UserMessage: ""}, nil
+		return HoldOutcome{Allowed: true, Token: "", UserMessage: ""}, nil
 	case !errors.Is(err, pgx.ErrNoRows):
-		return mcpriskscan.ApprovalOutcome{}, fmt.Errorf("consume approval: %w", err)
+		return HoldOutcome{}, fmt.Errorf("consume approval: %w", err)
 	}
 
 	if err := queries.ExpireLapsedOpenApproval(ctx, repo.ExpireLapsedOpenApprovalParams{
@@ -190,12 +257,12 @@ func (s *Service) HoldCall(ctx context.Context, call mcpriskscan.ApprovalCall) (
 		ToolName:        call.ToolName,
 		CallFingerprint: fingerprint,
 	}); err != nil {
-		return mcpriskscan.ApprovalOutcome{}, fmt.Errorf("expire lapsed approval: %w", err)
+		return HoldOutcome{}, fmt.Errorf("expire lapsed approval: %w", err)
 	}
 
 	token, err := NewToken()
 	if err != nil {
-		return mcpriskscan.ApprovalOutcome{}, err
+		return HoldOutcome{}, err
 	}
 	row, err := queries.UpsertBlockedApproval(ctx, repo.UpsertBlockedApprovalParams{
 		OrganizationID:   call.OrganizationID,
@@ -216,9 +283,9 @@ func (s *Service) HoldCall(ctx context.Context, call mcpriskscan.ApprovalCall) (
 		ArgumentsPreview: argumentsPreview(call.Arguments),
 	})
 	if err != nil {
-		return mcpriskscan.ApprovalOutcome{}, fmt.Errorf("record held call: %w", err)
+		return HoldOutcome{}, fmt.Errorf("record held call: %w", err)
 	}
-	return mcpriskscan.ApprovalOutcome{
+	return HoldOutcome{
 		Allowed:     false,
 		Token:       row.Token,
 		UserMessage: s.holdMessage(call.Policy.Name, call.ToolName, row),

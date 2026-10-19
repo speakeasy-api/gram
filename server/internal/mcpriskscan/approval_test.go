@@ -13,14 +13,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-type approvalGateFunc func(context.Context, mcpriskscan.ApprovalCall) (mcpriskscan.ApprovalOutcome, error)
+type approvalGateFunc func(context.Context, approval.HoldInput) (approval.HoldOutcome, error)
 
-func (f approvalGateFunc) HoldCall(ctx context.Context, call mcpriskscan.ApprovalCall) (mcpriskscan.ApprovalOutcome, error) {
+func (f approvalGateFunc) HoldCall(ctx context.Context, call approval.HoldInput) (approval.HoldOutcome, error) {
 	return f(ctx, call)
 }
 
@@ -51,12 +52,12 @@ func TestPolicyEvaluator_ApprovalHoldsAgentCall(t *testing.T) {
 	policy := approvalPolicy(projectID)
 
 	var mu sync.Mutex
-	var calls []mcpriskscan.ApprovalCall
-	gate := approvalGateFunc(func(_ context.Context, call mcpriskscan.ApprovalCall) (mcpriskscan.ApprovalOutcome, error) {
+	var calls []approval.HoldInput
+	gate := approvalGateFunc(func(_ context.Context, call approval.HoldInput) (approval.HoldOutcome, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		calls = append(calls, call)
-		return mcpriskscan.ApprovalOutcome{Allowed: false, Token: "apr_test", UserMessage: "ask for approval"}, nil
+		return approval.HoldOutcome{Allowed: false, Token: "apr_test", UserMessage: "ask for approval"}, nil
 	})
 	evaluator := newPolicyEvaluator(t, staticPolicies(policy), noDetector(t), &findingPublisher{}, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithApprovalGate(gate))
 
@@ -80,8 +81,8 @@ func TestPolicyEvaluator_ApprovalHoldsAgentCall(t *testing.T) {
 func TestPolicyEvaluator_ApprovalAllowsCoveredCall(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
-	gate := approvalGateFunc(func(context.Context, mcpriskscan.ApprovalCall) (mcpriskscan.ApprovalOutcome, error) {
-		return mcpriskscan.ApprovalOutcome{Allowed: true, Token: "", UserMessage: ""}, nil
+	gate := approvalGateFunc(func(context.Context, approval.HoldInput) (approval.HoldOutcome, error) {
+		return approval.HoldOutcome{Allowed: true, Token: "", UserMessage: ""}, nil
 	})
 	evaluator := newPolicyEvaluator(t, staticPolicies(approvalPolicy(projectID)), noDetector(t), &findingPublisher{}, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithApprovalGate(gate))
 
@@ -94,8 +95,8 @@ func TestPolicyEvaluator_ApprovalAllowsCoveredCall(t *testing.T) {
 
 func TestPolicyEvaluator_ApprovalFailsClosed(t *testing.T) {
 	t.Parallel()
-	failing := approvalGateFunc(func(context.Context, mcpriskscan.ApprovalCall) (mcpriskscan.ApprovalOutcome, error) {
-		return mcpriskscan.ApprovalOutcome{}, errors.New("database unavailable")
+	failing := approvalGateFunc(func(context.Context, approval.HoldInput) (approval.HoldOutcome, error) {
+		return approval.HoldOutcome{}, errors.New("database unavailable")
 	})
 	cases := map[string]struct {
 		options []mcpriskscan.PolicyEvaluatorOption
@@ -141,9 +142,9 @@ func TestPolicyEvaluator_ApprovalFailsClosed(t *testing.T) {
 func TestPolicyEvaluator_ApprovalSkipsResponses(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
-	gate := approvalGateFunc(func(context.Context, mcpriskscan.ApprovalCall) (mcpriskscan.ApprovalOutcome, error) {
+	gate := approvalGateFunc(func(context.Context, approval.HoldInput) (approval.HoldOutcome, error) {
 		t.Error("responses must not be held for approval")
-		return mcpriskscan.ApprovalOutcome{}, nil
+		return approval.HoldOutcome{}, nil
 	})
 	evaluator := newPolicyEvaluator(t, staticPolicies(approvalPolicy(projectID)), noDetector(t), &findingPublisher{}, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithApprovalGate(gate))
 
@@ -158,9 +159,9 @@ func TestPolicyEvaluator_BlockRunsBeforeApproval(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
 	block := policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Block", Action: "block"}
-	gate := approvalGateFunc(func(context.Context, mcpriskscan.ApprovalCall) (mcpriskscan.ApprovalOutcome, error) {
+	gate := approvalGateFunc(func(context.Context, approval.HoldInput) (approval.HoldOutcome, error) {
 		t.Error("a blocked call must not create an approval request")
-		return mcpriskscan.ApprovalOutcome{}, nil
+		return approval.HoldOutcome{}, nil
 	})
 	evaluator := newPolicyEvaluator(t, staticPolicies(block, approvalPolicy(projectID)), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
 		return []scanners.Finding{{RuleID: "block.rule", Description: "Blocked", Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
@@ -177,9 +178,9 @@ func TestPolicyEvaluator_BlockRunsBeforeApproval(t *testing.T) {
 func TestPolicyEvaluator_ApprovalDeniesUnreadableArguments(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
-	gate := approvalGateFunc(func(context.Context, mcpriskscan.ApprovalCall) (mcpriskscan.ApprovalOutcome, error) {
+	gate := approvalGateFunc(func(context.Context, approval.HoldInput) (approval.HoldOutcome, error) {
 		t.Error("unreadable arguments must not create an approval request")
-		return mcpriskscan.ApprovalOutcome{}, nil
+		return approval.HoldOutcome{}, nil
 	})
 	evaluator := newPolicyEvaluator(t, staticPolicies(approvalPolicy(projectID)), noDetector(t), &findingPublisher{}, mcpriskscan.PolicyConfig{
 		Deadline: time.Second, FailMode: mcpriskscan.FailOpen, FlagConcurrency: 1,
@@ -200,8 +201,8 @@ func TestPolicyEvaluator_FailOpenBlockLaneStillHoldsForApproval(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
 	block := policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Block", Action: "block"}
-	gate := approvalGateFunc(func(context.Context, mcpriskscan.ApprovalCall) (mcpriskscan.ApprovalOutcome, error) {
-		return mcpriskscan.ApprovalOutcome{Allowed: false, Token: "apr_test", UserMessage: "ask for approval"}, nil
+	gate := approvalGateFunc(func(context.Context, approval.HoldInput) (approval.HoldOutcome, error) {
+		return approval.HoldOutcome{Allowed: false, Token: "apr_test", UserMessage: "ask for approval"}, nil
 	})
 	evaluator := newPolicyEvaluator(t, staticPolicies(block, approvalPolicy(projectID)), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
 		return nil, errors.New("detector unavailable")

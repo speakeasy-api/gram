@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
-	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
@@ -130,7 +129,7 @@ type requestApprovalOutput struct {
 
 func (r *Runtime) requestApproval(ctx context.Context, _ *mcp.CallToolRequest, input requestApprovalInput) (*mcp.CallToolResult, requestApprovalOutput, error) {
 	identity, _ := mcpidentity.FromContext(ctx)
-	requesterURN, _, ok := mcpriskscan.ApprovalRequester(identity)
+	requesterURN, _, ok := Requester(identity)
 	authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
 	if !ok || !hasAuth || authCtx == nil {
 		return nil, requestApprovalOutput{}, errors.New("this credential cannot request approval; call with an agent key or sign in")
