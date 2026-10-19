@@ -663,9 +663,14 @@ WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
 -- and dispatch columns that path needs, plus each member's project, since
 -- members no longer share one, and each member's network access mode, which
 -- the caller matches against the request's ingress surface so a private_only
--- server stays invisible on the public one. Ordered by project then slug: a derived
--- gateway has no operator-authored order, and slugs are unique only within a
--- project, so the pair is what makes the listing stable.
+-- server stays invisible on the public one. Also reports whether the backing
+-- toolset's latest live version contains a Platform tool, so the organization
+-- gateway can drop those toolsets the same way automatic plugin delivery does
+-- (roledelivery.HasPlatformTool). The check runs here rather than in Go because
+-- this query serves every gateway request, and returning every tool URN only to
+-- reduce it to one flag would scale with toolset size. Ordered by project then
+-- slug: a derived gateway has no operator-authored order, and slugs are unique
+-- only within a project, so the pair is what makes the listing stable.
 SELECT
     s.id AS mcp_server_id,
     s.project_id AS mcp_server_project_id,
@@ -681,7 +686,11 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
-    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier,
+    EXISTS (
+      SELECT 1 FROM unnest(latest.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:platform:%'
+    )::boolean AS has_platform_tool
 FROM mcp_servers s
 JOIN projects p
   ON p.id = s.project_id
@@ -690,8 +699,64 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = s.project_id
  AND t.deleted IS FALSE
+LEFT JOIN toolsets backing
+  ON backing.id = s.toolset_id
+ AND backing.project_id = s.project_id
+ AND backing.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = backing.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
 WHERE p.organization_id = @organization_id
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
 ORDER BY s.project_id, s.slug;
+
+-- name: ListToolsetSummariesByIDs :many
+-- Proxy URNs are tools:externalmcp:<slug>:proxy; tool_count skips them.
+SELECT
+    t.id
+  , t.slug
+  , t.name
+  , t.tool_selection_mode
+  , t.external_oauth_server_id
+  , (
+      SELECT COUNT(DISTINCT u.urn)
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy'
+    )::bigint AS tool_count
+  , ARRAY(
+      SELECT DISTINCT split_part(u.urn, ':', 3) AS slug
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:externalmcp:%'
+      ORDER BY slug
+    )::text[] AS external_mcp_slugs
+  , (
+      EXISTS (SELECT 1 FROM unnest(lv.tool_urns) AS u(urn) WHERE u.urn LIKE 'tools:externalmcp:%:proxy')
+      AND NOT EXISTS (SELECT 1 FROM unnest(lv.tool_urns) AS u(urn) WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy')
+    )::boolean AS external_mcp_proxy_only
+  , COALESCE(origin.origin_registry_specifier, '')::text AS registry_specifier
+FROM toolsets t
+LEFT JOIN LATERAL (
+  SELECT tv.tool_urns
+  FROM toolset_versions tv
+  WHERE tv.toolset_id = t.id
+    AND tv.deleted IS FALSE
+  ORDER BY tv.version DESC
+  LIMIT 1
+) lv ON TRUE
+LEFT JOIN LATERAL (
+  SELECT o.origin_registry_specifier
+  FROM toolset_origins o
+  WHERE o.toolset_id = t.id
+    AND o.organization_id = t.organization_id
+    AND o.deleted IS FALSE
+  ORDER BY o.created_at DESC
+  LIMIT 1
+) origin ON TRUE
+WHERE t.id = ANY(@toolset_ids::uuid[])
+  AND t.organization_id = @organization_id
+  AND t.project_id = ANY(@project_ids::uuid[])
+  AND t.deleted IS FALSE;

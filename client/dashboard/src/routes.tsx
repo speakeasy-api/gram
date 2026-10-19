@@ -144,9 +144,7 @@ import { RoleEditorPage } from "./pages/access/RoleEditorPage";
 import RequestAccess from "./pages/access/RequestAccess";
 import Settings from "./pages/settings/Settings";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
-import SecurityOverview, {
-  RiskOverviewRoot,
-} from "./pages/security/SecurityOverview";
+import RiskOverviewRedirect from "./pages/security/RiskOverviewRedirect";
 import Watchdog from "./pages/security/watchdog/Watchdog";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
 import {
@@ -157,11 +155,6 @@ import {
 } from "./pages/shadow-ai/ShadowAI";
 import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
-import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
-import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
-import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
-import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
-import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
 import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
@@ -695,14 +688,14 @@ const ROUTE_STRUCTURE = {
   },
 
   remoteIdentityProviders: {
-    title: "Remote Identity Providers",
+    title: "Authorization Servers",
     url: "remote-identity-providers",
     icon: "key-round",
     component: RemoteIdentityProvidersRoot,
     indexComponent: RemoteIdentityProvidersPage,
     subPages: {
       issuerDetail: {
-        title: "Remote Identity Provider",
+        title: "Authorization Server",
         url: ":issuerId",
         component: RemoteIdentityProviderDetail,
         subPages: {
@@ -892,39 +885,13 @@ const ROUTE_STRUCTURE = {
     icon: "radar",
     component: Watchdog,
   },
-  riskOverview: {
+  // Retired page: old links and bookmarks, including its drill-downs, land on
+  // Watchdog.
+  legacyRiskOverview: {
     title: "Risk Overview",
-    url: "risk-overview",
-    icon: "shield",
-    component: RiskOverviewRoot,
-    indexComponent: SecurityOverview,
-    subPages: {
-      usersIndex: {
-        title: "Users",
-        url: "users",
-        component: RiskOverviewUsersIndex,
-      },
-      userDetail: {
-        title: "User",
-        url: "users/:externalUserId",
-        component: RiskOverviewUserDetail,
-      },
-      categoriesIndex: {
-        title: "Categories",
-        url: "categories",
-        component: RiskOverviewCategoriesIndex,
-      },
-      rulesIndex: {
-        title: "Rules",
-        url: "rules",
-        component: RiskOverviewRulesIndex,
-      },
-      categoryDetail: {
-        title: "Category",
-        url: "categories/:category",
-        component: RiskOverviewCategoryDetail,
-      },
-    },
+    url: "risk-overview/*",
+    legacyRedirect: true,
+    component: RiskOverviewRedirect,
   },
   // Legacy URL: Detection Rules lives as a Guardrails tab now; the
   // component redirects there (carrying ?rule= deep links along). Kept out of
@@ -1571,7 +1538,7 @@ const ORG_ROUTE_STRUCTURE = {
     component: ProjectIdentityRedirect,
   },
   legacyRemoteIdentityProviders: {
-    title: "Remote Identity Providers",
+    title: "Authorization Servers",
     url: "remote-identity-providers/*",
     legacyRedirect: true,
     component: ProjectIdentityRedirect,

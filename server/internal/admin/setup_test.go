@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -26,6 +27,10 @@ import (
 )
 
 var infra *testenv.Environment
+
+// The compiled registry schema is immutable, so every fixture shares one
+// instead of paying for a compile per test.
+var loadRegistryValidator = sync.OnceValues(mcpregistry.LoadValidator)
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
@@ -52,11 +57,20 @@ func TestMain(m *testing.M) {
 func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool) {
 	t.Helper()
 
+	conn, err := infra.CloneTestDatabase(t, "admintestdb")
+	require.NoError(t, err)
+
+	return newTestAdminServiceOnDB(t, conn)
+}
+
+// newTestAdminServiceOnDB is newTestAdminService on a database the caller
+// already cloned. Parallel cases that share one must not share organizations.
+func newTestAdminServiceOnDB(t *testing.T, conn *pgxpool.Pool) (context.Context, *Service, *pgxpool.Pool) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
-	conn, err := infra.CloneTestDatabase(t, "admintestdb")
-	require.NoError(t, err)
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
@@ -68,18 +82,19 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 		enc,
 	)
 	tracerProvider := testenv.NewTracerProvider(t)
-	validator, err := mcpregistry.LoadValidator()
+	validator, err := loadRegistryValidator()
 	require.NoError(t, err)
 	svc := &Service{
-		registry:        mcpregistry.New(conn, validator),
-		tracer:          tracerProvider.Tracer("admin_test"),
-		logger:          logger,
-		db:              conn,
-		audit:           audit.NewLogger(),
-		trial:           trialemails.NoopNotifier{},
-		sessions:        sessions,
-		loginStates:     cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
-		productFeatures: productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
+		registry:         mcpregistry.New(conn, validator),
+		tracer:           tracerProvider.Tracer("admin_test"),
+		logger:           logger,
+		db:               conn,
+		audit:            audit.NewLogger(),
+		trial:            trialemails.NoopNotifier{},
+		sessions:         sessions,
+		loginStates:      cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
+		hookClientsCache: cache.NewTypedObjectCache[hookClientsSnapshot](logger, adminCache, cache.SuffixNone),
+		productFeatures:  productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
 	}
 	svc.oidc = newTestOIDCClient(t, userinfoOK("sub-admin", "operator@example.com"))
 	svc.verifier = NewVerifier(logger, sessions, svc.oidc, adminCache)

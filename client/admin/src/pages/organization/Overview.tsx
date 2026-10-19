@@ -1,11 +1,12 @@
 import { useRef, useState, type JSX, type Ref } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import { ExternalLinkIcon, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
+import { ExternalLinkButton } from "@/components/ExternalLinkButton";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -396,17 +397,10 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
                 />
                 {/* Absent when the deployment has no WorkOS environment set. */}
                 {org.workos_dashboard_url ? (
-                  <Button asChild variant="ghost" size="icon-xs">
-                    <a
-                      href={org.workos_dashboard_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="Open in WorkOS"
-                      title="Open in WorkOS"
-                    >
-                      <ExternalLinkIcon aria-hidden="true" />
-                    </a>
-                  </Button>
+                  <ExternalLinkButton
+                    href={org.workos_dashboard_url}
+                    label="Open in WorkOS"
+                  />
                 ) : null}
               </span>
             ) : (

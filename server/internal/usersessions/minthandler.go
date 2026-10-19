@@ -2,6 +2,7 @@ package usersessions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -17,8 +18,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
-	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
@@ -41,7 +44,7 @@ const (
 )
 
 // mintTarget is the issuer-gated audience the JWT is bound to, resolved from
-// either a toolset (/mcp) or a remote MCP server (/x/mcp) before the shared
+// either a toolset or an MCP server before the shared
 // mint+persist tail runs.
 type mintTarget struct {
 	issuerID uuid.UUID
@@ -54,7 +57,7 @@ type mintTarget struct {
 }
 
 // MintUserSession issues a user-session JWT against an issuer-gated audience —
-// either a toolset (/mcp) or a remote MCP server (/x/mcp) — on behalf of the
+// either a toolset or an MCP server — on behalf of the
 // authenticated dashboard user. Exactly one of toolset_id / mcp_server_id must
 // be set. The resulting JWT has the same shape as the one /token would emit
 // after a real OAuth dance, so the runtime gateway validates it through the
@@ -115,6 +118,22 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		return nil, fmt.Errorf("authorize MCP session mint: %w", mcpaccess.ServerPermissionDenied(err, ""))
 	}
 
+	var toolPolicy []byte
+	if payload.DiscoveryMode != nil {
+		mode := metamcp.DiscoveryMode(*payload.DiscoveryMode)
+		if !hasMeta || !mode.Valid() {
+			return nil, oops.E(oops.CodeBadRequest, nil, "discovery_mode requires a gateway and a supported mode")
+		}
+		toolPolicy, err = json.Marshal(&toolfilter.SessionPolicy{
+			Resource:  "meta_mcp_server:" + target.resourceID,
+			Selection: nil,
+			Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: &mode},
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "encode gateway connection options").LogError(ctx, s.logger)
+		}
+	}
+
 	issuer, err := repo.New(s.db).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
 		ID:             target.issuerID,
 		ProjectID:      *authCtx.ProjectID,
@@ -172,7 +191,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		RefreshTokenHash: conv.ToPGText(fmt.Sprintf("%s:%s", sessiontokens.DashboardMintRefreshTokenHashPrefix, jti)),
 		ExpiresAt:        pgtype.Timestamptz{Time: now.Add(mintAccessTokenLifetime), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
-		ToolSelection:    nil,
+		ToolSelection:    toolPolicy,
 		// Dashboard sessions are issuer-scoped, never bound to one resource.
 		Resource:     pgtype.Text{String: "", Valid: false},
 		SignInID:     signInID,
@@ -317,7 +336,7 @@ func (s *Service) wrapperMintTarget(ctx context.Context, server *mcpserversrepo.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	issuerURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
+	issuerURL, err := endpointaddr.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
 	}
@@ -338,14 +357,14 @@ func serverMintTargetAt(server *mcpserversrepo.McpServer, issuerURL string) *min
 }
 
 // serverMintIssuerURL builds the descriptive iss claim from the server's
-// primary endpoint; servers with no endpoint keep the legacy /x/mcp shape.
+// primary endpoint; servers with no endpoint fall back to /mcp/{slug}.
 func (s *Service) serverMintIssuerURL(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (string, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	issuerURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
+	issuerURL, err := endpointaddr.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
 	}
@@ -356,7 +375,7 @@ func (s *Service) serverMintIssuerURL(ctx context.Context, server *mcpserversrep
 	if server.Slug.String == "" {
 		return "", oops.E(oops.CodeInvariantViolation, nil, "issuer-gated mcp server has no addressable endpoint or slug").LogError(ctx, s.logger)
 	}
-	issuerURL, err = url.JoinPath(s.serverURL, "x", "mcp", server.Slug.String)
+	issuerURL, err = url.JoinPath(s.serverURL, "mcp", server.Slug.String)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
 	}

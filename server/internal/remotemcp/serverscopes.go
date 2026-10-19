@@ -323,17 +323,7 @@ func (s *Service) clientScopes(ctx context.Context, projectID uuid.UUID, orgID s
 	}
 	out := make([]*gen.RemoteMcpServerClientScopes, 0, len(rows))
 	for _, r := range rows {
-		resource := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discover}
-		if owners[r.ClientID] {
-			resource = cached
-		}
-		resolved := (remotesessions.Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
-			ID:                      r.ClientID,
-			ClientScope:             r.ClientScope,
-			IssuerScopesSupported:   r.ScopesSupported,
-			IssuerScopeOverride:     r.ScopeOverride,
-			IssuerOmitScopeFallback: r.OmitScopeFallback.Valid && r.OmitScopeFallback.Bool,
-		}).RequestedScopes(resource)
+		resolved := remotesessions.ClientConnectionScopes(remotesessions.ConnectionScopeInputFromClientRow(r), cached, owners[r.ClientID])
 		out = append(out, &gen.RemoteMcpServerClientScopes{
 			ClientID:                 r.ClientID.String(),
 			IssuerName:               conv.PtrEmpty(strings.TrimSpace(r.IssuerName.String)),

@@ -410,7 +410,7 @@ const (
 	// 2026-07-28), otherwise from the observed `initialize` response.
 	McpNegotiatedProtocolVersionKey = attribute.Key("gram.mcp.negotiated_protocol_version")
 	// McpSurfaceKey is the inbound MCP serving surface: "hosting" for the
-	// third-party-facing /mcp/{slug} and /x/mcp/{slug} paths (all backends), or
+	// third-party-facing /mcp/{slug} path (all backends), or
 	// "platform" for the assistant-token-only /platform/mcp/{toolsetSlug} path.
 	McpSurfaceKey = attribute.Key("gram.mcp.surface")
 	// McpRejectionReasonKey is the bounded reason an inbound MCP request was
@@ -435,6 +435,7 @@ const (
 	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
 	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
+	McpServerIDsKey        = attribute.Key("gram.mcp_server.ids")
 	McpEndpointIDKey       = attribute.Key("gram.mcp_endpoint.id")
 	MetaMcpServerIDKey     = attribute.Key("gram.meta_mcp_server.id")
 	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
@@ -542,6 +543,10 @@ const (
 	// IdentityChainingFallbackKey reports an attempt after an earlier
 	// provider in the order failed.
 	IdentityChainingFallbackKey = attribute.Key("gram.identity_chaining.fallback")
+	// IdentityChainingCredentialSourceKey says where a released downstream
+	// credential came from: cached, adopted from the consent page, minted, or
+	// a consent credential dropped as stale.
+	IdentityChainingCredentialSourceKey = attribute.Key("gram.identity_chaining.credential_source")
 	// ConsentInventoryDeferredKey marks a consent tool inventory that cannot
 	// load until identity chaining runs after approval.
 	ConsentInventoryDeferredKey = attribute.Key("gram.consent.inventory_deferred")
@@ -650,6 +655,8 @@ const (
 	OktaReconcileRunIDKey             = attribute.Key("gram.okta_applications.run_id")
 	GCPImpersonateServiceAccountKey   = attribute.Key("gram.gcp.impersonate_service_account")
 	WorkOSDirectoryGroupIDKey         = attribute.Key("gram.workos.directory_group_id")
+	DirectoryMembershipsOpenedKey     = attribute.Key("gram.directory_group.memberships_opened")
+	DirectoryMembershipsClosedKey     = attribute.Key("gram.directory_group.memberships_closed")
 	OutcomeKey                        = attribute.Key("gram.outcome")
 	PackageNameKey                    = attribute.Key("gram.package.name")
 	PackageVersionKey                 = attribute.Key("gram.package.version")
@@ -707,7 +714,7 @@ const (
 	RiskScanLimitBytesKey        = attribute.Key("gram.risk.scan.limit_bytes")
 	RiskScanRequestIDKey         = attribute.Key("gram.risk.scan.request_id")
 	RiskScanEngineKey            = attribute.Key("gram.risk.scan.engine")
-	RiskScanGateReasonKey        = attribute.Key("gram.risk.scan.gate_reason")
+	RiskScanSelectionReasonKey   = attribute.Key("gram.risk.scan.selection_reason")
 	RiskFindingIDKey             = attribute.Key("gram.risk.finding.id")
 	RiskPolicyVersionKey         = attribute.Key("gram.risk.policy.version")
 	RiskConfidenceKey            = attribute.Key("gram.risk.confidence")
@@ -2182,6 +2189,9 @@ func IdentityChainingFallback(v bool) attribute.KeyValue { return IdentityChaini
 func SlogIdentityChainingFallback(v bool) slog.Attr {
 	return slog.Bool(string(IdentityChainingFallbackKey), v)
 }
+func SlogIdentityChainingCredentialSource[V ~string](v V) slog.Attr {
+	return slog.String(string(IdentityChainingCredentialSourceKey), string(v))
+}
 
 func ConsentInventoryDeferred(v bool) attribute.KeyValue { return ConsentInventoryDeferredKey.Bool(v) }
 func SlogConsentInventoryDeferred(v bool) slog.Attr {
@@ -2543,6 +2553,14 @@ func SlogWorkOSDirectoryGroupID(v string) slog.Attr {
 	return slog.String(string(WorkOSDirectoryGroupIDKey), v)
 }
 
+func SlogDirectoryMembershipsOpened(v int) slog.Attr {
+	return slog.Int(string(DirectoryMembershipsOpenedKey), v)
+}
+
+func SlogDirectoryMembershipsClosed(v int) slog.Attr {
+	return slog.Int(string(DirectoryMembershipsClosedKey), v)
+}
+
 func SlogOutboxID(v int64) slog.Attr { return slog.Int64(string(OutboxIDKey), v) }
 
 func SlogOutboxPublicID(v string) slog.Attr { return slog.String(string(OutboxPublicIDKey), v) }
@@ -2834,12 +2852,12 @@ func SlogRiskScanRequestID(v string) slog.Attr {
 func RiskScanEngine(v string) attribute.KeyValue { return RiskScanEngineKey.String(v) }
 func SlogRiskScanEngine(v string) slog.Attr      { return slog.String(string(RiskScanEngineKey), v) }
 
-func RiskScanGateReason[V ~string](v V) attribute.KeyValue {
-	return RiskScanGateReasonKey.String(string(v))
+func RiskScanSelectionReason[V ~string](v V) attribute.KeyValue {
+	return RiskScanSelectionReasonKey.String(string(v))
 }
 
-func SlogRiskScanGateReason(v string) slog.Attr {
-	return slog.String(string(RiskScanGateReasonKey), v)
+func SlogRiskScanSelectionReason(v string) slog.Attr {
+	return slog.String(string(RiskScanSelectionReasonKey), v)
 }
 
 func RiskFindingID(v string) attribute.KeyValue { return RiskFindingIDKey.String(v) }
@@ -3001,6 +3019,9 @@ func SlogResourceURI(v string) slog.Attr      { return slog.String(string(Resour
 
 func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
 func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }
+
+func McpServerIDs(v []string) attribute.KeyValue { return McpServerIDsKey.StringSlice(v) }
+func SlogMcpServerIDs(v []string) slog.Attr      { return slog.Any(string(McpServerIDsKey), v) }
 
 func McpEndpointID(v string) attribute.KeyValue { return McpEndpointIDKey.String(v) }
 func SlogMcpEndpointID(v string) slog.Attr      { return slog.String(string(McpEndpointIDKey), v) }

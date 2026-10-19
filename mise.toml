@@ -12,7 +12,7 @@ pin = true
 # file, you can specify more tools or different version of listed ones below as
 # well as overriding environment variables.
 [tools]
-"aqua:ariga/atlas" = "1.3.0"
+"aqua:ariga/atlas" = "1.3.4"
 "github:speakeasy-api/openapi" = "1.24.0"
 # Keep in sync with speakeasyVersion in .speakeasy/workflow.yaml, otherwise the
 # installed version and the version generation runs on can mismatch.
@@ -314,7 +314,8 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ## Speakeasy Assistant runtime settings ##
 ########################################
 ## Where assistant runtimes run.
-## Allowed values: local, flyio, gke.
+## Allowed values: local, gke. The server flag defaults to gke; local setup
+## writes local as described below.
 ## Left unset here so `./zero` / `mise run zero:assistants` can tell "not
 ## configured" from an intentional override in mise.local.toml or the
 ## environment. When unset, that task writes local defaults:

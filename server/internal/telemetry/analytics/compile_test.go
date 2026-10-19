@@ -28,43 +28,43 @@ func TestCompileGrouped(t *testing.T) {
 	t.Parallel()
 
 	plan, err := compileTest(t, Request{
-		Dataset:    "sessions",
+		Dataset:    "tool_calls",
 		Grain:      TimeGrainDay,
-		Dimensions: []string{"user", "model"},
+		Dimensions: []string{"user", "tool_name"},
 		Measures: []Measure{
 			{Op: "count", Field: "", Alias: ""},
-			{Op: "sum", Field: "tool_call_count", Alias: "tool_calls"},
-			{Op: "p95", Field: "duration_seconds", Alias: ""},
+			{Op: "sum", Field: "duration_ms", Alias: "total_ms"},
+			{Op: "p95", Field: "duration_ms", Alias: ""},
 		},
 		Filters:   []Filter{{Field: "surface", Operator: "in", Values: []string{"claude-code", "codex"}}},
-		OrderBy:   []OrderBy{{Measure: "tool_calls", Direction: "desc"}},
+		OrderBy:   []OrderBy{{Measure: "total_ms", Direction: "desc"}},
 		Limit:     0,
 		Ungrouped: false,
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, "sessions", plan.Dataset)
-	require.Equal(t, "sessions.agent_events", plan.Name)
+	require.Equal(t, "tool_calls", plan.Dataset)
+	require.Equal(t, "tool_calls.agent_events", plan.Name)
 	require.Equal(t, []Column{
 		{Name: "time_bucket", Kind: ColumnTime},
 		{Name: "user", Kind: ColumnDimension},
-		{Name: "model", Kind: ColumnDimension},
+		{Name: "tool_name", Kind: ColumnDimension},
 		{Name: "count", Kind: ColumnMeasure},
-		{Name: "tool_calls", Kind: ColumnMeasure},
-		{Name: "p95_duration_seconds", Kind: ColumnMeasure},
+		{Name: "total_ms", Kind: ColumnMeasure},
+		{Name: "p95_duration_ms", Kind: ColumnMeasure},
 	}, plan.Columns)
 
 	require.Contains(t, plan.SQL, "toStartOfDay(fromUnixTimestamp64Nano(started_at, 'UTC')) AS time_bucket")
 	require.Contains(t, plan.SQL, "user_email AS user")
 	require.Contains(t, plan.SQL, "count() AS count")
-	require.Contains(t, plan.SQL, "sum(tool_call_count) AS tool_calls")
-	require.Contains(t, plan.SQL, "quantile(0.95)((ended_at - started_at) / 1e9) AS p95_duration_seconds")
-	require.Contains(t, plan.SQL, "LIMIT 1 BY organization_id, project_id, record_id", "the source query de-duplicates before anything aggregates")
+	require.Contains(t, plan.SQL, "sum(duration_nano / 1e6) AS total_ms")
+	require.Contains(t, plan.SQL, "quantile(0.95)(duration_nano / 1e6) AS p95_duration_ms")
+	require.Contains(t, plan.SQL, "GROUP BY organization_id, project_id, event_id HAVING", "the source query merges before anything aggregates")
 	require.Contains(t, plan.SQL, "WHERE surface IN (?,?)")
-	require.Contains(t, plan.SQL, "GROUP BY time_bucket, user, model")
-	require.Contains(t, plan.SQL, "ORDER BY tool_calls DESC, time_bucket ASC, user ASC, model ASC")
+	require.Contains(t, plan.SQL, "GROUP BY time_bucket, user, tool_name")
+	require.Contains(t, plan.SQL, "ORDER BY total_ms DESC, time_bucket ASC, user ASC, tool_name ASC")
 	require.Contains(t, plan.SQL, "LIMIT 100", "the default limit applies")
-	require.Equal(t, []any{"org-1", "project-1", testFrom, testTo, "", "claude-code", "codex"}, plan.Args, "tenancy, window, the source query's own session_id != '' guard, then the filter values")
+	require.Equal(t, []any{"org-1", "project-1", "org-1", "project-1", testFrom, testTo, testFrom, testTo, "claude-code", "codex"}, plan.Args, "tenancy and window for the source query, then the filter values")
 	require.NotContains(t, plan.SQL, "project-1", "tenancy is bound, never interpolated")
 }
 
@@ -131,7 +131,7 @@ func TestCompileSkills(t *testing.T) {
 	}, plan.Columns)
 	require.Contains(t, plan.SQL, "skill_name AS skill")
 	require.Contains(t, plan.SQL, "uniqExact(nullIf(skill_name, '')) AS count_distinct_skill", "skills used counts the invocations that named one")
-	require.Contains(t, plan.SQL, "HAVING skill_name != ''", "the source keeps only the collapsed calls that named a skill")
+	require.Contains(t, plan.SQL, "AND skill_name != '') AS src", "the source keeps only the collapsed calls that named a skill")
 	require.Contains(t, plan.SQL, "WHERE skill_name IN (?,?)")
 	require.Contains(t, plan.SQL, "GROUP BY skill")
 	require.Equal(t, []any{"deploy", "review"}, plan.Args[len(plan.Args)-2:], "the filter values are bound last")
@@ -174,39 +174,39 @@ func TestCompileRejects(t *testing.T) {
 		field string
 	}{
 		{name: "unknown dataset", req: Request{Dataset: "departments", Measures: count}, code: ErrUnknownDataset, field: "dataset"},
-		{name: "unknown dimension", req: Request{Dataset: "sessions", Dimensions: []string{"department"}, Measures: count}, code: ErrUnknownField, field: "dimensions[0]"},
-		{name: "measure used as a dimension", req: Request{Dataset: "sessions", Dimensions: []string{"turn_count"}, Measures: count}, code: ErrUnknownField, field: "dimensions[0]"},
-		{name: "project is not a field", req: Request{Dataset: "sessions", Dimensions: []string{"project"}, Measures: count}, code: ErrUnknownField, field: "dimensions[0]"},
+		{name: "unknown dimension", req: Request{Dataset: "tool_calls", Dimensions: []string{"department"}, Measures: count}, code: ErrUnknownField, field: "dimensions[0]"},
+		{name: "measure used as a dimension", req: Request{Dataset: "tool_calls", Dimensions: []string{"duration_ms"}, Measures: count}, code: ErrUnknownField, field: "dimensions[0]"},
+		{name: "project is not a field", req: Request{Dataset: "tool_calls", Dimensions: []string{"project"}, Measures: count}, code: ErrUnknownField, field: "dimensions[0]"},
 		{name: "skill on tool_calls, where a Skill call is an ordinary call", req: Request{Dataset: "tool_calls", Dimensions: []string{"skill"}, Measures: count}, code: ErrUnknownField, field: "dimensions[0]"},
-		{name: "repeated dimension", req: Request{Dataset: "sessions", Dimensions: []string{"user", "user"}, Measures: count}, code: ErrUnsatisfiable, field: "dimensions[1]"},
-		{name: "too many dimensions", req: Request{Dataset: "sessions", Dimensions: []string{"user", "model", "surface", "provider"}, Measures: count}, code: ErrTooManyDimensions, field: "dimensions"},
-		{name: "aggregation the field does not admit", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "p95", Field: "turn_count", Alias: ""}}}, code: ErrUnsupportedAggregation, field: "measures[0].op"},
-		{name: "unknown measure field", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "sum", Field: "cost_usd", Alias: ""}}}, code: ErrUnknownField, field: "measures[0].field"},
-		{name: "count with a field", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "count", Field: "turn_count", Alias: ""}}}, code: ErrUnsatisfiable, field: "measures[0].field"},
+		{name: "repeated dimension", req: Request{Dataset: "tool_calls", Dimensions: []string{"user", "user"}, Measures: count}, code: ErrUnsatisfiable, field: "dimensions[1]"},
+		{name: "too many dimensions", req: Request{Dataset: "tool_calls", Dimensions: []string{"user", "tool_name", "surface", "status"}, Measures: count}, code: ErrTooManyDimensions, field: "dimensions"},
+		{name: "aggregation the field does not admit", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "max", Field: "duration_ms", Alias: ""}}}, code: ErrUnsupportedAggregation, field: "measures[0].op"},
+		{name: "unknown measure field", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "sum", Field: "cost_usd", Alias: ""}}}, code: ErrUnknownField, field: "measures[0].field"},
+		{name: "count with a field", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "count", Field: "duration_ms", Alias: ""}}}, code: ErrUnsatisfiable, field: "measures[0].field"},
 		{name: "count_distinct without a field", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "count_distinct", Field: "", Alias: ""}}}, code: ErrUnsatisfiable, field: "measures[0].field"},
 		{name: "count_distinct over a measure", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "count_distinct", Field: "duration_ms", Alias: ""}}}, code: ErrUnsupportedAggregation, field: "measures[0].op"},
 		{name: "count_distinct over a dimension that does not declare it", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "count_distinct", Field: "status", Alias: ""}}}, code: ErrUnsupportedAggregation, field: "measures[0].op"},
 		{name: "count_distinct over an unknown field", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "count_distinct", Field: "department", Alias: ""}}}, code: ErrUnknownField, field: "measures[0].field"},
 		{name: "a measure's aggregation over a dimension", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "sum", Field: "tool_name", Alias: ""}}}, code: ErrUnknownField, field: "measures[0].field"},
-		{name: "alias that is a field name", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "count", Field: "", Alias: "user"}}}, code: ErrUnsatisfiable, field: "measures[0].alias"},
-		{name: "alias that is not an identifier", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "count", Field: "", Alias: "x; DROP TABLE"}}}, code: ErrUnsatisfiable, field: "measures[0].alias"},
-		{name: "duplicate alias", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "count", Field: "", Alias: "n"}, {Op: "sum", Field: "turn_count", Alias: "n"}}}, code: ErrUnsatisfiable, field: "measures[1].alias"},
-		{name: "grouped without measures", req: Request{Dataset: "sessions"}, code: ErrUnsatisfiable, field: "measures"},
-		{name: "operator the dimension does not admit", req: Request{Dataset: "sessions", Measures: count, Filters: []Filter{{Field: "user", Operator: "contains", Values: []string{"a"}}}}, code: ErrUnsupportedOperator, field: "filters[0].operator"},
-		{name: "an aggregation offered as a filter operator", req: Request{Dataset: "sessions", Measures: count, Filters: []Filter{{Field: "user", Operator: "count_distinct", Values: []string{"a"}}}}, code: ErrUnsupportedOperator, field: "filters[0].operator"},
-		{name: "filter on a measure", req: Request{Dataset: "sessions", Measures: count, Filters: []Filter{{Field: "turn_count", Operator: "equals", Values: []string{"1"}}}}, code: ErrUnknownField, field: "filters[0].field"},
-		{name: "equals with two values", req: Request{Dataset: "sessions", Measures: count, Filters: []Filter{{Field: "user", Operator: "equals", Values: []string{"a", "b"}}}}, code: ErrUnsatisfiable, field: "filters[0].values"},
-		{name: "too many filter values", req: Request{Dataset: "sessions", Measures: count, Filters: []Filter{{Field: "user", Operator: "in", Values: make([]string, MaxFilterValues+1)}}}, code: ErrLimitExceeded, field: "filters[0].values"},
-		{name: "order by a measure not requested", req: Request{Dataset: "sessions", Measures: count, OrderBy: []OrderBy{{Measure: "tool_calls", Direction: "desc"}}}, code: ErrUnknownField, field: "order_by[0].measure"},
-		{name: "order by on ungrouped rows", req: Request{Dataset: "sessions", Ungrouped: true, OrderBy: []OrderBy{{Measure: "count", Direction: "desc"}}}, code: ErrUnsatisfiable, field: "order_by"},
-		{name: "measures on ungrouped rows", req: Request{Dataset: "sessions", Ungrouped: true, Measures: count}, code: ErrUnsatisfiable, field: "measures"},
-		{name: "grain on ungrouped rows", req: Request{Dataset: "sessions", Ungrouped: true, Grain: TimeGrainDay}, code: ErrUnsatisfiable, field: "grain"},
-		{name: "unknown grain", req: Request{Dataset: "sessions", Measures: count, Grain: "minute"}, code: ErrUnsupportedGrain, field: "grain"},
-		{name: "limit above the maximum", req: Request{Dataset: "sessions", Measures: count, Limit: MaxLimit + 1}, code: ErrLimitExceeded, field: "limit"},
-		{name: "rows above the rows maximum", req: Request{Dataset: "sessions", Ungrouped: true, Limit: MaxRowsLimit + 1}, code: ErrLimitExceeded, field: "limit"},
-		{name: "to before from", req: Request{Dataset: "sessions", Measures: count, FromUnixNano: testTo, ToUnixNano: testFrom}, code: ErrInvalidTimeRange, field: "to"},
-		{name: "range beyond the dataset's retention", req: Request{Dataset: "sessions", Measures: count, FromUnixNano: testFrom, ToUnixNano: testFrom + Sessions.MaxTimeRangeNanos() + 1}, code: ErrInvalidTimeRange, field: "to"},
-		{name: "range whose signed span wraps", req: Request{Dataset: "sessions", Measures: count, FromUnixNano: math.MinInt64, ToUnixNano: math.MaxInt64}, code: ErrInvalidTimeRange, field: "to"},
+		{name: "alias that is a field name", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "count", Field: "", Alias: "user"}}}, code: ErrUnsatisfiable, field: "measures[0].alias"},
+		{name: "alias that is not an identifier", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "count", Field: "", Alias: "x; DROP TABLE"}}}, code: ErrUnsatisfiable, field: "measures[0].alias"},
+		{name: "duplicate alias", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "count", Field: "", Alias: "n"}, {Op: "sum", Field: "duration_ms", Alias: "n"}}}, code: ErrUnsatisfiable, field: "measures[1].alias"},
+		{name: "grouped without measures", req: Request{Dataset: "tool_calls"}, code: ErrUnsatisfiable, field: "measures"},
+		{name: "operator the dimension does not admit", req: Request{Dataset: "tool_calls", Measures: count, Filters: []Filter{{Field: "user", Operator: "contains", Values: []string{"a"}}}}, code: ErrUnsupportedOperator, field: "filters[0].operator"},
+		{name: "an aggregation offered as a filter operator", req: Request{Dataset: "tool_calls", Measures: count, Filters: []Filter{{Field: "user", Operator: "count_distinct", Values: []string{"a"}}}}, code: ErrUnsupportedOperator, field: "filters[0].operator"},
+		{name: "filter on a measure", req: Request{Dataset: "tool_calls", Measures: count, Filters: []Filter{{Field: "duration_ms", Operator: "equals", Values: []string{"1"}}}}, code: ErrUnknownField, field: "filters[0].field"},
+		{name: "equals with two values", req: Request{Dataset: "tool_calls", Measures: count, Filters: []Filter{{Field: "user", Operator: "equals", Values: []string{"a", "b"}}}}, code: ErrUnsatisfiable, field: "filters[0].values"},
+		{name: "too many filter values", req: Request{Dataset: "tool_calls", Measures: count, Filters: []Filter{{Field: "user", Operator: "in", Values: make([]string, MaxFilterValues+1)}}}, code: ErrLimitExceeded, field: "filters[0].values"},
+		{name: "order by a measure not requested", req: Request{Dataset: "tool_calls", Measures: count, OrderBy: []OrderBy{{Measure: "total_ms", Direction: "desc"}}}, code: ErrUnknownField, field: "order_by[0].measure"},
+		{name: "order by on ungrouped rows", req: Request{Dataset: "tool_calls", Ungrouped: true, OrderBy: []OrderBy{{Measure: "count", Direction: "desc"}}}, code: ErrUnsatisfiable, field: "order_by"},
+		{name: "measures on ungrouped rows", req: Request{Dataset: "tool_calls", Ungrouped: true, Measures: count}, code: ErrUnsatisfiable, field: "measures"},
+		{name: "grain on ungrouped rows", req: Request{Dataset: "tool_calls", Ungrouped: true, Grain: TimeGrainDay}, code: ErrUnsatisfiable, field: "grain"},
+		{name: "unknown grain", req: Request{Dataset: "tool_calls", Measures: count, Grain: "minute"}, code: ErrUnsupportedGrain, field: "grain"},
+		{name: "limit above the maximum", req: Request{Dataset: "tool_calls", Measures: count, Limit: MaxLimit + 1}, code: ErrLimitExceeded, field: "limit"},
+		{name: "rows above the rows maximum", req: Request{Dataset: "tool_calls", Ungrouped: true, Limit: MaxRowsLimit + 1}, code: ErrLimitExceeded, field: "limit"},
+		{name: "to before from", req: Request{Dataset: "tool_calls", Measures: count, FromUnixNano: testTo, ToUnixNano: testFrom}, code: ErrInvalidTimeRange, field: "to"},
+		{name: "range beyond the dataset's retention", req: Request{Dataset: "tool_calls", Measures: count, FromUnixNano: testFrom, ToUnixNano: testFrom + ToolCalls.MaxTimeRangeNanos() + 1}, code: ErrInvalidTimeRange, field: "to"},
+		{name: "range whose signed span wraps", req: Request{Dataset: "tool_calls", Measures: count, FromUnixNano: math.MinInt64, ToUnixNano: math.MaxInt64}, code: ErrInvalidTimeRange, field: "to"},
 	}
 	for _, tc := range cases {
 		t.Run("it rejects "+tc.name, func(t *testing.T) {
@@ -227,10 +227,10 @@ func TestCompileAcceptsAWindowUpToTheDatasetRetention(t *testing.T) {
 	t.Parallel()
 
 	_, err := compileTest(t, Request{
-		Dataset:      "sessions",
+		Dataset:      "tool_calls",
 		Measures:     []Measure{{Op: "count", Field: "", Alias: ""}},
 		FromUnixNano: testFrom,
-		ToUnixNano:   testFrom + Sessions.MaxTimeRangeNanos(),
+		ToUnixNano:   testFrom + ToolCalls.MaxTimeRangeNanos(),
 	})
 	require.NoError(t, err)
 }
@@ -353,11 +353,11 @@ func TestCompileCapsRowsBelowGroupedResults(t *testing.T) {
 	t.Parallel()
 
 	count := []Measure{{Op: "count", Field: "", Alias: ""}}
-	plan, err := compileTest(t, Request{Dataset: "sessions", Measures: count, Dimensions: []string{"user"}, Limit: MaxRowsLimit + 1})
+	plan, err := compileTest(t, Request{Dataset: "tool_calls", Measures: count, Dimensions: []string{"user"}, Limit: MaxRowsLimit + 1})
 	require.NoError(t, err, "a grouped result is bounded by its groups and buckets, so it keeps the higher ceiling")
 	require.Contains(t, plan.SQL, fmt.Sprintf("LIMIT %d", MaxRowsLimit+1))
 
-	rows, err := compileTest(t, Request{Dataset: "sessions", Ungrouped: true, Limit: MaxRowsLimit})
+	rows, err := compileTest(t, Request{Dataset: "tool_calls", Ungrouped: true, Limit: MaxRowsLimit})
 	require.NoError(t, err)
 	require.Contains(t, rows.SQL, fmt.Sprintf("LIMIT %d", MaxRowsLimit))
 }

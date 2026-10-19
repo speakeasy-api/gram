@@ -50,7 +50,7 @@ export type RemoteSessionIssuer = {
   codeChallengeMethodsSupported?: Array<string> | null | undefined;
   createdAt: Date;
   /**
-   * The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.
+   * The EMA providers one vendor authorization server accepts, saved or default. They are stored as an ordered list that identity chaining tries in turn, but each endpoint can use only the provider its sign-in goes through, so the list acts as the set of accepted providers.
    */
   emaProviders?: EMAProviderOrder | undefined;
   grantTypesSupported?: Array<string> | undefined;

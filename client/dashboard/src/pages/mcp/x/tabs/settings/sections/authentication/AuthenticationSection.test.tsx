@@ -91,7 +91,7 @@ vi.mock("./RemoteIdentityProvidersField", () => ({
     readOnly?: boolean;
   }) => (
     <>
-      <button onClick={onAdd}>Add provider</button>
+      <button onClick={onAdd}>Add authorization server</button>
       <output>providers-{readOnly ? "read-only" : "editable"}</output>
       <output>
         attached-{associatedIssuers.map(({ id }) => id).join(",")}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
+	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/classifier/classifiertest"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
@@ -113,6 +114,10 @@ func TestMatchingFailureReasons(t *testing.T) {
 			h, pub := handler(t, m, definitions, c, meters)
 			require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 			require.Len(t, pub.readings, 1)
+			require.Len(t, pub.outcomes.messages, 1)
+			require.Equal(t, definitions[0].ID, pub.outcomes.messages[0].GetSensorId())
+			require.Equal(t, sigintv1.Outcome_STATUS_FAILED, pub.outcomes.messages[0].GetStatus())
+			require.Equal(t, tc.reason, pub.outcomes.messages[0].GetFailureReason())
 			testenv.RequireYAMLGolden(t, "testdata/requests/matching-user.golden.yaml", requests.snapshot(t))
 			var data metricdata.ResourceMetrics
 			require.NoError(t, reader.Collect(t.Context(), &data))

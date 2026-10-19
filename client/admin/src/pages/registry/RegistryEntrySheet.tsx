@@ -30,8 +30,7 @@ import {
 
 const RegistryJsonEditor = lazy(() => import("./RegistryJsonEditor"));
 
-export const STAGE_A_NOTICE =
-  "Edits affect the Speakeasy catalog. Customer catalog reads still use Pulse.";
+export const CATALOG_NOTICE = "Edits affect the Speakeasy catalog.";
 const EMPTY =
   '{\n  "server": {\n    "name": "",\n    "description": "",\n    "version": "1.0.0",\n    "remotes": []\n  }\n}';
 type Props = {
@@ -211,7 +210,7 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
           <SheetTitle>
             {base || id ? "Edit registry entry" : "New registry entry"}
           </SheetTitle>
-          <SheetDescription>{STAGE_A_NOTICE}</SheetDescription>
+          <SheetDescription>{CATALOG_NOTICE}</SheetDescription>
         </SheetHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
           <p className="text-muted-foreground shrink-0 text-sm">

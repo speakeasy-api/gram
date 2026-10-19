@@ -30,12 +30,12 @@ func TestCompileValues(t *testing.T) {
 		code ErrorCode
 	}{
 		{name: "unknown dataset", req: ValuesRequest{Dataset: "x", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testTo}, code: ErrUnknownDataset},
-		{name: "measure is not a dimension", req: ValuesRequest{Dataset: "sessions", Dimension: "turn_count", FromUnixNano: testFrom, ToUnixNano: testTo}, code: ErrUnknownField},
-		{name: "limit above the maximum", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: MaxValuesLimit + 1}, code: ErrLimitExceeded},
-		{name: "negative limit", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: -1}, code: ErrLimitExceeded},
-		{name: "empty window", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: testTo, ToUnixNano: testFrom}, code: ErrInvalidTimeRange},
-		{name: "window beyond the dataset's retention", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testFrom + Sessions.MaxTimeRangeNanos() + 1}, code: ErrInvalidTimeRange},
-		{name: "window whose signed span wraps", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: math.MinInt64, ToUnixNano: math.MaxInt64}, code: ErrInvalidTimeRange},
+		{name: "measure is not a dimension", req: ValuesRequest{Dataset: "tool_calls", Dimension: "duration_ms", FromUnixNano: testFrom, ToUnixNano: testTo}, code: ErrUnknownField},
+		{name: "limit above the maximum", req: ValuesRequest{Dataset: "tool_calls", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: MaxValuesLimit + 1}, code: ErrLimitExceeded},
+		{name: "negative limit", req: ValuesRequest{Dataset: "tool_calls", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: -1}, code: ErrLimitExceeded},
+		{name: "empty window", req: ValuesRequest{Dataset: "tool_calls", Dimension: "user", FromUnixNano: testTo, ToUnixNano: testFrom}, code: ErrInvalidTimeRange},
+		{name: "window beyond the dataset's retention", req: ValuesRequest{Dataset: "tool_calls", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testFrom + ToolCalls.MaxTimeRangeNanos() + 1}, code: ErrInvalidTimeRange},
+		{name: "window whose signed span wraps", req: ValuesRequest{Dataset: "tool_calls", Dimension: "user", FromUnixNano: math.MinInt64, ToUnixNano: math.MaxInt64}, code: ErrInvalidTimeRange},
 	}
 	for _, tc := range cases {
 		t.Run("it rejects "+tc.name, func(t *testing.T) {
@@ -53,34 +53,35 @@ func TestDimensionValues(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	base := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
-	row := func(recordID, sessionID, model string, at time.Time) chrepo.AgentEventRow {
-		r := agentEventFixture(ti.organizationID, recordID, sessionID, "t1", recordID, "api_request", at.UnixNano())
+	row := func(recordID, eventID, user string, at time.Time) chrepo.AgentEventRow {
+		r := agentEventFixture(ti.organizationID, recordID, "s1", "t1", eventID, "tool_call_result", at.UnixNano())
 		r.ProjectID = ti.projectID
-		r.Model = model
+		r.ToolName = "Bash"
+		r.UserEmail = user
 		return r
 	}
 	require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
-		row("v1", "s1", "claude-sonnet-4", base),
-		// A later observation of s1 changes its model; both stay listed.
-		row("v2", "s1", "claude-opus-4", base.Add(time.Minute)),
-		row("v3", "s2", "claude-opus-4", base.Add(2*time.Minute)),
-		row("v4", "s3", "gpt-5", base.Add(3*time.Minute)),
-		row("v5", "s4", "", base.Add(4*time.Minute)),
+		row("v1", "c1", "ada@example.com", base),
+		// A later observation of c1 changes its user; both stay listed.
+		row("v2", "c1", "grace@example.com", base.Add(time.Minute)),
+		row("v3", "c2", "grace@example.com", base.Add(2*time.Minute)),
+		row("v4", "c3", "linus@example.com", base.Add(3*time.Minute)),
+		row("v5", "c4", "", base.Add(4*time.Minute)),
 	}))
 
 	from, to := base.Add(-time.Hour).Format(time.RFC3339), base.Add(time.Hour).Format(time.RFC3339)
 
 	result, err := ti.service.DimensionValues(ctx, &gen.DimensionValuesPayload{
-		Dataset: "sessions", Dimension: "model", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
+		Dataset: "tool_calls", Dimension: "user", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "sessions", result.Dataset)
-	require.Equal(t, "model", result.Dimension)
+	require.Equal(t, "tool_calls", result.Dataset)
+	require.Equal(t, "user", result.Dimension)
 	require.Equal(t, []*gen.AnalyticsDimensionValue{
-		{Value: "claude-opus-4", Count: 2},
-		{Value: "claude-sonnet-4", Count: 1},
-		{Value: "gpt-5", Count: 1},
-	}, result.Values, "every model a session stated, counted in sessions, and never the empty one")
+		{Value: "grace@example.com", Count: 2},
+		{Value: "ada@example.com", Count: 1},
+		{Value: "linus@example.com", Count: 1},
+	}, result.Values, "every user a call stated, counted in calls, and never the empty one")
 
 	t.Run("it offers the skills a window saw", func(t *testing.T) {
 		t.Parallel()
@@ -182,7 +183,7 @@ func TestDimensionValues(t *testing.T) {
 	t.Run("it names an unknown dimension", func(t *testing.T) {
 		t.Parallel()
 		_, err := ti.service.DimensionValues(ctx, &gen.DimensionValuesPayload{
-			Dataset: "sessions", Dimension: "department", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", Dimension: "department", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
 		})
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "unknown_field")
@@ -191,7 +192,7 @@ func TestDimensionValues(t *testing.T) {
 	t.Run("it requires an authenticated project", func(t *testing.T) {
 		t.Parallel()
 		_, err := ti.service.DimensionValues(t.Context(), &gen.DimensionValuesPayload{
-			Dataset: "sessions", Dimension: "model", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", Dimension: "user", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
 		})
 		requireOopsCode(t, err, oops.CodeUnauthorized)
 	})

@@ -241,7 +241,7 @@ export function loginChallengeUrl(
   });
 }
 
-export function platformMcpPrompt({
+export function adminMcpPrompt({
   serverName,
   serverId,
   projectName,
@@ -259,7 +259,7 @@ export function platformMcpPrompt({
   // name are the customer's to set, so they follow as quoted labels the agent
   // is told not to act on: a name written as an instruction stays a name.
   return (
-    `Using the Speakeasy Platform MCP, investigate the MCP server with mcp_id ` +
+    `Using the Speakeasy Admin MCP server, investigate the MCP server with mcp_id ` +
     `${serverId}. Run get_mcp_diagnostics for ${range} and compare its call ` +
     `outcomes with the organization's. Tell me which tools failed, which apps ` +
     `reported the failures${spike}, and whether the fault most likely lies with ` +

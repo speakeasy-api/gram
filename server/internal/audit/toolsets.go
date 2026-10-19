@@ -23,6 +23,7 @@ const (
 	ActionToolsetAttachOAuthProxy          Action = "toolset:attach_oauth_proxy"
 	ActionToolsetUpdateOAuthProxy          Action = "toolset:update_oauth_proxy"
 	ActionToolsetDetachOAuthProxy          Action = "toolset:detach_oauth_proxy"
+	ActionToolsetMigrateToRemoteMcp        Action = "toolset:migrate_to_remote_mcp"
 )
 
 type LogToolsetCreateEvent struct {
@@ -337,3 +338,69 @@ func (l *Logger) LogToolsetDetachExternalOAuth(ctx context.Context, dbtx repo.DB
 // NOTE: The Attach/Update/Detach OAuth-proxy emit functions were removed with
 // the OAuth proxy. The ActionToolset*OAuthProxy action-string constants
 // are retained because historical audit-log entries still reference them.
+
+type LogToolsetMigrateToRemoteMcpEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	ToolsetURN  urn.Toolset
+	ToolsetName string
+	ToolsetSlug string
+
+	// McpSlug is the server's address, which does not change.
+	McpSlug string
+
+	// McpServerURN is the server switched from the toolset to the remote source.
+	McpServerURN urn.McpServer
+
+	// RemoteMcpServerURN is the remote MCP source the server now proxies.
+	RemoteMcpServerURN urn.RemoteMcpServer
+
+	// PreviousRemoteURL is the external MCP attachment's upstream URL.
+	PreviousRemoteURL string
+
+	// RemoteURL is the upstream URL the server now dials.
+	RemoteURL string
+}
+
+func (l *Logger) LogToolsetMigrateToRemoteMcp(ctx context.Context, dbtx repo.DBTX, event LogToolsetMigrateToRemoteMcpEvent) error {
+	action := ActionToolsetMigrateToRemoteMcp
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"mcp_slug":              event.McpSlug,
+		"mcp_server_urn":        event.McpServerURN.String(),
+		"remote_mcp_server_urn": event.RemoteMcpServerURN.String(),
+		"previous_remote_url":   event.PreviousRemoteURL,
+		"remote_url":            event.RemoteURL,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.ToolsetURN.ID.String(),
+		SubjectType:        string(subjectTypeToolset),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
+}

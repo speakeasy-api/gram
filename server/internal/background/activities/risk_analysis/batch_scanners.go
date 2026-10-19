@@ -25,8 +25,9 @@ import (
 )
 
 const (
-	inlineBatchExecutionPath  = "inline_batch"
-	shadowStreamExecutionPath = "shadow_stream"
+	inlineBatchExecutionPath        = "inline_batch"
+	shadowStreamExecutionPath       = "shadow_stream"
+	judgeHandlerStreamExecutionPath = "judge_handler_stream"
 	// llmAnalyzerStreamExecutionPath marks analysis requests the fine-tuned
 	// LLM analyzer's streams consumer evaluates as the only engine for the
 	// policy's sources, as opposed to the shadow stream that runs alongside
@@ -79,6 +80,13 @@ func nilUUIDString(id uuid.UUID) *string {
 	}
 	value := id.String()
 	return &value
+}
+
+func derefOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 func batchRiskProvenance(args AnalyzeBatchArgs, msg batchMessage, executionPath, requestID string) metering.RiskProvenance {
@@ -155,7 +163,7 @@ func findingsFromResults(results []scanners.Result) [][]scanners.Finding {
 	return findings
 }
 
-func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, exclusions ExclusionSet, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
+func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, exclusions ExclusionSet, masks CategoryScopeMasks, judgeInHandlers bool) ([][]scanners.Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
@@ -220,6 +228,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	var promptInjectionErr error
 	var customErr error
+	var toolCallPublishErr error
 
 	if llmMode || llmShadow {
 		wg.Go(func() {
@@ -234,14 +243,32 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	legacyRuns := func(source string) bool {
 		return !llmMode || !llmanalyzer.Enforces(source)
 	}
+	if sources.Has(shadowmcp.SourceShadowMCP) ||
+		(legacyRuns(shadowmcp.SourceDestructiveTool) && sources.Has(shadowmcp.SourceDestructiveTool)) ||
+		(legacyRuns(SourceCLIDestructive) && sources.Has(SourceCLIDestructive)) {
+		wg.Go(func() {
+			toolCallPublishErr = a.publishToolCallScanRequests(
+				ctx,
+				args,
+				messages,
+				sources,
+				masks,
+				legacyRuns(shadowmcp.SourceDestructiveTool),
+				legacyRuns(SourceCLIDestructive),
+			)
+		})
+	}
+
 	if legacyRuns(SourceGitleaks) && sources.Has(SourceGitleaks) {
 		wg.Go(func() {
-			findings, err := a.scanGitleaks(ctx, args, messages, contents)
+			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourceGitleaks])
+			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourceGitleaks, masks.RecommendedPrefilteredCount(sourceCategories[SourceGitleaks]))
+			findings, err := a.scanGitleaks(ctx, args, subMessages, subContents)
 			if err != nil {
 				gitleaksErr = err
 				return
 			}
-			gitleaksFindings = findings
+			gitleaksFindings = scatterFindings(n, indices, findings)
 		})
 	}
 
@@ -271,7 +298,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
-			findings, err := a.scanPromptInjection(ctx, args, subMessages, subContents)
+			findings, err := a.scanPromptInjection(ctx, args, subMessages, subContents, judgeInHandlers)
 			if err != nil {
 				promptInjectionErr = err
 				return
@@ -282,12 +309,14 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	if len(customRuleIDs) > 0 {
 		wg.Go(func() {
-			findings, err := a.scanCustomRules(ctx, args, messages, customRuleIDs)
+			subMessages, _, indices := masks.Subset(messages, contents, sourceCategories[SourceCustom])
+			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourceCustom, masks.RecommendedPrefilteredCount(sourceCategories[SourceCustom]))
+			findings, err := a.scanCustomRules(ctx, args, subMessages, customRuleIDs)
 			if err != nil {
 				customErr = err
 				return
 			}
-			customFindings = findings
+			customFindings = scatterFindings(n, indices, findings)
 		})
 	}
 
@@ -328,6 +357,10 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	if customErr != nil {
 		scanSpan.SetStatus(codes.Error, customErr.Error())
 		return nil, fmt.Errorf("custom rule scan: %w", customErr)
+	}
+	if toolCallPublishErr != nil {
+		scanSpan.SetStatus(codes.Error, toolCallPublishErr.Error())
+		return nil, fmt.Errorf("tool call scan dispatch: %w", toolCallPublishErr)
 	}
 	if ctx.Err() != nil {
 		err := fmt.Errorf("scan canceled: %w", ctx.Err())

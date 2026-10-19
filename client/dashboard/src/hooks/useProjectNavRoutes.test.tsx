@@ -30,7 +30,7 @@ function route(title: string, url: string): AppRoute {
 const routes = {
   mcpSessions: route("MCP Sessions", "mcp-sessions"),
   remoteIdentityProviders: route(
-    "Remote Identity Providers",
+    "Authorization Servers",
     "remote-identity-providers",
   ),
   agents: route("Agent Identity", "agent-management"),
@@ -56,7 +56,6 @@ const routes = {
   plugins: route("Plugins", "plugins"),
   policyCenter: route("Guardrails", "risk-policies"),
   riskEvents: route("Risk Events", "risk-events"),
-  riskOverview: route("Risk Overview", "risk"),
   watchdog: route("Watchdog", "watchdog"),
   settings: route("Project settings", "settings"),
   shadowAI: route("Shadow AI", "shadow-ai"),
@@ -171,7 +170,7 @@ describe("useProjectNavRoutes", () => {
       routes.remoteIdentityProviders,
     ]);
     expect(navRoutes.indexOf(routes.playground)).toBeLessThan(
-      navRoutes.indexOf(routes.riskOverview),
+      navRoutes.indexOf(routes.riskEvents),
     );
     expect(navRoutes.indexOf(routes.policyCenter)).toBeLessThan(
       navRoutes.indexOf(routes.costs),
@@ -239,8 +238,6 @@ describe("useProjectNavRoutes", () => {
       expect(navRoutes).not.toContain(routes.watchdog);
       expect(navRoutes).not.toContain(routes.explore);
       expect(navRoutes).toContain(routes.deployments);
-      // Without Watchdog, the legacy risk pages stay in the nav.
-      expect(navRoutes).toContain(routes.riskOverview);
       expect(navRoutes).toContain(routes.riskEvents);
     },
   );
@@ -277,9 +274,6 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.watchdog);
     expect(navRoutes).toContain(routes.explore);
     expect(navRoutes).not.toContain(routes.deployments);
-    // Watchdog supersedes the legacy overview in the nav; Risk Events shows
-    // in both modes.
-    expect(navRoutes).not.toContain(routes.riskOverview);
     expect(navRoutes).toContain(routes.riskEvents);
   });
 

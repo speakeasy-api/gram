@@ -3,17 +3,17 @@ package evaluation
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 )
-
-// Keep this namespace stable so repeated evaluations retain their reading ID.
-var readingNamespace = uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:sigint:reading"))
 
 type compiledSensor struct {
 	id          string
@@ -22,6 +22,7 @@ type compiledSensor struct {
 	mode        string
 	hash        string
 	questions   []classifier.Question
+	strategy    string
 	windowSize  int
 }
 
@@ -44,7 +45,7 @@ func compileSensor(sensor Sensor) (compiledSensor, bool) {
 	if ValidateInputConfiguration(strategy, size) != nil {
 		return compiled, false
 	}
-	compiled.windowSize = 1
+	compiled.strategy, compiled.windowSize = strategy, 1
 	if sensor.Instructions == nil || len(sensor.Signals) == 0 || sensor.Slug == "" {
 		return compiled, false
 	}
@@ -99,6 +100,16 @@ func compileSensor(sensor Sensor) (compiledSensor, bool) {
 	return compiled, true
 }
 
+// readingInput records the classifier input actually supplied for one sensor.
+func readingInput(sensor compiledSensor, in ResolvedInput) *sigintv1.Reading_Input {
+	input := &sigintv1.Reading_Input{}
+	input.SetStrategy(sensor.strategy)
+	input.SetRequestedMessageCount(conv.SafeInt32(sensor.windowSize))
+	input.SetMessageCount(conv.SafeInt32(in.MessageCount))
+	input.SetTruncated(in.Truncated)
+	return input
+}
+
 func reading(event Event, sensor compiledSensor, answers map[classifier.QuestionKey]classifier.QuestionOutcome, attempt, at string, result classifier.Result) (*sigintv1.Reading, error) {
 	if sensor.slug == "" {
 		return nil, fmt.Errorf("missing sensor slug")
@@ -110,11 +121,15 @@ func reading(event Event, sensor compiledSensor, answers map[classifier.Question
 		}
 	}
 	r := sigintv1.Reading_builder{Event: proto.CloneOf(event.Subject)}.Build()
-	identity, _ := json.Marshal([]string{"sigint-reading-v1", event.OrganizationID, event.ProjectID, event.Subject.GetKind(), event.Subject.GetId(), sensor.id})
-	r.SetId(uuid.NewSHA1(readingNamespace, identity).String())
+	r.SetId(readingID(event, sensor.id))
 	r.SetEvaluationAttemptId(attempt)
 	r.SetOrganizationId(event.OrganizationID)
 	r.SetProjectId(event.ProjectID)
+	r.SetTriggerKind(string(event.Evaluation.TriggerKind))
+	r.SetEvaluationRequestedAt(event.Evaluation.RequestedAt.UTC().Format(time.RFC3339Nano))
+	if event.Evaluation.RunID != uuid.Nil {
+		r.SetRunId(event.Evaluation.RunID.String())
+	}
 	r.SetSensorId(sensor.id)
 	r.SetSensorSlug(sensor.slug)
 	r.SetEvaluatedAt(at)
@@ -122,7 +137,8 @@ func reading(event Event, sensor compiledSensor, answers map[classifier.Question
 	r.SetConfiguredModel(result.Metadata.Model)
 	r.SetProvider(result.Metadata.Provider)
 	r.SetModels(result.Models)
-	r.SetCompilerVersion("sigint-v1/" + result.Metadata.CompilerVersion)
+	r.SetCompilerVersion(compilerVersion(result))
+	r.SetAttributes(maps.Clone(event.Attributes))
 	if event.Actor != nil {
 		r.SetActor(proto.CloneOf(event.Actor))
 	}
@@ -205,6 +221,10 @@ func reading(event Event, sensor compiledSensor, answers map[classifier.Question
 		r.SetScore(value)
 	}
 	return r, nil
+}
+
+func compilerVersion(result classifier.Result) string {
+	return "sigint-v1/" + result.Metadata.CompilerVersion
 }
 
 func distribution(values []classifier.Probability, slugs map[classifier.OptionKey]string) ([]*sigintv1.Reading_Probability, error) {

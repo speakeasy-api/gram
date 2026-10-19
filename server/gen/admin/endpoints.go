@@ -77,6 +77,10 @@ type Endpoints struct {
 	GetSupportCoverage                    goa.Endpoint
 	DescribeMcpServerHealth               goa.Endpoint
 	GetMcpServerToolCalls                 goa.Endpoint
+	GetHookClients                        goa.Endpoint
+	ListExternalMcpMigrationCandidates    goa.Endpoint
+	PreviewExternalMcpMigration           goa.Endpoint
+	MigrateExternalMcpServers             goa.Endpoint
 	GetRegistryOktaCandidates             goa.Endpoint
 	ListRegistryOktaUnmapped              goa.Endpoint
 	ListRegistryEntries                   goa.Endpoint
@@ -190,6 +194,10 @@ func NewEndpoints(s Service) *Endpoints {
 		GetSupportCoverage:                    NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
 		DescribeMcpServerHealth:               NewDescribeMcpServerHealthEndpoint(s, a.APIKeyAuth),
 		GetMcpServerToolCalls:                 NewGetMcpServerToolCallsEndpoint(s, a.APIKeyAuth),
+		GetHookClients:                        NewGetHookClientsEndpoint(s, a.APIKeyAuth),
+		ListExternalMcpMigrationCandidates:    NewListExternalMcpMigrationCandidatesEndpoint(s, a.APIKeyAuth),
+		PreviewExternalMcpMigration:           NewPreviewExternalMcpMigrationEndpoint(s, a.APIKeyAuth),
+		MigrateExternalMcpServers:             NewMigrateExternalMcpServersEndpoint(s, a.APIKeyAuth),
 		GetRegistryOktaCandidates:             NewGetRegistryOktaCandidatesEndpoint(s, a.APIKeyAuth),
 		ListRegistryOktaUnmapped:              NewListRegistryOktaUnmappedEndpoint(s, a.APIKeyAuth),
 		ListRegistryEntries:                   NewListRegistryEntriesEndpoint(s, a.APIKeyAuth),
@@ -283,6 +291,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSupportCoverage = m(e.GetSupportCoverage)
 	e.DescribeMcpServerHealth = m(e.DescribeMcpServerHealth)
 	e.GetMcpServerToolCalls = m(e.GetMcpServerToolCalls)
+	e.GetHookClients = m(e.GetHookClients)
+	e.ListExternalMcpMigrationCandidates = m(e.ListExternalMcpMigrationCandidates)
+	e.PreviewExternalMcpMigration = m(e.PreviewExternalMcpMigration)
+	e.MigrateExternalMcpServers = m(e.MigrateExternalMcpServers)
 	e.GetRegistryOktaCandidates = m(e.GetRegistryOktaCandidates)
 	e.ListRegistryOktaUnmapped = m(e.ListRegistryOktaUnmapped)
 	e.ListRegistryEntries = m(e.ListRegistryEntries)
@@ -1651,6 +1663,99 @@ func NewGetMcpServerToolCallsEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.GetMcpServerToolCalls(ctx, p)
+	}
+}
+
+// NewGetHookClientsEndpoint returns an endpoint function that calls the method
+// "getHookClients" of service "admin".
+func NewGetHookClientsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetHookClientsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetHookClients(ctx, p)
+	}
+}
+
+// NewListExternalMcpMigrationCandidatesEndpoint returns an endpoint function
+// that calls the method "listExternalMcpMigrationCandidates" of service
+// "admin".
+func NewListExternalMcpMigrationCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListExternalMcpMigrationCandidatesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListExternalMcpMigrationCandidates(ctx, p)
+	}
+}
+
+// NewPreviewExternalMcpMigrationEndpoint returns an endpoint function that
+// calls the method "previewExternalMcpMigration" of service "admin".
+func NewPreviewExternalMcpMigrationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*PreviewExternalMcpMigrationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.PreviewExternalMcpMigration(ctx, p)
+	}
+}
+
+// NewMigrateExternalMcpServersEndpoint returns an endpoint function that calls
+// the method "migrateExternalMcpServers" of service "admin".
+func NewMigrateExternalMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MigrateExternalMcpServersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.MigrateExternalMcpServers(ctx, p)
 	}
 }
 

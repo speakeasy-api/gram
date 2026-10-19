@@ -85,9 +85,9 @@ export function resolveEntityLink(
     case "risk_policy":
       return newTab(`${proj}/risk-policies?policy=${enc(rest)}`);
     case "risk_user":
-      return newTab(`${proj}/risk-overview/users/${enc(rest)}`);
+      return newTab(`${proj}/risk-events?identifier=${enc(rest)}`);
     case "risk_category":
-      return newTab(`${proj}/risk-overview/categories/${enc(rest)}`);
+      return newTab(`${proj}/risk-events?category=${enc(rest)}`);
     case "employee":
       return newTab(`${proj}/employees/${enc(rest)}`);
     case "environment":
