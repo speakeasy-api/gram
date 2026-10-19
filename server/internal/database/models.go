@@ -7553,6 +7553,60 @@ type WorkloadAgentAssignment struct {
 	Deleted bool
 }
 
+type WorkloadDeviceJoinToken struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: secret-restricted
+	TokenHash string
+	// @access: confidential
+	AgentID uuid.UUID
+	// @access: confidential
+	CreatedByUserID string
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	ConsumedAt pgtype.Timestamptz
+	// @access: restricted
+	ConsumedBySubject pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type WorkloadDeviceKey struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	WorkloadIssuerID uuid.UUID
+	// @access: restricted
+	Subject string
+	// @access: confidential
+	PublicJwk []byte
+	// @access: confidential
+	Thumbprint string
+	// @access: confidential-pii
+	Hostname pgtype.Text
+	// @access: confidential-pii
+	Serial pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type WorkloadIdentityAdmission struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -7599,6 +7653,8 @@ type WorkloadIssuer struct {
 	JwksUri string
 	// @access: confidential
 	AllowWildcardAdmission bool
+	// @access: confidential
+	KeySource pgtype.Text
 	// @access: opaque-restricted
 	Metadata []byte
 	// @access: confidential

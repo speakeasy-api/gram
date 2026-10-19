@@ -51,7 +51,7 @@ func describePlatformServer() serverDescription {
 	}
 }
 
-func describeMetaServer(meta *metamcprepo.MetaMcpServer) serverDescription {
+func describeMetaServer(meta *metamcprepo.MetaMcpServer, mode metamcp.DiscoveryMode) serverDescription {
 	hints := cacheHintsCallerUniform
 	if meta.UserSessionIssuerID.Valid {
 		hints = cacheHintsCallerVarying
@@ -59,7 +59,7 @@ func describeMetaServer(meta *metamcprepo.MetaMcpServer) serverDescription {
 	return serverDescription{
 		capabilities: map[string]json.RawMessage{"tools": json.RawMessage("{}"), "resources": json.RawMessage("{}")},
 		identity:     serverInfoMetaServer,
-		instructions: metamcp.ResolveInstructions(conv.FromPGText[string](meta.Instructions)),
+		instructions: metamcp.ResolveDiscoveryInstructions(conv.FromPGText[string](meta.Instructions), mode),
 		cacheHints:   hints,
 	}
 }

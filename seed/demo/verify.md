@@ -554,6 +554,13 @@ that URL.
       on purpose, so interactive sign-in through it (GitHub, the organization
       gateway) keeps working.
 
+31. **Gateway discovery modes**
+    - Open a gateway with tools.
+    - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
+    - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
+    - Select Direct in Inspect and apply/reconnect, then restore the gateway default to Progressive. Confirm the explicit Direct connection stays Direct while a connection using the gateway default follows Progressive.
+    - Connect a client to the organization gateway (`<server>/mcp/gateway/<org>`), choose Direct under Configuration on the consent page, and confirm tools/list shows `server--tool` names from every project you can reach. Reconnect: Direct is pre-selected. A connection that keeps the default lists the Progressive tools.
+
 ## On failure
 
 Fix the seed (see rules in `PAGES.md`), then re-run the target that owns

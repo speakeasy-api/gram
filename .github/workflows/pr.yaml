@@ -272,7 +272,7 @@ jobs:
 
       - name: Check for existing Go module cache
         id: lookup
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
         with:
           lookup-only: true
 
@@ -351,7 +351,7 @@ jobs:
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
 
       - name: Tag preview image
-        uses: $/.github/workflows/composite/tag-preview-images
+        uses: ./.github/workflows/composite/tag-preview-images # zizmor: ignore[self-repository]
         with:
           registry: ${{ env.REGISTRY }}
           image-owner: ${{ env.DOCKER_REPOSITORY_OWNER }}
@@ -466,7 +466,7 @@ jobs:
           exit 1
       - name: Build and Push Registry image to GCR
         id: build
-        uses: $/.github/workflows/composite/build-push
+        uses: ./.github/workflows/composite/build-push # zizmor: ignore[self-repository]
         with:
           hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -528,7 +528,7 @@ jobs:
           exit 1
       - name: Build and Push Registry image to GCR
         id: build
-        uses: $/.github/workflows/composite/build-push
+        uses: ./.github/workflows/composite/build-push # zizmor: ignore[self-repository]
         with:
           hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -1231,7 +1231,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Compute runtime image content hash
         id: assistant-runtime-hash
@@ -1295,7 +1295,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Test CI tooling
         run: mise run test:ci
@@ -1361,7 +1361,7 @@ jobs:
         run: mise run github
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Cache uv
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1482,7 +1482,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Build
         run: mise run build:cli --readonly
@@ -1530,7 +1530,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Build
         run: mise run build:hooks --readonly
@@ -1565,7 +1565,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Test
         run: mise run test:glint
@@ -1597,7 +1597,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Install Go tools
         run: go install tool
@@ -1654,7 +1654,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Install Go deps
         run: mise run install:go
@@ -1750,7 +1750,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Install Go deps
         run: mise run install:go
@@ -1859,7 +1859,7 @@ jobs:
       # CDN bucket.
       - name: Build and Push Admin Dashboard image to GCR
         id: build-admin-dashboard
-        uses: $/.github/workflows/composite/build-push
+        uses: ./.github/workflows/composite/build-push # zizmor: ignore[self-repository]
         with:
           hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -1874,7 +1874,7 @@ jobs:
 
       - name: Build and Push Registry image to GCR
         id: build
-        uses: $/.github/workflows/composite/build-push
+        uses: ./.github/workflows/composite/build-push # zizmor: ignore[self-repository]
         with:
           hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -2112,7 +2112,7 @@ jobs:
       # The hooks-go target's compile step resolves the root Go module's
       # dependencies, including test dependencies.
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Test generated artifact conflict resolution
         run: mise run test:gen-resolve
@@ -2162,7 +2162,7 @@ jobs:
         run: mise run github
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
