@@ -1,0 +1,32 @@
+server/database/schema.sql
+  h_9630b74bdac540 6835-6836,6894-6895
+server/internal/database/models.go
+  s_8f386c597c4122::t_d6ff53587c6766 1710,1771
+server/internal/directory/repo/models.go
+  s_8f386c597c4122::t_5ffe06592f83c3 22
+server/migrations/20261019004232_directory-source-identities.sql
+  h_9630b74bdac540 8-9,15-16
+server/migrations/atlas.sum
+  h_9630b74bdac540 1,477
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34de1e8ab3d06386fb0eadc873a2a09c83b0f91a",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_8f386c597c4122": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "67edf4c9-ee75-4ffc-a392-7a963ce58ed4",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
