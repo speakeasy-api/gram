@@ -19,6 +19,7 @@ type DirectoryUser struct {
 	// @access: confidential-pii
 	WorkosDirectoryUserID string
 	// WorkOS directory ID. NULL until an authoritative directory inventory or entity payload attributes this source.
+	// @access: confidential
 	DirectoryID pgtype.Text
 	// @access: confidential-pii
 	Email pgtype.Text
