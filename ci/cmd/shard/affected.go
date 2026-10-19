@@ -180,7 +180,7 @@ var fullRunPrefixes = []string{"server/gen/"}
 // nothing a Go test builds or reads depends on it.
 func inert(file string) bool {
 	switch {
-	case strings.HasSuffix(file, ".md"):
+	case path.Base(file) == "README.md", path.Base(file) == "CHANGELOG.md":
 		// Documentation. Markdown that a package does read (Platform MCP
 		// skills, for example) is embedded, and embeds are matched first.
 		return true
@@ -214,14 +214,21 @@ func classify(g graph, files []string) selection {
 
 		if strings.HasSuffix(file, ".go") {
 			// A Go file belongs to the package in its directory. One under
-			// testdata is data for the package that owns the testdata. Any
-			// other Go file is not compiled into a test binary in this run.
+			// testdata is data for the package that owns the testdata.
 			if pkg, ok := g.dirs[path.Dir(file)]; ok {
 				sel.changed[pkg] = true
-			} else if pkg, ok := testdataOwner(g, file); ok {
-				sel.changed[pkg] = true
+				continue
 			}
-			continue
+			if pkg, ok := testdataOwner(g, file); ok {
+				sel.changed[pkg] = true
+				continue
+			}
+
+			// Any other Go file is outside the packages under test, such as
+			// the CI tooling that selects them. Its effect on the run cannot
+			// be traced through imports.
+			sel.full = fmt.Sprintf("%s is not in a package under test", file)
+			return sel
 		}
 
 		for _, prefix := range fullRunPrefixes {
@@ -245,6 +252,16 @@ func classify(g graph, files []string) selection {
 
 		if inert(file) {
 			continue
+		}
+
+		// Other Markdown next to a package is usually its documentation, but
+		// a test may read it as a fixture (a runbook it checks against, for
+		// example), so it counts as a change to that package.
+		if strings.HasSuffix(file, ".md") {
+			if pkg, ok := g.dirs[path.Dir(file)]; ok {
+				sel.changed[pkg] = true
+				continue
+			}
 		}
 
 		sel.full = fmt.Sprintf("%s is not part of any package", file)
