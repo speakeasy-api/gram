@@ -361,6 +361,9 @@ function MCPOverview() {
     teamGateway.show &&
     search === "" &&
     !hasActiveMcpFilters(mcpFilters.values);
+  const teamGatewayCard = showTeamGateway && (
+    <TeamGatewayCard isOff={teamGateway.isOff} />
+  );
   const showNoMatches =
     !isLoading &&
     (search !== "" || hasActiveMcpFilters(mcpFilters.values)) &&
@@ -401,6 +404,11 @@ function MCPOverview() {
   ) {
     return (
       <>
+        {teamGatewayCard && (
+          <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
+            {teamGatewayCard}
+          </div>
+        )}
         <MCPEmptyState cta={newMcpServerButton} />
       </>
     );
@@ -468,9 +476,7 @@ function MCPOverview() {
               </>
             ) : (
               <>
-                {showTeamGateway && (
-                  <TeamGatewayCard isOff={teamGateway.isOff} />
-                )}
+                {teamGatewayCard}
                 {filteredGateways.map((gateway) => (
                   <GatewayCard key={gateway.id} gateway={gateway} />
                 ))}

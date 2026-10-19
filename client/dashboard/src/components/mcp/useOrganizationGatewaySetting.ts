@@ -15,7 +15,11 @@ import { toast } from "sonner";
 export type OrganizationGatewaySetting = {
   features: ReturnType<typeof useProductFeatures>;
   gateway: ReturnType<typeof useOrganizationGateway>;
-  /** Whether the gateway is switched on; undefined until the setting loads. */
+  /**
+   * Whether the gateway is switched on. The stored setting decides; when it
+   * can't be read, the gateway's own answer does only if it is definite
+   * (served is on, turned off is off). Otherwise undefined.
+   */
   on: boolean | undefined;
   setOn: (on: boolean, options?: { onSuccess?: () => void }) => void;
   isPending: boolean;
@@ -78,7 +82,13 @@ export function useOrganizationGatewaySetting({
   return {
     features,
     gateway,
-    on: features.data ? !features.data.organizationGatewayDisabled : undefined,
+    on: features.data
+      ? !features.data.organizationGatewayDisabled
+      : gateway.data?.available
+        ? true
+        : gateway.data?.unavailableReason === "turned_off"
+          ? false
+          : undefined,
     setOn,
     isPending: mutation.isPending,
   };

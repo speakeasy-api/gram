@@ -53,16 +53,13 @@ function TeamGatewayContent({
   organizationSlug: string;
 }): JSX.Element {
   const isCurrentOrganization = useIsCurrentOrganization(organizationId);
-  const { features, gateway, on, setOn, isPending } =
-    useOrganizationGatewaySetting({ organizationId, isCurrentOrganization });
-
-  // The stored setting is the source of truth for the switch; the gateway's
-  // own answer says the same thing when the setting can't be read.
-  const isOn =
-    on ??
-    (gateway.data
-      ? gateway.data.unavailableReason !== "turned_off"
-      : undefined);
+  const {
+    features,
+    gateway,
+    on: isOn,
+    setOn,
+    isPending,
+  } = useOrganizationGatewaySetting({ organizationId, isCurrentOrganization });
 
   return (
     <SettingsPage
