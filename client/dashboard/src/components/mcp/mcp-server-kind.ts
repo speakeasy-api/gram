@@ -20,7 +20,7 @@ export interface ListedMcpServer {
 }
 
 /** How Speakeasy reaches the server; undefined for a row with no backend. */
-export function mcpServerKind(server: McpServer): McpServerKind | undefined {
+function mcpServerKind(server: McpServer): McpServerKind | undefined {
   if (server.unproxiedMcpServerId) return "unproxied";
   if (server.tunneledMcpServerId) return "tunneled";
   if (server.remoteMcpServerId) return "remote";
