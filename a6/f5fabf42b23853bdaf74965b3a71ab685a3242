@@ -1,0 +1,41 @@
+server/internal/background/activities/process_workos_directory_attributes_events.go
+  h_9630b74bdac540 22-23,57-59,71-129,179-181,183-185,189,527
+  h_9630b74bdac540 528-529
+server/database/sqlc.yaml
+  h_9630b74bdac540 822-830
+  s_37c6efa0d75c7d::t_e35717c09d8b4c 821
+server/internal/directoryreview/queries.sql
+  h_9630b74bdac540 1-375
+server/internal/access/directory_role_mappings.go
+  h_9630b74bdac540 13,25,478-481,485-503,612-613
+  h_9630b74bdac540 504-505,614-615
+server/internal/directoryreview/review.go
+  h_9630b74bdac540 1-296
+server/internal/directoryreview/repo/db.go
+  h_9630b74bdac540 1-32
+server/internal/directoryreview/repo/models.go
+  h_9630b74bdac540 1-5
+server/internal/directoryreview/repo/queries.sql.go
+  h_9630b74bdac540 1-863
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a6f5fabf42b23853bdaf74965b3a71ab685a3242",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_37c6efa0d75c7d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0a30eb4c-87c0-4667-8f59-1818f4b91bbe",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
