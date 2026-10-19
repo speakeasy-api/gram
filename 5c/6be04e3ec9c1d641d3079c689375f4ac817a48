@@ -1,0 +1,14 @@
+server/internal/platformmcp/output_schema_test.go
+  h_9630b74bdac540 49,194-217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5c6be04e3ec9c1d641d3079c689375f4ac817a48",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
