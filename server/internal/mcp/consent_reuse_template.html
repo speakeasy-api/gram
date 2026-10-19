@@ -17,23 +17,23 @@
 
       <section class="bg-card border" aria-labelledby="checking-heading">
         <div class="flex flex-col gap-4 px-6 py-8 sm:px-8" role="status">
-          <svg
-            class="text-muted-foreground size-5 animate-spin motion-reduce:animate-none"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            aria-hidden="true"
-          >
-            <circle cx="12" cy="12" r="9" opacity="0.2" />
-            <path d="M12 3a9 9 0 0 1 9 9" />
-          </svg>
-          <h1 id="checking-heading" class="text-display-xs">
-            Checking saved approval…
+          <h1 id="checking-heading" class="text-display-xs flex items-center gap-3">
+            <svg
+              class="text-muted-foreground size-5 shrink-0 animate-spin motion-reduce:animate-none"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9" opacity="0.2" />
+              <path d="M12 3a9 9 0 0 1 9 9" />
+            </svg>
+            <span>Checking sign-in status...</span>
           </h1>
           <p class="text-sm text-muted-foreground">
-            No action needed. You’ll continue automatically if your saved approval
-            still applies.
+            No action needed. You’ll continue automatically if your prior sign-in
+            is still valid.
           </p>
         </div>
         <div class="border-t px-6 py-6 sm:px-8">

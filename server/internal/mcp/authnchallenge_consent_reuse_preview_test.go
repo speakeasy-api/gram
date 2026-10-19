@@ -16,7 +16,7 @@ func TestConsentReusePagePreview(t *testing.T) {
 	state := AuthnChallengeState{ID: "preview-state", CSRFToken: "preview-csrf"}
 	w := httptest.NewRecorder()
 	require.NoError(t, renderConsentReuse(w, endpoint, state))
-	require.Contains(t, w.Body.String(), "Checking saved approval")
+	require.Contains(t, w.Body.String(), "Checking sign-in status...")
 	require.Contains(t, w.Body.String(), "Review access")
 	require.NotContains(t, w.Body.String(), "Give Access")
 	require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
