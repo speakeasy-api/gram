@@ -783,8 +783,9 @@ function UserAccess({
       "mcpAssignments",
       organization.id,
       "user",
-      "explained",
+      "connection-decisions",
       selected?.id,
+      serverAccess?.map(({ server }) => server.id),
     ],
     enabled: !!selected && !!serverAccess,
     queryFn: async ({ signal }) => {
@@ -798,11 +799,7 @@ function UserAccess({
         ...new Map(
           [
             ...result.servers,
-            ...(serverAccess ?? [])
-              .filter(({ entries }) =>
-                entries.some((entry) => entry.level === "blocked"),
-              )
-              .map(({ server }) => server),
+            ...(serverAccess ?? []).map(({ server }) => server),
           ].map((server) => [server.id, server]),
         ).values(),
       ];

@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -447,21 +448,7 @@ it("opens effective access with a member selected from a role roster", async () 
   ).toBeNull();
 });
 
-it("includes blocked servers that the identity access listing omits", async () => {
-  state.audience.mockImplementation(
-    async ({ resourceId }: { resourceId: string }) => ({
-      version: "v1",
-      entries: [
-        {
-          principalUrn: role.principalUrn,
-          kind: "role",
-          displayName: role.name,
-          level: resourceId === "server-0" ? "blocked" : "use",
-          appliesTo: "resource",
-        },
-      ],
-    }),
-  );
+it("includes a newly blocked server even when the overview still shows an allow grant", async () => {
   state.explain.mockImplementation(
     async ({ resourceId }: { resourceId: string }) => ({
       visibility: "private",
@@ -489,7 +476,11 @@ it("includes blocked servers that the identity access listing omits", async () =
     await screen.findByRole("button", { name: "Pick Lee" }),
   );
   await screen.findByText("Allowed server");
-  expect(screen.getByText("Server 00")).toBeTruthy();
+  expect(
+    within(screen.getByRole("dialog", { name: "Check user access" })).getByText(
+      "Server 00",
+    ),
+  ).toBeTruthy();
   expect(screen.queryByText("Denied server")).toBeNull();
   expect(state.explain).toHaveBeenCalledWith(
     expect.objectContaining({ resourceId: "server-0", userId: "lee" }),
