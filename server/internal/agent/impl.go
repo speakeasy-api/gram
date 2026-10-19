@@ -354,19 +354,20 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 		}
 	})
 	group.Go(func() error {
-		organization, err := orgrepo.New(s.db).GetOrganizationMetadata(groupCtx, authCtx.ActiveOrganizationID)
-		if err != nil {
-			s.logger.WarnContext(ctx, "organization gateway unavailable; plugin poll omits organization_gateway_url", attr.SlogError(err))
-			return nil
-		}
-		_, unavailable, err := orggateway.Availability(groupCtx, s.db, organization)
-		if err != nil {
-			s.logger.WarnContext(ctx, "organization gateway unavailable; plugin poll omits organization_gateway_url", attr.SlogError(err))
-			return nil
-		}
-		if unavailable == orggateway.UnavailabilityNone {
-			organizationGatewayURL = new(orggateway.URL(s.orgHosts.ServerURL(organization.DefaultHost), organization.Slug))
-		}
+		organizationGatewayURL = optionalOrganizationGatewayURL(ctx, s.logger, func() (*string, error) {
+			organization, err := orgrepo.New(s.db).GetOrganizationMetadata(groupCtx, authCtx.ActiveOrganizationID)
+			if err != nil {
+				return nil, fmt.Errorf("read organization for gateway: %w", err)
+			}
+			_, unavailable, err := orggateway.Availability(groupCtx, s.db, organization)
+			if err != nil {
+				return nil, fmt.Errorf("resolve organization gateway: %w", err)
+			}
+			if unavailable != orggateway.UnavailabilityNone {
+				return nil, nil
+			}
+			return new(orggateway.URL(s.orgHosts.ServerURL(organization.DefaultHost), organization.Slug)), nil
+		})
 		return nil
 	})
 	if err := group.Wait(); err != nil {
@@ -399,6 +400,18 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 	attachOrganizationGatewayURL(result, organizationGatewayURL)
 
 	return result, nil
+}
+
+// optionalOrganizationGatewayURL keeps this additive display metadata from
+// becoming a dependency of the policy poll: lookup failures are observable but
+// fail open, leaving older/cached agent behavior intact.
+func optionalOrganizationGatewayURL(ctx context.Context, logger *slog.Logger, resolve func() (*string, error)) *string {
+	url, err := resolve()
+	if err != nil {
+		logger.WarnContext(ctx, "organization gateway unavailable; plugin poll omits organization_gateway_url", attr.SlogError(err))
+		return nil
+	}
+	return url
 }
 
 // ListSyncedUsers returns the emails seen polling agent.getPlugins for the
