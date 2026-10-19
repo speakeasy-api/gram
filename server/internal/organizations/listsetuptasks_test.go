@@ -82,11 +82,11 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	includeHidden := true
 	result, err := ti.service.ListSetupTasks(platformCtx, &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
 	require.NoError(t, err)
-	require.Len(t, result.Tasks, 15)
+	require.Len(t, result.Tasks, 16)
 	require.Equal(t, "configure-policies", result.Tasks[len(result.Tasks)-1].Key)
 	require.True(t, setupTask(result.Tasks, "litellm").Hidden)
 	for _, task := range result.Tasks {
-		if task.Key != "litellm" && task.Key != "private-network" {
+		if task.Key != "litellm" && task.Key != "private-network" && task.Key != "cursor-admin-controls" {
 			require.False(t, task.Hidden, task.Key)
 		}
 	}
@@ -99,9 +99,10 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 		"identity-provider", "enable-logging",
 		"anthropic-observability", "agent-observability", "instrument-agents", "confirm-traffic", "litellm",
 		"additional-agent-config", "mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp", "private-network",
-		"anthropic-admin-controls", "configure-policies",
+		"anthropic-admin-controls", "cursor-admin-controls", "configure-policies",
 	}, keys)
 	require.True(t, setupTask(result.Tasks, "private-network").Hidden)
+	require.True(t, setupTask(result.Tasks, "cursor-admin-controls").Hidden)
 	require.Equal(t, []string{"create-marketplace"}, setupTask(result.Tasks, "distribute-servers").BlockedBy)
 }
 
@@ -397,7 +398,7 @@ func TestService_UpdateSetupTaskCompletesMergedCatalog(t *testing.T) {
 	done := "done"
 	for _, key := range []string{
 		"create-marketplace", "enable-logging",
-		"identity-provider", "anthropic-observability", "anthropic-admin-controls",
+		"identity-provider", "anthropic-observability", "anthropic-admin-controls", "cursor-admin-controls",
 		"instrument-agents", "litellm", "additional-agent-config", "confirm-traffic",
 		"distribute-servers", "configure-policies", "platform-mcp", "private-network",
 	} {
