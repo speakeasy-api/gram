@@ -1,4 +1,4 @@
-h1:W/uK7Ma0GACGTpKencBp+mSilfoKrb+DRFTNpAbbubA=
+h1:hmOHjOzFjbYj6CWm9FI+2Mho9Vup9ctvhV825PZJs0Y=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -123,3 +123,4 @@ h1:W/uK7Ma0GACGTpKencBp+mSilfoKrb+DRFTNpAbbubA=
 20261016113820_sigint-readings.up.sql h1:/LCGRbbh4DyaD5AxnQZ70zAvlD9EI9hXdadgjp81b5E=
 20261016122958_add_tool_calls.up.sql h1:Obq7XADOBRuMQp8g4jHp0ka7vS677Jm1TJ9tcaUvles=
 20261017144335_sigint-readings-v2.up.sql h1:60lHUm5k8HJuVmUp4jsHQBgmSiuLFgVQb5eJq60qA6U=
+20261019220227_attribute-agent-hook-events.up.sql h1:Gh/smqK/WeBplRxDklRlLgsdRhEgJtmZsHEM9ITFU6U=
