@@ -74,7 +74,7 @@ INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VAL
 
 -- name: DeployInsertUserSessionIssuer :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
-VALUES (@id, @project_id::uuid, @organization_id::text, 'acme-partner-gateway', 'interactive', interval '30 days');
+VALUES (@id, @project_id::uuid, @organization_id::text, 'acme-partner-gateway', 'interactive', make_interval(secs => 30 * 24 * 60 * 60));
 
 -- name: DeployAttachUserSessionIssuer :exec
 UPDATE toolsets SET user_session_issuer_id = @user_session_issuer_id::uuid WHERE id = @toolset_id;
