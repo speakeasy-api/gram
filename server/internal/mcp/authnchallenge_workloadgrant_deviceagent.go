@@ -5,6 +5,7 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,8 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
@@ -24,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
@@ -38,6 +42,62 @@ var deviceAgentAuthorizationServerNamespace = uuid.MustParse("6f1c2b8e-4a3d-4e5f
 // endpoint uses in place of a user session issuer for organizationID.
 func deviceAgentAuthorizationServerID(organizationID string) uuid.UUID {
 	return uuid.NewSHA1(deviceAgentAuthorizationServerNamespace, []byte(organizationID))
+}
+
+// deviceAgentTokenRate bounds the database reads the device-agent token
+// endpoint does for unverified requests. It protects the database from probe
+// floods, at device registration's rate.
+//
+// One bucket for the whole endpoint: the organization in the path is chosen by
+// the caller, so a per-organization bucket would give every probe a fresh
+// budget and bound nothing.
+var deviceAgentTokenRate = ratelimit.PerMinute(600).WithBurst(120)
+
+const (
+	// deviceAgentTokenBudgetScope is the endpoint's single budget key.
+	deviceAgentTokenBudgetScope = "workload-device-agent-token"
+
+	// deviceAgentTokenChargeTimeout bounds one budget charge, so a stalled
+	// store cannot hold an unverified request open.
+	deviceAgentTokenChargeTimeout = 5 * time.Second
+)
+
+// newDeviceAgentTokenBudget builds the endpoint's budget, or nil when there is
+// no store. A nil budget refuses, as the issuer lookup's does.
+func newDeviceAgentTokenBudget(redisClient *redis.Client, meterProvider metric.MeterProvider) workloadIssuerBudget {
+	if redisClient == nil {
+		return nil
+	}
+	limiter := ratelimit.New(
+		ratelimit.NewRedisStore(redisClient),
+		"workload_device_agent_token",
+		deviceAgentTokenRate,
+		ratelimit.WithMetrics(meterProvider),
+	)
+	return limiter.Allow
+}
+
+// chargeDeviceAgentTokenBudget charges one request to the endpoint's budget,
+// answering a workload grant refusal when it is spent or cannot be charged.
+func (s *Service) chargeDeviceAgentTokenBudget(ctx context.Context) error {
+	if s.deviceAgentTokenBudget == nil {
+		return workloadGrantStageUnavailable("device_agent_token_limiter_unavailable", errors.New("no device-agent token budget is wired"))
+	}
+	chargeCtx, cancel := context.WithTimeout(ctx, deviceAgentTokenChargeTimeout)
+	defer cancel()
+	charged, err := s.deviceAgentTokenBudget(chargeCtx, deviceAgentTokenBudgetScope)
+	if err != nil {
+		return workloadGrantStageUnavailable("device_agent_token_limiter_unavailable", err)
+	}
+	if !charged.Allowed {
+		return &workloadGrantError{
+			reason:     "device_agent_token_rate_limited",
+			outcome:    workloadGrantRateLimited,
+			retryAfter: charged.RetryAfter,
+			err:        errors.New("the device-agent token endpoint is rate limited"),
+		}
+	}
+	return nil
 }
 
 // maxPathOrganizationIDLength bounds the organization ID a device-agent token
@@ -116,6 +176,11 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	// that admitted the same subject string.
 	if issuerOrganization, isDeviceIssuer := workloadidentity.DeviceIssuerOrganization(serverURL, unverified.Issuer); isDeviceIssuer && issuerOrganization != organizationID {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("device_issuer_wrong_organization", errors.New("iss is another organization's device issuer")))
+	}
+	// Charged before the first database read, so a throttled request reads
+	// nothing and answers the same whether or not its organization exists.
+	if err := s.chargeDeviceAgentTokenBudget(ctx); err != nil {
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
 	}
 	// An organization that does not exist is refused like any other bad
 	// assertion, so the endpoint does not reveal which organizations exist.

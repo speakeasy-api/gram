@@ -181,11 +181,14 @@ type Service struct {
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	telemLogger       *tm.Logger
 	// toolCallLogger emits tool call records into the OTel pipeline.
-	toolCallLogger         *otelpub.Logger
-	vectorToolStore        *rag.ToolsetVectorStore
-	assistantTokens        *assistanttokens.Manager
-	principalCredentials   *principalcredential.Issuer
-	deviceAgentTokens      *deviceagenttoken.Issuer
+	toolCallLogger       *otelpub.Logger
+	vectorToolStore      *rag.ToolsetVectorStore
+	assistantTokens      *assistanttokens.Manager
+	principalCredentials *principalcredential.Issuer
+	deviceAgentTokens    *deviceagenttoken.Issuer
+	// deviceAgentTokenBudget bounds the device-agent token endpoint's reads
+	// for unverified requests; nil without Redis, which refuses.
+	deviceAgentTokenBudget workloadIssuerBudget
 	sessions               *sessions.Manager
 	consentBindings        ConsentBindingService
 	identityResolver       IdentityResolver
@@ -561,6 +564,7 @@ func NewService(
 		assistantTokens:        assistantTokens,
 		principalCredentials:   principalCredentials,
 		deviceAgentTokens:      deviceagenttoken.New(callerAssertions, db),
+		deviceAgentTokenBudget: newDeviceAgentTokenBudget(redisClient, meterProvider),
 		sessions:               sessions,
 		chatSessionsManager:    chatSessionsManager,
 		enc:                    enc,
