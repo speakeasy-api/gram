@@ -6,10 +6,15 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 export type ListWorkloadIdentitiesSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
 export type ListWorkloadIdentitiesSecurityOption2 = {
+  sessionHeaderGramSession: string;
+};
+
+export type ListWorkloadIdentitiesSecurityOption3 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
 };
@@ -17,9 +22,14 @@ export type ListWorkloadIdentitiesSecurityOption2 = {
 export type ListWorkloadIdentitiesSecurity = {
   option1?: ListWorkloadIdentitiesSecurityOption1 | undefined;
   option2?: ListWorkloadIdentitiesSecurityOption2 | undefined;
+  option3?: ListWorkloadIdentitiesSecurityOption3 | undefined;
 };
 
 export type ListWorkloadIdentitiesRequest = {
+  /**
+   * Read the selected project's tier alone instead of the organization's. Requires a caller that names a project. Defaults to false.
+   */
+  projectScoped?: boolean | undefined;
   /**
    * Session header
    */
@@ -36,6 +46,7 @@ export type ListWorkloadIdentitiesRequest = {
 
 /** @internal */
 export type ListWorkloadIdentitiesSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
@@ -46,10 +57,12 @@ export const ListWorkloadIdentitiesSecurityOption1$outboundSchema:
     ListWorkloadIdentitiesSecurityOption1
   > = z.pipe(
     z.object({
+      projectSlugHeaderGramProject: z.string(),
       sessionHeaderGramSession: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
+        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
         sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
@@ -67,8 +80,7 @@ export function listWorkloadIdentitiesSecurityOption1ToJSON(
 
 /** @internal */
 export type ListWorkloadIdentitiesSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -78,13 +90,11 @@ export const ListWorkloadIdentitiesSecurityOption2$outboundSchema:
     ListWorkloadIdentitiesSecurityOption2
   > = z.pipe(
     z.object({
-      apikeyHeaderGramKey: z.string(),
-      projectSlugHeaderGramProject: z.string(),
+      sessionHeaderGramSession: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+        sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
   );
@@ -100,9 +110,44 @@ export function listWorkloadIdentitiesSecurityOption2ToJSON(
 }
 
 /** @internal */
+export type ListWorkloadIdentitiesSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const ListWorkloadIdentitiesSecurityOption3$outboundSchema:
+  z.ZodMiniType<
+    ListWorkloadIdentitiesSecurityOption3$Outbound,
+    ListWorkloadIdentitiesSecurityOption3
+  > = z.pipe(
+    z.object({
+      apikeyHeaderGramKey: z.string(),
+      projectSlugHeaderGramProject: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      });
+    }),
+  );
+
+export function listWorkloadIdentitiesSecurityOption3ToJSON(
+  listWorkloadIdentitiesSecurityOption3: ListWorkloadIdentitiesSecurityOption3,
+): string {
+  return JSON.stringify(
+    ListWorkloadIdentitiesSecurityOption3$outboundSchema.parse(
+      listWorkloadIdentitiesSecurityOption3,
+    ),
+  );
+}
+
+/** @internal */
 export type ListWorkloadIdentitiesSecurity$Outbound = {
   Option1?: ListWorkloadIdentitiesSecurityOption1$Outbound | undefined;
   Option2?: ListWorkloadIdentitiesSecurityOption2$Outbound | undefined;
+  Option3?: ListWorkloadIdentitiesSecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -117,11 +162,15 @@ export const ListWorkloadIdentitiesSecurity$outboundSchema: z.ZodMiniType<
     option2: z.optional(
       z.lazy(() => ListWorkloadIdentitiesSecurityOption2$outboundSchema),
     ),
+    option3: z.optional(
+      z.lazy(() => ListWorkloadIdentitiesSecurityOption3$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
       option1: "Option1",
       option2: "Option2",
+      option3: "Option3",
     });
   }),
 );
@@ -138,6 +187,7 @@ export function listWorkloadIdentitiesSecurityToJSON(
 
 /** @internal */
 export type ListWorkloadIdentitiesRequest$Outbound = {
+  project_scoped: boolean;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -149,12 +199,14 @@ export const ListWorkloadIdentitiesRequest$outboundSchema: z.ZodMiniType<
   ListWorkloadIdentitiesRequest
 > = z.pipe(
   z.object({
+    projectScoped: z._default(z.boolean(), false),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      projectScoped: "project_scoped",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

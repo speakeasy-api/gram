@@ -37,8 +37,7 @@ type RegisterIssuerRequestBody struct {
 	// tags of at most 64 characters each.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires a caller that names a project. Defaults to false.
 	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
 }
 
@@ -59,6 +58,10 @@ type UpdateIssuerRequestBody struct {
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
 	Tags []string `json:"tags,omitzero"`
+	// Act on the selected project's tier instead of the organization's, so only a
+	// row that project owns can be named. Requires a caller that names a project.
+	// Defaults to false.
+	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
 }
 
 // AdmitSubjectRequestBody is the type of the "workloadIdentities" service
@@ -85,8 +88,7 @@ type AdmitSubjectRequestBody struct {
 	// The agent whose policy the admitted workload inherits.
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires a caller that names a project. Defaults to false.
 	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
 }
 
@@ -105,6 +107,10 @@ type UpdateSubjectRequestBody struct {
 	// The agent whose policy the admitted workload inherits. Shared with any
 	// admission of the same subject under the same issuer at the other tier.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Act on the selected project's tier instead of the organization's, so only a
+	// row that project owns can be named. Requires a caller that names a project.
+	// Defaults to false.
+	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
 }
 
 // CreateDeviceJoinTokenRequestBody is the type of the "workloadIdentities"
@@ -2771,15 +2777,22 @@ func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *
 // the "updateIssuer" endpoint of the "workloadIdentities" service.
 func NewUpdateIssuerRequestBody(p *workloadidentities.UpdateIssuerPayload) *UpdateIssuerRequestBody {
 	body := &UpdateIssuerRequestBody{
-		ID:          p.ID,
-		Name:        p.Name,
-		JwksURI:     p.JwksURI,
-		Description: p.Description,
+		ID:            p.ID,
+		Name:          p.Name,
+		JwksURI:       p.JwksURI,
+		Description:   p.Description,
+		ProjectScoped: p.ProjectScoped,
 	}
 	if p.Tags != nil {
 		body.Tags = make([]string, len(p.Tags))
 		for i, val := range p.Tags {
 			body.Tags[i] = val
+		}
+	}
+	{
+		var zero bool
+		if body.ProjectScoped == zero {
+			body.ProjectScoped = false
 		}
 	}
 	return body
@@ -2821,14 +2834,21 @@ func NewAdmitSubjectRequestBody(p *workloadidentities.AdmitSubjectPayload) *Admi
 // the "updateSubject" endpoint of the "workloadIdentities" service.
 func NewUpdateSubjectRequestBody(p *workloadidentities.UpdateSubjectPayload) *UpdateSubjectRequestBody {
 	body := &UpdateSubjectRequestBody{
-		ID:      p.ID,
-		Name:    p.Name,
-		AgentID: p.AgentID,
+		ID:            p.ID,
+		Name:          p.Name,
+		AgentID:       p.AgentID,
+		ProjectScoped: p.ProjectScoped,
 	}
 	if p.Tags != nil {
 		body.Tags = make([]string, len(p.Tags))
 		for i, val := range p.Tags {
 			body.Tags[i] = val
+		}
+	}
+	{
+		var zero bool
+		if body.ProjectScoped == zero {
+			body.ProjectScoped = false
 		}
 	}
 	return body

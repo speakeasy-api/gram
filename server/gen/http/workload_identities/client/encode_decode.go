@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -54,6 +55,9 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		values := req.URL.Query()
+		values.Add("project_scoped", fmt.Sprintf("%v", p.ProjectScoped))
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
@@ -770,6 +774,9 @@ func EncodeListTokenEndpointsRequest(encoder func(*http.Request) goahttp.Encoder
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		values := req.URL.Query()
+		values.Add("project_scoped", fmt.Sprintf("%v", p.ProjectScoped))
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
@@ -1496,6 +1503,7 @@ func EncodeWithdrawIssuerRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
+		values.Add("project_scoped", fmt.Sprintf("%v", p.ProjectScoped))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -2222,6 +2230,7 @@ func EncodeWithdrawSubjectRequest(encoder func(*http.Request) goahttp.Encoder) f
 		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
+		values.Add("project_scoped", fmt.Sprintf("%v", p.ProjectScoped))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

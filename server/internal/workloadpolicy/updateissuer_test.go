@@ -51,6 +51,7 @@ func updatePayload(id string) *gen.UpdateIssuerPayload {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 		ID:               id,
 		Name:             nil,
 		JwksURI:          nil,
@@ -175,9 +176,9 @@ func TestUpdateIssuer_ClientRequestKeepsAnEmptyTagListAndOmitsANilOne(t *testing
 		tags []string
 		want string
 	}{
-		{name: "empty list is sent", tags: []string{}, want: `{"id":"` + id + `","tags":[]}`},
-		{name: "nil list is omitted", tags: nil, want: `{"id":"` + id + `"}`},
-		{name: "tags are sent", tags: []string{"ci"}, want: `{"id":"` + id + `","tags":["ci"]}`},
+		{name: "empty list is sent", tags: []string{}, want: `{"id":"` + id + `","project_scoped":false,"tags":[]}`},
+		{name: "nil list is omitted", tags: nil, want: `{"id":"` + id + `","project_scoped":false}`},
+		{name: "tags are sent", tags: []string{"ci"}, want: `{"id":"` + id + `","project_scoped":false,"tags":["ci"]}`},
 	}
 
 	for _, tc := range tests {
@@ -294,7 +295,7 @@ func TestUpdateIssuer_RefusesInvalidFields(t *testing.T) { //nolint:tparallel //
 		})
 	}
 
-	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ProjectScoped: false})
 	require.NoError(t, err)
 	require.Equal(t, original, onlyIssuer(t, policy))
 }
@@ -411,6 +412,7 @@ func TestUpdateIssuer_RefusesAWithdrawnIssuer(t *testing.T) {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 		ID:               original.ID,
 	})
 	require.NoError(t, err)
@@ -433,7 +435,7 @@ func TestUpdateIssuer_RequiresWorkloadWrite(t *testing.T) {
 	_, err := ti.service.UpdateIssuer(readOnly, payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	policy, err := ti.service.List(readOnly, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	policy, err := ti.service.List(readOnly, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ProjectScoped: false})
 	require.NoError(t, err)
 	require.Equal(t, "Claude Tag", onlyIssuer(t, policy).Name)
 }
@@ -490,7 +492,7 @@ func TestUpdateIssuer_RollsBackWhenTheAuditEntryFails(t *testing.T) {
 	_, err := ti.service.UpdateIssuer(ctx, payload)
 	requireOopsCode(t, err, oops.CodeUnexpected)
 
-	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ProjectScoped: false})
 	require.NoError(t, err)
 	require.Equal(t, "Claude Tag", onlyIssuer(t, policy).Name)
 }

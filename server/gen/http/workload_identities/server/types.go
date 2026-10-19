@@ -39,8 +39,7 @@ type RegisterIssuerRequestBody struct {
 	// tags of at most 64 characters each.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires a caller that names a project. Defaults to false.
 	ProjectScoped *bool `form:"project_scoped,omitempty" json:"project_scoped,omitempty" xml:"project_scoped,omitempty"`
 }
 
@@ -61,6 +60,10 @@ type UpdateIssuerRequestBody struct {
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
 	Tags []string `json:"tags,omitzero"`
+	// Act on the selected project's tier instead of the organization's, so only a
+	// row that project owns can be named. Requires a caller that names a project.
+	// Defaults to false.
+	ProjectScoped *bool `form:"project_scoped,omitempty" json:"project_scoped,omitempty" xml:"project_scoped,omitempty"`
 }
 
 // AdmitSubjectRequestBody is the type of the "workloadIdentities" service
@@ -87,8 +90,7 @@ type AdmitSubjectRequestBody struct {
 	// The agent whose policy the admitted workload inherits.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires a caller that names a project. Defaults to false.
 	ProjectScoped *bool `form:"project_scoped,omitempty" json:"project_scoped,omitempty" xml:"project_scoped,omitempty"`
 }
 
@@ -107,6 +109,10 @@ type UpdateSubjectRequestBody struct {
 	// The agent whose policy the admitted workload inherits. Shared with any
 	// admission of the same subject under the same issuer at the other tier.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Act on the selected project's tier instead of the organization's, so only a
+	// row that project owns can be named. Requires a caller that names a project.
+	// Defaults to false.
+	ProjectScoped *bool `form:"project_scoped,omitempty" json:"project_scoped,omitempty" xml:"project_scoped,omitempty"`
 }
 
 // CreateDeviceJoinTokenRequestBody is the type of the "workloadIdentities"
@@ -4799,8 +4805,9 @@ func NewRegisterDeviceGatewayErrorResponseBody(res *goa.ServiceError) *RegisterD
 }
 
 // NewListPayload builds a workloadIdentities service list endpoint payload.
-func NewListPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListPayload {
+func NewListPayload(projectScoped bool, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListPayload {
 	v := &workloadidentities.ListPayload{}
+	v.ProjectScoped = projectScoped
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -4832,8 +4839,9 @@ func NewGetCustomFlowsPayload(sessionToken *string, apikeyToken *string, project
 
 // NewListTokenEndpointsPayload builds a workloadIdentities service
 // listTokenEndpoints endpoint payload.
-func NewListTokenEndpointsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListTokenEndpointsPayload {
+func NewListTokenEndpointsPayload(projectScoped bool, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListTokenEndpointsPayload {
 	v := &workloadidentities.ListTokenEndpointsPayload{}
+	v.ProjectScoped = projectScoped
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -4879,11 +4887,17 @@ func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string,
 		JwksURI:     body.JwksURI,
 		Description: body.Description,
 	}
+	if body.ProjectScoped != nil {
+		v.ProjectScoped = *body.ProjectScoped
+	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))
 		for i, val := range body.Tags {
 			v.Tags[i] = val
 		}
+	}
+	if body.ProjectScoped == nil {
+		v.ProjectScoped = false
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -4894,9 +4908,10 @@ func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string,
 
 // NewWithdrawIssuerPayload builds a workloadIdentities service withdrawIssuer
 // endpoint payload.
-func NewWithdrawIssuerPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.WithdrawIssuerPayload {
+func NewWithdrawIssuerPayload(id string, projectScoped bool, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.WithdrawIssuerPayload {
 	v := &workloadidentities.WithdrawIssuerPayload{}
 	v.ID = id
+	v.ProjectScoped = projectScoped
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -4946,11 +4961,17 @@ func NewUpdateSubjectPayload(body *UpdateSubjectRequestBody, sessionToken *strin
 		Name:    body.Name,
 		AgentID: body.AgentID,
 	}
+	if body.ProjectScoped != nil {
+		v.ProjectScoped = *body.ProjectScoped
+	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))
 		for i, val := range body.Tags {
 			v.Tags[i] = val
 		}
+	}
+	if body.ProjectScoped == nil {
+		v.ProjectScoped = false
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -4961,9 +4982,10 @@ func NewUpdateSubjectPayload(body *UpdateSubjectRequestBody, sessionToken *strin
 
 // NewWithdrawSubjectPayload builds a workloadIdentities service
 // withdrawSubject endpoint payload.
-func NewWithdrawSubjectPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.WithdrawSubjectPayload {
+func NewWithdrawSubjectPayload(id string, projectScoped bool, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.WithdrawSubjectPayload {
 	v := &workloadidentities.WithdrawSubjectPayload{}
 	v.ID = id
+	v.ProjectScoped = projectScoped
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

@@ -6,10 +6,15 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 export type WithdrawWorkloadSubjectSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
 export type WithdrawWorkloadSubjectSecurityOption2 = {
+  sessionHeaderGramSession: string;
+};
+
+export type WithdrawWorkloadSubjectSecurityOption3 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
 };
@@ -17,6 +22,7 @@ export type WithdrawWorkloadSubjectSecurityOption2 = {
 export type WithdrawWorkloadSubjectSecurity = {
   option1?: WithdrawWorkloadSubjectSecurityOption1 | undefined;
   option2?: WithdrawWorkloadSubjectSecurityOption2 | undefined;
+  option3?: WithdrawWorkloadSubjectSecurityOption3 | undefined;
 };
 
 export type WithdrawWorkloadSubjectRequest = {
@@ -24,6 +30,10 @@ export type WithdrawWorkloadSubjectRequest = {
    * The admission id.
    */
   id: string;
+  /**
+   * Act on the selected project's tier instead of the organization's, so only a row that project owns can be named. Requires a caller that names a project. Defaults to false.
+   */
+  projectScoped?: boolean | undefined;
   /**
    * Session header
    */
@@ -40,6 +50,7 @@ export type WithdrawWorkloadSubjectRequest = {
 
 /** @internal */
 export type WithdrawWorkloadSubjectSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
@@ -50,10 +61,12 @@ export const WithdrawWorkloadSubjectSecurityOption1$outboundSchema:
     WithdrawWorkloadSubjectSecurityOption1
   > = z.pipe(
     z.object({
+      projectSlugHeaderGramProject: z.string(),
       sessionHeaderGramSession: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
+        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
         sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
@@ -72,8 +85,7 @@ export function withdrawWorkloadSubjectSecurityOption1ToJSON(
 
 /** @internal */
 export type WithdrawWorkloadSubjectSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -83,13 +95,11 @@ export const WithdrawWorkloadSubjectSecurityOption2$outboundSchema:
     WithdrawWorkloadSubjectSecurityOption2
   > = z.pipe(
     z.object({
-      apikeyHeaderGramKey: z.string(),
-      projectSlugHeaderGramProject: z.string(),
+      sessionHeaderGramSession: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+        sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
   );
@@ -106,9 +116,45 @@ export function withdrawWorkloadSubjectSecurityOption2ToJSON(
 }
 
 /** @internal */
+export type WithdrawWorkloadSubjectSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const WithdrawWorkloadSubjectSecurityOption3$outboundSchema:
+  z.ZodMiniType<
+    WithdrawWorkloadSubjectSecurityOption3$Outbound,
+    WithdrawWorkloadSubjectSecurityOption3
+  > = z.pipe(
+    z.object({
+      apikeyHeaderGramKey: z.string(),
+      projectSlugHeaderGramProject: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      });
+    }),
+  );
+
+export function withdrawWorkloadSubjectSecurityOption3ToJSON(
+  withdrawWorkloadSubjectSecurityOption3:
+    WithdrawWorkloadSubjectSecurityOption3,
+): string {
+  return JSON.stringify(
+    WithdrawWorkloadSubjectSecurityOption3$outboundSchema.parse(
+      withdrawWorkloadSubjectSecurityOption3,
+    ),
+  );
+}
+
+/** @internal */
 export type WithdrawWorkloadSubjectSecurity$Outbound = {
   Option1?: WithdrawWorkloadSubjectSecurityOption1$Outbound | undefined;
   Option2?: WithdrawWorkloadSubjectSecurityOption2$Outbound | undefined;
+  Option3?: WithdrawWorkloadSubjectSecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -123,11 +169,15 @@ export const WithdrawWorkloadSubjectSecurity$outboundSchema: z.ZodMiniType<
     option2: z.optional(
       z.lazy(() => WithdrawWorkloadSubjectSecurityOption2$outboundSchema),
     ),
+    option3: z.optional(
+      z.lazy(() => WithdrawWorkloadSubjectSecurityOption3$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
       option1: "Option1",
       option2: "Option2",
+      option3: "Option3",
     });
   }),
 );
@@ -145,6 +195,7 @@ export function withdrawWorkloadSubjectSecurityToJSON(
 /** @internal */
 export type WithdrawWorkloadSubjectRequest$Outbound = {
   id: string;
+  project_scoped: boolean;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -157,12 +208,14 @@ export const WithdrawWorkloadSubjectRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     id: z.string(),
+    projectScoped: z._default(z.boolean(), false),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      projectScoped: "project_scoped",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

@@ -6,10 +6,15 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 export type ListWorkloadPlatformsSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
 export type ListWorkloadPlatformsSecurityOption2 = {
+  sessionHeaderGramSession: string;
+};
+
+export type ListWorkloadPlatformsSecurityOption3 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
 };
@@ -17,6 +22,7 @@ export type ListWorkloadPlatformsSecurityOption2 = {
 export type ListWorkloadPlatformsSecurity = {
   option1?: ListWorkloadPlatformsSecurityOption1 | undefined;
   option2?: ListWorkloadPlatformsSecurityOption2 | undefined;
+  option3?: ListWorkloadPlatformsSecurityOption3 | undefined;
 };
 
 export type ListWorkloadPlatformsRequest = {
@@ -36,6 +42,7 @@ export type ListWorkloadPlatformsRequest = {
 
 /** @internal */
 export type ListWorkloadPlatformsSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
@@ -45,10 +52,12 @@ export const ListWorkloadPlatformsSecurityOption1$outboundSchema: z.ZodMiniType<
   ListWorkloadPlatformsSecurityOption1
 > = z.pipe(
   z.object({
+    projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -66,8 +75,7 @@ export function listWorkloadPlatformsSecurityOption1ToJSON(
 
 /** @internal */
 export type ListWorkloadPlatformsSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -76,13 +84,11 @@ export const ListWorkloadPlatformsSecurityOption2$outboundSchema: z.ZodMiniType<
   ListWorkloadPlatformsSecurityOption2
 > = z.pipe(
   z.object({
-    apikeyHeaderGramKey: z.string(),
-    projectSlugHeaderGramProject: z.string(),
+    sessionHeaderGramSession: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
 );
@@ -98,9 +104,43 @@ export function listWorkloadPlatformsSecurityOption2ToJSON(
 }
 
 /** @internal */
+export type ListWorkloadPlatformsSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const ListWorkloadPlatformsSecurityOption3$outboundSchema: z.ZodMiniType<
+  ListWorkloadPlatformsSecurityOption3$Outbound,
+  ListWorkloadPlatformsSecurityOption3
+> = z.pipe(
+  z.object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
+  }),
+);
+
+export function listWorkloadPlatformsSecurityOption3ToJSON(
+  listWorkloadPlatformsSecurityOption3: ListWorkloadPlatformsSecurityOption3,
+): string {
+  return JSON.stringify(
+    ListWorkloadPlatformsSecurityOption3$outboundSchema.parse(
+      listWorkloadPlatformsSecurityOption3,
+    ),
+  );
+}
+
+/** @internal */
 export type ListWorkloadPlatformsSecurity$Outbound = {
   Option1?: ListWorkloadPlatformsSecurityOption1$Outbound | undefined;
   Option2?: ListWorkloadPlatformsSecurityOption2$Outbound | undefined;
+  Option3?: ListWorkloadPlatformsSecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -115,11 +155,15 @@ export const ListWorkloadPlatformsSecurity$outboundSchema: z.ZodMiniType<
     option2: z.optional(
       z.lazy(() => ListWorkloadPlatformsSecurityOption2$outboundSchema),
     ),
+    option3: z.optional(
+      z.lazy(() => ListWorkloadPlatformsSecurityOption3$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
       option1: "Option1",
       option2: "Option2",
+      option3: "Option3",
     });
   }),
 );

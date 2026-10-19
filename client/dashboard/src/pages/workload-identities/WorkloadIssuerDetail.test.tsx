@@ -409,6 +409,7 @@ it("sends only the fields the edit changed", () => {
         id: ISSUER_ID,
         name: "Example deploys",
         description: "",
+        projectScoped: false,
       },
     },
   });
@@ -465,6 +466,7 @@ it("sends only the machine fields the edit changed", () => {
       updateWorkloadSubjectForm: {
         id: `admission-${ISSUER_ID}-1`,
         name: "Release bot",
+        projectScoped: false,
       },
     },
   });
@@ -487,6 +489,7 @@ it("repoints the JWKS URI and clears the tags", () => {
         id: ISSUER_ID,
         jwksUri: "https://keys.example.com/jwks",
         tags: [],
+        projectScoped: false,
       },
     },
   });
@@ -565,6 +568,7 @@ it("reopens a machine on its saved values and diffs the next edit against them",
   expect(updateSubject).toHaveBeenLastCalledWith({
     request: {
       updateWorkloadSubjectForm: {
+        projectScoped: false,
         id: `admission-${ISSUER_ID}-1`,
         tags: [],
       },
@@ -592,6 +596,7 @@ it("diffs a machine edit against the machine as it stood when the sheet opened",
       updateWorkloadSubjectForm: {
         id: `admission-${ISSUER_ID}-1`,
         name: "Release bot",
+        projectScoped: false,
       },
     },
   });
@@ -617,7 +622,11 @@ it("diffs against the platform as it stood when the sheet opened", () => {
 
   expect(mocks.updateIssuer).toHaveBeenCalledWith({
     request: {
-      updateWorkloadIssuerForm: { id: ISSUER_ID, name: "Example deploys" },
+      updateWorkloadIssuerForm: {
+        projectScoped: false,
+        id: ISSUER_ID,
+        name: "Example deploys",
+      },
     },
   });
 });
@@ -691,7 +700,11 @@ it("reopens on the saved values and diffs the next edit against them", async () 
   expect(mocks.updateIssuer).toHaveBeenCalledTimes(2);
   expect(mocks.updateIssuer).toHaveBeenLastCalledWith({
     request: {
-      updateWorkloadIssuerForm: { id: ISSUER_ID, tags: [] },
+      updateWorkloadIssuerForm: {
+        projectScoped: false,
+        id: ISSUER_ID,
+        tags: [],
+      },
     },
   });
 });
@@ -722,7 +735,11 @@ it("reopens on values a refresh brought in after the sheet closed", async () => 
 
   expect(mocks.updateIssuer).toHaveBeenLastCalledWith({
     request: {
-      updateWorkloadIssuerForm: { id: ISSUER_ID, tags: [] },
+      updateWorkloadIssuerForm: {
+        projectScoped: false,
+        id: ISSUER_ID,
+        tags: [],
+      },
     },
   });
 });
@@ -763,6 +780,7 @@ it("drops an open platform edit when the page moves to another platform", () => 
       updateWorkloadIssuerForm: {
         id: OTHER_ISSUER_ID,
         description: "Nightly jobs",
+        projectScoped: false,
       },
     },
   });
@@ -810,6 +828,7 @@ it("drops an open machine edit when the page moves to another platform", () => {
       updateWorkloadSubjectForm: {
         id: `admission-${OTHER_ISSUER_ID}-1`,
         name: "Nightly bot",
+        projectScoped: false,
       },
     },
   });

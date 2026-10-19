@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listTokenEndpoints workloadIdentities
  *
  * @remarks
- * List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.
+ * List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. With project_scoped, list the selected project's alone. Requires workload:read.
  */
 export function workloadIdentitiesListTokenEndpoints(
   client: GramCore,
@@ -110,6 +110,10 @@ async function $do(
 
   const path = pathToFunc("/rpc/workloadIdentities.listTokenEndpoints")();
 
+  const query = encodeFormQuery({
+    "project_scoped": payload?.project_scoped,
+  });
+
   const headers = new Headers(compactMap({
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
@@ -129,6 +133,11 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option1?.projectSlugHeaderGramProject,
+      },
+      {
         fieldName: "Gram-Session",
         type: "apiKey:header",
         value: security?.option1?.sessionHeaderGramSession,
@@ -136,14 +145,21 @@ async function $do(
     ],
     [
       {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.option2?.sessionHeaderGramSession,
+      },
+    ],
+    [
+      {
         fieldName: "Gram-Key",
         type: "apiKey:header",
-        value: security?.option2?.apikeyHeaderGramKey,
+        value: security?.option3?.apikeyHeaderGramKey,
       },
       {
         fieldName: "Gram-Project",
         type: "apiKey:header",
-        value: security?.option2?.projectSlugHeaderGramProject,
+        value: security?.option3?.projectSlugHeaderGramProject,
       },
     ],
   );
@@ -169,6 +185,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,

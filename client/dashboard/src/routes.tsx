@@ -121,10 +121,11 @@ import {
   RemoteIdentityProvidersPage,
   RemoteIdentityProvidersRoot,
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
+import { WorkloadIssuersPage } from "./pages/workload-identities/WorkloadIssuers";
 import {
-  WorkloadIssuersPage,
-  WorkloadIssuersRoot,
-} from "./pages/workload-identities/WorkloadIssuers";
+  OrganizationAccessHubRoot,
+  ProjectAccessHubRoot,
+} from "./pages/workload-identities/AccessHubRoots";
 import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
 import { CatalogPlatformPage } from "./pages/workload-identities/setup/CatalogPlatformPage";
 import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
@@ -723,19 +724,35 @@ const ROUTE_STRUCTURE = {
     },
   },
 
-  // Legacy project-scoped URLs for the Access Hub and the Workload Identities
-  // page redirect to the organization-level Access Hub.
+  // The legacy project-scoped Workload Identities page redirects to the
+  // organization-level Access Hub.
   legacyWorkloadIdentities: {
     title: "Workload Identities",
     url: "workload-identities",
     legacyRedirect: true,
     component: AccessHubRedirect,
   },
-  legacyAccessHub: {
+  // The project's own tier of the trust policy. The organization's Access Hub
+  // manages the organization tier; neither lists the other's platforms.
+  accessHub: {
     title: "Access Hub",
-    url: "access-hub/*",
-    legacyRedirect: true,
-    component: AccessHubRedirect,
+    url: "access-hub",
+    icon: "cpu",
+    stage: "preview",
+    component: ProjectAccessHubRoot,
+    indexComponent: WorkloadIssuersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Trusted Platform",
+        url: ":issuerId",
+        component: WorkloadIssuerDetailPage,
+      },
+      catalogPlatform: {
+        title: "Catalog Platform",
+        url: "catalog/:platformKey",
+        component: CatalogPlatformPage,
+      },
+    },
   },
 
   agents: {
@@ -1479,14 +1496,14 @@ const ORG_ROUTE_STRUCTURE = {
       },
     },
   },
-  // The trust policy is configured for the organization as a whole, so the
-  // Access Hub names no project.
+  // The organization tier of the trust policy. Each project's tier has its own
+  // Access Hub under the project.
   workloadIssuers: {
     title: "Access Hub",
     url: "access-hub",
     icon: "cpu",
     stage: "preview",
-    component: WorkloadIssuersRoot,
+    component: OrganizationAccessHubRoot,
     indexComponent: WorkloadIssuersPage,
     subPages: {
       issuerDetail: {

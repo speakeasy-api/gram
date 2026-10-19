@@ -22,6 +22,10 @@ export type UpdateWorkloadSubjectForm = {
    */
   name?: string | undefined;
   /**
+   * Act on the selected project's tier instead of the organization's, so only a row that project owns can be named. Requires a caller that names a project. Defaults to false.
+   */
+  projectScoped?: boolean | undefined;
+  /**
    * Replaces the admission's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
    */
   tags?: Array<string> | undefined;
@@ -32,6 +36,7 @@ export type UpdateWorkloadSubjectForm$Outbound = {
   agent_id?: string | undefined;
   id: string;
   name?: string | undefined;
+  project_scoped: boolean;
   tags?: Array<string> | undefined;
 };
 
@@ -44,11 +49,13 @@ export const UpdateWorkloadSubjectForm$outboundSchema: z.ZodMiniType<
     agentId: z.optional(z.string()),
     id: z.string(),
     name: z.optional(z.string()),
+    projectScoped: z._default(z.boolean(), false),
     tags: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {
       agentId: "agent_id",
+      projectScoped: "project_scoped",
     });
   }),
 );

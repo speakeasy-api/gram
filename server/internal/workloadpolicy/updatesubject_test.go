@@ -50,6 +50,7 @@ func updateSubjectPayload(id string) *gen.UpdateSubjectPayload {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 		ID:               id,
 		Name:             nil,
 		Tags:             nil,
@@ -174,9 +175,9 @@ func TestUpdateSubject_ClientRequestKeepsAnEmptyTagListAndOmitsANilOne(t *testin
 		tags []string
 		want string
 	}{
-		{name: "empty list is sent", tags: []string{}, want: `{"id":"` + id + `","tags":[]}`},
-		{name: "nil list is omitted", tags: nil, want: `{"id":"` + id + `"}`},
-		{name: "tags are sent", tags: []string{"ci"}, want: `{"id":"` + id + `","tags":["ci"]}`},
+		{name: "empty list is sent", tags: []string{}, want: `{"id":"` + id + `","project_scoped":false,"tags":[]}`},
+		{name: "nil list is omitted", tags: nil, want: `{"id":"` + id + `","project_scoped":false}`},
+		{name: "tags are sent", tags: []string{"ci"}, want: `{"id":"` + id + `","project_scoped":false,"tags":["ci"]}`},
 	}
 
 	for _, tc := range tests {
@@ -344,7 +345,7 @@ func TestUpdateSubject_RefusesInvalidFields(t *testing.T) {
 		})
 	}
 
-	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ProjectScoped: false})
 	require.NoError(t, err)
 	require.Equal(t, original, onlyAdmission(t, policy))
 }
@@ -383,7 +384,7 @@ func TestUpdateSubject_RefusesAnUnknownAgent(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	// Refused as a whole: the label is not saved without the agent.
-	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ProjectScoped: false})
 	require.NoError(t, err)
 	require.Equal(t, original, onlyAdmission(t, policy))
 }
@@ -490,6 +491,7 @@ func TestUpdateSubject_RefusesAWithdrawnAdmission(t *testing.T) {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 		ID:               original.ID,
 	})
 	require.NoError(t, err)
@@ -523,7 +525,7 @@ func TestUpdateSubject_RequiresWorkloadWrite(t *testing.T) {
 	_, err := ti.service.UpdateSubject(readOnly, payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	policy, err := ti.service.List(readOnly, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	policy, err := ti.service.List(readOnly, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ProjectScoped: false})
 	require.NoError(t, err)
 	require.Equal(t, "Deploy channel", onlyAdmission(t, policy).Name)
 }
@@ -591,7 +593,7 @@ func TestUpdateSubject_RollsBackWhenTheAuditEntryFails(t *testing.T) {
 	_, err := ti.service.UpdateSubject(ctx, payload)
 	requireOopsCode(t, err, oops.CodeUnexpected)
 
-	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ProjectScoped: false})
 	require.NoError(t, err)
 	require.Equal(t, original, onlyAdmission(t, policy))
 	require.Equal(t, firstAgent, resolvedAgent(t, ctx, ti, original))

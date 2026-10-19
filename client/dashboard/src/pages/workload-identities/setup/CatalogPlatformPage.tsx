@@ -3,10 +3,10 @@ import { RequireScope } from "@/components/require-scope";
 import { SourceSectionError } from "@/components/sources/SourceSectionError";
 import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { useOrgRoutes } from "@/routes";
 import { useWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
 import { Plus } from "lucide-react";
 import { Navigate, useParams, useSearchParams } from "react-router";
+import { useAccessHubScope } from "../accessHubScope";
 import { CatalogEmptyState, IssuerDetail } from "../WorkloadIssuerDetail";
 import type { CatalogEntry } from "./definition";
 import { PlatformSetupSheet } from "./PlatformSetupSheet";
@@ -35,10 +35,10 @@ function CatalogPlatform({
 }: {
   platformKey: string;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const { projectScoped, hubHref } = useAccessHubScope();
   const [searchParams, setSearchParams] = useSearchParams();
   const catalog = useCatalogEntries();
-  const policy = useWorkloadIdentities({});
+  const policy = useWorkloadIdentities({ projectScoped });
   const entry = catalog.entries.find(
     (candidate) => candidate.key === platformKey,
   );
@@ -71,7 +71,7 @@ function CatalogPlatform({
 
   // A stale link, or a platform the catalog no longer offers.
   if (entry === undefined || !entry.enabled || entry.setup === undefined) {
-    return <Navigate to={orgRoutes.workloadIssuers.href()} replace />;
+    return <Navigate to={hubHref()} replace />;
   }
 
   const issuer = connectedIssuer(entry, policy.data?.issuers ?? []);

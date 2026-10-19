@@ -56,6 +56,7 @@ const routes = {
   plugins: route("Plugins", "plugins"),
   policyCenter: route("Guardrails", "risk-policies"),
   riskEvents: route("Risk Events", "risk-events"),
+  accessHub: route("Access Hub", "access-hub"),
   watchdog: route("Watchdog", "watchdog"),
   settings: route("Project settings", "settings"),
   shadowAI: route("Shadow AI", "shadow-ai"),

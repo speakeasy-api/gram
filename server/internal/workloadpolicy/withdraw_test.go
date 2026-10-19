@@ -31,6 +31,7 @@ func TestWithdrawSubject_StopsItAuthenticatingAndClearsItsAgent(t *testing.T) {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 		ID:               policy.Admissions[0].ID,
 	})
 	require.NoError(t, err)
@@ -80,6 +81,7 @@ func TestWithdrawIssuer_CascadesToItsAdmittedSubjects(t *testing.T) {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 		ID:               policy.Issuers[0].ID,
 	})
 	require.NoError(t, err)
@@ -118,6 +120,7 @@ func TestWithdrawIssuer_RefusesAnIssuerOutsideTheCallersTenancy(t *testing.T) {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 		ID:               uuid.NewString(),
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
@@ -134,6 +137,7 @@ func TestWithdrawIssuer_RequiresWorkloadWrite(t *testing.T) {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 		ID:               policy.Issuers[0].ID,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -146,7 +150,7 @@ func TestList_RequiresWorkloadRead(t *testing.T) {
 	// Reading the policy discloses which machines the organization recognises,
 	// so it is withheld from members rather than riding on project:read.
 	noScopes := withScopes(t, ctx, ti, authz.ScopeProjectRead)
-	_, err := ti.service.List(noScopes, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	_, err := ti.service.List(noScopes, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ProjectScoped: false})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
@@ -183,6 +187,7 @@ func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 		ID:               orgTier.Admissions[0].ID,
 	})
 	require.NoError(t, err)
@@ -243,6 +248,7 @@ func TestWithdrawIssuer_RefusesASiblingProjectsIssuer(t *testing.T) {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 		ID:               siblingIssuer.String(),
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)

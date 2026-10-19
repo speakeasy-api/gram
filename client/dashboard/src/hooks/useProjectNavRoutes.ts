@@ -127,6 +127,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         : []),
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
+      { route: routes.accessHub, scope: ["workload:read", "workload:write"] },
       { route: routes.costs, scope: observe },
       ...(isExploreEnabled
         ? [

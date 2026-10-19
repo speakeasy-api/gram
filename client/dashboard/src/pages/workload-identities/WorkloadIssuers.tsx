@@ -15,28 +15,24 @@ import { useRegisterWorkloadIssuerMutation } from "@gram/client/react-query/regi
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link, Outlet } from "react-router";
-import { useOrgRoutes } from "@/routes";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { issuerMatches } from "./search";
 import { CatalogPlatforms } from "./setup/CatalogPlatforms";
 import { useCustomFlows } from "./custom/flows";
 import { PlatformFormSheet } from "./custom/PlatformFormSheet";
 import type { RegisterIssuerValues } from "./formValues";
+import { useAccessHubScope } from "./accessHubScope";
 
 /**
- * The platforms this organization has trusted, one card each, and a way to trust
- * another.
+ * The platforms this organization, or one project, has trusted, one card each,
+ * and a way to trust another.
  *
  * A card carries what an operator needs to recognise a platform: its name, a
  * description (or, without one, the identifier an assertion's `iss` must
  * carry), and its tags. The identifiers and the machines allowed under it live
  * on that platform's own page.
  */
-export function WorkloadIssuersRoot(): JSX.Element {
-  return <Outlet />;
-}
-
 export function WorkloadIssuersPage(): JSX.Element {
   return (
     <RequireScope scope={["workload:read", "workload:write"]} level="page">
@@ -53,7 +49,10 @@ function WorkloadIssuersCatalogue(): JSX.Element {
   // fallback for a platform the catalogue does not carry.
   const [view, setView] = useState<IssuerView>("catalog");
   const [search, setSearch] = useState("");
-  const { data, isPending, isError, refetch } = useWorkloadIdentities({});
+  const { projectScoped } = useAccessHubScope();
+  const { data, isPending, isError, refetch } = useWorkloadIdentities({
+    projectScoped,
+  });
   const issuers = useMemo(() => data?.issuers ?? [], [data]);
   // Fetched with the page so the registration sheet opens on its form.
   useCustomFlows();
@@ -89,6 +88,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
           issuer: values.issuer.trim(),
           jwksUri: values.jwksUri.trim(),
           tags: values.tags,
+          projectScoped,
         },
       },
     });
@@ -205,7 +205,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
 type IssuerView = "catalog" | "custom";
 
 function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const { issuerHref } = useAccessHubScope();
   // A description identifies the platform better than its URL, so it takes the
   // URL's place when there is one.
   const hasDescription = issuer.description !== "";
@@ -214,7 +214,7 @@ function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
     // A link rather than an onClick, so the card keeps what a link gives for
     // free: middle-click, open in a new tab, and a focus ring for the keyboard.
     <Link
-      to={orgRoutes.workloadIssuers.issuerDetail.href(issuer.id)}
+      to={issuerHref(issuer.id)}
       className="block h-full focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       <Card className="hover:border-foreground/30 h-full transition-colors">

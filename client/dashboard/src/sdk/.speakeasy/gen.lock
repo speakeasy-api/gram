@@ -10574,6 +10574,9 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listWorkloadIdentities:
     speakeasy-default-list-workload-identities:
+      parameters:
+        query:
+          project_scoped: false
       responses:
         "200":
           application/json: {"admissions": [], "issuers": [{"allow_wildcard_admission": false, "created_at": "2026-04-05T08:16:34.528Z", "description": "preclude pocket-watch shakily usually warmly great", "id": "7f2a8883-57ab-4de9-846b-7a2c31e8601f", "issuer": "visa", "jwks_uri": "https://rewarding-developing.net", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "tags": ["<value 1>"], "updated_at": "2025-04-11T13:58:43.672Z"}]}
@@ -10592,6 +10595,9 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listWorkloadTokenEndpoints:
     speakeasy-default-list-workload-token-endpoints:
+      parameters:
+        query:
+          project_scoped: false
       responses:
         "200":
           application/json: {"items": [{"issuer": "discover", "mcp_host": "<value>", "project_id": "<id>", "project_name": "<value>", "token_endpoint": "<value>", "user_session_issuer_id": "530963df-8f46-458c-8ea8-5db8b2f4ef40", "user_session_issuer_slug": "<value>"}]}
@@ -13343,7 +13349,7 @@ examples:
   updateWorkloadIssuer:
     speakeasy-default-update-workload-issuer:
       requestBody:
-        application/json: {"id": "59fe3ec7-33f6-48fc-9d36-7c3e31122287"}
+        application/json: {"id": "59fe3ec7-33f6-48fc-9d36-7c3e31122287", "project_scoped": false}
       responses:
         "200":
           application/json: {"admissions": [], "issuers": [{"allow_wildcard_admission": false, "created_at": "2024-11-19T20:12:14.378Z", "description": "barring eek dampen", "id": "5b893d0e-f5b7-4389-83f3-9db4a472304b", "issuer": "mastercard", "jwks_uri": "https://utter-airman.org", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "tags": [], "updated_at": "2024-05-15T18:17:39.606Z"}]}
@@ -13354,7 +13360,7 @@ examples:
   updateWorkloadSubject:
     speakeasy-default-update-workload-subject:
       requestBody:
-        application/json: {"id": "a5aa099c-7fde-41ed-bb62-fc68426cf392"}
+        application/json: {"id": "a5aa099c-7fde-41ed-bb62-fc68426cf392", "project_scoped": false}
       responses:
         "200":
           application/json: {"admissions": [], "issuers": []}
@@ -13738,6 +13744,7 @@ examples:
       parameters:
         query:
           id: "bca55d4a-5ccb-44af-8ea2-f7c1e52c2772"
+          project_scoped: false
       responses:
         "200":
           application/json: {"admissions": [{"agent_id": "7307caf8-59ec-45fa-989b-cdfbf0f2b40a", "agent_name": "<value>", "created_at": "2026-11-30T22:02:46.314Z", "id": "f041a24d-46b3-410e-b84c-250693d21ace", "issuer": "american_express", "issuer_name": "<value>", "match_kind": "wildcard", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "tags": ["<value 1>", "<value 2>"], "updated_at": "2024-06-12T05:33:26.915Z", "wildcard_active": false, "workload_issuer_id": "5d157ed0-a29a-4ddc-9e8d-6666043fdd45"}], "issuers": []}
@@ -13750,6 +13757,7 @@ examples:
       parameters:
         query:
           id: "f1fdb5e8-d552-40e5-82cd-2856641d1250"
+          project_scoped: false
       responses:
         "200":
           application/json: {"admissions": [{"agent_id": "1b7cd57f-5526-4b15-914c-f0abefbae7c5", "agent_name": "<value>", "created_at": "2024-10-08T12:41:59.151Z", "id": "68d3e580-f5be-4d0f-823a-3f4bb1a537fb", "issuer": "american_express", "issuer_name": "<value>", "match_kind": "wildcard", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "tags": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2026-01-19T16:13:07.192Z", "wildcard_active": false, "workload_issuer_id": "bc1cd297-a931-4711-a6f1-5c5fcd473345"}], "issuers": []}

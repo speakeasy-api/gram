@@ -269,6 +269,19 @@ describe("Access Hub", () => {
     expect(orgRoutePaths).toContain("access-hub/:issuerId");
   });
 
+  function ProjectAccessHubHrefs(): JSX.Element {
+    const routes = useRoutes();
+    return (
+      <output data-testid="project-access-hub-hrefs">
+        {[
+          routes.accessHub.href(),
+          routes.accessHub.issuerDetail.href("issuer-1"),
+          routes.accessHub.catalogPlatform.href("claude-tag"),
+        ].join("\n")}
+      </output>
+    );
+  }
+
   it("is an organization route with no project in its path", () => {
     expect(orgRoutePaths).toContain("access-hub");
     render(
@@ -282,21 +295,30 @@ describe("Access Hub", () => {
     );
   });
 
-  it.each([
-    ["/org/projects/project/access-hub", "/org/access-hub"],
-    [
-      "/org/projects/project/access-hub/issuer-1?tab=machines#rules",
-      "/org/access-hub/issuer-1?tab=machines#rules",
-    ],
-    ["/org/projects/project/workload-identities", "/org/access-hub"],
-  ])("redirects the project URL %s", async (source, destination) => {
+  it("is also a project route, for that project's tier", () => {
+    render(
+      <MemoryRouter initialEntries={["/org/projects/project"]}>
+        <ProjectAccessHubHrefs />
+      </MemoryRouter>,
+    );
+
+    expect(
+      (screen.getByTestId("project-access-hub-hrefs").textContent ?? "").split(
+        "\n",
+      ),
+    ).toEqual([
+      "/org/projects/project/access-hub",
+      "/org/projects/project/access-hub/issuer-1",
+      "/org/projects/project/access-hub/catalog/claude-tag",
+    ]);
+  });
+
+  it("redirects the legacy project Workload Identities URL", async () => {
     const { container } = render(
-      <MemoryRouter initialEntries={[source]}>
+      <MemoryRouter
+        initialEntries={["/org/projects/project/workload-identities"]}
+      >
         <Routes>
-          <Route
-            path="/:orgSlug/projects/:projectSlug/access-hub/*"
-            element={<AccessHubRedirect />}
-          />
           <Route
             path="/:orgSlug/projects/:projectSlug/workload-identities"
             element={<AccessHubRedirect />}
@@ -306,7 +328,7 @@ describe("Access Hub", () => {
       </MemoryRouter>,
     );
 
-    expect(await within(container).findByText(destination)).toBeTruthy();
+    expect(await within(container).findByText("/org/access-hub")).toBeTruthy();
   });
 });
 

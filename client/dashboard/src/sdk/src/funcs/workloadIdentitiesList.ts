@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * list workloadIdentities
  *
  * @remarks
- * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.
+ * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when an API key names a project, with the agent each subject resolves to. With project_scoped, read the selected project's tier alone. Requires workload:read.
  */
 export function workloadIdentitiesList(
   client: GramCore,
@@ -107,6 +107,10 @@ async function $do(
 
   const path = pathToFunc("/rpc/workloadIdentities.list")();
 
+  const query = encodeFormQuery({
+    "project_scoped": payload?.project_scoped,
+  });
+
   const headers = new Headers(compactMap({
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
@@ -126,6 +130,11 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option1?.projectSlugHeaderGramProject,
+      },
+      {
         fieldName: "Gram-Session",
         type: "apiKey:header",
         value: security?.option1?.sessionHeaderGramSession,
@@ -133,14 +142,21 @@ async function $do(
     ],
     [
       {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.option2?.sessionHeaderGramSession,
+      },
+    ],
+    [
+      {
         fieldName: "Gram-Key",
         type: "apiKey:header",
-        value: security?.option2?.apikeyHeaderGramKey,
+        value: security?.option3?.apikeyHeaderGramKey,
       },
       {
         fieldName: "Gram-Project",
         type: "apiKey:header",
-        value: security?.option2?.projectSlugHeaderGramProject,
+        value: security?.option3?.projectSlugHeaderGramProject,
       },
     ],
   );
@@ -166,6 +182,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
