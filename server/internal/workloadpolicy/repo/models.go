@@ -78,6 +78,8 @@ type WorkloadIssuer struct {
 	JwksUri string
 	// @access: confidential
 	AllowWildcardAdmission bool
+	// @access: confidential
+	KeySource pgtype.Text
 	// @access: opaque-restricted
 	Metadata []byte
 	// @access: confidential

@@ -93,7 +93,7 @@ func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloa
 const createWorkloadIssuer = `-- name: CreateWorkloadIssuer :one
 INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateWorkloadIssuerParams struct {
@@ -129,6 +129,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -139,7 +140,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 }
 
 const findWorkloadIssuersByIssuer = `-- name: FindWorkloadIssuersByIssuer :many
-SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -182,6 +183,7 @@ func (q *Queries) FindWorkloadIssuersByIssuer(ctx context.Context, arg FindWorkl
 			&i.Issuer,
 			&i.JwksUri,
 			&i.AllowWildcardAdmission,
+			&i.KeySource,
 			&i.Metadata,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -319,7 +321,7 @@ func (q *Queries) GetWorkloadAgentAssignmentForSubject(ctx context.Context, arg 
 }
 
 const getWorkloadIssuer = `-- name: GetWorkloadIssuer :one
-SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -350,6 +352,7 @@ func (q *Queries) GetWorkloadIssuer(ctx context.Context, arg GetWorkloadIssuerPa
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -461,7 +464,7 @@ func (q *Queries) ListWorkloadAdmissions(ctx context.Context, arg ListWorkloadAd
 
 const listWorkloadIssuers = `-- name: ListWorkloadIssuers :many
 
-SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -500,6 +503,7 @@ func (q *Queries) ListWorkloadIssuers(ctx context.Context, arg ListWorkloadIssue
 			&i.Issuer,
 			&i.JwksUri,
 			&i.AllowWildcardAdmission,
+			&i.KeySource,
 			&i.Metadata,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -744,7 +748,7 @@ WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
   AND id = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteWorkloadIssuerParams struct {
@@ -769,6 +773,7 @@ func (q *Queries) SoftDeleteWorkloadIssuer(ctx context.Context, arg SoftDeleteWo
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -839,7 +844,7 @@ WHERE organization_id = $5
   AND (project_id IS NULL OR project_id = $6)
   AND id = $7
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateWorkloadIssuerParams struct {
@@ -877,6 +882,7 @@ func (q *Queries) UpdateWorkloadIssuer(ctx context.Context, arg UpdateWorkloadIs
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
 		&i.UpdatedAt,
