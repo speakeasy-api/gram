@@ -190,7 +190,7 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 		wantReconnect bool
 	}{
 		{name: "served by chaining", decision: identitychaining.RefreshServed},
-		{name: "served while a sibling client has no session", decision: identitychaining.RefreshServed, sibling: true},
+		{name: "a sibling client leaves the credential without a choice", decision: identitychaining.RefreshServed, sibling: true, wantReconnect: true},
 		{name: "chaining unconfirmed", decision: identitychaining.RefreshUnconfirmed},
 		{name: "chaining needs a fresh sign-in", decision: identitychaining.RefreshReauthenticate, wantReconnect: true},
 		{name: "chaining does not serve the upstream", decision: identitychaining.RefreshNotChained, wantReconnect: true},
@@ -205,10 +205,6 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 			_, issuer, client, refreshToken, oldJTI := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
 			remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
 			if tc.sibling {
-				// The server offers both clients; the person connected the
-				// first, which their credential therefore chose, so the
-				// sibling's missing session is not the one refresh judges.
-				upsertExpiredRefreshableRemoteSession(t, ctx, ti, issuer.ID, remoteClient.ID, urn.NewUserSubject("refresh-replay-user"))
 				attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
 			}
 			slug := "chained-refresh-" + uuid.NewString()[:8]
@@ -237,6 +233,13 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 
 			g.mu.Lock()
 			defer g.mu.Unlock()
+			if tc.sibling {
+				// The server offers two clients and the credential predates
+				// any consent pick, so it has no choice to judge chaining
+				// through and reconnects first.
+				require.Empty(t, g.refreshed)
+				return
+			}
 			require.Len(t, g.refreshed, 1, "refresh asks identity chaining once")
 			req := g.refreshed[0]
 			require.Equal(t, upstream, req.UpstreamResource)

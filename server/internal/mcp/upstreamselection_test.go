@@ -54,6 +54,13 @@ func (f selectionFixture) associate(t *testing.T, ctx context.Context, serverID,
 // issuance would, at this moment's configuration.
 func (f selectionFixture) issue(t *testing.T, ctx context.Context, slug string, issuerID uuid.UUID, subject urn.SessionSubject) string {
 	t.Helper()
+	return f.issuePicked(t, ctx, slug, issuerID, subject, nil)
+}
+
+// issuePicked is issue after a consent page that picked a client for each
+// server in picks.
+func (f selectionFixture) issuePicked(t *testing.T, ctx context.Context, slug string, issuerID uuid.UUID, subject urn.SessionSubject, picks map[uuid.UUID]uuid.UUID) string {
+	t.Helper()
 	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  subject,
 		Audience: urn.NewUserSessionIssuer(issuerID).String(),
@@ -67,11 +74,18 @@ func (f selectionFixture) issue(t *testing.T, ctx context.Context, slug string, 
 		Jti:                 jti,
 	})
 	require.NoError(t, err)
+	servers, clients := []uuid.UUID{}, []uuid.UUID{}
+	for serverID, clientID := range picks {
+		servers = append(servers, serverID)
+		clients = append(clients, clientID)
+	}
 	_, err = usersessions_repo.New(f.ti.conn).RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
 		UserSessionIssuerID: issuerID,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        policy.CredentialID,
 		Source:              upstreamclients.SelectionSourceIssuance,
+		PickedMcpServerIds:  servers,
+		PickedClientIds:     clients,
 	})
 	require.NoError(t, err)
 	return token
@@ -288,10 +302,10 @@ func TestUpstreamClientSelection_ConsentOffersOnlyTheServersOwnClients(t *testin
 	require.Equal(t, "sel-own-as.example.com", location.Host, "only the server's own client is offered")
 }
 
-// A server offering two clients serves each person through the one they
-// connected at consent, recorded when their credential is issued. Someone
-// who connected neither is asked to reconnect.
-func TestUpstreamClientSelection_ServerOfferingSeveralClientsServesTheConnectedOne(t *testing.T) {
+// A server offering two clients serves each person through the one picked on
+// their consent page, recorded when their credential is issued. A credential
+// without a pick is asked to reconnect.
+func TestUpstreamClientSelection_ServerOfferingSeveralClientsServesThePickedOne(t *testing.T) {
 	t.Parallel()
 	ctx, f := newSelectionFixture(t)
 
@@ -304,17 +318,18 @@ func TestUpstreamClientSelection_ServerOfferingSeveralClientsServesTheConnectedO
 	f.associate(t, ctx, server.ID, first)
 	f.associate(t, ctx, server.ID, second)
 
-	connected := createTestUser(t, ctx, f.ti, "sel-connected-"+uuid.NewString())
-	insertQualifiedRemoteSessionToken(t, ctx, f.ti, issuerID, second, connected, "token-second", upstream.url)
-	resp, err := callTool(t, f.ti, slug, f.issue(t, ctx, slug, issuerID, connected), "ping")
+	picked := createTestUser(t, ctx, f.ti, "sel-picked-"+uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, f.ti, issuerID, first, picked, "token-first", upstream.url)
+	insertQualifiedRemoteSessionToken(t, ctx, f.ti, issuerID, second, picked, "token-second", upstream.url)
+	resp, err := callTool(t, f.ti, slug, f.issuePicked(t, ctx, slug, issuerID, picked, map[uuid.UUID]uuid.UUID{server.ID: second}), "ping")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	upstream.requireToolCallAuth(t, "Bearer token-second")
+	upstream.requireNeverCarried(t, "Bearer token-first")
 	upstream.awaitMetadataProbe(t)
 
-	unconnected := createTestUser(t, ctx, f.ti, "sel-unconnected-"+uuid.NewString())
 	before := upstream.requestCount()
-	resp, err = callTool(t, f.ti, slug, f.issue(t, ctx, slug, issuerID, unconnected), "ping")
+	resp, err = callTool(t, f.ti, slug, f.issue(t, ctx, slug, issuerID, picked), "ping")
 	requireReconnect(t, resp, err, slug)
 	require.Equal(t, before, upstream.requestCount())
 }

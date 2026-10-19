@@ -1109,6 +1109,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 	}
 
+	// The credential this grant mints records the upstream client picked here
+	// for each server offering several.
+	upstreamPicks, err := s.consentUpstreamClientPicks(ctx, endpoint, challengeState)
+	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
+		return oops.E(oops.CodeUnavailable, err, "read upstream client picks").LogError(ctx, logger)
+	}
+
 	code, err := generateOpaqueToken()
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
@@ -1139,7 +1147,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		ToolSelection:               toolSelection,
 		SignInID:                    nil,
 		GatewayPolicy:               toolPolicy,
-		UpstreamClientPicks:         nil,
+		UpstreamClientPicks:         upstreamPicks,
 		CreatedAt:                   time.Now(),
 	}
 	// Only a human subject's own session is linked to its sign-in.
