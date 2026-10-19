@@ -102,7 +102,7 @@ func (r *Runtime) WithSkills(catalog *mcpskills.EmbeddedCatalog, gate SkillsGate
 
 	if err := mcp.AddReceivingCustomMethod(r.server, mcpversions.MethodSkillsList, func(_ context.Context, _ *mcp.ServerSession, params *skillsListParams) (*skillsListResult, error) {
 		if params != nil && params.Cursor != "" {
-			return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: "unknown cursor"}
+			return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: "unknown cursor", Data: nil}
 		}
 		entries := catalog.Entries()
 		skills := make([]mcpskills.Skill, 0, len(entries))
@@ -116,7 +116,7 @@ func (r *Runtime) WithSkills(catalog *mcpskills.EmbeddedCatalog, gate SkillsGate
 
 	if err := mcp.AddReceivingCustomMethod(r.server, mcpversions.MethodSkillsGet, func(_ context.Context, _ *mcp.ServerSession, params *skillsGetParams) (*skillsGetResult, error) {
 		if params == nil || params.URI == "" {
-			return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: "skill URI is required"}
+			return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: "skill URI is required", Data: nil}
 		}
 		entry, ok := catalog.Get(params.URI)
 		if !ok {
@@ -154,7 +154,7 @@ func skillsMiddleware(catalog *mcpskills.EmbeddedCatalog, gate SkillsGate) mcp.M
 				return result, nil
 			case mcpversions.MethodSkillsList, mcpversions.MethodSkillsGet:
 				if !skillsEnabled(ctx, gate) {
-					return nil, &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound, Message: fmt.Sprintf("method %q not found", method)}
+					return nil, &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound, Message: fmt.Sprintf("method %q not found", method), Data: nil}
 				}
 				return next(ctx, method, req)
 			case "resources/read":
@@ -220,5 +220,5 @@ func privateCacheable() mcp.Cacheable {
 // skillNotFound is the -32602 answer SEP-2640 requires when no served skill
 // matches a URI, whether on skills/get or resources/read.
 func skillNotFound(uri string) error {
-	return &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: fmt.Sprintf("no skill is served at %s", uri)}
+	return &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: fmt.Sprintf("no skill is served at %s", uri), Data: nil}
 }
