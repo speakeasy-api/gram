@@ -1141,6 +1141,6 @@ planning. Please note that this might be slightly outdated, and this guide shoul
 
 ### Gateway discovery configuration
 
-Every organization can set gateway defaults and per-connection discovery choices. Gateway defaults require project `mcp:write`; Inspect overrides require gateway `mcp:connect`.
+Every organization can set gateway defaults and per-connection discovery choices. Gateway defaults require project `mcp:write`; Inspect overrides require gateway `mcp:connect`. The organization gateway has no gateway default (it serves Progressive); each connection can choose its mode on the sign-in consent page.
 
 Platform MCP's `get_mcp_connection_settings` includes a gateway's discovery mode. During preview, mode changes use the dashboard or management API. The existing Platform MCP address and network mutations remain limited to those settings; an agent-facing mode mutation is deferred until it has its own confirmation and concurrency contract.

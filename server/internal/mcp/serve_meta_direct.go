@@ -84,7 +84,7 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 	if len(params.Cursor) > 512 {
 		return nil, oops.E(oops.CodeInvalid, nil, "invalid tool listing cursor")
 	}
-	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, server.ID, endpoint.ProjectID)
+	ctx, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, server.ID, endpoint.ProjectID)
 	if err != nil {
 		return nil, err
 	}

@@ -34,7 +34,11 @@ func TestConsentGatewayModeChoices(t *testing.T) {
 	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "unsupported", nil)
 	require.Error(t, err)
 	organizationGateway := &ResolvedMcpEndpoint{MetaMcpServerID: endpoint.MetaMcpServerID, OrganizationID: "org_test", RouteBase: organizationGatewayRouteBase}
-	_, err = service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{}, "", "direct", nil)
+	policy, err = service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{}, "", "direct", nil)
+	require.NoError(t, err, "organization gateway connections choose their own mode")
+	require.Equal(t, metamcp.DiscoveryModeDirect, *policy.Gateway.DiscoveryMode)
+	require.Equal(t, endpointToolSelectionResource(organizationGateway), policy.Resource)
+	_, err = service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{FirstParty: true}, "", "direct", nil)
 	require.Error(t, err)
 }
 

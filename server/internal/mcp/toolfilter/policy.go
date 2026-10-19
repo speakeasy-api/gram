@@ -29,7 +29,7 @@ type SessionPolicy struct {
 	// Selection is nil for unrestricted tools; an empty allow list denies all.
 	Selection *SessionSelection
 
-	// Gateway holds explicit options for a stored gateway connection.
+	// Gateway holds explicit options for a gateway connection.
 	Gateway *GatewayOptions
 }
 

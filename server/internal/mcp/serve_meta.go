@@ -264,7 +264,9 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 			gate.discoveryMode = *gatePolicy.Gateway.DiscoveryMode
 		}
 	}
-	if membership.derived() {
+	// An agent gateway serves its delegated members progressively; the
+	// organization gateway follows the connection's choice.
+	if membership.agentID != uuid.Nil {
 		gate.discoveryMode = metamcp.DiscoveryModeProgressive
 	}
 	// Identity comes from the issuer gate alone: this surface runs no
@@ -543,19 +545,7 @@ func (s *Service) callMetaServerTool(
 	// inside one. A derived gateway has no stored membership — its members
 	// are whatever the caller's access still reaches at this instant — so a
 	// revoked grant lands between requests the same way.
-	var (
-		members []metaMember
-		err     error
-	)
-	if gate.agentID != uuid.Nil || gate.organizationGateway {
-		issuer := uuid.Nil
-		if gate.organizationGateway {
-			issuer = gate.userSessionIssuerID
-		}
-		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID, issuer)
-	} else {
-		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
-	}
+	ctx, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, metaServer.ID, mcpEndpoint.ProjectID)
 	if err != nil {
 		if params.Name != metamcp.ToolExecuteTool {
 			s.logMetaDiscovery(ctx, gate, params.Name, start, err)
