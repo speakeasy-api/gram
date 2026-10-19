@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -444,6 +445,8 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
+	// External MCP tools forward the upstream result, whose isError is the verdict.
+	resultIsError := plan.Kind == gateway.ToolKindExternalMCP && dialect.MCPResultIsError(interceptor.buffer.Bytes())
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	var functionCPU *float64
@@ -505,6 +508,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 		attrRecorder[attr.EventSourceKey] = string(tm.EventSourceToolCall)
 		attrRecorder.RecordStatusCode(interceptor.statusCode)
+		attrRecorder[attr.OutcomeKey] = dialect.ToolCallOutcome(interceptor.statusCode, resultIsError)
 		attrRecorder.RecordRequestBody(requestNumBytes)
 		attrRecorder.RecordResponseBody(outputNumBytes)
 		attrRecorder.RecordTraceContext(ctx)

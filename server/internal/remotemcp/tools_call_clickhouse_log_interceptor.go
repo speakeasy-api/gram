@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -130,6 +131,18 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	}
 
 	statusCode := upstreamStatusCode(call)
+	resultIsError := call.Result != nil && call.Result.IsError
+	if resultIsError {
+		// Warn, not error: an isError result is the upstream tool's verdict, not a
+		// Speakeasy fault. The body stays out: it is upstream-controlled content.
+		fields := append([]slog.Attr{
+			attr.SlogComponent("xmcp"),
+			attr.SlogToolName(toolName),
+			attr.SlogOrganizationID(serverCtx.OrganizationID),
+			attr.SlogProjectID(serverCtx.ProjectID.String()),
+		}, i.identity.SlogAttrs()...)
+		i.logger.LogAttrs(ctx, slog.LevelWarn, "remote MCP tool returned an error result", fields...)
+	}
 
 	// Synthetic URN: the dashboard's tool-call queries filter on
 	// startsWith(gram_urn, 'tools:'), so the prefix is required. Use the
@@ -159,6 +172,7 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	}
 	logAttrs.RecordDuration(durationSec)
 	logAttrs.RecordStatusCode(statusCode)
+	logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(statusCode, resultIsError)
 	logAttrs.RecordRequestBody(requestBytes)
 	logAttrs.RecordResponseBody(outputBytes)
 	logAttrs.RecordRequestBodyContent(call.Request.Params.Arguments)
@@ -238,7 +252,8 @@ func ensureTraceContext(logAttrs tm.HTTPLogAttributes) {
 // response. JSON-RPC errors map to 500 since they signal upstream-side
 // failure even when the HTTP layer succeeded; tool-level errors (Result
 // with IsError=true) keep the upstream HTTP status — failure is signaled by
-// the response writer's status code, not the tool's inner error flag.
+// the response writer's status code, not the tool's inner error flag, which
+// is recorded separately as gram.outcome.
 func upstreamStatusCode(call *proxy.ToolsCallResponse) int {
 	if call.RemoteMessage != nil && call.RemoteMessage.RemoteHTTPResponse != nil {
 		code := call.RemoteMessage.RemoteHTTPResponse.StatusCode

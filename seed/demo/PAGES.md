@@ -183,6 +183,12 @@ Like the attachment above, every row has invalid ciphertext, no refresh token
 and auto-refresh disabled; they are display-only. IDs derive from
 `Spec.NameSeed` (`gram-demo-validated-session-<n>`).
 
+### In-band tool errors
+
+About 1 in 25 bulk hosted tool calls that return 200 carry `gram.outcome` =
+`error` and an `isError` result body. Admin server health outcomes and Platform
+MCP diagnostics count them as `failed`. Status-only charts still count them as OK.
+
 ## Local only (RunLocalFixtures, never the demo org)
 
 These come from `server/internal/demoseed/local.go` after the seed, so they are

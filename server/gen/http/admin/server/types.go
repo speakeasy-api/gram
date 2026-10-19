@@ -20781,7 +20781,8 @@ type AdminMcpServerToolCallBucketResponseBody struct {
 	BucketStart string `form:"bucket_start" json:"bucket_start" xml:"bucket_start"`
 	// Tool calls in the bucket.
 	Total int64 `form:"total" json:"total" xml:"total"`
-	// Failed tool calls in the bucket.
+	// Tool calls in the bucket that failed with status 400 or above. Tool errors
+	// returned inside HTTP 200 (isError) are not counted here.
 	Failed int64 `form:"failed" json:"failed" xml:"failed"`
 }
 

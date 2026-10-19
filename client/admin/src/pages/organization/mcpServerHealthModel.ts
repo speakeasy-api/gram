@@ -7,8 +7,8 @@ export const DATADOG_ORIGIN = "https://app.datadoghq.com";
 
 export type ToolCallTotals = {
   total: number;
-  // Every outcome at status 400 or above, which is what the chart's buckets
-  // count as failed. `unknown` is neither.
+  // Every outcome at status 400 or above, plus tool errors returned inside a
+  // 200 (isError), which the chart's buckets do not count. `unknown` is neither.
   failed: number;
   unauthorized: number;
   // 0 to 1. Zero calls is a zero share, never NaN.

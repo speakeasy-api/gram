@@ -36,7 +36,7 @@ export type AdminMcpServerToolCalls = {
    */
   daily?: Array<AdminMcpServerToolCallBucket> | undefined;
   /**
-   * Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.
+   * Tool calls inside the window by outcome class. failed counts tool errors returned inside HTTP 200 (isError) and hook-reported tool errors; in-band errors recorded before mid-October 2026 still count as success.
    */
   outcomes?: AdminMcpServerToolCallOutcomes | undefined;
   type: Type;

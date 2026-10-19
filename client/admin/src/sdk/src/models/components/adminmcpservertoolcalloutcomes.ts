@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.
+ * Tool calls inside the window by outcome class. failed counts tool errors returned inside HTTP 200 (isError) and hook-reported tool errors; in-band errors recorded before mid-October 2026 still count as success.
  */
 export type AdminMcpServerToolCallOutcomes = {
   blocked: number;

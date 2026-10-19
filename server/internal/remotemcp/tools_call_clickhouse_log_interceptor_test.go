@@ -1,7 +1,9 @@
 package remotemcp_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -326,7 +328,7 @@ func TestToolsCallClickHouseLogInterceptor_NoAuthContextSkips(t *testing.T) {
 func TestToolsCallClickHouseLogInterceptor_JSONRPCErrorWith2xxMapsTo500(t *testing.T) {
 	t.Parallel()
 
-	statusCode := runStatusCodeMappingCase(t, statusCodeCase{
+	recorded := runStatusCodeMappingCase(t, statusCodeCase{
 		toolName: "rpc_err_2xx",
 		response: func(req *proxy.ToolsCallRequest) *proxy.ToolsCallResponse {
 			return &proxy.ToolsCallResponse{
@@ -342,13 +344,14 @@ func TestToolsCallClickHouseLogInterceptor_JSONRPCErrorWith2xxMapsTo500(t *testi
 			}
 		},
 	})
-	require.Equal(t, int32(500), statusCode, "JSON-RPC Error with upstream 2xx should map to 500")
+	require.Equal(t, int32(500), recorded.statusCode, "JSON-RPC Error with upstream 2xx should map to 500")
+	require.Equal(t, "error", recorded.outcome)
 }
 
 func TestToolsCallClickHouseLogInterceptor_JSONRPCErrorWithoutHTTPResponseMapsTo500(t *testing.T) {
 	t.Parallel()
 
-	statusCode := runStatusCodeMappingCase(t, statusCodeCase{
+	recorded := runStatusCodeMappingCase(t, statusCodeCase{
 		toolName: "rpc_err_no_http",
 		response: func(req *proxy.ToolsCallRequest) *proxy.ToolsCallResponse {
 			return &proxy.ToolsCallResponse{
@@ -364,13 +367,14 @@ func TestToolsCallClickHouseLogInterceptor_JSONRPCErrorWithoutHTTPResponseMapsTo
 			}
 		},
 	})
-	require.Equal(t, int32(500), statusCode, "JSON-RPC Error with no upstream HTTP response should map to 500")
+	require.Equal(t, int32(500), recorded.statusCode, "JSON-RPC Error with no upstream HTTP response should map to 500")
+	require.Equal(t, "error", recorded.outcome)
 }
 
 func TestToolsCallClickHouseLogInterceptor_JSONRPCErrorWith4xxPreservesCode(t *testing.T) {
 	t.Parallel()
 
-	statusCode := runStatusCodeMappingCase(t, statusCodeCase{
+	recorded := runStatusCodeMappingCase(t, statusCodeCase{
 		toolName: "rpc_err_401",
 		response: func(req *proxy.ToolsCallRequest) *proxy.ToolsCallResponse {
 			return &proxy.ToolsCallResponse{
@@ -386,19 +390,109 @@ func TestToolsCallClickHouseLogInterceptor_JSONRPCErrorWith4xxPreservesCode(t *t
 			}
 		},
 	})
-	require.Equal(t, int32(401), statusCode, "JSON-RPC Error with upstream 4xx should preserve the upstream code")
+	require.Equal(t, int32(401), recorded.statusCode, "JSON-RPC Error with upstream 4xx should preserve the upstream code")
+	require.Equal(t, "error", recorded.outcome)
+}
+
+func TestToolsCallClickHouseLogInterceptor_IsErrorResultRecordsErrorOutcome(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		isError bool
+		outcome string
+	}{
+		{name: "tool_error_200", isError: true, outcome: "error"},
+		{name: "tool_ok_200", isError: false, outcome: "ok"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			recorded := runStatusCodeMappingCase(t, statusCodeCase{
+				toolName: tc.name,
+				response: func(req *proxy.ToolsCallRequest) *proxy.ToolsCallResponse {
+					return &proxy.ToolsCallResponse{
+						Error: nil,
+						RemoteMessage: &proxy.RemoteMessage{
+							UserHTTPRequest:    nil,
+							RemoteHTTPRequest:  nil,
+							RemoteHTTPResponse: &http.Response{StatusCode: http.StatusOK},
+							Message:            nil,
+						},
+						Request: req,
+						Result: &mcp.CallToolResult{
+							Content:           nil,
+							IsError:           tc.isError,
+							Meta:              nil,
+							StructuredContent: nil,
+							InputRequests:     nil,
+							RequestState:      "",
+						},
+					}
+				},
+			})
+			require.Equal(t, int32(200), recorded.statusCode, "an isError result keeps the upstream HTTP status")
+			require.Equal(t, tc.outcome, recorded.outcome)
+		})
+	}
+}
+
+func TestToolsCallClickHouseLogInterceptor_IsErrorLogsWarnWithoutBody(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	const secret = "upstream-secret-detail"
+
+	runStatusCodeMappingCase(t, statusCodeCase{
+		toolName: "tool_error_log",
+		logger:   logger,
+		response: func(req *proxy.ToolsCallRequest) *proxy.ToolsCallResponse {
+			return &proxy.ToolsCallResponse{
+				Error: nil,
+				RemoteMessage: &proxy.RemoteMessage{
+					UserHTTPRequest:    nil,
+					RemoteHTTPRequest:  nil,
+					RemoteHTTPResponse: &http.Response{StatusCode: http.StatusOK},
+					Message:            nil,
+				},
+				Request: req,
+				Result: &mcp.CallToolResult{
+					Content:           []mcp.Content{&mcp.TextContent{Text: secret}},
+					IsError:           true,
+					Meta:              nil,
+					StructuredContent: nil,
+					InputRequests:     nil,
+					RequestState:      "",
+				},
+			}
+		},
+	})
+
+	out := logs.String()
+	require.Contains(t, out, `"msg":"remote MCP tool returned an error result"`)
+	require.Contains(t, out, `"level":"WARN"`)
+	require.Contains(t, out, `"gram.tool.name":"tool_error_log"`)
+	require.NotContains(t, out, secret, "the upstream result body stays out of the log")
+}
+
+type recordedCall struct {
+	statusCode int32
+	outcome    string
 }
 
 type statusCodeCase struct {
 	toolName string
 	response func(*proxy.ToolsCallRequest) *proxy.ToolsCallResponse
+	// logger receives the interceptor's own logs; nil uses the test logger.
+	logger *slog.Logger
 }
 
 // runStatusCodeMappingCase drives one tools/call through a fresh interceptor
-// and returns the materialized http.response.status_code recorded for the row,
+// and returns the http.response.status_code and gram.outcome recorded for the row,
 // so each upstreamStatusCode branch can be asserted against a real telemetry
 // row.
-func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
+func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) recordedCall {
 	t.Helper()
 
 	logger := testenv.NewLogger(t)
@@ -408,6 +502,9 @@ func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, logsEnabled, toolIOLogsEnabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	if tc.logger != nil {
+		logger = tc.logger
+	}
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
@@ -436,22 +533,22 @@ func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
 	require.NoError(t, interceptor.InterceptToolsCallResponse(ctx, tc.response(req)))
 
 	expectedURN := "tools:externalmcp:" + serverID + ":" + tc.toolName
-	var statusCode int32
+	var recorded recordedCall
 	require.Eventually(t, func() bool {
 		row := conn.QueryRow(t.Context(),
-			`SELECT toInt32OrZero(toString(attributes.http.response.status_code)) FROM telemetry_logs
+			`SELECT toInt32OrZero(toString(attributes.http.response.status_code)), toString(attributes.gram.outcome) FROM telemetry_logs
 			 WHERE gram_project_id = ? AND gram_urn = ?`,
 			projectID.String(), expectedURN)
-		var got int32
-		if err := row.Scan(&got); err != nil {
+		var got recordedCall
+		if err := row.Scan(&got.statusCode, &got.outcome); err != nil {
 			return false
 		}
-		if got == 0 {
+		if got.statusCode == 0 {
 			return false
 		}
-		statusCode = got
+		recorded = got
 		return true
 	}, 5*time.Second, 50*time.Millisecond, "telemetry_logs row did not appear")
 
-	return statusCode
+	return recorded
 }

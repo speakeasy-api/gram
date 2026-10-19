@@ -144,7 +144,7 @@ var AdminMcpServerHealthUserSessionIssuer = Type("AdminMcpServerHealthUserSessio
 })
 
 var AdminMcpServerToolCallOutcomes = Type("AdminMcpServerToolCallOutcomes", func() {
-	Description("Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.")
+	Description("Tool calls inside the window by outcome class. failed counts tool errors returned inside HTTP 200 (isError) and hook-reported tool errors; in-band errors recorded before mid-October 2026 still count as success.")
 	Required("success", "unauthorized", "client_error", "server_error", "blocked", "failed", "unknown")
 
 	Attribute("success", Int64)
@@ -162,7 +162,7 @@ var AdminMcpServerToolCallBucket = Type("AdminMcpServerToolCallBucket", func() {
 
 	Attribute("bucket_start", String, func() { Format(FormatDateTime) })
 	Attribute("total", Int64, "Tool calls in the bucket.")
-	Attribute("failed", Int64, "Failed tool calls in the bucket.")
+	Attribute("failed", Int64, "Tool calls in the bucket that failed with status 400 or above. Tool errors returned inside HTTP 200 (isError) are not counted here.")
 })
 
 var AdminMcpServerToolCalls = Type("AdminMcpServerToolCalls", func() {
