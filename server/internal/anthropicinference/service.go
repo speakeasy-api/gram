@@ -31,9 +31,14 @@ import (
 )
 
 const (
-	// verdictBudget caps risk evaluation at nine seconds. Earlier request work
-	// can shorten it to preserve checkpoint and response headroom.
-	verdictBudget = 9 * time.Second
+	// verdictBudget caps risk evaluation so the whole exchange fits Anthropic's
+	// default 5-second verdict timeout. Earlier request work can shorten it to
+	// preserve checkpoint and response headroom.
+	verdictBudget = 3750 * time.Millisecond
+	// backlogBudget bounds how long a verdict waits on stored content the
+	// checkpoint has not accepted yet. What it leaves unscanned is picked up by
+	// the next delivery.
+	backlogBudget = time.Second
 	// scanConcurrency bounds how many inputs of one transcript are evaluated
 	// at once.
 	scanConcurrency = 4
@@ -41,7 +46,7 @@ const (
 	checkpointBudget = 500 * time.Millisecond
 	// responseBudget reserves time to serialize the verdict after checkpointing.
 	responseBudget = 250 * time.Millisecond
-	// requestBudget leaves 250ms before the documented 10-second upstream timeout.
+	// requestBudget leaves 500ms of Anthropic's default 5-second timeout for the network.
 	requestBudget = verdictBudget + checkpointBudget + responseBudget
 	// titleScheduleTimeout bounds the goroutine that asks for a title, so a
 	// degraded Temporal frontend cannot pin one goroutine per inference request.
@@ -56,6 +61,9 @@ var errPolicyDenied = errors.New("inference policy denied")
 // inputScan is what one policy input's evaluation produced. An input the
 // budget or an earlier denial cut off stays unevaluated.
 type inputScan struct {
+	// backlog marks stored content the checkpoint has not accepted. It cannot
+	// fail the verdict by running out of time.
+	backlog   bool
 	evaluated bool
 	complete  bool
 	result    *risk.ScanResult
@@ -140,7 +148,7 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	if err != nil {
 		return Verdict{}, fmt.Errorf("resolve inference hook actor: %w", err)
 	}
-	_, err = s.store.Save(budget, config, frame, userID)
+	freshStart, err := s.store.Save(budget, config, frame, userID)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("store inference transcript: %w", err)
 	}
@@ -154,7 +162,13 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	}
 	hashes := transcriptHashes(messages)
 	matched := acceptedPrefix(accepted, hashes)
-	scanStart := min(matched, currentTurnStart(messages))
+	// The verdict waits on content the archive has not seen and on the current
+	// turn. Stored content the checkpoint never accepted (a delivery cut off by
+	// the upstream timeout, a policy change) is backlog: it is scanned in the
+	// time left and accepted as it clears, so a long backlog cannot make every
+	// later delivery time out.
+	liveStart := min(currentTurnStart(messages), max(matched, freshStart))
+	scanStart := min(matched, liveStart)
 	inputs, err := policyInputs(messages[scanStart:])
 	if err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
@@ -164,26 +178,52 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
 	scans := make([]inputScan, len(inputs))
+	// Live inputs take the scan slots first; backlog fills them afterwards.
+	order := make([]int, 0, len(inputs))
+	for offset, input := range inputs {
+		backlog := scanStart+input.message < liveStart
+		scans[offset] = inputScan{backlog: backlog, evaluated: false, complete: false, result: nil}
+		if !backlog {
+			order = append(order, offset)
+		}
+	}
+	for offset, scan := range scans {
+		if scan.backlog {
+			order = append(order, offset)
+		}
+	}
 	group, groupCtx := errgroup.WithContext(budget)
 	group.SetLimit(scanConcurrency)
-	for offset, input := range inputs {
-		if groupCtx.Err() != nil {
+	backlogCtx, cancelBacklog := context.WithTimeout(groupCtx, backlogBudget)
+	defer cancelBacklog()
+	for _, offset := range order {
+		scanCtx := groupCtx
+		if scans[offset].backlog {
+			scanCtx = backlogCtx
+		}
+		if scanCtx.Err() != nil {
 			break
 		}
 		group.Go(func() error {
 			// group.Go can block on a free slot past the budget, so the check
 			// above may be stale by the time this runs.
-			if groupCtx.Err() != nil {
+			if scanCtx.Err() != nil {
 				return nil
 			}
-			outcome, err := s.scanner.ScanForInferenceEnforcement(groupCtx, scanRequest(config, frame, userID, len(priorInputs)+offset, input))
-			if err != nil {
-				if groupCtx.Err() != nil {
-					return nil
-				}
+			outcome, err := s.scanner.ScanForInferenceEnforcement(scanCtx, scanRequest(config, frame, userID, len(priorInputs)+offset, inputs[offset]))
+			switch {
+			case err == nil:
+			case scanCtx.Err() != nil:
+				return nil
+			case scans[offset].backlog:
+				// Left unevaluated, so the checkpoint stops short of it.
+				s.logger.WarnContext(ctx, "scan inference backlog input", attr.SlogError(err))
+				return nil
+			default:
 				return fmt.Errorf("scan input %d: %w", len(priorInputs)+offset, err)
 			}
-			scans[offset] = inputScan{evaluated: true, complete: outcome != nil && outcome.Complete, result: nil}
+			scans[offset].evaluated = true
+			scans[offset].complete = outcome != nil && outcome.Complete
 			if outcome != nil {
 				scans[offset].result = outcome.Result
 			}
@@ -219,7 +259,7 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 			break
 		}
 	}
-	if slices.ContainsFunc(scans, func(scan inputScan) bool { return !scan.evaluated }) {
+	if slices.ContainsFunc(scans, func(scan inputScan) bool { return !scan.backlog && !scan.evaluated }) {
 		// A failed evaluation must not silently allow inference, including when
 		// Anthropic's administrator selected allow-on-webhook-failure.
 		s.logger.WarnContext(ctx, "inference verdict budget exhausted",

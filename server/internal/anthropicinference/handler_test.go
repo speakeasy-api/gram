@@ -72,6 +72,19 @@ func TestHandlerFailsClosedOnProcessingError(t *testing.T) {
 	require.NotContains(t, response.Body.String(), "database")
 }
 
+func TestHandlerDoesNotAnswerAfterCallerHangsUp(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t, &testProcessor{err: fmt.Errorf("inference policy deadline: %w", context.Canceled)})
+	body := `{"type":"prompt","request_id":"request-example"}`
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "/", strings.NewReader(body))
+	request.Header = signedHeaders([]byte(body), h.keys[0], time.Now())
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, request)
+	require.Empty(t, response.Body.String())
+}
+
 func TestHandlerRejectsCrossTenantDelivery(t *testing.T) {
 	t.Parallel()
 	processor := &testProcessor{calls: 0, verdict: Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}, err: nil}

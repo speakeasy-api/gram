@@ -145,7 +145,14 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	verdict := Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
 	if frame.Type == "prompt" {
 		verdict, err = h.processor.Process(r.Context(), h.config, frame)
-		if err != nil {
+		switch {
+		case err == nil:
+		case errors.Is(err, context.Canceled) && r.Context().Err() != nil:
+			// TimeoutHandler expiry reports DeadlineExceeded, so the caller hung
+			// up, usually because its verdict timeout is shorter than requestBudget.
+			h.logger.ErrorContext(r.Context(), "Anthropic closed the inference hook before a verdict", attr.SlogError(err))
+			return
+		default:
 			h.logger.ErrorContext(r.Context(), "process Anthropic inference hook", attr.SlogError(err))
 			// A failed evaluation must not silently allow inference, including when
 			// Anthropic's administrator selected allow-on-webhook-failure.

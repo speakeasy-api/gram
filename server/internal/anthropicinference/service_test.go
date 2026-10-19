@@ -363,6 +363,105 @@ func TestServiceAcceptsCleanPrefixWhenBudgetExhausted(t *testing.T) {
 	})
 }
 
+// backlogScanner finishes each input after 100ms, never finishes stall
+// inputs, and fails fail inputs.
+type backlogScanner struct {
+	stall  string
+	fail   string
+	result *risk.ScanResult
+}
+
+func (s *backlogScanner) ScanForInferenceEnforcement(ctx context.Context, request risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error) {
+	switch request.Text {
+	case s.stall:
+		<-ctx.Done()
+		return nil, fmt.Errorf("scan deadline: %w", ctx.Err())
+	case s.fail:
+		return nil, errors.New("scanner unavailable")
+	}
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("scan deadline: %w", ctx.Err())
+	case <-time.After(100 * time.Millisecond):
+		return &risk.InferenceScanOutcome{Result: s.result, Complete: true}, nil
+	}
+}
+
+func backlogFrame() Frame {
+	frame := exampleFrame()
+	frame.Messages = []Message{
+		textMessage("user", "old prompt"), textMessage("assistant", "old reply"),
+		textMessage("user", "stall"), textMessage("assistant", "second reply"),
+		textMessage("user", "new prompt"),
+	}
+	return frame
+}
+
+func TestServiceDoesNotWaitOnUnacceptedBacklog(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		frame := backlogFrame()
+		// Everything but the current turn is archived, and nothing is accepted,
+		// as after deliveries the upstream timeout cut off.
+		store := &deltaStore{memoryStore: memoryStore{}, newStart: 4}
+		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &backlogScanner{stall: "stall"}}
+		start := time.Now()
+		verdict, err := service.Process(t.Context(), Config{}, frame)
+		require.NoError(t, err)
+		require.Equal(t, "allow", verdict.Action)
+		require.Equal(t, backlogBudget, time.Since(start))
+		require.Equal(t, transcriptHashes(frame.Messages[:2]), store.accepted)
+
+		// The next delivery resumes the backlog where the last one stopped.
+		retry := &recordingScanner{}
+		service.scanner = retry
+		verdict, err = service.Process(t.Context(), Config{}, frame)
+		require.NoError(t, err)
+		require.Equal(t, "allow", verdict.Action)
+		require.Equal(t, []string{"stall", "second reply", "new prompt"}, []string{retry.inputs[0].text, retry.inputs[1].text, retry.inputs[2].text})
+		require.Equal(t, transcriptHashes(frame.Messages), store.accepted)
+	})
+}
+
+func TestServiceBacklogScannerErrorsDoNotFailTheVerdict(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		frame := backlogFrame()
+		store := &deltaStore{memoryStore: memoryStore{}, newStart: 4}
+		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &backlogScanner{fail: "old reply"}}
+		verdict, err := service.Process(t.Context(), Config{}, frame)
+		require.NoError(t, err)
+		require.Equal(t, "allow", verdict.Action)
+		require.Equal(t, transcriptHashes(frame.Messages[:1]), store.accepted)
+	})
+}
+
+func TestServiceDeniesBacklogMatch(t *testing.T) {
+	t.Parallel()
+	result := new(risk.ScanResult)
+	result.Action = "block"
+	scanner := &recordingScanner{result: result}
+	frame := backlogFrame()
+	service := &Service{logger: testenv.NewLogger(t), store: &deltaStore{memoryStore: memoryStore{}, newStart: 4}, scanner: scanner}
+	verdict, err := service.Process(t.Context(), Config{}, frame)
+	require.NoError(t, err)
+	require.Equal(t, "deny", verdict.Action)
+	require.NotEqual(t, unavailableDenyReason, verdict.DenyReason)
+}
+
+func TestServiceStillDeniesUnscannedCurrentTurn(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		frame := backlogFrame()
+		store := &deltaStore{memoryStore: memoryStore{}, newStart: 4}
+		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &backlogScanner{stall: "new prompt"}}
+		verdict, err := service.Process(t.Context(), Config{}, frame)
+		require.NoError(t, err)
+		require.Equal(t, Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}, verdict)
+		require.Equal(t, transcriptHashes(frame.Messages[:4]), store.accepted)
+	})
+}
+
 // checkpointHeadroomStore exercises the checkpoint window after evaluation expires.
 type checkpointHeadroomStore struct {
 	memoryStore
@@ -389,8 +488,8 @@ func (s *checkpointHeadroomSession) Accept(ctx context.Context, hashes [][]byte)
 func TestServiceReservesCheckpointAndResponseHeadroom(t *testing.T) {
 	t.Parallel()
 	// Pin the requested evaluation cap separately from behavioral assertions.
-	require.Equal(t, 9*time.Second, verdictBudget)
-	require.Less(t, requestBudget, 10*time.Second)
+	require.Equal(t, 3750*time.Millisecond, verdictBudget)
+	require.Less(t, requestBudget, 5*time.Second)
 	for _, elapsed := range []time.Duration{0, time.Second} {
 		t.Run(elapsed.String(), func(t *testing.T) {
 			t.Parallel()
