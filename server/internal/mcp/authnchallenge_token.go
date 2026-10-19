@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/signins"
@@ -283,8 +284,7 @@ func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds present
 }
 
 // ServeToken is the post-resolution entry point for the OAuth 2.1
-// token endpoint, shared by /mcp's HandleToken (toolset-keyed) and
-// /x/mcp's mcp_endpoint-keyed route registration. Parses the form and
+// token endpoint, called by HandleToken after slug resolution. Parses the form and
 // dispatches on grant_type before any client authentication, so each grant
 // branch applies its own client-authentication requirement.
 func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
@@ -798,18 +798,27 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		desiredSessionDuration = &d
 	}
 	var toolSelection []byte
-	if grant.ToolSelection != nil {
+	toolPolicy := toolfilter.PolicyForSelection(grant.ToolSelection)
+	if grant.GatewayPolicy != nil {
+		if toolPolicy != nil || !strings.HasPrefix(req.Code, gatewayAuthorizationCodePrefix) {
+			return rejectGrant("invalid gateway connection options; reauthorize")
+		}
+		toolPolicy = grant.GatewayPolicy
+	} else if strings.HasPrefix(req.Code, gatewayAuthorizationCodePrefix) {
+		return rejectGrant("missing gateway connection options; reauthorize")
+	}
+	if toolPolicy != nil {
 		// Codes are cached issuer-wide, so a sibling endpoint sharing the
 		// issuer could otherwise redeem this code and mint a session whose
 		// selection is bound to another endpoint's resource — rejected at use
 		// time anyway, but failing the redemption is cheaper than a
 		// 200-then-401 loop.
-		if grant.ToolSelection.Resource != endpointToolSelectionResource(endpoint) {
+		if toolPolicy.Resource != endpointToolSelectionResource(endpoint) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "tool_selection_resource_mismatch")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return rejectGrant("authorization code is bound to a different MCP endpoint")
 		}
-		encoded, merr := json.Marshal(grant.ToolSelection)
+		encoded, merr := json.Marshal(toolPolicy)
 		if merr != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return oops.E(oops.CodeUnexpected, merr, "encode tool selection").LogError(ctx, logger)
@@ -1063,7 +1072,7 @@ func (s *Service) rotateRefreshToken(
 	if lookupErr == nil && refreshSession.SubjectUrn.Kind == urn.SessionSubjectKindAgent &&
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
 		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) {
-		selection, selectionErr := toolfilter.ParseSessionSelection(refreshSession.ToolSelection)
+		selection, selectionErr := toolfilter.ParseSessionPolicy(refreshSession.ToolSelection)
 		selectionMatches := selectionErr == nil && (selection == nil || selection.Resource == endpointToolSelectionResource(endpoint))
 		if selectionMatches {
 			credential, admissionErr := loadAgentSessionCredential(
@@ -1090,7 +1099,7 @@ func (s *Service) rotateRefreshToken(
 	if lookupErr == nil && refreshSession.SubjectUrn.Kind == urn.SessionSubjectKindUser &&
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
 		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) &&
-		s.userRefreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn) {
+		s.userRefreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn, refreshSession.Jti) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "upstream_reconnect_required")
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, remoteSessionReconnectDescription)
 	}
@@ -1264,7 +1273,7 @@ func (s *Service) rotateRefreshToken(
 	authorizationExpiresAt := oldSession.RefreshExpiresAt.Time
 	// Tool selection rides refresh slides verbatim; reject malformed or
 	// cross-endpoint policies before consuming the refresh transaction.
-	oldSelection, perr := toolfilter.ParseSessionSelection(oldSession.ToolSelection)
+	oldSelection, perr := toolfilter.ParseSessionPolicy(oldSession.ToolSelection)
 	if perr != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_malformed")
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is malformed; reauthorize")
@@ -1352,7 +1361,18 @@ func (s *Service) rotateRefreshToken(
 // while invalid_grant sends the client through the consent page that
 // reconnects the upstream. It fails open (meta MCP endpoints, check errors)
 // because many clients treat any failed refresh as a sign-out.
-func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) bool {
+//
+// When identity chaining owns the upstream, refresh follows the runtime, which
+// then serves the call from the upstream's own token or by chaining and never
+// consults sibling clients on the user session issuer; the consent page
+// likewise lets a chained card stand in for a connection. So once chaining
+// serves the grant, sibling sessions need no reconnect either. The reconnect
+// stands only when chaining does not serve the upstream, stored state
+// confirms the human must sign in again, or a provider just refused chaining
+// for good, which only the consent page's separate sign-in works around.
+// Anything chaining cannot confirm,
+// a failed read included, fails open, because no reconnect would change it.
+func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) bool {
 	if endpoint.MetaMcpServerID.Valid {
 		return false
 	}
@@ -1361,7 +1381,45 @@ func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger 
 		logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
 		return false
 	}
-	return reconnect
+	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
+		return reconnect
+	}
+	// The runtime serves the server through the credential's choice, so
+	// refresh judges chaining through it too: no usable choice means the
+	// runtime asks for a reconnect, and a no-auth choice needs no upstream.
+	choice, err := s.refreshUpstreamChoice(ctx, endpoint, jti)
+	switch {
+	case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
+		return true
+	case err != nil:
+		logger.WarnContext(ctx, "load upstream client choice before refresh", attr.SlogError(err))
+		return false
+	case choice.noAuth():
+		return false
+	}
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
+	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, choice)
+	switch {
+	case err != nil:
+		return false
+	case !ok:
+		return true
+	}
+	req.UserSessionJTI = jti
+	verdict := s.identityChainer.RefreshDecision(ctx, req)
+	logger.InfoContext(ctx, "identity chaining decided the refresh upstream reconnect",
+		attr.SlogOutcome(string(verdict.Decision)),
+		attr.SlogReason(string(verdict.Reason)),
+		attr.SlogIdentityChainingProvider(string(verdict.Provider)),
+		attr.SlogRemoteSessionIssuerID(verdict.RemoteSessionIssuerID.String()),
+	)
+	switch verdict.Decision {
+	case identitychaining.RefreshServed, identitychaining.RefreshUnconfirmed:
+		return false
+	case identitychaining.RefreshNotChained, identitychaining.RefreshReauthenticate, identitychaining.RefreshRefused:
+		return true
+	}
+	return true
 }
 
 func (s *Service) releaseRefreshTokenReplayLock(ctx context.Context, lockKey, lockOwner string, logger *slog.Logger) {
@@ -1449,7 +1507,16 @@ func (s *Service) writeRefreshTokenReplay(
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refreshed session is no longer active; sign in again")
 		}
 	}
-	if payload.Subject.Kind == urn.SessionSubjectKindAgent {
+	endpointIssuer, err := s.issuerURL(endpoint, baseURL)
+	if err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_resign_error")
+		return oops.E(oops.CodeUnexpected, err, "build replay endpoint issuer URL").LogError(ctx, logger)
+	}
+	audience := endpoint.AudienceURN
+	if sessionResource != "" {
+		audience = sessionResource
+	}
+	if payload.Subject.Kind == urn.SessionSubjectKindAgent || payload.EndpointIssuer != endpointIssuer || payload.AudienceURN != audience {
 		replaySession, err := usersessions_repo.New(s.db).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
 			Jti:                 payload.JTI,
@@ -1466,36 +1533,34 @@ func (s *Service) writeRefreshTokenReplay(
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_session_mismatch")
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refreshed session is no longer active")
 		}
-		credential, cerr := loadAgentSessionCredential(
-			endpoint, *payload.Subject, replaySession.SubjectUrn, replaySession.OrganizationID,
-			replaySession.AuthorizerUserID, replaySession.DelegatedGrants, replaySession.DelegatedGrantsVersion,
-		)
-		authorizationCtx := ctx
-		if cerr == nil {
-			authorizationCtx, cerr = s.contextForSessionSubject(ctx, endpoint, *payload.Subject, "", clientRow.ClientID)
+		policy, policyErr := toolfilter.ParseSessionPolicy(replaySession.ToolSelection)
+		if policyErr != nil || (policy != nil && !endpointAcceptsToolSelectionResource(endpoint, policy.Resource)) {
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session policy is invalid for this MCP endpoint; reauthorize")
 		}
-		if cerr == nil {
-			_, cerr = s.admitAgentSession(authorizationCtx, endpoint, *payload.Subject, credential)
-		}
-		if cerr != nil {
-			var rolloutErr *oops.ShareableError
-			if errors.As(cerr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
-				return cerr
+		if payload.Subject.Kind == urn.SessionSubjectKindAgent {
+			credential, cerr := loadAgentSessionCredential(
+				endpoint, *payload.Subject, replaySession.SubjectUrn, replaySession.OrganizationID,
+				replaySession.AuthorizerUserID, replaySession.DelegatedGrants, replaySession.DelegatedGrantsVersion,
+			)
+			authorizationCtx := ctx
+			if cerr == nil {
+				authorizationCtx, cerr = s.contextForSessionSubject(ctx, endpoint, *payload.Subject, "", clientRow.ClientID)
 			}
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
+			if cerr == nil {
+				_, cerr = s.admitAgentSession(authorizationCtx, endpoint, *payload.Subject, credential)
+			}
+			if cerr != nil {
+				var rolloutErr *oops.ShareableError
+				if errors.As(cerr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
+					return cerr
+				}
+				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
+				return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
+			}
 		}
+
 	}
 
-	endpointIssuer, err := s.issuerURL(endpoint, baseURL)
-	if err != nil {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_resign_error")
-		return oops.E(oops.CodeUnexpected, err, "build replay endpoint issuer URL").LogError(ctx, logger)
-	}
-	audience := endpoint.AudienceURN
-	if sessionResource != "" {
-		audience = sessionResource
-	}
 	if payload.EndpointIssuer != endpointIssuer || payload.AudienceURN != audience {
 		accessToken, _, mintErr := s.mintUserSessionAccessToken(mintUserSessionAccessTokenParams{
 			AccessExpiresAt: payload.AccessExpiresAt,

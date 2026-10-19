@@ -806,10 +806,10 @@ RETURNING id;
 
 -- name: SeedCapturedAgentChatMessageFixture :one
 -- Test-only fixture: inserts a captured transcript row with the full recall
--- shape — generation, tool_calls, capture source, asset offload marker, and
--- risk-analysis completion — at a deterministic created_at.
-INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, source, content_asset_url, risk_analyzed_at, created_at)
-VALUES (@chat_id, @project_id, @role, @content, @generation, sqlc.narg(tool_calls), sqlc.narg(source), sqlc.narg(content_asset_url), sqlc.narg(risk_analyzed_at), @created_at)
+-- shape — generation, tool_calls, stored payload, sender, capture source, asset
+-- offload marker, and risk-analysis completion — at a deterministic created_at.
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, content_raw, user_id, source, content_asset_url, risk_analyzed_at, created_at)
+VALUES (@chat_id, @project_id, @role, @content, @generation, sqlc.narg(tool_calls), sqlc.narg(content_raw), sqlc.narg(user_id), sqlc.narg(source), sqlc.narg(content_asset_url), sqlc.narg(risk_analyzed_at), @created_at)
 RETURNING id;
 
 -- name: SeedUserAccountFixture :one
@@ -1142,6 +1142,50 @@ UPDATE workload_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: CreateWorkloadDeviceIssuerFixture :one
+INSERT INTO workload_issuers (organization_id, name, issuer, jwks_uri, allow_wildcard_admission, key_source)
+VALUES (@organization_id, @name, @issuer, @jwks_uri, false, 'device_keys')
+RETURNING id;
+
+-- name: CreateWorkloadDeviceKeyFixture :exec
+INSERT INTO workload_device_keys (organization_id, workload_issuer_id, subject, public_jwk, thumbprint)
+VALUES (@organization_id, @workload_issuer_id, @subject, @public_jwk, @thumbprint);
+
+-- name: SetWorkloadIssuerKeySourceFixture :execrows
+UPDATE workload_issuers
+SET key_source = @key_source
+WHERE id = @id
+  AND organization_id = @organization_id;
+
+-- name: SoftDeleteWorkloadDeviceKeyFixture :execrows
+UPDATE workload_device_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND subject = @subject
+  AND deleted IS FALSE;
+
+-- name: SoftDeleteWorkloadAdmissionFixture :execrows
+UPDATE workload_identity_admissions
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND subject = @subject
+  AND deleted IS FALSE;
+
+-- name: CountLiveWorkloadDeviceKeysFixture :one
+SELECT count(*)
+FROM workload_device_keys
+WHERE organization_id = @organization_id
+  AND subject = @subject
+  AND deleted IS FALSE;
+
+-- name: ExpireWorkloadDeviceJoinTokensFixture :execrows
+UPDATE workload_device_join_tokens
+SET expires_at = clock_timestamp() - interval '1 minute'
+WHERE organization_id = @organization_id;
+
 
 -- Shared attachment fixtures exercise authorization boundaries in remote-session,
 -- issuer-gate, and user-session projection tests.
@@ -2051,3 +2095,13 @@ SELECT id, COALESCE(credential_id, id)::uuid AS credential_id, deleted
 FROM user_sessions
 WHERE subject_urn = @subject_urn
 ORDER BY created_at, id;
+
+-- name: CountDatabasesWithPrefixFixture :one
+-- Databases whose name starts with a prefix, so a test can show clones are dropped.
+SELECT count(*)::bigint AS databases FROM pg_catalog.pg_database
+WHERE starts_with(datname, @prefix::text);
+
+-- name: SeedChatMessageParticipantFixture :exec
+-- Test-only fixture: records one participant snapshot on a captured message.
+INSERT INTO chat_message_participants (project_id, chat_id, message_id, provider, provider_user_id, user_id)
+VALUES (@project_id, @chat_id, @message_id, @provider, @provider_user_id, sqlc.narg(user_id));

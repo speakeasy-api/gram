@@ -84,7 +84,7 @@ func (g *Governor) readyProviderOrder(ctx context.Context, req Request, sel sele
 // speakeasyReadiness is the status-view readiness of the organization's
 // Speakeasy issuer, using the same checks as minting.
 func (g *Governor) speakeasyReadiness(ctx context.Context, organizationID string, issuerID uuid.UUID) (remotesessions.EMAProviderUnavailableReason, error) {
-	source, ok := g.source(remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: issuerID, Unavailable: ""}).(speakeasySource)
+	source, ok := g.source(remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: issuerID, Unavailable: "", LastAcceptedAt: nil}).(speakeasySource)
 	if !ok || !source.available() {
 		return remotesessions.EMAProviderSigningUnavailable, nil
 	}
@@ -148,14 +148,19 @@ func (g *Governor) source(p remotesessions.EMAProvider) tokenSource {
 
 // sourceAvailable reports whether kind's source can serve on this deployment.
 func (g *Governor) sourceAvailable(kind remotesessions.EMAProviderKind) bool {
-	return g.source(remotesessions.EMAProvider{Kind: kind, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}).available()
+	return g.source(remotesessions.EMAProvider{Kind: kind, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: "", LastAcceptedAt: nil}).available()
 }
 
 // externalSource exchanges the human's retained ID token for an ID-JAG at
 // one external issuer (RFC 8693). Identity chaining holds a subject token only
 // for the endpoint's trusted issuer, so issuer must still be that one.
 type externalSource struct {
+	// g checks the endpoint's trust and the human's retained delegation.
+	g *Governor
+
+	// c exchanges and redeems; nil on a Governor, which never issues.
 	c *Chainer
+
 	// issuer is the provider's remote session issuer; Nil means the
 	// endpoint's trusted issuer, whichever it is.
 	issuer uuid.UUID
@@ -168,10 +173,10 @@ func (externalSource) kind() remotesessions.EMAProviderKind {
 func (externalSource) available() bool { return true }
 
 func (s externalSource) authorize(ctx context.Context, logger *slog.Logger, req Request, sel *selection) Outcome {
-	if s.c == nil {
+	if s.g == nil {
 		return providerUnavailable
 	}
-	outcome := s.c.authorize(ctx, logger, req, sel)
+	outcome := s.g.authorize(ctx, logger, req, sel)
 	if outcome.Succeeded() && s.issuer != uuid.Nil && sel.trustedIssuerID != s.issuer {
 		// The endpoint's trust moved after the order was resolved; this
 		// provider reports stale configuration and the next one is tried.
@@ -181,9 +186,15 @@ func (s externalSource) authorize(ctx context.Context, logger *slog.Logger, req 
 }
 
 func (s externalSource) checkReuse(ctx context.Context, req Request, sel selection) Outcome {
-	return s.c.checkDelegation(ctx, req, sel)
+	if s.g == nil {
+		return providerUnavailable
+	}
+	return s.g.checkDelegation(ctx, req, sel)
 }
 
 func (s externalSource) issue(ctx context.Context, logger *slog.Logger, req Request, sel selection, ready func() Outcome) (issuedGrant, Outcome) {
+	if s.c == nil {
+		return issuedGrant{value: "", trustedSessionID: uuid.Nil, trustedObtainedAt: time.Time{}}, providerUnavailable
+	}
 	return s.c.exchangeGrant(ctx, logger, req, sel, ready)
 }

@@ -167,7 +167,7 @@ describe("RequestedScopesSummary", () => {
     );
     expect(
       screen.getByText(
-        "No scopes are requested; the identity provider applies its defaults.",
+        "No scopes are requested; the authorization server applies its defaults.",
       ),
     ).toBeTruthy();
   });
@@ -178,8 +178,8 @@ describe("RequestedScopesSummary", () => {
     ["challenge_scope", "From the MCP server's last sign-in challenge."],
     ["live_resource", "Advertised by the MCP server."],
     ["cached_resource", "Advertised by the MCP server."],
-    ["issuer_override", "Set by the identity provider's override."],
-    ["issuer_catalogue", "Every scope the identity provider advertises."],
+    ["issuer_override", "Set by the authorization server's override."],
+    ["issuer_catalogue", "Every scope the authorization server advertises."],
   ] as const)("explains the %s source", (scopeSource, line) => {
     renderSummary(scopes([client({ scopeSource })]));
     expect(screen.getByText(line)).toBeTruthy();
@@ -249,7 +249,7 @@ describe("RequestedScopesSummary", () => {
       }),
     );
     expect(
-      screen.getByText("Set by the identity provider's override."),
+      screen.getByText("Set by the authorization server's override."),
     ).toBeTruthy();
   });
 

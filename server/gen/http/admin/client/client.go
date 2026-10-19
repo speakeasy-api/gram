@@ -256,6 +256,22 @@ type Client struct {
 	// getMcpServerToolCalls endpoint.
 	GetMcpServerToolCallsDoer goahttp.Doer
 
+	// GetHookClients Doer is the HTTP client used to make requests to the
+	// getHookClients endpoint.
+	GetHookClientsDoer goahttp.Doer
+
+	// ListExternalMcpMigrationCandidates Doer is the HTTP client used to make
+	// requests to the listExternalMcpMigrationCandidates endpoint.
+	ListExternalMcpMigrationCandidatesDoer goahttp.Doer
+
+	// PreviewExternalMcpMigration Doer is the HTTP client used to make requests to
+	// the previewExternalMcpMigration endpoint.
+	PreviewExternalMcpMigrationDoer goahttp.Doer
+
+	// MigrateExternalMcpServers Doer is the HTTP client used to make requests to
+	// the migrateExternalMcpServers endpoint.
+	MigrateExternalMcpServersDoer goahttp.Doer
+
 	// GetRegistryOktaCandidates Doer is the HTTP client used to make requests to
 	// the getRegistryOktaCandidates endpoint.
 	GetRegistryOktaCandidatesDoer goahttp.Doer
@@ -460,6 +476,10 @@ func NewClient(
 		GetSupportCoverageDoer:                      doer,
 		DescribeMcpServerHealthDoer:                 doer,
 		GetMcpServerToolCallsDoer:                   doer,
+		GetHookClientsDoer:                          doer,
+		ListExternalMcpMigrationCandidatesDoer:      doer,
+		PreviewExternalMcpMigrationDoer:             doer,
+		MigrateExternalMcpServersDoer:               doer,
 		GetRegistryOktaCandidatesDoer:               doer,
 		ListRegistryOktaUnmappedDoer:                doer,
 		ListRegistryEntriesDoer:                     doer,
@@ -1939,6 +1959,102 @@ func (c *Client) GetMcpServerToolCalls() goa.Endpoint {
 		resp, err := c.GetMcpServerToolCallsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getMcpServerToolCalls", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetHookClients returns an endpoint that makes HTTP requests to the admin
+// service getHookClients server.
+func (c *Client) GetHookClients() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetHookClientsRequest(c.encoder)
+		decodeResponse = DecodeGetHookClientsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetHookClientsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetHookClientsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getHookClients", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListExternalMcpMigrationCandidates returns an endpoint that makes HTTP
+// requests to the admin service listExternalMcpMigrationCandidates server.
+func (c *Client) ListExternalMcpMigrationCandidates() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListExternalMcpMigrationCandidatesRequest(c.encoder)
+		decodeResponse = DecodeListExternalMcpMigrationCandidatesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListExternalMcpMigrationCandidatesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListExternalMcpMigrationCandidatesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listExternalMcpMigrationCandidates", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// PreviewExternalMcpMigration returns an endpoint that makes HTTP requests to
+// the admin service previewExternalMcpMigration server.
+func (c *Client) PreviewExternalMcpMigration() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePreviewExternalMcpMigrationRequest(c.encoder)
+		decodeResponse = DecodePreviewExternalMcpMigrationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPreviewExternalMcpMigrationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PreviewExternalMcpMigrationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "previewExternalMcpMigration", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MigrateExternalMcpServers returns an endpoint that makes HTTP requests to
+// the admin service migrateExternalMcpServers server.
+func (c *Client) MigrateExternalMcpServers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMigrateExternalMcpServersRequest(c.encoder)
+		decodeResponse = DecodeMigrateExternalMcpServersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMigrateExternalMcpServersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MigrateExternalMcpServersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "migrateExternalMcpServers", err)
 		}
 		return decodeResponse(resp)
 	}

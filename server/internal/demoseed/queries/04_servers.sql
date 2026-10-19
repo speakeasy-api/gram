@@ -304,6 +304,139 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
   (@slack_endpoint_id::uuid, @project_id::uuid, NULL,
    @slack_server_id::uuid, @slack_slug::text);
 
+-- Enterprise Managed Authorization (EMA). Acme Identity is a fictional
+-- identity provider for two fictional services behind workforce servers;
+-- the workforce sign-in deliberately does not trust it, so demo sign-in is
+-- unaffected. Neither service has accepted a provider yet: a seeded
+-- acceptance needs a trusted issuer session, which the hourly delegation
+-- cleanup erases unless an organization sign-in trusts the issuer. Acme
+-- Wiki carries a saved provider order. Speakeasy's own issuer is not seeded:
+-- it needs a KMS signing key. Reserved example hosts and invalid ciphertext
+-- keep every row inert. These servers are added after role distribution, so
+-- plugins skip them.
+-- name: ServersInsertEMAIdentityProvider :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
+   token_endpoint, jwks_uri, scopes_supported, grant_types_supported,
+   response_types_supported, token_endpoint_auth_methods_supported,
+   code_challenge_methods_supported, oidc, name)
+VALUES
+  (@id::uuid, NULL, @org_id::text, 'acme-identity',
+   'https://login.acme-identity.example',
+   'https://login.acme-identity.example/oauth2/v1/authorize',
+   'https://login.acme-identity.example/oauth2/v1/token',
+   'https://login.acme-identity.example/oauth2/v1/keys',
+   ARRAY['openid', 'profile', 'email'],
+   ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['code'], ARRAY['client_secret_basic'], ARRAY['S256'], TRUE,
+   'Acme Identity');
+
+-- The workforce sign-in is left as it is: pointing it at this fictional
+-- provider would send interactive sign-in for every server on it to a
+-- provider that doesn't exist. The Services pages still show these vendors.
+-- name: ServersInsertEMAIdentityProviderClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_secret_encrypted, token_endpoint_auth_method, grant_types, scope)
+VALUES
+  (@id::uuid, NULL, @org_id::text, @remote_session_issuer_id::uuid,
+   'demo-acme-identity-sign-in', 'DEMO-NOT-VALID-CIPHERTEXT',
+   'client_secret_basic', ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['openid', 'profile', 'email']);
+
+-- name: ServersInsertEMARemoteMCPServers :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  (@tracker_id::uuid, @project_id::uuid, 'Acme Tracker', 'acme-tracker',
+   'streamable-http', 'https://mcp.acme-tracker.example/mcp'),
+  (@wiki_id::uuid, @project_id::uuid, 'Acme Wiki', 'acme-wiki',
+   'streamable-http', 'https://mcp.acme-wiki.example/mcp');
+
+-- name: ServersInsertEMAMCPServers :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                         remote_mcp_server_id, user_session_issuer_id,
+                         visibility) VALUES
+  (@tracker_id::uuid, @project_id::uuid, 'Acme Tracker', 'acme-tracker',
+   NULL, @remote_tracker_id::uuid, @issuer_workforce_id::uuid, 'disabled'),
+  (@wiki_id::uuid, @project_id::uuid, 'Acme Wiki', 'acme-wiki',
+   NULL, @remote_wiki_id::uuid, @issuer_workforce_id::uuid, 'disabled');
+
+-- Each service's authorization server accepts ID-JAGs from a confidential client.
+-- name: ServersInsertEMAVendorIssuers :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, token_endpoint, name,
+   grant_types_supported, authorization_grant_profiles_supported,
+   token_endpoint_auth_methods_supported)
+VALUES
+  (@tracker_id::uuid, @project_id::uuid, @org_id::text,
+   'acme-tracker-auth', 'https://auth.acme-tracker.example',
+   'https://auth.acme-tracker.example/oauth/token', 'Acme Tracker',
+   ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
+   ARRAY['client_secret_basic']),
+  (@wiki_id::uuid, @project_id::uuid, @org_id::text,
+   'acme-wiki-auth', 'https://auth.acme-wiki.example',
+   'https://auth.acme-wiki.example/oauth/token', 'Acme Wiki',
+   ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
+   ARRAY['client_secret_basic']);
+
+-- name: ServersInsertEMAVendorClients :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_secret_encrypted, token_endpoint_auth_method, grant_types, scope)
+VALUES
+  (@tracker_id::uuid, @project_id::uuid, @org_id::text,
+   @tracker_issuer_id::uuid, 'demo-acme-tracker-client',
+   'DEMO-NOT-VALID-CIPHERTEXT', 'client_secret_basic',
+   ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   ARRAY['issues:read']),
+  (@wiki_id::uuid, @project_id::uuid, @org_id::text,
+   @wiki_issuer_id::uuid, 'demo-acme-wiki-client',
+   'DEMO-NOT-VALID-CIPHERTEXT', 'client_secret_basic',
+   ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   ARRAY['pages:read']);
+
+-- name: ServersInsertEMAProtectedResources :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  (@tracker_id::uuid, @project_id::uuid, @org_id::text,
+   'https://mcp.acme-tracker.example/mcp',
+   'https://mcp.acme-tracker.example/.well-known/oauth-protected-resource/mcp',
+   ARRAY['https://auth.acme-tracker.example'], ARRAY['issues:read'],
+   now() - interval '2 hours'),
+  (@wiki_id::uuid, @project_id::uuid, @org_id::text,
+   'https://mcp.acme-wiki.example/mcp',
+   'https://mcp.acme-wiki.example/.well-known/oauth-protected-resource/mcp',
+   ARRAY['https://auth.acme-wiki.example'], ARRAY['pages:read'],
+   now() - interval '2 hours');
+
+-- name: ServersInsertEMABindings :exec
+INSERT INTO remote_session_ema_bindings
+  (id, project_id, organization_id, user_session_issuer_id,
+   remote_session_issuer_id, resource, remote_session_client_id, generation,
+   state, grant_source, created_at, updated_at)
+VALUES
+  (@tracker_id::uuid, @project_id::uuid, @org_id::text,
+   @issuer_workforce_id::uuid, @tracker_issuer_id::uuid,
+   'https://mcp.acme-tracker.example/mcp', @tracker_client_id::uuid, 1,
+   'ready', 'administrator_declared',
+   now() - interval '6 days', now() - interval '6 days'),
+  (@wiki_id::uuid, @project_id::uuid, @org_id::text,
+   @issuer_workforce_id::uuid, @wiki_issuer_id::uuid,
+   'https://mcp.acme-wiki.example/mcp', @wiki_client_id::uuid, 1,
+   'ready', 'administrator_declared',
+   now() - interval '1 day', now() - interval '1 day');
+
+-- A saved order for Acme Wiki, so its service page shows "Use default".
+-- name: ServersInsertEMAProviderOrder :exec
+INSERT INTO remote_session_ema_providers
+  (id, organization_id, vendor_issuer, remote_session_issuer_id, position)
+VALUES
+  (@id::uuid, @org_id::text, 'https://auth.acme-wiki.example',
+   @remote_session_issuer_id::uuid, 0);
+
 -- Live connections spread across the MCP servers, not pooled on one issuer.
 -- The identity page's connections tab groups by MCP server, and every
 -- session hanging off the partner gateway collapsed that view to a single

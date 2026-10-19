@@ -124,6 +124,22 @@ func (u *upstreamSelector) forServer(ctx context.Context, serverID uuid.UUID) (u
 	return upstreamChoice{clientID: row.RemoteSessionClientID, remoteSessionIssuerID: row.RemoteSessionIssuerID}, nil
 }
 
+// refreshUpstreamChoice returns the choice of the credential a refreshed
+// session belongs to for a direct endpoint's server, or
+// errUpstreamSelectionMissing or errUpstreamSelectionUnusable.
+func (s *Service) refreshUpstreamChoice(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (upstreamChoice, error) {
+	var none upstreamChoice
+	if !endpoint.McpServerID.Valid {
+		return none, errUpstreamSelectionMissing
+	}
+	policy, err := s.loadSessionPolicy(ctx, endpoint, jti)
+	if err != nil {
+		return none, fmt.Errorf("load session credential: %w", err)
+	}
+	selector := &upstreamSelector{service: s, organizationID: endpoint.OrganizationID, userSessionIssuerID: endpoint.UserSessionIssuerID, credentialID: policy.credentialID}
+	return selector.forServer(ctx, endpoint.McpServerID.UUID)
+}
+
 // serverChoices is one credential's recorded choices for a set of servers.
 type serverChoices map[uuid.UUID]usersessions_repo.ListUpstreamClientSelectionsRow
 

@@ -108,6 +108,7 @@ var (
 	VariationV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.variation_event_v1", "Emitted when changes to tool names and other properties are made")
 	WorkloadAdmissionV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.workload_admission_event_v1", "Emitted when a workload subject is admitted or withdrawn, which grants or revokes machine access")
 	WorkloadIssuerV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.workload_issuer_event_v1", "Emitted when the external issuers an organization trusts to vouch for its workloads are changed")
+	WorkloadDeviceJoinTokenV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.workload_device_join_token_event_v1", "Emitted when a device join token is created or redeemed to enroll a device as a workload")
 )
 
 // AuditLogCreatedPayloadV1 is the webhook payload for audit_log.created events.

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -663,7 +664,9 @@ func completeAuthenticationHostFederatedLogin(t *testing.T, ctx context.Context,
 	bootstrap, err := url.Parse(start.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Equal(t, callbackURL, bootstrap.Scheme+"://"+bootstrap.Host+bootstrap.Path)
-	originCookies := start.Result().Cookies()
+	originCookies := slices.DeleteFunc(start.Result().Cookies(), func(cookie *http.Cookie) bool {
+		return !strings.HasPrefix(cookie.Name, "__Host-gram-federation-")
+	})
 	require.Len(t, originCookies, 1)
 
 	// The callback host holds no cookie yet, so it binds one and sends the

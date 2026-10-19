@@ -257,6 +257,8 @@ func ForDeploymentProcessing(
 			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 			LLMAnalysis:             gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
+			ToolCallAnalysis:        gcp.NewNoopPublisher[*riskv1.ToolCallAnalysis](),
+			AccountIdentityAnalysis: gcp.NewNoopPublisher[*riskv1.AccountIdentityAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			MeterReadings:           gcp.NewNoopPublisher[*meteringv1.MeterReading](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),

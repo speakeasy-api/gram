@@ -60,8 +60,8 @@ type sessionPolicyEntry struct {
 
 // sessionPolicy is a validated session's immutable issuance policy.
 type sessionPolicy struct {
-	// selection is the consent-screen tool selection, nil for all tools.
-	selection *toolfilter.SessionSelection
+	// selection is the consent-screen tool policy, nil for all tools.
+	selection *toolfilter.SessionPolicy
 
 	// refreshable reports that issuance included an actual refresh token.
 	refreshable bool
@@ -89,9 +89,11 @@ func (e sessionPolicyEntry) TTL() time.Duration { return sessionPolicyTTL }
 
 // endpointToolSelectionResource is the server-authored identity a consent
 // selection binds to: the fronting mcp_server when there is one, else the
-// toolset. Empty when the endpoint has neither, as with meta-MCP.
+// toolset or gateway. Empty when the endpoint has no stored resource.
 func endpointToolSelectionResource(endpoint *ResolvedMcpEndpoint) string {
 	switch {
+	case endpoint.MetaMcpServerID.Valid:
+		return "meta_mcp_server:" + endpoint.MetaMcpServerID.UUID.String()
 	case endpoint.McpServerID.Valid:
 		return "mcp_server:" + endpoint.McpServerID.UUID.String()
 	case endpoint.ToolsetID.Valid:
@@ -149,7 +151,7 @@ func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEn
 		}
 	}
 
-	sel, err := toolfilter.ParseSessionSelection(entry.Selection)
+	sel, err := toolfilter.ParseSessionPolicy(entry.Selection)
 	if err != nil {
 		return sessionPolicy{}, fmt.Errorf("parse stored tool selection: %w", err)
 	}

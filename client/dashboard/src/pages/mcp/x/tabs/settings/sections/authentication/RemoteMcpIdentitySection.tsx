@@ -9,15 +9,12 @@ import {
 } from "@/components/ui/HoverCard";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
 import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/detachUserSessionIssuer.js";
-import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import {
@@ -58,7 +55,6 @@ import { useAgentCredentialDraft } from "@/lib/remote-identity";
 import { RequestedScopesSummary } from "./RequestedScopesSummary";
 import { ResourceScopePinField } from "./ResourceScopePinField";
 import { useResourceScopePin } from "./resourceScopePin";
-import { IdentityChainingField } from "./IdentityChainingField";
 import { RepointedServersNotice } from "./RepointedServersNotice";
 import type { AuthTarget } from "./authTarget";
 import {
@@ -129,11 +125,6 @@ export function RemoteMcpIdentitySectionBody({
   const orgSharedClient = organizationIssuer
     ? clients.find((linked) => linked.projectId === "")
     : undefined;
-  const chainingFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
-  const chainingIssuer =
-    chainingFlag.status === "enabled"
-      ? identityChainingIssuer(userSessionIssuer)
-      : undefined;
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -667,13 +658,13 @@ export function RemoteMcpIdentitySectionBody({
               <Alert variant="warning" dismissible={false}>
                 This identity is shared by {linkedServers.length} MCP servers.
                 Editing is disabled here so one server cannot change the
-                credential used by the others. Manage linked providers and
-                clients in{" "}
+                credential used by the others. Manage linked authorization
+                servers and clients in{" "}
                 <Link
                   className="font-medium underline underline-offset-2"
                   to={routes.remoteIdentityProviders.href()}
                 >
-                  Remote Identity Providers
+                  Authorization Servers
                 </Link>
                 .
               </Alert>
@@ -879,15 +870,6 @@ export function RemoteMcpIdentitySectionBody({
             </div>
           ) : null}
 
-          {identityResolved && chainingIssuer && sourceQuery.data?.url ? (
-            <IdentityChainingField
-              userSessionIssuer={chainingIssuer}
-              linkedClients={clients}
-              resource={sourceQuery.data.url}
-              remoteMcpServerId={remoteMcpServerId}
-            />
-          ) : null}
-
           {identityResolved && selectedMode === "agent" ? (
             <div className="px-6 py-5">
               <ServiceAccountPanel
@@ -1085,18 +1067,8 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-/** Identity chaining needs an organization issuer that trusts an identity provider sign-in client. */
-function identityChainingIssuer(
-  issuer: UserSessionIssuer | undefined,
-): UserSessionIssuer | undefined {
-  if (issuer?.projectId !== "") return undefined;
-  if (!issuer.trustedRemoteSessionIssuerId) return undefined;
-  if (!issuer.trustedRemoteSessionClientId) return undefined;
-  return issuer;
-}
-
 const UNLINK_PROVIDER_CONSEQUENCE =
-  "Saving unlinks the identity provider from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The provider and its client stay available to other servers.";
+  "Saving unlinks the authorization server from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The authorization server and its client stay available to other servers.";
 const REPLACE_CLIENT_CONSEQUENCE =
   "Saving replaces the client this server uses. Everyone signed in through the current one will have to sign in again. The old client stays available to other servers.";
 const REMOVE_SELF_CLIENT_CONSEQUENCE =

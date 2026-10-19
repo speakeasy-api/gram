@@ -177,7 +177,7 @@ func TestSharedAuthorizationServerDoesNotShareResourceBranding(t *testing.T) {
 	issuer, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
 	require.True(t, reuse, "one authorization server, one issuer")
-	require.Equal(t, "Remote identity provider", issuer.Name.String)
+	require.Equal(t, "Authorization server", issuer.Name.String)
 	require.False(t, issuer.ServiceDocumentation.Valid)
 	require.False(t, issuer.OpPolicyUri.Valid)
 	require.NoError(t, attachmentTestCommit(t, service, principal, project, usiB, metadata, "client-b", resourceB.Resource, resourceB))

@@ -24,6 +24,7 @@ import { adminFetchGlobalIssuerMetadata } from "../funcs/adminFetchGlobalIssuerM
 import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
+import { adminGetHookClients } from "../funcs/adminGetHookClients.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
 import { adminGetMcpServerToolCalls } from "../funcs/adminGetMcpServerToolCalls.js";
@@ -48,6 +49,7 @@ import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminGetUpstreamOAuthMigrationStatus } from "../funcs/adminGetUpstreamOAuthMigrationStatus.js";
 import { adminListCustomerUsage } from "../funcs/adminListCustomerUsage.js";
+import { adminListExternalMcpMigrationCandidates } from "../funcs/adminListExternalMcpMigrationCandidates.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
 import { adminListOnboardingPlaybooks } from "../funcs/adminListOnboardingPlaybooks.js";
@@ -66,7 +68,9 @@ import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.
 import { adminListUsers } from "../funcs/adminListUsers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
+import { adminMigrateExternalMcpServers } from "../funcs/adminMigrateExternalMcpServers.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
+import { adminPreviewExternalMcpMigration } from "../funcs/adminPreviewExternalMcpMigration.js";
 import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
 import { adminRefreshGlobalIssuerMetadata } from "../funcs/adminRefreshGlobalIssuerMetadata.js";
 import { adminRepairInferenceKey } from "../funcs/adminRepairInferenceKey.js";
@@ -95,10 +99,13 @@ import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulk
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
 import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
+import { AdminExternalMcpMigrationResult } from "../models/components/adminexternalmcpmigrationresult.js";
+import { AdminHookClientsResult } from "../models/components/adminhookclientsresult.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
 import { AdminInferenceKeyRepairResult } from "../models/components/admininferencekeyrepairresult.js";
 import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
+import { AdminListExternalMcpMigrationCandidatesResult } from "../models/components/adminlistexternalmcpmigrationcandidatesresult.js";
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
 import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
@@ -154,8 +161,10 @@ import { IssuerMigratePreflight } from "../models/components/issuermigrateprefli
 import { ListSignupOffersResponseBody } from "../models/components/listsignupoffersresponsebody.js";
 import { MarkEnterpriseTrialConvertedRequestBody } from "../models/components/markenterprisetrialconvertedrequestbody.js";
 import { MarkEnterpriseTrialConvertedResult } from "../models/components/markenterprisetrialconvertedresult.js";
+import { MigrateExternalMcpServersRequestBody } from "../models/components/migrateexternalmcpserversrequestbody.js";
 import { MigrateRemoteSessionIssuerRequestBody } from "../models/components/migrateremotesessionissuerrequestbody.js";
 import { MigrateRemoteSessionIssuerResult } from "../models/components/migrateremotesessionissuerresult.js";
+import { PreviewExternalMcpMigrationRequestBody } from "../models/components/previewexternalmcpmigrationrequestbody.js";
 import { ProductFeatures } from "../models/components/productfeatures.js";
 import { RearmTrialRequestBody } from "../models/components/rearmtrialrequestbody.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
@@ -190,6 +199,7 @@ import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admind
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
 import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
 import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
+import { AdminGetHookClientsRequest } from "../models/operations/admingethookclients.js";
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
 import { AdminGetMcpServerToolCallsRequest } from "../models/operations/admingetmcpservertoolcalls.js";
@@ -283,6 +293,72 @@ export class Admin extends ClientSDK {
   ): Promise<void> {
     return unwrapAsync(adminLogout(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * listExternalMcpMigrationCandidates admin
+   *
+   * @remarks
+   * Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.
+   */
+  async listExternalMcpMigrationCandidates(
+    options?: RequestOptions,
+  ): Promise<AdminListExternalMcpMigrationCandidatesResult> {
+    return unwrapAsync(adminListExternalMcpMigrationCandidates(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * migrateExternalMcpServers admin
+   *
+   * @remarks
+   * Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
+   */
+  async migrateExternalMcpServers(
+    request: MigrateExternalMcpServersRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminExternalMcpMigrationResult> {
+    return unwrapAsync(adminMigrateExternalMcpServers(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * previewExternalMcpMigration admin
+   *
+   * @remarks
+   * Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.
+   */
+  async previewExternalMcpMigration(
+    request: PreviewExternalMcpMigrationRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminExternalMcpMigrationResult> {
+    return unwrapAsync(adminPreviewExternalMcpMigration(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getHookClients admin
+   *
+   * @remarks
+   * Fleet-wide hook client grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, and inference hook traffic per Claude app.
+   */
+  async getHookClients(
+    request?: AdminGetHookClientsRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminHookClientsResult> {
+    return unwrapAsync(adminGetHookClients(
+      this,
+      request,
       options,
     ));
   }

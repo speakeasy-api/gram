@@ -40,7 +40,17 @@ type Request struct {
 	// A binding for any other client, even at the same resource, never serves
 	// the caller.
 	RemoteSessionClientID uuid.NullUUID
+
+	// consentSignInID is the consent page's sign-in, set only by CheckConsent.
+	// It puts the request in consent mode: the Speakeasy provider vouches for
+	// this sign-in instead of a grant, and its credential is stored without
+	// one. A request without it always needs UserSessionJTI.
+	consentSignInID uuid.UUID
 }
+
+// consent reports whether r checks a consent page's sign-in before its MCP
+// grant exists.
+func (r Request) consent() bool { return r.consentSignInID != uuid.Nil }
 
 // complete reports whether every field needed to select a binding is set.
 func (r Request) complete() bool {
@@ -76,6 +86,7 @@ func NewUpstreamRequest(organizationID string, projectID, userSessionIssuerID uu
 		UpstreamResource:      upstreamResource,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		consentSignInID:       uuid.Nil,
 	}
 	if tunneled {
 		if !tunneledIssuerID.Valid || tunneledIssuerID.UUID == uuid.Nil {

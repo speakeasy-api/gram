@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
@@ -222,7 +221,6 @@ func TestWakeFromWorkloadCredentialRecordsNoRequester(t *testing.T) {
 	raw, _, err := credentials.Mint(principalcredential.Credential{
 		OrganizationID: "org-trigger-test", ProjectID: f.projectID, AuthorizerUserID: "",
 		Principal: urn.NewWorkloadPrincipal(uuid.New(), "assistant-trigger:"+uuid.NewString()),
-		Grants:    []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, uuid.NewString())},
 	})
 	require.NoError(t, err)
 	ctx, err := credentials.Authenticate(t.Context(), raw)

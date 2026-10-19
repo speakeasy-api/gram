@@ -1292,13 +1292,19 @@ RETURNING *;
 -- soft-deleted. Joins through user_session_clients since consents are
 -- per-client. Tenancy is guaranteed because the parent issuer was already
 -- verified to belong to the caller, at whichever tier owns it.
+WITH revoked AS (
 UPDATE user_session_consents AS c
 SET deleted_at = clock_timestamp()
 FROM user_session_clients AS cli
 WHERE c.user_session_client_id = cli.id
   AND cli.user_session_issuer_id = @user_session_issuer_id
   AND c.deleted IS FALSE
-RETURNING c.*;
+RETURNING c.*
+), resources AS (
+    UPDATE user_session_consent_resources AS r SET deleted_at = clock_timestamp()
+    FROM revoked WHERE r.user_session_consent_id = revoked.id AND r.deleted IS FALSE
+)
+SELECT * FROM revoked;
 
 -- name: GetUserSessionClientByID :one
 SELECT cli.*
@@ -2652,3 +2658,94 @@ WHERE sel.credential_kind = @credential_kind::text
   AND sel.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND sel.organization_id = @organization_id::text
   AND sel.deleted IS FALSE;
+
+-- name: LockUserSessionConsentClient :one
+-- Serializes remembered approval, automatic code issuance and withdrawal.
+-- Remote inventory requests must finish before acquiring this lock.
+SELECT cli.id
+FROM user_session_clients AS cli
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE cli.id = @user_session_client_id
+  AND (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+  AND cli.deleted IS FALSE AND iss.deleted IS FALSE
+FOR UPDATE OF cli;
+
+-- name: RecordUserSessionConsent :one
+INSERT INTO user_session_consents (project_id, organization_id, subject_urn, user_session_client_id, remote_set_hash)
+SELECT cli.project_id, cli.organization_id, @subject_urn, cli.id, @remote_set_hash
+FROM user_session_clients AS cli
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE cli.id = @user_session_client_id
+  AND (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+  AND cli.deleted IS FALSE AND iss.deleted IS FALSE
+ON CONFLICT (subject_urn, user_session_client_id, remote_set_hash) WHERE deleted IS FALSE
+DO UPDATE SET updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: GetUserSessionConsentResource :one
+SELECT r.*
+FROM user_session_consent_resources AS r
+JOIN user_session_consents AS c ON c.id = r.user_session_consent_id
+JOIN user_session_clients AS cli ON cli.id = c.user_session_client_id
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE r.project_id = @project_id::uuid
+  AND (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+  AND c.user_session_client_id = @user_session_client_id
+  AND c.subject_urn = @subject_urn
+  AND r.resource = @resource
+  AND r.deleted IS FALSE AND c.deleted IS FALSE AND cli.deleted IS FALSE AND iss.deleted IS FALSE
+ORDER BY r.created_at DESC, r.id DESC
+LIMIT 1;
+
+-- name: SupersedeUserSessionConsentResource :exec
+-- A new explicit decision supersedes every older variant, including when
+-- no complete inventory is available to save reusable evidence.
+UPDATE user_session_consent_resources AS r
+SET deleted_at = clock_timestamp()
+FROM user_session_consents AS c, user_session_clients AS cli, user_session_issuers AS iss
+WHERE r.user_session_consent_id = c.id
+  AND cli.id = c.user_session_client_id AND iss.id = cli.user_session_issuer_id
+  AND r.project_id = @project_id::uuid
+  AND (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+  AND c.user_session_client_id = @user_session_client_id
+  AND c.subject_urn = @subject_urn AND r.resource = @resource
+  AND r.deleted IS FALSE;
+
+-- name: CreateUserSessionConsentResource :one
+INSERT INTO user_session_consent_resources (
+    project_id, user_session_consent_id, resource, inventory_hash,
+    remote_set_hash, tool_selection, session_duration_hours
+)
+SELECT @project_id::uuid, c.id, @resource, @inventory_hash,
+       @remote_set_hash, @tool_selection, @session_duration_hours
+FROM user_session_consents AS c
+JOIN user_session_clients AS cli ON cli.id = c.user_session_client_id
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE c.id = @user_session_consent_id
+  AND (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+  AND c.deleted IS FALSE AND cli.deleted IS FALSE AND iss.deleted IS FALSE
+RETURNING *;
+
+-- name: RevokeUserSessionConsentGroup :many
+-- The caller holds the client's approval lock. Every saved variant is
+-- withdrawn, without invalidating sessions or already-issued codes.
+WITH revoked AS (
+    UPDATE user_session_consents AS c SET deleted_at = clock_timestamp()
+    FROM user_session_clients AS cli, user_session_issuers AS iss
+    WHERE cli.id = c.user_session_client_id AND iss.id = cli.user_session_issuer_id
+      AND (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+      AND c.user_session_client_id = @user_session_client_id AND c.subject_urn = @subject_urn
+      AND c.deleted IS FALSE
+    RETURNING c.*
+), resources AS (
+    UPDATE user_session_consent_resources AS r SET deleted_at = clock_timestamp()
+    FROM revoked WHERE r.user_session_consent_id = revoked.id AND r.deleted IS FALSE
+)
+SELECT * FROM revoked;
+
+
+-- name: CountLiveUserSessionConsentResourcesFixture :one
+SELECT COUNT(*) FROM user_session_consent_resources
+WHERE project_id = @project_id::uuid
+  AND user_session_consent_id = ANY(@consent_ids::uuid[])
+  AND deleted IS FALSE;

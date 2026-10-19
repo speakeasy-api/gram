@@ -42,6 +42,10 @@ func (c *recordingChainer) HasUsableCredential(context.Context, identitychaining
 	return false
 }
 
+func (c *recordingChainer) RefreshDecision(context.Context, identitychaining.Request) identitychaining.RefreshVerdict {
+	return identitychaining.RefreshVerdict{Decision: identitychaining.RefreshNotChained, RemoteSessionIssuerID: uuid.Nil, Provider: "", Reason: ""}
+}
+
 func (c *recordingChainer) Acquire(_ context.Context, req identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -282,4 +286,8 @@ func TestIdentityChainingCarriesTheChosenClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, chainer.requests, 1)
 	require.Equal(t, uuid.NullUUID{UUID: chosen, Valid: true}, chainer.requests[0].RemoteSessionClientID)
+}
+
+func (c *recordingChainer) RetireConsentCredentials(context.Context, string, uuid.UUID, uuid.UUID, string, uuid.UUID) error {
+	return nil
 }

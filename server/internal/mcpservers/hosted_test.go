@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -118,6 +119,10 @@ func TestUpdateMcpServerHostedWrapperWritesThroughToolset(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	require.Equal(t, "public", string(view.Visibility))
+	require.NotNil(t, view.Toolset)
+	require.Equal(t, f.toolset.ID.String(), view.Toolset.ID)
+	require.Equal(t, conv.PtrEmpty(f.toolset.McpSlug.String), view.PlatformEndpointSlug)
+	require.NotNil(t, view.PrimaryEndpointID)
 
 	toolset, server := f.requireProjected(t, ctx)
 	require.Equal(t, "Renamed hosted", toolset.Name)

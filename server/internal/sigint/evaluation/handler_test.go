@@ -74,6 +74,7 @@ func message() *conversationv1.MessageEvent {
 	m.SetProjectId(uuid.NewString())
 	m.SetOrganizationId("test-organization")
 	m.SetMessageCreatedAt("2026-09-28T12:00:00.123456789Z")
+	m.SetOccurredAt("2026-10-01T09:00:00.987654321Z")
 	m.SetRole(conversationv1.MessageEvent_ROLE_USER)
 	return m
 }
@@ -181,6 +182,10 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 		require.Equal(t, []string{"test-model"}, a.GetModels())
 		require.Equal(t, "openrouter", a.GetProvider())
 		require.Equal(t, m.GetMessageCreatedAt(), a.GetEvent().GetOccurredAt())
+		require.Equal(t, "stream", a.GetTriggerKind())
+		require.False(t, a.HasRunId())
+		require.Equal(t, m.GetOccurredAt(), a.GetEvaluationRequestedAt())
+		require.Equal(t, a.GetEvaluationRequestedAt(), b.GetEvaluationRequestedAt())
 		require.Equal(t, "message-user", a.GetActor().GetUserId())
 		require.Equal(t, "external-user", a.GetActor().GetExternalUserId())
 		require.Equal(t, "actor@example.test", a.GetActor().GetUserEmail())
