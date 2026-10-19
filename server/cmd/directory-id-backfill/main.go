@@ -64,7 +64,7 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("organization %q has no WorkOS organization ID", *organizationID)
 	}
 
-	client := workos.NewClient(policy, apiKey, workos.ClientOpts{Endpoint: endpoint, ClientID: ""})
+	client := workos.NewClient(policy, apiKey, workos.ClientOpts{Endpoint: endpoint, ClientID: "", RetryConfig: nil})
 	report, err := directory.AttributeDirectorySources(ctx, pool, client, *organizationID, org.WorkosID.String, !*apply)
 	if err != nil {
 		return fmt.Errorf("attribute directory sources: %w", err)
