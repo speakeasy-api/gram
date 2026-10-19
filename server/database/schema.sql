@@ -14933,3 +14933,30 @@ COMMENT ON COLUMN assistant_kit_gateway_credentials.runtime_id IS '@access: conf
 COMMENT ON COLUMN assistant_kit_gateway_credentials.token_ciphertext IS '@access: secret-restricted';
 COMMENT ON COLUMN assistant_kit_gateway_credentials.created_at IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_gateway_credentials.updated_at IS '@access: confidential';
+
+-- Foreground stop requests are addressed to one immutable runtime/event attempt.
+CREATE TABLE assistant_kit_interrupt_requests (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid REFERENCES projects(id) ON DELETE SET NULL,
+  assistant_id uuid REFERENCES assistants(id) ON DELETE SET NULL,
+  runtime_id uuid REFERENCES assistant_runtimes(id) ON DELETE SET NULL,
+  assistant_thread_id uuid REFERENCES assistant_threads(id) ON DELETE SET NULL,
+  event_id uuid REFERENCES assistant_thread_events(id) ON DELETE SET NULL,
+  attempt bigint NOT NULL,
+  outcome text NOT NULL DEFAULT 'pending',
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  acknowledged_at timestamptz,
+  PRIMARY KEY (id)
+);
+CREATE UNIQUE INDEX assistant_kit_interrupt_requests_attempt_key
+  ON assistant_kit_interrupt_requests (project_id, runtime_id, event_id, attempt);
+COMMENT ON COLUMN assistant_kit_interrupt_requests.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_interrupt_requests.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_interrupt_requests.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_interrupt_requests.runtime_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_interrupt_requests.assistant_thread_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_interrupt_requests.event_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_interrupt_requests.attempt IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_interrupt_requests.outcome IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_interrupt_requests.created_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_kit_interrupt_requests.acknowledged_at IS '@access: confidential';

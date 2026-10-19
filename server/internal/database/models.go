@@ -596,6 +596,29 @@ type AssistantKitGatewayCredential struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type AssistantKitInterruptRequest struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	AssistantID uuid.NullUUID
+	// @access: confidential
+	RuntimeID uuid.NullUUID
+	// @access: confidential
+	AssistantThreadID uuid.NullUUID
+	// @access: confidential
+	EventID uuid.NullUUID
+	// @access: confidential
+	Attempt int64
+	// @access: confidential
+	Outcome string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	AcknowledgedAt pgtype.Timestamptz
+}
+
 type AssistantKitSession struct {
 	// @access: confidential
 	ID uuid.UUID
