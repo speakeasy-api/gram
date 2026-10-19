@@ -763,6 +763,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
@@ -931,6 +932,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddMCPFindingEvidenceCleanupSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add MCP finding evidence cleanup schedule", attr.SlogError(err))
+	}
+
+	if err := AddDirectoryReviewSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add directory review sweep schedule", attr.SlogError(err))
 	}
 
 	if err := AddKillswitchMaintenanceSchedule(ctx, env); err != nil {

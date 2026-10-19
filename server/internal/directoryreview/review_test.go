@@ -419,6 +419,38 @@ func TestOptedOutKeyRaisesNoNewValues(t *testing.T) {
 	require.Empty(t, changes.Opened)
 }
 
+func TestSweepCoversOrganizationsWithDirectoryData(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+
+	// testOrg has directory mappings left but SCIM off; a second org has SCIM
+	// on and nothing else; a third has neither.
+	group := seedGroup(t, conn, "group_mapped")
+	mapGroup(t, conn, group)
+	for _, id := range []string{"org_scim", "org_none"} {
+		_, err := organizationsrepo.New(conn).UpsertOrganizationMetadata(t.Context(), organizationsrepo.UpsertOrganizationMetadataParams{
+			ID: id, Name: id, Slug: id, WorkosID: conv.ToPGText("workos_" + id),
+		})
+		require.NoError(t, err)
+	}
+	_, err := conn.Exec(t.Context(), `UPDATE organization_metadata SET scim_enabled = TRUE WHERE id = 'org_scim'`)
+	require.NoError(t, err)
+
+	require.NoError(t, directoryreview.Sweep(t.Context(), conn))
+
+	rows, err := conn.Query(t.Context(), `SELECT organization_id FROM directory_review_org_states ORDER BY organization_id`)
+	require.NoError(t, err)
+	defer rows.Close()
+	var baselined []string
+	for rows.Next() {
+		var id string
+		require.NoError(t, rows.Scan(&id))
+		baselined = append(baselined, id)
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, []string{testOrg, "org_scim"}, baselined)
+}
+
 func TestParseUserAttributesMatchesPostgresText(t *testing.T) {
 	t.Parallel()
 

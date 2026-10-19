@@ -10,10 +10,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
@@ -248,6 +250,43 @@ func ReconcileUserChange(ctx context.Context, dbtx database.DBTX, organizationID
 		}
 	}
 	return changes, nil
+}
+
+// Sweep reconciles every organization that may need decisions, each in its own
+// transaction, so one organization's failure neither rolls back nor blocks the
+// others. It returns every organization's error joined.
+func Sweep(ctx context.Context, db *pgxpool.Pool) error {
+	organizationIDs, err := repo.New(db).ListOrganizationsForDirectoryReviewSweep(ctx)
+	if err != nil {
+		return fmt.Errorf("list organizations for directory review sweep: %w", err)
+	}
+
+	var errs []error
+	for _, organizationID := range organizationIDs {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(append(errs, err)...)
+		}
+		if err := sweepOrganization(ctx, db, organizationID); err != nil {
+			errs = append(errs, fmt.Errorf("organization %s: %w", organizationID, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func sweepOrganization(ctx context.Context, db *pgxpool.Pool, organizationID string) error {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin directory review sweep: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := ReconcileOrganization(ctx, tx, organizationID); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit directory review sweep: %w", err)
+	}
+	return nil
 }
 
 // ReconcileOrganization recomputes every item for an organization from its
