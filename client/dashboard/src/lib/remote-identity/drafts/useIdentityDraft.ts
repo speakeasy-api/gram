@@ -832,19 +832,11 @@ export function useUserIdentityDraft({
   };
 
   const commit = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (revision: number) => {
       if (!selected) throw new Error("choose an identity provider");
       if (!choice) throw new Error("Choose a registration method.");
-      const revision = selectionRevision.current;
-
-      // Recheck the live cache as well as the rendered selection: query updates
-      // can arrive before React renders, including during scope discovery.
-      const assertCurrentDiscovery = () => {
+      const assertCurrentSelection = () => {
         const latest = latestSelection.current;
-        const query = queryClient.getQueryState<RemoteSessionIssuerDraft>([
-          "remote-session-issuer-metadata",
-          discoveredIssuerUrl,
-        ]);
         if (
           !latest.enabled ||
           selectionRevision.current !== revision ||
@@ -852,7 +844,23 @@ export function useUserIdentityDraft({
           latest.selectedProviderId !== selectedProviderId ||
           latest.discoveredIssuerUrl !== discoveredIssuerUrl ||
           latest.mcpServerId !== mcpServerId ||
-          latest.remoteMcpServerId !== remoteMcpServerId ||
+          latest.remoteMcpServerId !== remoteMcpServerId
+        ) {
+          throw new Error(
+            "The selected provider changed. Save again to retry.",
+          );
+        }
+      };
+      assertCurrentSelection();
+
+      // Query updates can arrive before React renders. Check the live cache
+      // before creating a provider, not just the metadata captured by render.
+      const assertCurrentDiscovery = () => {
+        const query = queryClient.getQueryState<RemoteSessionIssuerDraft>([
+          "remote-session-issuer-metadata",
+          discoveredIssuerUrl,
+        ]);
+        if (
           discoveryStatus !== "ready" ||
           !discoveredMetadata ||
           query?.status !== "success" ||
@@ -935,6 +943,7 @@ export function useUserIdentityDraft({
         };
       }
 
+      assertCurrentSelection();
       if (selectedDiscovered) assertCurrentDiscovery();
       commitStarted.current = true;
       try {
@@ -1167,7 +1176,7 @@ export function useUserIdentityDraft({
       // put the failure on screen, so the rejection is swallowed here rather
       // than surfacing twice or escaping as an unhandled rejection.
       try {
-        await runCommit();
+        await runCommit(selectionRevision.current);
         return true;
       } catch {
         /* reported by onError */

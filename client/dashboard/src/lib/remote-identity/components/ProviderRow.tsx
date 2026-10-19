@@ -228,8 +228,6 @@ export function UserIdentityRow({
         variant="secondary"
         size="sm"
         disabled={disabled || draft.saving}
-        aria-expanded={false}
-        aria-controls={`${issuerInputId}-editor`}
         onClick={draft.openIssuerEditor}
       >
         <Button.Text>Correct issuer URL</Button.Text>

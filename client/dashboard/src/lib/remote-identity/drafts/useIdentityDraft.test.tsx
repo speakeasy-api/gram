@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   commit: vi.fn(),
   resource: vi.fn(),
   discoverResource: vi.fn(),
+  issuers: vi.fn(),
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -24,7 +25,7 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
   invalidateAllRemoteSessionIssuers: vi.fn(),
 }));
 vi.mock("../queries/useRemoteSessionIssuersByIds", () => ({
-  useRemoteSessionIssuersByIds: () => ({ items: [] }),
+  useRemoteSessionIssuersByIds: () => ({ items: mocks.issuers() }),
 }));
 vi.mock("../queries/useAllRemoteSessionClients", () => ({
   useAllRemoteSessionClients: () => ({ items: [], isLoading: false }),
@@ -87,6 +88,7 @@ function renderDraft() {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.issuers.mockReturnValue([]);
   mocks.resource.mockReturnValue({
     status: "available",
     metadata: { authorizationServers: [advertised] },
@@ -306,27 +308,43 @@ describe("unsaved issuer correction", () => {
     },
   );
 
-  it("rejects a captured inline submission when correction changes during scope retrieval", async () => {
-    const scope = deferred<{ available: boolean }>();
-    mocks.discoverResource.mockReturnValue(scope.promise);
+  it("rejects a queued inline submission when correction changes before commit", async () => {
     const { result } = renderDraft();
     await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
     let saving!: Promise<boolean>;
     act(() => {
       saving = result.current.save();
+      result.current.setIssuerEditorText(corrected);
     });
-    await waitFor(() => expect(mocks.discoverResource).toHaveBeenCalledOnce());
-    act(() => result.current.setIssuerEditorText(corrected));
     act(() => result.current.discoverIssuer());
-    await waitFor(() =>
-      expect(result.current.issuerEditorText).toBe(corrected),
-    );
-    await act(async () => {
-      scope.resolve({ available: false });
-      expect(await saving).toBe(false);
-    });
+    await act(async () => expect(await saving).toBe(false));
     expect(mocks.commit).not.toHaveBeenCalled();
   });
+
+  it.each([false, true])(
+    "rejects a queued saved-provider submission after selection changes (restored: %s)",
+    async (restore) => {
+      mocks.issuers.mockReturnValue([
+        {
+          id: "saved-provider",
+          name: "Saved provider",
+          ...metadata("https://saved.example.test"),
+        },
+      ]);
+      const { result } = renderDraft();
+      act(() => result.current.selectProvider("saved-provider"));
+      await waitFor(() => expect(result.current.choice).toBe("auto"));
+      expect(result.current.canSave).toBe(true);
+      let saving!: Promise<boolean>;
+      act(() => {
+        saving = result.current.save();
+        result.current.selectProvider(null);
+        if (restore) result.current.selectProvider("saved-provider");
+      });
+      await act(async () => expect(await saving).toBe(false));
+      expect(mocks.commit).not.toHaveBeenCalled();
+    },
+  );
 
   it("ignores issuer and provider changes while the commit RPC is active", async () => {
     const commit = deferred<{ status: string }>();

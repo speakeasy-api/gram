@@ -1085,9 +1085,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
             .disabled,
         ).toBe(false),
       );
-      fireEvent.click(
-        screen.getByRole("button", { name: "Correct issuer URL" }),
-      );
+      const correctIssuer = screen.getByRole("button", {
+        name: "Correct issuer URL",
+      });
+      expect(correctIssuer.hasAttribute("aria-controls")).toBe(false);
+      expect(correctIssuer.hasAttribute("aria-expanded")).toBe(false);
+      fireEvent.click(correctIssuer);
       const panel = screen.getByRole("group", { name: "Issuer correction" });
       const success = "OAuth metadata discovered. Save to finish setup.";
       expect(within(panel).getByRole("status").textContent).toBe(success);
@@ -1364,7 +1367,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
           clientMode: "auto",
           createProvider: expect.objectContaining(correctedMetadata),
           clientConfiguration: expect.objectContaining({
-            scope: ["corrected.read"],
+            scope: undefined,
             tokenEndpointAuthMethod: "client_secret_post",
           }),
         }),
@@ -1807,53 +1810,29 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     it.each(["selection", "refetch", "failure"])(
-      "rechecks %s after awaiting protected-resource scopes before commit",
+      "rechecks %s before a queued commit",
       async (change) => {
         discoverUnsavedProvider();
-        let resolveScopes!: (value: { available: boolean }) => void;
-        mocks.discoverProtectedResource.mockImplementationOnce(
-          () =>
-            new Promise((resolve) => {
-              resolveScopes = resolve;
-            }),
-        );
-        const { result, queryClient, rerender } = renderIdentityDraft();
+        const { result, queryClient } = renderIdentityDraft();
         await waitFor(() => expect(result.current.canSave).toBe(true));
         let saving!: Promise<boolean>;
         act(() => {
           saving = result.current.save();
-        });
-        await waitFor(() =>
-          expect(mocks.discoverProtectedResource).toHaveBeenCalledOnce(),
-        );
-        if (change === "selection") {
-          mocks.protectedResourceMetadata.mockReturnValue({
-            status: "idle",
-            metadata: null,
-          });
-          rerender();
-        } else {
-          mocks.fetchMetadata.mockImplementationOnce(() =>
-            change === "failure"
-              ? Promise.reject(new Error("refetch failed"))
-              : new Promise(() => {}),
-          );
-          act(() => {
+          if (change === "selection") {
+            result.current.selectProvider(null);
+          } else {
+            mocks.fetchMetadata.mockImplementationOnce(() =>
+              change === "failure"
+                ? Promise.reject(new Error("refetch failed"))
+                : new Promise(() => {}),
+            );
             void queryClient.refetchQueries({
               queryKey: discoveryKey,
               exact: true,
             });
-          });
-          if (change === "failure") {
-            await waitFor(() =>
-              expect(result.current.discoveryStatus).toBe("error"),
-            );
           }
-        }
-        await act(async () => {
-          resolveScopes({ available: false });
-          expect(await saving).toBe(false);
         });
+        await act(async () => expect(await saving).toBe(false));
         expect(mocks.commit).not.toHaveBeenCalled();
       },
     );
