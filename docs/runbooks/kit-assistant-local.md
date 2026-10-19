@@ -269,7 +269,6 @@ original config, keep URL and credentials unchanged, and check that no tool
 references depend on the old name. This is fixture recovery, not proof of MCP
 credential revocation or a general retry API.
 
-
 | Symptom                                                                             | Likely cause                                                                             | Remedy                                                                                                                                                                                                                            |
 | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Worktree MCP registration fails during setup                                        | Missing or incorrect server URL                                                          | Run `mise run git:workmcp --server-url 'https://<WORKTREE_SERVER_HOST>:<PORT>'` with this worktree's HTTPS server URL, not its dashboard URL; rerun the failed setup step.                                                        |
