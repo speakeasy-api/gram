@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -71,11 +72,14 @@ func newDeleteMCPFixture(t *testing.T, name string) (context.Context, *deleteMCP
 			return errors.New("interrupted before the delete committed")
 		}
 		err := serverService.DeleteMcpServer(ctx, &mcpserversgen.DeleteMcpServerPayload{ID: serverID.String(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
-		if err == nil && fixture.failAfter {
+		if err != nil {
+			return fmt.Errorf("dashboard delete: %w", err)
+		}
+		if fixture.failAfter {
 			fixture.failAfter = false
 			return errors.New("interrupted after the delete committed")
 		}
-		return err
+		return nil
 	}, "platform-mcp-delete-test-key")
 	require.NoError(t, err)
 	fixture.service = service
