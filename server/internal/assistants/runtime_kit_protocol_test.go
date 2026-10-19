@@ -112,7 +112,7 @@ func TestKitProtocolSwitchUnderAdmissionLock(t *testing.T) {
 	for _, busy := range []bool{false, true} {
 		t.Run(fmt.Sprintf("background_busy_%t", busy), func(t *testing.T) {
 			t.Parallel()
-			core, db, key, chatID := kitSessionFixture(t)
+			core, db, key, _ := kitSessionFixture(t)
 			_, err := core.StoreKitRuntimeSession(t.Context(), key, "session-one")
 			require.NoError(t, err)
 			_, err = assistantrepo.New(db).CancelPendingAssistantThreadEvents(t.Context(), assistantrepo.CancelPendingAssistantThreadEventsParams{ProjectID: key.ProjectID, ThreadID: key.ThreadID, PendingStatus: eventStatusPending, CancelledStatus: eventStatusCancelled})
@@ -149,7 +149,7 @@ func TestKitProtocolSwitchUnderAdmissionLock(t *testing.T) {
 					if ch != nil && msg.Method == "session/resume" {
 						assert.NotContains(t, msg.Params, "replayFrom")
 						assert.NotContains(t, msg.Params, "mcpServers")
-						assert.JSONEq(t, fmt.Sprintf(`{"ai.speakeasy/gram-chat-id":%q}`, chatID.String()), string(msg.Params["_meta"]))
+						assert.NotContains(t, msg.Params, "_meta")
 						resumed = true
 						w.WriteHeader(202)
 						ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
@@ -305,11 +305,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 				if _, supplied := msg.Params["mcpServers"]; supplied {
 					t.Error("filesystem-owned MCP must not replace the session overlay")
 				}
-				var meta map[string]string
-				_ = json.Unmarshal(msg.Params["_meta"], &meta)
-				if meta["ai.speakeasy/gram-chat-id"] != chatID.String() {
-					t.Error("missing canonical chat metadata")
-				}
+				assert.NotContains(t, msg.Params, "_meta", "chat identity belongs to the control plane")
 				if msg.Method == "session/new" {
 					result = strings.TrimSuffix(catalog(), "}") + `,"sessionId":"session-one"}`
 				} else if string(msg.Params["replayFrom"]) != `{"type":"start"}` {
@@ -427,8 +423,14 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	}
 	require.Equal(t, 1, users)
 	require.Equal(t, 1, finals)
+	// Desired-set removal cannot be expressed by an additive MCP upsert.
+	// Reject before opening another transport or submitting another prompt.
+	for _, desired := range [][]runtimeMCPServer{{}, {{ID: "client", URL: "https://mcp.example/mcp"}}} {
+		err := p.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ThreadID: key.ThreadID, Prompt: "must not send", MCPServers: desired})
+		require.ErrorIs(t, err, ErrKitMCPDesiredSetUnsupported)
+	}
 	interrupted, err = p.InterruptTurn(ctx, r, key.ThreadID)
-	require.ErrorIs(t, err, ErrKitInterruptControlUnavailable)
+	require.NoError(t, err)
 	require.False(t, interrupted)
 	mu.Lock()
 	require.Equal(t, []string{"session/new", "session/set_config_option", "session/prompt", "kit/session/status", "session/resume", "session/set_config_option", "session/prompt", "kit/session/status"}, methods)

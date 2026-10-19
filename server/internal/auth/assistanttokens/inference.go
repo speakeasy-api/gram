@@ -37,6 +37,7 @@ type InferenceCredential struct {
 	ExpiresAt time.Time
 }
 type inferenceContextKey struct{}
+type inferenceRuntimeContextKey struct{}
 
 // IsInferenceCredential recognizes only the dedicated opaque startup token namespace.
 func IsInferenceCredential(header string) bool {
@@ -124,6 +125,7 @@ func (m *Manager) AuthorizeInference(ctx context.Context, header string) (contex
 	if err != nil {
 		return ctx, fmt.Errorf("prepare inference authorization: %w", err)
 	}
+	authed = context.WithValue(authed, inferenceRuntimeContextKey{}, row.RuntimeID)
 	return context.WithValue(authed, inferenceContextKey{}, identity), nil
 }
 

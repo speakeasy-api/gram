@@ -5,13 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/exec"
-	"sync/atomic"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,8 +16,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/assistants/kitacp"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -78,60 +79,77 @@ func TestKitLocalStartupBootstrapRotatesCredential(t *testing.T) {
 	var firstFile, secondFile kitInferenceFile
 	require.NoError(t, json.Unmarshal(first.InferenceJSON, &firstFile))
 	require.NoError(t, json.Unmarshal(second.InferenceJSON, &secondFile))
-	firstHash := sha256.Sum256([]byte(firstFile.BearerToken))
-	secondHash := sha256.Sum256([]byte(secondFile.BearerToken))
+	firstHash := sha256.Sum256([]byte(firstFile.APIKey))
+	secondHash := sha256.Sum256([]byte(secondFile.APIKey))
 	tokens := tokenrepo.New(db)
 	_, err = tokens.ReadInferenceCredential(t.Context(), firstHash[:])
 	require.ErrorIs(t, err, pgx.ErrNoRows, "previous startup credential must no longer authorize")
 	current, err := tokens.ReadInferenceCredential(t.Context(), secondHash[:])
 	require.NoError(t, err)
 	require.Equal(t, next, current.ID)
+	firstKeyHash, err := auth.GetAPIKeyHash(firstFile.APIKey)
+	require.NoError(t, err)
+	secondKeyHash, err := auth.GetAPIKeyHash(secondFile.APIKey)
+	require.NoError(t, err)
+	_, err = keysrepo.New(db).GetAPIKeyByKeyHash(t.Context(), firstKeyHash)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "rotation must revoke the native API key")
+	activeKey, err := keysrepo.New(db).GetAPIKeyByKeyHash(t.Context(), secondKeyHash)
+	require.NoError(t, err)
+	require.Equal(t, next, activeKey.ID)
+	require.Equal(t, "gram_local_", secondFile.APIKey[:11])
 	require.NoError(t, validateKitBootstrap(second))
+	ac := &contextvalues.AuthContext{APIKeyID: next.String(), ProjectID: &project, ActiveOrganizationID: "org-test"}
+	authed := contextvalues.WithAuthenticatedActor(t.Context(), ac, urn.NewPrincipal(urn.PrincipalTypeAgent, resolved.Identity.AgentID.String()))
+	trusted, managed, err := manager.AuthorizeKitAPIKey(authed, secondFile.APIKey)
+	require.NoError(t, err)
+	require.True(t, managed)
+	require.True(t, assistanttokens.InferenceTranscriptOwned(trusted))
+	_, managed, err = manager.AuthorizeKitAPIKey(authed, firstFile.APIKey)
+	require.True(t, managed)
+	require.Error(t, err, "a rotated credential cannot inherit the new key's authority")
+	wrongActor := contextvalues.WithAuthenticatedActor(t.Context(), ac, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()))
+	_, managed, err = manager.AuthorizeKitAPIKey(wrongActor, secondFile.APIKey)
+	require.True(t, managed)
+	require.Error(t, err)
+	require.NoError(t, manager.RevokeRuntimeInferenceCredentials(t.Context(), project, runtime))
+	_, managed, err = manager.AuthorizeKitAPIKey(authed, secondFile.APIKey)
+	require.True(t, managed, "revoked runtime credentials must not fall back to ordinary capture")
+	require.Error(t, err)
 }
 
-// Explicit image smoke: no model calls, only authenticated catalog discovery,
+// Explicit image smoke: native TLS authentication with a synthetic local response,
 // canonical session creation, settlement observation and durable session close.
+// The isolated internal network prevents production egress and paid inference.
 func TestKitLocalExactImageGatewaySmoke(t *testing.T) {
 	t.Parallel()
 	if os.Getenv("SPEAKEASY_KIT_IMAGE_SMOKE") != "1" {
 		t.Skip("set SPEAKEASY_KIT_IMAGE_SMOKE=1 to exercise the pinned local Kit image") //nolint:forbidigo // Opt-in smoke requires a locally built image and running container engine.
 	}
-	var discovery atomic.Int64
-	mock := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/chat/models" {
-			http.NotFound(w, r)
-			return
-		}
-		if r.Header.Get("Authorization") != "Bearer sai_smoke" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		discovery.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":[{"id":"openai/gpt-4o-mini","name":"Smoke model","context_length":128000,"pricing":{"prompt":"0","completion":"0"},"supported_parameters":["tools"]}]}`))
-	}))
-	listener, err := net.Listen("tcp", "0.0.0.0:0")
+	image := os.Getenv("SPEAKEASY_KIT_SMOKE_IMAGE")
+	if image == "" {
+		image = KitIntegrationImage
+	}
+	fixture := newKitNativeCatalogFixture(t, image)
+	origin, err := url.Parse("https://ai.speakeasy.com")
 	require.NoError(t, err)
-	mock.Listener = listener
-	mock.Start()
-	defer mock.Close()
-	address, ok := listener.Addr().(*net.TCPAddr)
-	require.True(t, ok)
-	origin, _ := url.Parse(fmt.Sprintf("http://%s:%d", LocalRuntimeHostGatewayAlias, address.Port))
 	config := DefaultKitLocalRuntimeConfig(origin)
+	config.Image = image
+	config.Network = fixture.network
+	config.ExtraCACertFile = fixture.caFile
 	config.Bootstrap = func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error) {
-		raw, _ := json.Marshal(kitInferenceFile{Version: 1, BearerToken: "sai_smoke", Origin: origin.String()})
-		return KitLocalBootstrap{AgentsMD: []byte("Smoke-test assistant. Do not call inference."), InferenceJSON: raw, MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("kit-smoke-token")}, nil
+		raw, _ := json.Marshal(kitInferenceFile{APIKey: "gram_local_" + strings.Repeat("a", 64), Project: "smoke"})
+		return KitLocalBootstrap{AgentsMD: []byte("Smoke-test assistant. Do not call tools."), InferenceJSON: raw, MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("kit-smoke-token")}, nil
 	}
 	config.Protocol = func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error) {
 		return &fakeKitLocalProtocol{}, nil
 	}
 	var client *kitacp.Client
+	httpClient := kitProtocolTestHTTPClient(t)
 	config.Ready = func(ctx context.Context, _ assistantRuntimeRecord, endpoint *url.URL) error {
 		deadline := time.Now().Add(20 * time.Second)
 		for {
 			var err error
-			client, _, err = kitacp.Dial(ctx, endpoint.String()+"/acp/v2", "kit-smoke-token", nil, json.RawMessage(`{"protocolVersion":2,"info":{"name":"provisioning-smoke","version":"1"},"capabilities":{}}`))
+			client, _, err = kitacp.Dial(ctx, endpoint.String(), "kit-smoke-token", httpClient, json.RawMessage(`{"protocolVersion":2,"info":{"name":"provisioning-smoke","version":"1"},"capabilities":{}}`))
 			if err == nil {
 				return nil
 			}
@@ -154,15 +172,15 @@ func TestKitLocalExactImageGatewaySmoke(t *testing.T) {
 		if client != nil {
 			_ = client.CloseTransport(ctx)
 		}
-		_ = backend.Stop(ctx, runtime)
-		_ = backend.ReapStoppedMachine(ctx, runtime)
+		require.NoError(t, backend.Stop(ctx, runtime))
+		require.NoError(t, backend.ReapStoppedMachine(ctx, runtime))
 	})
 	result, err := backend.Ensure(t.Context(), runtime)
 	require.NoError(t, err)
 	runtime.BackendMetadataJSON = result.BackendMetadataJSON
 	endpoint, err := backend.endpoint(t.Context(), runtime)
 	require.NoError(t, err)
-	unauthenticated, err := http.Get(endpoint.String() + "/acp/v2")
+	unauthenticated, err := http.Get(endpoint.String())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusUnauthorized, unauthenticated.StatusCode)
 	_ = unauthenticated.Body.Close()
@@ -170,11 +188,6 @@ func TestKitLocalExactImageGatewaySmoke(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	raw, err := client.Call(ctx, "session/new", map[string]any{"cwd": KitWorkspacePath, "mcpServers": []any{}, "_meta": map[string]string{"ai.speakeasy/gram-chat-id": uuid.NewString()}}, "")
-	if err != nil {
-		name, _ := kitLocalNames(runtime)
-		logs, _ := exec.CommandContext(ctx, "docker", "logs", "--tail", "25", name).CombinedOutput()
-		t.Logf("gateway smoke stderr (synthetic credentials only), discovery requests=%d: %s", discovery.Load(), logs)
-	}
 	require.NoError(t, err)
 	var session struct {
 		SessionID string `json:"sessionId"`
@@ -182,10 +195,25 @@ func TestKitLocalExactImageGatewaySmoke(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &session))
 	require.NotEmpty(t, session.SessionID)
 	require.NoError(t, client.AttachSession(ctx, session.SessionID))
-	status, err := client.Call(ctx, "kit/session/status", map[string]string{"sessionId": session.SessionID}, session.SessionID)
+	// This exact image discovers models from public OpenRouter, not an
+	// authenticated Speakeasy catalog. Exercise its actual native-key path
+	// against the isolated synthetic completion endpoint instead.
+	_, err = client.Call(ctx, "session/prompt", map[string]any{"sessionId": session.SessionID, "prompt": []map[string]string{{"type": "text", "text": "Reply with smoke-ok. Do not call tools."}}}, session.SessionID)
 	require.NoError(t, err)
-	require.Contains(t, string(status), `"settled":true`)
+	require.Eventually(t, func() bool {
+		status, err := client.Call(ctx, "kit/session/status", map[string]string{"sessionId": session.SessionID}, session.SessionID)
+		if err != nil {
+			return false
+		}
+		var state struct {
+			Settled bool `json:"settled"`
+		}
+		return json.Unmarshal(status, &state) == nil && state.Settled
+	}, 20*time.Second, 100*time.Millisecond, "synthetic completion must settle before close")
 	_, err = client.Call(ctx, "session/close", map[string]string{"sessionId": session.SessionID}, session.SessionID)
 	require.NoError(t, err)
-	require.Positive(t, discovery.Load(), "child must read hashed filesystem bearer and authenticate catalog")
+	stats := fixture.stats(t)
+	require.Positive(t, stats.Completions, "Kit must authenticate fixed HTTPS completion with native API key and project")
+	require.Zero(t, stats.Rejected, "all provider requests must carry native authentication")
+	require.Zero(t, stats.Unexpected, "session lifecycle must not call unexpected provider endpoints")
 }

@@ -26,7 +26,10 @@ type KitMCPProvisionRequest struct {
 	RuntimeID, ProjectID, AssistantID, TriggerID, UserSessionIssuerID uuid.UUID
 	OrganizationID                                                    string
 }
-type KitMCPProvisionResult struct{ ClientID, Secret string }
+type KitMCPProvisionResult struct {
+	ClientID, Secret, AuthMethod string
+	PrivateKeyPEM                []byte
+}
 type KitMCPProvisioner func(context.Context, KitMCPProvisionRequest) (KitMCPProvisionResult, error)
 
 // KitLocalCompositionConfig is an explicit local-only opt-in. This first
@@ -34,21 +37,24 @@ type KitMCPProvisioner func(context.Context, KitMCPProvisionRequest) (KitMCPProv
 // Built-in platform endpoints are intentionally unsupported: no human token or
 // inference bearer is ever substituted for their missing machine-auth contract.
 type KitLocalCompositionConfig struct {
-	Environment, Image, ExtraCACertFile   string
-	Origin                                *url.URL
-	AllowInsecureInference                bool
-	MCPResource, MCPIssuer                *url.URL
-	MCPUserSessionIssuerID, RootTriggerID uuid.UUID
-	ProvisionMCP                          KitMCPProvisioner
-	TurnStream                            *chat.TurnStream
+	Environment, Image, ExtraCACertFile, Network string
+	Origin                                       *url.URL
+	AllowInsecureInference                       bool
+	MCPResource, MCPIssuer                       *url.URL
+	MCPUserSessionIssuerID, RootTriggerID        uuid.UUID
+	ProvisionMCP                                 KitMCPProvisioner
+	TurnStream                                   *chat.TurnStream
 }
 
 func validateKitLocalComposition(c KitLocalCompositionConfig) error {
 	if c.Environment != "local" || c.Image == "" || c.ProvisionMCP == nil || c.TurnStream == nil || c.MCPUserSessionIssuerID == uuid.Nil {
 		return errors.New("kit local composition requires explicit image, resource issuer, provisioning callback and turn stream")
 	}
-	if c.Origin == nil || c.Origin.Host == "" || c.Origin.User != nil || c.Origin.Path != "" || c.Origin.RawQuery != "" || c.Origin.Fragment != "" || (c.Origin.Scheme != "https" && (c.Origin.Scheme != "http" || !c.AllowInsecureInference)) {
-		return errors.New("kit inference requires an origin and explicit local HTTP opt-in when insecure")
+	if c.Origin == nil || c.Origin.String() != "https://ai.speakeasy.com" || c.AllowInsecureInference {
+		return errors.New("current Kit uses the HTTPS Speakeasy provider origin; local routing must preserve TLS and hostname")
+	}
+	if c.Network == "" || c.ExtraCACertFile == "" {
+		return errors.New("local Kit requires an isolated network and trusted local TLS relay for ai.speakeasy.com")
 	}
 	for _, u := range []*url.URL{c.MCPResource, c.MCPIssuer} {
 		if u == nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -101,7 +107,7 @@ func (s *ServiceCore) InstallKitLocalRuntime(c KitLocalCompositionConfig) error 
 	command, args := KitGatewayCommand(8081)
 	backend, err := NewKitLocalRuntimeBackend(KitLocalRuntimeConfig{
 		Environment: c.Environment, Image: c.Image, Command: command, Args: args, Env: env, GuestPort: 8081, ServerURL: c.Origin,
-		ExtraCACertFile: c.ExtraCACertFile, CompatibilityGeneration: "kit-c3cbc0e-v1", HomeOwnedByRuntimeUser: true,
+		ExtraCACertFile: c.ExtraCACertFile, Network: c.Network, CompatibilityGeneration: "kit-native-api-key-v1", HomeOwnedByRuntimeUser: true,
 		Bootstrap: func(ctx context.Context, r assistantRuntimeRecord) (KitLocalBootstrap, error) {
 			return s.kitCompositionBootstrap(ctx, r, c)
 		},
@@ -177,7 +183,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		return zero, err
 	}
 	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n\nUse the configured independent workload MCP connection. Built-in platform endpoints and human-delegated sign-in are unavailable in this runtime. Never request or substitute a user's credentials.\n")
-	bootstrap, _, err := PrepareKitStartupBootstrap(ctx, s.assistantTokens, KitStartupBootstrapInput{Identity: *resolved.Identity, RuntimeID: r.ID, Lifetime: assistanttokens.MaxInferenceLifetime, Origin: c.Origin.String(), AgentsMD: instructions, MCPJSON: mcpJSON, MCPFiles: files, GatewayToken: []byte(gateway)})
+	bootstrap, _, err := PrepareKitStartupBootstrap(ctx, s.assistantTokens, KitStartupBootstrapInput{Model: assistant.Model, Environment: c.Environment, Identity: *resolved.Identity, RuntimeID: r.ID, Lifetime: assistanttokens.MaxInferenceLifetime, Origin: c.Origin.String(), AgentsMD: instructions, MCPJSON: mcpJSON, MCPFiles: files, GatewayToken: []byte(gateway)})
 	return bootstrap, err
 }
 
@@ -194,20 +200,38 @@ func kitResourceAttached(a assistantRecord, resource *url.URL) bool {
 	return false
 }
 func kitCompositionMCP(c KitLocalCompositionConfig, client KitMCPProvisionResult) ([]byte, map[string][]byte, error) {
-	if client.ClientID == "" || client.Secret == "" {
+	if client.ClientID == "" {
 		return nil, nil, errors.New("kit MCP provisioning returned no confidential client")
 	}
-	const filename = "mcp-workload-secret"
+	var filename string
+	var credential []byte
+	var method map[string]string
+	switch client.AuthMethod {
+	case "", "client_secret_basic":
+		if client.Secret == "" || len(client.PrivateKeyPEM) != 0 {
+			return nil, nil, errors.New("invalid Kit shared-secret credentials")
+		}
+		filename, credential = "mcp-workload-secret", []byte(client.Secret)
+		method = map[string]string{"type": "client_secret", "client_secret_file": "/home/kit/.kit/credentials/" + filename}
+	case "private_key_jwt":
+		if len(client.PrivateKeyPEM) == 0 || client.Secret != "" {
+			return nil, nil, errors.New("invalid Kit private-key credentials")
+		}
+		filename, credential = "mcp-workload-private-key.pem", client.PrivateKeyPEM
+		method = map[string]string{"type": "private_key_jwt", "private_key_file": "/home/kit/.kit/credentials/" + filename, "signing_algorithm": "ES256"}
+	default:
+		return nil, nil, errors.New("unsupported Kit MCP authentication method")
+	}
 	data, err := json.Marshal(map[string]any{"mcpServers": map[string]any{"workload": map[string]any{
 		"type": "streamable-http", "url": c.MCPResource.String(), "auth": map[string]any{
 			"type": "client_credentials", "client_id": client.ClientID, "resource": c.MCPResource.String(), "expected_issuer": c.MCPIssuer.String(), "scopes": []string{"mcp:connect"},
-			"method": map[string]string{"type": "client_secret", "client_secret_file": "/home/kit/.kit/credentials/" + filename},
+			"method": method,
 		},
 	}}})
 	if err != nil {
 		return nil, nil, fmt.Errorf("encode kit MCP configuration: %w", err)
 	}
-	return data, map[string][]byte{filename: []byte(client.Secret)}, nil
+	return data, map[string][]byte{filename: credential}, nil
 }
 
 // These helpers deliberately do not acquire an advisory lock on a second

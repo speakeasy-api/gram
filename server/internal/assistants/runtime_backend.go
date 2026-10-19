@@ -13,6 +13,7 @@ import (
 type runTurnRequest struct {
 	ThreadID               uuid.UUID
 	EventID                uuid.UUID
+	EventAttempt           int
 	CanonicalUserMessageID uuid.UUID
 	// Model is the persisted assistant choice, not a guest default.
 	Model string

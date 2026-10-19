@@ -203,6 +203,10 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 // like KeyType, never from client-claimed headers — so a caller cannot pick
 // another slot's customer key.
 func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
+	return s.directAuthorizeWithKitAdmission(ctx, r, false)
+}
+
+func (s *Service) directAuthorizeWithKitAdmission(ctx context.Context, r *http.Request, allowKit bool) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
 	if assistanttokens.IsInferenceCredential(r.Header.Get("Authorization")) {
 		return ctx, nil, "", oops.C(oops.CodeUnauthorized)
 	}
@@ -231,6 +235,7 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 
 	authorizedCtx, err := s.auth.Authorize(ctx, r.Header.Get(constants.SessionHeader), &sc)
 
+	requireKitBinding := false
 	// Try API key auth if session auth fails
 	if err != nil {
 		sc := security.APIKeyScheme{
@@ -239,6 +244,17 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 			Scopes:         []string{},
 		}
 		authorizedCtx, err = s.auth.Authorize(ctx, r.Header.Get(constants.APIKeyHeader), &sc)
+		if err != nil && allowKit && r.Header.Get(constants.APIKeyHeader) != "" {
+			// Principal keys cannot enter chat transports. Completion alone may
+			// authenticate through the ordinary consumer transport, provided the
+			// managed runtime binding is verified below before any model work.
+			sc.RequiredScopes = []string{"consumer"}
+			kitCtx, kitErr := s.auth.Authorize(ctx, r.Header.Get(constants.APIKeyHeader), &sc)
+			if _, principal := contextvalues.PrincipalCredentialAuthorization(kitCtx); kitErr == nil && principal {
+				authorizedCtx, err = kitCtx, nil
+				requireKitBinding = true
+			}
+		}
 	}
 
 	// Try Chat Sessions auth if API key auth fails
@@ -257,7 +273,13 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
-	authorizedCtx, err = s.auth.Authorize(authorizedCtx, r.Header.Get(constants.ProjectHeader), &sc)
+	if requireKitBinding {
+		// Runtime identity, rather than a generic project:read grant, admits
+		// this model-only request. Tenant/project binding is still enforced.
+		authorizedCtx, err = s.auth.AuthorizeWithHandlerProjectAccess(authorizedCtx, r.Header.Get(constants.ProjectHeader), &sc)
+	} else {
+		authorizedCtx, err = s.auth.Authorize(authorizedCtx, r.Header.Get(constants.ProjectHeader), &sc)
+	}
 	if err != nil {
 		return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, err, "unauthorized access")
 	}
@@ -269,6 +291,20 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 
 	if authCtx.ProjectID == nil {
 		return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, nil, "unauthorized: project id is required")
+	}
+
+	if allowKit {
+		var managed bool
+		authorizedCtx, managed, err = s.assistantTokens.AuthorizeKitAPIKey(authorizedCtx, r.Header.Get(constants.APIKeyHeader))
+		if err != nil {
+			return authorizedCtx, nil, "", err
+		}
+		if requireKitBinding && !managed {
+			return authorizedCtx, nil, "", oops.C(oops.CodeUnauthorized)
+		}
+		if managed {
+			keySlot = billing.ModelUsageSourceAssistants
+		}
 	}
 
 	return authorizedCtx, authCtx, keySlot, nil
@@ -1938,9 +1974,12 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		if err != nil {
 			return oops.C(oops.CodeForbidden)
 		}
-		ctx, err = s.assistantTokens.BindInferenceChat(ctx, id)
+		ctx, err = s.assistantTokens.BindKitSession(ctx, id)
 		if err != nil {
 			return fmt.Errorf("bind inference chat: %w", err)
+		}
+		if canonical, bound := assistanttokens.RuntimeChatID(ctx); bound {
+			chatIDHeader = canonical.String()
 		}
 	}
 
@@ -3604,7 +3643,7 @@ func (s *Service) authorizeCompletion(r *http.Request) (context.Context, *contex
 	}
 
 	if !assistanttokens.IsRuntimeCredential(r.Header.Get("Authorization")) {
-		return s.directAuthorize(r.Context(), r)
+		return s.directAuthorizeWithKitAdmission(r.Context(), r, true)
 	}
 	ctx, _, err := s.assistantTokens.AuthorizeRuntime(r.Context(), r.Header.Get("Authorization"))
 	if err != nil {

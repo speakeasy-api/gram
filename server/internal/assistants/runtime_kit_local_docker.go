@@ -25,6 +25,9 @@ func (d *dockerCLIEngine) CreateKit(ctx context.Context, spec kitLocalContainerS
 }
 func kitLocalCreateArgs(port int, spec kitLocalContainerSpec) []string {
 	args := []string{"create", "--name", spec.Name, "--user", "1000:1000", "--workdir", "/home/kit", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--publish", "127.0.0.1::" + strconv.Itoa(port), "--add-host", LocalRuntimeHostGatewayAlias + ":host-gateway", "--volume", spec.VolumeName + ":/home/kit", "--env", "HOME=/home/kit"}
+	if spec.Network != "" {
+		args = append(args, "--network", spec.Network)
+	}
 	if spec.ExtraCACertFile != "" {
 		args = append(args, "--volume", spec.ExtraCACertFile+":"+localRuntimeCACertMountPath+":ro")
 		// The image must honor standard TLS CA environment variables. There is no
@@ -164,7 +167,7 @@ func kitLocalBootstrapArchive(b KitLocalBootstrap) ([]byte, error) {
 	files := []struct {
 		name string
 		data []byte
-	}{{".kit/AGENTS.md", b.AgentsMD}, {".kit/config.toml", []byte(kitFileConfig)}, {".kit/credentials/" + KitInferenceCredentialFilename, b.InferenceJSON}, {".kit/credentials/mcp.json", b.MCPJSON}, {".kit/credentials/gateway-token", b.GatewayToken}}
+	}{{".kit/AGENTS.md", b.AgentsMD}, {".kit/config.toml", []byte(kitBootstrapConfig(b))}, {".kit/credentials/" + KitInferenceCredentialFilename, b.InferenceJSON}, {".kit/credentials/mcp.json", b.MCPJSON}, {".kit/credentials/gateway-token", b.GatewayToken}}
 	for _, name := range slices.Sorted(maps.Keys(b.MCPFiles)) {
 		files = append(files, struct {
 			name string

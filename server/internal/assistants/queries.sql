@@ -1980,3 +1980,56 @@ WHERE project_id = @project_id AND id = @runtime_id;
 -- Test fixture for authoritative dashboard input correlation.
 UPDATE assistant_threads SET source_kind = @source_kind
 WHERE project_id = @project_id AND id = @thread_id;
+
+-- name: RequestKitInterrupt :one
+-- Caller holds the assistant admission fence; never changes event status.
+INSERT INTO assistant_kit_interrupt_requests
+  (project_id, assistant_id, runtime_id, assistant_thread_id, event_id, attempt)
+SELECT e.project_id, e.assistant_id, r.id, e.assistant_thread_id, e.id, e.attempts
+FROM assistant_thread_events e
+JOIN assistant_runtimes r ON r.project_id=e.project_id AND r.assistant_id=e.assistant_id
+JOIN assistant_kit_sessions s ON s.project_id=r.project_id AND s.assistant_id=r.assistant_id
+  AND s.runtime_id=r.id AND s.assistant_thread_id=e.assistant_thread_id
+WHERE e.project_id=sqlc.arg(project_id)::uuid AND e.assistant_id=sqlc.arg(assistant_id)::uuid
+  AND e.assistant_thread_id=sqlc.arg(thread_id)::uuid AND r.id=sqlc.arg(runtime_id)::uuid
+  AND e.deleted IS FALSE AND e.status='processing' AND e.attempts > 0
+  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.runtime_version=3
+ORDER BY e.created_at LIMIT 1
+ON CONFLICT (project_id, runtime_id, event_id, attempt)
+DO UPDATE SET id=assistant_kit_interrupt_requests.id
+RETURNING id;
+
+-- name: KitInterruptPending :one
+SELECT EXISTS (
+ SELECT 1 FROM assistant_kit_interrupt_requests q
+ JOIN assistant_thread_events e ON e.id=q.event_id AND e.project_id=q.project_id
+   AND e.assistant_id=q.assistant_id AND e.assistant_thread_id=q.assistant_thread_id
+ JOIN assistant_runtimes r ON r.id=q.runtime_id AND r.project_id=q.project_id AND r.assistant_id=q.assistant_id
+ WHERE q.project_id=sqlc.arg(project_id)::uuid AND q.runtime_id=sqlc.arg(runtime_id)::uuid
+   AND q.event_id=sqlc.arg(event_id)::uuid AND q.attempt=sqlc.arg(attempt)::bigint
+   AND q.outcome='pending' AND e.deleted IS FALSE AND e.status='processing' AND e.attempts=q.attempt
+   AND r.deleted IS FALSE AND r.ended IS FALSE AND r.runtime_version=3
+)::boolean AS pending;
+
+-- name: AcknowledgeKitInterrupt :exec
+-- Only the owning turn calls this after authoritative settlement AND projector flush.
+UPDATE assistant_kit_interrupt_requests q SET outcome=sqlc.arg(outcome)::text, acknowledged_at=clock_timestamp()
+WHERE q.project_id=sqlc.arg(project_id)::uuid AND q.runtime_id=sqlc.arg(runtime_id)::uuid
+  AND q.event_id=sqlc.arg(event_id)::uuid AND q.attempt=sqlc.arg(attempt)::bigint AND q.outcome='pending'
+  AND EXISTS (SELECT 1 FROM assistant_thread_events e
+    JOIN assistant_runtimes r ON r.id=q.runtime_id AND r.project_id=e.project_id AND r.assistant_id=e.assistant_id
+    WHERE e.id=q.event_id AND e.project_id=q.project_id AND e.assistant_id=q.assistant_id
+      AND e.assistant_thread_id=q.assistant_thread_id AND e.attempts=q.attempt
+      AND e.deleted IS FALSE AND e.status='processing' AND r.deleted IS FALSE AND r.ended IS FALSE
+    FOR UPDATE OF e);
+
+-- name: GetKitInterruptOutcome :one
+SELECT (CASE
+ WHEN q.outcome <> 'pending' THEN q.outcome
+ WHEN e.id IS NULL OR e.deleted OR e.attempts <> q.attempt THEN 'unknown'
+ WHEN e.status <> 'processing' THEN 'unknown'
+ ELSE 'pending' END)::text AS outcome
+FROM assistant_kit_interrupt_requests q
+LEFT JOIN assistant_thread_events e ON e.id=q.event_id AND e.project_id=q.project_id
+  AND e.assistant_id=q.assistant_id AND e.assistant_thread_id=q.assistant_thread_id
+WHERE q.project_id=sqlc.arg(project_id)::uuid AND q.id=sqlc.arg(request_id)::uuid;

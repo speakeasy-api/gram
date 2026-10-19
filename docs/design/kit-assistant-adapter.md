@@ -57,6 +57,36 @@ OAuth issuer. Built-in Platform MCP machine authentication is outside this
 composition's supported contract; neither human credentials nor inference
 bearers are substitutes.
 
+## MCP configuration lifecycle
+
+The approved `_kit/session/update_mcp` contract is **additive upsert**, not
+replacement of the server set. Verify support in the runtime image before using
+this API; this contract does not change or establish support in the image pinned
+above.
+
+| Operation | Required behavior |
+| --- | --- |
+| Initial session creation or cold restore | Supply the initial MCP servers. This does not establish transcript deduplication across cold restore. |
+| Resident reconnect with `mcpServers` omitted or `[]` | Retain the resident server configuration. |
+| Resident reconnect with nonempty `mcpServers` | Reject the request; reconnect is not a configuration update. |
+| `_kit/session/update_mcp` with a new client-owned name | Add that server. |
+| `_kit/session/update_mcp` with an existing client-owned name | Update only that named server. |
+| Server names omitted from an update | Retain those servers unchanged. |
+| `_kit/session/update_mcp` with `[]` | No-op; retain all servers. |
+| A submitted name colliding with a host- or plugin-owned server | Reject the collision; host/plugin servers and built-ins remain protected. |
+
+For example, if the client owns `inventory` and `tickets`, an update containing
+only `inventory` changes only `inventory`; `tickets` remains configured. An update
+adding `reports` retains both existing servers. An empty update removes nothing.
+
+There are no implicit removals and no removal API in this contract. If enforcing
+revocation requires explicitly removing a server, fail closed and report that
+the operation is unsupported. Do not omit its name, send `[]`, or report success
+while leaving revoked access usable. Block affected work and use supported
+credential revocation and safe session/runtime retirement. If that lifecycle
+cannot safely complete, keep the operation blocked and escalate rather than
+silently retaining access. The cancellation limitation below still applies.
+
 ## Canonical transcript projection
 
 ACP projection owns the canonical chat transcript. Trusted inference capture is
@@ -103,12 +133,30 @@ Transport disconnect only detaches; it does not cancel accepted work. Retrying
 an ambiguous request can repeat external effects. Transcript idempotence does
 not provide exactly-once tool execution.
 
-`InterruptTurn` returns `ErrKitInterruptControlUnavailable` for a persisted
-session without dialing or sending cancellation. With no saved session, it
-returns false without an error. A replacement `session/resume`
-would take control away from the active projector and is not a safe workaround.
-Cancellation requires control ownership that preserves active projection; no
-successful live cancellation is established by the continuation/replay tests.
+`InterruptTurn` enqueues a durable PostgreSQL mailbox request fenced to the
+runtime, processing event, and attempt. It does not open a competing ACP control
+connection. With no eligible processing event/session, it returns false without
+an error. The owning worker consumes the request and sends cancellation at most
+once on its existing session connection while foreground work is active.
+
+Cancellation success requires an observed `idle` terminal with
+`stopReason = "cancelled"` after the owner's send, authoritative settlement, and
+a completed projection flush before the owner acknowledges the mailbox request.
+Startup replay is not terminal evidence for the current prompt. HTTP acceptance
+or an ambiguous transport response is not cancellation evidence. Natural
+completion returns false rather than a successful cancellation result.
+
+The API waits up to ten seconds, bounded by its caller context. Timeout, mailbox
+errors, or an unknown outcome return `ErrKitInterruptPending`: the owning turn
+may still be running. Timeout leaves the durable request intact. Do not publish
+a stopped result, cancel the projector, or steal control with replacement
+`session/resume` based on an unconfirmed request. Mailbox read and acknowledgement
+failures are retried by the owner without detaching healthy projection or
+resubmitting the prompt.
+
+Focused mailbox and cancellation-state tests have passed; live cancellation has
+not been demonstrated. Runtime-image verification remains pending. The
+continuation/replay tests and unchanged image pin do not prove live cancellation.
 
 Runtime-generated context-upgrade notices for preexisting transcripts are
 unsupported by the pinned runtime (`ErrKitUpgradeNoticeUnsupported`). Do not

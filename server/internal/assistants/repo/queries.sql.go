@@ -42,6 +42,38 @@ func (q *Queries) AbandonAssistantMCPOAuthClientRegistration(ctx context.Context
 	return err
 }
 
+const acknowledgeKitInterrupt = `-- name: AcknowledgeKitInterrupt :exec
+UPDATE assistant_kit_interrupt_requests q SET outcome=$1::text, acknowledged_at=clock_timestamp()
+WHERE q.project_id=$2::uuid AND q.runtime_id=$3::uuid
+  AND q.event_id=$4::uuid AND q.attempt=$5::bigint AND q.outcome='pending'
+  AND EXISTS (SELECT 1 FROM assistant_thread_events e
+    JOIN assistant_runtimes r ON r.id=q.runtime_id AND r.project_id=e.project_id AND r.assistant_id=e.assistant_id
+    WHERE e.id=q.event_id AND e.project_id=q.project_id AND e.assistant_id=q.assistant_id
+      AND e.assistant_thread_id=q.assistant_thread_id AND e.attempts=q.attempt
+      AND e.deleted IS FALSE AND e.status='processing' AND r.deleted IS FALSE AND r.ended IS FALSE
+    FOR UPDATE OF e)
+`
+
+type AcknowledgeKitInterruptParams struct {
+	Outcome   string
+	ProjectID uuid.UUID
+	RuntimeID uuid.UUID
+	EventID   uuid.UUID
+	Attempt   int64
+}
+
+// Only the owning turn calls this after authoritative settlement AND projector flush.
+func (q *Queries) AcknowledgeKitInterrupt(ctx context.Context, arg AcknowledgeKitInterruptParams) error {
+	_, err := q.db.Exec(ctx, acknowledgeKitInterrupt,
+		arg.Outcome,
+		arg.ProjectID,
+		arg.RuntimeID,
+		arg.EventID,
+		arg.Attempt,
+	)
+	return err
+}
+
 const acquireAssistantAdvisoryLock = `-- name: AcquireAssistantAdvisoryLock :exec
 SELECT pg_advisory_xact_lock(hashtext('asst:' || $1::text))
 `
@@ -1591,6 +1623,30 @@ func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg Get
 	return id, err
 }
 
+const getKitInterruptOutcome = `-- name: GetKitInterruptOutcome :one
+SELECT (CASE
+ WHEN q.outcome <> 'pending' THEN q.outcome
+ WHEN e.id IS NULL OR e.deleted OR e.attempts <> q.attempt THEN 'unknown'
+ WHEN e.status <> 'processing' THEN 'unknown'
+ ELSE 'pending' END)::text AS outcome
+FROM assistant_kit_interrupt_requests q
+LEFT JOIN assistant_thread_events e ON e.id=q.event_id AND e.project_id=q.project_id
+  AND e.assistant_id=q.assistant_id AND e.assistant_thread_id=q.assistant_thread_id
+WHERE q.project_id=$1::uuid AND q.id=$2::uuid
+`
+
+type GetKitInterruptOutcomeParams struct {
+	ProjectID uuid.UUID
+	RequestID uuid.UUID
+}
+
+func (q *Queries) GetKitInterruptOutcome(ctx context.Context, arg GetKitInterruptOutcomeParams) (string, error) {
+	row := q.db.QueryRow(ctx, getKitInterruptOutcome, arg.ProjectID, arg.RequestID)
+	var outcome string
+	err := row.Scan(&outcome)
+	return outcome, err
+}
+
 const getKitRuntimeSessionBinding = `-- name: GetKitRuntimeSessionBinding :one
 SELECT r.id AS runtime_id, t.id AS thread_id, t.chat_id, s.acp_session_id,
   EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id) AS has_prior_transcript
@@ -1954,6 +2010,38 @@ func (q *Queries) InvalidateAssistantMCPOAuthClient(ctx context.Context, arg Inv
 		arg.ClientID,
 	)
 	return err
+}
+
+const kitInterruptPending = `-- name: KitInterruptPending :one
+SELECT EXISTS (
+ SELECT 1 FROM assistant_kit_interrupt_requests q
+ JOIN assistant_thread_events e ON e.id=q.event_id AND e.project_id=q.project_id
+   AND e.assistant_id=q.assistant_id AND e.assistant_thread_id=q.assistant_thread_id
+ JOIN assistant_runtimes r ON r.id=q.runtime_id AND r.project_id=q.project_id AND r.assistant_id=q.assistant_id
+ WHERE q.project_id=$1::uuid AND q.runtime_id=$2::uuid
+   AND q.event_id=$3::uuid AND q.attempt=$4::bigint
+   AND q.outcome='pending' AND e.deleted IS FALSE AND e.status='processing' AND e.attempts=q.attempt
+   AND r.deleted IS FALSE AND r.ended IS FALSE AND r.runtime_version=3
+)::boolean AS pending
+`
+
+type KitInterruptPendingParams struct {
+	ProjectID uuid.UUID
+	RuntimeID uuid.UUID
+	EventID   uuid.UUID
+	Attempt   int64
+}
+
+func (q *Queries) KitInterruptPending(ctx context.Context, arg KitInterruptPendingParams) (bool, error) {
+	row := q.db.QueryRow(ctx, kitInterruptPending,
+		arg.ProjectID,
+		arg.RuntimeID,
+		arg.EventID,
+		arg.Attempt,
+	)
+	var pending bool
+	err := row.Scan(&pending)
+	return pending, err
 }
 
 const kitProtocolHasPriorMessages = `-- name: KitProtocolHasPriorMessages :one
@@ -3840,6 +3928,44 @@ func (q *Queries) RecordAssistantSkillObservation(ctx context.Context, arg Recor
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const requestKitInterrupt = `-- name: RequestKitInterrupt :one
+INSERT INTO assistant_kit_interrupt_requests
+  (project_id, assistant_id, runtime_id, assistant_thread_id, event_id, attempt)
+SELECT e.project_id, e.assistant_id, r.id, e.assistant_thread_id, e.id, e.attempts
+FROM assistant_thread_events e
+JOIN assistant_runtimes r ON r.project_id=e.project_id AND r.assistant_id=e.assistant_id
+JOIN assistant_kit_sessions s ON s.project_id=r.project_id AND s.assistant_id=r.assistant_id
+  AND s.runtime_id=r.id AND s.assistant_thread_id=e.assistant_thread_id
+WHERE e.project_id=$1::uuid AND e.assistant_id=$2::uuid
+  AND e.assistant_thread_id=$3::uuid AND r.id=$4::uuid
+  AND e.deleted IS FALSE AND e.status='processing' AND e.attempts > 0
+  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.runtime_version=3
+ORDER BY e.created_at LIMIT 1
+ON CONFLICT (project_id, runtime_id, event_id, attempt)
+DO UPDATE SET id=assistant_kit_interrupt_requests.id
+RETURNING id
+`
+
+type RequestKitInterruptParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+	RuntimeID   uuid.UUID
+}
+
+// Caller holds the assistant admission fence; never changes event status.
+func (q *Queries) RequestKitInterrupt(ctx context.Context, arg RequestKitInterruptParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, requestKitInterrupt,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+		arg.RuntimeID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const requeueStaleAssistantEvents = `-- name: RequeueStaleAssistantEvents :many

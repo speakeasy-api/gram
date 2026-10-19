@@ -29,13 +29,46 @@ WHERE c.token_hash = @token_hash AND c.revoked_at IS NULL AND c.expires_at > clo
 AND NOT r.deleted AND NOT r.ended AND NOT a.deleted AND a.status = 'active';
 
 -- name: RevokeInferenceCredential :exec
-UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
-WHERE project_id = @project_id AND id = @id AND revoked_at IS NULL;
+WITH revoked AS (
+  UPDATE assistant_inference_credentials c SET revoked_at = clock_timestamp()
+  WHERE c.project_id = @project_id AND c.id = @id AND c.revoked_at IS NULL RETURNING c.id
+)
+UPDATE api_keys SET deleted_at = clock_timestamp() WHERE id IN (SELECT id FROM revoked) AND NOT deleted;
 
 -- name: InferenceChatThread :one
 SELECT t.id FROM assistant_threads t JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
 WHERE t.project_id = @project_id AND t.assistant_id = @assistant_id AND t.chat_id = @chat_id AND NOT t.deleted AND NOT c.deleted;
 
 -- name: RevokeRuntimeInferenceCredentials :exec
-UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
-WHERE project_id = @project_id AND runtime_id = @runtime_id AND revoked_at IS NULL;
+WITH revoked AS (
+  UPDATE assistant_inference_credentials c SET revoked_at = clock_timestamp()
+  WHERE c.project_id = @project_id AND c.runtime_id = @runtime_id AND c.revoked_at IS NULL RETURNING c.id
+)
+UPDATE api_keys SET deleted_at = clock_timestamp() WHERE id IN (SELECT id FROM revoked) AND NOT deleted;
+
+-- name: ListKitInferenceSessionBindings :many
+-- Resolve provider session attribution only inside the authenticated runtime.
+SELECT s.acp_session_id, t.id AS thread_id, t.chat_id
+FROM assistant_kit_sessions s
+JOIN assistant_runtimes r ON r.id = s.runtime_id AND r.project_id = s.project_id AND r.assistant_id = s.assistant_id
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+JOIN assistant_threads t ON t.id = s.assistant_thread_id AND t.project_id = s.project_id AND t.assistant_id = s.assistant_id
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE s.runtime_id = @runtime_id AND s.project_id = @project_id AND s.assistant_id = @assistant_id
+  AND r.runtime_version = 3 AND a.runtime_version = 3
+  AND NOT r.deleted AND NOT r.ended AND NOT a.deleted AND a.status = 'active'
+  AND NOT t.deleted AND NOT c.deleted;
+
+-- name: IssueKitAPIKeyBinding :one
+-- The id references the already-created native API key; this row holds only
+-- control-plane runtime authority and does not define a new wire credential.
+INSERT INTO assistant_inference_credentials (id, project_id, assistant_id, runtime_id, token_hash, identity_json, policy_json, policy_version, expires_at)
+SELECT @id, @project_id, @assistant_id, r.id, @token_hash, @identity_json, @policy_json, @policy_version, @expires_at
+FROM assistant_runtimes r JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
+AND r.runtime_version = 3 AND a.runtime_version = 3
+AND NOT r.deleted AND NOT r.ended AND NOT a.deleted AND a.status = 'active'
+RETURNING id;
+
+-- name: IsManagedKitAPIKey :one
+SELECT EXISTS (SELECT 1 FROM assistant_inference_credentials WHERE id = @id);

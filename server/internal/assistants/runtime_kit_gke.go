@@ -57,6 +57,7 @@ func (i KitGKEIdentity) validate() error {
 // lock with settled work and fenced prior authority. No warm pool is used.
 type KitGKEProvisionInput struct {
 	Identity                                       KitGKEIdentity
+	Model                                          string
 	Name, Image, IngressCIDR                       string
 	GuestPort                                      int32
 	Command, Args                                  []string
@@ -141,7 +142,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		}
 		annotations["podsnapshot.gke.io/ps-name"] = in.Restore.name
 	}
-	data := map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitFileConfig), KitInferenceCredentialFilename: in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}
+	data := map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitBootstrapConfig(KitLocalBootstrap{Model: in.Model})), KitInferenceCredentialFilename: in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}
 	for name, bytes := range in.MCPFiles {
 		data[name] = bytes
 	}
@@ -260,6 +261,7 @@ func PrepareKitGKEStartup(ctx context.Context, manager *assistanttokens.Manager,
 	if in.Identity.AssistantID != startup.Identity.AssistantID.String() || in.Identity.Lineage != startup.RuntimeID.String() {
 		return KitGKEProvisionInput{}, fmt.Errorf("kit GKE startup credentials must match assistant and runtime lineage")
 	}
+	in.Model = startup.Model
 	in.Command, in.Args = KitGatewayCommand(int(in.GuestPort))
 	bootstrap, _, err := PrepareKitStartupBootstrap(ctx, manager, startup)
 	if err != nil {

@@ -1,30 +1,68 @@
 package gram
 
 import (
-	"net/url"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
+	"encoding/pem"
+	"flag"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 )
 
-func TestKitRuntimeCompositionOptIn(t *testing.T) {
+func TestKitWorkloadPrivateKeyCredentials(t *testing.T) {
 	t.Parallel()
-	origin, _ := url.Parse("https://api.example")
-	c := newAssistantRuntimeCLIContext(t, map[string]string{"environment": "local", "assistant-runtime-provider": "local"})
-	require.Empty(t, c.String("assistant-kit-image"))
-	require.NoError(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, origin), "disabled composition must not touch dependencies or change legacy behavior")
+	c, private, err := kitWorkloadClientCredentials("private_key_jwt")
+	require.NoError(t, err)
+	require.Empty(t, c.Secret)
+	require.Empty(t, c.JWKSURI)
+	_, err = jwks.ValidateKeySource(c.AuthMethod, c.JWKS, c.JWKSURI)
+	require.NoError(t, err)
+	block, rest := pem.Decode(private)
+	require.NotNil(t, block)
+	require.Empty(t, rest)
+	require.Equal(t, "PRIVATE KEY", block.Type)
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	require.NoError(t, err)
+	key, ok := parsed.(*ecdsa.PrivateKey)
+	require.True(t, ok)
+	require.Equal(t, elliptic.P256(), key.Curve)
+	var jwks struct {
+		Keys []map[string]string `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(c.JWKS, &jwks))
+	require.Equal(t, []map[string]string{{"kty": "EC", "crv": "P-256", "use": "sig", "alg": "ES256", "x": base64.RawURLEncoding.EncodeToString(key.X.FillBytes(make([]byte, 32))), "y": base64.RawURLEncoding.EncodeToString(key.Y.FillBytes(make([]byte, 32)))}}, jwks.Keys)
+	next, nextPrivate, err := kitWorkloadClientCredentials("private_key_jwt")
+	require.NoError(t, err)
+	require.NotEqual(t, private, nextPrivate)
+	require.NotEqual(t, c.JWKS, next.JWKS)
 }
 
-func TestKitRuntimeCompositionRejectsNonLocalOptIn(t *testing.T) {
+func TestKitWorkloadAuthMethodConfiguration(t *testing.T) {
 	t.Parallel()
-	origin, _ := url.Parse("https://api.example")
-	c := newAssistantRuntimeCLIContext(t, map[string]string{"environment": "production", "assistant-runtime-provider": "local", "assistant-kit-image": "image:tag"})
-	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, origin), "local environment")
-}
-
-func TestKitRuntimeCompositionRequiresExplicitIssuer(t *testing.T) {
-	t.Parallel()
-	origin, _ := url.Parse("https://api.example")
-	c := newAssistantRuntimeCLIContext(t, map[string]string{"environment": "local", "assistant-runtime-provider": "local", "assistant-kit-image": "image:tag", "assistant-kit-mcp-resource": "https://mcp.example/mcp/resource", "assistant-kit-mcp-issuer": "https://issuer.example"})
-	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, origin), "assistant-kit-mcp-issuer-id")
+	c, private, err := kitWorkloadClientCredentials("client_secret_basic")
+	require.NoError(t, err)
+	require.Equal(t, "client_secret_basic", c.AuthMethod)
+	require.Empty(t, private)
+	require.Empty(t, c.JWKS)
+	for _, method := range []string{"", "client_secret_post", "PRIVATE_KEY_JWT", "private_key_jwt "} {
+		_, _, err := kitWorkloadClientCredentials(method)
+		require.Error(t, err)
+	}
+	for _, f := range assistantKitRuntimeFlags() {
+		if f.Names()[0] == "assistant-kit-mcp-auth-method" {
+			value := f.(*cli.StringFlag)
+			require.Equal(t, "client_secret_basic", value.Value)
+			require.Equal(t, []string{"GRAM_ASSISTANT_KIT_MCP_AUTH_METHOD"}, value.EnvVars)
+		}
+	}
+	set := flag.NewFlagSet("test", flag.ContinueOnError)
+	set.String("assistant-kit-image", "kit:test", "")
+	set.String("assistant-kit-mcp-auth-method", "invalid", "")
+	require.ErrorContains(t, installKitLocalRuntimeFromCLI(cli.NewContext(nil, set, nil), nil, nil, nil, nil, nil), "invalid assistant-kit-mcp-auth-method")
 }

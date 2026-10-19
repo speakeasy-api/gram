@@ -18,6 +18,7 @@ import (
 
 // KitLocalBootstrap uses the verified Kit filesystem configuration contract. Secrets travel only through an in-memory archive into a stopped guest.
 type KitLocalBootstrap struct {
+	Model                                          string
 	AgentsMD, InferenceJSON, MCPJSON, GatewayToken []byte
 	MCPFiles                                       map[string][]byte
 }
@@ -35,6 +36,7 @@ type KitLocalRuntimeConfig struct {
 	GuestPort               int
 	ServerURL               *url.URL
 	ExtraCACertFile         string
+	Network                 string
 	CompatibilityGeneration string
 	HomeOwnedByRuntimeUser  bool
 	// Bootstrap runs before every stopped-container start. Use PrepareKitStartupBootstrap
@@ -69,6 +71,7 @@ type kitLocalContainerSpec struct {
 	Command, Args           []string
 	Labels, Env             map[string]string
 	ExtraCACertFile         string
+	Network                 string
 }
 
 type kitLocalRuntimeMetadata struct {
@@ -124,7 +127,7 @@ func newKitLocalRuntimeBackend(config KitLocalRuntimeConfig, engine kitLocalEngi
 	}
 	serverURL := *config.ServerURL
 	config.ServerURL = &serverURL
-	encoded, err := json.Marshal(map[string]any{"image": config.Image, "command": config.Command, "args": config.Args, "env": config.Env, "port": config.GuestPort, "ca": config.ExtraCACertFile})
+	encoded, err := json.Marshal(map[string]any{"image": config.Image, "command": config.Command, "args": config.Args, "env": config.Env, "port": config.GuestPort, "ca": config.ExtraCACertFile, "network": config.Network})
 	if err != nil {
 		return nil, fmt.Errorf("encode kit local immutable spec: %w", err)
 	}
@@ -242,7 +245,7 @@ func (k *KitLocalRuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeR
 		return result, fmt.Errorf("inspect kit local container: %w", err)
 	}
 	if created {
-		spec := kitLocalContainerSpec{Name: name, Image: k.config.Image, VolumeName: volume, Command: k.config.Command, Args: k.config.Args, Labels: k.labels(r), Env: k.config.Env, ExtraCACertFile: k.config.ExtraCACertFile}
+		spec := kitLocalContainerSpec{Name: name, Image: k.config.Image, VolumeName: volume, Command: k.config.Command, Args: k.config.Args, Labels: k.labels(r), Env: k.config.Env, ExtraCACertFile: k.config.ExtraCACertFile, Network: k.config.Network}
 		if _, err := k.engine.CreateKit(ctx, spec); err != nil {
 			return result, fmt.Errorf("create kit local container: %w", err)
 		}

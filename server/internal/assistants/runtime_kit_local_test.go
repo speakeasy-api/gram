@@ -103,9 +103,9 @@ func kitLocalFixture(t *testing.T) (*KitLocalRuntimeBackend, *fakeKitLocalEngine
 	t.Helper()
 	engine := &fakeKitLocalEngine{nextPort: 32100}
 	protocol := &fakeKitLocalProtocol{}
-	config := KitLocalRuntimeConfig{Environment: "local", Image: "example.invalid/kit:local", Command: []string{"/usr/local/bin/kit"}, Args: func() []string { _, args := KitGatewayCommand(8080); return args }(), GuestPort: 8080, ServerURL: &url.URL{Scheme: "https", Host: "host.docker.internal:8443"}, CompatibilityGeneration: "local-generation-one", HomeOwnedByRuntimeUser: true,
+	config := KitLocalRuntimeConfig{Environment: "local", Image: "example.invalid/kit:local", Command: []string{"/usr/local/bin/kit"}, Args: func() []string { _, args := KitGatewayCommand(8080); return args }(), GuestPort: 8080, ServerURL: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, CompatibilityGeneration: "local-generation-one", HomeOwnedByRuntimeUser: true,
 		Bootstrap: func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error) {
-			return KitLocalBootstrap{AgentsMD: []byte("caller instructions"), InferenceJSON: []byte(`{"version":1,"bearer_token":"sai_test","origin":"https://host.docker.internal:8443"}`), MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("private-test-token")}, nil
+			return KitLocalBootstrap{AgentsMD: []byte("caller instructions"), InferenceJSON: []byte(`{"api_key":"gram_local_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","project":"test-project","email":null,"organization_id":null}`), MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("private-test-token")}, nil
 		},
 		Protocol: func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error) { return protocol, nil },
 		Ready: func(context.Context, assistantRuntimeRecord, *url.URL) error {
@@ -272,6 +272,7 @@ func TestKitLocalBootstrapTarPermissionsAndExactBytes(t *testing.T) {
 	k, _, r, _ := kitLocalFixture(t)
 	b, err := k.config.Bootstrap(t.Context(), r)
 	require.NoError(t, err)
+	b.Model = "openai/gpt-4.1-mini"
 	archive, err := kitLocalBootstrapArchive(b)
 	require.NoError(t, err)
 	reader := tar.NewReader(bytes.NewReader(archive))
@@ -293,7 +294,7 @@ func TestKitLocalBootstrapTarPermissionsAndExactBytes(t *testing.T) {
 		require.NoError(t, err)
 		files[header.Name] = data
 	}
-	require.Equal(t, map[string][]byte{".kit/AGENTS.md": b.AgentsMD, ".kit/config.toml": []byte(kitFileConfig), ".kit/credentials/" + KitInferenceCredentialFilename: b.InferenceJSON, ".kit/credentials/mcp.json": b.MCPJSON, ".kit/credentials/gateway-token": b.GatewayToken}, files)
+	require.Equal(t, map[string][]byte{".kit/AGENTS.md": b.AgentsMD, ".kit/config.toml": []byte(kitFileConfig + "model = \"openai/gpt-4.1-mini\"\n"), ".kit/credentials/" + KitInferenceCredentialFilename: b.InferenceJSON, ".kit/credentials/mcp.json": b.MCPJSON, ".kit/credentials/gateway-token": b.GatewayToken}, files)
 }
 func TestKitLocalDockerCreateUsesOnlyInjectedImageContract(t *testing.T) {
 	t.Parallel()

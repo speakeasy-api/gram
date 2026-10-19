@@ -15,10 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 )
 
-const KitIntegrationImage = "localhost/kit-assistant-integration:c3cbc0e"
+const KitIntegrationImage = "localhost/kit-control-plane:2c4a35e"
 
 // KitInferenceCredentialFilename is a public provider cache key, not a credential.
-const KitInferenceCredentialFilename = "f5a93b2411bbf44d12df4db53aa064d87685df4fad637f3c61a653f4bc5b200f.json" //nolint:gosec // Public provider cache filename, not a secret.
+const KitInferenceCredentialFilename = "9bad6d07edf01f03e226b74e3be944c9fc374754bf1903ac36e2c7ce4cd7f305.json" //nolint:gosec // Public provider cache filename, not a secret.
 
 // KitWorkspacePath is persistent under the runtime's HOME volume. ACP cwd must
 // equal this approved canonical gateway project root on new and resumed sessions.
@@ -36,23 +36,40 @@ func validateKitGatewayCommand(command, args []string, port int) error {
 	return nil
 }
 
+// Kit's existing speakeasy/default credential record. No runtime-specific
+// credential type, origin metadata, or canonical chat identity is sent to Kit.
 type kitInferenceFile struct {
-	Version     int    `json:"version"`
-	BearerToken string `json:"bearer_token"`
-	Origin      string `json:"origin"`
+	APIKey         string  `json:"api_key"`
+	Project        string  `json:"project"`
+	Email          *string `json:"email"`
+	OrganizationID *string `json:"organization_id"`
 }
 
 func kitInferenceOrigin(raw []byte) (string, error) {
 	var credential kitInferenceFile
-	if err := json.Unmarshal(raw, &credential); err != nil {
-		return "", fmt.Errorf("invalid Kit inference credential JSON")
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&credential); err != nil {
+		return "", fmt.Errorf("invalid Kit provider credential JSON")
 	}
-	origin, err := url.Parse(credential.Origin)
-	if err != nil || origin.Hostname() == "" || (origin.Scheme != "https" && origin.Scheme != "http") || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || origin.Path != "" || credential.Version != 1 || !strings.HasPrefix(credential.BearerToken, "sai_") {
-		return "", fmt.Errorf("invalid Kit inference credential version, bearer or origin")
+	validKey := false
+	for _, prefix := range []string{"gram_live_", "gram_test_", "gram_local_"} {
+		if secret, found := strings.CutPrefix(credential.APIKey, prefix); found && len(secret) == 64 {
+			validKey = true
+			for _, c := range secret {
+				if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+					validKey = false
+					break
+				}
+			}
+		}
 	}
-	return credential.Origin, nil
+	if !validKey || credential.Project == "" || strings.ContainsAny(credential.Project, "\r\n") {
+		return "", fmt.Errorf("invalid Kit API key or project")
+	}
+	return "https://ai.speakeasy.com", nil
 }
+
 func validateKitBootstrap(b KitLocalBootstrap) error {
 	if len(b.AgentsMD) == 0 || len(b.GatewayToken) == 0 {
 		return fmt.Errorf("kit requires global instructions and gateway bearer")
@@ -88,14 +105,16 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 // contract. Caller must install Bootstrap, Protocol and authenticated Ready.
 func DefaultKitLocalRuntimeConfig(origin *url.URL) KitLocalRuntimeConfig {
 	command, args := KitGatewayCommand(8081)
-	return KitLocalRuntimeConfig{Environment: "local", Image: KitIntegrationImage, Command: command, Args: args, GuestPort: 8081, ServerURL: origin, CompatibilityGeneration: "kit-c3cbc0e-v1", HomeOwnedByRuntimeUser: true, Env: nil, ExtraCACertFile: "", Bootstrap: nil, Protocol: nil, Ready: nil}
+	return KitLocalRuntimeConfig{Environment: "local", Image: KitIntegrationImage, Command: command, Args: args, GuestPort: 8081, ServerURL: origin, CompatibilityGeneration: "kit-native-api-key-v1", HomeOwnedByRuntimeUser: true, Env: nil, ExtraCACertFile: "", Bootstrap: nil, Protocol: nil, Ready: nil}
 }
 
 type KitStartupBootstrapInput struct {
+	Model                           string
 	Identity                        assistantidentity.Identity
 	RuntimeID                       uuid.UUID
 	Lifetime                        time.Duration
 	Origin                          string
+	Environment                     string
 	AgentsMD, MCPJSON, GatewayToken []byte
 	MCPFiles                        map[string][]byte
 }
@@ -105,8 +124,8 @@ type KitStartupBootstrapInput struct {
 // for the row before issuing a replacement; no snapshot credential is reused.
 // The caller must likewise refresh/revoke its MCP machine credentials separately.
 func PrepareKitStartupBootstrap(ctx context.Context, manager *assistanttokens.Manager, in KitStartupBootstrapInput) (KitLocalBootstrap, uuid.UUID, error) {
-	b := KitLocalBootstrap{InferenceJSON: nil, AgentsMD: in.AgentsMD, MCPJSON: in.MCPJSON, GatewayToken: in.GatewayToken, MCPFiles: in.MCPFiles}
-	b.InferenceJSON, _ = json.Marshal(kitInferenceFile{Version: 1, BearerToken: "sai_validation", Origin: in.Origin})
+	b := KitLocalBootstrap{Model: in.Model, InferenceJSON: nil, AgentsMD: in.AgentsMD, MCPJSON: in.MCPJSON, GatewayToken: in.GatewayToken, MCPFiles: in.MCPFiles}
+	b.InferenceJSON, _ = json.Marshal(kitInferenceFile{APIKey: "gram_local_" + strings.Repeat("a", 64), Project: "validation"})
 	if err := validateKitBootstrap(b); err != nil {
 		return KitLocalBootstrap{}, uuid.Nil, err
 	}
@@ -116,10 +135,18 @@ func PrepareKitStartupBootstrap(ctx context.Context, manager *assistanttokens.Ma
 	if err := manager.RevokeRuntimeInferenceCredentials(ctx, in.Identity.ProjectID, in.RuntimeID); err != nil {
 		return KitLocalBootstrap{}, uuid.Nil, fmt.Errorf("revoke previous kit inference credentials: %w", err)
 	}
-	credential, err := manager.IssueInferenceCredential(ctx, assistanttokens.InferenceIssueInput{Identity: in.Identity, RuntimeID: in.RuntimeID, Lifetime: in.Lifetime})
+	credential, err := manager.IssueKitAPIKey(ctx, assistanttokens.InferenceIssueInput{Identity: in.Identity, RuntimeID: in.RuntimeID, Lifetime: in.Lifetime}, in.Environment)
 	if err != nil {
 		return KitLocalBootstrap{}, uuid.Nil, fmt.Errorf("issue kit inference credential: %w", err)
 	}
-	b.InferenceJSON, _ = json.Marshal(kitInferenceFile{Version: 1, BearerToken: credential.Token, Origin: in.Origin})
+	b.InferenceJSON, _ = json.Marshal(kitInferenceFile{APIKey: credential.Key, Project: credential.ProjectSlug})
 	return b, credential.ID, nil
+}
+
+// Pin the assistant's saved model through Kit's existing startup configuration.
+func kitBootstrapConfig(b KitLocalBootstrap) string {
+	if b.Model == "" {
+		return kitFileConfig
+	}
+	return kitFileConfig + "model = " + strconv.Quote(b.Model) + "\n"
 }

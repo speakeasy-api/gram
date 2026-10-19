@@ -2,6 +2,13 @@ package gram
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net/url"
 
@@ -17,6 +24,8 @@ import (
 
 func assistantKitRuntimeFlags() []cli.Flag {
 	return []cli.Flag{
+		&cli.StringFlag{Name: "assistant-kit-mcp-auth-method", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_AUTH_METHOD"}, Value: "client_secret_basic", Usage: "Local Kit workload authentication: client_secret_basic or private_key_jwt."},
+		&cli.StringFlag{Name: "assistant-kit-network", EnvVars: []string{"GRAM_ASSISTANT_KIT_NETWORK"}, Usage: "Isolated local container network with a trusted TLS relay for ai.speakeasy.com."},
 		&cli.StringFlag{Name: "assistant-kit-image", EnvVars: []string{"GRAM_ASSISTANT_KIT_IMAGE"}, Usage: "Opt in to local Kit v3 using this exact tagged image; empty leaves legacy runtime composition unchanged."},
 		&cli.StringFlag{Name: "assistant-kit-mcp-resource", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_RESOURCE"}, Usage: "Exact HTTPS URL of the attached issuer-gated MCP resource to provision for local Kit."},
 		&cli.StringFlag{Name: "assistant-kit-mcp-issuer", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_ISSUER"}, Usage: "Expected OAuth issuer advertised by the configured Kit MCP resource."},
@@ -29,6 +38,10 @@ func assistantKitRuntimeFlags() []cli.Flag {
 func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, db *pgxpool.Pool, auditLogger *audit.Logger, redisClient *redis.Client, serverURL *url.URL) error {
 	if c.String("assistant-kit-image") == "" {
 		return nil
+	}
+	authMethod := c.String("assistant-kit-mcp-auth-method")
+	if authMethod != "client_secret_basic" && authMethod != "private_key_jwt" {
+		return fmt.Errorf("invalid assistant-kit-mcp-auth-method")
 	}
 	base, err := assistantRuntimeConfigFromCLI(c, serverURL)
 	if err != nil {
@@ -59,7 +72,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 	provisioner := mcp.NewAssistantRuntimeWorkloadProvisioner(db, auditLogger)
 	err = core.InstallKitLocalRuntime(assistants.KitLocalCompositionConfig{
 		Environment: c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
-		Origin: base.Local.ServerURL, AllowInsecureInference: c.Bool("assistant-kit-allow-insecure-inference"),
+		Origin: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, Network: c.String("assistant-kit-network"), AllowInsecureInference: c.Bool("assistant-kit-allow-insecure-inference"),
 		MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: issuerID, RootTriggerID: root, TurnStream: chat.NewTurnStream(redisClient),
 		ProvisionMCP: func(ctx context.Context, r assistants.KitMCPProvisionRequest) (assistants.KitMCPProvisionResult, error) {
 			var zero assistants.KitMCPProvisionResult
@@ -76,21 +89,54 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 			if err := tx.Commit(ctx); err != nil {
 				return zero, fmt.Errorf("configure local kit workload: %w", err)
 			}
-			// This opt-in local fixture deliberately uses a generated shared secret.
-			// Production deployments must explicitly choose shared-secret or asymmetric
-			// authentication; this fixture does not mandate either deployment policy.
-			client, err := provisioner.Provision(ctx, r.RuntimeID, mcp.AssistantRuntimeWorkloadClientConfig{UserSessionIssuerID: r.UserSessionIssuerID, TriggerID: r.TriggerID, AuthMethod: "client_secret_basic", Secret: "", JWKS: nil, JWKSURI: ""})
+			workloadConfig, privatePEM, err := kitWorkloadClientCredentials(authMethod)
+			if err != nil {
+				return zero, err
+			}
+			workloadConfig.UserSessionIssuerID = r.UserSessionIssuerID
+			workloadConfig.TriggerID = r.TriggerID
+			client, err := provisioner.Provision(ctx, r.RuntimeID, workloadConfig)
 			if err != nil {
 				return zero, fmt.Errorf("configure local kit workload: %w", err)
 			}
 			if client.RuntimeID != r.RuntimeID || client.TriggerID != r.TriggerID {
 				return zero, fmt.Errorf("kit workload registration returned a mismatched runtime binding")
 			}
-			return assistants.KitMCPProvisionResult{ClientID: client.ClientID, Secret: client.Secret}, nil
+			return assistants.KitMCPProvisionResult{ClientID: client.ClientID, Secret: client.Secret, AuthMethod: authMethod, PrivateKeyPEM: privatePEM}, nil
 		},
 	})
 	if err != nil {
 		return fmt.Errorf("install local kit runtime: %w", err)
 	}
 	return nil
+}
+
+// kitWorkloadClientCredentials runs for every runtime startup. Only the public
+// JWKS reaches persisted workload registration; the private key is bootstrap-only.
+func kitWorkloadClientCredentials(method string) (mcp.AssistantRuntimeWorkloadClientConfig, []byte, error) {
+	c := mcp.AssistantRuntimeWorkloadClientConfig{AuthMethod: method}
+	switch method {
+	case "client_secret_basic":
+		return c, nil, nil
+	case "private_key_jwt":
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return c, nil, fmt.Errorf("generate Kit workload key: %w", err)
+		}
+		der, err := x509.MarshalPKCS8PrivateKey(key)
+		if err != nil {
+			return c, nil, fmt.Errorf("encode Kit workload key: %w", err)
+		}
+		c.JWKS, err = json.Marshal(map[string]any{"keys": []any{map[string]string{
+			"kty": "EC", "crv": "P-256", "use": "sig", "alg": "ES256",
+			"x": base64.RawURLEncoding.EncodeToString(key.X.FillBytes(make([]byte, 32))),
+			"y": base64.RawURLEncoding.EncodeToString(key.Y.FillBytes(make([]byte, 32))),
+		}}})
+		if err != nil {
+			return c, nil, fmt.Errorf("encode Kit workload public key: %w", err)
+		}
+		return c, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), nil
+	default:
+		return c, nil, fmt.Errorf("invalid assistant-kit-mcp-auth-method")
+	}
 }

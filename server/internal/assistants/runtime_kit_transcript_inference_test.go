@@ -65,8 +65,18 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	require.Empty(t, principal.AuthorizerUserID)
 	_, _, err = manager.Authorize(t.Context(), credential.Token)
 	require.Error(t, err, "inference bearer cannot authorize transcript/legacy APIs")
-	ctx, err = manager.BindInferenceChat(ctx, chatID)
+	const sessionID = "kit-inference-session"
+	_, err = queries.InsertKitRuntimeSession(t.Context(), assistantrepo.InsertKitRuntimeSessionParams{SessionID: sessionID, RuntimeID: runtime, ProjectID: project, AssistantID: assistant.ID, ThreadID: thread})
 	require.NoError(t, err)
+	_, err = manager.BindKitSession(ctx, chatID)
+	require.Error(t, err, "a control-plane chat ID is not a guest session identity")
+	_, err = manager.BindKitSession(ctx, uuid.New())
+	require.Error(t, err, "unknown sessions must not acquire transcript authority")
+	ctx, err = manager.BindKitSession(ctx, uuid.NewSHA1(uuid.NameSpaceDNS, []byte(sessionID)))
+	require.NoError(t, err)
+	boundChat, bound := assistanttokens.RuntimeChatID(ctx)
+	require.True(t, bound)
+	require.Equal(t, chatID, boundChat)
 	require.True(t, assistanttokens.InferenceTranscriptOwned(ctx))
 	// The trusted context bypasses both ingress and response persistence while
 	// leaving chat identity available to telemetry; nil dependencies prove neither

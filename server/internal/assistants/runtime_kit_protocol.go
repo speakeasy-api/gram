@@ -33,9 +33,6 @@ type KitRuntimeProtocol struct{ config KitRuntimeProtocolConfig }
 var _ runtimeProtocol = (*KitRuntimeProtocol)(nil)
 var _ runtimeSwitchCoordinator = (*KitRuntimeProtocol)(nil)
 
-// ErrKitInterruptControlUnavailable prevents falsely acknowledging an unowned cancellation.
-var ErrKitInterruptControlUnavailable = errors.New("kit turn interruption requires routing to the existing session controller; cancellation was not sent")
-
 var ErrKitUpgradeNoticeUnsupported = errors.New("kit runtime-generated context upgrade notice is not supported by the pinned runtime")
 
 func NewKitRuntimeProtocol(c KitRuntimeProtocolConfig) (*KitRuntimeProtocol, error) {
@@ -129,6 +126,9 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
 	}
+	if err := validateKitMCPStartup(found, req.MCPServers != nil); err != nil {
+		return err
+	}
 	servers := make([]map[string]any, 0, len(req.MCPServers))
 	for _, s := range req.MCPServers {
 		headers := make([]map[string]string, 0, len(s.Headers))
@@ -142,9 +142,9 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	defer closeKitTransport(c)
-	params := map[string]any{"cwd": p.config.CWD, "_meta": map[string]string{"ai.speakeasy/gram-chat-id": session.ChatID.String()}}
-	// Omission preserves a resident session's overlay. An explicit empty list
-	// instead requests replacement; filesystem-owned machine MCP needs neither.
+	params := map[string]any{"cwd": p.config.CWD}
+	// Only new sessions receive an explicit initial configuration. Omission
+	// retains resident configuration; [] is not a clearing operation.
 	if req.MCPServers != nil {
 		params["mcpServers"] = servers
 	}
@@ -188,11 +188,13 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	projection := make(chan error, 1)
 	flush := make(chan chan error)
 	reducer := newKitTranscriptReducer()
+	interrupt := &kitInterruptState{}
 	go func() {
 		err := kitConsumeNotifications(work, c.Notifications(), flush, func(n kitacp.Notification) error {
 			if n.SessionID != session.SessionID {
 				return nil
 			}
+			interrupt.observe(n.Params)
 			var envelope struct {
 				Update struct {
 					Kind string `json:"sessionUpdate"`
@@ -233,6 +235,11 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		}
 	}()
 	if needsResume {
+		// A concurrent session/new winner can turn creation into resume.
+		// Never reinterpret a desired set as additive upserts or silent retention.
+		if err := validateKitMCPStartup(true, req.MCPServers != nil); err != nil {
+			return err
+		}
 		params["sessionId"] = session.SessionID
 		params["replayFrom"] = map[string]string{"type": "start"}
 		startup, err = c.Call(work, "session/resume", params, session.SessionID)
@@ -284,6 +291,23 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		echoMu.Unlock()
 	}
 	close(ackReady)
+	// Echo correlation must be ready before draining replayed user messages.
+	// No cancellation is sent until this flush completes.
+	startupAck := make(chan error, 1)
+	select {
+	case flush <- startupAck:
+	case <-work.Done():
+		return fmt.Errorf("drain Kit startup: %w", work.Err())
+	}
+	select {
+	case err := <-startupAck:
+		if err != nil {
+			return err
+		}
+	case <-work.Done():
+		return fmt.Errorf("drain Kit startup: %w", work.Err())
+	}
+	interrupt.arm()
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -299,6 +323,19 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			if e != nil {
 				return fmt.Errorf("kit session operation: %w", e)
 			}
+			var activity struct {
+				ForegroundActive bool `json:"foregroundActive"`
+			}
+			// kitSettled above already validated the complete status document.
+			_ = json.Unmarshal(raw, &activity)
+			pending, mailboxErr := p.kitInterruptPending(work, r, req)
+			// A mailbox read failure must not tear down an otherwise healthy
+			// projector. The API remains unconfirmed; the next tick retries reads.
+			if mailboxErr == nil && pending && activity.ForegroundActive {
+				interrupt.request(work, func(ctx context.Context) error {
+					return c.Cancel(ctx, session.SessionID)
+				})
+			}
 			if settled {
 				// The status reply follows earlier updates on the same session stream.
 				// Flush queued updates and the in-flight projection before detaching.
@@ -310,7 +347,15 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 				}
 				select {
 				case err := <-ack:
-					return err
+					if err != nil {
+						return err
+					}
+					if err := p.acknowledgeKitInterrupt(work, r, req, interrupt.outcome()); err != nil {
+						// Do not turn an acknowledgement outage into a retried
+						// prompt or detach the projector. Retry while we own it.
+						continue
+					}
+					return nil
 				case <-work.Done():
 					return fmt.Errorf("kit protocol canceled: %w", work.Err())
 				}
@@ -320,17 +365,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 }
 
 func (p *KitRuntimeProtocol) InterruptTurn(ctx context.Context, r assistantRuntimeRecord, thread uuid.UUID) (bool, error) {
-	_, found, err := p.config.Core.LoadKitRuntimeSession(ctx, kitSessionKey(r, thread))
-	if err != nil {
-		return false, fmt.Errorf("load kit session for interrupt: %w", err)
-	}
-	if !found {
-		return false, nil
-	}
-	// Attaching a fresh transport does not grant control, and HTTP 202 for a
-	// cancellation notification does not acknowledge cancellation. Resuming
-	// would replace the active controller and disconnect its sole projector.
-	return false, ErrKitInterruptControlUnavailable
+	return p.requestKitInterrupt(ctx, r, thread)
 }
 
 func (p *KitRuntimeProtocol) Status(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendStatus, error) {
@@ -397,7 +432,6 @@ func (p *KitRuntimeProtocol) PrepareRuntimeSwitch(ctx context.Context, assistant
 		_, err = c.Call(ctx, "session/resume", map[string]any{
 			"sessionId": session.AcpSessionID,
 			"cwd":       p.config.CWD,
-			"_meta":     map[string]string{"ai.speakeasy/gram-chat-id": session.ChatID.UUID.String()},
 		}, session.AcpSessionID)
 		if err != nil {
 			return result, fmt.Errorf("resume Kit switch session: %w", err)

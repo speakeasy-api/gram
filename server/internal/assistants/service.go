@@ -3334,6 +3334,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 	}
 	if err := protocol.RunTurn(ctx, runtime, runTurnRequest{
 		EventID:                event.ID,
+		EventAttempt:           event.Attempts,
 		CanonicalUserMessageID: canonicalUserMessageID,
 		Model:                  assistant.Model,
 		ThreadID:               thread.ID,
