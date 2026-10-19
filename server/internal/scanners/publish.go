@@ -47,6 +47,13 @@ func WithFindingMCPContext(attribution *riskv1.Finding_Attribution, execution *r
 	}
 }
 
+// WithFindingID overrides the default content-derived finding identity.
+func WithFindingID(id uuid.UUID) FindingOption {
+	return func(finding *riskv1.Finding) {
+		finding.SetId(id.String())
+	}
+}
+
 func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding, logPrefix string, options ...FindingOption) (int, []string, error) {
 	results, ruleIDs := StartPublishFindings(ctx, pub, meta, findings, options...)
 

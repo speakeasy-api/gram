@@ -71,9 +71,11 @@ func (e sessionPolicyEntry) TTL() time.Duration { return sessionPolicyTTL }
 
 // endpointToolSelectionResource is the server-authored identity a consent
 // selection binds to: the fronting mcp_server when there is one, else the
-// toolset. Empty when the endpoint has neither, as with meta-MCP.
+// toolset or gateway. Empty when the endpoint has no stored resource.
 func endpointToolSelectionResource(endpoint *ResolvedMcpEndpoint) string {
 	switch {
+	case endpoint.MetaMcpServerID.Valid:
+		return "meta_mcp_server:" + endpoint.MetaMcpServerID.UUID.String()
 	case endpoint.McpServerID.Valid:
 		return "mcp_server:" + endpoint.McpServerID.UUID.String()
 	case endpoint.ToolsetID.Valid:
@@ -102,7 +104,7 @@ func endpointAcceptsToolSelectionResource(endpoint *ResolvedMcpEndpoint, resourc
 // must be rejected: missing row (a live jti always has one — refresh
 // rotation revokes the old jti before soft-deleting its row), database
 // failure, or a malformed stored policy.
-func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (*toolfilter.SessionSelection, bool, error) {
+func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (*toolfilter.SessionPolicy, bool, error) {
 	issuerID := endpoint.UserSessionIssuerID.String()
 
 	var raw []byte
@@ -133,7 +135,7 @@ func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEn
 		}
 	}
 
-	sel, err := toolfilter.ParseSessionSelection(raw)
+	sel, err := toolfilter.ParseSessionPolicy(raw)
 	if err != nil {
 		return nil, false, fmt.Errorf("parse stored tool selection: %w", err)
 	}

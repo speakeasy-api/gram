@@ -20,6 +20,7 @@ import {
   ListChecksIcon,
   ChartColumnStackedIcon,
   ArrowRightLeftIcon,
+  ActivityIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -101,6 +102,12 @@ export const ADMIN_NAV_GROUPS = [
         label: "External MCP migration",
         keywords: "external mcp attachments remote servers migrate cutover",
         icon: ArrowRightLeftIcon,
+      },
+      {
+        to: "/hook-clients",
+        label: "Hook clients",
+        keywords: "hooks curl binary versions inference sessions rollout",
+        icon: ActivityIcon,
       },
       {
         to: "/mcp-setup",

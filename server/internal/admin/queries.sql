@@ -1184,3 +1184,9 @@ RETURNING *;
 UPDATE signup_offers SET name = @name, stripe_promotion_code_id = @stripe_promotion_code_id,
  signup_flow = @signup_flow, enabled = @enabled, updated_at = clock_timestamp()
 WHERE id = @id RETURNING *;
+
+-- name: AdminListOrganizationNamesByIDs :many
+-- Labels the hook client grids, whose rows carry only organization ids.
+SELECT id, name, slug
+FROM organization_metadata
+WHERE id = ANY(@ids::text[]);

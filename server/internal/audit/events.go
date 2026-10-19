@@ -85,8 +85,9 @@ const (
 	subjectTypeVariation                   subjectType = "variation"
 	// The admitted subject, not the machine it admits: the row is the grant, so
 	// it is audited under its own subject rather than under the issuer's.
-	subjectTypeWorkloadAdmission subjectType = "workload_admission"
-	subjectTypeWorkloadIssuer    subjectType = "workload_issuer"
+	subjectTypeWorkloadAdmission       subjectType = "workload_admission"
+	subjectTypeWorkloadDeviceJoinToken subjectType = "workload_device_join_token"
+	subjectTypeWorkloadIssuer          subjectType = "workload_issuer"
 )
 
 type Action string

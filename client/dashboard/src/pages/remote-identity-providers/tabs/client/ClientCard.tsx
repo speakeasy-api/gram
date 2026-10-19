@@ -86,7 +86,7 @@ export function ClientCard({
   const privateKeyJwtSelected = isPrivateKeyJwtAuthMethod(shownAuthMethod);
   const serviceAccount = client.credentialOwner === "self";
   const { entitled: customerManagedKeys } = useCustomerManagedKeys();
-  const issuerName = issuer?.name ?? "the identity provider";
+  const issuerName = issuer?.name ?? "the authorization server";
   const privateKeyJwtMissingKeySet =
     privateKeyJwtSelected && client.jsonWebKeySetId == null;
 
@@ -206,7 +206,7 @@ export function ClientCard({
               />
               <Text small muted>
                 Leave empty to request what the MCP server asks for at each
-                sign-in. Choose from the scopes this identity provider
+                sign-in. Choose from the scopes this authorization server
                 advertises, or type one to add it.
               </Text>
             </div>
@@ -299,7 +299,7 @@ export function ClientCard({
                   </Label>
                 </div>
                 <Text small muted>
-                  On for apps registered with the identity provider under the
+                  On for apps registered with the authorization server under the
                   legacy /oauth/callback URL. Turn it off once the app has the
                   /mcp/remote_login_callback URL registered. Saved with your
                   other changes.

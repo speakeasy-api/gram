@@ -323,6 +323,8 @@ export const AUDIT_ACTIONS = [
   "workload-admission:admit",
   "workload-admission:update",
   "workload-admission:withdraw",
+  "workload-device-join-token:create",
+  "workload-device-join-token:redeem",
   "workload-issuer:create",
   "workload-issuer:delete",
   "workload-issuer:update",
@@ -842,7 +844,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "remote-session-issuer:delete":
       return "deleted remote session issuer";
     case "remote-session-issuer:update_ema_providers":
-      return "changed the EMA provider order for";
+      return "changed the enabled identity providers for";
     case "remote-session-issuer:migrate":
       return "migrated remote session issuer";
 
@@ -1035,6 +1037,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated workload";
     case "workload-admission:withdraw":
       return "withdrew workload";
+    case "workload-device-join-token:create":
+      return "created a device join token for";
+    case "workload-device-join-token:redeem":
+      return "enrolled a device with a join token for";
 
     default:
       return assertNever(action);
