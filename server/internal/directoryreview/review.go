@@ -158,9 +158,10 @@ func SupersedeAttributeKey(ctx context.Context, dbtx database.DBTX, organization
 // reads them, before or after an event. Nil means the user is not live.
 type UserAttributes map[string]string
 
-// ParseUserAttributes reads a directory user's stored attributes. Each value
-// becomes the text Postgres's ->> operator returns for it, so it compares the
-// way mappings match; null values are left out.
+// ParseUserAttributes reads a directory user's stored attributes. Each scalar
+// value becomes the text Postgres's ->> operator returns for it, so it
+// compares the way mappings match. Nulls, objects and arrays are left out: a
+// mapping value is a scalar, and Postgres formats nested JSON differently.
 func ParseUserAttributes(raw []byte) (UserAttributes, error) {
 	out := UserAttributes{}
 	if len(raw) == 0 {
@@ -179,19 +180,16 @@ func ParseUserAttributes(raw []byte) (UserAttributes, error) {
 }
 
 func attributeText(raw json.RawMessage) (string, bool) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || string(trimmed) == "null" || trimmed[0] == '{' || trimmed[0] == '[' {
+		return "", false
+	}
 	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
+	if err := json.Unmarshal(trimmed, &s); err == nil {
 		return s, true
 	}
-	if string(raw) == "null" {
-		return "", false
-	}
-	// Numbers, booleans, objects and arrays: ->> returns their JSON text.
-	var compact bytes.Buffer
-	if err := json.Compact(&compact, raw); err != nil {
-		return "", false
-	}
-	return compact.String(), true
+	// Numbers and booleans: ->> returns their JSON text.
+	return string(trimmed), true
 }
 
 // ReconcileUserChange raises and settles items after a directory event
