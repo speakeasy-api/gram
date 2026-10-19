@@ -36,10 +36,12 @@ const (
 )
 
 var acceptedStripeWebhookEvents = map[string]struct{}{
-	"checkout.session.completed":    {},
-	"customer.subscription.deleted": {},
-	"invoice.created":               {},
-	"invoice.payment_failed":        {},
+	"checkout.session.completed":               {},
+	"checkout.session.async_payment_succeeded": {},
+	"checkout.session.async_payment_failed":    {},
+	"customer.subscription.deleted":            {},
+	"invoice.created":                          {},
+	"invoice.payment_failed":                   {},
 }
 
 type stripeWebhookResult struct {
@@ -50,6 +52,14 @@ type stripeWebhookResult struct {
 }
 
 type stripeWebhookHandler func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error)
+
+func isStripeCheckoutSuccess(eventType string) bool {
+	return eventType == "checkout.session.completed" || eventType == "checkout.session.async_payment_succeeded"
+}
+
+func isStripeCheckoutEvent(eventType string) bool {
+	return isStripeCheckoutSuccess(eventType) || eventType == "checkout.session.async_payment_failed"
+}
 
 func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -79,7 +89,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		logger.InfoContext(ctx, "skipping unsupported Stripe webhook event")
 		return nil
 	}
-	if event.Type == "checkout.session.completed" && (event.ObjectID == "" || event.CustomerID == "" || event.SubscriptionID == "") {
+	if isStripeCheckoutEvent(event.Type) && (event.ObjectID == "" || event.CustomerID == "" || event.SubscriptionID == "") {
 		return oops.E(oops.CodeBadRequest, nil, "invalid Stripe Checkout completion identifiers").LogWarn(ctx, logger)
 	}
 	if event.Type == "customer.subscription.deleted" && event.ObjectID == "" {
@@ -110,13 +120,17 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	var checkoutState *stripeclient.CheckoutSessionState
 	var invoiceState *stripeclient.InvoiceState
 	checkoutEligible := true
-	if event.Type == "checkout.session.completed" {
+	if isStripeCheckoutEvent(event.Type) {
 		checkoutState, checkoutEligible, err = s.currentCheckoutSession(ctx, event)
 		if err != nil {
 			return err
 		}
 	}
-	if event.Type == "checkout.session.completed" && checkoutEligible {
+	// Await payment without recording an activation receipt that could trigger replay cleanup.
+	if isStripeCheckoutSuccess(event.Type) && checkoutState != nil && !checkoutState.PaymentReady() {
+		return nil
+	}
+	if isStripeCheckoutSuccess(event.Type) && checkoutEligible {
 		if err := s.acceptManualPartnerCheckout(ctx, event, checkoutState); err != nil {
 			return oops.E(oops.CodeUnavailable, err, "failed to accept partner Checkout").LogWarn(ctx, logger)
 		}
@@ -137,7 +151,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	queries := repo.New(tx)
 	var subscriptionLockID string
 	switch {
-	case event.Type == "checkout.session.completed" && checkoutEligible:
+	case isStripeCheckoutSuccess(event.Type) && checkoutEligible:
 		subscriptionLockID = event.SubscriptionID
 	case event.Type == "customer.subscription.deleted":
 		subscriptionLockID = event.ObjectID
@@ -160,7 +174,11 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve Stripe webhook customer").LogError(ctx, logger)
 	}
 
-	if event.Type == "checkout.session.completed" && checkoutEligible {
+	if checkoutState != nil && checkoutState.OrganizationID != "" && checkoutState.OrganizationID != organizationID {
+		return oops.E(oops.CodeBadRequest, nil, "Stripe Checkout organization does not match customer ownership").LogWarn(ctx, logger)
+	}
+
+	if isStripeCheckoutSuccess(event.Type) && checkoutEligible {
 		trialQueries := trialsrepo.New(tx)
 		_, err := trialQueries.LockTrialLifecycle(ctx, organizationID)
 		switch {
@@ -174,13 +192,13 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	// checkout and prior-subscription deletion hold different subscription locks:
 	// trial row when applicable, every OpenRouter key advisory lock, then billing
 	// and key rows. Trial demotion follows the same trial/key prefix.
-	if (event.Type == "checkout.session.completed" && checkoutEligible) || event.Type == "customer.subscription.deleted" {
+	if (isStripeCheckoutSuccess(event.Type) && checkoutEligible) || event.Type == "customer.subscription.deleted" {
 		if err := acquireOpenRouterBillingLocks(ctx, queries, organizationID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to lock OpenRouter billing state").LogError(ctx, logger)
 		}
 	}
 
-	if event.Type == "checkout.session.completed" && checkoutEligible {
+	if isStripeCheckoutSuccess(event.Type) && checkoutEligible {
 		// Serialize Stripe activation with legacy billing-metadata writes only after
 		// OpenRouter locks. This keeps all lifecycle paths advisory-before-row ordered.
 		if err := queries.LockBillingMetadataOrganization(ctx, organizationID); err != nil {
@@ -242,7 +260,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	if event.Type == "checkout.session.completed" {
+	if isStripeCheckoutSuccess(event.Type) {
 		if err := s.finishPaygCheckout(ctx, organizationID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to finish committed Stripe Checkout").LogError(ctx, logger)
 		}
@@ -254,7 +272,7 @@ func (s *Service) repairCommittedStripeLifecycleEvent(ctx context.Context, logge
 	logger.InfoContext(ctx, "repairing duplicate Stripe lifecycle event from committed state")
 	var err error
 	switch receipt.EventType {
-	case "checkout.session.completed":
+	case "checkout.session.completed", "checkout.session.async_payment_succeeded":
 		err = s.repairReplayedPaygCheckout(ctx, logger, receipt.OrganizationID)
 	case "customer.subscription.deleted":
 		err = RepairPaygOpenRouterChatKey(ctx, logger, s.db, s.openRouter, receipt.OrganizationID, openrouter.KeyDesiredStateDisabled)
@@ -391,6 +409,14 @@ func (s *Service) currentCheckoutSession(ctx context.Context, event *stripeclien
 		return nil, false, oops.E(oops.CodeUnavailable, nil, "Stripe Checkout session is not complete").LogWarn(ctx, s.logger)
 	}
 
+	if event.Type == "checkout.session.async_payment_failed" {
+		// A late failure must not override a subsequently successful payment.
+		return state, state.PaymentStatus == "unpaid", nil
+	}
+	if !state.PaymentReady() {
+		return state, false, nil
+	}
+
 	switch state.SubscriptionStatus {
 	case "active", "trialing", "past_due":
 		return state, true, nil
@@ -403,7 +429,7 @@ func (s *Service) currentCheckoutSession(ctx context.Context, event *stripeclien
 
 func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.Logger, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, checkout *stripeclient.CheckoutSessionState, invoice *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 	switch event.Type {
-	case "checkout.session.completed":
+	case "checkout.session.completed", "checkout.session.async_payment_succeeded":
 		return s.activatePaygCheckout(ctx, tx, organizationID, event, checkout)
 	case "invoice.created":
 		recorded, err := s.recordStripeInvoice(ctx, tx, organizationID, event, invoice)
@@ -415,7 +441,7 @@ func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.
 		} else {
 			logger.InfoContext(ctx, "skipped non-billable Stripe invoice creation")
 		}
-	case "invoice.payment_failed":
+	case "invoice.payment_failed", "checkout.session.async_payment_failed":
 		logger.InfoContext(ctx, "received Stripe invoice payment failure")
 		return stripeWebhookResult{newlyEnabledFeatures: nil, reconcileKeyTypes: nil, invoicePaymentFailed: true, subscriptionLost: false}, nil
 	case "customer.subscription.deleted":

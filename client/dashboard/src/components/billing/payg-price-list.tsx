@@ -3,28 +3,11 @@ import { Page } from "@/components/page-layout";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useSession } from "@/contexts/Auth";
-import { useTrialNow } from "@/hooks/useTrialNow";
-import { getTrialLifecycleFromDates } from "@/lib/trial-status";
 import type { TierLimits } from "@gram/client/models/components/tierlimits.js";
 import { useGetUsageTiers } from "@gram/client/react-query/getUsageTiers.js";
 
-/**
- * The server-owned PAYG rates, shown while the product trial that converts to
- * pay as you go is running: metered token management, risk scanning, and MCP
- * gateway egress, plus provider-cost pass-through lines. The product feature
- * list stays off this section — it describes the plan's contents, not prices.
- */
+/** Server-owned rates for the guarded billing setup and payment subpages. */
 export function PaygPriceList(): JSX.Element | null {
-  const { trial } = useSession();
-  const now = useTrialNow(trial);
-
-  if (getTrialLifecycleFromDates(trial, now) !== "active") return null;
-
-  return <PaygPriceListBody />;
-}
-
-function PaygPriceListBody(): JSX.Element | null {
   const { data, isLoading, isError } = useGetUsageTiers({
     throwOnError: false,
   });
@@ -35,8 +18,8 @@ function PaygPriceListBody(): JSX.Element | null {
     <Page.Section>
       <Page.Section.Title area="">Pay as you go pricing</Page.Section.Title>
       <Page.Section.Description>
-        The rates this organization is billed once the trial converts to pay as
-        you go.
+        Pay-as-you-go rates. During a trial, billing starts when the trial
+        converts.
       </Page.Section.Description>
       <Page.Section.Body>
         {isLoading || !data ? (

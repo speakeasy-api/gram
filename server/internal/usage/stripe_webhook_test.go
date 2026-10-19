@@ -74,6 +74,10 @@ func (f *fakeStripeWebhookClient) CreateCheckoutSession(context.Context, stripec
 	return nil, errors.New("not implemented")
 }
 
+func (*fakeStripeWebhookClient) PublishableKey() string {
+	return ""
+}
+
 func (f *fakeStripeWebhookClient) GetCheckoutSession(context.Context, string) (*stripeclient.CheckoutSessionState, error) {
 	f.checkoutCalls.Add(1)
 	return f.checkout, f.checkoutError
@@ -1087,6 +1091,8 @@ func configurePaygCheckout(t *testing.T, service *Service, eventID, subscription
 		Partner:                nil,
 		ID:                     "checkout_placeholder",
 		Status:                 "complete",
+		PaymentStatus:          "paid",
+		OrganizationID:         stripeWebhookOrganizationID,
 		CustomerID:             "customer_placeholder",
 		SubscriptionID:         subscriptionID,
 		SubscriptionCustomerID: "customer_placeholder",
@@ -3120,4 +3126,92 @@ func TestStripeCheckoutRejectsMalformedIdentifiers(t *testing.T) {
 	}}
 	service := &Service{logger: testenv.NewLogger(t), stripeClient: client, stripeHandler: testStripeWebhookHandler}
 	require.Equal(t, http.StatusBadRequest, serveStripeWebhook(service, "malformed").Code)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomes(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, eventType, paymentStatus, subscriptionStatus string
+		activated, failed                                  bool
+	}{
+		{"unpaid completion", "checkout.session.completed", "unpaid", "active", false, false},
+		{"trial completion", "checkout.session.completed", "no_payment_required", "trialing", true, false},
+		{"unpaid trial completion", "checkout.session.completed", "unpaid", "trialing", true, false},
+		{"async success", "checkout.session.async_payment_succeeded", "paid", "active", true, false},
+		{"unpaid async success", "checkout.session.async_payment_succeeded", "unpaid", "active", false, false},
+		{"async failure", "checkout.session.async_payment_failed", "unpaid", "active", false, true},
+		{"stale async failure", "checkout.session.async_payment_failed", "paid", "active", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+			configurePaygCheckout(t, service, "event_async", "subscription_async", tc.subscriptionStatus)
+			client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+			require.True(t, ok)
+			verify := client.verify
+			client.verify = func(body []byte, signature string) (*stripeclient.WebhookEvent, error) {
+				event, err := verify(body, signature)
+				event.Type = tc.eventType
+				return event, err
+			}
+			client.checkout.PaymentStatus = tc.paymentStatus
+			metrics := &captureStripeWebhookMetrics{}
+			service.stripeMetrics = metrics
+			for range 2 {
+				require.Equal(t, http.StatusOK, serveStripeWebhook(service, "async outcome").Code)
+			}
+			metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+			require.NoError(t, err)
+			require.Equal(t, tc.activated, metadata.StripeSubscriptionID.Valid)
+			if !tc.activated && !tc.failed && tc.paymentStatus == "unpaid" {
+				require.Zero(t, stripeWebhookReceiptCount(t, db), "pending payment must not record an activation receipt")
+			}
+			if tc.failed {
+				require.EqualValues(t, 1, metrics.invoicePaymentFailures.Load())
+			} else {
+				require.Zero(t, metrics.invoicePaymentFailures.Load())
+			}
+		})
+	}
+}
+
+func TestStripeCheckoutRejectsOrganizationMetadataMismatch(t *testing.T) {
+	t.Parallel()
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_org_mismatch", "subscription_placeholder", "active")
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	client.checkout.OrganizationID = "org_other"
+	require.Equal(t, http.StatusBadRequest, serveStripeWebhook(service, "wrong organization").Code)
+	require.Zero(t, stripeWebhookReceiptCount(t, db))
+}
+
+func TestStripeCheckoutPendingPaymentCanLaterSucceed(t *testing.T) {
+	t.Parallel()
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_delayed_payment", "subscription_delayed_payment", "active")
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	client.checkout.PaymentStatus = "unpaid"
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "pending payment").Code)
+	require.Zero(t, stripeWebhookReceiptCount(t, db))
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.False(t, metadata.StripeSubscriptionID.Valid)
+
+	verify := client.verify
+	client.verify = func(body []byte, signature string) (*stripeclient.WebhookEvent, error) {
+		event, err := verify(body, signature)
+		event.ID = "event_delayed_payment_succeeded"
+		event.Type = "checkout.session.async_payment_succeeded"
+		return event, err
+	}
+	client.checkout.PaymentStatus = "paid"
+	for range 2 {
+		require.Equal(t, http.StatusOK, serveStripeWebhook(service, "payment succeeded").Code)
+	}
+	metadata, err = repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "subscription_delayed_payment", metadata.StripeSubscriptionID.String)
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
 }
