@@ -424,10 +424,12 @@ it("preserves explicit custom instructions for an unknown mode without inferring
     },
   });
   state.mutate.mockClear();
-  fireEvent.change(textarea(), { target: { value: " \0 " } });
-  expect(save().disabled).toBe(true);
-  fireEvent.click(save());
-  expect(state.mutate).not.toHaveBeenCalled();
+  for (const value of ["", " \0 ", "\0 \0"]) {
+    fireEvent.change(textarea(), { target: { value } });
+    expect(save().disabled).toBe(true);
+    fireEvent.click(save());
+    expect(state.mutate).not.toHaveBeenCalled();
+  }
 });
 
 it("uses the direct default instructions for direct discovery", () => {

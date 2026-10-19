@@ -253,7 +253,8 @@ export function GatewayInstructionsSection({
     !dirty ||
     overLimit ||
     update.isPending ||
-    (defaultInstructions === undefined && characterCount === 0);
+    (defaultInstructions === undefined &&
+      trimmedDraft.replaceAll("\0", "").trim() === "");
 
   return (
     <SettingsSection id={GATEWAY_INSTRUCTIONS_SECTION_ID}>
