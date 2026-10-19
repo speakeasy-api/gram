@@ -123,72 +123,58 @@ func TestSearchUsers_GroupByInternalUser(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Len(c, res.Users, 2) {
-			return
-		}
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 2)
 
-		// Index by user ID
-		byUser := make(map[string]*gen.UserSummary)
-		for _, u := range res.Users {
-			byUser[u.UserID] = u
-		}
+	// Index by user ID
+	byUser := make(map[string]*gen.UserSummary)
+	for _, u := range res.Users {
+		byUser[u.UserID] = u
+	}
 
-		// User 1
-		u1 := byUser[user1]
-		if !assert.NotNil(c, u1) {
-			return
-		}
-		assert.Equal(c, int64(1), u1.TotalChats)
-		assert.Equal(c, int64(2), u1.TotalChatRequests)
-		assert.Equal(c, int64(300), u1.TotalInputTokens)  // 100 + 200
-		assert.Equal(c, int64(150), u1.TotalOutputTokens) // 50 + 100
-		assert.Equal(c, int64(450), u1.TotalTokens)       // 150 + 300
-		assert.Equal(c, int64(1), u1.TotalToolCalls)
-		assert.Equal(c, int64(1), u1.ToolCallSuccess)
-		assert.Equal(c, int64(0), u1.ToolCallFailure)
-		if assert.Len(c, u1.Tools, 1) {
-			assert.Equal(c, "tools:http:petstore:listPets", u1.Tools[0].Urn)
-			assert.Equal(c, int64(1), u1.Tools[0].Count)
-			assert.Equal(c, int64(1), u1.Tools[0].SuccessCount)
-			assert.Equal(c, int64(0), u1.Tools[0].FailureCount)
-		}
+	// User 1
+	u1 := byUser[user1]
+	require.NotNil(t, u1)
+	require.Equal(t, int64(1), u1.TotalChats)
+	require.Equal(t, int64(2), u1.TotalChatRequests)
+	require.Equal(t, int64(300), u1.TotalInputTokens)  // 100 + 200
+	require.Equal(t, int64(150), u1.TotalOutputTokens) // 50 + 100
+	require.Equal(t, int64(450), u1.TotalTokens)       // 150 + 300
+	require.Equal(t, int64(1), u1.TotalToolCalls)
+	require.Equal(t, int64(1), u1.ToolCallSuccess)
+	require.Equal(t, int64(0), u1.ToolCallFailure)
+	require.Len(t, u1.Tools, 1)
+	require.Equal(t, "tools:http:petstore:listPets", u1.Tools[0].Urn)
+	require.Equal(t, int64(1), u1.Tools[0].Count)
+	require.Equal(t, int64(1), u1.Tools[0].SuccessCount)
+	require.Equal(t, int64(0), u1.Tools[0].FailureCount)
 
-		// User 2
-		u2 := byUser[user2]
-		if !assert.NotNil(c, u2) {
-			return
-		}
-		assert.Equal(c, int64(1), u2.TotalChats)
-		assert.Equal(c, int64(1), u2.TotalChatRequests)
-		assert.Equal(c, int64(150), u2.TotalInputTokens)
-		assert.Equal(c, int64(75), u2.TotalOutputTokens)
-		assert.Equal(c, int64(225), u2.TotalTokens)
-		assert.Equal(c, int64(1), u2.TotalToolCalls)
-		assert.Equal(c, int64(0), u2.ToolCallSuccess)
-		assert.Equal(c, int64(1), u2.ToolCallFailure)
-		if assert.Len(c, u2.Tools, 1) {
-			assert.Equal(c, "tools:http:petstore:getPet", u2.Tools[0].Urn)
-			assert.Equal(c, int64(1), u2.Tools[0].Count)
-			assert.Equal(c, int64(0), u2.Tools[0].SuccessCount)
-			assert.Equal(c, int64(1), u2.Tools[0].FailureCount)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	// User 2
+	u2 := byUser[user2]
+	require.NotNil(t, u2)
+	require.Equal(t, int64(1), u2.TotalChats)
+	require.Equal(t, int64(1), u2.TotalChatRequests)
+	require.Equal(t, int64(150), u2.TotalInputTokens)
+	require.Equal(t, int64(75), u2.TotalOutputTokens)
+	require.Equal(t, int64(225), u2.TotalTokens)
+	require.Equal(t, int64(1), u2.TotalToolCalls)
+	require.Equal(t, int64(0), u2.ToolCallSuccess)
+	require.Equal(t, int64(1), u2.ToolCallFailure)
+	require.Len(t, u2.Tools, 1)
+	require.Equal(t, "tools:http:petstore:getPet", u2.Tools[0].Urn)
+	require.Equal(t, int64(1), u2.Tools[0].Count)
+	require.Equal(t, int64(0), u2.Tools[0].SuccessCount)
+	require.Equal(t, int64(1), u2.Tools[0].FailureCount)
 }
 
 func TestSearchUsers_GroupByExternalUser(t *testing.T) {
@@ -210,37 +196,29 @@ func TestSearchUsers_GroupByExternalUser(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "external",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Len(c, res.Users, 1) {
-			return
-		}
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "external",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1)
 
-		u := res.Users[0]
-		assert.Equal(c, extUser, u.UserID)
-		assert.Equal(c, int64(1), u.TotalChats)
-		assert.Equal(c, int64(1), u.TotalChatRequests)
-		assert.Equal(c, int64(100), u.TotalInputTokens)
-		assert.Equal(c, int64(50), u.TotalOutputTokens)
-		assert.Equal(c, int64(150), u.TotalTokens)
-		assert.Equal(c, int64(1), u.TotalToolCalls)
-		assert.Equal(c, int64(1), u.ToolCallSuccess)
-		assert.Equal(c, int64(0), u.ToolCallFailure)
-	}, 10*time.Second, 200*time.Millisecond)
+	u := res.Users[0]
+	require.Equal(t, extUser, u.UserID)
+	require.Equal(t, int64(1), u.TotalChats)
+	require.Equal(t, int64(1), u.TotalChatRequests)
+	require.Equal(t, int64(100), u.TotalInputTokens)
+	require.Equal(t, int64(50), u.TotalOutputTokens)
+	require.Equal(t, int64(150), u.TotalTokens)
+	require.Equal(t, int64(1), u.TotalToolCalls)
+	require.Equal(t, int64(1), u.ToolCallSuccess)
+	require.Equal(t, int64(0), u.ToolCallFailure)
 }
 
 func TestSearchUsers_FallsBackToUserEmail(t *testing.T) {
@@ -259,30 +237,22 @@ func TestSearchUsers_FallsBackToUserEmail(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Len(c, res.Users, 1) {
-			return
-		}
-		assert.Equal(c, email, res.Users[0].UserID)
-		assert.Equal(c, int64(100), res.Users[0].TotalInputTokens)
-		assert.Equal(c, int64(50), res.Users[0].TotalOutputTokens)
-		assert.InDelta(c, 1.25, res.Users[0].TotalCost, 0.000001)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1)
+	require.Equal(t, email, res.Users[0].UserID)
+	require.Equal(t, int64(100), res.Users[0].TotalInputTokens)
+	require.Equal(t, int64(50), res.Users[0].TotalOutputTokens)
+	require.InDelta(t, 1.25, res.Users[0].TotalCost, 0.000001)
 
 	filtered, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
 		Filter: &gen.SearchUsersFilter{
@@ -316,25 +286,20 @@ func TestSearchUsers_GroupsInternalUsersByEmailWhenOpaqueUserIDPresent(t *testin
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 1) {
-			return
-		}
-		assert.Equal(c, email, res.Users[0].UserID)
-		assert.Equal(c, email, res.Users[0].UserEmail)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1)
+	require.Equal(t, email, res.Users[0].UserID)
+	require.Equal(t, email, res.Users[0].UserEmail)
 }
 
 func TestSearchUsers_MergesInternalUsersByEmail(t *testing.T) {
@@ -355,30 +320,25 @@ func TestSearchUsers_MergesInternalUsersByEmail(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 1) {
-			return
-		}
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1)
 
-		user := res.Users[0]
-		assert.Equal(c, email, user.UserID)
-		assert.Equal(c, email, user.UserEmail)
-		assert.Equal(c, int64(300), user.TotalInputTokens)
-		assert.Equal(c, int64(150), user.TotalOutputTokens)
-		assert.Equal(c, int64(450), user.TotalTokens)
-	}, 10*time.Second, 200*time.Millisecond)
+	user := res.Users[0]
+	require.Equal(t, email, user.UserID)
+	require.Equal(t, email, user.UserEmail)
+	require.Equal(t, int64(300), user.TotalInputTokens)
+	require.Equal(t, int64(150), user.TotalOutputTokens)
+	require.Equal(t, int64(450), user.TotalTokens)
 
 	filtered, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
 		Filter: &gen.SearchUsersFilter{
@@ -422,31 +382,26 @@ func TestSearchUsers_MergesEmaillessRowsByKnownUserID(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 1) {
-			return
-		}
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1)
 
-		user := res.Users[0]
-		assert.Equal(c, email, user.UserID)
-		assert.Equal(c, email, user.UserEmail)
-		assert.Equal(c, int64(200), user.TotalInputTokens)
-		assert.Equal(c, int64(100), user.TotalOutputTokens)
-		assert.Equal(c, int64(1), user.TotalToolCalls)
-		assert.Equal(c, strconv.FormatInt(toolCallAt.UnixNano(), 10), user.LastSeenUnixNano)
-	}, 10*time.Second, 200*time.Millisecond)
+	user := res.Users[0]
+	require.Equal(t, email, user.UserID)
+	require.Equal(t, email, user.UserEmail)
+	require.Equal(t, int64(200), user.TotalInputTokens)
+	require.Equal(t, int64(100), user.TotalOutputTokens)
+	require.Equal(t, int64(1), user.TotalToolCalls)
+	require.Equal(t, strconv.FormatInt(toolCallAt.UnixNano(), 10), user.LastSeenUnixNano)
 }
 
 // TestSearchUsers_AttachesAccountsToEmailKeyedSummary guards the accounts
@@ -485,37 +440,28 @@ func TestSearchUsers_AttachesAccountsToEmailKeyedSummary(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 1) {
-			return
-		}
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1)
 
-		user := res.Users[0]
-		assert.Equal(c, email, user.UserID)
-		if !assert.Len(c, user.Accounts, 1) {
-			return
-		}
-		account := user.Accounts[0]
-		assert.Equal(c, "anthropic", account.Provider)
-		if assert.NotNil(c, account.AccountType) {
-			assert.Equal(c, "team", *account.AccountType)
-		}
-		if assert.NotNil(c, account.Email) {
-			assert.Equal(c, email, *account.Email)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	user := res.Users[0]
+	require.Equal(t, email, user.UserID)
+	require.Len(t, user.Accounts, 1)
+	account := user.Accounts[0]
+	require.Equal(t, "anthropic", account.Provider)
+	require.NotNil(t, account.AccountType)
+	require.Equal(t, "team", *account.AccountType)
+	require.NotNil(t, account.Email)
+	require.Equal(t, email, *account.Email)
 }
 
 // TestSearchUsers_ForeignRawUserIDsDoNotStealAccounts reproduces DNO-509: a
@@ -562,39 +508,33 @@ func TestSearchUsers_ForeignRawUserIDsDoNotStealAccounts(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 2) {
-			return
-		}
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 2)
 
-		byKey := make(map[string]*gen.UserSummary, len(res.Users))
-		for _, u := range res.Users {
-			byKey[u.UserID] = u
-		}
-		summaryA := byKey[emailA]
-		summaryB := byKey[emailB]
-		if !assert.NotNil(c, summaryA) || !assert.NotNil(c, summaryB) {
-			return
-		}
-		if assert.Len(c, summaryA.Accounts, 1) && assert.NotNil(c, summaryA.Accounts[0].Email) {
-			assert.Equal(c, emailA, *summaryA.Accounts[0].Email)
-		}
-		if assert.Len(c, summaryB.Accounts, 1) && assert.NotNil(c, summaryB.Accounts[0].Email) {
-			assert.Equal(c, emailB, *summaryB.Accounts[0].Email)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	byKey := make(map[string]*gen.UserSummary, len(res.Users))
+	for _, u := range res.Users {
+		byKey[u.UserID] = u
+	}
+	summaryA := byKey[emailA]
+	summaryB := byKey[emailB]
+	require.NotNil(t, summaryA)
+	require.NotNil(t, summaryB)
+	require.Len(t, summaryA.Accounts, 1)
+	require.NotNil(t, summaryA.Accounts[0].Email)
+	require.Equal(t, emailA, *summaryA.Accounts[0].Email)
+	require.Len(t, summaryB.Accounts, 1)
+	require.NotNil(t, summaryB.Accounts[0].Email)
+	require.Equal(t, emailB, *summaryB.Accounts[0].Email)
 }
 
 // TestSearchUsers_PersonalAccountAttachesToOwnerSummary covers the
@@ -638,43 +578,35 @@ func TestSearchUsers_PersonalAccountAttachesToOwnerSummary(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 2) {
-			return
-		}
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 2)
 
-		byKey := make(map[string]*gen.UserSummary, len(res.Users))
-		for _, u := range res.Users {
-			byKey[u.UserID] = u
-		}
-		workSummary := byKey[workEmail]
-		personalSummary := byKey[personalEmail]
-		if !assert.NotNil(c, workSummary) || !assert.NotNil(c, personalSummary) {
-			return
-		}
-		if assert.Len(c, workSummary.Accounts, 2) {
-			gotEmails := make([]string, 0, 2)
-			for _, account := range workSummary.Accounts {
-				if assert.NotNil(c, account.Email) {
-					gotEmails = append(gotEmails, *account.Email)
-				}
-			}
-			assert.ElementsMatch(c, []string{workEmail, personalEmail}, gotEmails)
-		}
-		assert.Empty(c, personalSummary.Accounts)
-	}, 10*time.Second, 200*time.Millisecond)
+	byKey := make(map[string]*gen.UserSummary, len(res.Users))
+	for _, u := range res.Users {
+		byKey[u.UserID] = u
+	}
+	workSummary := byKey[workEmail]
+	personalSummary := byKey[personalEmail]
+	require.NotNil(t, workSummary)
+	require.NotNil(t, personalSummary)
+	require.Len(t, workSummary.Accounts, 2)
+	gotEmails := make([]string, 0, 2)
+	for _, account := range workSummary.Accounts {
+		require.NotNil(t, account.Email)
+		gotEmails = append(gotEmails, *account.Email)
+	}
+	require.ElementsMatch(t, []string{workEmail, personalEmail}, gotEmails)
+	require.Empty(t, personalSummary.Accounts)
 }
 
 // TestSearchUsers_UserIDFilterReachesEmailKeyedSummaries pins the identity
@@ -707,33 +639,28 @@ func TestSearchUsers_UserIDFilterReachesEmailKeyedSummaries(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From:    from,
-				To:      to,
-				UserIds: []string{userID},
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 2) {
-			return
-		}
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:    from,
+			To:      to,
+			UserIds: []string{userID},
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 2)
 
-		keys := make([]string, 0, len(res.Users))
-		var totalInput int64
-		for _, u := range res.Users {
-			keys = append(keys, u.UserID)
-			totalInput += u.TotalInputTokens
-		}
-		assert.ElementsMatch(c, []string{workEmail, personalEmail}, keys)
-		assert.Equal(c, int64(500), totalInput)
-	}, 10*time.Second, 200*time.Millisecond)
+	keys := make([]string, 0, len(res.Users))
+	var totalInput int64
+	for _, u := range res.Users {
+		keys = append(keys, u.UserID)
+		totalInput += u.TotalInputTokens
+	}
+	require.ElementsMatch(t, []string{workEmail, personalEmail}, keys)
+	require.Equal(t, int64(500), totalInput)
 }
 
 // The mirror of the id-filter test for the agents page's dominant key shape:
@@ -759,35 +686,30 @@ func TestSearchUsers_EmailFilterReachesLinkedAccountEmailSummaries(t *testing.T)
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From:    from,
-				To:      to,
-				UserIds: []string{workEmail},
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 2) {
-			return
-		}
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:    from,
+			To:      to,
+			UserIds: []string{workEmail},
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 2)
 
-		keys := make([]string, 0, len(res.Users))
-		var totalInput, toolCalls int64
-		for _, u := range res.Users {
-			keys = append(keys, u.UserID)
-			totalInput += u.TotalInputTokens
-			toolCalls += u.TotalToolCalls
-		}
-		assert.ElementsMatch(c, []string{personalEmail, userID}, keys)
-		assert.Equal(c, int64(400), totalInput)
-		assert.Equal(c, int64(1), toolCalls)
-	}, 10*time.Second, 200*time.Millisecond)
+	keys := make([]string, 0, len(res.Users))
+	var totalInput, toolCalls int64
+	for _, u := range res.Users {
+		keys = append(keys, u.UserID)
+		totalInput += u.TotalInputTokens
+		toolCalls += u.TotalToolCalls
+	}
+	require.ElementsMatch(t, []string{personalEmail, userID}, keys)
+	require.Equal(t, int64(400), totalInput)
+	require.Equal(t, int64(1), toolCalls)
 }
 
 // seedConnectedOrgUser creates a user connected to the test org and returns
@@ -841,26 +763,20 @@ func TestSearchUsers_Pagination(t *testing.T) {
 
 	// Page 1: limit 2
 	var page1 *gen.SearchUsersResult
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    2,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Users, 2)
-		assert.NotNil(c, res.NextCursor)
-		page1 = res
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    2,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 2)
+	require.NotNil(t, res.NextCursor)
+	page1 = res
 
 	// Page 2
 	page2, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
@@ -924,26 +840,20 @@ func TestSearchUsers_PaginationAscOrder(t *testing.T) {
 
 	// Page 1
 	var page1 *gen.SearchUsersResult
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    2,
-			Sort:     "asc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Users, 2)
-		assert.NotNil(c, res.NextCursor)
-		page1 = res
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    2,
+		Sort:     "asc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 2)
+	require.NotNil(t, res.NextCursor)
+	page1 = res
 
 	// Page 2
 	page2, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
@@ -1007,28 +917,20 @@ func TestSearchUsers_FilterByDeploymentID(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From:         from,
-				To:           to,
-				DeploymentID: &deployment1,
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Len(c, res.Users, 1) {
-			return
-		}
-		assert.Equal(c, user1, res.Users[0].UserID)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:         from,
+			To:           to,
+			DeploymentID: &deployment1,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1)
+	require.Equal(t, user1, res.Users[0].UserID)
 }
 
 func TestSearchUsers_FilterByInternalUserIDs(t *testing.T) {
@@ -1052,29 +954,21 @@ func TestSearchUsers_FilterByInternalUserIDs(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From:    from,
-				To:      to,
-				UserIds: []string{includedUser},
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Len(c, res.Users, 1) {
-			return
-		}
-		assert.Equal(c, includedUser, res.Users[0].UserID)
-		assert.Equal(c, int64(150), res.Users[0].TotalTokens)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:    from,
+			To:      to,
+			UserIds: []string{includedUser},
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1)
+	require.Equal(t, includedUser, res.Users[0].UserID)
+	require.Equal(t, int64(150), res.Users[0].TotalTokens)
 }
 
 func TestSearchUsers_FilterByExternalUserIDs(t *testing.T) {
@@ -1097,29 +991,21 @@ func TestSearchUsers_FilterByExternalUserIDs(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From:    from,
-				To:      to,
-				UserIds: []string{includedExternalUser},
-			},
-			UserType: "external",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Len(c, res.Users, 1) {
-			return
-		}
-		assert.Equal(c, includedExternalUser, res.Users[0].UserID)
-		assert.Equal(c, int64(150), res.Users[0].TotalTokens)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:    from,
+			To:      to,
+			UserIds: []string{includedExternalUser},
+		},
+		UserType: "external",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1)
+	require.Equal(t, includedExternalUser, res.Users[0].UserID)
+	require.Equal(t, int64(150), res.Users[0].TotalTokens)
 }
 
 func TestSearchUsers_HookSourceBreakdown(t *testing.T) {
@@ -1143,46 +1029,34 @@ func TestSearchUsers_HookSourceBreakdown(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From:    from,
-				To:      to,
-				UserIds: []string{userID},
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Len(c, res.Users, 1) {
-			return
-		}
-		assert.Equal(c, userID, res.Users[0].UserID)
-		if !assert.Len(c, res.Users[0].HookSources, 2) {
-			return
-		}
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:    from,
+			To:      to,
+			UserIds: []string{userID},
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1)
+	require.Equal(t, userID, res.Users[0].UserID)
+	require.Len(t, res.Users[0].HookSources, 2)
 
-		byHookSource := make(map[string]*gen.HookSourceUsage)
-		for _, source := range res.Users[0].HookSources {
-			byHookSource[source.Source] = source
-		}
+	byHookSource := make(map[string]*gen.HookSourceUsage)
+	for _, source := range res.Users[0].HookSources {
+		byHookSource[source.Source] = source
+	}
 
-		cursor := byHookSource["cursor"]
-		if assert.NotNil(c, cursor) {
-			assert.Equal(c, int64(2), cursor.EventCount)
-		}
+	cursor := byHookSource["cursor"]
+	require.NotNil(t, cursor)
+	require.Equal(t, int64(2), cursor.EventCount)
 
-		claudeCode := byHookSource["claude-code"]
-		if assert.NotNil(c, claudeCode) {
-			assert.Equal(c, int64(1), claudeCode.EventCount)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	claudeCode := byHookSource["claude-code"]
+	require.NotNil(t, claudeCode)
+	require.Equal(t, int64(1), claudeCode.EventCount)
 }
 
 func TestSearchUsers_ToolsBreakdown(t *testing.T) {
@@ -1207,55 +1081,43 @@ func TestSearchUsers_ToolsBreakdown(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Len(c, res.Users, 1) {
-			return
-		}
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1)
 
-		u := res.Users[0]
-		assert.Equal(c, userID, u.UserID)
-		assert.Equal(c, int64(5), u.TotalToolCalls)
-		assert.Equal(c, int64(4), u.ToolCallSuccess) // 2+2
-		assert.Equal(c, int64(1), u.ToolCallFailure) // 1
+	u := res.Users[0]
+	require.Equal(t, userID, u.UserID)
+	require.Equal(t, int64(5), u.TotalToolCalls)
+	require.Equal(t, int64(4), u.ToolCallSuccess) // 2+2
+	require.Equal(t, int64(1), u.ToolCallFailure) // 1
 
-		// Per-tool breakdown
-		if !assert.Len(c, u.Tools, 2) {
-			return
-		}
-		toolStats := make(map[string]*gen.ToolUsage)
-		for _, tool := range u.Tools {
-			toolStats[tool.Urn] = tool
-		}
+	// Per-tool breakdown
+	require.Len(t, u.Tools, 2)
+	toolStats := make(map[string]*gen.ToolUsage)
+	for _, tool := range u.Tools {
+		toolStats[tool.Urn] = tool
+	}
 
-		listPets := toolStats["tools:http:petstore:listPets"]
-		if assert.NotNil(c, listPets) {
-			assert.Equal(c, int64(3), listPets.Count)
-			assert.Equal(c, int64(2), listPets.SuccessCount)
-			assert.Equal(c, int64(1), listPets.FailureCount)
-		}
+	listPets := toolStats["tools:http:petstore:listPets"]
+	require.NotNil(t, listPets)
+	require.Equal(t, int64(3), listPets.Count)
+	require.Equal(t, int64(2), listPets.SuccessCount)
+	require.Equal(t, int64(1), listPets.FailureCount)
 
-		getPet := toolStats["tools:http:petstore:getPet"]
-		if assert.NotNil(c, getPet) {
-			assert.Equal(c, int64(2), getPet.Count)
-			assert.Equal(c, int64(2), getPet.SuccessCount)
-			assert.Equal(c, int64(0), getPet.FailureCount)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	getPet := toolStats["tools:http:petstore:getPet"]
+	require.NotNil(t, getPet)
+	require.Equal(t, int64(2), getPet.Count)
+	require.Equal(t, int64(2), getPet.SuccessCount)
+	require.Equal(t, int64(0), getPet.FailureCount)
 }
 
 func TestSearchUsers_ScopedByProject(t *testing.T) {
@@ -1282,31 +1144,23 @@ func TestSearchUsers_ScopedByProject(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Len(c, res.Users, 1, "should only return users from the queried project") {
-			return
-		}
-		assert.Equal(c, sharedUserID, res.Users[0].UserID)
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1, "should only return users from the queried project")
+	require.Equal(t, sharedUserID, res.Users[0].UserID)
 
-		// Metrics should only reflect the current project's data
-		assert.Equal(c, int64(100), res.Users[0].TotalInputTokens, "should not include tokens from other project")
-		assert.Equal(c, int64(150), res.Users[0].TotalTokens, "should not include tokens from other project")
-	}, 10*time.Second, 200*time.Millisecond)
+	// Metrics should only reflect the current project's data
+	require.Equal(t, int64(100), res.Users[0].TotalInputTokens, "should not include tokens from other project")
+	require.Equal(t, int64(150), res.Users[0].TotalTokens, "should not include tokens from other project")
 }
 
 // TestSearchUsers_BasicMetricsOmitsBreakdowns pins the "basic" metrics detail

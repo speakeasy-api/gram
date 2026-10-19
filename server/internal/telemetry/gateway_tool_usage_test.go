@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -159,7 +158,7 @@ func TestListToolUsageTraces_ClassifiesHookObservedGateway(t *testing.T) {
 	from := now.Add(-time.Hour).Format(time.RFC3339)
 	to := now.Add(time.Hour).Format(time.RFC3339)
 
-	all := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10}, func(result *gen.ListToolUsageTracesResult) bool {
+	all := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10}, func(result *gen.ListToolUsageTracesResult) bool {
 		return len(result.Traces) == 3
 	})
 	byTarget := map[string]*gen.ToolUsageTraceSummary{}
@@ -213,23 +212,17 @@ func TestGetToolUsageSummary_ClassifiesAndFiltersGateway(t *testing.T) {
 	from := now.Add(-time.Hour).Format(time.RFC3339)
 	to := now.Add(time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{From: from, To: to, MetaMcpServerIds: []string{gatewayID}})
-		if !assert.NoError(c, err) || !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Equal(c, int64(2), res.Totals.EventCount) {
-			return
-		}
-		targets := toolUsageTargetsByKey(res.Targets)
-		observed := targets[repo.ToolUsageTargetTypeMetaMCP+":server:"+gatewayID]
-		if assert.NotNil(c, observed) {
-			assert.Equal(c, "Acme Gateway", observed.TargetLabel)
-			assert.Equal(c, int64(1), observed.EventCount)
-		}
-		assert.NotNil(c, targets["tunneled_mcp_server:server:"+fixture.memberSlug], "the dispatch stays attributed to the member")
-		assert.Nil(c, targets["shadow_mcp_server:server:shadow-db"])
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{From: from, To: to, MetaMcpServerIds: []string{gatewayID}})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, int64(2), res.Totals.EventCount)
+	targets := toolUsageTargetsByKey(res.Targets)
+	observed := targets[repo.ToolUsageTargetTypeMetaMCP+":server:"+gatewayID]
+	require.NotNil(t, observed)
+	require.Equal(t, "Acme Gateway", observed.TargetLabel)
+	require.Equal(t, int64(1), observed.EventCount)
+	require.NotNil(t, targets["tunneled_mcp_server:server:"+fixture.memberSlug], "the dispatch stays attributed to the member")
+	require.Nil(t, targets["shadow_mcp_server:server:shadow-db"])
 
 	options, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{From: from, To: to})
 	require.NoError(t, err)

@@ -190,7 +190,7 @@ func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
 		require.Equal(t, workChatID, sessions.Sessions[1].GramChatID)
 
 		wideFrom, wideTo := summaryWindow(now)
-		wideSessions := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		wideSessions := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 			From:    wideFrom,
 			To:      wideTo,
 			Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{email}}},

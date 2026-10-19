@@ -69,7 +69,7 @@ func TestListToolUsageTraces_ReturnsHostedShadowLocalAndSkills(t *testing.T) {
 		conversationID: "conv-skill",
 	})
 
-	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Limit: 10,
@@ -167,7 +167,7 @@ func TestListToolUsageTraces_SummaryPathMatchesRawPath(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	summaryPath := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	summaryPath := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  from,
 		To:    to,
 		Limit: 10,
@@ -179,7 +179,7 @@ func TestListToolUsageTraces_SummaryPathMatchesRawPath(t *testing.T) {
 	// A non-empty query forces the raw telemetry_logs path. ":" is present in all
 	// seeded gram_urn values, so it should not change the logical result set.
 	rawPathQuery := ":"
-	rawPath := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	rawPath := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  from,
 		To:    to,
 		Query: &rawPathQuery,
@@ -226,7 +226,7 @@ func TestListToolUsageTraces_DerivesSkillNameFromToolInput(t *testing.T) {
 		conversationID: "conv-skill",
 	})
 
-	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Limit: 10,
@@ -267,7 +267,7 @@ func TestListToolUsageTraces_ClassifiesDirectTunneledMCP(t *testing.T) {
 		statusCode:  200,
 	})
 
-	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:          now.Add(1 * time.Hour).Format(time.RFC3339),
 		TargetTypes: []gen.ToolUsageTargetType{"tunneled_mcp_server"},
@@ -319,7 +319,7 @@ func TestListToolUsageTraces_KeepsClassificationAfterServerDeleted(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:          now.Add(1 * time.Hour).Format(time.RFC3339),
 		TargetTypes: []gen.ToolUsageTargetType{"tunneled_mcp_server"},
@@ -381,7 +381,7 @@ func TestListToolUsageTraces_ConfiguredServerSelectorsExcludeASameNamedShadowSer
 
 	// Both rows are present in the project, so what follows is an exclusion
 	// rather than a row that never landed.
-	all := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	all := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  from,
 		To:    to,
 		Limit: 10,
@@ -390,7 +390,7 @@ func TestListToolUsageTraces_ConfiguredServerSelectorsExcludeASameNamedShadowSer
 	})
 	require.Len(t, all.Traces, 2)
 
-	configured := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	configured := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:               from,
 		To:                 to,
 		HostedToolsetSlugs: []string{"billing"},
@@ -404,7 +404,7 @@ func TestListToolUsageTraces_ConfiguredServerSelectorsExcludeASameNamedShadowSer
 
 	// Naming the shadow server explicitly, which only the Tool Logs page does,
 	// still reaches it, and reaches only it.
-	shadow := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	shadow := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:              from,
 		To:                to,
 		ShadowServerNames: []string{"billing"},
@@ -447,7 +447,7 @@ func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
 		customAttrs:    map[string]any{"gram.trigger.instance_id": "trigger_123"},
 	})
 
-	hostedOnly := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	hostedOnly := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:               now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:                 now.Add(1 * time.Hour).Format(time.RFC3339),
 		TargetTypes:        []gen.ToolUsageTargetType{"hosted_mcp_server"},
@@ -460,7 +460,7 @@ func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
 	require.Equal(t, gen.ToolUsageTargetType("hosted_mcp_server"), hostedOnly.Traces[0].TargetType)
 
 	attributeQuery := "conv-shadow"
-	shadowCursorOnly := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	shadowCursorOnly := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:              now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:                now.Add(1 * time.Hour).Format(time.RFC3339),
 		ShadowServerNames: []string{"shadow-db"},
@@ -475,7 +475,7 @@ func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
 	require.Equal(t, "shadow-db", shadowCursorOnly.Traces[0].TargetID)
 	require.Equal(t, "cursor", *shadowCursorOnly.Traces[0].HookSource)
 
-	triggerFiltered := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	triggerFiltered := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 		Filters: []*gen.LogFilter{
@@ -512,7 +512,7 @@ func TestListToolUsageTraces_PaginatesWithOpaqueCursor(t *testing.T) {
 		})
 	}
 
-	page1 := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	page1 := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Limit: 2,
@@ -580,7 +580,7 @@ func TestListToolUsageTraces_PrefersWorstStatusInGroupedTrace(t *testing.T) {
 		},
 	})
 
-	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Limit: 10,
@@ -657,7 +657,7 @@ func TestListToolUsageTraces_StatusFilterExcludesSuccessfulTracesWithStatuslessR
 	// Sanity check: without a status filter both traces are present. A non-empty query
 	// (":" is in every seeded gram_urn) forces the same raw path the status filter uses.
 	rawPathQuery := ":"
-	all := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	all := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Query: &rawPathQuery,
@@ -667,7 +667,7 @@ func TestListToolUsageTraces_StatusFilterExcludesSuccessfulTracesWithStatuslessR
 	})
 	require.Len(t, all.Traces, 2)
 
-	filtered := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	filtered := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 		Filters: []*gen.LogFilter{
@@ -738,7 +738,7 @@ func TestListToolUsageTraces_FiltersByStatus(t *testing.T) {
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
 	// Wait until all three traces are queryable.
-	waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From: from, To: to, Limit: 10,
 	}, func(result *gen.ListToolUsageTracesResult) bool {
 		return len(result.Traces) == 3
@@ -762,7 +762,7 @@ func TestListToolUsageTraces_FiltersByStatus(t *testing.T) {
 			t.Parallel()
 
 			want := len(tc.wantStatus)
-			result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+			result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 				From:     from,
 				To:       to,
 				Statuses: tc.statuses,
@@ -798,7 +798,7 @@ func TestListToolUsageTraces_IncludesTriggerOnlyRowsForTriggerFilter(t *testing.
 		body:              "trigger delivered",
 	})
 
-	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 		Filters: []*gen.LogFilter{
@@ -879,7 +879,7 @@ func insertTriggerOnlyLog(t *testing.T, ctx context.Context, ti *testInstance, p
 	require.NoError(t, err)
 }
 
-func waitForToolUsageTraces(
+func requireToolUsageTraces(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
@@ -888,13 +888,10 @@ func waitForToolUsageTraces(
 ) *gen.ListToolUsageTracesResult {
 	t.Helper()
 
-	var result *gen.ListToolUsageTracesResult
-	var err error
-	require.Eventually(t, func() bool {
-		result, err = ti.service.ListToolUsageTraces(ctx, payload)
-		return err == nil && result != nil && ready(result)
-	}, 2*time.Second, 50*time.Millisecond, "expected tool usage traces to become query-ready, err: %v", errors.Unwrap(err))
+	result, err := ti.service.ListToolUsageTraces(ctx, payload)
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.NotNil(t, result)
+	require.True(t, ready(result), "tool usage traces did not match")
 	return result
 }
 

@@ -96,7 +96,7 @@ func TestCostAnalytics_CanonicalFold_FiltersFoldThroughMap(t *testing.T) {
 		require.Len(t, sessions.Sessions, 2)
 
 		wideFrom, wideTo := summaryWindow(now)
-		wideSessions := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		wideSessions := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 			From:    wideFrom,
 			To:      wideTo,
 			Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{email}}},
@@ -1043,12 +1043,9 @@ func TestListToolUsageTraces_CanonicalFold_EmailFilterReachesAliasRows(t *testin
 		Limit:                10,
 	}
 
-	var folded []repo.ToolUsageTraceSummary
-	require.Eventually(t, func() bool {
-		var err error
-		folded, err = ti.chClient.ListToolUsageTraces(ctx, params)
-		return err == nil && len(folded) == 2
-	}, 2*time.Second, 50*time.Millisecond, "expected the folded filter to reach both the canonical and the alias row")
+	folded, err := ti.chClient.ListToolUsageTraces(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, folded, 2, "expected the folded filter to reach both the canonical and the alias row")
 	keys := make([]string, 0, len(folded))
 	for _, row := range folded {
 		keys = append(keys, row.UserKey)

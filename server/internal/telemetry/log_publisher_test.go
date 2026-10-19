@@ -65,7 +65,7 @@ func newShadowTestLogger(t *testing.T, ctx context.Context, ti *testInstance, pu
 }
 
 // fetchLog reads back exactly one telemetry_logs row for the given tool.
-// Only for synchronous writes; async writes use flushAndGetLog, which polls.
+// Only for synchronous writes; async writes use getLog, which polls.
 func fetchLog(t *testing.T, ctx context.Context, client *repo.Queries, projectID, urn string, timestamp time.Time) repo.TelemetryLog {
 	t.Helper()
 
@@ -107,8 +107,8 @@ func TestLogPublisher_MirrorsRowsToPubSub(t *testing.T) {
 		{Timestamp: timestamp, ToolInfo: toolInfoB, Attributes: attrs},
 	}))
 
-	logA := flushAndGetLog(t, ctx, ti, toolInfoA.ProjectID, toolInfoA.URN, timestamp)
-	logB := flushAndGetLog(t, ctx, ti, toolInfoB.ProjectID, toolInfoB.URN, timestamp)
+	logA := getLog(t, ctx, ti, toolInfoA.ProjectID, toolInfoA.URN, timestamp)
+	logB := getLog(t, ctx, ti, toolInfoB.ProjectID, toolInfoB.URN, timestamp)
 
 	// Publishes happen synchronously inside LogBulk; only the ack drain is
 	// async, so the capture is already complete here.
