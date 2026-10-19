@@ -45,6 +45,28 @@ func TestBudgetedDeviceKeyLookup(t *testing.T) {
 		require.Equal(t, []string{"workload-device-key-lookup:" + issuerID.String(), "workload-device-key-lookup:" + issuerID.String()}, scopes)
 	})
 
+	t.Run("the charge and the lookup are bounded even when the caller is not", func(t *testing.T) {
+		t.Parallel()
+		within := func(ctx context.Context) {
+			deadline, ok := ctx.Deadline()
+			require.True(t, ok, "the stage must carry its own deadline")
+			require.LessOrEqual(t, time.Until(deadline), workloadDeviceKeyLookupTimeout)
+		}
+		charge := func(ctx context.Context, _ string) (ratelimit.Result, error) {
+			within(ctx)
+			return ratelimit.Result{Allowed: true, Remaining: 1, RetryAfter: 0}, nil
+		}
+		var calls int
+		lookup := func(ctx context.Context, _ string, _ uuid.UUID, _ string) (workloadidentity.DeviceKey, error) {
+			calls++
+			within(ctx)
+			return found, nil
+		}
+		_, err := budgetedDeviceKeyLookup(lookup, charge)(context.Background(), "org", issuerID, "device:a")
+		require.NoError(t, err)
+		require.Equal(t, 1, calls)
+	})
+
 	t.Run("a refused charge never reaches the store", func(t *testing.T) {
 		t.Parallel()
 		var calls int
