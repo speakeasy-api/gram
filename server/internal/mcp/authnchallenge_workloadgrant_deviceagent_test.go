@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -27,6 +28,7 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -117,11 +119,10 @@ func (f deviceAgentGrantFixture) registerDevice(t *testing.T) registeredDevice {
 
 	policy := f.workloadPolicy(t)
 
-	// A join token is refused for an agent that could not poll or send hooks.
+	// A join token is refused for an agent that could not poll. The agent gets
+	// no hooks grant: enrolling does not need one.
 	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String())
-	for _, scope := range []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest} {
-		seedPrincipalGrant(t, f.ctx, f.ti, f.fx.orgID, agentPrincipal, scope, f.fx.orgID)
-	}
+	seedPrincipalGrant(t, f.ctx, f.ti, f.fx.orgID, agentPrincipal, authz.ScopeOrgDeviceAgentSync, f.fx.orgID)
 
 	join, err := policy.CreateDeviceJoinToken(f.ctx, &gen.CreateDeviceJoinTokenPayload{
 		AgentID:          f.agentID.String(),
@@ -216,6 +217,31 @@ func TestDeviceAgentToken_RegisteredDeviceReceivesAToken(t *testing.T) {
 	device := f.registerDevice(t)
 	require.Equal(t, f.fx.orgID, device.registration.OrganizationID)
 	requireDeviceAgentToken(t, f.exchangeDeviceAgent(t, device.assertion(t, f.tokenURL)), f.fx.orgID, f.deviceIssuerID(t, device), device.registration.DeviceSubject)
+}
+
+// A device whose agent holds no hooks grant still enrolls and receives a token,
+// so it can use MCP; each hooks request it makes is refused by RBAC.
+func TestDeviceAgentToken_DeviceWithoutHooksGrantGetsATokenButNoHooks(t *testing.T) {
+	t.Parallel()
+
+	f := newDeviceAgentGrantFixture(t)
+	device := f.registerDevice(t)
+	w := f.exchangeDeviceAgent(t, device.assertion(t, f.tokenURL))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	token, ok := resp["access_token"].(string)
+	require.True(t, ok)
+
+	callerIssuer, err := sharedCallerIssuer()
+	require.NoError(t, err)
+	admitted, _, err := deviceagenttoken.New(callerIssuer, f.ti.conn).Admit(t.Context(), token, f.ti.authzEngine)
+	require.NoError(t, err)
+
+	err = f.ti.authzEngine.Require(admitted, authz.HooksIngestCheck(f.fx.orgID, f.fx.target.ProjectID.String()))
+	shareable, ok := errors.AsType[*oops.ShareableError](err)
+	require.True(t, ok, "error: %v", err)
+	require.Equal(t, oops.CodeForbidden, shareable.Code)
 }
 
 // A device cannot exchange at another organization's endpoint, even with the

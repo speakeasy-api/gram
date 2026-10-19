@@ -506,33 +506,3 @@ func TestCreateDeviceJoinToken_RequiresAPerson(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
-
-// The project a hook may reach is decided per request, so an agent whose hooks
-// grant is bounded to one project can still enroll a device.
-func TestCreateDeviceJoinToken_AcceptsAnAgentWhoseHooksGrantNamesOneProject(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-
-	agentID := newAgentWithoutDeviceGrants(t, ctx, ti, "one-project-hooks")
-	seedAgentGrant(t, ctx, ti, agentID, authz.ScopeOrgDeviceAgentSync)
-	selector := authz.NewSelector(authz.ScopeOrgHooksIngest, ti.orgID)
-	selector[authz.SelectorKeyProjectID] = ti.projectID.String()
-	selectors, err := selector.MarshalJSON()
-	require.NoError(t, err)
-	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
-		OrganizationID: ti.orgID,
-		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()),
-		Scope:          string(authz.ScopeOrgHooksIngest),
-		Selectors:      selectors,
-	})
-	require.NoError(t, err)
-
-	_, err = ti.service.CreateDeviceJoinToken(ctx, &gen.CreateDeviceJoinTokenPayload{
-		AgentID:          agentID.String(),
-		ExpiresInSeconds: 3600,
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-	})
-	require.NoError(t, err)
-}
