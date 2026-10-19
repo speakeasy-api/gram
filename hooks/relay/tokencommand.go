@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -19,7 +20,10 @@ import (
 // The token-command credential source authenticates a headless workload box
 // (ADR-0025). The command comes from SPEAKEASY_AI_HOOKS_TOKEN_COMMAND, identity
 // discovery, or the token-box record, and is then the only source: any key
-// would bypass the admission's project filter.
+// would bypass the server's per-project check. The project is the box's
+// configured hooks project (the device agent's
+// workload_identity.hooks_project_slug), delivered in the command's output;
+// the agent's org:hooks_ingest RBAC decides whether the server accepts it.
 
 const (
 	tokenCommandTimeout   = 5 * time.Second
@@ -30,12 +34,24 @@ const (
 	tokenCacheKind        = "token"
 
 	// tokenCommandRefusedExit is the command's exit status for a definitive
-	// refusal (revoked, not a workload, no hooks project), as opposed to an outage.
+	// refusal (revoked, not a workload, no configured hooks project), as
+	// opposed to an outage.
 	tokenCommandRefusedExit = 3
 )
 
 // errTokenRefused marks a token command failure as a definitive refusal.
 var errTokenRefused = errors.New("the device agent refused to issue a hooks token")
+
+// errNoHooksProject is the refusal for command output without a usable
+// project. It is definitive like exit status 3: there is no other source of
+// the project, and a key would bypass the server's per-project check.
+var errNoHooksProject = fmt.Errorf("%w: the device agent has no valid workload_identity.hooks_project_slug configured; hooks are not sent", errTokenRefused)
+
+// hooksProjectSlugPattern matches the device agent's validation of
+// workload_identity.hooks_project_slug.
+var hooksProjectSlugPattern = regexp.MustCompile(`^[a-z0-9_-]{1,128}$`)
+
+func validHooksProjectSlug(slug string) bool { return hooksProjectSlugPattern.MatchString(slug) }
 
 // A refused token box fails closed until a fresh token is accepted; otherwise an
 // expired token would reach the fail-open no-token path. A separate file, so a
@@ -148,7 +164,7 @@ func tokenCommandArgv() ([]string, bool) {
 	}
 	// Once a box has authenticated by token it stays a token box, whatever a
 	// (possibly stale or failed) identity lookup now says: falling back to a
-	// key would bypass the admission's project filter.
+	// key would bypass the server's per-project check.
 	if st, ok := readTokenBox(); ok {
 		return st.Argv, true
 	}
@@ -186,6 +202,9 @@ func resolveTokenAuth(cfg Config, argv []string, refresh bool) (creds, bool) {
 	}
 	bearer, err := parseTokenOutput(out)
 	if err != nil {
+		if errors.Is(err, errTokenRefused) {
+			markTokenRejected()
+		}
 		debugTokenCommand(cfg, "token command output rejected: %v", err)
 		return creds{}, false
 	}
@@ -213,7 +232,8 @@ func resolveTokenAuth(cfg Config, argv []string, refresh bool) (creds, bool) {
 
 // parseTokenOutput validates the command's JSON. A value with a line break or
 // stray whitespace is refused: the cache is line-oriented and the bearer goes
-// into a header verbatim.
+// into a header verbatim. A missing or malformed project is a definitive
+// refusal (errNoHooksProject), not an outage.
 func parseTokenOutput(raw []byte) (tokenCommandOutput, error) {
 	var out tokenCommandOutput
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -230,23 +250,24 @@ func parseTokenOutput(raw []byte) (tokenCommandOutput, error) {
 		return tokenCommandOutput{}, errors.New("authorization is not a bearer token")
 	case len(token) > tokenMaxBearerBytes || strings.ContainsAny(token, " \t\r\n"):
 		return tokenCommandOutput{}, errors.New("bearer token is malformed")
-	case out.Project == "" || strings.ContainsAny(out.Project, " \t\r\n"):
-		return tokenCommandOutput{}, errors.New("project is missing or malformed")
 	case out.ExpiresAt.IsZero() || !out.ExpiresAt.After(nowFunc()):
 		return tokenCommandOutput{}, errors.New("expires_at is missing or in the past")
+	case !validHooksProjectSlug(out.Project):
+		return tokenCommandOutput{}, errNoHooksProject
 	}
 	return out, nil
 }
 
 // readCachedToken loads the cached token if it belongs to this deployment and
-// has tokenRefreshMargin left. Its project is the admission's, not the plugin's.
+// has tokenRefreshMargin left. Its project is the box's configured hooks
+// project, not the plugin's; a cache without a valid one is not used.
 func readCachedToken(cfg Config) (creds, bool) {
 	values, err := readAuthFile(authFilePath())
 	if err != nil || values["kind"] != tokenCacheKind {
 		return creds{}, false
 	}
 	expires, err := time.Parse(time.RFC3339Nano, values["expires_at"])
-	if err != nil || values["bearer"] == "" ||
+	if err != nil || values["bearer"] == "" || !validHooksProjectSlug(values["project"]) ||
 		!sameDeployment(values["server_url"], values["org"], cfg.ServerURL, cfg.OrgID) ||
 		!nowFunc().Add(tokenRefreshMargin).Before(expires) {
 		return creds{}, false
@@ -296,7 +317,7 @@ func recoverTokenRejection(cfg Config, c creds, res ingestResult, resend func(cr
 	argv, _ := tokenCommandArgv()
 	fresh, ok := resolveTokenAuth(cfg, argv, true)
 	if ok && fresh.Project != c.Project {
-		// The admission now names another project: this event was bound to
+		// The box's configured hooks project changed: this event was bound to
 		// the old one, so it is not resent. The fresh token stays cached.
 		debugTokenCommand(cfg, "token project changed from %q to %q; event not resent", c.Project, fresh.Project)
 		return res, c
@@ -305,6 +326,11 @@ func recoverTokenRejection(cfg Config, c creds, res ingestResult, resend func(cr
 		res, c = resend(fresh), fresh
 	}
 	if res.authRejected || !ok {
+		if res.authRejected {
+			// A 401/403 may be policy rather than a bad token: the agent's
+			// org:hooks_ingest RBAC may not cover this project.
+			debugTokenCommand(cfg, "hooks refused for project %q (status %d): the workload's agent may not send hooks there, or the token was rejected", c.Project, res.statusCode)
+		}
 		if err := markTokenRejected(); err != nil {
 			debugTokenCommand(cfg, "%v", err)
 		}

@@ -122,7 +122,7 @@ const brokenAuthMessage = "Speakeasy hooks are configured for this workspace but
 
 const reauthNeededMessage = "Speakeasy hooks need to reconnect. Run the Speakeasy hooks login command to reconnect."
 
-const tokenRejectedMessage = "Speakeasy refused this device's hooks credential; the device may have been revoked. Contact your Speakeasy administrator."
+const tokenRejectedMessage = "Speakeasy refused this device's hooks: the device may have been revoked, have no hooks project configured, or not be allowed to send hooks to that project. Contact your Speakeasy administrator."
 
 const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in SPEAKEASY_AI_HOOKS_API_KEY (or the deprecated GRAM_HOOKS_API_KEY). Update or unset it, then run the Speakeasy hooks login command to reconnect."
 
@@ -291,7 +291,9 @@ func (r *Relay) tokenUnavailable(typed any) ingestResult {
 	res := ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeCredential, causeDetail: "token command produced no usable token"}
 	r.debugf("event=%s token-unavailable", agenthooks.EventOf(typed).NativeName)
 	// Bind the entry to the project the box last authenticated for, so a
-	// replay after the device is reassigned cannot land in another project.
+	// replay after the box's configured hooks project changes cannot land in
+	// another project. An entry with no valid project is never replayed: the
+	// drain drops it.
 	st, _ := readTokenBox()
 	r.finishExchange(newIdempotencyToken(), payload, res, st.Project)
 	return res
@@ -301,7 +303,7 @@ func tokenRejectedResult() ingestResult {
 	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: tokenRejectedMessage}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}
 }
 
-// tokenProjectOf is the admission project a token credential is bound to, or
+// tokenProjectOf is the configured hooks project a token credential is bound to, or
 // "" for key credentials.
 func tokenProjectOf(c creds) string {
 	if c.Source == credToken {

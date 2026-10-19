@@ -146,10 +146,10 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			cl = newReplayClient(entry.ServerURL)
 			clients[entry.ServerURL] = cl
 		}
-		if a.c.Source == credToken && entry.TokenProject != a.c.Project {
-			// A token box replays only events bound to its current admission
-			// project: one captured for another project, or a pre-binding (v1)
-			// entry with no project at all, must not land in this one.
+		if a.c.Source == credToken && (entry.TokenProject != a.c.Project || !validHooksProjectSlug(entry.TokenProject)) {
+			// A token box replays only events bound to its current configured
+			// hooks project: one captured for another project, or a pre-binding
+			// (v1) entry with no project at all, must not land in this one.
 			if removeSpoolEntry(path) {
 				s.Dropped++
 			} else {
@@ -406,9 +406,9 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 				}
 			}
 		}
-		// A token's project is the one the box's admission authorizes; the
-		// project recorded at spool time came from the plugin config and
-		// would be refused by the project filter.
+		// A token's project is the box's configured hooks project; the
+		// project recorded at spool time came from the plugin config and is
+		// not the token's to use.
 		if a.ok && entry.ProjectSlug != "" && a.c.Source != credToken {
 			// The stored deployment identity is the replay routing truth: a
 			// SPEAKEASY_AI_HOOKS_PROJECT_SLUG (or cached project) inherited from the

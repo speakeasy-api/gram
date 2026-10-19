@@ -144,8 +144,32 @@ func TestDrainRefreshesOnceThenRecordsTheRefusal(t *testing.T) {
 	requireNoKeySent(t, fs)
 }
 
-// A spooled event bound to one admission project is never replayed into
-// another after the device is reassigned.
+// A drain whose token command delivers no configured hooks project replays
+// nothing, never through a key, and records the refusal.
+func TestDrainWithoutConfiguredProjectReplaysNothing(t *testing.T) {
+	fs, mode := modeServer(t)
+	cfg, fc := tokenBox(t, fs.URL)
+	stateHome := setSpoolStateHome(t)
+
+	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	mode.Store(http.StatusServiceUnavailable)
+	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/post_tool_use.json")
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	require.Len(t, listSpoolEntries(spoolDirPath()), 1)
+
+	forgetAuth()
+	fc.project = ""
+	mode.Store(http.StatusOK)
+	sent := len(fs.requests)
+	s := Drain(context.Background())
+	require.Equal(t, 1, s.Skipped, "the entry is not replayed")
+	require.Len(t, fs.requests, sent, "nothing is sent without a configured hooks project")
+	require.True(t, tokenRejected())
+	requireNoKeySent(t, fs)
+}
+
+// A spooled event bound to one configured hooks project is never replayed
+// into another after the box's configured project changes.
 func TestDrainDropsEventsBoundToAnotherProject(t *testing.T) {
 	fs, mode := modeServer(t)
 	cfg, fc := tokenBox(t, fs.URL)

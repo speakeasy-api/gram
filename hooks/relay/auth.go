@@ -147,7 +147,9 @@ func sameDeployment(gotURL, gotOrg, wantURL, wantOrg string) bool {
 // credential.
 //
 // A configured token command is exclusive: no key of any kind is consulted,
-// because each would bypass the project filter the box's admission sets.
+// because each would bypass the server's per-project check: a token box sends
+// only to its configured hooks project, and only if the agent's
+// org:hooks_ingest RBAC allows it.
 func resolveAuth(cfg Config) (creds, bool) {
 	if argv, ok := tokenCommandArgv(); ok {
 		return resolveTokenAuth(cfg, argv, false)

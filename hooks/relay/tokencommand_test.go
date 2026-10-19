@@ -214,7 +214,6 @@ func TestParseTokenOutputRejectsMalformedOutput(t *testing.T) {
 		{name: "not a bearer", raw: `{"authorization":"Basic abc","project":"p","expires_at":"` + future + `"}`},
 		{name: "empty token", raw: `{"authorization":"Bearer ","project":"p","expires_at":"` + future + `"}`},
 		{name: "token with a newline", raw: `{"authorization":"Bearer a\nb","project":"p","expires_at":"` + future + `"}`},
-		{name: "missing project", raw: `{"authorization":"Bearer abc","expires_at":"` + future + `"}`},
 		{name: "expired", raw: `{"authorization":"Bearer abc","project":"p","expires_at":"2026-10-13T11:00:00Z"}`},
 		{name: "missing expiry", raw: `{"authorization":"Bearer abc","project":"p"}`},
 		{name: "unknown field", raw: `{"authorization":"Bearer abc","project":"p","expires_at":"` + future + `","api_key":"x"}`},
@@ -229,6 +228,124 @@ func TestParseTokenOutputRejectsMalformedOutput(t *testing.T) {
 	out, err := parseTokenOutput([]byte(`{"authorization":"Bearer abc","project":"p","expires_at":"` + future + `"}`))
 	require.NoError(t, err)
 	require.Equal(t, "p", out.Project)
+}
+
+// Output without a valid project is a definitive refusal, not an outage: the
+// configured hooks project has no other source.
+func TestParseTokenOutputRefusesMissingOrMalformedProject(t *testing.T) {
+	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	prev := nowFunc
+	nowFunc = func() time.Time { return now }
+	t.Cleanup(func() { nowFunc = prev })
+	future := now.Add(time.Hour).Format(time.RFC3339)
+
+	for _, tc := range []struct{ name, project string }{
+		{name: "missing", project: ""},
+		{name: "with a space", project: `"a b"`},
+		{name: "upper case", project: `"Hooks"`},
+		{name: "with a slash", project: `"a/b"`},
+		{name: "with a newline", project: `"a\nb"`},
+		{name: "too long", project: `"` + strings.Repeat("a", 129) + `"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			field := ""
+			if tc.project != "" {
+				field = `"project":` + tc.project + `,`
+			}
+			_, err := parseTokenOutput([]byte(`{"authorization":"Bearer abc",` + field + `"expires_at":"` + future + `"}`))
+			require.ErrorIs(t, err, errTokenRefused)
+			require.ErrorContains(t, err, "workload_identity.hooks_project_slug")
+		})
+	}
+
+	out, err := parseTokenOutput([]byte(`{"authorization":"Bearer abc","project":"` + strings.Repeat("a", 128) + `","expires_at":"` + future + `"}`))
+	require.NoError(t, err)
+	require.Len(t, out.Project, 128)
+}
+
+// A token command that delivers no valid project refuses hooks: nothing is
+// sent, no key is used in its place, nothing is spooled, and the box stays
+// closed. The plugin's own project never stands in for it.
+func TestTokenCommandWithoutValidProjectRefusesHooks(t *testing.T) {
+	for _, tc := range []struct{ name, project string }{
+		{name: "empty project", project: ""},
+		{name: "malformed project", project: "Not A Slug"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := newFakeServer(t, nil)
+			cfg, fc := tokenBox(t, fs.URL)
+			fc.project = tc.project
+			t.Setenv("SPEAKEASY_AI_HOOKS_PROJECT_SLUG", "env-project")
+			stateHome := setSpoolStateHome(t)
+			writeOrgSettings(cfg, true)
+
+			requireDenied(t, invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json"), "a refused box fails closed even when the org fails open")
+			res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/post_tool_use.json")
+
+			require.Equal(t, 0, res.ExitCode)
+			require.Equal(t, 0, fs.count(), "nothing is sent without a configured hooks project")
+			require.True(t, tokenRejected(), "the refusal is recorded")
+			t.Setenv("XDG_STATE_HOME", stateHome)
+			require.Empty(t, listSpoolEntries(spoolDirPath()), "a refused event is not kept for replay")
+			values, err := readAuthFile(authFilePath())
+			if err == nil {
+				require.Empty(t, values["bearer"], "no token is cached without a project")
+			}
+		})
+	}
+}
+
+// A cached token without a valid project is never used: the command runs again.
+func TestCachedTokenWithoutProjectIsNotUsed(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg, fc := tokenBox(t, fs.URL)
+	body := "kind=token\nserver_url=" + fs.URL + "\nbearer=cached-tok\nproject=\norg=org-1\nexpires_at=" +
+		fc.now.Add(time.Hour).Format(time.RFC3339Nano) + "\n"
+	require.NoError(t, os.WriteFile(authFilePath(), []byte(body), 0o600))
+
+	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Equal(t, int32(1), fc.calls.Load())
+	require.Equal(t, 1, fs.count())
+	require.Equal(t, "Bearer tok-1", fs.headers[0].Get("Authorization"))
+	require.Equal(t, "hooks-proj", fs.headers[0].Get("Gram-Project"))
+}
+
+// The configured hooks project from the token command is the only project
+// sent; neither the plugin's project nor SPEAKEASY_AI_HOOKS_PROJECT_SLUG is.
+func TestTokenProjectIgnoresPluginAndEnvProject(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg, fc := tokenBox(t, fs.URL)
+	fc.project = "configured_hooks-1"
+	t.Setenv("SPEAKEASY_AI_HOOKS_PROJECT_SLUG", "env-project")
+
+	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Equal(t, 1, fs.count())
+	require.Equal(t, "configured_hooks-1", fs.headers[0].Get("Gram-Project"))
+	require.Empty(t, fs.headers[0].Get("Gram-Key"))
+}
+
+// A 403 for the project (the agent's org:hooks_ingest may not cover it) gets
+// the usual single refresh and resend, then fails closed; the log does not
+// claim the token is bad.
+func TestProjectForbiddenFailsClosedAfterOneRetry(t *testing.T) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusForbidden, decision{Decision: "", Reason: "", Message: "forbidden"}
+	})
+	cfg, fc := tokenBox(t, fs.URL)
+	cfg.DebugLog = filepath.Join(t.TempDir(), "debug.log")
+
+	requireDenied(t, invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json"), "a forbidden project fails closed")
+
+	require.Equal(t, 2, fs.count(), "one refresh and resend, then stop")
+	require.Equal(t, int32(1), fc.refresh.Load())
+	require.True(t, tokenRejected())
+	requireNoKeySent(t, fs)
+	log, err := os.ReadFile(cfg.DebugLog)
+	require.NoError(t, err)
+	require.Contains(t, string(log), `hooks refused for project "hooks-proj"`)
+	require.Contains(t, string(log), "may not send hooks there")
 }
 
 func TestTokenCacheForAnotherDeploymentIsIgnored(t *testing.T) {

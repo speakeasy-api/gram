@@ -36,7 +36,7 @@ const (
 	// spoolEntryVersion versions the on-disk entry schema; drain skips
 	// versions it doesn't understand rather than guessing. Version 2 added
 	// token_project: a drain that predates it would replay a token box's
-	// event without the admission-project check, so it must skip v2.
+	// event without the token-project check, so it must skip v2.
 	spoolEntryVersion = 2
 
 	// spoolEntryVersionV1 is the pre-token_project schema, still drained:
@@ -75,8 +75,8 @@ type spoolEntry struct {
 	ServerURL      string `json:"server_url"`
 	OrgID          string `json:"org_id,omitempty"`
 	ProjectSlug    string `json:"project_slug,omitempty"`
-	// TokenProject is the admission project a token box's event was bound
-	// to; the drain drops the entry if the box's token now names another.
+	// TokenProject is the configured hooks project a token box's event was
+	// bound to; the drain drops the entry if the box's token now names another.
 	TokenProject string                       `json:"token_project,omitempty"`
 	ConfigPath   string                       `json:"config_path,omitempty"`
 	SpooledAt    time.Time                    `json:"spooled_at"`
