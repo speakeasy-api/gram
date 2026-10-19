@@ -38,6 +38,7 @@ type ruleSettings struct {
 	RpcEndpointFormat          rpcEndpointFormatSettings          `json:"rpc-endpoint-format"`
 	NoRawUserEmailFilter       noRawUserEmailFilterSettings       `json:"no-raw-user-email-filter"`
 	ResearchImportBoundary     researchImportBoundarySettings     `json:"research-import-boundary"`
+	NoQuerySkipAsyncInsertWait noQuerySkipAsyncInsertWaitSettings `json:"no-query-skip-async-insert-wait"`
 }
 
 type plugin struct {
@@ -108,6 +109,9 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	}
 	if !p.settings.Rules.ResearchImportBoundary.Disabled {
 		analyzers = append(analyzers, newResearchImportBoundaryAnalyzer(p.settings.Rules.ResearchImportBoundary))
+	}
+	if !p.settings.Rules.NoQuerySkipAsyncInsertWait.Disabled {
+		analyzers = append(analyzers, newNoQuerySkipAsyncInsertWaitAnalyzer(p.settings.Rules.NoQuerySkipAsyncInsertWait))
 	}
 
 	return analyzers, nil
