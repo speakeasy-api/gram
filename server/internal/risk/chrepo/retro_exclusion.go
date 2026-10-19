@@ -223,12 +223,14 @@ func reversalWhere(keep RetroReversalKeep) string {
 // columns supplied by the caller. Column order matches riskFindingColumns
 // exactly, which a test pins against InsertRiskFindings.
 func copyProjection(excludedAtExpr, exclusionIDExpr, falsePositiveAtExpr, excludedReasonExpr, excludedDetailExpr, eventKindExpr string) string {
+	return copyProjectionFrom("", excludedAtExpr, exclusionIDExpr, falsePositiveAtExpr, excludedReasonExpr, excludedDetailExpr, eventKindExpr)
+}
+
+func copyProjectionFrom(prefix, excludedAtExpr, exclusionIDExpr, falsePositiveAtExpr, excludedReasonExpr, excludedDetailExpr, eventKindExpr string) string {
 	projected := make([]string, len(riskFindingColumns))
 	for i, col := range riskFindingColumns {
 		switch col {
 		case "inserted_at":
-			// DateTime64(9) has a one-nanosecond tick. Caller monotonicity
-			// alone cannot order copies when ClickHouse's clock is ahead.
 			projected[i] = "greatest(toDateTime64(?, 9), now64(9), latest.inserted_at) + toIntervalNanosecond(1)"
 		case "excluded_at":
 			projected[i] = excludedAtExpr
@@ -243,7 +245,7 @@ func copyProjection(excludedAtExpr, exclusionIDExpr, falsePositiveAtExpr, exclud
 		case "event_kind":
 			projected[i] = eventKindExpr
 		default:
-			projected[i] = col
+			projected[i] = prefix + col
 		}
 	}
 	return strings.Join(projected, ", ")
