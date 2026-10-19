@@ -17,6 +17,30 @@ import {
 } from "./assistanttoolsetref.js";
 
 /**
+ * The runtime version read before requesting a switch. Required with runtime_version; conflicts require a fresh read.
+ */
+export const ExpectedRuntimeVersion = {
+  Two: 2,
+  Three: 3,
+} as const;
+/**
+ * The runtime version read before requesting a switch. Required with runtime_version; conflicts require a fresh read.
+ */
+export type ExpectedRuntimeVersion = ClosedEnum<typeof ExpectedRuntimeVersion>;
+
+/**
+ * Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.
+ */
+export const RuntimeVersion = {
+  Two: 2,
+  Three: 3,
+} as const;
+/**
+ * Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.
+ */
+export type RuntimeVersion = ClosedEnum<typeof RuntimeVersion>;
+
+/**
  * The assistant status.
  */
 export const UpdateAssistantFormStatus = {
@@ -31,6 +55,10 @@ export type UpdateAssistantFormStatus = ClosedEnum<
 >;
 
 export type UpdateAssistantForm = {
+  /**
+   * The runtime version read before requesting a switch. Required with runtime_version; conflicts require a fresh read.
+   */
+  expectedRuntimeVersion?: ExpectedRuntimeVersion | undefined;
   /**
    * The assistant ID.
    */
@@ -56,6 +84,10 @@ export type UpdateAssistantForm = {
    */
   name?: string | undefined;
   /**
+   * Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.
+   */
+  runtimeVersion?: RuntimeVersion | undefined;
+  /**
    * The assistant status.
    */
   status?: UpdateAssistantFormStatus | undefined;
@@ -70,18 +102,30 @@ export type UpdateAssistantForm = {
 };
 
 /** @internal */
+export const ExpectedRuntimeVersion$outboundSchema: z.ZodMiniEnum<
+  typeof ExpectedRuntimeVersion
+> = z.enum(ExpectedRuntimeVersion);
+
+/** @internal */
+export const RuntimeVersion$outboundSchema: z.ZodMiniEnum<
+  typeof RuntimeVersion
+> = z.enum(RuntimeVersion);
+
+/** @internal */
 export const UpdateAssistantFormStatus$outboundSchema: z.ZodMiniEnum<
   typeof UpdateAssistantFormStatus
 > = z.enum(UpdateAssistantFormStatus);
 
 /** @internal */
 export type UpdateAssistantForm$Outbound = {
+  expected_runtime_version?: number | undefined;
   id: string;
   instructions?: string | undefined;
   max_concurrency?: number | undefined;
   mcp_servers?: Array<AssistantMCPServerRef$Outbound> | undefined;
   model?: string | undefined;
   name?: string | undefined;
+  runtime_version?: number | undefined;
   status?: string | undefined;
   toolsets?: Array<AssistantToolsetRef$Outbound> | undefined;
   warm_ttl_seconds?: number | undefined;
@@ -93,20 +137,24 @@ export const UpdateAssistantForm$outboundSchema: z.ZodMiniType<
   UpdateAssistantForm
 > = z.pipe(
   z.object({
+    expectedRuntimeVersion: z.optional(ExpectedRuntimeVersion$outboundSchema),
     id: z.string(),
     instructions: z.optional(z.string()),
     maxConcurrency: z.optional(z.int()),
     mcpServers: z.optional(z.array(AssistantMCPServerRef$outboundSchema)),
     model: z.optional(z.string()),
     name: z.optional(z.string()),
+    runtimeVersion: z.optional(RuntimeVersion$outboundSchema),
     status: z.optional(UpdateAssistantFormStatus$outboundSchema),
     toolsets: z.optional(z.array(AssistantToolsetRef$outboundSchema)),
     warmTtlSeconds: z.optional(z.int()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      expectedRuntimeVersion: "expected_runtime_version",
       maxConcurrency: "max_concurrency",
       mcpServers: "mcp_servers",
+      runtimeVersion: "runtime_version",
       warmTtlSeconds: "warm_ttl_seconds",
     });
   }),

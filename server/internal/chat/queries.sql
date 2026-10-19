@@ -2253,3 +2253,21 @@ FROM ancestry ORDER BY root_id, (slack_channel_id IS NULL), depth;
 -- name: LockChatRowForTest :exec
 -- Test fixture: hold the lock an ordinary helper capture takes on its own row.
 SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDATE;
+
+-- name: GetKitProjectionMessage :one
+SELECT * FROM chat_messages WHERE project_id = @project_id AND id = @id;
+
+-- name: PatchKitProjectionMessage :execrows
+UPDATE chat_messages SET content = @content, content_raw = @content_raw,
+ tool_calls = @tool_calls, content_hash = @content_hash
+WHERE project_id = @project_id AND chat_id = @chat_id AND id = @id AND source = 'kit'
+AND (content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls);
+
+-- name: ValidateKitTranscriptBinding :one
+SELECT t.id FROM assistant_threads t
+JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id AND r.project_id = t.project_id
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE t.project_id = @project_id AND t.assistant_id = @assistant_id AND t.id = @thread_id AND t.chat_id = @chat_id
+AND r.id = @runtime_id AND r.runtime_version = 3 AND NOT r.deleted AND NOT r.ended
+AND NOT t.deleted AND NOT c.deleted AND NOT a.deleted AND a.status = 'active';

@@ -1,5 +1,7 @@
 export const FEATURE_FLAGS = {
   assistants: "assistants",
+  // UI-only visibility; saved runtime selection and backend authorization are independent.
+  assistantKitRuntime: "assistant-kit-runtime",
   budgets: "gram-budgets",
   deploymentsPage: "gram-deployments-page",
   deviceAgent: "gram-device-agent",

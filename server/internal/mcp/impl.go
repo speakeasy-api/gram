@@ -611,6 +611,7 @@ func NewService(
 		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}
+	service.assistantWorkloadTokens = &registeredAssistantWorkloadIssuer{service: service}
 	return service, nil
 }
 

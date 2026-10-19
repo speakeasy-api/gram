@@ -1239,6 +1239,56 @@ func (q *Queries) GetInferenceAcceptedCheckpoint(ctx context.Context, arg GetInf
 	return inference_accepted_checkpoint, err
 }
 
+const getKitProjectionMessage = `-- name: GetKitProjectionMessage :one
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM chat_messages WHERE project_id = $1 AND id = $2
+`
+
+type GetKitProjectionMessageParams struct {
+	ProjectID uuid.NullUUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) GetKitProjectionMessage(ctx context.Context, arg GetKitProjectionMessageParams) (ChatMessage, error) {
+	row := q.db.QueryRow(ctx, getKitProjectionMessage, arg.ProjectID, arg.ID)
+	var i ChatMessage
+	err := row.Scan(
+		&i.ID,
+		&i.Seq,
+		&i.ChatID,
+		&i.ProjectID,
+		&i.Role,
+		&i.Content,
+		&i.ContentRaw,
+		&i.ContentAssetUrl,
+		&i.Model,
+		&i.MessageID,
+		&i.FinishReason,
+		&i.ToolCalls,
+		&i.PromptTokens,
+		&i.CompletionTokens,
+		&i.TotalTokens,
+		&i.StorageError,
+		&i.UserID,
+		&i.ExternalUserID,
+		&i.ExternalMessageID,
+		&i.Origin,
+		&i.UserAgent,
+		&i.IpAddress,
+		&i.Source,
+		&i.ToolCallID,
+		&i.ToolUrn,
+		&i.ToolOutcome,
+		&i.ToolOutcomeNotes,
+		&i.ToolCallSummaries,
+		&i.ContentHash,
+		&i.Generation,
+		&i.Replayed,
+		&i.CreatedAt,
+		&i.RiskAnalyzedAt,
+	)
+	return i, err
+}
+
 const getLLMClientBreakdownByMessages = `-- name: GetLLMClientBreakdownByMessages :many
 SELECT
   COALESCE(m.source, 'unknown') as client_name,
@@ -3980,6 +4030,39 @@ func (q *Queries) MarkClaudeTagMessages(ctx context.Context, arg MarkClaudeTagMe
 	return err
 }
 
+const patchKitProjectionMessage = `-- name: PatchKitProjectionMessage :execrows
+UPDATE chat_messages SET content = $1, content_raw = $2,
+ tool_calls = $3, content_hash = $4
+WHERE project_id = $5 AND chat_id = $6 AND id = $7 AND source = 'kit'
+AND (content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3)
+`
+
+type PatchKitProjectionMessageParams struct {
+	Content     string
+	ContentRaw  []byte
+	ToolCalls   []byte
+	ContentHash []byte
+	ProjectID   uuid.NullUUID
+	ChatID      uuid.UUID
+	ID          uuid.UUID
+}
+
+func (q *Queries) PatchKitProjectionMessage(ctx context.Context, arg PatchKitProjectionMessageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, patchKitProjectionMessage,
+		arg.Content,
+		arg.ContentRaw,
+		arg.ToolCalls,
+		arg.ContentHash,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordChatSlackChannel = `-- name: RecordChatSlackChannel :exec
 UPDATE chats SET slack_team_id = coalesce(nullif($1::text, ''), slack_team_id),
  slack_channel_name = coalesce(nullif($2::text, ''), CASE WHEN slack_channel_id = $3::text THEN slack_channel_name END),
@@ -5089,6 +5172,37 @@ func (q *Queries) UpsertSetupAssistantThread(ctx context.Context, arg UpsertSetu
 		arg.ProjectID,
 		arg.CorrelationID,
 		arg.ChatID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const validateKitTranscriptBinding = `-- name: ValidateKitTranscriptBinding :one
+SELECT t.id FROM assistant_threads t
+JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id AND r.project_id = t.project_id
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE t.project_id = $1 AND t.assistant_id = $2 AND t.id = $3 AND t.chat_id = $4
+AND r.id = $5 AND r.runtime_version = 3 AND NOT r.deleted AND NOT r.ended
+AND NOT t.deleted AND NOT c.deleted AND NOT a.deleted AND a.status = 'active'
+`
+
+type ValidateKitTranscriptBindingParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+	ChatID      uuid.UUID
+	RuntimeID   uuid.UUID
+}
+
+func (q *Queries) ValidateKitTranscriptBinding(ctx context.Context, arg ValidateKitTranscriptBindingParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, validateKitTranscriptBinding,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+		arg.ChatID,
+		arg.RuntimeID,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

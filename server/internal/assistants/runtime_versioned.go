@@ -1,0 +1,238 @@
+package assistants
+
+import (
+	"context"
+	"fmt"
+	"net/url"
+
+	"github.com/google/uuid"
+)
+
+// versionedRuntimeBackend keeps infrastructure selection separate from guest
+// protocol evolution. Runtime rows, never UI flags, select the implementation.
+type versionedRuntimeBackend struct {
+	legacy RuntimeBackend
+	kit    RuntimeBackend
+}
+
+func (v *versionedRuntimeBackend) forVersion(version int16) (RuntimeBackend, error) {
+	var backend RuntimeBackend
+	switch version {
+	case 1, 2:
+		backend = v.legacy
+	case 3:
+		backend = v.kit
+	default:
+		return nil, fmt.Errorf("unsupported assistant runtime version %d", version)
+	}
+	if backend == nil {
+		return nil, fmt.Errorf("assistant runtime version %d is not configured", version)
+	}
+	return backend, nil
+}
+
+func (v *versionedRuntimeBackend) route(r assistantRuntimeRecord) (RuntimeBackend, error) {
+	b, err := v.forVersion(r.RuntimeVersion)
+	if err != nil {
+		return nil, err
+	}
+	if !b.SupportsBackend(r.Backend) {
+		return nil, fmt.Errorf("assistant runtime version %d does not support backend %q", r.RuntimeVersion, r.Backend)
+	}
+	return b, nil
+}
+
+func (v *versionedRuntimeBackend) Backend() string { return v.legacy.Backend() }
+func (v *versionedRuntimeBackend) SupportsBackend(b string) bool {
+	return v.legacy.SupportsBackend(b) || (v.kit != nil && v.kit.SupportsBackend(b))
+}
+func (v *versionedRuntimeBackend) ServerURL() *url.URL { return v.legacy.ServerURL() }
+func (v *versionedRuntimeBackend) ImageRef() string    { return v.legacy.ImageRef() }
+
+func (v *versionedRuntimeBackend) BackendForVersion(version int16) (string, error) {
+	b, err := v.forVersion(version)
+	if err != nil {
+		return "", err
+	}
+	return b.Backend(), nil
+}
+func (v *versionedRuntimeBackend) ProtocolForRuntime(r assistantRuntimeRecord) (runtimeProtocol, error) {
+	return v.route(r)
+}
+func (v *versionedRuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
+	b, err := v.route(r)
+	if err != nil {
+		return RuntimeBackendEnsureResult{}, err
+	}
+	return b.Ensure(ctx, r)
+}
+func (v *versionedRuntimeBackend) RecycleImage(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
+	b, err := v.route(r)
+	if err != nil {
+		return RuntimeBackendRecycleResult{}, err
+	}
+	return b.RecycleImage(ctx, r)
+}
+func (v *versionedRuntimeBackend) RunTurn(ctx context.Context, r assistantRuntimeRecord, turn runTurnRequest) error {
+	b, err := v.route(r)
+	if err != nil {
+		return err
+	}
+	return b.RunTurn(ctx, r, turn)
+}
+func (v *versionedRuntimeBackend) InterruptTurn(ctx context.Context, r assistantRuntimeRecord, thread uuid.UUID) (bool, error) {
+	b, err := v.route(r)
+	if err != nil {
+		return false, err
+	}
+	return b.InterruptTurn(ctx, r, thread)
+}
+func (v *versionedRuntimeBackend) Status(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	b, err := v.route(r)
+	if err != nil {
+		return RuntimeBackendStatus{}, err
+	}
+	return b.Status(ctx, r)
+}
+func (v *versionedRuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecord) error {
+	b, err := v.route(r)
+	if err != nil {
+		return err
+	}
+	return b.Stop(ctx, r)
+}
+func (v *versionedRuntimeBackend) Reap(ctx context.Context, r assistantRuntimeRecord) error {
+	b, err := v.route(r)
+	if err != nil {
+		return err
+	}
+	return b.Reap(ctx, r)
+}
+func (v *versionedRuntimeBackend) ReapStoppedMachine(ctx context.Context, r assistantRuntimeRecord) error {
+	b, err := v.route(r)
+	if err != nil {
+		return err
+	}
+	return b.ReapStoppedMachine(ctx, r)
+}
+func (v *versionedRuntimeBackend) RuntimeExists(ctx context.Context, r assistantRuntimeRecord) (bool, error) {
+	b, err := v.route(r)
+	if err != nil {
+		return false, err
+	}
+	probe, ok := b.(interface {
+		RuntimeExists(context.Context, assistantRuntimeRecord) (bool, error)
+	})
+	if !ok {
+		return true, nil
+	}
+	return probe.RuntimeExists(ctx, r)
+}
+
+// installKitRuntime is called during service composition before serving work.
+// Keeping installation local to the service avoids changing the legacy default.
+func (s *ServiceCore) installKitRuntime(kit RuntimeBackend) error {
+	if kit == nil {
+		return fmt.Errorf("kit runtime backend is required")
+	}
+	if t, ok := s.runtime.(*telemetryRuntimeBackend); ok {
+		t.inner = &versionedRuntimeBackend{legacy: t.inner, kit: kit}
+	} else {
+		s.runtime = &versionedRuntimeBackend{legacy: s.runtime, kit: kit}
+	}
+	return nil
+}
+
+func runtimeBackendForVersion(backend RuntimeBackend, version int16) (string, error) {
+	if selector, ok := backend.(interface{ BackendForVersion(int16) (string, error) }); ok {
+		return selector.BackendForVersion(version)
+	}
+	if version == 1 || version == 2 {
+		return backend.Backend(), nil
+	}
+	return "", fmt.Errorf("assistant runtime version %d admission is not configured", version)
+}
+func boundRuntimeProtocol(backend RuntimeBackend, r assistantRuntimeRecord) (runtimeProtocol, error) {
+	if selector, ok := backend.(interface {
+		ProtocolForRuntime(assistantRuntimeRecord) (runtimeProtocol, error)
+	}); ok {
+		return selector.ProtocolForRuntime(r)
+	}
+	return resolveRuntimeProtocol(r.RuntimeVersion, backend, nil)
+}
+
+func (t *telemetryRuntimeBackend) BackendForVersion(version int16) (string, error) {
+	return runtimeBackendForVersion(t.inner, version)
+}
+func (t *telemetryRuntimeBackend) ProtocolForRuntime(r assistantRuntimeRecord) (runtimeProtocol, error) {
+	if _, err := boundRuntimeProtocol(t.inner, r); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+func (t *telemetryRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assistant assistantRecord, rows []assistantRuntimeRecord, destination int16) (runtimeSwitchReadiness, error) {
+	coordinator, ok := t.inner.(runtimeSwitchCoordinator)
+	if !ok {
+		return runtimeSwitchReadiness{}, errRuntimeSwitchUnavailable
+	}
+	return coordinator.PrepareRuntimeSwitch(ctx, assistant, rows, destination)
+}
+
+func (v *versionedRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assistant assistantRecord, rows []assistantRuntimeRecord, destination int16) (runtimeSwitchReadiness, error) {
+	target, err := v.forVersion(destination)
+	if err != nil {
+		return runtimeSwitchReadiness{}, err
+	}
+	if ready, ok := target.(interface{ RuntimeReadyForAdmission(context.Context) error }); ok {
+		if err := ready.RuntimeReadyForAdmission(ctx); err != nil {
+			return runtimeSwitchReadiness{}, err
+		}
+	} else if destination == 3 {
+		return runtimeSwitchReadiness{}, errRuntimeSwitchUnavailable
+	}
+	releases := make([]func(), 0, len(rows))
+	release := func() {
+		for i := len(releases) - 1; i >= 0; i-- {
+			releases[i]()
+		}
+	}
+	for _, row := range rows {
+		source, err := v.route(row)
+		if err != nil {
+			release()
+			return runtimeSwitchReadiness{}, err
+		}
+		if coordinator, ok := source.(runtimeSwitchCoordinator); ok {
+			result, err := coordinator.PrepareRuntimeSwitch(ctx, assistant, []assistantRuntimeRecord{row}, destination)
+			if result.Release != nil {
+				releases = append(releases, result.Release)
+			}
+			if err != nil {
+				release()
+				return runtimeSwitchReadiness{}, err
+			}
+			if !result.Settled || result.Release == nil {
+				release()
+				return runtimeSwitchReadiness{}, errRuntimeSwitchBusy
+			}
+			continue
+		}
+		if row.RuntimeVersion == 3 {
+			release()
+			return runtimeSwitchReadiness{}, errRuntimeSwitchUnavailable
+		}
+		// Legacy guests admit work only through the event pipeline; its DB lock is
+		// held by the caller. Their idle clock includes turn-end persistence and
+		// compaction. This reasoning does NOT apply to Kit background work.
+		status, err := source.Status(ctx, row)
+		if err != nil {
+			release()
+			return runtimeSwitchReadiness{}, fmt.Errorf("verify legacy runtime settlement: %w", err)
+		}
+		if !status.Configured || (status.IdleSeconds != nil && *status.IdleSeconds == 0) {
+			release()
+			return runtimeSwitchReadiness{}, errRuntimeSwitchBusy
+		}
+	}
+	return runtimeSwitchReadiness{DestinationReady: true, Settled: true, Release: release}, nil
+}

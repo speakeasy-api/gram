@@ -8,8 +8,11 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"maps"
 	"net"
 	"regexp"
+	"slices"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -58,6 +61,8 @@ type KitGKEProvisionInput struct {
 	GuestPort                                      int32
 	Command, Args                                  []string
 	AgentsMD, InferenceJSON, MCPJSON, GatewayToken []byte
+	MCPFiles                                       map[string][]byte
+	AllowInsecureHTTP                              bool
 	Resources                                      corev1.ResourceRequirements
 	WorkSizeLimit, TmpSizeLimit                    string
 	SnapshotsEnabled                               bool
@@ -106,9 +111,24 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	if _, _, err := net.ParseCIDR(in.IngressCIDR); err != nil {
 		return out, fmt.Errorf("invalid Kit ingress CIDR")
 	}
-	if len(in.AgentsMD) == 0 || len(in.GatewayToken) == 0 || !json.Valid(in.InferenceJSON) || !json.Valid(in.MCPJSON) {
-		return out, fmt.Errorf("kit bootstrap requires nonempty instructions/token and valid JSON configurations")
+	if err := validateKitGatewayCommand(in.Command, in.Args, int(in.GuestPort)); err != nil {
+		return out, err
 	}
+	if err := validateKitBootstrap(KitLocalBootstrap{AgentsMD: in.AgentsMD, InferenceJSON: in.InferenceJSON, MCPJSON: in.MCPJSON, GatewayToken: in.GatewayToken, MCPFiles: in.MCPFiles}); err != nil {
+		return out, err
+	}
+	origin, err := kitInferenceOrigin(in.InferenceJSON)
+	if err != nil {
+		return out, err
+	}
+	if strings.HasPrefix(origin, "http:") && !in.AllowInsecureHTTP {
+		return out, fmt.Errorf("insecure Kit inference requires explicit HTTP opt-in")
+	}
+	environment := []corev1.EnvVar{{Name: "HOME", Value: "/home/kit"}, {Name: "SPEAKEASY_ORIGIN", Value: origin}}
+	if in.AllowInsecureHTTP {
+		environment = append(environment, corev1.EnvVar{Name: "SPEAKEASY_ALLOW_INSECURE_HTTP", Value: "1"})
+	}
+
 	if in.ColdReset {
 		if in.PreviousIdentity == nil || in.PreviousIdentity.AssistantID != in.Identity.AssistantID || in.PreviousIdentity.Namespace != in.Identity.Namespace || in.PreviousIdentity.Lineage == in.Identity.Lineage || in.PreviousIdentity.Lineage == "" || in.Restore != nil {
 			return out, fmt.Errorf("kit cold/reset requires a new lineage for the same assistant and namespace, without restore")
@@ -121,7 +141,18 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		}
 		annotations["podsnapshot.gke.io/ps-name"] = in.Restore.name
 	}
-	data := map[string][]byte{"AGENTS.md": in.AgentsMD, "inference.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}
+	data := map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitFileConfig), KitInferenceCredentialFilename: in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}
+	for name, bytes := range in.MCPFiles {
+		data[name] = bytes
+	}
+	items := make([]corev1.KeyToPath, 0, len(data))
+	for _, name := range slices.Sorted(maps.Keys(data)) {
+		path := "credentials/" + name
+		if name == "AGENTS.md" || name == "config.toml" {
+			path = name
+		}
+		items = append(items, corev1.KeyToPath{Key: name, Path: path})
+	}
 	// Content-address the immutable generation-specific bootstrap: no credential
 	// rotation in place, and no names shared across assistants or runtime lineages.
 	encoded, err := json.Marshal(map[string]any{"namespace": in.Identity.Namespace, "identity": in.Identity.labels(), "data": data})
@@ -155,8 +186,8 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		Tolerations:     []corev1.Toleration{{Key: "sandbox.gke.io/runtime", Operator: corev1.TolerationOpEqual, Value: "gvisor", Effect: corev1.TaintEffectNoSchedule}, {Key: "workload-type", Operator: corev1.TolerationOpEqual, Value: "sandbox", Effect: corev1.TaintEffectNoSchedule}},
 		SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: &yes, RunAsUser: &uid, RunAsGroup: &uid, FSGroup: &uid},
 		InitContainers:  []corev1.Container{{Name: "provision-kit", Image: in.Image, Command: []string{"/bin/sh", "-ec"}, Args: []string{kitBootstrapScript}, SecurityContext: security, Resources: in.Resources, VolumeMounts: []corev1.VolumeMount{home, {Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}}}},
-		Containers:      []corev1.Container{{Name: "kit", Image: in.Image, Command: in.Command, Args: in.Args, WorkingDir: "/home/kit", Ports: []corev1.ContainerPort{{ContainerPort: in.GuestPort}}, Env: []corev1.EnvVar{{Name: "HOME", Value: "/home/kit"}}, SecurityContext: security, Resources: in.Resources, VolumeMounts: []corev1.VolumeMount{home, {Name: "tmp", MountPath: "/tmp"}}}},
-		Volumes:         []corev1.Volume{work, tmp, {Name: "bootstrap", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secretName, DefaultMode: &mode, Items: []corev1.KeyToPath{{Key: "AGENTS.md", Path: "AGENTS.md"}, {Key: "inference.json", Path: "inference.json"}, {Key: "mcp.json", Path: "mcp.json"}, {Key: "gateway-token", Path: "gateway-token"}}}}}},
+		Containers:      []corev1.Container{{Name: "kit", Image: in.Image, Command: in.Command, Args: in.Args, WorkingDir: "/home/kit", Ports: []corev1.ContainerPort{{ContainerPort: in.GuestPort}}, Env: environment, SecurityContext: security, Resources: in.Resources, VolumeMounts: []corev1.VolumeMount{home, {Name: "tmp", MountPath: "/tmp"}}}},
+		Volumes:         []corev1.Volume{work, tmp, {Name: "bootstrap", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secretName, DefaultMode: &mode, Items: items}}}},
 	}}
 	if in.SnapshotsEnabled {
 		pod.Labels["gram.ai/snapshots"] = "enabled"
@@ -178,12 +209,12 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 func ptrKitString(s string) *string { return &s }
 
 const kitBootstrapScript = `umask 077
-mkdir -p /home/kit/.kit /home/kit/.kit/credentials
+mkdir -p /home/kit/.kit/credentials /home/kit/workspace
+chmod 700 /home/kit/.kit /home/kit/.kit/credentials /home/kit/workspace
 cp /bootstrap/AGENTS.md /home/kit/.kit/AGENTS.md
-cp /bootstrap/inference.json /home/kit/.kit/credentials/inference.json
-cp /bootstrap/mcp.json /home/kit/.kit/credentials/mcp.json
-cp /bootstrap/gateway-token /home/kit/.kit/credentials/gateway-token
-chmod 600 /home/kit/.kit/AGENTS.md /home/kit/.kit/credentials/*
+cp /bootstrap/config.toml /home/kit/.kit/config.toml
+cp -R /bootstrap/credentials/. /home/kit/.kit/credentials/
+chmod 600 /home/kit/.kit/AGENTS.md /home/kit/.kit/config.toml /home/kit/.kit/credentials/*
 `
 
 // ProvisionKitGKE is create-only: no adoption, mutation, cleanup, or readiness
@@ -219,4 +250,21 @@ func validateKitResources(resources corev1.ResourceRequirements) error {
 		}
 	}
 	return nil
+}
+
+// PrepareKitGKEStartup replaces any snapshot-derived credential bytes with fresh
+// startup authority before rendering a new pod. Caller must hold runtime admission
+// and ensure the gateway boots afresh (not resume a process with cached credentials).
+// The snapshot identity remains exact; inference authority is rotated for its row.
+func PrepareKitGKEStartup(ctx context.Context, manager *assistanttokens.Manager, startup KitStartupBootstrapInput, in KitGKEProvisionInput) (KitGKEProvisionInput, error) {
+	if in.Identity.AssistantID != startup.Identity.AssistantID.String() || in.Identity.Lineage != startup.RuntimeID.String() {
+		return KitGKEProvisionInput{}, fmt.Errorf("Kit GKE startup credentials must match assistant and runtime lineage")
+	}
+	in.Command, in.Args = KitGatewayCommand(int(in.GuestPort))
+	bootstrap, _, err := PrepareKitStartupBootstrap(ctx, manager, startup)
+	if err != nil {
+		return KitGKEProvisionInput{}, err
+	}
+	in.AgentsMD, in.InferenceJSON, in.MCPJSON, in.GatewayToken, in.MCPFiles = bootstrap.AgentsMD, bootstrap.InferenceJSON, bootstrap.MCPJSON, bootstrap.GatewayToken, bootstrap.MCPFiles
+	return in, nil
 }

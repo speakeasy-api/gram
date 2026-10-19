@@ -92,7 +92,7 @@ export type Assistant = {
    */
   projectId: string;
   /**
-   * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Read-only until safe runtime switching is available.
+   * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.
    */
   runtimeVersion: number;
   /**

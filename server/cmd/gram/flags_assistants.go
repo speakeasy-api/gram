@@ -22,7 +22,7 @@ import (
 // applied to a flag set. Sharing definitions across flag sets means sharing
 // mutable state.
 func assistantRuntimeFlags() []cli.Flag {
-	return []cli.Flag{
+	return append([]cli.Flag{
 		&cli.StringFlag{
 			Name:    "assistant-runtime-provider",
 			Usage:   "Assistant runtime provider. Allowed values: gke, local.",
@@ -77,7 +77,7 @@ func assistantRuntimeFlags() []cli.Flag {
 			Usage:   "The OCI image repository for the assistant runtime image. It must not include a tag.",
 			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OCI_IMAGE"},
 		},
-	}
+	}, assistantKitRuntimeFlags()...)
 }
 
 func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistants.RuntimeBackendConfig, error) {

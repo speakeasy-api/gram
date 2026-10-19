@@ -626,6 +626,24 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 			}
 			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, qerr)
 		}
+		if row.UserSessionClientID.Valid {
+			client, clientErr := usersessions_repo.New(s.db).GetUserSessionClientByID(ctx, usersessions_repo.GetUserSessionClientByIDParams{
+				ID: row.UserSessionClientID.UUID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
+			})
+			if clientErr != nil || client.UserSessionIssuerID != endpoint.UserSessionIssuerID {
+				return ctx, nil, nil, false, fmt.Errorf("%w: workload client registration is no longer eligible", errCredentialRejected)
+			}
+			// A client reference alone does not identify an assistant credential:
+			// existing workload sessions can belong to ordinary OAuth clients.
+			// Either assistant binding marker requires the complete live binding;
+			// missing, revoked or retired bindings must still fail closed.
+			if client.AssistantRuntimeID.Valid || client.AssistantTriggerWorkloadBindingID.Valid {
+				identity, bindingErr := s.loadAssistantWorkloadClientIdentity(ctx, endpoint, row.UserSessionClientID.UUID)
+				if bindingErr != nil || urn.NewWorkloadSubject(identity.IssuerID, identity.Subject).String() != subject.String() {
+					return ctx, nil, nil, false, fmt.Errorf("%w: assistant workload registration is no longer eligible", errCredentialRejected)
+				}
+			}
+		}
 		reach := workloadSessionReachResource
 		var credential workloadSessionCredential
 		var cerr error

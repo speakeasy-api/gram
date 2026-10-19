@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getAssistantRevocation = `-- name: GetAssistantRevocation :one
@@ -62,4 +63,115 @@ func (q *Queries) GetAssistantTokenRevocation(ctx context.Context, arg GetAssist
 	var i GetAssistantTokenRevocationRow
 	err := row.Scan(&i.ThreadDeleted, &i.AssistantDeleted, &i.AssistantStatus)
 	return i, err
+}
+
+const inferenceChatThread = `-- name: InferenceChatThread :one
+SELECT t.id FROM assistant_threads t JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE t.project_id = $1 AND t.assistant_id = $2 AND t.chat_id = $3 AND NOT t.deleted AND NOT c.deleted
+`
+
+type InferenceChatThreadParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	ChatID      uuid.UUID
+}
+
+func (q *Queries) InferenceChatThread(ctx context.Context, arg InferenceChatThreadParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, inferenceChatThread, arg.ProjectID, arg.AssistantID, arg.ChatID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const issueInferenceCredential = `-- name: IssueInferenceCredential :one
+INSERT INTO assistant_inference_credentials (project_id, assistant_id, runtime_id, token_hash, identity_json, policy_json, policy_version, expires_at)
+SELECT $1, $2, r.id, $3, $4, $5, $6, $7
+FROM assistant_runtimes r JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = $8 AND r.project_id = $1 AND r.assistant_id = $2
+AND NOT r.deleted AND NOT r.ended AND NOT a.deleted AND a.status = 'active'
+RETURNING id
+`
+
+type IssueInferenceCredentialParams struct {
+	ProjectID     uuid.UUID
+	AssistantID   uuid.UUID
+	TokenHash     []byte
+	IdentityJson  []byte
+	PolicyJson    []byte
+	PolicyVersion int32
+	ExpiresAt     pgtype.Timestamptz
+	RuntimeID     uuid.UUID
+}
+
+func (q *Queries) IssueInferenceCredential(ctx context.Context, arg IssueInferenceCredentialParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, issueInferenceCredential,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.TokenHash,
+		arg.IdentityJson,
+		arg.PolicyJson,
+		arg.PolicyVersion,
+		arg.ExpiresAt,
+		arg.RuntimeID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const readInferenceCredential = `-- name: ReadInferenceCredential :one
+SELECT c.id, c.project_id, c.assistant_id, c.runtime_id, c.token_hash, c.identity_json, c.policy_json, c.policy_version, c.created_at, c.expires_at, c.revoked_at FROM assistant_inference_credentials c
+JOIN assistant_runtimes r ON r.id = c.runtime_id AND r.project_id = c.project_id AND r.assistant_id = c.assistant_id
+JOIN assistants a ON a.id = c.assistant_id AND a.project_id = c.project_id
+WHERE c.token_hash = $1 AND c.revoked_at IS NULL AND c.expires_at > clock_timestamp()
+AND NOT r.deleted AND NOT r.ended AND NOT a.deleted AND a.status = 'active'
+`
+
+func (q *Queries) ReadInferenceCredential(ctx context.Context, tokenHash []byte) (AssistantInferenceCredential, error) {
+	row := q.db.QueryRow(ctx, readInferenceCredential, tokenHash)
+	var i AssistantInferenceCredential
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.RuntimeID,
+		&i.TokenHash,
+		&i.IdentityJson,
+		&i.PolicyJson,
+		&i.PolicyVersion,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const revokeInferenceCredential = `-- name: RevokeInferenceCredential :exec
+UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
+WHERE project_id = $1 AND id = $2 AND revoked_at IS NULL
+`
+
+type RevokeInferenceCredentialParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) RevokeInferenceCredential(ctx context.Context, arg RevokeInferenceCredentialParams) error {
+	_, err := q.db.Exec(ctx, revokeInferenceCredential, arg.ProjectID, arg.ID)
+	return err
+}
+
+const revokeRuntimeInferenceCredentials = `-- name: RevokeRuntimeInferenceCredentials :exec
+UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
+WHERE project_id = $1 AND runtime_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeRuntimeInferenceCredentialsParams struct {
+	ProjectID uuid.UUID
+	RuntimeID uuid.UUID
+}
+
+func (q *Queries) RevokeRuntimeInferenceCredentials(ctx context.Context, arg RevokeRuntimeInferenceCredentialsParams) error {
+	_, err := q.db.Exec(ctx, revokeRuntimeInferenceCredentials, arg.ProjectID, arg.RuntimeID)
+	return err
 }

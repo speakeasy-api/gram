@@ -203,6 +203,9 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 // like KeyType, never from client-claimed headers — so a caller cannot pick
 // another slot's customer key.
 func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
+	if assistanttokens.IsInferenceCredential(r.Header.Get("Authorization")) {
+		return ctx, nil, "", oops.C(oops.CodeUnauthorized)
+	}
 	if token := r.Header.Get("Authorization"); token != "" {
 		authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
 		if err == nil {
@@ -1930,6 +1933,17 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	}
 
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
+	if assistanttokens.InferenceTranscriptOwned(ctx) {
+		id, err := uuid.Parse(chatIDHeader)
+		if err != nil {
+			return oops.C(oops.CodeForbidden)
+		}
+		ctx, err = s.assistantTokens.BindInferenceChat(ctx, id)
+		if err != nil {
+			return err
+		}
+	}
+
 	if id, bound := assistanttokens.RuntimeChatID(ctx); bound {
 		if chatIDHeader != "" && chatIDHeader != id.String() {
 			return oops.C(oops.CodeForbidden)
@@ -1999,7 +2013,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// assistant-principal check before any non-assistant caller adopts
 	// it.
 	completionChatID := chatID
-	if r.Header.Get("Gram-Skip-Capture") == "1" {
+	if r.Header.Get("Gram-Skip-Capture") == "1" && !assistanttokens.InferenceTranscriptOwned(ctx) {
 		completionChatID = uuid.Nil
 	}
 	reasoning := chatRequest.Reasoning
@@ -2066,7 +2080,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		// the way past, so the dashboard renders text as it is generated. The
 		// bytes still reach this caller untouched; the tee is a side channel.
 		src := io.Reader(streamBody)
-		if s.turnStream != nil && chatID != uuid.Nil {
+		if s.turnStream != nil && chatID != uuid.Nil && !assistanttokens.InferenceTranscriptOwned(ctx) {
 			teed, done := s.teeStreamText(ctx, chatID)
 			src = io.TeeReader(streamBody, teed)
 			defer done()
@@ -2093,7 +2107,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// With no chat to attribute frames to, or no stream to publish on, this is
 	// an ordinary completion.
 	var response *openrouter.CompletionResponse
-	if s.turnStream != nil && chatID != uuid.Nil {
+	if s.turnStream != nil && chatID != uuid.Nil && !assistanttokens.InferenceTranscriptOwned(ctx) {
 		teed, teeErr := s.teedCompletion(ctx, completionReq, chatID)
 		if teeErr != nil {
 			return teeErr
@@ -3577,6 +3591,18 @@ func clampUint64ToInt64(value uint64) int64 {
 // work only: directAuthorize also serves transcript APIs, which keep their own
 // authentication.
 func (s *Service) authorizeCompletion(r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
+	if assistanttokens.IsInferenceCredential(r.Header.Get("Authorization")) {
+		ctx, err := s.assistantTokens.AuthorizeInference(r.Context(), r.Header.Get("Authorization"))
+		if err != nil {
+			return ctx, nil, "", err
+		}
+		ac, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || ac == nil || ac.ProjectID == nil {
+			return ctx, nil, "", oops.C(oops.CodeUnauthorized)
+		}
+		return ctx, ac, billing.ModelUsageSourceAssistants, nil
+	}
+
 	if !assistanttokens.IsRuntimeCredential(r.Header.Get("Authorization")) {
 		return s.directAuthorize(r.Context(), r)
 	}

@@ -21,8 +21,8 @@ func kitGKEInput() KitGKEProvisionInput {
 	return KitGKEProvisionInput{
 		Identity: KitGKEIdentity{Namespace: "kit-test", AssistantID: "assistant-test", Lineage: "lineage-one", CompatibilityGeneration: "generation-one"},
 		Name:     "kit-test-runtime", Image: "example.invalid/kit@sha256:" + strings.Repeat("a", 64), IngressCIDR: "10.1.0.0/16", GuestPort: 8080,
-		Command: []string{"/approved/kit-command"}, Args: []string{"caller-supplied-argument"},
-		AgentsMD: []byte("caller instructions"), InferenceJSON: []byte(`{"caller":"inference"}`), MCPJSON: []byte(`{"caller":"mcp"}`), GatewayToken: []byte("test-token"),
+		Command: []string{"/usr/local/bin/kit"}, Args: func() []string { _, args := KitGatewayCommand(8080); return args }(),
+		AgentsMD: []byte("caller instructions"), InferenceJSON: []byte(`{"version":1,"bearer_token":"sai_test","origin":"https://api.example.invalid"}`), MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("test-token"),
 		WorkSizeLimit: "1Gi", TmpSizeLimit: "128Mi",
 		Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("128Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("1Gi")}},
 	}
@@ -44,7 +44,7 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	var secret corev1.Secret
 	require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(objects.Secret.Object, &secret))
 	require.True(t, *secret.Immutable)
-	require.Equal(t, map[string][]byte{"AGENTS.md": in.AgentsMD, "inference.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}, secret.Data)
+	require.Equal(t, map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitFileConfig), KitInferenceCredentialFilename: in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}, secret.Data)
 	require.Equal(t, in.Identity.labels(), secret.Labels)
 	pod := kitPodTemplate(t, objects)
 	require.Equal(t, in.Identity.labels(), pod.Labels)
@@ -65,13 +65,13 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	init, main := pod.Spec.InitContainers[0], pod.Spec.Containers[0]
 	require.Equal(t, in.Command, main.Command)
 	require.Equal(t, in.Args, main.Args)
-	require.Equal(t, []corev1.EnvVar{{Name: "HOME", Value: "/home/kit"}}, main.Env)
+	require.Equal(t, []corev1.EnvVar{{Name: "HOME", Value: "/home/kit"}, {Name: "SPEAKEASY_ORIGIN", Value: "https://api.example.invalid"}}, main.Env)
 	require.Equal(t, "/home/kit", main.WorkingDir)
 	require.Equal(t, []corev1.VolumeMount{{Name: "work", MountPath: "/home/kit"}, {Name: "tmp", MountPath: "/tmp"}}, main.VolumeMounts)
 	require.Equal(t, corev1.VolumeMount{Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}, init.VolumeMounts[1])
 	require.Equal(t, init.VolumeMounts[0], main.VolumeMounts[0])
 	require.Contains(t, init.Args[0], "umask 077")
-	require.Contains(t, init.Args[0], "chmod 600 /home/kit/.kit/AGENTS.md /home/kit/.kit/credentials/*")
+	require.Contains(t, init.Args[0], "chmod 600 /home/kit/.kit/AGENTS.md /home/kit/.kit/config.toml /home/kit/.kit/credentials/*")
 	for _, container := range []corev1.Container{init, main} {
 		require.False(t, *container.SecurityContext.AllowPrivilegeEscalation)
 		require.Equal(t, []corev1.Capability{"ALL"}, container.SecurityContext.Capabilities.Drop)
@@ -80,7 +80,7 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.Equal(t, corev1.StorageMediumMemory, pod.Spec.Volumes[1].EmptyDir.Medium)
 	require.Equal(t, secret.Name, pod.Spec.Volumes[2].Secret.SecretName)
 	require.Equal(t, int32(0440), *pod.Spec.Volumes[2].Secret.DefaultMode)
-	require.Len(t, pod.Spec.Volumes[2].Secret.Items, 4)
+	require.Len(t, pod.Spec.Volumes[2].Secret.Items, 5)
 	policy, found, err := unstructured.NestedMap(objects.Template.Object, "spec", "networkPolicy")
 	require.NoError(t, err)
 	require.True(t, found)

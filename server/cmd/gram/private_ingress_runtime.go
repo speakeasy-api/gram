@@ -263,6 +263,9 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	assistantsCore.SetWakeCanceller(triggerApp)
 	assistantsCore.SetDashboardIngestor(triggerApp)
 	assistantsCore.SetChatMessageWriter(chatWriter)
+	if err := installKitLocalRuntimeFromCLI(c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+		return nil, err
+	}
 	assistantsCore.SetAssetStorage(assetStorage)
 	assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 	assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))

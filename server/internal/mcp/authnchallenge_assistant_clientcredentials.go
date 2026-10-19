@@ -18,6 +18,9 @@ import (
 // an assistant selected by the caller. The issuer must resolve that registration
 // to exactly one live assistant in this tenancy.
 type AssistantWorkloadTokenRequest struct {
+	endpoint             *ResolvedMcpEndpoint
+	baseURL              string
+	client               *usersessions_repo.UserSessionClient
 	ClientRegistrationID uuid.UUID
 	ClientID             string
 	IssuerID             uuid.UUID
@@ -47,8 +50,8 @@ type AssistantWorkloadToken struct {
 // minutes, carry exactly these scopes and resource, and have no refresh token.
 //
 // Do not implement this through mintSession: agent sessions there deliberately
-// require a human authorizer and delegated grants. No default implementation is
-// installed until the workload registration adapter is explicitly composed.
+// require a human authorizer and delegated grants. The native implementation is
+// composed by NewService and admits only explicitly bound registrations.
 // Reuse assistantidentity.Resolve/Validate for assistant/trigger bindings,
 // workloadidentity admission/assignment and existing workload session issuance
 // and bearer validation; do not create another identity registry. OAuth scopes
@@ -93,6 +96,7 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 	}
 	scopes := strings.Split(rawScopes[0], " ")
 	result, err := s.assistantWorkloadTokens.IssueAssistantWorkloadToken(ctx, AssistantWorkloadTokenRequest{
+		endpoint: endpoint, baseURL: baseURL, client: client,
 		ClientRegistrationID: client.ID, ClientID: client.ClientID,
 		IssuerID: endpoint.UserSessionIssuerID, OrganizationID: endpoint.OrganizationID,
 		ProjectID: endpoint.ProjectID, Resource: resource, Scopes: scopes,

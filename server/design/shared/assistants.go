@@ -53,7 +53,7 @@ var Assistant = Type("Assistant", func() {
 	Attribute("skills", ArrayOf(AssistantSkillRef), "Skills attached to the assistant.")
 	Attribute("warm_ttl_seconds", Int, "Warm runtime TTL in seconds.")
 	Attribute("max_concurrency", Int, "Maximum active warm runtimes for the assistant.")
-	Attribute("runtime_version", Int, "Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Read-only until safe runtime switching is available.")
+	Attribute("runtime_version", Int, "Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.")
 	Attribute("status", String, "The assistant status.", func() {
 		Enum("active", "paused")
 	})

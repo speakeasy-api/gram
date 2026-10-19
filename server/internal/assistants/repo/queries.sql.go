@@ -68,6 +68,32 @@ type AddAssistantToolsetsParams struct {
 	ProjectID     uuid.UUID
 }
 
+const assistantHasUnsettledEvents = `-- name: AssistantHasUnsettledEvents :one
+SELECT EXISTS (
+  SELECT 1 FROM assistant_thread_events e
+  WHERE e.project_id = $1 AND e.assistant_id = $2
+    AND e.deleted IS FALSE AND e.status NOT IN ('completed', 'failed', 'cancelled')
+) OR EXISTS (
+  SELECT 1 FROM trigger_instances t
+  WHERE t.project_id = $1 AND t.target_kind = 'assistant'
+    AND t.target_ref = $2::uuid::text AND t.definition_slug = 'wake'
+    AND t.deleted IS FALSE AND t.status NOT IN ('fired', 'cancelled')
+) AS busy
+`
+
+type AssistantHasUnsettledEventsParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+// Unknown statuses fail closed; pending includes queued admissions.
+func (q *Queries) AssistantHasUnsettledEvents(ctx context.Context, arg AssistantHasUnsettledEventsParams) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, assistantHasUnsettledEvents, arg.ProjectID, arg.AssistantID)
+	var busy pgtype.Bool
+	err := row.Scan(&busy)
+	return busy, err
+}
+
 const backdateAssistantRuntimeUpdatedAt = `-- name: BackdateAssistantRuntimeUpdatedAt :exec
 UPDATE assistant_runtimes
 SET updated_at = $1
@@ -101,7 +127,7 @@ WHERE id = (
    AND t.id = $2
    AND (
      r.assistant_thread_id = t.id
-     OR (r.runtime_version = 2 AND r.assistant_id = t.assistant_id)
+     OR (r.runtime_version IN (2, 3) AND r.assistant_id = t.assistant_id)
    )
   WHERE r.project_id = $3
     AND r.state IN ($4, $1)
@@ -1445,7 +1471,7 @@ SELECT id, assistant_thread_id, assistant_id, project_id, runtime_version, backe
 FROM assistant_runtimes
 WHERE project_id = $1
   AND assistant_id = $2
-  AND runtime_version = 2
+  AND runtime_version IN (2, 3)
   AND deleted IS FALSE
   AND ended IS FALSE
 LIMIT 1
@@ -1565,6 +1591,57 @@ func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg Get
 	return id, err
 }
 
+const getKitRuntimeSessionBinding = `-- name: GetKitRuntimeSessionBinding :one
+SELECT r.id AS runtime_id, t.id AS thread_id, t.chat_id, s.acp_session_id,
+  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id) AS has_prior_transcript
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+LEFT JOIN assistant_kit_sessions s ON s.runtime_id = r.id AND s.assistant_thread_id = t.id
+  AND s.project_id = r.project_id AND s.assistant_id = r.assistant_id
+WHERE r.id = $1 AND r.project_id = $2 AND r.assistant_id = $3
+  AND t.id = $4
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.runtime_version = 3 AND a.deleted IS FALSE
+  AND t.deleted IS FALSE AND c.deleted IS FALSE
+FOR SHARE OF r, a, t, c
+`
+
+type GetKitRuntimeSessionBindingParams struct {
+	RuntimeID   uuid.UUID
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+}
+
+type GetKitRuntimeSessionBindingRow struct {
+	RuntimeID          uuid.UUID
+	ThreadID           uuid.UUID
+	ChatID             uuid.UUID
+	AcpSessionID       pgtype.Text
+	HasPriorTranscript bool
+}
+
+// Existence only: never load any previous transcript contents into the guest.
+func (q *Queries) GetKitRuntimeSessionBinding(ctx context.Context, arg GetKitRuntimeSessionBindingParams) (GetKitRuntimeSessionBindingRow, error) {
+	row := q.db.QueryRow(ctx, getKitRuntimeSessionBinding,
+		arg.RuntimeID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+	)
+	var i GetKitRuntimeSessionBindingRow
+	err := row.Scan(
+		&i.RuntimeID,
+		&i.ThreadID,
+		&i.ChatID,
+		&i.AcpSessionID,
+		&i.HasPriorTranscript,
+	)
+	return i, err
+}
+
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
@@ -1641,6 +1718,29 @@ func (q *Queries) GetLatestAssistantThreadEventByThreadID(ctx context.Context, a
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getLiveKitRuntimeAuthority = `-- name: GetLiveKitRuntimeAuthority :one
+SELECT r.id
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = $1 AND r.project_id = $2 AND r.assistant_id = $3
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.runtime_version = 3 AND a.deleted IS FALSE
+FOR SHARE OF r, a
+`
+
+type GetLiveKitRuntimeAuthorityParams struct {
+	RuntimeID   uuid.UUID
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+func (q *Queries) GetLiveKitRuntimeAuthority(ctx context.Context, arg GetLiveKitRuntimeAuthorityParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getLiveKitRuntimeAuthority, arg.RuntimeID, arg.ProjectID, arg.AssistantID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getManagedAssistantByProject = `-- name: GetManagedAssistantByProject :one
@@ -1732,6 +1832,9 @@ func (q *Queries) InitThreadSkillSnapshot(ctx context.Context, arg InitThreadSki
 }
 
 const insertAssistantThreadEvent = `-- name: InsertAssistantThreadEvent :one
+WITH ingestion_fence AS MATERIALIZED (
+  SELECT pg_advisory_xact_lock(hashtext('asst:' || $2::uuid::text))
+)
 INSERT INTO assistant_thread_events (
   assistant_thread_id,
   assistant_id,
@@ -1742,7 +1845,7 @@ INSERT INTO assistant_thread_events (
   status,
   normalized_payload_json,
   source_payload_json
-) VALUES (
+) SELECT
   $1,
   $2,
   $3,
@@ -1752,7 +1855,7 @@ INSERT INTO assistant_thread_events (
   $7,
   $8,
   $9
-)
+FROM ingestion_fence
 ON CONFLICT (project_id, assistant_id, event_id) WHERE deleted IS FALSE DO NOTHING
 RETURNING id
 `
@@ -1786,6 +1889,43 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	return id, err
 }
 
+const insertKitRuntimeSession = `-- name: InsertKitRuntimeSession :execrows
+INSERT INTO assistant_kit_sessions (project_id, assistant_id, runtime_id, assistant_thread_id, acp_session_id)
+SELECT r.project_id, r.assistant_id, r.id, t.id, $1
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE r.id = $2 AND r.project_id = $3 AND r.assistant_id = $4
+  AND t.id = $5
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.runtime_version = 3 AND a.deleted IS FALSE
+  AND t.deleted IS FALSE AND c.deleted IS FALSE
+ON CONFLICT (runtime_id, assistant_thread_id) DO NOTHING
+`
+
+type InsertKitRuntimeSessionParams struct {
+	SessionID   string
+	RuntimeID   uuid.UUID
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+}
+
+func (q *Queries) InsertKitRuntimeSession(ctx context.Context, arg InsertKitRuntimeSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertKitRuntimeSession,
+		arg.SessionID,
+		arg.RuntimeID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const invalidateAssistantMCPOAuthClient = `-- name: InvalidateAssistantMCPOAuthClient :exec
 UPDATE assistant_mcp_oauth_clients
 SET
@@ -1816,11 +1956,30 @@ func (q *Queries) InvalidateAssistantMCPOAuthClient(ctx context.Context, arg Inv
 	return err
 }
 
+const kitProtocolHasPriorMessages = `-- name: KitProtocolHasPriorMessages :one
+SELECT EXISTS(SELECT 1 FROM chat_messages
+WHERE project_id= $1 AND chat_id= $2
+AND id <> ALL($3::uuid[])) AS has_prior
+`
+
+type KitProtocolHasPriorMessagesParams struct {
+	ProjectID         uuid.NullUUID
+	ChatID            uuid.UUID
+	CurrentMessageIds []uuid.UUID
+}
+
+func (q *Queries) KitProtocolHasPriorMessages(ctx context.Context, arg KitProtocolHasPriorMessagesParams) (bool, error) {
+	row := q.db.QueryRow(ctx, kitProtocolHasPriorMessages, arg.ProjectID, arg.ChatID, arg.CurrentMessageIds)
+	var has_prior bool
+	err := row.Scan(&has_prior)
+	return has_prior, err
+}
+
 const listActiveAssistantRuntimes = `-- name: ListActiveAssistantRuntimes :many
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = $1
-  AND r.runtime_version = 2
+  AND r.runtime_version IN (2, 3)
   AND r.deleted IS FALSE
   AND r.ended IS FALSE
   AND r.backend_metadata_json <> '{}'::jsonb
@@ -2025,6 +2184,57 @@ func (q *Queries) ListAssistantRuntimesForReap(ctx context.Context, arg ListAssi
 			&i.BackendMetadataJson,
 			&i.State,
 			&i.WarmUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssistantRuntimesForSwitch = `-- name: ListAssistantRuntimesForSwitch :many
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+WHERE project_id = $1 AND assistant_id = $2
+  AND deleted IS FALSE AND ended IS FALSE
+ORDER BY id
+FOR UPDATE
+`
+
+type ListAssistantRuntimesForSwitchParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+func (q *Queries) ListAssistantRuntimesForSwitch(ctx context.Context, arg ListAssistantRuntimesForSwitchParams) ([]AssistantRuntime, error) {
+	rows, err := q.db.Query(ctx, listAssistantRuntimesForSwitch, arg.ProjectID, arg.AssistantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AssistantRuntime
+	for rows.Next() {
+		var i AssistantRuntime
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssistantThreadID,
+			&i.AssistantID,
+			&i.ProjectID,
+			&i.Backend,
+			&i.State,
+			&i.WarmUntil,
+			&i.LeaseOwner,
+			&i.LastHeartbeatAt,
+			&i.BackendMetadataJson,
+			&i.EndedAt,
+			&i.RuntimeVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.Ended,
 		); err != nil {
 			return nil, err
 		}
@@ -2332,7 +2542,7 @@ JOIN assistants a
   ON a.id = r.assistant_id
  AND a.project_id = r.project_id
  AND a.deleted IS FALSE
-WHERE r.runtime_version = 2
+WHERE r.runtime_version IN (2, 3)
   AND r.deleted IS FALSE
   AND r.ended IS FALSE
   AND r.backend = ANY($1::text[])
@@ -2500,6 +2710,71 @@ func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg 
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKitProtocolSessions = `-- name: ListKitProtocolSessions :many
+SELECT acp_session_id FROM assistant_kit_sessions
+WHERE project_id= $1 AND assistant_id= $2 AND runtime_id= $3
+ORDER BY acp_session_id
+`
+
+type ListKitProtocolSessionsParams struct {
+	ProjectID   uuid.NullUUID
+	AssistantID uuid.NullUUID
+	RuntimeID   uuid.NullUUID
+}
+
+func (q *Queries) ListKitProtocolSessions(ctx context.Context, arg ListKitProtocolSessionsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listKitProtocolSessions, arg.ProjectID, arg.AssistantID, arg.RuntimeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var acp_session_id string
+		if err := rows.Scan(&acp_session_id); err != nil {
+			return nil, err
+		}
+		items = append(items, acp_session_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKitProtocolUserEchoes = `-- name: ListKitProtocolUserEchoes :many
+SELECT (e.source_payload_json->'_kit_user_echoes')::jsonb AS echoes
+FROM assistant_thread_events e
+WHERE e.project_id= $1 AND e.assistant_id= $2 AND e.assistant_thread_id= $3
+AND e.deleted IS FALSE AND e.source_payload_json ? '_kit_user_echoes'
+`
+
+type ListKitProtocolUserEchoesParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+}
+
+func (q *Queries) ListKitProtocolUserEchoes(ctx context.Context, arg ListKitProtocolUserEchoesParams) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, listKitProtocolUserEchoes, arg.ProjectID, arg.AssistantID, arg.ThreadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items [][]byte
+	for rows.Next() {
+		var echoes []byte
+		if err := rows.Scan(&echoes); err != nil {
+			return nil, err
+		}
+		items = append(items, echoes)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -3048,6 +3323,29 @@ func (q *Queries) LoadAttachedAssistantSkill(ctx context.Context, arg LoadAttach
 	return i, err
 }
 
+const loadKitGatewayCredential = `-- name: LoadKitGatewayCredential :one
+SELECT g.token_ciphertext
+FROM assistant_kit_gateway_credentials g
+JOIN assistant_runtimes r ON r.id = g.runtime_id AND r.project_id = g.project_id AND r.assistant_id = g.assistant_id
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = $1 AND r.project_id = $2 AND r.assistant_id = $3
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.runtime_version = 3 AND a.deleted IS FALSE
+`
+
+type LoadKitGatewayCredentialParams struct {
+	RuntimeID   uuid.UUID
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+func (q *Queries) LoadKitGatewayCredential(ctx context.Context, arg LoadKitGatewayCredentialParams) (string, error) {
+	row := q.db.QueryRow(ctx, loadKitGatewayCredential, arg.RuntimeID, arg.ProjectID, arg.AssistantID)
+	var token_ciphertext string
+	err := row.Scan(&token_ciphertext)
+	return token_ciphertext, err
+}
+
 const loadThreadContext = `-- name: LoadThreadContext :one
 SELECT
   t.id,
@@ -3216,7 +3514,7 @@ FROM assistant_threads t
 JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
 JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id
   AND r.project_id = t.project_id
-  AND r.runtime_version = 2
+  AND r.runtime_version IN (2, 3)
 WHERE t.id = $1
   AND t.project_id = $2
   AND t.deleted IS FALSE
@@ -3318,7 +3616,7 @@ SELECT id, state
 FROM assistant_runtimes
 WHERE project_id = $1
   AND assistant_id = $2
-  AND runtime_version = 2
+  AND runtime_version IN (2, 3)
   AND deleted IS FALSE
   AND ended IS FALSE
 LIMIT 1
@@ -3420,7 +3718,7 @@ WHERE deleted IS FALSE
     OR (
       state = $4
       AND updated_at < $5
-      AND (runtime_version <> 2 OR backend <> ALL($6::text[]))
+      AND (runtime_version < 2 OR backend <> ALL($6::text[]))
     )
   )
 RETURNING assistant_id
@@ -3634,13 +3932,16 @@ INSERT INTO assistant_runtimes (
   $3,
   $4,
   $5,
-  2,
+  (SELECT a.runtime_version FROM assistants a WHERE a.id = $2 AND a.project_id = $3 AND a.deleted IS FALSE),
   COALESCE((
     SELECT r.backend_metadata_json
     FROM assistant_runtimes r
     WHERE r.project_id = $3
       AND r.assistant_id = $2
+      -- Only legacy v2 bindings may survive runtime-row replacement. Kit v3
+      -- metadata carries immutable runtime-row authority and must start empty.
       AND r.runtime_version = 2
+      AND r.runtime_version = (SELECT a.runtime_version FROM assistants a WHERE a.id = $2 AND a.project_id = $3)
       AND r.backend = $4
       AND r.backend_metadata_json <> '{}'::jsonb
     ORDER BY r.created_at DESC
@@ -3661,8 +3962,9 @@ type ReserveAssistantRuntimeV2Params struct {
 // v2 runtimes are keyed on (project_id, assistant_id) — one VM serves
 // every thread under an assistant. assistant_thread_id is set to the
 // admitting thread (the one that triggered admit) so the column stays
-// a real reference; the runtime_version = 2 marker carries the v2
-// semantic distinction. The unique partial index
+// a real reference. The persisted desired version is stamped once at creation;
+// it is never changed on a runtime row. Versions 2 and 3 share the unique index.
+// The unique partial index
 // `assistant_runtimes_v2_one_per_assistant` backs the ON CONFLICT and
 // guarantees the single-VM invariant under concurrent admit. Callers
 // must hold pg_advisory_xact_lock on the assistant id to serialise VM
@@ -3679,22 +3981,29 @@ func (q *Queries) ReserveAssistantRuntimeV2(ctx context.Context, arg ReserveAssi
 }
 
 const resetAssistantThreadEventToPending = `-- name: ResetAssistantThreadEventToPending :exec
-UPDATE assistant_thread_events
+WITH ingestion_fence AS MATERIALIZED (
+  SELECT e.id, pg_advisory_xact_lock(hashtext('asst:' || e.assistant_id::text))
+  FROM assistant_thread_events e
+  WHERE e.id = $5 AND e.project_id = $4
+)
+UPDATE assistant_thread_events e
 SET
   status = $1,
   attempts = GREATEST(0, attempts - CASE WHEN $2::boolean THEN 1 ELSE 0 END),
   last_error = $3,
   updated_at = clock_timestamp()
-WHERE id = $4
-  AND project_id = $5
+FROM ingestion_fence
+WHERE e.id = ingestion_fence.id
+  AND e.project_id = $4
+  AND e.status = 'processing'
 `
 
 type ResetAssistantThreadEventToPendingParams struct {
 	PendingStatus  string
 	RestoreAttempt bool
 	LastError      pgtype.Text
-	EventID        uuid.UUID
 	ProjectID      uuid.UUID
+	EventID        uuid.UUID
 }
 
 func (q *Queries) ResetAssistantThreadEventToPending(ctx context.Context, arg ResetAssistantThreadEventToPendingParams) error {
@@ -3702,8 +4011,8 @@ func (q *Queries) ResetAssistantThreadEventToPending(ctx context.Context, arg Re
 		arg.PendingStatus,
 		arg.RestoreAttempt,
 		arg.LastError,
-		arg.EventID,
 		arg.ProjectID,
+		arg.EventID,
 	)
 	return err
 }
@@ -3804,6 +4113,44 @@ func (q *Queries) ResolveEnvironmentsForWrite(ctx context.Context, arg ResolveEn
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const resolveKitCurrentUserMessage = `-- name: ResolveKitCurrentUserMessage :many
+SELECT m.id FROM assistant_thread_events e
+JOIN assistant_threads t ON t.id=e.assistant_thread_id AND t.project_id=e.project_id
+JOIN chat_messages m ON m.chat_id=t.chat_id AND m.project_id=e.project_id AND m.role='user'
+WHERE e.project_id= $1 AND e.assistant_id= $2 AND e.id= $3
+AND e.deleted IS FALSE AND t.deleted IS FALSE
+AND t.source_kind='dashboard'
+AND NULLIF(e.source_payload_json->>'idempotency_key','') IS NOT NULL
+AND (m.message_id=e.source_payload_json->>'idempotency_key' OR m.id::text=e.source_payload_json->>'idempotency_key')
+`
+
+type ResolveKitCurrentUserMessageParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	EventID     uuid.UUID
+}
+
+// Dashboard idempotency_key is the caller's message ID, not an event UUID or text match.
+func (q *Queries) ResolveKitCurrentUserMessage(ctx context.Context, arg ResolveKitCurrentUserMessageParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, resolveKitCurrentUserMessage, arg.ProjectID, arg.AssistantID, arg.EventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -4041,6 +4388,24 @@ func (q *Queries) RetireAssistantMCPOAuthClients(ctx context.Context, arg Retire
 	return err
 }
 
+const retireAssistantRuntimesForSwitch = `-- name: RetireAssistantRuntimesForSwitch :exec
+UPDATE assistant_runtimes
+SET state = 'stopped', ended_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE project_id = $1 AND assistant_id = $2
+  AND deleted IS FALSE AND ended IS FALSE
+`
+
+type RetireAssistantRuntimesForSwitchParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+// Never rewrite a runtime's protocol. Authority checks must reject ended rows.
+func (q *Queries) RetireAssistantRuntimesForSwitch(ctx context.Context, arg RetireAssistantRuntimesForSwitchParams) error {
+	_, err := q.db.Exec(ctx, retireAssistantRuntimesForSwitch, arg.ProjectID, arg.AssistantID)
+	return err
+}
+
 const revertExpireAssistantRuntimeToActive = `-- name: RevertExpireAssistantRuntimeToActive :exec
 UPDATE assistant_runtimes
 SET
@@ -4164,6 +4529,33 @@ func (q *Queries) RevokeSkillDistributionsByAssistant(ctx context.Context, arg R
 		return nil, err
 	}
 	return items, nil
+}
+
+const setAssistantDesiredRuntimeVersion = `-- name: SetAssistantDesiredRuntimeVersion :execrows
+UPDATE assistants SET runtime_version = $1, updated_at = clock_timestamp()
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+  AND runtime_version = $4
+`
+
+type SetAssistantDesiredRuntimeVersionParams struct {
+	RuntimeVersion         int16
+	AssistantID            uuid.UUID
+	ProjectID              uuid.UUID
+	ExpectedRuntimeVersion int16
+}
+
+// Caller holds the assistant advisory lock and has fenced and retired old runtimes.
+func (q *Queries) SetAssistantDesiredRuntimeVersion(ctx context.Context, arg SetAssistantDesiredRuntimeVersionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setAssistantDesiredRuntimeVersion,
+		arg.RuntimeVersion,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.ExpectedRuntimeVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setAssistantDesiredRuntimeVersionForTest = `-- name: SetAssistantDesiredRuntimeVersionForTest :exec
@@ -4326,6 +4718,75 @@ func (q *Queries) StopAssistantRuntime(ctx context.Context, arg StopAssistantRun
 		arg.ExpiringState,
 	)
 	return err
+}
+
+const storeKitGatewayCredential = `-- name: StoreKitGatewayCredential :execrows
+INSERT INTO assistant_kit_gateway_credentials (project_id, assistant_id, runtime_id, token_ciphertext)
+SELECT r.project_id, r.assistant_id, r.id, $1
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = $2 AND r.project_id = $3 AND r.assistant_id = $4
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.runtime_version = 3 AND a.deleted IS FALSE
+ON CONFLICT (runtime_id) DO UPDATE
+SET token_ciphertext = EXCLUDED.token_ciphertext, updated_at = clock_timestamp()
+WHERE assistant_kit_gateway_credentials.project_id = EXCLUDED.project_id
+  AND assistant_kit_gateway_credentials.assistant_id = EXCLUDED.assistant_id
+`
+
+type StoreKitGatewayCredentialParams struct {
+	TokenCiphertext string
+	RuntimeID       uuid.UUID
+	ProjectID       uuid.UUID
+	AssistantID     uuid.UUID
+}
+
+func (q *Queries) StoreKitGatewayCredential(ctx context.Context, arg StoreKitGatewayCredentialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, storeKitGatewayCredential,
+		arg.TokenCiphertext,
+		arg.RuntimeID,
+		arg.ProjectID,
+		arg.AssistantID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const storeKitProtocolUserEcho = `-- name: StoreKitProtocolUserEcho :execrows
+UPDATE assistant_thread_events e
+SET source_payload_json=jsonb_set(e.source_payload_json,'{_kit_user_echoes}',
+COALESCE(e.source_payload_json->'_kit_user_echoes','[]'::jsonb) || $1::jsonb), updated_at=clock_timestamp()
+WHERE e.project_id= $2 AND e.assistant_id= $3 AND e.assistant_thread_id= $4
+AND e.id= $5 AND e.deleted IS FALSE
+AND EXISTS(SELECT 1 FROM chat_messages m JOIN assistant_threads t ON t.chat_id=m.chat_id
+WHERE t.id=e.assistant_thread_id AND t.project_id=e.project_id
+AND m.project_id=e.project_id AND m.id= $6 AND m.role='user')
+`
+
+type StoreKitProtocolUserEchoParams struct {
+	Echo        []byte
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+	EventID     uuid.UUID
+	MessageID   uuid.UUID
+}
+
+func (q *Queries) StoreKitProtocolUserEcho(ctx context.Context, arg StoreKitProtocolUserEchoParams) (int64, error) {
+	result, err := q.db.Exec(ctx, storeKitProtocolUserEcho,
+		arg.Echo,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+		arg.EventID,
+		arg.MessageID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const touchProcessingLease = `-- name: TouchProcessingLease :exec

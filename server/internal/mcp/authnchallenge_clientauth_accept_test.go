@@ -378,7 +378,7 @@ func TestHandleGetAuthorizationServer_OmitsIDJAGWithoutTrustedIssuer(t *testing.
 	// workload grant, which is a different use of the same grant type. The
 	// ID-JAG profile is what says the endpoint accepts an authenticated
 	// identity assertion, and it stays absent.
-	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
+	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeClientCredentials, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
 	require.Empty(t, meta.GrantProfiles)
 }
 
@@ -419,6 +419,6 @@ func TestHandleGetAuthorizationServer_AdvertisesIDJAGWithTrustedIssuer(t *testin
 	require.NoError(t, err)
 
 	meta := loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
-	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
+	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeClientCredentials, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
 	require.Equal(t, []string{oauthwire.GrantProfileIDJAG}, meta.GrantProfiles)
 }

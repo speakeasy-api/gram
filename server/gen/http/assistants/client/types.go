@@ -75,6 +75,12 @@ type UpdateAssistantRequestBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching
+	// requires the assistant and all background work to be settled.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
+	// The runtime version read before requesting a switch. Required with
+	// runtime_version; conflicts require a fresh read.
+	ExpectedRuntimeVersion *int `form:"expected_runtime_version,omitempty" json:"expected_runtime_version,omitempty" xml:"expected_runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 }
@@ -148,7 +154,7 @@ type GetAssistantResponseBody struct {
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
 	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
-	// Read-only until safe runtime switching is available.
+	// Runtime changes require a settled assistant and available destination.
 	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -192,7 +198,7 @@ type CreateAssistantResponseBody struct {
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
 	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
-	// Read-only until safe runtime switching is available.
+	// Runtime changes require a settled assistant and available destination.
 	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -236,7 +242,7 @@ type UpgradeAssistantIdentityResponseBody struct {
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
 	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
-	// Read-only until safe runtime switching is available.
+	// Runtime changes require a settled assistant and available destination.
 	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -280,7 +286,7 @@ type UpdateAssistantResponseBody struct {
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
 	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
-	// Read-only until safe runtime switching is available.
+	// Runtime changes require a settled assistant and available destination.
 	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -349,7 +355,7 @@ type GetManagedAssistantResponseBody struct {
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
 	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
-	// Read-only until safe runtime switching is available.
+	// Runtime changes require a settled assistant and available destination.
 	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -393,7 +399,7 @@ type EnsureManagedAssistantResponseBody struct {
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
 	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
-	// Read-only until safe runtime switching is available.
+	// Runtime changes require a settled assistant and available destination.
 	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -2296,7 +2302,7 @@ type AssistantResponseBody struct {
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
 	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
-	// Read-only until safe runtime switching is available.
+	// Runtime changes require a settled assistant and available destination.
 	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -2424,13 +2430,15 @@ func NewUpgradeAssistantIdentityRequestBody(p *assistants.UpgradeAssistantIdenti
 // of the "updateAssistant" endpoint of the "assistants" service.
 func NewUpdateAssistantRequestBody(p *assistants.UpdateAssistantPayload) *UpdateAssistantRequestBody {
 	body := &UpdateAssistantRequestBody{
-		ID:             p.ID,
-		Name:           p.Name,
-		Model:          p.Model,
-		Instructions:   p.Instructions,
-		WarmTTLSeconds: p.WarmTTLSeconds,
-		MaxConcurrency: p.MaxConcurrency,
-		Status:         p.Status,
+		ID:                     p.ID,
+		Name:                   p.Name,
+		Model:                  p.Model,
+		Instructions:           p.Instructions,
+		WarmTTLSeconds:         p.WarmTTLSeconds,
+		MaxConcurrency:         p.MaxConcurrency,
+		RuntimeVersion:         p.RuntimeVersion,
+		ExpectedRuntimeVersion: p.ExpectedRuntimeVersion,
+		Status:                 p.Status,
 	}
 	if p.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefRequestBody, len(p.Toolsets))

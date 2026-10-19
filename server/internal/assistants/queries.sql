@@ -23,7 +23,7 @@ WHERE deleted IS FALSE
     OR (
       state = @expiring_state
       AND updated_at < @expiring_cutoff
-      AND (runtime_version <> 2 OR backend <> ALL(@idle_expiring_backends::text[]))
+      AND (runtime_version < 2 OR backend <> ALL(@idle_expiring_backends::text[]))
     )
   )
 RETURNING assistant_id;
@@ -714,6 +714,9 @@ DO UPDATE SET
 RETURNING id;
 
 -- name: InsertAssistantThreadEvent :one
+WITH ingestion_fence AS MATERIALIZED (
+  SELECT pg_advisory_xact_lock(hashtext('asst:' || sqlc.arg('assistant_id')::uuid::text))
+)
 INSERT INTO assistant_thread_events (
   assistant_thread_id,
   assistant_id,
@@ -724,7 +727,7 @@ INSERT INTO assistant_thread_events (
   status,
   normalized_payload_json,
   source_payload_json
-) VALUES (
+) SELECT
   @assistant_thread_id,
   @assistant_id,
   @project_id,
@@ -734,7 +737,7 @@ INSERT INTO assistant_thread_events (
   @status,
   @normalized_payload_json,
   @source_payload_json
-)
+FROM ingestion_fence
 ON CONFLICT (project_id, assistant_id, event_id) WHERE deleted IS FALSE DO NOTHING
 RETURNING id;
 
@@ -882,8 +885,9 @@ ON CONFLICT DO NOTHING;
 -- v2 runtimes are keyed on (project_id, assistant_id) — one VM serves
 -- every thread under an assistant. assistant_thread_id is set to the
 -- admitting thread (the one that triggered admit) so the column stays
--- a real reference; the runtime_version = 2 marker carries the v2
--- semantic distinction. The unique partial index
+-- a real reference. The persisted desired version is stamped once at creation;
+-- it is never changed on a runtime row. Versions 2 and 3 share the unique index.
+-- The unique partial index
 -- `assistant_runtimes_v2_one_per_assistant` backs the ON CONFLICT and
 -- guarantees the single-VM invariant under concurrent admit. Callers
 -- must hold pg_advisory_xact_lock on the assistant id to serialise VM
@@ -902,13 +906,16 @@ INSERT INTO assistant_runtimes (
   @project_id,
   @backend,
   @state,
-  2,
+  (SELECT a.runtime_version FROM assistants a WHERE a.id = @assistant_id AND a.project_id = @project_id AND a.deleted IS FALSE),
   COALESCE((
     SELECT r.backend_metadata_json
     FROM assistant_runtimes r
     WHERE r.project_id = @project_id
       AND r.assistant_id = @assistant_id
+      -- Only legacy v2 bindings may survive runtime-row replacement. Kit v3
+      -- metadata carries immutable runtime-row authority and must start empty.
       AND r.runtime_version = 2
+      AND r.runtime_version = (SELECT a.runtime_version FROM assistants a WHERE a.id = @assistant_id AND a.project_id = @project_id)
       AND r.backend = @backend
       AND r.backend_metadata_json <> '{}'::jsonb
     ORDER BY r.created_at DESC
@@ -954,7 +961,7 @@ SELECT id, state
 FROM assistant_runtimes
 WHERE project_id = @project_id
   AND assistant_id = @assistant_id
-  AND runtime_version = 2
+  AND runtime_version IN (2, 3)
   AND deleted IS FALSE
   AND ended IS FALSE
 LIMIT 1;
@@ -968,7 +975,7 @@ SELECT id, assistant_thread_id, assistant_id, project_id, runtime_version, backe
 FROM assistant_runtimes
 WHERE project_id = @project_id
   AND assistant_id = @assistant_id
-  AND runtime_version = 2
+  AND runtime_version IN (2, 3)
   AND deleted IS FALSE
   AND ended IS FALSE
 LIMIT 1;
@@ -1019,7 +1026,7 @@ FROM assistant_threads t
 JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
 JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id
   AND r.project_id = t.project_id
-  AND r.runtime_version = 2
+  AND r.runtime_version IN (2, 3)
 WHERE t.id = @thread_id
   AND t.project_id = @project_id
   AND t.deleted IS FALSE
@@ -1175,14 +1182,21 @@ WHERE project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: ResetAssistantThreadEventToPending :exec
-UPDATE assistant_thread_events
+WITH ingestion_fence AS MATERIALIZED (
+  SELECT e.id, pg_advisory_xact_lock(hashtext('asst:' || e.assistant_id::text))
+  FROM assistant_thread_events e
+  WHERE e.id = @event_id AND e.project_id = @project_id
+)
+UPDATE assistant_thread_events e
 SET
   status = @pending_status,
   attempts = GREATEST(0, attempts - CASE WHEN @restore_attempt::boolean THEN 1 ELSE 0 END),
   last_error = @last_error,
   updated_at = clock_timestamp()
-WHERE id = @event_id
-  AND project_id = @project_id;
+FROM ingestion_fence
+WHERE e.id = ingestion_fence.id
+  AND e.project_id = @project_id
+  AND e.status = 'processing';
 
 -- name: SetAssistantRuntimeActive :exec
 UPDATE assistant_runtimes
@@ -1311,7 +1325,7 @@ WHERE id = @runtime_id
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = @active_state
-  AND r.runtime_version = 2
+  AND r.runtime_version IN (2, 3)
   AND r.deleted IS FALSE
   AND r.ended IS FALSE
   AND r.backend_metadata_json <> '{}'::jsonb
@@ -1403,7 +1417,7 @@ WHERE id = (
    AND t.id = @thread_id
    AND (
      r.assistant_thread_id = t.id
-     OR (r.runtime_version = 2 AND r.assistant_id = t.assistant_id)
+     OR (r.runtime_version IN (2, 3) AND r.assistant_id = t.assistant_id)
    )
   WHERE r.project_id = @project_id
     AND r.state IN (@active_state, @expiring_state)
@@ -1433,7 +1447,7 @@ JOIN assistants a
   ON a.id = r.assistant_id
  AND a.project_id = r.project_id
  AND a.deleted IS FALSE
-WHERE r.runtime_version = 2
+WHERE r.runtime_version IN (2, 3)
   AND r.deleted IS FALSE
   AND r.ended IS FALSE
   AND r.backend = ANY(@idle_expiring_backends::text[])
@@ -1819,3 +1833,135 @@ WHERE id = @assistant_id AND project_id = @project_id;
 -- name: CountAssistantRuntimeRowsForTest :one
 SELECT count(*) FROM assistant_runtimes
 WHERE assistant_id = @assistant_id AND project_id = @project_id;
+
+-- name: AssistantHasUnsettledEvents :one
+-- Unknown statuses fail closed; pending includes queued admissions.
+SELECT EXISTS (
+  SELECT 1 FROM assistant_thread_events e
+  WHERE e.project_id = @project_id AND e.assistant_id = @assistant_id
+    AND e.deleted IS FALSE AND e.status NOT IN ('completed', 'failed', 'cancelled')
+) OR EXISTS (
+  SELECT 1 FROM trigger_instances t
+  WHERE t.project_id = @project_id AND t.target_kind = 'assistant'
+    AND t.target_ref = sqlc.arg('assistant_id')::uuid::text AND t.definition_slug = 'wake'
+    AND t.deleted IS FALSE AND t.status NOT IN ('fired', 'cancelled')
+) AS busy;
+
+-- name: ListAssistantRuntimesForSwitch :many
+SELECT * FROM assistant_runtimes
+WHERE project_id = @project_id AND assistant_id = @assistant_id
+  AND deleted IS FALSE AND ended IS FALSE
+ORDER BY id
+FOR UPDATE;
+
+-- name: SetAssistantDesiredRuntimeVersion :execrows
+-- Caller holds the assistant advisory lock and has fenced and retired old runtimes.
+UPDATE assistants SET runtime_version = @runtime_version, updated_at = clock_timestamp()
+WHERE id = @assistant_id AND project_id = @project_id AND deleted IS FALSE
+  AND runtime_version = @expected_runtime_version;
+
+-- name: RetireAssistantRuntimesForSwitch :exec
+-- Never rewrite a runtime's protocol. Authority checks must reject ended rows.
+UPDATE assistant_runtimes
+SET state = 'stopped', ended_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE project_id = @project_id AND assistant_id = @assistant_id
+  AND deleted IS FALSE AND ended IS FALSE;
+
+-- name: GetLiveKitRuntimeAuthority :one
+SELECT r.id
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.runtime_version = 3 AND a.deleted IS FALSE
+FOR SHARE OF r, a;
+
+-- name: GetKitRuntimeSessionBinding :one
+-- Existence only: never load any previous transcript contents into the guest.
+SELECT r.id AS runtime_id, t.id AS thread_id, t.chat_id, s.acp_session_id,
+  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id) AS has_prior_transcript
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+LEFT JOIN assistant_kit_sessions s ON s.runtime_id = r.id AND s.assistant_thread_id = t.id
+  AND s.project_id = r.project_id AND s.assistant_id = r.assistant_id
+WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
+  AND t.id = @thread_id
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.runtime_version = 3 AND a.deleted IS FALSE
+  AND t.deleted IS FALSE AND c.deleted IS FALSE
+FOR SHARE OF r, a, t, c;
+
+-- name: InsertKitRuntimeSession :execrows
+INSERT INTO assistant_kit_sessions (project_id, assistant_id, runtime_id, assistant_thread_id, acp_session_id)
+SELECT r.project_id, r.assistant_id, r.id, t.id, @session_id
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
+  AND t.id = @thread_id
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.runtime_version = 3 AND a.deleted IS FALSE
+  AND t.deleted IS FALSE AND c.deleted IS FALSE
+ON CONFLICT (runtime_id, assistant_thread_id) DO NOTHING;
+
+-- name: StoreKitGatewayCredential :execrows
+INSERT INTO assistant_kit_gateway_credentials (project_id, assistant_id, runtime_id, token_ciphertext)
+SELECT r.project_id, r.assistant_id, r.id, @token_ciphertext
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.runtime_version = 3 AND a.deleted IS FALSE
+ON CONFLICT (runtime_id) DO UPDATE
+SET token_ciphertext = EXCLUDED.token_ciphertext, updated_at = clock_timestamp()
+WHERE assistant_kit_gateway_credentials.project_id = EXCLUDED.project_id
+  AND assistant_kit_gateway_credentials.assistant_id = EXCLUDED.assistant_id;
+
+-- name: LoadKitGatewayCredential :one
+SELECT g.token_ciphertext
+FROM assistant_kit_gateway_credentials g
+JOIN assistant_runtimes r ON r.id = g.runtime_id AND r.project_id = g.project_id AND r.assistant_id = g.assistant_id
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.runtime_version = 3 AND a.deleted IS FALSE;
+
+-- name: ListKitProtocolSessions :many
+SELECT acp_session_id FROM assistant_kit_sessions
+WHERE project_id= @project_id AND assistant_id= @assistant_id AND runtime_id= @runtime_id
+ORDER BY acp_session_id;
+
+-- name: KitProtocolHasPriorMessages :one
+SELECT EXISTS(SELECT 1 FROM chat_messages
+WHERE project_id= @project_id AND chat_id= @chat_id
+AND id <> ALL(@current_message_ids::uuid[])) AS has_prior;
+
+-- name: ResolveKitCurrentUserMessage :many
+-- Dashboard idempotency_key is the caller's message ID, not an event UUID or text match.
+SELECT m.id FROM assistant_thread_events e
+JOIN assistant_threads t ON t.id=e.assistant_thread_id AND t.project_id=e.project_id
+JOIN chat_messages m ON m.chat_id=t.chat_id AND m.project_id=e.project_id AND m.role='user'
+WHERE e.project_id= @project_id AND e.assistant_id= @assistant_id AND e.id= @event_id
+AND e.deleted IS FALSE AND t.deleted IS FALSE
+AND t.source_kind='dashboard'
+AND NULLIF(e.source_payload_json->>'idempotency_key','') IS NOT NULL
+AND (m.message_id=e.source_payload_json->>'idempotency_key' OR m.id::text=e.source_payload_json->>'idempotency_key');
+
+-- name: StoreKitProtocolUserEcho :execrows
+UPDATE assistant_thread_events e
+SET source_payload_json=jsonb_set(e.source_payload_json,'{_kit_user_echoes}',
+COALESCE(e.source_payload_json->'_kit_user_echoes','[]'::jsonb) || @echo::jsonb), updated_at=clock_timestamp()
+WHERE e.project_id= @project_id AND e.assistant_id= @assistant_id AND e.assistant_thread_id= @thread_id
+AND e.id= @event_id AND e.deleted IS FALSE
+AND EXISTS(SELECT 1 FROM chat_messages m JOIN assistant_threads t ON t.chat_id=m.chat_id
+WHERE t.id=e.assistant_thread_id AND t.project_id=e.project_id
+AND m.project_id=e.project_id AND m.id= @message_id AND m.role='user');
+
+-- name: ListKitProtocolUserEchoes :many
+SELECT (e.source_payload_json->'_kit_user_echoes')::jsonb AS echoes
+FROM assistant_thread_events e
+WHERE e.project_id= @project_id AND e.assistant_id= @assistant_id AND e.assistant_thread_id= @thread_id
+AND e.deleted IS FALSE AND e.source_payload_json ? '_kit_user_echoes';

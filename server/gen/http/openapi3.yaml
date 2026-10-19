@@ -91281,7 +91281,7 @@ components:
                     format: uuid
                 runtime_version:
                     type: integer
-                    description: 'Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Read-only until safe runtime switching is available.'
+                    description: 'Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.'
                     format: int64
                 skills:
                     type: array
@@ -120656,6 +120656,13 @@ components:
         UpdateAssistantForm:
             type: object
             properties:
+                expected_runtime_version:
+                    type: integer
+                    description: The runtime version read before requesting a switch. Required with runtime_version; conflicts require a fresh read.
+                    enum:
+                        - 2
+                        - 3
+                    format: int64
                 id:
                     type: string
                     description: The assistant ID.
@@ -120678,6 +120685,13 @@ components:
                 name:
                     type: string
                     description: The assistant name.
+                runtime_version:
+                    type: integer
+                    description: 'Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.'
+                    enum:
+                        - 2
+                        - 3
+                    format: int64
                 status:
                     type: string
                     description: The assistant status.

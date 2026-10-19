@@ -3,3 +3,33 @@
 //   sqlc v1.31.1
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type AssistantInferenceCredential struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	AssistantID uuid.UUID
+	// @access: confidential
+	RuntimeID uuid.UUID
+	// @access: opaque-restricted
+	TokenHash []byte
+	// @access: opaque-restricted
+	IdentityJson []byte
+	// @access: opaque-restricted
+	PolicyJson []byte
+	// @access: confidential
+	PolicyVersion int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+}
