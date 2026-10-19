@@ -374,13 +374,8 @@ export function UserIdentityRow({
             </div>
           ) : null}
           {selected.isNew && draft.discoveryStatus === "error" ? (
-            <Alert
-              variant="error"
-              dismissible={false}
-              alignTop
-              className="min-w-0"
-            >
-              <code className="text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">
+            <Alert variant="error" dismissible={false} className="min-w-0">
+              <code className="block text-xs leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]">
                 {draft.discoveryError}
               </code>
             </Alert>
