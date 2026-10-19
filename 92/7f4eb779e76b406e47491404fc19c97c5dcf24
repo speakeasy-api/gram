@@ -1,0 +1,59 @@
+client/dashboard/src/components/observe/insightsEmployeesData.test.ts
+  h_9630b74bdac540 66,82,101,127,129,160,241,324,329-330,333-357
+  s_09e60060cae680::t_7797ca4cf48bc1 331-332,358-359,394-395
+client/dashboard/src/pages/identities/useIdentityQueries.ts
+  h_9630b74bdac540 158
+client/dashboard/src/lib/insights-suggestions.ts
+  h_9630b74bdac540 659-660,663,666-667,670,673-674,677
+.changeset/directory-identity-facts.md
+  h_9630b74bdac540 1-5
+client/dashboard/src/pages/identities/IdentityDevices.tsx
+  h_9630b74bdac540 21,85-86,123-134,136-137,140,148-154,157-162,166,212,214,218-219,221-222,226-227,229-235,237
+  s_13de7b35d060cb::t_6677073e440d40 155-156,216-217,223-225
+client/dashboard/src/pages/identities/IdentitiesIndex.tsx
+  h_9630b74bdac540 123-125,127-128,132-147,212-219,222-224,506,508-509,592,775-784,786-787,790,798
+  s_09e60060cae680::t_eb6fa47cc4bafd 131,220-221,507,510-512,514-515,591,593,598,609-611,634-640,695-697,720-722,785,788-789,792-793,795-797,804,852-854
+client/dashboard/src/components/observe/insightsEmployeesData.ts
+  h_9630b74bdac540 27-37,304-305,332-335,353-356,358-359
+client/dashboard/src/pages/identities/identityKind.test.ts
+  h_9630b74bdac540 14-15
+client/dashboard/src/pages/identities/IdentitySecurity.tsx
+  h_9630b74bdac540 54
+client/dashboard/src/pages/identities/identityRoster.test.ts
+  h_9630b74bdac540 26,35-36,137-138,142-150,156-157,161-164,166-169,173-175,179-209,211-217,219-220
+  s_09e60060cae680::t_54924db96dd749 139-141,151,158,165,170,172,176,178,210,218,221-225,227-228
+client/dashboard/src/pages/identities/IdentityPanel.tsx
+  h_9630b74bdac540 54
+client/dashboard/src/pages/identities/identityRoster.ts
+  h_9630b74bdac540 2,78,86-87,112-126,130,133-136,138-140
+  s_09e60060cae680::t_c4caeb56a5c074 111,127,137,141-143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "927f4eb779e76b406e47491404fc19c97c5dcf24",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_09e60060cae680": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "677109c1-d514-4af1-a677-dc332c5b35b4",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_13de7b35d060cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7ee51192-aac0-4baf-956b-d11d26d93ab0",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
