@@ -91,6 +91,21 @@ func (e *RejectError) Error() string {
 	return fmt.Sprintf("jsonrpc reject %d: %s", e.Code, e.Message)
 }
 
+// ToolResultError is how an interceptor answers a tools/call itself with a
+// tool result marked isError, instead of a JSON-RPC error. Agents read a tool
+// result as something to act on, so a call held for approval returns its
+// instructions this way rather than as a protocol failure.
+type ToolResultError struct {
+	// Message is the text the agent reads. It is user-facing, so the same
+	// sanitization rules as RejectError.Message apply.
+	Message string
+}
+
+// Error implements [error] for logs. The agent sees Message.
+func (e *ToolResultError) Error() string {
+	return "tool error result: " + e.Message
+}
+
 // RejectErrorFromCause coerces an arbitrary error into a *RejectError so
 // the proxy can always synthesize a spec-shaped rejection event when an
 // interceptor returns an error. Walks the error chain via [errors.As] so a

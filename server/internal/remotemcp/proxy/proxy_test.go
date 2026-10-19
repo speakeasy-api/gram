@@ -1788,6 +1788,45 @@ func TestProxy_Post_ToolsCallRequestInterceptor_RejectionWritesJSONRPCError(t *t
 	require.Contains(t, rr.Body.String(), "policy violation", "RejectError message must propagate to the envelope")
 }
 
+func TestProxy_Post_ToolsCallRequestInterceptor_ToolResultErrorWritesIsErrorResult(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("upstream must not be called when an interceptor answers tools/call itself")
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsCallRequestInterceptors = []proxy.ToolsCallRequestInterceptor{
+		&mockToolsCallRequestInterceptor{name: "held", err: &proxy.ToolResultError{Message: "Waiting for approval. Request token: apr_example"}},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	var envelope struct {
+		ID     int `json:"id"`
+		Result struct {
+			IsError bool `json:"isError"`
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
+		Error *struct{} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &envelope))
+	require.Equal(t, 1, envelope.ID)
+	require.Nil(t, envelope.Error, "a tool error result is a result, not a JSON-RPC error")
+	require.True(t, envelope.Result.IsError)
+	require.Len(t, envelope.Result.Content, 1)
+	require.Equal(t, "text", envelope.Result.Content[0].Type)
+	require.Equal(t, "Waiting for approval. Request token: apr_example", envelope.Result.Content[0].Text)
+}
+
 func TestProxy_Post_ToolsCallRequestInterceptor_RunsAfterGeneric(t *testing.T) {
 	t.Parallel()
 

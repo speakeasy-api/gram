@@ -3,6 +3,7 @@ package remotemcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -474,4 +475,19 @@ func newRiskScanTestProxyWithEvaluator(t *testing.T, upstreamURL string, evaluat
 	}
 	return manager.Build(logger, &remotemcprepo.RemoteMcpServer{ID: uuid.New(), Url: upstreamURL},
 		riskScanServerID, nil, mcpservers.VisibilityPublic, "org-test", riskScanProjectID, "", "", selection)
+}
+
+func TestRiskScanRejectionReturnsHeldCallsAsToolResults(t *testing.T) {
+	t.Parallel()
+	held := mcpriskscan.Decision{Disposition: mcpriskscan.DispositionDeny, UserMessage: "Calling send_message needs approval. Request token: apr_example", ApprovalToken: "apr_example"}
+	toolResult, ok := errors.AsType[*proxy.ToolResultError](riskScanRejection(held))
+	require.True(t, ok, "a held call is answered with a tool result")
+	require.Equal(t, held.UserMessage, toolResult.Message)
+
+	blocked := mcpriskscan.Decision{Disposition: mcpriskscan.DispositionDeny, UserMessage: "Blocked by Remote policy", ApprovalToken: ""}
+	rejection, ok := errors.AsType[*proxy.RejectError](riskScanRejection(blocked))
+	require.True(t, ok, "a block stays a JSON-RPC error")
+	require.Equal(t, proxy.RejectCodeForbidden, rejection.Code)
+
+	require.NoError(t, riskScanRejection(mcpriskscan.Allow()))
 }
