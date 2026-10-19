@@ -910,9 +910,10 @@ type AdminMcpServerToolCallBucket struct {
 	Failed int64
 }
 
-// Tool calls inside the window by outcome class. failed counts tool errors
-// returned inside HTTP 200 (isError) and hook-reported tool errors; in-band
-// errors recorded before mid-October 2026 still count as success.
+// Tool calls inside the window by outcome class. failed counts isError tool
+// errors in 2xx/3xx responses and hook-reported tool errors; hosted rows
+// recorded before 2026-10-15 and remote rows recorded before this change
+// shipped still count as success.
 type AdminMcpServerToolCallOutcomes struct {
 	Success      int64
 	Unauthorized int64
