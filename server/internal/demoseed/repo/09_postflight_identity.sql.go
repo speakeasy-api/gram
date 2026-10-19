@@ -273,6 +273,21 @@ func (q *Queries) PostflightIDConnections(ctx context.Context, projectID uuid.UU
 	return count, err
 }
 
+const postflightIDDeletedGroupMappings = `-- name: PostflightIDDeletedGroupMappings :one
+SELECT count(*) FROM directory_role_mappings drm
+JOIN directory_groups dg ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+WHERE drm.organization_id = $1::text AND drm.deleted IS FALSE
+  AND dg.workos_deleted IS TRUE
+`
+
+func (q *Queries) PostflightIDDeletedGroupMappings(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDDeletedGroupMappings, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDDirectoryRoleMappings = `-- name: PostflightIDDirectoryRoleMappings :one
 SELECT count(*) FROM directory_role_mappings
 WHERE organization_id = $1::text AND deleted IS FALSE

@@ -324,6 +324,34 @@ func (q *Queries) RolesInsertDefaultPlugin(ctx context.Context, arg RolesInsertD
 	return id, err
 }
 
+const rolesInsertDeletedDirectoryGroup = `-- name: RolesInsertDeletedDirectoryGroup :exec
+INSERT INTO directory_groups
+  (organization_id, workos_directory_group_id, name, workos_created_at,
+   workos_updated_at, workos_deleted_at, deleted_at)
+VALUES ($1::text, $2::text || $3::text, $4::text,
+        now() - interval '60 days', now() - interval '3 days',
+        now() - interval '3 days', now() - interval '3 days')
+`
+
+type RolesInsertDeletedDirectoryGroupParams struct {
+	OrganizationID string
+	GroupPrefix    string
+	Slug           string
+	Name           string
+}
+
+// A group the directory has since deleted. Its mapping stays and grants
+// nothing, so the mappings page shows it as a missing source.
+func (q *Queries) RolesInsertDeletedDirectoryGroup(ctx context.Context, arg RolesInsertDeletedDirectoryGroupParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertDeletedDirectoryGroup,
+		arg.OrganizationID,
+		arg.GroupPrefix,
+		arg.Slug,
+		arg.Name,
+	)
+	return err
+}
+
 const rolesInsertDeviceAgentDeviceSync = `-- name: RolesInsertDeviceAgentDeviceSync :exec
 INSERT INTO device_agent_device_syncs
   (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
