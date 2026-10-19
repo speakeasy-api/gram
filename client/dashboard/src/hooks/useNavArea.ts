@@ -26,6 +26,7 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "agent-management": "Identity",
   "mcp-sessions": "Identity",
   "remote-identity-providers": "Identity",
+  "access-hub": "Identity",
   // Security and Policy
   watchdog: "Security and Policy",
   "risk-policies": "Security and Policy",
@@ -34,7 +35,6 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "shadow-ai": "Security and Policy",
   "request-access": "Security and Policy",
   "detection-rules": "Security and Policy",
-  "access-hub": "Security and Policy",
   // MCP Gateway
   mcp: "MCP Gateway",
   playground: "MCP Gateway",

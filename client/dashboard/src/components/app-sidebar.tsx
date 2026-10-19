@@ -238,6 +238,7 @@ export function AppSidebar({
                 item: routes.remoteIdentityProviders,
                 ...accessFor(routes.remoteIdentityProviders),
               },
+              { item: routes.accessHub, ...accessFor(routes.accessHub) },
             ]}
           />
 
@@ -267,7 +268,6 @@ export function AppSidebar({
                 : []),
               { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              { item: routes.accessHub, ...accessFor(routes.accessHub) },
             ]}
           />
 
