@@ -208,18 +208,19 @@ func TestService_ListMembers_ReportsDirectoryMappedRolesSeparately(t *testing.T)
 
 	key := "department_name"
 	value := "Sales"
-	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	seedMappingAdministrator(t, ctx, ti)
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:     directoryRoleMappingSourceAttribute,
 		AttributeKey:   &key,
 		AttributeValue: &value,
-		RoleUrn:        builder,
+		RoleUrns:       []string{builder},
 	})
 	require.NoError(t, err)
 	groupIDString := groupID.String()
-	_, err = ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	_, err = ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:       directoryRoleMappingSourceGroup,
 		DirectoryGroupID: &groupIDString,
-		RoleUrn:          viewer,
+		RoleUrns:         []string{viewer},
 	})
 	require.NoError(t, err)
 

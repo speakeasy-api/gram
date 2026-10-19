@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -89,84 +88,74 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 
 	require.NoError(t, q.InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{plain, excluded, shadow}))
 
-	// async_insert=1, wait_for_async_insert=0: the rows land after the buffer
-	// flushes, so poll until all are visible.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		rows, err := conn.Query(t.Context(), `
-			SELECT id, tags, match_redacted, chat_id, user_id, external_user_id, category, excluded_at, exclusion_id, excluded_reason, excluded_detail, message_created_at, assistant_id, surface, field, path, tool_call_id, shadow
-			FROM risk_findings
-			WHERE organization_id = ?
-			ORDER BY created_at
-		`, orgID)
-		if !assert.NoError(c, err) {
-			return
-		}
-		defer func() { _ = rows.Close() }()
+	rows, err := conn.Query(t.Context(), `
+		SELECT id, tags, match_redacted, chat_id, user_id, external_user_id, category, excluded_at, exclusion_id, excluded_reason, excluded_detail, message_created_at, assistant_id, surface, field, path, tool_call_id, shadow
+		FROM risk_findings
+		WHERE organization_id = ?
+		ORDER BY created_at
+	`, orgID)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
 
-		type foundRow struct {
-			tags             []string
-			redacted         string
-			chatID           string
-			userID           string
-			externalUserID   string
-			category         string
-			excludedAt       *time.Time
-			exclusionID      *uuid.UUID
-			excludedReason   string
-			excludedDetail   string
-			messageCreatedAt time.Time
-			assistantID      string
-			surface          string
-			field            string
-			path             string
-			toolCallID       string
-			shadow           uint8
-		}
-		got := map[uuid.UUID]foundRow{}
-		for rows.Next() {
-			var (
-				id  uuid.UUID
-				row foundRow
-			)
-			if !assert.NoError(c, rows.Scan(&id, &row.tags, &row.redacted, &row.chatID, &row.userID, &row.externalUserID, &row.category, &row.excludedAt, &row.exclusionID, &row.excludedReason, &row.excludedDetail, &row.messageCreatedAt, &row.assistantID, &row.surface, &row.field, &row.path, &row.toolCallID, &row.shadow)) {
-				return
-			}
-			got[id] = row
-		}
+	type foundRow struct {
+		tags             []string
+		redacted         string
+		chatID           string
+		userID           string
+		externalUserID   string
+		category         string
+		excludedAt       *time.Time
+		exclusionID      *uuid.UUID
+		excludedReason   string
+		excludedDetail   string
+		messageCreatedAt time.Time
+		assistantID      string
+		surface          string
+		field            string
+		path             string
+		toolCallID       string
+		shadow           uint8
+	}
+	got := map[uuid.UUID]foundRow{}
+	for rows.Next() {
+		var (
+			id  uuid.UUID
+			row foundRow
+		)
+		require.NoError(t, rows.Scan(&id, &row.tags, &row.redacted, &row.chatID, &row.userID, &row.externalUserID, &row.category, &row.excludedAt, &row.exclusionID, &row.excludedReason, &row.excludedDetail, &row.messageCreatedAt, &row.assistantID, &row.surface, &row.field, &row.path, &row.toolCallID, &row.shadow))
+		got[id] = row
+	}
 
-		if !assert.Contains(c, got, plain.ID) || !assert.Contains(c, got, excluded.ID) || !assert.Contains(c, got, shadow.ID) {
-			return
-		}
+	require.Contains(t, got, plain.ID)
+	require.Contains(t, got, excluded.ID)
+	require.Contains(t, got, shadow.ID)
 
-		p := got[plain.ID]
-		assert.Equal(c, []string{"pii", "secret"}, p.tags, "tags array round-trips")
-		assert.Equal(c, plain.MatchRedacted, p.redacted)
-		assert.Equal(c, plain.ChatID, p.chatID, "attribution chat_id round-trips")
-		assert.Equal(c, plain.UserID, p.userID, "attribution user_id round-trips")
-		assert.Equal(c, plain.ExternalUserID, p.externalUserID, "attribution external_user_id round-trips")
-		assert.Equal(c, plain.Category, p.category, "category round-trips")
-		assert.Nil(c, p.excludedAt, "non-excluded row stores NULL excluded_at")
-		assert.Nil(c, p.exclusionID, "non-excluded row stores NULL exclusion_id")
-		assert.Empty(c, p.excludedReason, "non-excluded row stores empty excluded_reason")
-		assert.Empty(c, p.excludedDetail, "non-excluded row stores empty excluded_detail")
-		assert.True(c, plain.MessageCreatedAt.Equal(p.messageCreatedAt), "message_created_at round-trips")
-		assert.Equal(c, plain.AssistantID, p.assistantID, "assistant_id round-trips")
-		assert.Equal(c, plain.Surface, p.surface, "surface round-trips")
-		assert.Equal(c, plain.Field, p.field, "field round-trips")
-		assert.Equal(c, plain.Path, p.path, "path round-trips")
-		assert.Equal(c, plain.ToolCallID, p.toolCallID, "tool_call_id round-trips")
-		assert.Equal(c, uint8(0), p.shadow, "enforcing row stores shadow = 0")
+	p := got[plain.ID]
+	require.Equal(t, []string{"pii", "secret"}, p.tags, "tags array round-trips")
+	require.Equal(t, plain.MatchRedacted, p.redacted)
+	require.Equal(t, plain.ChatID, p.chatID, "attribution chat_id round-trips")
+	require.Equal(t, plain.UserID, p.userID, "attribution user_id round-trips")
+	require.Equal(t, plain.ExternalUserID, p.externalUserID, "attribution external_user_id round-trips")
+	require.Equal(t, plain.Category, p.category, "category round-trips")
+	require.Nil(t, p.excludedAt, "non-excluded row stores NULL excluded_at")
+	require.Nil(t, p.exclusionID, "non-excluded row stores NULL exclusion_id")
+	require.Empty(t, p.excludedReason, "non-excluded row stores empty excluded_reason")
+	require.Empty(t, p.excludedDetail, "non-excluded row stores empty excluded_detail")
+	require.True(t, plain.MessageCreatedAt.Equal(p.messageCreatedAt), "message_created_at round-trips")
+	require.Equal(t, plain.AssistantID, p.assistantID, "assistant_id round-trips")
+	require.Equal(t, plain.Surface, p.surface, "surface round-trips")
+	require.Equal(t, plain.Field, p.field, "field round-trips")
+	require.Equal(t, plain.Path, p.path, "path round-trips")
+	require.Equal(t, plain.ToolCallID, p.toolCallID, "tool_call_id round-trips")
+	require.Equal(t, uint8(0), p.shadow, "enforcing row stores shadow = 0")
 
-		assert.Equal(c, uint8(1), got[shadow.ID].shadow, "shadow row stores shadow = 1")
+	require.Equal(t, uint8(1), got[shadow.ID].shadow, "shadow row stores shadow = 1")
 
-		e := got[excluded.ID]
-		if assert.NotNil(c, e.excludedAt, "excluded row stores excluded_at") {
-			assert.True(c, excludedAt.Equal(*e.excludedAt))
-		}
-		if assert.NotNil(c, e.exclusionID, "excluded row stores exclusion_id") {
-			assert.Equal(c, exclusionID, *e.exclusionID)
-		}
-		assert.Equal(c, chrepo.ExcludedReasonRule, e.excludedReason, "excluded_reason round-trips")
-		assert.Equal(c, excluded.ExcludedDetail, e.excludedDetail, "excluded_detail round-trips")
-	}, 5*time.Second, 100*time.Millisecond)
+	e := got[excluded.ID]
+	require.NotNil(t, e.excludedAt, "excluded row stores excluded_at")
+	require.True(t, excludedAt.Equal(*e.excludedAt))
+	require.NotNil(t, e.exclusionID, "excluded row stores exclusion_id")
+	require.Equal(t, exclusionID, *e.exclusionID)
+	require.Equal(t, chrepo.ExcludedReasonRule, e.excludedReason, "excluded_reason round-trips")
+	require.Equal(t, excluded.ExcludedDetail, e.excludedDetail, "excluded_detail round-trips")
 }

@@ -307,6 +307,26 @@ func GetMcpServerToolCallsAdminPath() string {
 	return "/admin/project.mcpServerToolCalls"
 }
 
+// GetHookClientsAdminPath returns the URL path to the admin service getHookClients HTTP endpoint.
+func GetHookClientsAdminPath() string {
+	return "/admin/hookClients.get"
+}
+
+// ListExternalMcpMigrationCandidatesAdminPath returns the URL path to the admin service listExternalMcpMigrationCandidates HTTP endpoint.
+func ListExternalMcpMigrationCandidatesAdminPath() string {
+	return "/admin/externalMcpMigration.listCandidates"
+}
+
+// PreviewExternalMcpMigrationAdminPath returns the URL path to the admin service previewExternalMcpMigration HTTP endpoint.
+func PreviewExternalMcpMigrationAdminPath() string {
+	return "/admin/externalMcpMigration.preview"
+}
+
+// MigrateExternalMcpServersAdminPath returns the URL path to the admin service migrateExternalMcpServers HTTP endpoint.
+func MigrateExternalMcpServersAdminPath() string {
+	return "/admin/externalMcpMigration.migrate"
+}
+
 // GetRegistryOktaCandidatesAdminPath returns the URL path to the admin service getRegistryOktaCandidates HTTP endpoint.
 func GetRegistryOktaCandidatesAdminPath() string {
 	return "/admin/registry.oktaCandidates"

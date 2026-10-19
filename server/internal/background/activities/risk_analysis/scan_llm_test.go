@@ -134,8 +134,7 @@ func runLLMLaneBatchWithMeter(t *testing.T, conn *pgxpool.Pool, td testData, fla
 		llmPub = capturedLLMPub
 	}
 
-	ab, err := risk_analysis.NewAnalyzeBatch(
-		testenv.NewLogger(t),
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		meterProvider,
 		conn,
@@ -151,15 +150,12 @@ func runLLMLaneBatchWithMeter(t *testing.T, conn *pgxpool.Pool, td testData, fla
 		promptInjectionPub,
 		newPromptPolicyPub(),
 		newCustomRulesPub(),
-		llmPub,
-		newFindingsPub(),
-		mustCustomRuleScanner(t, conn),
+		llmPub, newToolCallPub(), newAccountIdentityPub(), mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-		analyzerEnabled,
-	)
+		analyzerEnabled)
 	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite

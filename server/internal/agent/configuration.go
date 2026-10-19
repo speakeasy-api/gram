@@ -306,6 +306,17 @@ func attachDeviceAgentConfiguration(result *gen.GetPluginsResult, configuration 
 	result.Etag = hex.EncodeToString(hash.Sum(nil))
 }
 
+func attachOrganizationGatewayURL(result *gen.GetPluginsResult, gatewayURL *string) {
+	result.OrganizationGatewayURL = gatewayURL
+	value := ""
+	if gatewayURL != nil {
+		value = *gatewayURL
+	}
+	hash := sha256.New()
+	_, _ = fmt.Fprintf(hash, "policy=%s\norganization_gateway_url=%t\x00%s\n", result.Etag, gatewayURL != nil, value)
+	result.Etag = hex.EncodeToString(hash.Sum(nil))
+}
+
 // Any payloads decoded by Goa use map[string]any and []any. Direct service tests
 // may use typed slices, so normalize those before validation without weakening
 // the HTTP contract.

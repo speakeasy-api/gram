@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  McpServerToolsetSummary,
+  McpServerToolsetSummary$inboundSchema,
+} from "./mcpservertoolsetsummary.js";
 
 /**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
@@ -62,9 +66,17 @@ export type McpServer = {
    */
   networkAccessMode: McpServerNetworkAccessMode;
   /**
-   * An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.
+   * The slug of this server's primary platform endpoint, the oldest one. Absent when no platform endpoint exists; never a custom-domain slug.
    */
   platformEndpointSlug?: string | undefined;
+  /**
+   * The ID of the endpoint that stands for this server when a single address must be chosen: domain-root custom-domain endpoints first, then other custom-domain endpoints, then platform endpoints. Absent when the server has no addressable endpoint.
+   */
+  primaryEndpointId?: string | undefined;
+  /**
+   * The public MCP URL of the primary endpoint. Absent when the server has no addressable endpoint.
+   */
+  primaryEndpointUrl?: string | undefined;
   /**
    * The project ID this MCP server belongs to
    */
@@ -81,6 +93,10 @@ export type McpServer = {
    * The ID of the tool variations group enabling MCP tool filtering for this server, if any.
    */
   toolVariationsGroupId?: string | undefined;
+  /**
+   * A summary of the toolset backing a hosted MCP server.
+   */
+  toolset?: McpServerToolsetSummary | undefined;
   /**
    * The ID of the toolset used as the backend
    */
@@ -130,10 +146,13 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       name: z.optional(z.string()),
       network_access_mode: McpServerNetworkAccessMode$inboundSchema,
       platform_endpoint_slug: z.optional(z.string()),
+      primary_endpoint_id: z.optional(z.string()),
+      primary_endpoint_url: z.optional(z.string()),
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
       slug: z.optional(z.string()),
       tool_variations_group_id: z.optional(z.string()),
+      toolset: z.optional(McpServerToolsetSummary$inboundSchema),
       toolset_id: z.optional(z.string()),
       tunneled_mcp_server_id: z.optional(z.string()),
       unproxied_mcp_server_id: z.optional(z.string()),
@@ -150,6 +169,8 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         "environment_id": "environmentId",
         "network_access_mode": "networkAccessMode",
         "platform_endpoint_slug": "platformEndpointSlug",
+        "primary_endpoint_id": "primaryEndpointId",
+        "primary_endpoint_url": "primaryEndpointUrl",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
         "tool_variations_group_id": "toolVariationsGroupId",

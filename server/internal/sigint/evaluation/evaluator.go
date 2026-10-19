@@ -105,6 +105,10 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 		h.terminal(ctx, event, "invalid_timestamp")
 		return nil
 	}
+	if err := event.Evaluation.Validate(); err != nil {
+		h.terminal(ctx, event, "invalid_evaluation_context")
+		return nil
+	}
 
 	enabled, err := h.features.IsFeatureEnabled(ctx, event.OrganizationID, productfeatures.FeatureSignalsIntelligence)
 	if err != nil {

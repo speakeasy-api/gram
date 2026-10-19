@@ -18,7 +18,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -602,6 +604,69 @@ func TestLoadChat_RiskOnly_AttachmentFinding(t *testing.T) {
 	full, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
 	require.NoError(t, err)
 	require.Equal(t, int64(1), full.Totals.RiskOnly, "the risky-only count includes the attachment's prompt")
+}
+
+func TestLoadChat_ClickHouseCutover_AttachmentFinding(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	ti.flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, ti.orgID, true)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "ClickHouse attachment risk chat")
+	ids := seedNMessages(t, ctx, ti, chatID, 30)
+	seqs := allSeqs(t, ctx, ti, chatID, ids)
+
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
+	t.Cleanup(func() { _ = shutdown(t.Context()) })
+	assetURL, err := writer.WriteContentPartAsset(ctx, ti.projectID, chatID, []byte("attachment body"))
+	require.NoError(t, err)
+
+	r := repo.New(ti.conn)
+	_, err = r.CreateChatContentPart(ctx, []repo.CreateChatContentPartParams{{
+		ChatID:              chatID,
+		ProjectID:           ti.projectID,
+		Kind:                message.PromptAttachment,
+		ContentAssetUrl:     assetURL,
+		ExternalID:          pgtype.Text{String: "attachment", Valid: true},
+		ParentChatMessageID: uuid.NullUUID{UUID: ids[12], Valid: true},
+		Version:             pgtype.Int4{},
+		Source:              pgtype.Text{},
+		Metadata:            []byte(`{"display_path":"data.csv","kind":"file"}`),
+		RiskAnalyzedAt:      pgtype.Timestamptz{},
+		CreatedAt:           pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	}})
+	require.NoError(t, err)
+	parts, err := r.ListChatContentPartsByChatID(ctx, repo.ListChatContentPartsByChatIDParams{
+		ChatID:               chatID,
+		ProjectID:            ti.projectID,
+		ParentChatMessageIds: []uuid.UUID{ids[12]},
+	})
+	require.NoError(t, err)
+	require.Len(t, parts, 1)
+
+	policyID, err := r.SeedRiskPolicy(ctx, repo.SeedRiskPolicyParams{ProjectID: ti.projectID, OrganizationID: ti.orgID})
+	require.NoError(t, err)
+	finding := seedClickHouseFinding(t, ti, uuid.New(), chatID, ids[12], policyID)
+	finding.ChatMessageID = ""
+	finding.ContentPartID = parts[0].ID.String()
+	require.NoError(t, riskchrepo.New(ti.chConn).InsertRiskFindings(ctx, []riskchrepo.RiskFindingRow{finding}))
+
+	payload := loadPayload(chatID.String())
+	payload.RiskOnly = true
+	result, err := ti.service.LoadChat(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, result.Messages, 11)
+	require.Equal(t, seqs[7], result.Messages[0].Seq)
+	require.Equal(t, seqs[17], result.Messages[10].Seq)
+	require.True(t, isRiskAt(result.Messages, seqs[12]))
+	require.Len(t, result.RiskSegments, 1)
+	require.Len(t, result.ContentParts, 1)
+	require.Equal(t, parts[0].ID.String(), result.ContentParts[0].ID)
+	require.True(t, result.ContentParts[0].IsRisk)
+
+	full, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
+	require.NoError(t, err)
+	require.Equal(t, int64(1), full.Totals.RiskOnly)
 }
 
 // TestLoadChat_RiskOnly_Empty verifies a chat with no findings returns nothing
