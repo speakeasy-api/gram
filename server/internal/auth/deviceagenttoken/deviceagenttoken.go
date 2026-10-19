@@ -202,6 +202,8 @@ func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context,
 		AuthorizerUserID:       "",
 		DelegatedGrants:        ceiling,
 		DelegatedGrantsVersion: version,
+		// The token carries its ceiling, so admission derives none.
+		DerivesPolicyAtAdmission: false,
 	}), nil
 }
 
