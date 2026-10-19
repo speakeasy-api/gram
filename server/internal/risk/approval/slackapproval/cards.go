@@ -165,8 +165,9 @@ func pendingCard(in cardInput) card {
 	buttons := []element{
 		{Type: "button", Text: plainText("Approve once"), ActionID: ActionApprove, Value: in.Approval.ID.String(), Style: "primary", URL: "", TextValue: "", Confirm: nil},
 		{Type: "button", Text: plainText("Deny"), ActionID: ActionDeny, Value: in.Approval.ID.String(), Style: "danger", URL: "", TextValue: "", Confirm: &confirmDialog{
-			Title:   textObject{Type: "plain_text", Text: "Deny this call?"},
-			Text:    textObject{Type: "mrkdwn", Text: fmt.Sprintf("The agent is told the call to `%s` was denied.", escape(in.Approval.ToolName))},
+			Title: textObject{Type: "plain_text", Text: "Deny this call?"},
+			// Slack shows a confirm dialog's text as plain text, so no mrkdwn here.
+			Text:    textObject{Type: "plain_text", Text: fmt.Sprintf("The agent is told the call to %s was denied.", in.Approval.ToolName)},
 			Confirm: textObject{Type: "plain_text", Text: "Deny"},
 			Deny:    textObject{Type: "plain_text", Text: "Cancel"},
 			Style:   "danger",

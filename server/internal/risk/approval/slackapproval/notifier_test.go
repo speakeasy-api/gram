@@ -102,6 +102,7 @@ func TestNotifyDMsEachApprover(t *testing.T) {
 		// Agent-written text cannot ping the channel or render a link.
 		require.Contains(t, text, "&lt;!channel&gt;")
 		require.NotContains(t, text, "<!channel>")
+		require.Contains(t, text, "The agent is told the call to slack__post_message was denied.")
 	}
 
 	messages := f.messages(t, approvalID)
