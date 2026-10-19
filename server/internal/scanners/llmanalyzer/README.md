@@ -86,12 +86,16 @@ PostHog); anything else — off, absent, unrecognized, provider error — is `of
 - **Realtime** (`ScanForEnforcement`): one `enforcereply.DispatchRequest`
   carries the legacy lanes exactly as under `off` (gitleaks / Presidio lanes
   only when `risk-enforcement-pubsub` is on, otherwise those engines run
-  in-process) **and** the LLM lane with `execution_path = realtime_shadow`;
-  the scan waits for every lane, so hook latency includes the model call (up
-  to the 20 s lane budget). `scanPolicy` enforces from the legacy results
-  alone and, per covered policy, compares the LLM lane's findings for the
-  policy's sources — after the same scope, exclusion and disabled-rule
-  filters — with the legacy outcome on
+  in-process) and dispatches the LLM lane **separately and detached** with
+  `execution_path = realtime_shadow`: the scan enforces as soon as the legacy
+  path answers and never waits for the model, so hook latency is that of the
+  legacy path. The lane runs on a cancellation-detached context bounded by the
+  lane budget plus headroom, tracked by the scanner so `Shutdown` drains it
+  (`AwaitRealtimeRecords` waits for it in tests). `scanPolicy` enforces from
+  the legacy results alone and hands back, per covered policy, the inputs of
+  its comparison; once the lane answers, `recordComparisons` compares the
+  lane's findings for the policy's sources — after the same scope, exclusion
+  and disabled-rule filters — with the legacy outcome on
   `risk.llm.shadow_comparison{gram.risk.policy_id, gram.risk.scan_mode=sync, gram.outcome}`.
   Only the policy's in-scope sources with a realtime legacy engine (gitleaks,
   Presidio, prompt injection) are compared; a destructive-only policy records
@@ -111,8 +115,9 @@ PostHog); anything else — off, absent, unrecognized, provider error — is `of
 - Shadow scans are metered like enforcing ones (`gram.risk.scan.llm_analyzer`
   readings carry the shadow execution path in their operation id).
 - In the `llm` mode a policy with a compared source (prompt injection) is
-  still compared for that source alone, from the same awaited lane reply the
-  enforced sources read.
+  still compared for that source alone: when the policy set also enforces
+  from the lane the comparison reads the awaited reply, otherwise the lane is
+  dispatched detached exactly as under `shadow`.
 
 ### Cutover order
 
