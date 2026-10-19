@@ -14,13 +14,13 @@ deployment, migrate v1/v2 transcripts, or establish cold-restore correctness.
 Provision files before starting the gateway. Private files are owned by UID/GID
 1000 and use mode `0600` under `/home/kit`. Never log their contents.
 
-| Path relative to `/home/kit` | Contract |
-| --- | --- |
-| `.kit/AGENTS.md` | Global assistant instructions, loaded before workspace rules. |
-| `.kit/config.toml` | Set `provider = "speakeasy"`, `credential_store = "file"`, `credential_dir = "/home/kit/.kit/credentials"`, and `mcp_config = "/home/kit/.kit/credentials/mcp.json"`. |
-| `.kit/credentials/f5a93b2411bbf44d12df4db53aa064d87685df4fad637f3c61a653f4bc5b200f.json` | Version-1 inference record containing `bearer_token` and the matching `origin`. `inference.json` is not a recognized replacement filename. |
-| `.kit/credentials/gateway-token` | Gateway bearer credential. |
-| `.kit/credentials/mcp.json` and referenced private files | MCP client-credentials configuration and machine secrets; not a fabricated credential-store record. |
+| Path relative to `/home/kit`                                                             | Contract                                                                                                                                                              |
+| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.kit/AGENTS.md`                                                                         | Global assistant instructions, loaded before workspace rules.                                                                                                         |
+| `.kit/config.toml`                                                                       | Set `provider = "speakeasy"`, `credential_store = "file"`, `credential_dir = "/home/kit/.kit/credentials"`, and `mcp_config = "/home/kit/.kit/credentials/mcp.json"`. |
+| `.kit/credentials/f5a93b2411bbf44d12df4db53aa064d87685df4fad637f3c61a653f4bc5b200f.json` | Version-1 inference record containing `bearer_token` and the matching `origin`. `inference.json` is not a recognized replacement filename.                            |
+| `.kit/credentials/gateway-token`                                                         | Gateway bearer credential.                                                                                                                                            |
+| `.kit/credentials/mcp.json` and referenced private files                                 | MCP client-credentials configuration and machine secrets; not a fabricated credential-store record.                                                                   |
 
 The persistent workspace is `/home/kit/workspace`; ACP `cwd` must match it
 exactly. The gateway listens on `0.0.0.0:8081` with explicit wildcard permission

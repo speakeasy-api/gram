@@ -34,7 +34,7 @@ var _ runtimeProtocol = (*KitRuntimeProtocol)(nil)
 var _ runtimeSwitchCoordinator = (*KitRuntimeProtocol)(nil)
 
 // ErrKitInterruptControlUnavailable prevents falsely acknowledging an unowned cancellation.
-var ErrKitInterruptControlUnavailable = errors.New("Kit turn interruption requires routing to the existing session controller; cancellation was not sent")
+var ErrKitInterruptControlUnavailable = errors.New("kit turn interruption requires routing to the existing session controller; cancellation was not sent")
 
 var ErrKitUpgradeNoticeUnsupported = errors.New("kit runtime-generated context upgrade notice is not supported by the pinned runtime")
 
