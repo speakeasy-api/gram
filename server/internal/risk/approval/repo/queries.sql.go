@@ -36,7 +36,7 @@ WHERE id = (
   AND organization_id = $1
   AND project_id = $2
   AND status = 'approved'
-RETURNING id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, mcp_server_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
 `
 
 type ConsumeApprovedApprovalParams struct {
@@ -75,6 +75,7 @@ func (q *Queries) ConsumeApprovedApproval(ctx context.Context, arg ConsumeApprov
 		&i.SessionID,
 		&i.ChatID,
 		&i.ToolsetID,
+		&i.McpServerID,
 		&i.ServerUrl,
 		&i.ToolName,
 		&i.CallFingerprint,
@@ -113,7 +114,7 @@ WHERE organization_id = $6
   AND status = 'pending'
   AND (expires_at IS NULL OR expires_at > clock_timestamp())
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, mcp_server_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
 `
 
 type DecideApprovalParams struct {
@@ -155,6 +156,7 @@ func (q *Queries) DecideApproval(ctx context.Context, arg DecideApprovalParams) 
 		&i.SessionID,
 		&i.ChatID,
 		&i.ToolsetID,
+		&i.McpServerID,
 		&i.ServerUrl,
 		&i.ToolName,
 		&i.CallFingerprint,
@@ -218,7 +220,7 @@ func (q *Queries) ExpireLapsedOpenApproval(ctx context.Context, arg ExpireLapsed
 }
 
 const getApproval = `-- name: GetApproval :one
-SELECT id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, mcp_server_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
 FROM risk_policy_approvals
 WHERE organization_id = $1
   AND project_id = $2
@@ -249,6 +251,7 @@ func (q *Queries) GetApproval(ctx context.Context, arg GetApprovalParams) (RiskP
 		&i.SessionID,
 		&i.ChatID,
 		&i.ToolsetID,
+		&i.McpServerID,
 		&i.ServerUrl,
 		&i.ToolName,
 		&i.CallFingerprint,
@@ -273,7 +276,7 @@ func (q *Queries) GetApproval(ctx context.Context, arg GetApprovalParams) (RiskP
 }
 
 const getApprovalByToken = `-- name: GetApprovalByToken :one
-SELECT id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, mcp_server_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
 FROM risk_policy_approvals
 WHERE token = $1
   AND deleted IS FALSE
@@ -298,6 +301,7 @@ func (q *Queries) GetApprovalByToken(ctx context.Context, token string) (RiskPol
 		&i.SessionID,
 		&i.ChatID,
 		&i.ToolsetID,
+		&i.McpServerID,
 		&i.ServerUrl,
 		&i.ToolName,
 		&i.CallFingerprint,
@@ -322,7 +326,7 @@ func (q *Queries) GetApprovalByToken(ctx context.Context, token string) (RiskPol
 }
 
 const listApprovals = `-- name: ListApprovals :many
-SELECT id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, mcp_server_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
 FROM risk_policy_approvals
 WHERE organization_id = $1
   AND project_id = $2
@@ -372,6 +376,7 @@ func (q *Queries) ListApprovals(ctx context.Context, arg ListApprovalsParams) ([
 			&i.SessionID,
 			&i.ChatID,
 			&i.ToolsetID,
+			&i.McpServerID,
 			&i.ServerUrl,
 			&i.ToolName,
 			&i.CallFingerprint,
@@ -415,7 +420,7 @@ WHERE organization_id = $4
   AND id = $6
   AND status = 'blocked'
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, mcp_server_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
 `
 
 type MarkApprovalRequestedParams struct {
@@ -454,6 +459,7 @@ func (q *Queries) MarkApprovalRequested(ctx context.Context, arg MarkApprovalReq
 		&i.SessionID,
 		&i.ChatID,
 		&i.ToolsetID,
+		&i.McpServerID,
 		&i.ServerUrl,
 		&i.ToolName,
 		&i.CallFingerprint,
@@ -491,6 +497,7 @@ INSERT INTO risk_policy_approvals (
   , session_id
   , chat_id
   , toolset_id
+  , mcp_server_id
   , server_url
   , tool_name
   , call_fingerprint
@@ -510,17 +517,18 @@ VALUES (
   , $10::text
   , $11::uuid
   , $12::uuid
-  , $13::text
-  , $14
+  , (SELECT m.id FROM mcp_servers m WHERE m.id = $13::uuid AND m.project_id = $2)
+  , $14::text
   , $15
   , $16
+  , $17
   , 'blocked'
 )
 ON CONFLICT (project_id, risk_policy_id, requester_urn, tool_name, call_fingerprint)
 WHERE deleted IS FALSE AND status IN ('blocked', 'pending')
 DO UPDATE
 SET updated_at = clock_timestamp()
-RETURNING id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, mcp_server_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertBlockedApprovalParams struct {
@@ -536,6 +544,7 @@ type UpsertBlockedApprovalParams struct {
 	SessionID        pgtype.Text
 	ChatID           uuid.NullUUID
 	ToolsetID        uuid.NullUUID
+	McpServerID      uuid.NullUUID
 	ServerUrl        pgtype.Text
 	ToolName         string
 	CallFingerprint  string
@@ -545,6 +554,8 @@ type UpsertBlockedApprovalParams struct {
 // Records the block of a call held by a require_approval policy. A retry of
 // the same call while its request is still open lands on the existing row, so
 // the agent sees the same token again; @token is used only for a new row.
+// mcp_server_id is kept only when it names an MCP server in the project: a
+// Platform MCP call carries a platform toolset id there instead.
 func (q *Queries) UpsertBlockedApproval(ctx context.Context, arg UpsertBlockedApprovalParams) (RiskPolicyApproval, error) {
 	row := q.db.QueryRow(ctx, upsertBlockedApproval,
 		arg.OrganizationID,
@@ -559,6 +570,7 @@ func (q *Queries) UpsertBlockedApproval(ctx context.Context, arg UpsertBlockedAp
 		arg.SessionID,
 		arg.ChatID,
 		arg.ToolsetID,
+		arg.McpServerID,
 		arg.ServerUrl,
 		arg.ToolName,
 		arg.CallFingerprint,
@@ -579,6 +591,7 @@ func (q *Queries) UpsertBlockedApproval(ctx context.Context, arg UpsertBlockedAp
 		&i.SessionID,
 		&i.ChatID,
 		&i.ToolsetID,
+		&i.McpServerID,
 		&i.ServerUrl,
 		&i.ToolName,
 		&i.CallFingerprint,

@@ -2,6 +2,8 @@
 -- Records the block of a call held by a require_approval policy. A retry of
 -- the same call while its request is still open lands on the existing row, so
 -- the agent sees the same token again; @token is used only for a new row.
+-- mcp_server_id is kept only when it names an MCP server in the project: a
+-- Platform MCP call carries a platform toolset id there instead.
 INSERT INTO risk_policy_approvals (
     organization_id
   , project_id
@@ -15,6 +17,7 @@ INSERT INTO risk_policy_approvals (
   , session_id
   , chat_id
   , toolset_id
+  , mcp_server_id
   , server_url
   , tool_name
   , call_fingerprint
@@ -34,6 +37,7 @@ VALUES (
   , sqlc.narg(session_id)::text
   , sqlc.narg(chat_id)::uuid
   , sqlc.narg(toolset_id)::uuid
+  , (SELECT m.id FROM mcp_servers m WHERE m.id = sqlc.narg(mcp_server_id)::uuid AND m.project_id = @project_id)
   , sqlc.narg(server_url)::text
   , @tool_name
   , @call_fingerprint

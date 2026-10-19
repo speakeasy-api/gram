@@ -181,7 +181,8 @@ type HoldInput struct {
 	// ToolsetID is the hosted toolset that served the call, when known.
 	ToolsetID string
 
-	// ServerID is the MCP server the call targets, when known.
+	// ServerID is the MCP server the call targets, when known. It is stored
+	// with the request so approvers see which server the tool belongs to.
 	ServerID string
 
 	// ToolName is the called tool.
@@ -284,6 +285,7 @@ func (s *Service) HoldCall(ctx context.Context, call HoldInput) (HoldOutcome, er
 		SessionID:        pgtype.Text{String: "", Valid: false},
 		ChatID:           parseNullUUID(call.ChatID),
 		ToolsetID:        parseNullUUID(call.ToolsetID),
+		McpServerID:      parseNullUUID(call.ServerID),
 		ServerUrl:        pgtype.Text{String: "", Valid: false},
 		ToolName:         call.ToolName,
 		CallFingerprint:  fingerprint,

@@ -37,6 +37,8 @@ type RiskPolicyApproval struct {
 	ChatID uuid.NullUUID
 	// @access: confidential
 	ToolsetID uuid.NullUUID
+	// @access: confidential
+	McpServerID uuid.NullUUID
 	// @access: restricted
 	ServerUrl pgtype.Text
 	// @access: confidential

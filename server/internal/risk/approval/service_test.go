@@ -4,7 +4,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestHoldCallReturnsSameTokenWhileOpen(t *testing.T) {
@@ -267,4 +271,38 @@ func TestUnusedApprovalExpiresWithItsWindow(t *testing.T) {
 func TestArgumentsPreviewKeepsExactNumbers(t *testing.T) {
 	t.Parallel()
 	require.JSONEq(t, `{"id":9007199254740993,"nested":"{\"n\":12345678901234567890}"}`, string(argumentsPreview([]byte(`{"id":9007199254740993,"nested":{"n":12345678901234567890}}`))))
+}
+
+func TestHeldCallRecordsTheMCPServerOnlyWhenItIsInTheProject(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	fixtures := testrepo.New(f.db)
+	toolsetID, err := fixtures.CreateToolsetFixture(t.Context(), testrepo.CreateToolsetFixtureParams{
+		ID:             uuid.New(),
+		OrganizationID: f.organizationID,
+		ProjectID:      f.projectID,
+		Name:           "Team Slack",
+		Slug:           "team-slack-" + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
+	serverID, err := fixtures.CreateRemoteMCPServerFixture(t.Context(), testrepo.CreateRemoteMCPServerFixtureParams{
+		ID:         uuid.New(),
+		ProjectID:  f.projectID,
+		ToolsetID:  uuid.NullUUID{UUID: toolsetID, Valid: true},
+		Visibility: "private",
+	})
+	require.NoError(t, err)
+
+	onServer := f.call(`{"channel":"#releases"}`)
+	onServer.ServerID = serverID.String()
+	row, err := repo.New(f.db).GetApprovalByToken(t.Context(), f.hold(t, onServer))
+	require.NoError(t, err)
+	require.Equal(t, uuid.NullUUID{UUID: serverID, Valid: true}, row.McpServerID)
+
+	// A Platform MCP call carries a platform toolset id, not an MCP server.
+	elsewhere := f.call(`{"channel":"#general"}`)
+	elsewhere.ServerID = uuid.NewString()
+	row, err = repo.New(f.db).GetApprovalByToken(t.Context(), f.hold(t, elsewhere))
+	require.NoError(t, err)
+	require.False(t, row.McpServerID.Valid)
 }
