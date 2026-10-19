@@ -38,6 +38,23 @@ func (s *Service) readIdentityChaining(ctx context.Context, in PreparationInput)
 	return readIdentityChainingSnapshot(ctx, repo.New(tx), project, org, in)
 }
 
+// reportConnectionScopes fills r's ConnectionScopes and ScopesOutOfDate when
+// it selects a client. The runtime's read never calls it: chaining requests
+// the recorded scopes alone.
+func reportConnectionScopes(ctx context.Context, db repo.DBTX, project uuid.UUID, org string, userSessionIssuerID uuid.UUID, discover bool, r *PreparationResult) error {
+	if r == nil || r.ClientID == uuid.Nil {
+		return nil
+	}
+	connection, err := ConnectionScopes(ctx, db, BindingConnection{ProjectID: project, OrganizationID: org, UserSessionIssuerID: userSessionIssuerID, ClientID: r.ClientID, Resource: r.Resource, Discover: discover})
+	if err != nil {
+		return fmt.Errorf("resolve identity chaining connection scopes: %w", err)
+	}
+	current := BindingScopes(connection, r.Scopes).Scopes
+	r.ConnectionScopes = current
+	r.ScopesOutOfDate = !SameBindingScopes(current, r.Scopes)
+	return nil
+}
+
 // ReadIdentityChainingForTenant recomputes a binding's readiness exactly as
 // the preparation API reports it, for a tenant the caller already authorized
 // from its own request context rather than an HTTP auth context.
@@ -55,9 +72,10 @@ func ReadIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, projec
 }
 
 // InspectIdentityChainingForTenant reports every live binding naming one
-// upstream, each as the preparation API reports it, for a tenant the caller
-// already authorized. It never mutates or contacts a provider.
-func InspectIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, project uuid.UUID, org string, userSessionIssuerID uuid.UUID, remoteSessionIssuerID uuid.NullUUID, upstream string) ([]*PreparationResult, error) {
+// upstream, each as readEMA reports it, connection scopes included, for a
+// tenant the caller already authorized. discover is as for BindingConnection.
+// It never mutates or contacts a provider.
+func InspectIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, project uuid.UUID, org string, userSessionIssuerID uuid.UUID, remoteSessionIssuerID uuid.NullUUID, upstream string, discover bool) ([]*PreparationResult, error) {
 	tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		return nil, fmt.Errorf("begin identity chaining snapshot: %w", err)
@@ -76,6 +94,9 @@ func InspectIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, pro
 		}
 		result, err := readIdentityChainingSnapshot(ctx, q, project, org, in)
 		if err != nil {
+			return nil, err
+		}
+		if err := reportConnectionScopes(ctx, tx, project, org, b.UserSessionIssuerID, discover, result); err != nil {
 			return nil, err
 		}
 		results = append(results, result)

@@ -2845,6 +2845,7 @@ func unmarshalEMAProviderResponseBodyToTypesEMAProvider(v *EMAProviderResponseBo
 		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
 		InternalSessionIssuerID: v.InternalSessionIssuerID,
 		UnavailableReason:       v.UnavailableReason,
+		LastAcceptedAt:          v.LastAcceptedAt,
 	}
 
 	return res

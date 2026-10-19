@@ -24,7 +24,16 @@ type PrepareEMARequestBody struct {
 	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 	// Explicit selected client row ID; never inferred.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// Requested scope tokens.
+	// The scopes this preparation request supplies, which a DCR registration
+	// always asks for. Turning identity chaining on records the server
+	// connection's scopes (what an interactive sign-in through the selected client
+	// requests) and ignores these, unless the client is not linked to the user
+	// session issuer, no single remote MCP server signing in directly through it
+	// serves the resource (a gateway member qualified through another sign-in
+	// issuer is not resolved), or the connection names only OpenID Connect scopes
+	// while these name others; then these are recorded, and a scope outside the
+	// client's registered scope reports manual_setup_required. With neither naming
+	// a scope, nothing is recorded and identity chaining requests no scope.
 	Scopes    []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 	Mechanism *string  `form:"mechanism,omitempty" json:"mechanism,omitempty" xml:"mechanism,omitempty"`
 	// Explicit DCR authentication method.
@@ -200,13 +209,34 @@ type PrepareEMAResponseBody struct {
 	Resource         string  `form:"resource" json:"resource" xml:"resource"`
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	Scopes     []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Scopes recorded on the binding when identity chaining was turned on.
+	// Identity chaining requests exactly these, without OpenID Connect scopes;
+	// when that leaves none, an ID-JAG naming a scope outside these is rejected.
+	// Changes to the server connection apply only when identity chaining is
+	// prepared again.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Scopes preparing identity chaining again would record now, sorted: what an
+	// interactive sign-in through the selected client requests for this server, or
+	// the recorded scopes when the binding has no server connection to follow or
+	// the connection names only OpenID Connect scopes while the recorded ones name
+	// others. Returned by readEMA and prepareEMA when a client is selected.
+	ConnectionScopes []string `form:"connection_scopes,omitempty" json:"connection_scopes,omitempty" xml:"connection_scopes,omitempty"`
+	// True when connection_scopes differs from scopes; prepareEMA with the current
+	// expected_generation applies connection_scopes. Returned by readEMA and
+	// prepareEMA when a client is selected.
+	ScopesOutOfDate *bool `form:"scopes_out_of_date,omitempty" json:"scopes_out_of_date,omitempty" xml:"scopes_out_of_date,omitempty"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
-	// The vendor's EMA provider order resolved for this endpoint. Identity
-	// chaining tries the providers that can serve, in order; entries with
-	// unavailable_reason are skipped. Returned by readEMA only.
+	// The EMA providers the vendor accepts, resolved for this endpoint. A provider
+	// vouches only where the endpoint's sign-in goes through it, so at most one is
+	// usable here; entries with unavailable_reason cannot serve. Returned by
+	// readEMA only.
 	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	// When the vendor last accepted an assertion for this binding from a provider
+	// that can serve it now, so chaining has worked for it. Omitted when none is
+	// recorded for a usable provider or acceptance could not be read. Returned by
+	// readEMA only.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // ReadEMAResponseBody is the type of the "remoteSessionClients" service
@@ -228,13 +258,34 @@ type ReadEMAResponseBody struct {
 	Resource         string  `form:"resource" json:"resource" xml:"resource"`
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	Scopes     []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Scopes recorded on the binding when identity chaining was turned on.
+	// Identity chaining requests exactly these, without OpenID Connect scopes;
+	// when that leaves none, an ID-JAG naming a scope outside these is rejected.
+	// Changes to the server connection apply only when identity chaining is
+	// prepared again.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Scopes preparing identity chaining again would record now, sorted: what an
+	// interactive sign-in through the selected client requests for this server, or
+	// the recorded scopes when the binding has no server connection to follow or
+	// the connection names only OpenID Connect scopes while the recorded ones name
+	// others. Returned by readEMA and prepareEMA when a client is selected.
+	ConnectionScopes []string `form:"connection_scopes,omitempty" json:"connection_scopes,omitempty" xml:"connection_scopes,omitempty"`
+	// True when connection_scopes differs from scopes; prepareEMA with the current
+	// expected_generation applies connection_scopes. Returned by readEMA and
+	// prepareEMA when a client is selected.
+	ScopesOutOfDate *bool `form:"scopes_out_of_date,omitempty" json:"scopes_out_of_date,omitempty" xml:"scopes_out_of_date,omitempty"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
-	// The vendor's EMA provider order resolved for this endpoint. Identity
-	// chaining tries the providers that can serve, in order; entries with
-	// unavailable_reason are skipped. Returned by readEMA only.
+	// The EMA providers the vendor accepts, resolved for this endpoint. A provider
+	// vouches only where the endpoint's sign-in goes through it, so at most one is
+	// usable here; entries with unavailable_reason cannot serve. Returned by
+	// readEMA only.
 	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	// When the vendor last accepted an assertion for this binding from a provider
+	// that can serve it now, so chaining has worked for it. Omitted when none is
+	// recorded for a usable provider or acceptance could not be read. Returned by
+	// readEMA only.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // UnlinkEMAResponseBody is the type of the "remoteSessionClients" service
@@ -256,13 +307,34 @@ type UnlinkEMAResponseBody struct {
 	Resource         string  `form:"resource" json:"resource" xml:"resource"`
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	Scopes     []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Scopes recorded on the binding when identity chaining was turned on.
+	// Identity chaining requests exactly these, without OpenID Connect scopes;
+	// when that leaves none, an ID-JAG naming a scope outside these is rejected.
+	// Changes to the server connection apply only when identity chaining is
+	// prepared again.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Scopes preparing identity chaining again would record now, sorted: what an
+	// interactive sign-in through the selected client requests for this server, or
+	// the recorded scopes when the binding has no server connection to follow or
+	// the connection names only OpenID Connect scopes while the recorded ones name
+	// others. Returned by readEMA and prepareEMA when a client is selected.
+	ConnectionScopes []string `form:"connection_scopes,omitempty" json:"connection_scopes,omitempty" xml:"connection_scopes,omitempty"`
+	// True when connection_scopes differs from scopes; prepareEMA with the current
+	// expected_generation applies connection_scopes. Returned by readEMA and
+	// prepareEMA when a client is selected.
+	ScopesOutOfDate *bool `form:"scopes_out_of_date,omitempty" json:"scopes_out_of_date,omitempty" xml:"scopes_out_of_date,omitempty"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
-	// The vendor's EMA provider order resolved for this endpoint. Identity
-	// chaining tries the providers that can serve, in order; entries with
-	// unavailable_reason are skipped. Returned by readEMA only.
+	// The EMA providers the vendor accepts, resolved for this endpoint. A provider
+	// vouches only where the endpoint's sign-in goes through it, so at most one is
+	// usable here; entries with unavailable_reason cannot serve. Returned by
+	// readEMA only.
 	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	// When the vendor last accepted an assertion for this binding from a provider
+	// that can serve it now, so chaining has worked for it. Omitted when none is
+	// recorded for a usable provider or acceptance could not be read. Returned by
+	// readEMA only.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // CreateRemoteSessionClientResponseBody is the type of the
@@ -3521,9 +3593,12 @@ type DeleteRemoteSessionClientGatewayErrorResponseBody struct {
 type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
-	// No order is saved, so the endpoint uses its configured external issuer.
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
-	// The saved providers in order, or the external default.
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
 	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
 }
 
@@ -3531,17 +3606,28 @@ type EMAProviderOrderResponseBody struct {
 type EMAProviderResponseBody struct {
 	// external or speakeasy.
 	Kind string `form:"kind" json:"kind" xml:"kind"`
-	// The external provider's remote session issuer. Omitted for speakeasy, and
-	// for the endpoint's trusted issuer in a default order with none.
+	// The external provider's remote session issuer. Omitted for speakeasy, and in
+	// the organization-wide default order, where an external entry stands for each
+	// endpoint's own trusted issuer.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
 	// Why the provider cannot serve now; omitted when it can. Identity chaining
 	// skips it and tries the next provider. not_trusted_by_endpoint means the
-	// endpoint's authorization server does not accept this issuer.
+	// endpoint's sign-in doesn't go through this provider, so it can't vouch for
+	// people there: an external issuer other than the sign-in's trusted issuer, or
+	// Speakeasy on a sign-in federated through an external issuer.
 	// readiness_unknown means the Speakeasy issuer's state could not be read just
 	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// When the vendor last accepted an assertion from this provider anywhere in
+	// the organization, so the vendor already trusts it, from cached credentials
+	// that still hold an access token. Attributed to the exact issuer that
+	// vouched; the organization-wide default's external entry takes the newest
+	// acceptance of any external issuer. Set on every response that returns an
+	// order; omitted when the vendor has never accepted it, when acceptance could
+	// not be read, or on readEMA when the caller lacks org:read.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // RemoteSessionClientResponseBody is used to define fields on response body
@@ -3629,7 +3715,9 @@ func NewPrepareEMAResponseBody(res *remotesessionclients.IdentityChainingPrepara
 		ExternalClientID: res.ExternalClientID,
 		Issuer:           res.Issuer,
 		Resource:         res.Resource,
+		ScopesOutOfDate:  res.ScopesOutOfDate,
 		GrantSource:      res.GrantSource,
+		LastAcceptedAt:   res.LastAcceptedAt,
 	}
 	if res.GrantTypes != nil {
 		body.GrantTypes = make([]string, len(res.GrantTypes))
@@ -3644,6 +3732,12 @@ func NewPrepareEMAResponseBody(res *remotesessionclients.IdentityChainingPrepara
 		}
 	} else {
 		body.Scopes = []string{}
+	}
+	if res.ConnectionScopes != nil {
+		body.ConnectionScopes = make([]string, len(res.ConnectionScopes))
+		for i, val := range res.ConnectionScopes {
+			body.ConnectionScopes[i] = val
+		}
 	}
 	if res.EmaProviders != nil {
 		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
@@ -3665,7 +3759,9 @@ func NewReadEMAResponseBody(res *remotesessionclients.IdentityChainingPreparatio
 		ExternalClientID: res.ExternalClientID,
 		Issuer:           res.Issuer,
 		Resource:         res.Resource,
+		ScopesOutOfDate:  res.ScopesOutOfDate,
 		GrantSource:      res.GrantSource,
+		LastAcceptedAt:   res.LastAcceptedAt,
 	}
 	if res.GrantTypes != nil {
 		body.GrantTypes = make([]string, len(res.GrantTypes))
@@ -3680,6 +3776,12 @@ func NewReadEMAResponseBody(res *remotesessionclients.IdentityChainingPreparatio
 		}
 	} else {
 		body.Scopes = []string{}
+	}
+	if res.ConnectionScopes != nil {
+		body.ConnectionScopes = make([]string, len(res.ConnectionScopes))
+		for i, val := range res.ConnectionScopes {
+			body.ConnectionScopes[i] = val
+		}
 	}
 	if res.EmaProviders != nil {
 		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
@@ -3701,7 +3803,9 @@ func NewUnlinkEMAResponseBody(res *remotesessionclients.IdentityChainingPreparat
 		ExternalClientID: res.ExternalClientID,
 		Issuer:           res.Issuer,
 		Resource:         res.Resource,
+		ScopesOutOfDate:  res.ScopesOutOfDate,
 		GrantSource:      res.GrantSource,
+		LastAcceptedAt:   res.LastAcceptedAt,
 	}
 	if res.GrantTypes != nil {
 		body.GrantTypes = make([]string, len(res.GrantTypes))
@@ -3716,6 +3820,12 @@ func NewUnlinkEMAResponseBody(res *remotesessionclients.IdentityChainingPreparat
 		}
 	} else {
 		body.Scopes = []string{}
+	}
+	if res.ConnectionScopes != nil {
+		body.ConnectionScopes = make([]string, len(res.ConnectionScopes))
+		for i, val := range res.ConnectionScopes {
+			body.ConnectionScopes[i] = val
+		}
 	}
 	if res.EmaProviders != nil {
 		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)

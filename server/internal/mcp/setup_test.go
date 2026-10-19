@@ -616,7 +616,10 @@ func buildTestMCPService(
 	require.NoError(t, err)
 	// Identity chaining runs as in production, so gate tests without bindings
 	// prove it leaves their behavior unchanged.
-	svc.SetIdentityChainer(identitychaining.New(logger, conn, enc, remoteChallengeMgr, remotesessions.NewDelegationService(conn, enc, remoteChallengeMgr), idTokenKeys, cacheAdapter))
+	chainer := identitychaining.New(logger, conn, enc, remoteChallengeMgr, remotesessions.NewDelegationService(conn, enc, remoteChallengeMgr), idTokenKeys, cacheAdapter)
+	chainer.SetResourceResolver(remoteChallengeMgr.ResolveEMAResource)
+	chainer.SetCachedResourceResolver(remoteChallengeMgr.CachedEMAResource)
+	svc.SetIdentityChainer(chainer)
 
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 

@@ -2,11 +2,11 @@ package evaluation
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
@@ -36,26 +36,30 @@ func (s compiledSensor) ref() sensorRef {
 // readingID is the logical identity shared by a sensor's readings and outcomes
 // for one event, so storage replaces either with the latest attempt.
 func readingID(event Event, sensorID string) string {
-	identity, _ := json.Marshal([]string{"sigint-reading-v1", event.OrganizationID, event.ProjectID, event.Subject.GetKind(), event.Subject.GetId(), sensorID})
-	return uuid.NewSHA1(readingNamespace, identity).String()
+	return event.Evaluation.ReadingID(event.OrganizationID, event.ProjectID, event.Subject.GetKind(), event.Subject.GetId(), sensorID).String()
 }
 
 // outcome records a terminal decision without an answer, with the same identity
 // and attribution a reading for the sensor and event would carry.
 func outcome(event Event, sensor sensorRef, attempt, at string, status sigintv1.Outcome_Status, reason string) *sigintv1.Outcome {
 	o := sigintv1.Outcome_builder{
-		Id:                  new(readingID(event, sensor.id)),
-		EvaluationAttemptId: new(attempt),
-		OrganizationId:      new(event.OrganizationID),
-		ProjectId:           new(event.ProjectID),
-		Event:               outcomeEvent(event.Subject),
-		SensorId:            new(sensor.id),
-		SensorSlug:          new(sensor.slug),
-		EvaluatedAt:         new(at),
-		DefinitionHash:      new(sensor.hash),
-		Status:              new(status),
-		Attributes:          maps.Clone(event.Attributes),
+		Id:                    new(readingID(event, sensor.id)),
+		EvaluationAttemptId:   new(attempt),
+		OrganizationId:        new(event.OrganizationID),
+		ProjectId:             new(event.ProjectID),
+		TriggerKind:           new(string(event.Evaluation.TriggerKind)),
+		EvaluationRequestedAt: new(event.Evaluation.RequestedAt.UTC().Format(time.RFC3339Nano)),
+		Event:                 outcomeEvent(event.Subject),
+		SensorId:              new(sensor.id),
+		SensorSlug:            new(sensor.slug),
+		EvaluatedAt:           new(at),
+		DefinitionHash:        new(sensor.hash),
+		Status:                new(status),
+		Attributes:            maps.Clone(event.Attributes),
 	}.Build()
+	if event.Evaluation.RunID != uuid.Nil {
+		o.SetRunId(event.Evaluation.RunID.String())
+	}
 	if status == sigintv1.Outcome_STATUS_FAILED {
 		o.SetFailureReason(reason)
 	}

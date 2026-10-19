@@ -154,9 +154,25 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 			})
 		}, 1, "demo seed postflight: expected the workforce user session issuer in shared mode, found %d"},
 		{byProj(s.q.PostflightIDUserSessionClients), 8, "demo seed postflight: expected 8 registered agents, found %d"},
-		// Linear's remote identity provider, the identity chaining example, and
-		// Jamf Pro.
-		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 3, "demo seed postflight: expected 3 project remote session issuers, found %d"},
+		// EMA: two ready bindings, no cached credentials, and one saved
+		// provider order. The workforce sign-in must not trust the fictional
+		// provider.
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDWorkforceTrustsEMAProvider(ctx, repo.PostflightIDWorkforceTrustsEMAProviderParams{
+				WorkforceIssuer: s.det("issuer-workforce"),
+				OrgID:           org,
+				EmaProvider:     s.det("ema-idp"),
+			})
+		}, 0, "demo seed postflight: the workforce issuer must not trust Acme Identity, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDReadyEMABindings(ctx, repo.PostflightIDReadyEMABindingsParams{OrgID: org, ProjectID: proj})
+		}, 2, "demo seed postflight: expected 2 ready EMA bindings, found %d"},
+		{byOrg(s.q.PostflightIDEMACredentials), 0, "demo seed postflight: expected no EMA credentials, found %d"},
+		{byOrg(s.q.PostflightIDTrustedIssuerSessions), 0, "demo seed postflight: expected no trusted issuer sessions, found %d"},
+		{byOrg(s.q.PostflightIDSavedEMAProviders), 1, "demo seed postflight: expected 1 saved EMA provider, found %d"},
+		// Linear's remote identity provider, the identity chaining example, Jamf
+		// Pro, and the two EMA services' authorization servers.
+		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 5, "demo seed postflight: expected 5 project remote session issuers, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDRemoteIdentityClients(ctx, repo.PostflightIDRemoteIdentityClientsParams{ProjectID: proj, OrgID: org})
 		}, 1, "demo seed postflight: expected 1 Remote MCP identity client, found %d"},
@@ -274,7 +290,10 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// to write: an undecided overlay row renders as unreviewed and is
 		// indistinguishable on the page from a tool nobody has touched.
 		{byOrg(s.q.PostflightIDUndecidedAITools), 0, "demo seed postflight: %d AI tool rows carry a status other than approved or blocked"},
-		{byOrg(s.q.PostflightIDDirectoryRoleMappings), 3, "demo seed postflight: expected 3 directory role mappings, found %d"},
+		{byOrg(s.q.PostflightIDDirectoryRoleMappings), 4, "demo seed postflight: expected 4 directory role mappings, found %d"},
+		// One group grants a set of roles, so the mapping page shows two role
+		// chips on a single source.
+		{byOrg(s.q.PostflightIDInfraGroupMappedRoles), 2, "demo seed postflight: expected 2 roles for Infra, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDGitHubCheckAccessGrants(ctx, repo.PostflightIDGitHubCheckAccessGrantsParams{
 				OrgID:            org,

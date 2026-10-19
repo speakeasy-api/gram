@@ -18,13 +18,13 @@ type ReadingInserter interface {
 	InsertReadings(context.Context, []chrepo.ReadingRow) error
 }
 
-// attemptMessage is a sensor evaluation attempt landed in sigint_readings.
+// attemptMessage is a sensor evaluation attempt landed in sigint_readings_v2.
 // Getters are nil-safe on generated protobuf messages.
 type attemptMessage interface {
 	GetId() string
 }
 
-// CHWriter lands evaluation attempts in sigint_readings without suppressing
+// CHWriter lands evaluation attempts in sigint_readings_v2 without suppressing
 // duplicate deliveries. Readings and outcomes share the table and its
 // replacement key, so the latest attempt wins across both.
 type CHWriter[M attemptMessage] struct {

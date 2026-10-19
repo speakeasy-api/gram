@@ -40,6 +40,15 @@ import { buildAdminDescribeMcpServerHealthQuery } from "@gram/admin-client/react
 import { buildAdminGetMcpServerToolCallsQuery } from "@gram/admin-client/react-query/adminGetMcpServerToolCalls.core";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
+import { buildAdminListExternalMcpMigrationCandidatesQuery } from "@gram/admin-client/react-query/adminListExternalMcpMigrationCandidates.core";
+import {
+  buildAdminPreviewExternalMcpMigrationMutation,
+  type AdminPreviewExternalMcpMigrationMutationVariables,
+} from "@gram/admin-client/react-query/adminPreviewExternalMcpMigration";
+import {
+  buildAdminMigrateExternalMcpServersMutation,
+  type AdminMigrateExternalMcpServersMutationVariables,
+} from "@gram/admin-client/react-query/adminMigrateExternalMcpServers";
 import {
   buildAdminUploadPlatformImageMutation,
   type AdminUploadPlatformImageMutationVariables,
@@ -1065,4 +1074,43 @@ export function inferenceKeysQuery(
     queryFn: (context) => redirecting(generated.queryFn(context)),
     retry: false,
   });
+}
+
+function createAdminListExternalMcpMigrationCandidatesQuery() {
+  const generated =
+    buildAdminListExternalMcpMigrationCandidatesQuery(redirectingClient);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function adminListExternalMcpMigrationCandidatesQuery(): ReturnType<
+  typeof createAdminListExternalMcpMigrationCandidatesQuery
+> {
+  return createAdminListExternalMcpMigrationCandidatesQuery();
+}
+
+export function adminPreviewExternalMcpMigration(
+  request: AdminPreviewExternalMcpMigrationMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminPreviewExternalMcpMigrationMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminPreviewExternalMcpMigrationMutation(redirectingClient).mutationFn(
+      { request },
+    ),
+  );
+}
+
+export function adminMigrateExternalMcpServers(
+  request: AdminMigrateExternalMcpServersMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminMigrateExternalMcpServersMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminMigrateExternalMcpServersMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
 }

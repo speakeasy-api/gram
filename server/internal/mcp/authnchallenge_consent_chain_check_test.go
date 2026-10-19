@@ -213,23 +213,23 @@ func TestConsentPage_CachedChainedCredentialRendersConnected(t *testing.T) {
 
 	code, page, _ := render(t, fx)
 	require.Equal(t, http.StatusOK, code)
-	require.Contains(t, page, "Connected through your identity provider")
+	require.Contains(t, page, "Service connected through your identity provider")
 	require.Contains(t, page, `data-chain-check="connected"`)
 	require.Contains(t, page, "1 of 1 connected")
 	require.Contains(t, page, "Use a separate sign-in instead")
 	require.Empty(t, g.acquired, "rendering reads stored credentials only")
 }
 
-func TestConsentChainCheck_ReadyAllowsAuthorizationWithoutPersonalOAuth(t *testing.T) {
+func TestConsentChainCheck_UnknownAllowsAuthorizationWithoutPersonalOAuth(t *testing.T) {
 	t.Parallel()
-	_, fx, issuer := seedChainedConsentEndpoint(t, "ema-consent-ready")
+	_, fx, issuer := seedChainedConsentEndpoint(t, "ema-consent-unknown")
 	g := setConsentGovernor(t, fx, issuer, consentChainedUpstream)
 	g.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome {
-		return identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonConsentRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
+		return identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceInferred, Retryable: true, Cached: false, Provider: ""}
 	}
 	w, err := postChainCheck(t, fx, nil)
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{"status": "ready", "message": "Automatically connects when you give access"}, chainCheckResult(t, w))
+	require.Equal(t, map[string]string{"status": "unknown", "message": "Managed by your identity provider"}, chainCheckResult(t, w))
 	code, page, redirect := render(t, fx)
 	require.Equal(t, http.StatusOK, code)
 	require.Nil(t, redirect, "must not redirect to personal upstream OAuth")

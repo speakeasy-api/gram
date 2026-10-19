@@ -36,7 +36,7 @@ func newMCPAuthTestService(t *testing.T, conn *pgxpool.Pool) *Service {
 		conn,
 		guardianPolicy,
 		testenv.NewEncryptionClient(t),
-		testRuntimeBackend{backend: runtimeBackendFlyIO},
+		testRuntimeBackend{backend: runtimeBackendGKE},
 		nil,
 		nil,
 		nil,
