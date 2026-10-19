@@ -17,6 +17,17 @@ func constantKey() clickhouse.QueryOption {
 	})
 }
 
+func plainMap() clickhouse.QueryOption {
+	return clickhouse.WithSettings(map[string]any{
+		"wait_for_async_insert": 0, // want `set wait_for_async_insert on the connection, not per query`
+	})
+}
+
+// unrelatedMap is not ClickHouse settings, so the key means nothing here.
+func unrelatedMap() map[string]any {
+	return map[string]any{"wait_for_async_insert": 0}
+}
+
 func otherZeroSpellings() []clickhouse.Settings {
 	return []clickhouse.Settings{
 		{"wait_for_async_insert": 0.0},     // want `set wait_for_async_insert on the connection, not per query`

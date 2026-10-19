@@ -10,7 +10,9 @@ package glint
 //
 // Any clickhouse.Settings value counts as query settings — a literal or an
 // index assignment, wherever it is later passed — except the Settings field of
-// clickhouse.Options, which configures the connection.
+// clickhouse.Options, which configures the connection. So does a plain map
+// literal passed straight to clickhouse.WithSettings, which accepts one because
+// Settings is a map[string]any.
 
 import (
 	"go/ast"
@@ -51,8 +53,23 @@ func runNoQuerySkipAsyncInsertWait(pass *analysis.Pass) (any, error) {
 	// literal or field assignment is visited; Preorder reaches the parent first.
 	connection := make(map[*ast.CompositeLit]bool)
 
-	ins.Preorder([]ast.Node{(*ast.CompositeLit)(nil), (*ast.AssignStmt)(nil)}, func(node ast.Node) {
+	ins.Preorder([]ast.Node{(*ast.CallExpr)(nil), (*ast.CompositeLit)(nil), (*ast.AssignStmt)(nil)}, func(node ast.Node) {
 		switch n := node.(type) {
+		case *ast.CallExpr:
+			if !isClickhouseWithSettings(pass, n) {
+				return
+			}
+			for _, arg := range n.Args {
+				lit, ok := ast.Unparen(arg).(*ast.CompositeLit)
+				if !ok {
+					continue
+				}
+				typ := pass.TypesInfo.TypeOf(lit)
+				// Settings literals are checked on their own below.
+				if _, isMap := typ.Underlying().(*types.Map); isMap && !isClickhouseNamed(typ, "Settings") {
+					reportWaitForAsyncInsertZero(pass, lit)
+				}
+			}
 		case *ast.CompositeLit:
 			typ := pass.TypesInfo.TypeOf(n)
 			if isClickhouseNamed(typ, "Options") {
@@ -72,12 +89,7 @@ func runNoQuerySkipAsyncInsertWait(pass *analysis.Pass) (any, error) {
 			if !isClickhouseNamed(typ, "Settings") || connection[n] {
 				return
 			}
-			for _, elt := range n.Elts {
-				kv, ok := elt.(*ast.KeyValueExpr)
-				if ok && isConstString(pass, kv.Key, waitForAsyncInsertName) && isConstZero(pass, kv.Value) {
-					pass.ReportRangef(kv, "%s", noQuerySkipAsyncInsertWaitDefaultMessage)
-				}
-			}
+			reportWaitForAsyncInsertZero(pass, n)
 		case *ast.AssignStmt:
 			for i, lhs := range n.Lhs {
 				if isOptionsSettingsField(pass, lhs) && i < len(n.Rhs) {
@@ -101,6 +113,29 @@ func runNoQuerySkipAsyncInsertWait(pass *analysis.Pass) (any, error) {
 	})
 
 	return nil, nil
+}
+
+// reportWaitForAsyncInsertZero reports a wait_for_async_insert entry set to an
+// off value in a settings map literal.
+func reportWaitForAsyncInsertZero(pass *analysis.Pass, lit *ast.CompositeLit) {
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if ok && isConstString(pass, kv.Key, waitForAsyncInsertName) && isConstZero(pass, kv.Value) {
+			pass.ReportRangef(kv, "%s", noQuerySkipAsyncInsertWaitDefaultMessage)
+		}
+	}
+}
+
+func isClickhouseWithSettings(pass *analysis.Pass, call *ast.CallExpr) bool {
+	sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	fn, ok := pass.TypesInfo.Uses[sel.Sel].(*types.Func)
+	if !ok || fn.Pkg() == nil {
+		return false
+	}
+	return fn.Pkg().Path() == clickhousePkgPath && fn.Name() == "WithSettings"
 }
 
 // isClickhouseNamed reports whether typ is the named clickhouse-go type name.
