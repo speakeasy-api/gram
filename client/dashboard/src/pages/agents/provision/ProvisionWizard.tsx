@@ -461,7 +461,7 @@ export function ProvisionWizard({
               >
                 <Text muted small>
                   Federate a token the platform already issues — GitHub Actions,
-                  Kubernetes, SPIFFE, GCP. No Gram secret is created.
+                  Kubernetes, SPIFFE, GCP. No Speakeasy secret is created.
                 </Text>
                 <span className="text-muted-foreground mt-1 block font-mono text-xs">
                   Short-lived tokens · no refresh token

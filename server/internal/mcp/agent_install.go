@@ -139,7 +139,7 @@ func shellSingleQuote(value string) string {
 // is safe.
 func agentInstallScript(url, key string) string {
 	return `#!/bin/sh
-# Connects this machine's MCP clients to a Gram agent gateway.
+# Connects this machine's MCP clients to a Speakeasy agent gateway.
 # Generated for one use. The key below is live: treat this file as a secret.
 set -eu
 
