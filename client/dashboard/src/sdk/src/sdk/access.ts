@@ -14,6 +14,7 @@ import { accessListAIDetectionUsers } from "../funcs/accessListAIDetectionUsers.
 import { accessListAudienceOptions } from "../funcs/accessListAudienceOptions.js";
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
+import { accessListDirectoryReviewItems } from "../funcs/accessListDirectoryReviewItems.js";
 import { accessListDirectoryRoleMappings } from "../funcs/accessListDirectoryRoleMappings.js";
 import { accessListEmployeeAIDetections } from "../funcs/accessListEmployeeAIDetections.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
@@ -28,6 +29,7 @@ import { accessListShadowMCPInventoryUsers } from "../funcs/accessListShadowMCPI
 import { accessPreviewDirectoryRoleSetup } from "../funcs/accessPreviewDirectoryRoleSetup.js";
 import { accessRequestAccess } from "../funcs/accessRequestAccess.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
+import { accessResolveDirectoryReviewItem } from "../funcs/accessResolveDirectoryReviewItem.js";
 import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveShadowMCPInventoryRequest.js";
 import { accessSetAIToolDecision } from "../funcs/accessSetAIToolDecision.js";
 import { accessSetDirectoryRoleMappings } from "../funcs/accessSetDirectoryRoleMappings.js";
@@ -47,6 +49,7 @@ import { ListAIDetectionUsersResult } from "../models/components/listaidetection
 import { ListAudienceOptionsResult } from "../models/components/listaudienceoptionsresult.js";
 import { ListChallengeBucketsResult } from "../models/components/listchallengebucketsresult.js";
 import { ListChallengesResult } from "../models/components/listchallengesresult.js";
+import { ListDirectoryReviewItemsResult } from "../models/components/listdirectoryreviewitemsresult.js";
 import { ListDirectoryRoleMappingsResult } from "../models/components/listdirectoryrolemappingsresult.js";
 import { ListIdentityAccessResult } from "../models/components/listidentityaccessresult.js";
 import { ListMembersResult } from "../models/components/listmembersresult.js";
@@ -57,6 +60,7 @@ import { ListShadowMCPInventoryUsersResult } from "../models/components/listshad
 import { ListUserGrantsResult } from "../models/components/listusergrantsresult.js";
 import { RequestAccessResult } from "../models/components/requestaccessresult.js";
 import { ResolveChallengesResult } from "../models/components/resolvechallengesresult.js";
+import { ResolveDirectoryReviewItemResult } from "../models/components/resolvedirectoryreviewitemresult.js";
 import { ResourceAudienceResult } from "../models/components/resourceaudienceresult.js";
 import { Role } from "../models/components/role.js";
 import { SetAIToolDecisionResult } from "../models/components/setaitooldecisionresult.js";
@@ -111,6 +115,10 @@ import {
   ListChallengesRequest,
   ListChallengesSecurity,
 } from "../models/operations/listchallenges.js";
+import {
+  ListDirectoryReviewItemsRequest,
+  ListDirectoryReviewItemsSecurity,
+} from "../models/operations/listdirectoryreviewitems.js";
 import {
   ListDirectoryRoleMappingsRequest,
   ListDirectoryRoleMappingsSecurity,
@@ -167,6 +175,10 @@ import {
   ResolveChallengeRequest,
   ResolveChallengeSecurity,
 } from "../models/operations/resolvechallenge.js";
+import {
+  ResolveDirectoryReviewItemRequest,
+  ResolveDirectoryReviewItemSecurity,
+} from "../models/operations/resolvedirectoryreviewitem.js";
 import {
   ResolveShadowMCPInventoryRequestRequest,
   ResolveShadowMCPInventoryRequestSecurity,
@@ -423,6 +435,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListChallengesResult> {
     return unwrapAsync(accessListChallenges(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listDirectoryReviewItems access
+   *
+   * @remarks
+   * List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.
+   */
+  async listDirectoryReviewItems(
+    request?: ListDirectoryReviewItemsRequest | undefined,
+    security?: ListDirectoryReviewItemsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListDirectoryReviewItemsResult> {
+    return unwrapAsync(accessListDirectoryReviewItems(
       this,
       request,
       security,
@@ -689,6 +720,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ResolveChallengesResult> {
     return unwrapAsync(accessResolveChallenge(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * resolveDirectoryReviewItem access
+   *
+   * @remarks
+   * Decide one pending directory review item. approve on a new group or attribute value maps it to the given role set, creating new roles as applyDirectoryRoleSetup does; approve on a missing source removes its mappings. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. approve checks version as applyDirectoryRoleSetup does and returns conflict if the source changed. An item that is no longer pending returns conflict.
+   */
+  async resolveDirectoryReviewItem(
+    request: ResolveDirectoryReviewItemRequest,
+    security?: ResolveDirectoryReviewItemSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ResolveDirectoryReviewItemResult> {
+    return unwrapAsync(accessResolveDirectoryReviewItem(
       this,
       request,
       security,

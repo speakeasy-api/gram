@@ -8,14 +8,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/directoryreview"
+	reviewrepo "github.com/speakeasy-api/gram/server/internal/directoryreview/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 var infra *testenv.Environment
@@ -91,38 +95,35 @@ func seedUser(t *testing.T, conn *pgxpool.Pool, externalID, attributes string) {
 
 func mapGroup(t *testing.T, conn *pgxpool.Pool, groupID uuid.UUID) {
 	t.Helper()
-	_, err := conn.Exec(t.Context(), `
-		INSERT INTO directory_role_mappings (organization_id, source_kind, directory_group_id, role_urn)
-		VALUES ($1, 'group', $2, $3)`, testOrg, groupID, roleURN)
+	_, err := accessrepo.New(conn).InsertDirectoryGroupRoleMapping(t.Context(), accessrepo.InsertDirectoryGroupRoleMappingParams{
+		OrganizationID: testOrg, DirectoryGroupID: uuid.NullUUID{UUID: groupID, Valid: true}, RoleUrn: roleURN,
+	})
 	require.NoError(t, err)
 }
 
 func unmapGroup(t *testing.T, conn *pgxpool.Pool, groupID uuid.UUID) {
 	t.Helper()
-	_, err := conn.Exec(t.Context(), `
-		UPDATE directory_role_mappings SET deleted_at = clock_timestamp()
-		WHERE organization_id = $1 AND directory_group_id = $2 AND deleted IS FALSE`, testOrg, groupID)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).SoftDeleteDirectoryGroupRoleMappingsFixture(t.Context(), testrepo.SoftDeleteDirectoryGroupRoleMappingsFixtureParams{
+		OrganizationID: testOrg, DirectoryGroupID: uuid.NullUUID{UUID: groupID, Valid: true},
+	}))
 }
 
 func mapAttribute(t *testing.T, conn *pgxpool.Pool, key, value string) {
 	t.Helper()
-	_, err := conn.Exec(t.Context(), `
-		INSERT INTO directory_role_mappings (organization_id, source_kind, attribute_key, attribute_value, role_urn)
-		VALUES ($1, 'attribute', $2, $3, $4)`, testOrg, key, value, roleURN)
+	_, err := accessrepo.New(conn).InsertDirectoryAttributeRoleMapping(t.Context(), accessrepo.InsertDirectoryAttributeRoleMappingParams{
+		OrganizationID: testOrg, AttributeKey: conv.ToPGText(key), AttributeValue: conv.ToPGText(value), RoleUrn: roleURN,
+	})
 	require.NoError(t, err)
 }
 
 func tombstoneGroup(t *testing.T, conn *pgxpool.Pool, groupID uuid.UUID) {
 	t.Helper()
-	_, err := conn.Exec(t.Context(), `UPDATE directory_groups SET workos_deleted_at = clock_timestamp() WHERE id = $1`, groupID)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).SetDirectoryGroupWorkOSDeletedFixture(t.Context(), testrepo.SetDirectoryGroupWorkOSDeletedFixtureParams{Deleted: true, ID: groupID}))
 }
 
 func restoreGroup(t *testing.T, conn *pgxpool.Pool, groupID uuid.UUID) {
 	t.Helper()
-	_, err := conn.Exec(t.Context(), `UPDATE directory_groups SET workos_deleted_at = NULL, deleted_at = NULL WHERE id = $1`, groupID)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).SetDirectoryGroupWorkOSDeletedFixture(t.Context(), testrepo.SetDirectoryGroupWorkOSDeletedFixtureParams{Deleted: false, ID: groupID}))
 }
 
 // setUserAttributes stands in for a directory user event: it reads the user's
@@ -131,8 +132,9 @@ func restoreGroup(t *testing.T, conn *pgxpool.Pool, groupID uuid.UUID) {
 func setUserAttributes(t *testing.T, conn *pgxpool.Pool, externalID, attributes string) directoryreview.Changes {
 	t.Helper()
 	before := userSnapshot(t, conn, externalID)
-	_, err := conn.Exec(t.Context(), `UPDATE directory_users SET attributes = $2::jsonb WHERE workos_directory_user_id = $1`, externalID, attributes)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).SetDirectoryUserAttributesFixture(t.Context(), testrepo.SetDirectoryUserAttributesFixtureParams{
+		Attributes: []byte(attributes), WorkosDirectoryUserID: externalID,
+	}))
 	after := userSnapshot(t, conn, externalID)
 	changes, err := directoryreview.ReconcileUserChange(t.Context(), conn, testOrg, externalID, before, after)
 	require.NoError(t, err)
@@ -142,8 +144,7 @@ func setUserAttributes(t *testing.T, conn *pgxpool.Pool, externalID, attributes 
 func deactivateUser(t *testing.T, conn *pgxpool.Pool, externalID string) directoryreview.Changes {
 	t.Helper()
 	before := userSnapshot(t, conn, externalID)
-	_, err := conn.Exec(t.Context(), `UPDATE directory_users SET workos_deleted_at = clock_timestamp() WHERE workos_directory_user_id = $1`, externalID)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).SetDirectoryUserWorkOSDeletedFixture(t.Context(), externalID))
 	changes, err := directoryreview.ReconcileUserChange(t.Context(), conn, testOrg, externalID, before, nil)
 	require.NoError(t, err)
 	return changes
@@ -168,42 +169,22 @@ func sweep(t *testing.T, conn *pgxpool.Pool) directoryreview.Changes {
 	return changes
 }
 
-type itemRow struct {
-	Kind       string
-	Source     string
-	Occurrence int32
-	State      string
-}
+type itemRow = testrepo.ListDirectoryReviewItemsFixtureRow
 
 // listItems returns every item, oldest first, with its source as a group's
 // external ID or key=value.
 func listItems(t *testing.T, conn *pgxpool.Pool) []itemRow {
 	t.Helper()
-	rows, err := conn.Query(t.Context(), `
-		SELECT i.kind, COALESCE(dg.workos_directory_group_id, i.attribute_key || '=' || i.attribute_value), i.occurrence, i.state
-		FROM directory_review_items AS i
-		LEFT JOIN directory_groups AS dg ON dg.id = i.directory_group_id
-		WHERE i.organization_id = $1
-		ORDER BY i.created_at, i.id`, testOrg)
+	rows, err := testrepo.New(conn).ListDirectoryReviewItemsFixture(t.Context(), testOrg)
 	require.NoError(t, err)
-	defer rows.Close()
-
-	var out []itemRow
-	for rows.Next() {
-		var r itemRow
-		require.NoError(t, rows.Scan(&r.Kind, &r.Source, &r.Occurrence, &r.State))
-		out = append(out, r)
-	}
-	require.NoError(t, rows.Err())
-	return out
+	return rows
 }
 
 func resolve(t *testing.T, conn *pgxpool.Pool, kind, state string) {
 	t.Helper()
-	_, err := conn.Exec(t.Context(), `
-		UPDATE directory_review_items SET state = $3, resolved_at = clock_timestamp()
-		WHERE organization_id = $1 AND kind = $2 AND state = 'pending'`, testOrg, kind, state)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).SetPendingDirectoryReviewItemsStateFixture(t.Context(), testrepo.SetPendingDirectoryReviewItemsStateFixtureParams{
+		State: state, OrganizationID: testOrg, Kind: kind,
+	}))
 }
 
 func TestEventsBeforeFirstSweepRaiseNothing(t *testing.T) {
@@ -408,8 +389,9 @@ func TestOptedOutKeyRaisesNoNewValues(t *testing.T) {
 	sweep(t, conn)
 
 	setUserAttributes(t, conn, "user_a", `{"department":"Sales"}`)
-	_, err := conn.Exec(t.Context(), `INSERT INTO directory_review_attribute_opt_outs (organization_id, attribute_key) VALUES ($1, 'department')`, testOrg)
-	require.NoError(t, err)
+	require.NoError(t, reviewrepo.New(conn).InsertDirectoryReviewAttributeOptOut(t.Context(), reviewrepo.InsertDirectoryReviewAttributeOptOutParams{
+		OrganizationID: testOrg, AttributeKey: "department",
+	}))
 
 	changes, err := directoryreview.SupersedeAttributeKey(t.Context(), conn, testOrg, "department")
 	require.NoError(t, err)
@@ -433,21 +415,14 @@ func TestSweepCoversOrganizationsWithDirectoryData(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
-	_, err := conn.Exec(t.Context(), `UPDATE organization_metadata SET scim_enabled = TRUE WHERE id = 'org_scim'`)
-	require.NoError(t, err)
+	require.NoError(t, organizationsrepo.New(conn).SetSCIMEnabled(t.Context(), organizationsrepo.SetSCIMEnabledParams{
+		Enabled: pgtype.Bool{Bool: true, Valid: true}, WorkosLastEventID: conv.ToPGText("event_scim"), WorkosID: conv.ToPGText("workos_org_scim"),
+	}))
 
 	require.NoError(t, directoryreview.Sweep(t.Context(), conn))
 
-	rows, err := conn.Query(t.Context(), `SELECT organization_id FROM directory_review_org_states ORDER BY organization_id`)
+	baselined, err := testrepo.New(conn).ListDirectoryReviewOrgStateIDsFixture(t.Context())
 	require.NoError(t, err)
-	defer rows.Close()
-	var baselined []string
-	for rows.Next() {
-		var id string
-		require.NoError(t, rows.Scan(&id))
-		baselined = append(baselined, id)
-	}
-	require.NoError(t, rows.Err())
 	require.Equal(t, []string{testOrg, "org_scim"}, baselined)
 }
 

@@ -67,6 +67,16 @@ func ApplyDirectoryRoleSetupAccessPath() string {
 	return "/rpc/access.applyDirectoryRoleSetup"
 }
 
+// ListDirectoryReviewItemsAccessPath returns the URL path to the access service listDirectoryReviewItems HTTP endpoint.
+func ListDirectoryReviewItemsAccessPath() string {
+	return "/rpc/access.listDirectoryReviewItems"
+}
+
+// ResolveDirectoryReviewItemAccessPath returns the URL path to the access service resolveDirectoryReviewItem HTTP endpoint.
+func ResolveDirectoryReviewItemAccessPath() string {
+	return "/rpc/access.resolveDirectoryReviewItem"
+}
+
 // ListScopesAccessPath returns the URL path to the access service listScopes HTTP endpoint.
 func ListScopesAccessPath() string {
 	return "/rpc/access.listScopes"

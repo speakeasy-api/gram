@@ -332,6 +332,9 @@ WHERE i.organization_id = @organization_id
 RETURNING i.id, i.organization_id, i.kind, i.directory_group_id, i.attribute_key, i.attribute_value, i.occurrence, i.state;
 
 -- name: ListPendingDirectoryReviewItems :many
+-- An organization's pending items, oldest first, with the directory people
+-- each source matches now, counted as bulk setup counts them: distinct
+-- emails of live directory users.
 SELECT
   i.id,
   i.kind,
@@ -340,7 +343,30 @@ SELECT
   i.attribute_key,
   i.attribute_value,
   i.occurrence,
-  i.created_at
+  i.created_at,
+  CASE
+    WHEN i.directory_group_id IS NOT NULL THEN (
+      SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+      FROM directory_user_group_memberships AS m
+      JOIN directory_users AS du
+        ON du.id = m.directory_user_id
+        AND du.organization_id = i.organization_id
+        AND du.deleted IS FALSE
+        AND du.workos_deleted IS FALSE
+      WHERE m.directory_group_id = i.directory_group_id
+        AND m.deleted IS FALSE
+        AND dg.deleted IS FALSE
+        AND dg.workos_deleted IS FALSE
+    )
+    ELSE (
+      SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+      FROM directory_users AS du
+      WHERE du.organization_id = i.organization_id
+        AND du.deleted IS FALSE
+        AND du.workos_deleted IS FALSE
+        AND du.attributes ->> i.attribute_key = i.attribute_value
+    )
+  END::bigint AS directory_people
 FROM directory_review_items AS i
 LEFT JOIN directory_groups AS dg
   ON dg.id = i.directory_group_id
@@ -348,6 +374,13 @@ LEFT JOIN directory_groups AS dg
 WHERE i.organization_id = @organization_id
   AND i.state = 'pending'
 ORDER BY i.created_at, i.id;
+
+-- name: GetDirectoryReviewItem :one
+-- An item of the organization, in any state.
+SELECT id, organization_id, kind, directory_group_id, attribute_key, attribute_value, occurrence, state
+FROM directory_review_items
+WHERE organization_id = @organization_id
+  AND id = @id;
 
 -- name: GetPendingDirectoryReviewItemForUpdate :one
 -- Locks a pending item so two admins cannot resolve it at once.

@@ -63,6 +63,46 @@ func (q *Queries) GetDirectoryGroupByWorkOSIDForReview(ctx context.Context, work
 	return i, err
 }
 
+const getDirectoryReviewItem = `-- name: GetDirectoryReviewItem :one
+SELECT id, organization_id, kind, directory_group_id, attribute_key, attribute_value, occurrence, state
+FROM directory_review_items
+WHERE organization_id = $1
+  AND id = $2
+`
+
+type GetDirectoryReviewItemParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type GetDirectoryReviewItemRow struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	Kind             string
+	DirectoryGroupID uuid.NullUUID
+	AttributeKey     pgtype.Text
+	AttributeValue   pgtype.Text
+	Occurrence       int32
+	State            string
+}
+
+// An item of the organization, in any state.
+func (q *Queries) GetDirectoryReviewItem(ctx context.Context, arg GetDirectoryReviewItemParams) (GetDirectoryReviewItemRow, error) {
+	row := q.db.QueryRow(ctx, getDirectoryReviewItem, arg.OrganizationID, arg.ID)
+	var i GetDirectoryReviewItemRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Kind,
+		&i.DirectoryGroupID,
+		&i.AttributeKey,
+		&i.AttributeValue,
+		&i.Occurrence,
+		&i.State,
+	)
+	return i, err
+}
+
 const getDirectoryReviewOrgState = `-- name: GetDirectoryReviewOrgState :one
 SELECT organization_id, baseline_at, emails_disabled_at, last_emailed_at, reminders_sent
 FROM directory_review_org_states
@@ -247,7 +287,30 @@ SELECT
   i.attribute_key,
   i.attribute_value,
   i.occurrence,
-  i.created_at
+  i.created_at,
+  CASE
+    WHEN i.directory_group_id IS NOT NULL THEN (
+      SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+      FROM directory_user_group_memberships AS m
+      JOIN directory_users AS du
+        ON du.id = m.directory_user_id
+        AND du.organization_id = i.organization_id
+        AND du.deleted IS FALSE
+        AND du.workos_deleted IS FALSE
+      WHERE m.directory_group_id = i.directory_group_id
+        AND m.deleted IS FALSE
+        AND dg.deleted IS FALSE
+        AND dg.workos_deleted IS FALSE
+    )
+    ELSE (
+      SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+      FROM directory_users AS du
+      WHERE du.organization_id = i.organization_id
+        AND du.deleted IS FALSE
+        AND du.workos_deleted IS FALSE
+        AND du.attributes ->> i.attribute_key = i.attribute_value
+    )
+  END::bigint AS directory_people
 FROM directory_review_items AS i
 LEFT JOIN directory_groups AS dg
   ON dg.id = i.directory_group_id
@@ -266,8 +329,12 @@ type ListPendingDirectoryReviewItemsRow struct {
 	AttributeValue     pgtype.Text
 	Occurrence         int32
 	CreatedAt          pgtype.Timestamptz
+	DirectoryPeople    int64
 }
 
+// An organization's pending items, oldest first, with the directory people
+// each source matches now, counted as bulk setup counts them: distinct
+// emails of live directory users.
 func (q *Queries) ListPendingDirectoryReviewItems(ctx context.Context, organizationID string) ([]ListPendingDirectoryReviewItemsRow, error) {
 	rows, err := q.db.Query(ctx, listPendingDirectoryReviewItems, organizationID)
 	if err != nil {
@@ -286,6 +353,7 @@ func (q *Queries) ListPendingDirectoryReviewItems(ctx context.Context, organizat
 			&i.AttributeValue,
 			&i.Occurrence,
 			&i.CreatedAt,
+			&i.DirectoryPeople,
 		); err != nil {
 			return nil, err
 		}

@@ -91,7 +91,7 @@ func ReconcileGroup(ctx context.Context, dbtx database.DBTX, organizationID stri
 	var changes Changes
 
 	superseded, err := q.SupersedeDirectoryReviewItems(ctx, repo.SupersedeDirectoryReviewItemsParams{
-		OrganizationID: organizationID, DirectoryGroupID: group, AttributeKey: pgtype.Text{}, AttributeValue: pgtype.Text{},
+		OrganizationID: organizationID, DirectoryGroupID: group, AttributeKey: pgtype.Text{String: "", Valid: false}, AttributeValue: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return changes, fmt.Errorf("supersede group review items: %w", err)
@@ -126,7 +126,7 @@ func reconcileAttributeValue(ctx context.Context, dbtx database.DBTX, organizati
 	var changes Changes
 
 	superseded, err := q.SupersedeDirectoryReviewItems(ctx, repo.SupersedeDirectoryReviewItemsParams{
-		OrganizationID: organizationID, DirectoryGroupID: uuid.NullUUID{}, AttributeKey: conv.ToPGText(key), AttributeValue: conv.ToPGText(value),
+		OrganizationID: organizationID, DirectoryGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, AttributeKey: conv.ToPGText(key), AttributeValue: conv.ToPGText(value),
 	})
 	if err != nil {
 		return changes, fmt.Errorf("supersede attribute review items: %w", err)
@@ -148,7 +148,7 @@ func reconcileAttributeValue(ctx context.Context, dbtx database.DBTX, organizati
 // such as after the key is opted out of new-value decisions.
 func SupersedeAttributeKey(ctx context.Context, dbtx database.DBTX, organizationID, key string) (Changes, error) {
 	superseded, err := repo.New(dbtx).SupersedeDirectoryReviewItems(ctx, repo.SupersedeDirectoryReviewItemsParams{
-		OrganizationID: organizationID, DirectoryGroupID: uuid.NullUUID{}, AttributeKey: conv.ToPGText(key), AttributeValue: pgtype.Text{},
+		OrganizationID: organizationID, DirectoryGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, AttributeKey: conv.ToPGText(key), AttributeValue: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return Changes{}, fmt.Errorf("supersede attribute key review items: %w", err)
@@ -302,27 +302,27 @@ func ReconcileOrganization(ctx context.Context, dbtx database.DBTX, organization
 	}
 
 	superseded, err := q.SupersedeDirectoryReviewItems(ctx, repo.SupersedeDirectoryReviewItemsParams{
-		OrganizationID: organizationID, DirectoryGroupID: uuid.NullUUID{}, AttributeKey: pgtype.Text{}, AttributeValue: pgtype.Text{},
+		OrganizationID: organizationID, DirectoryGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, AttributeKey: pgtype.Text{String: "", Valid: false}, AttributeValue: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return changes, fmt.Errorf("supersede review items: %w", err)
 	}
 	changes.Superseded = items(superseded)
 
-	newGroups, err := q.OpenNewGroupItems(ctx, repo.OpenNewGroupItemsParams{OrganizationID: organizationID, DirectoryGroupID: uuid.NullUUID{}})
+	newGroups, err := q.OpenNewGroupItems(ctx, repo.OpenNewGroupItemsParams{OrganizationID: organizationID, DirectoryGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	if err != nil {
 		return changes, fmt.Errorf("open new group review items: %w", err)
 	}
 	changes.Opened = append(changes.Opened, items(newGroups)...)
 
-	missingGroups, err := q.OpenMissingGroupItems(ctx, repo.OpenMissingGroupItemsParams{OrganizationID: organizationID, DirectoryGroupID: uuid.NullUUID{}})
+	missingGroups, err := q.OpenMissingGroupItems(ctx, repo.OpenMissingGroupItemsParams{OrganizationID: organizationID, DirectoryGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	if err != nil {
 		return changes, fmt.Errorf("open missing group review items: %w", err)
 	}
 	changes.Opened = append(changes.Opened, items(missingGroups)...)
 
 	missingAttributes, err := q.OpenMissingAttributeItems(ctx, repo.OpenMissingAttributeItemsParams{
-		OrganizationID: organizationID, AttributeKey: pgtype.Text{}, AttributeValue: pgtype.Text{}, AllowRecurrence: false,
+		OrganizationID: organizationID, AttributeKey: pgtype.Text{String: "", Valid: false}, AttributeValue: pgtype.Text{String: "", Valid: false}, AllowRecurrence: false,
 	})
 	if err != nil {
 		return changes, fmt.Errorf("open missing attribute review items: %w", err)
