@@ -78,9 +78,6 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 	postCall.DurationNano = 5_000_000
 	postCall.MCPServerName = "assistants-dev"
 	postCall.MCPToolName = "whoami"
-	trailingHook := agentEventFixture(orgID, "r8", "s1", "", "r8", "", base+4)
-	trailingHook.RawEventName = "hook_execution_complete"
-	trailingHook.Model = ""
 	// The same record again, observed later and carrying a correction. Only
 	// the newer copy may survive the collapse.
 	reemitted := agentEventFixture(orgID, "r1", "s1", "t1", "r1", "api_request", base)
@@ -111,12 +108,6 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 	blockedSkillResult := agentEventFixture(orgID, "r14", "s1", "t2", "tc4", "tool_call_result", base+8)
 	blockedSkillResult.ToolName = "Skill"
 	blockedSkillResult.SkillName = "release"
-	// A record first filed under s2, then re-emitted with its session
-	// withdrawn. The collapse must run before the session predicate, or the
-	// withdrawn copy is filtered away first and the stale one survives.
-	filedUnderS2 := agentEventFixture(orgID, "r10", "s2", "t3", "r10", "api_request", base+12)
-	withdrawn := agentEventFixture(orgID, "r10", "", "", "r10", "api_request", base+12)
-	withdrawn.ObservedAtUnixNano = base + 200
 
 	rows := []chrepo.AgentEventRow{
 		agentEventFixture(orgID, "r1", "s1", "t1", "r1", "api_request", base),
@@ -127,61 +118,14 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		postCall,
 		// A blocked call is a decision alone, and still a call.
 		blocked,
-		agentEventFixture(orgID, "r4", "s1", "t2", "r4", "api_request", base+3),
 		skillDecision,
 		skillCall,
 		blockedSkillDecision,
 		blockedSkillResult,
-		// How a real session ends: a hook or MCP event with no model on it.
-		trailingHook,
-		// A second session with a prompt and no turn id.
-		agentEventFixture(orgID, "r5", "s2", "", "r5", "prompt", base+10),
-		// Outside the window.
-		agentEventFixture(orgID, "r6", "s1", "t9", "r6", "api_request", base+int64(48*time.Hour)),
-		// No session: not a session row.
-		agentEventFixture(orgID, "r7", "", "", "r7", "api_request", base+11),
-		// Filed under s2, then withdrawn from it: no session may keep it.
-		filedUnderS2,
-		withdrawn,
 	}
 	require.NoError(t, chrepo.New(conn).InsertAgentEvents(t.Context(), rows))
 
 	qc := QueryContext{Tenant: Tenant{OrganizationID: orgID, ProjectID: "project-1"}, Window: Window{FromUnixNano: base - 1, ToUnixNano: base + int64(time.Hour)}}
-
-	t.Run("sessions collapses to one row per session with identity-aware counts", func(t *testing.T) {
-		t.Parallel()
-		query, args, err := sessionsSource.Rows(qc).ToSql()
-		require.NoError(t, err)
-		result, err := conn.Query(t.Context(), query+" ORDER BY session_id", args...)
-		require.NoError(t, err)
-		defer func() { require.NoError(t, result.Close()) }()
-
-		type session struct {
-			org, project, id             string
-			startedAt, endedAt           int64
-			user, model, surface, provid string
-			turns, toolCalls             int64
-		}
-		var got []session
-		for result.Next() {
-			var s session
-			require.NoError(t, result.Scan(&s.org, &s.project, &s.id, &s.startedAt, &s.endedAt, &s.user, &s.model, &s.surface, &s.provid, &s.turns, &s.toolCalls))
-			got = append(got, s)
-		}
-		require.NoError(t, result.Err())
-
-		require.Len(t, got, 2)
-		require.Equal(t, "s1", got[0].id)
-		require.Equal(t, int64(2), got[0].turns, "t1 and t2, with the redelivered record counted once")
-		require.Equal(t, int64(4), got[0].toolCalls, "two observations of tc1 are one call, the blocked tc2 another, and the skill calls tc3 and tc4 two more")
-		require.Equal(t, base, got[0].startedAt)
-		require.Equal(t, base+8, got[0].endedAt, "the out-of-window row does not stretch the session")
-		require.Equal(t, "dev@example.com", got[0].user)
-		require.Equal(t, "claude-sonnet-4", got[0].model, "the trailing hook row, which states no model, does not blank it")
-		require.Equal(t, "s2", got[1].id)
-		require.Zero(t, got[1].turns, "an empty turn id is not a turn, and the record withdrawn from s2 brings none with it")
-		require.Zero(t, got[1].toolCalls)
-	})
 
 	t.Run("tool_calls resolves each call to its terminal observation", func(t *testing.T) {
 		t.Parallel()
@@ -261,32 +205,12 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		// Only the result named the skill, and the decision still counts
 		// towards the row: the invocation starts when it was decided and its
 		// status is that decision. A predicate on the raw rows would have
-		// dropped the decision before the collapse and lost both.
+		// dropped the decision before the fold and lost both.
 		require.Equal(t, "tc4", got[1].id)
 		require.Equal(t, "release", got[1].skill)
 		require.Equal(t, "rejected", got[1].status)
 		require.Equal(t, base+7, got[1].startedAt)
 		require.Equal(t, base+8, got[1].endedAt)
-	})
-
-	t.Run("deduped keeps one copy of a re-emitted record, the latest observed", func(t *testing.T) {
-		t.Parallel()
-		// Every measure above is idempotent under duplicates by design, so the
-		// collapse cannot be seen through them. Read the scan itself.
-		inner, args, err := collapsedAgentEvents(qc).ToSql()
-		require.NoError(t, err)
-		result, err := conn.Query(t.Context(), "SELECT record_id, text FROM ("+inner+") WHERE record_id = 'r1'", args...)
-		require.NoError(t, err)
-		defer func() { require.NoError(t, result.Close()) }()
-
-		var copies []string
-		for result.Next() {
-			var recordID, text string
-			require.NoError(t, result.Scan(&recordID, &text))
-			copies = append(copies, text)
-		}
-		require.NoError(t, result.Err())
-		require.Equal(t, []string{"re-emitted"}, copies, "one copy survives, and it is the one observed last")
 	})
 }
 

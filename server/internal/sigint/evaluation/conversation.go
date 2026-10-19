@@ -3,6 +3,8 @@ package evaluation
 import (
 	"context"
 	"fmt"
+	"maps"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
@@ -13,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
+	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
@@ -212,7 +215,9 @@ func (in *conversationInput) Event() Event {
 	subject.SetId(m.GetMessageId())
 	subject.SetOccurredAt(m.GetMessageCreatedAt())
 	subject.SetConversationMessage(messageContext)
-	event := Event{OrganizationID: m.GetOrganizationId(), ProjectID: m.GetProjectId(), Subject: subject, Actor: nil, BillingUserID: nil, Source: nil, Account: nil, AssistantID: nil, Replayed: nil}
+	// Invalid request timestamps become zero and are rejected before evaluation.
+	requestedAt, _ := time.Parse(time.RFC3339Nano, m.GetOccurredAt())
+	event := Event{Evaluation: readings.Context{TriggerKind: readings.TriggerStream, RunID: uuid.Nil, RequestedAt: requestedAt}, OrganizationID: m.GetOrganizationId(), ProjectID: m.GetProjectId(), Subject: subject, Actor: nil, BillingUserID: nil, Source: nil, Account: nil, AssistantID: nil, Replayed: nil, Attributes: nil}
 	actor := &sigintv1.Reading_Actor{}
 	if p.UserID.Valid {
 		actor.SetUserId(p.UserID.String)
@@ -226,6 +231,7 @@ func (in *conversationInput) Event() Event {
 	}
 
 	if source := m.GetIngestion(); source != nil {
+		event.Attributes = maps.Clone(source.GetAttributes())
 		if source.HasObservedUserEmail() {
 			actor.SetUserEmail(source.GetObservedUserEmail())
 		}

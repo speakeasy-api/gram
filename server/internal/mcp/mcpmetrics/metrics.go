@@ -89,7 +89,7 @@ type Metrics struct {
 
 	// requestCensus is the unsampled per-request census (mcp.request) emitted
 	// at the JSON-RPC dispatch sites for the hosted and platform surfaces. The
-	// remote/tunnel /x/mcp backends publish the same instrument from the
+	// remote/tunnel /mcp backends publish the same instrument from the
 	// proxy's request interceptor, which constructs its own [RequestCounter].
 	requestCensus *RequestCounter
 
@@ -377,14 +377,14 @@ func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, logger *slog.Lo
 	counter.RecordToolsetSlugFallback(ctx, logger, hit)
 }
 
-// RecordLegacyAudienceAccepted counts one bearer accepted via the legacy
-// toolset-URN audience. Semantics on
+// RecordLegacyAudienceAccepted logs and counts one bearer accepted via the
+// legacy toolset-URN audience. Semantics on
 // [LegacyFallbackCounter.RecordLegacyAudienceAccepted].
-func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, issuerID string) {
+func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, logger *slog.Logger, hit LegacyAudienceAccepted) {
 	if m == nil {
 		return
 	}
-	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, issuerID)
+	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, logger, hit)
 }
 
 // RecordMCPInitialize counts one observed MCP handshake, dimensioned by the
@@ -419,7 +419,7 @@ func (m *Metrics) RecordMCPInitialize(ctx context.Context, requested, negotiated
 // surface. The census semantics — what counts, what the version dimension
 // means, and how this relates to `mcp.initialize` and `mcp.request.duration` —
 // are documented on [RequestCounter.Record], which the remote proxy's
-// interceptor invokes directly for the /x/mcp traffic that never reaches the
+// interceptor invokes directly for the proxied traffic that never reaches the
 // mcp dispatch.
 func (m *Metrics) RecordMCPRequest(ctx context.Context, protocolVersion, method string, surface Surface) {
 	if m == nil {

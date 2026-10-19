@@ -64,9 +64,7 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 			}
 
 			origin := r.Header.Get("Origin")
-			if r.Method == http.MethodPost && origin == "" && r.Referer() == "" && (r.URL.Path == "/admin-mcp" || r.URL.Path == "/admin-mcp/token" || r.URL.Path == "/admin-mcp/register") {
-				// These endpoints authenticate through MCP bearer tokens or OAuth
-				// client credentials, not browser cookies. Consent is never exempt.
+			if origin == "" && r.Referer() == "" && tokenAuthenticatedRoute(r) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -90,6 +88,21 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 
 			http.Error(w, "forbidden: origin not allowed", http.StatusForbidden)
 		})
+	}
+}
+
+// tokenAuthenticatedRoute reports whether a request targets an endpoint that
+// authenticates through its own bearer token or OAuth client credentials, not
+// browser cookies, so it needs no CSRF Origin check. Consent is never exempt.
+func tokenAuthenticatedRoute(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodPost:
+		return r.URL.Path == "/admin-mcp" || r.URL.Path == "/admin-mcp/token" || r.URL.Path == "/admin-mcp/register"
+	case http.MethodPut:
+		// The staff image upload, redeemed by a single-use upload token.
+		return r.URL.Path == "/admin/assets.uploadImage"
+	default:
+		return false
 	}
 }
 

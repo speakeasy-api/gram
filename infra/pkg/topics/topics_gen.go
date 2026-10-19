@@ -56,6 +56,8 @@ const (
 	GramPluginsV1OrganizationPublicationRequested Topic = "gram.plugins.v1.OrganizationPublicationRequested"
 	// GramPluginsV1PublicationRequested publishes to gram-plugins-v1-publication-requested.
 	GramPluginsV1PublicationRequested Topic = "gram.plugins.v1.PublicationRequested"
+	// GramRiskV1AccountIdentityAnalysis publishes to gram-risk-v1-account-identity-analysis.
+	GramRiskV1AccountIdentityAnalysis Topic = "gram.risk.v1.AccountIdentityAnalysis"
 	// GramRiskV1CustomRulesAnalysis publishes to gram-risk-v1-custom-rules-analysis.
 	GramRiskV1CustomRulesAnalysis Topic = "gram.risk.v1.CustomRulesAnalysis"
 	// GramRiskV1Finding publishes to gram-risk-v1-finding.
@@ -76,8 +78,12 @@ const (
 	GramRiskV1PromptInjectionAnalysis Topic = "gram.risk.v1.PromptInjectionAnalysis"
 	// GramRiskV1PromptPolicyAnalysis publishes to gram-risk-v1-prompt-policy-analysis.
 	GramRiskV1PromptPolicyAnalysis Topic = "gram.risk.v1.PromptPolicyAnalysis"
+	// GramRiskV1ToolCallAnalysis publishes to gram-risk-v1-tool-call-analysis.
+	GramRiskV1ToolCallAnalysis Topic = "gram.risk.v1.ToolCallAnalysis"
 	// GramRole_distributionV1RoleDistributionSetupRequestedV1 publishes to gram-role-distribution-v1-role-distribution-setup-requested-v1.
 	GramRole_distributionV1RoleDistributionSetupRequestedV1 Topic = "gram.role_distribution.v1.RoleDistributionSetupRequestedV1"
+	// GramSigintV1Outcome publishes to gram-sigint-v1-outcome.
+	GramSigintV1Outcome Topic = "gram.sigint.v1.Outcome"
 	// GramSigintV1Reading publishes to gram-sigint-v1-reading.
 	GramSigintV1Reading Topic = "gram.sigint.v1.Reading"
 	// GramTelemetryV1LogRecord publishes to gram-telemetry-v1-log-record.
@@ -104,6 +110,7 @@ func All() []Topic {
 		GramPingV2Message,
 		GramPluginsV1OrganizationPublicationRequested,
 		GramPluginsV1PublicationRequested,
+		GramRiskV1AccountIdentityAnalysis,
 		GramRiskV1CustomRulesAnalysis,
 		GramRiskV1Finding,
 		GramRiskV1GitleaksAnalysis,
@@ -114,7 +121,9 @@ func All() []Topic {
 		GramRiskV1PresidioEnforcement,
 		GramRiskV1PromptInjectionAnalysis,
 		GramRiskV1PromptPolicyAnalysis,
+		GramRiskV1ToolCallAnalysis,
 		GramRole_distributionV1RoleDistributionSetupRequestedV1,
+		GramSigintV1Outcome,
 		GramSigintV1Reading,
 		GramTelemetryV1LogRecord,
 		GramTelemetryV1SessionObserved,
@@ -151,6 +160,8 @@ func Lookup(name string) (Topic, bool) {
 		return GramPluginsV1OrganizationPublicationRequested, true
 	case GramPluginsV1PublicationRequested:
 		return GramPluginsV1PublicationRequested, true
+	case GramRiskV1AccountIdentityAnalysis:
+		return GramRiskV1AccountIdentityAnalysis, true
 	case GramRiskV1CustomRulesAnalysis:
 		return GramRiskV1CustomRulesAnalysis, true
 	case GramRiskV1Finding:
@@ -171,8 +182,12 @@ func Lookup(name string) (Topic, bool) {
 		return GramRiskV1PromptInjectionAnalysis, true
 	case GramRiskV1PromptPolicyAnalysis:
 		return GramRiskV1PromptPolicyAnalysis, true
+	case GramRiskV1ToolCallAnalysis:
+		return GramRiskV1ToolCallAnalysis, true
 	case GramRole_distributionV1RoleDistributionSetupRequestedV1:
 		return GramRole_distributionV1RoleDistributionSetupRequestedV1, true
+	case GramSigintV1Outcome:
+		return GramSigintV1Outcome, true
 	case GramSigintV1Reading:
 		return GramSigintV1Reading, true
 	case GramTelemetryV1LogRecord:
@@ -218,6 +233,8 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &pluginsv1.OrganizationPublicationRequested{}, gcp.WithEncodedPublishSettings(settings))
 	case GramPluginsV1PublicationRequested:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &pluginsv1.PublicationRequested{}, gcp.WithEncodedPublishSettings(settings))
+	case GramRiskV1AccountIdentityAnalysis:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.AccountIdentityAnalysis{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1CustomRulesAnalysis:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.CustomRulesAnalysis{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1Finding:
@@ -238,8 +255,12 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.PromptInjectionAnalysis{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1PromptPolicyAnalysis:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.PromptPolicyAnalysis{}, gcp.WithEncodedPublishSettings(settings))
+	case GramRiskV1ToolCallAnalysis:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.ToolCallAnalysis{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRole_distributionV1RoleDistributionSetupRequestedV1:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &roledistributionv1.RoleDistributionSetupRequestedV1{}, gcp.WithEncodedPublishSettings(settings))
+	case GramSigintV1Outcome:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &sigintv1.Outcome{}, gcp.WithEncodedPublishSettings(settings))
 	case GramSigintV1Reading:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &sigintv1.Reading{}, gcp.WithEncodedPublishSettings(settings))
 	case GramTelemetryV1LogRecord:

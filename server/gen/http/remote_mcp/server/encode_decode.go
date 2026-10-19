@@ -3770,8 +3770,42 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
 		Visibility:            string(v.Visibility),
 		NetworkAccessMode:     string(v.NetworkAccessMode),
+		PrimaryEndpointID:     v.PrimaryEndpointID,
+		PrimaryEndpointURL:    v.PrimaryEndpointURL,
 		CreatedAt:             v.CreatedAt,
 		UpdatedAt:             v.UpdatedAt,
+	}
+	if v.Toolset != nil {
+		res.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v.Toolset)
+	}
+
+	return res
+}
+
+// marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody
+// builds a value of type *McpServerToolsetSummaryResponseBody from a value of
+// type *types.McpServerToolsetSummary.
+func marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v *types.McpServerToolsetSummary) *McpServerToolsetSummaryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &McpServerToolsetSummaryResponseBody{
+		ID:                    v.ID,
+		Slug:                  v.Slug,
+		Name:                  v.Name,
+		ToolCount:             v.ToolCount,
+		ToolSelectionMode:     v.ToolSelectionMode,
+		ExternalMcpProxyOnly:  v.ExternalMcpProxyOnly,
+		ExternalOauthServerID: v.ExternalOauthServerID,
+		RegistrySpecifier:     v.RegistrySpecifier,
+	}
+	if v.ExternalMcpSlugs != nil {
+		res.ExternalMcpSlugs = make([]string, len(v.ExternalMcpSlugs))
+		for i, val := range v.ExternalMcpSlugs {
+			res.ExternalMcpSlugs[i] = val
+		}
+	} else {
+		res.ExternalMcpSlugs = []string{}
 	}
 
 	return res

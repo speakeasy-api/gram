@@ -2944,10 +2944,10 @@ paths:
       x-speakeasy-react-hook:
         name: SetAIToolDecision
         type: mutation
-  /rpc/access.setDirectoryRoleMapping:
+  /rpc/access.setDirectoryRoleMappings:
     post:
-      description: Map a directory group or attribute value to a role, replacing any role it was mapped to before.
-      operationId: setDirectoryRoleMapping
+      description: Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.
+      operationId: setDirectoryRoleMappings
       parameters:
         - allowEmptyValue: true
           description: API Key header
@@ -2967,14 +2967,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SetDirectoryRoleMappingForm'
+              $ref: '#/components/schemas/SetDirectoryRoleMappingsForm'
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DirectoryRoleMapping'
+                items:
+                  $ref: '#/components/schemas/DirectoryRoleMapping'
+                type: array
           description: OK response.
         "400":
           content:
@@ -3034,12 +3036,12 @@ paths:
         - apikey_header_Gram-Key: []
         - session_header_Gram-Session: []
         - {}
-      summary: setDirectoryRoleMapping access
+      summary: setDirectoryRoleMappings access
       tags:
         - access
-      x-speakeasy-name-override: setDirectoryRoleMapping
+      x-speakeasy-name-override: setDirectoryRoleMappings
       x-speakeasy-react-hook:
-        name: SetDirectoryRoleMapping
+        name: SetDirectoryRoleMappings
         type: mutation
   /rpc/access.setResourceAudience:
     post:
@@ -38650,6 +38652,88 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: OrganizationRemoteSessionIssuers
+  /rpc/organizationRemoteSessionIssuers.listEMAServices:
+    get:
+      description: 'List every service identity chaining reaches in the caller''s organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and the MCP servers that chain through it: counts include every server, the list only those the caller has mcp:read on. Requires org:read.'
+      operationId: listOrganizationRemoteSessionIssuerEMAServices
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEMAServicesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listEMAServices organizationRemoteSessionIssuers
+      tags:
+        - organizationRemoteSessionIssuers
+      x-speakeasy-name-override: listEMAServices
+      x-speakeasy-react-hook:
+        name: OrganizationRemoteSessionIssuerEMAServices
   /rpc/organizationRemoteSessionIssuers.migrate:
     post:
       description: 'Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller''s organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.'
@@ -38940,7 +39024,7 @@ paths:
         name: RefreshOrganizationRemoteSessionIssuerMetadata
   /rpc/organizationRemoteSessionIssuers.setEMAProviders:
     post:
-      description: 'Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint''s authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the default: the endpoint''s configured external issuer. Speakeasy is used only for vendors whose list names it. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
+      description: 'Replace the EMA providers the vendor authorization server this issuer names accepts, the providers that may issue ID-JAGs for it. They are stored as an ordered list, but each endpoint can use only the provider its sign-in goes through: the sign-in''s trusted external issuer, or the organization''s Speakeasy issuer for a sign-in that trusts none. So the list acts as the set of accepted providers, and its order does not change who vouches; a list that leaves out an endpoint''s provider leaves that endpoint with nobody to vouch. An empty list restores the derived default, which accepts every provider: an endpoint whose sign-in trusts an external issuer uses that issuer alone, and one that trusts none uses the organization''s Speakeasy issuer when it has one. The list applies organization-wide to every issuer with the same canonical issuer URL. With expected_providers, the write happens only while the saved list still matches it. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
       operationId: setOrganizationRemoteSessionIssuerEMAProviders
       parameters:
         - allowEmptyValue: true
@@ -55315,130 +55399,6 @@ paths:
       x-speakeasy-react-hook:
         name: RiskGetPolicyChallenge
         type: mutation
-  /rpc/risk.getRuleBreakdown:
-    get:
-      description: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.
-      operationId: getRiskRuleBreakdown
-      parameters:
-        - allowEmptyValue: true
-          description: Required category key to break down by rule_id (e.g. secrets, pii).
-          in: query
-          name: category
-          required: true
-          schema:
-            description: Required category key to break down by rule_id (e.g. secrets, pii).
-            type: string
-        - allowEmptyValue: true
-          description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
-          in: query
-          name: from
-          schema:
-            description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
-            format: date-time
-            type: string
-        - allowEmptyValue: true
-          description: Exclusive end of the window. Defaults to now.
-          in: query
-          name: to
-          schema:
-            description: Exclusive end of the window. Defaults to now.
-            format: date-time
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RiskRuleBreakdownResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: getRiskRuleBreakdown risk
-      tags:
-        - risk
-      x-speakeasy-group: risk.overview
-      x-speakeasy-name-override: rules
-      x-speakeasy-react-hook:
-        name: RiskRuleBreakdown
   /rpc/risk.getSignals:
     get:
       description: Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.
@@ -55565,7 +55525,7 @@ paths:
         name: RiskSignals
   /rpc/risk.getUserBreakdown:
     get:
-      description: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.
+      description: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the risk panels on identity pages.
       operationId: getRiskUserBreakdown
       parameters:
         - allowEmptyValue: true
@@ -79016,6 +78976,110 @@ paths:
       x-speakeasy-name-override: admitSubject
       x-speakeasy-react-hook:
         name: AdmitWorkloadSubject
+  /rpc/workloadIdentities.createDeviceJoinToken:
+    post:
+      description: 'Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Only a person can create one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent''s policy.'
+      operationId: createWorkloadDeviceJoinToken
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeviceJoinTokenRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadDeviceJoinToken'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createDeviceJoinToken workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: createDeviceJoinToken
+      x-speakeasy-react-hook:
+        name: CreateWorkloadDeviceJoinToken
   /rpc/workloadIdentities.getCustomFlows:
     get:
       description: 'Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.'
@@ -79408,6 +79472,81 @@ paths:
       x-speakeasy-name-override: listTokenEndpoints
       x-speakeasy-react-hook:
         name: WorkloadTokenEndpoints
+  /rpc/workloadIdentities.registerDevice:
+    post:
+      description: 'Enroll a device with its public key, redeeming a join token. No session or API key: the single-use join token is the credential, and an unknown, expired, or already redeemed token returns 401. A key already registered to another device returns 409, and an agent whose policy no longer grants org:device_agent_sync returns a failed precondition without spending the token. In one transaction the device''s key is registered, the device is admitted under the organization''s Speakeasy device issuer, and it is assigned the token''s agent.'
+      operationId: registerWorkloadDevice
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadDeviceRegistration'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: registerDevice workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: registerDevice
   /rpc/workloadIdentities.registerIssuer:
     post:
       description: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
@@ -81561,7 +81700,7 @@ components:
         grain:
           type: string
           description: What one row represents, as a noun
-          example: session
+          example: tool call
         kind:
           type: string
           enum:
@@ -81569,7 +81708,7 @@ components:
             - metric
         name:
           type: string
-          example: sessions
+          example: tool_calls
       description: A dataset and the fields it exposes. The builder is generated from this.
       required:
         - name
@@ -81654,7 +81793,7 @@ components:
         unit:
           type: string
           description: Unit of a measure, when it has one
-          example: s
+          example: ms
       description: One queryable field on a dataset.
       required:
         - name
@@ -81699,11 +81838,11 @@ components:
         alias:
           type: string
           description: Result column name. Defaults to the op, or op_field.
-          example: tool_calls
+          example: total_ms
         field:
           type: string
           description: 'Field the op applies to: a dimension for count_distinct, a measure otherwise. Absent for count.'
-          example: tool_call_count
+          example: duration_ms
         op:
           type: string
           description: Aggregation to apply. count takes no field; count_distinct takes a dimension that admits it; every other op needs a measure field that admits it, per describe.
@@ -81733,7 +81872,7 @@ components:
         measure:
           type: string
           description: Alias of a requested measure
-          example: tool_calls
+          example: total_ms
       description: Sort a grouped result by one of its measures.
       required:
         - measure
@@ -81743,7 +81882,7 @@ components:
         dataset:
           type: string
           description: Dataset to query, per describe
-          example: sessions
+          example: tool_calls
         dimensions:
           type: array
           items:
@@ -84486,6 +84625,22 @@ components:
       required:
         - name
         - destination_type
+    CreateDeviceJoinTokenRequestBody:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent the enrolled device inherits its policy from.
+          format: uuid
+        expires_in_seconds:
+          type: integer
+          description: How long the token stays redeemable. Defaults to one hour.
+          default: 3600
+          format: int64
+          minimum: 60
+          maximum: 86400
+      required:
+        - agent_id
     CreateDomainRequestBody:
       type: object
       properties:
@@ -87194,11 +87349,11 @@ components:
         dataset:
           type: string
           description: Dataset to look in
-          example: sessions
+          example: tool_calls
         dimension:
           type: string
           description: Dimension to list values of
-          example: model
+          example: tool_name
         from:
           type: string
           description: Start of the half-open window [from, to), ISO 8601
@@ -87461,13 +87616,17 @@ components:
           enum:
             - external
             - speakeasy
+        last_accepted_at:
+          type: string
+          description: When the vendor last accepted an assertion from this provider anywhere in the organization, so the vendor already trusts it, from cached credentials that still hold an access token. Attributed to the exact issuer that vouched; the organization-wide default's external entry takes the newest acceptance of any external issuer. Set on every response that returns an order; omitted when the vendor has never accepted it, when acceptance could not be read, or on readEMA when the caller lacks org:read.
+          format: date-time
         remote_session_issuer_id:
           type: string
-          description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
+          description: The external provider's remote session issuer. Omitted for speakeasy, and in the organization-wide default order, where an external entry stands for each endpoint's own trusted issuer.
           format: uuid
         unavailable_reason:
           type: string
-          description: Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
+          description: 'Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint''s sign-in doesn''t go through this provider, so it can''t vouch for people there: an external issuer other than the sign-in''s trusted issuer, or Speakeasy on a sign-in federated through an external issuer. readiness_unknown means the Speakeasy issuer''s state could not be read just now; retry the read.'
           enum:
             - deleted
             - disabled
@@ -87480,7 +87639,7 @@ components:
             - signing_paused
             - sign_in_enforcement_required
             - readiness_unknown
-      description: One EMA provider in a vendor's order.
+      description: One EMA provider a vendor accepts.
       required:
         - kind
     EMAProviderInput:
@@ -87504,20 +87663,111 @@ components:
       properties:
         is_default:
           type: boolean
-          description: No order is saved, so the endpoint uses its configured external issuer.
+          description: Nothing is saved, so every provider is accepted. An endpoint whose sign-in trusts an external issuer uses that issuer alone; one that trusts none uses the organization's Speakeasy issuer when it has one.
         providers:
           type: array
           items:
             $ref: '#/components/schemas/EMAProvider'
-          description: The saved providers in order, or the external default.
+          description: The saved providers in their stored order, or the derived default described by is_default.
         vendor_issuer:
           type: string
           description: The vendor authorization server issuer, canonicalized.
-      description: The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.
+      description: The EMA providers one vendor authorization server accepts, saved or default. They are stored as an ordered list that identity chaining tries in turn, but each endpoint can use only the provider its sign-in goes through, so the list acts as the set of accepted providers.
       required:
         - vendor_issuer
         - is_default
         - providers
+    EMAService:
+      type: object
+      properties:
+        ema_providers:
+          $ref: '#/components/schemas/EMAProviderOrder'
+        hidden_server_count:
+          type: integer
+          description: Counted servers the caller cannot read; they are not named.
+          format: int64
+        name:
+          type: string
+          description: The vendor's display name, from an issuer record that names it. Empty when none has one.
+        ready_server_count:
+          type: integer
+          description: Of those, how many have a ready binding, including servers the caller cannot read.
+          format: int64
+        remote_session_issuer_id:
+          type: string
+          description: An issuer record the organization can name for this vendor, organization-level first, to pass to setEMAProviders. Omitted only when no issuer record names the vendor any more.
+          format: uuid
+        server_count:
+          type: integer
+          description: Distinct live MCP servers whose identity chaining binding for this vendor has been turned on, in any state after setup, including servers the caller cannot read.
+          format: int64
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EMAServiceServer'
+          description: The counted servers the caller can read (mcp:read), ordered by project and name.
+        vendor_issuer:
+          type: string
+          description: The vendor authorization server issuer, canonicalized.
+      description: 'One service identity chaining reaches in the organization: a vendor authorization server, the identity providers that can vouch for people to it with whether the vendor has accepted each, and the MCP servers that chain through it.'
+      required:
+        - vendor_issuer
+        - name
+        - ema_providers
+        - server_count
+        - ready_server_count
+        - servers
+        - hidden_server_count
+    EMAServiceServer:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The MCP server id.
+          format: uuid
+        last_accepted_at:
+          type: string
+          description: When the vendor last accepted an assertion for this server from a provider that can vouch now. Omitted when never.
+          format: date-time
+        name:
+          type: string
+          description: The MCP server name. Empty when it has none.
+        project_id:
+          type: string
+          description: The owning project.
+          format: uuid
+        project_name:
+          type: string
+          description: The owning project's name.
+        project_slug:
+          type: string
+          description: The owning project's slug.
+        sign_in_issuer_id:
+          type: string
+          description: 'The remote session issuer the server''s sign-in trusts, such as an Okta authorization server: only that issuer can vouch for people on the server. Omitted when the server uses Speakeasy''s own sign-in, where only Speakeasy can vouch.'
+          format: uuid
+        sign_in_issuer_name:
+          type: string
+          description: The display name of sign_in_issuer_id. Omitted with it, or when the issuer has no name.
+        slug:
+          type: string
+          description: The MCP server slug. Empty when it has none.
+        status:
+          type: string
+          description: 'working: on, and the vendor accepted an assertion for this server from a provider that can vouch now. not_proven: on, with no such acceptance yet. needs_attention: on but blocked, or no provider can vouch for it right now.'
+          enum:
+            - working
+            - not_proven
+            - needs_attention
+      description: One live MCP server whose identity chaining binding for the service has been turned on.
+      required:
+        - id
+        - name
+        - slug
+        - project_id
+        - project_slug
+        - project_name
+        - status
     EmployeeDataFlowEdge:
       type: object
       properties:
@@ -89752,12 +90002,16 @@ components:
           $ref: '#/components/schemas/DeviceAgentConfiguration'
         etag:
           type: string
-          description: Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.
+          description: Opaque revision identifier covering the marketplace, plugin, remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
         marketplaces:
           type: array
           items:
             $ref: '#/components/schemas/AgentMarketplace'
           description: Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
+        organization_gateway_url:
+          type: string
+          description: URL of the active organization's gateway. Absent when the organization gateway is unavailable.
+          format: uri
         plugins:
           type: array
           items:
@@ -90956,6 +91210,11 @@ components:
         client_id:
           type: string
           description: Exact selected remote_session_client row ID, when available.
+        connection_scopes:
+          type: array
+          items:
+            type: string
+          description: 'Scopes preparing identity chaining again would record now, sorted: what an interactive sign-in through the selected client requests for this server, or the recorded scopes when the binding has no server connection to follow or the connection names only OpenID Connect scopes while the recorded ones name others. Returned by readEMA and prepareEMA when a client is selected.'
         ema_providers:
           $ref: '#/components/schemas/EMAProviderOrder'
         external_client_id:
@@ -90975,6 +91234,10 @@ components:
           nullable: true
         issuer:
           type: string
+        last_accepted_at:
+          type: string
+          description: When the vendor last accepted an assertion for this binding from a provider that can serve it now, so chaining has worked for it. Omitted when none is recorded for a usable provider or acceptance could not be read. Returned by readEMA only.
+          format: date-time
         remediation:
           type: string
           description: Safe next action without provider bodies or credentials.
@@ -90986,6 +91249,10 @@ components:
           type: array
           items:
             type: string
+          description: Scopes recorded on the binding when identity chaining was turned on. Identity chaining requests exactly these, without OpenID Connect scopes; when that leaves none, an ID-JAG naming a scope outside these is rejected. Changes to the server connection apply only when identity chaining is prepared again.
+        scopes_out_of_date:
+          type: boolean
+          description: True when connection_scopes differs from scopes; prepareEMA with the current expected_generation applies connection_scopes. Returned by readEMA and prepareEMA when a client is selected.
         stage:
           type: string
           enum:
@@ -92888,6 +93155,16 @@ components:
             $ref: '#/components/schemas/DistributionPlugin'
       required:
         - plugins
+    ListEMAServicesResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EMAService'
+      description: Every service identity chaining reaches in the organization.
+      required:
+        - items
     ListEnvironmentsResult:
       type: object
       properties:
@@ -95270,7 +95547,14 @@ components:
             - private_only
         platform_endpoint_slug:
           type: string
-          description: An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.
+          description: The slug of this server's primary platform endpoint, the oldest one. Absent when no platform endpoint exists; never a custom-domain slug.
+        primary_endpoint_id:
+          type: string
+          description: 'The ID of the endpoint that stands for this server when a single address must be chosen: domain-root custom-domain endpoints first, then other custom-domain endpoints, then platform endpoints. Absent when the server has no addressable endpoint.'
+          format: uuid
+        primary_endpoint_url:
+          type: string
+          description: The public MCP URL of the primary endpoint. Absent when the server has no addressable endpoint.
         project_id:
           type: string
           description: The project ID this MCP server belongs to
@@ -95286,6 +95570,8 @@ components:
           type: string
           description: The ID of the tool variations group enabling MCP tool filtering for this server, if any.
           format: uuid
+        toolset:
+          $ref: '#/components/schemas/McpServerToolsetSummary'
         toolset_id:
           type: string
           description: The ID of the toolset used as the backend
@@ -95356,6 +95642,50 @@ components:
         - target_label
         - total_tool_calls
         - recent_tool_calls
+    McpServerToolsetSummary:
+      type: object
+      properties:
+        external_mcp_proxy_only:
+          type: boolean
+          description: Whether every configured tool is an external MCP proxy tool, so the real tool count is unknown until a user signs in
+        external_mcp_slugs:
+          type: array
+          items:
+            type: string
+          description: The distinct slugs of the external MCP sources the toolset's configured tools come from, sorted
+        external_oauth_server_id:
+          type: string
+          description: The ID of the external OAuth server attached to the toolset, if any
+          format: uuid
+        id:
+          type: string
+          description: The ID of the toolset
+          format: uuid
+        name:
+          type: string
+          description: The name of the toolset
+        registry_specifier:
+          type: string
+          description: The registry specifier the toolset originated from, if any
+        slug:
+          type: string
+          description: The slug of the toolset
+        tool_count:
+          type: integer
+          description: The number of distinct configured tools in the latest toolset version, excluding external MCP proxy tools. Counts configured tool URNs, so it may differ from the number of tools that resolve against the active deployment.
+          format: int64
+        tool_selection_mode:
+          type: string
+          description: The toolset's tool selection mode
+      description: A summary of the toolset backing a hosted MCP server.
+      required:
+        - id
+        - slug
+        - name
+        - tool_count
+        - tool_selection_mode
+        - external_mcp_slugs
+        - external_mcp_proxy_only
     MetaMcpDiscoveryFunnel:
       type: object
       properties:
@@ -95438,6 +95768,12 @@ components:
           type: string
           description: When the meta MCP server was created
           format: date-time
+        discovery_mode:
+          type: string
+          description: The effective default discovery mode. Unconfigured connections follow this value.
+          enum:
+            - progressive
+            - direct
         id:
           type: string
           description: The ID of the meta MCP server
@@ -95488,6 +95824,7 @@ components:
         - name
         - visibility
         - network_access_mode
+        - discovery_mode
         - created_at
         - updated_at
     MeterUsageBreakdown:
@@ -95753,6 +96090,12 @@ components:
     MintUserSessionRequestBody:
       type: object
       properties:
+        discovery_mode:
+          type: string
+          description: An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.
+          enum:
+            - progressive
+            - direct
         mcp_server_id:
           type: string
           description: Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
@@ -95770,7 +96113,7 @@ components:
       properties:
         access_token:
           type: string
-          description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.'
+          description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} surface.'
         expires_in:
           type: integer
           description: Lifetime of the access token in seconds.
@@ -98299,7 +98642,7 @@ components:
             type: string
             pattern: ^[!#-[\]-~]+$
             maxLength: 128
-          description: Requested scope tokens.
+          description: The scopes this preparation request supplies, which a DCR registration always asks for. Turning identity chaining on records the server connection's scopes (what an interactive sign-in through the selected client requests) and ignores these, unless the client is not linked to the user session issuer, no single remote MCP server signing in directly through it serves the resource (a gateway member qualified through another sign-in issuer is not resolved), or the connection names only OpenID Connect scopes while these name others; then these are recorded, and a scope outside the client's registered scope reports manual_setup_required. With neither naming a scope, nothing is recorded and identity chaining requests no scope.
         token_endpoint_auth_method:
           type: string
           description: Explicit DCR authentication method.
@@ -98437,9 +98780,6 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
-        consent_tool_filtering_enabled:
-          type: boolean
-          description: Whether MCP consent screens offer the tool filtering picker for the organization
         custom_model_keys_enabled:
           type: boolean
           description: Whether the organization can supply its own model provider API keys (BYOK)
@@ -98514,7 +98854,6 @@ components:
         - customer_managed_encryption_keys_enabled
         - remote_session_auto_refresh_enabled
         - remote_session_auto_refresh_enforced_enabled
-        - consent_tool_filtering_enabled
         - session_portability_enabled
         - network_ingress_enabled
         - signals_intelligence_enabled
@@ -99568,6 +99907,29 @@ components:
       properties:
         deployment:
           $ref: '#/components/schemas/Deployment'
+    RegisterDeviceRequestBody:
+      type: object
+      properties:
+        hostname:
+          type: string
+          description: The device's hostname, shown to administrators. Self-reported.
+          maxLength: 255
+        join_token:
+          type: string
+          description: The join token from createDeviceJoinToken.
+          minLength: 1
+          maxLength: 512
+        public_jwk:
+          type: object
+          description: 'The device''s public signing key as a JWK: EC P-256 (ES256) or OKP Ed25519 (EdDSA). Private key material is refused.'
+          additionalProperties: true
+        serial:
+          type: string
+          description: The device's serial number, shown to administrators. Self-reported.
+          maxLength: 255
+      required:
+        - join_token
+        - public_jwk
     RegisterRequestBody:
       type: object
       properties:
@@ -101417,10 +101779,6 @@ components:
     RiskOverviewResult:
       type: object
       properties:
-        active_policies:
-          type: integer
-          description: Enabled risk policies for the current project.
-          format: int64
         findings:
           type: integer
           description: Policy findings in the window.
@@ -101433,10 +101791,6 @@ components:
           type: string
           description: Inclusive start of the overview window.
           format: date-time
-        messages_scanned:
-          type: integer
-          description: Messages analyzed by risk policies in the window.
-          format: int64
         time_series_findings:
           type: array
           items:
@@ -101464,10 +101818,8 @@ components:
       required:
         - from
         - to
-        - messages_scanned
         - findings
         - flagged_sessions
-        - active_policies
         - top_categories
         - top_users
         - top_rules
@@ -102187,35 +102539,6 @@ components:
         - rule_id
         - source
         - findings
-    RiskRuleBreakdownResult:
-      type: object
-      properties:
-        category:
-          type: string
-          description: Category the breakdown is scoped to.
-        from:
-          type: string
-          description: Inclusive start of the window used.
-          format: date-time
-        rules:
-          type: array
-          items:
-            $ref: '#/components/schemas/RiskRuleBreakdownEntry'
-          description: Rules in this category, ordered by finding count descending.
-        to:
-          type: string
-          description: Exclusive end of the window used.
-          format: date-time
-        total:
-          type: integer
-          description: Total findings across all rules in this category and window.
-          format: int64
-      required:
-        - from
-        - to
-        - category
-        - rules
-        - total
     RiskSegment:
       type: object
       properties:
@@ -103974,7 +104297,7 @@ components:
           minimum: 0
       required:
         - billing_cycle_anchor_day
-    SetDirectoryRoleMappingForm:
+    SetDirectoryRoleMappingsForm:
       type: object
       properties:
         attribute_key:
@@ -103989,9 +104312,16 @@ components:
           type: string
           description: Directory group to map. Required when source_kind is group.
           format: uuid
-        role_urn:
-          type: string
-          description: Principal URN of the role to grant, from Role.principal_urn.
+        expected_role_urns:
+          type: array
+          items:
+            type: string
+          description: Optional compare-and-set precondition. The normalized current role set must match or the request returns conflict without changes. Omit for unconditional replacement; an empty array requires an unmapped source.
+        role_urns:
+          type: array
+          items:
+            type: string
+          description: The complete set of role principal URNs to grant, from Role.principal_urn. Empty removes every mapping for the source.
         source_kind:
           type: string
           description: What the mapping matches.
@@ -104000,15 +104330,20 @@ components:
             - attribute
       required:
         - source_kind
-        - role_urn
+        - role_urns
     SetEMAProvidersRequestBody:
       type: object
       properties:
+        expected_providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EMAProviderInput'
+          description: The saved list the caller started from, in its stored order, empty for the default. When given and the saved list no longer matches it, nothing is written and the request fails with conflict, so a stale editor never overwrites another administrator's change. Send the list you last read when updating; on conflict, re-read and reconcile the list before retrying. Omit only to replace the list unconditionally.
         providers:
           type: array
           items:
             $ref: '#/components/schemas/EMAProviderInput'
-          description: Providers in the order they are tried, at most 10; each at most once. An empty list restores the external default.
+          description: The accepted providers, at most 10; each at most once. Stored in the given order, though each endpoint uses only the one its sign-in goes through. An empty list restores the derived default.
         remote_session_issuer_id:
           type: string
           description: Any remote_session_issuer in the caller's organization that names the vendor authorization server.
@@ -104173,7 +104508,6 @@ components:
             - customer_managed_encryption_keys
             - remote_session_auto_refresh
             - remote_session_auto_refresh_enforced
-            - consent_tool_filtering
             - session_portability
             - network_ingress
             - signals_intelligence
@@ -110191,6 +110525,12 @@ components:
     UpdateMetaMcpServerForm:
       type: object
       properties:
+        discovery_mode:
+          type: string
+          description: The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+          enum:
+            - progressive
+            - direct
         id:
           type: string
           description: The ID of the meta MCP server to update
@@ -112583,7 +112923,7 @@ components:
         dataset:
           type: string
           description: The catalog dataset the widget asks
-          example: sessions
+          example: tool_calls
         description:
           type: string
           description: What the widget is for, when its creator said
@@ -112799,6 +113139,40 @@ components:
         - edit_platform
         - allow_access
         - edit_access
+    WorkloadDeviceJoinToken:
+      type: object
+      properties:
+        expires_at:
+          type: string
+          description: When the token stops being redeemable.
+          format: date-time
+        token:
+          type: string
+          description: The join token. Shown once; only its hash is stored.
+      required:
+        - token
+        - expires_at
+    WorkloadDeviceRegistration:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent the device inherits its policy from.
+          format: uuid
+        device_subject:
+          type: string
+          description: The device's workload subject, device:<uuid>. Its assertions carry this as sub.
+        issuer:
+          type: string
+          description: The issuer its assertions carry as iss.
+        organization_id:
+          type: string
+          description: The organization the device enrolled in.
+      required:
+        - device_subject
+        - issuer
+        - agent_id
+        - organization_id
     WorkloadForm:
       type: object
       properties:

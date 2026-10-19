@@ -33,7 +33,7 @@ func newPosthogForTest(t *testing.T) *posthog.Posthog {
 func newInitializeRequest(t *testing.T, sessionID string) *proxy.InitializeRequest {
 	t.Helper()
 
-	httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", http.NoBody)
+	httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", http.NoBody)
 	require.NoError(t, err)
 	if sessionID != "" {
 		httpReq.Header.Set("Mcp-Session-Id", sessionID)
@@ -76,7 +76,7 @@ func TestInitializePostHogEventInterceptor_PassesThrough(t *testing.T) {
 	})
 	ctx = contextvalues.SetRequestContext(ctx, &contextvalues.RequestContext{
 		Host:   "x.example.com",
-		ReqURL: "/x/mcp/abc",
+		ReqURL: "/mcp/abc",
 	})
 
 	require.NoError(t, interceptor.InterceptInitializeRequest(ctx, newInitializeRequest(t, "session-init")))
@@ -92,7 +92,7 @@ func TestInitializePostHogEventInterceptor_MissingSessionIDPassesThrough(t *test
 	// the PostHog distinct ID rather than emitting an empty value.
 	ctx := contextvalues.SetRequestContext(t.Context(), &contextvalues.RequestContext{
 		Host:   "x.example.com",
-		ReqURL: "/x/mcp/abc",
+		ReqURL: "/mcp/abc",
 	})
 
 	require.NoError(t, interceptor.InterceptInitializeRequest(ctx, newInitializeRequest(t, "")))
@@ -107,7 +107,7 @@ func TestInitializePostHogEventInterceptor_UnauthenticatedPassesThrough(t *testi
 	// and an empty project_id rather than rejecting.
 	ctx := contextvalues.SetRequestContext(t.Context(), &contextvalues.RequestContext{
 		Host:   "x.example.com",
-		ReqURL: "/x/mcp/abc",
+		ReqURL: "/mcp/abc",
 	})
 
 	require.NoError(t, interceptor.InterceptInitializeRequest(ctx, newInitializeRequest(t, "session-anon")))

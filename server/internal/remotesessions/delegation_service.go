@@ -21,9 +21,10 @@ type DelegationAuthorizer = delegation.Authorizer
 type DelegationOfflineStatus = delegation.OfflineStatus
 
 var (
-	ErrDelegationTemporary        = delegation.ErrTemporary
-	ErrDelegationReauthentication = delegation.ErrReauthentication
-	ErrDelegationConfiguration    = delegation.ErrConfiguration
+	ErrDelegationTemporary         = delegation.ErrTemporary
+	ErrDelegationReauthentication  = delegation.ErrReauthentication
+	ErrDelegationConfiguration     = delegation.ErrConfiguration
+	ErrDelegationStaleRegistration = delegation.ErrStaleRegistration
 )
 
 type DelegationService struct{ service *delegation.Service }
@@ -168,6 +169,16 @@ func (s *DelegationService) Check(ctx context.Context, b DelegationBinding, auth
 		authority = delegationAuthority{authority}
 	}
 	return s.service.Check(ctx, b, authority) //nolint:wrapcheck // Compatibility facade preserves the public sentinel error and message contract.
+}
+
+// CheckResolvable reports whether Resolve could return an assertion now
+// without the human signing in again, without renewing the credential or
+// contacting the provider.
+func (s *DelegationService) CheckResolvable(ctx context.Context, b DelegationBinding, authority DelegationAuthorizer) error {
+	if authority != nil {
+		authority = delegationAuthority{authority}
+	}
+	return s.service.CheckResolvable(ctx, b, authority) //nolint:wrapcheck // Compatibility facade preserves the public sentinel error and message contract.
 }
 func (s *DelegationService) Revoke(ctx context.Context, b DelegationBinding, authority DelegationAuthorizer) error {
 	if authority != nil {

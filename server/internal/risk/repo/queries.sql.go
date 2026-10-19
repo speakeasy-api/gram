@@ -2063,7 +2063,7 @@ type GetMessageContentBatchRow struct {
 
 // The scanned user's id rides along so the LLM judge's completion telemetry
 // can attribute scanning volume to whose traffic was analyzed. Same
-// attribution rule as ListRiskOverviewTopUsers: the message's own user_id
+// attribution rule as the risk overview top users: the message's own user_id
 // wins, the chat owner's is the fallback — and a soft-deleted chat's owner
 // never is, while its messages remain eligible for scanning.
 // The lateral probes capture bounded causal context at the same event read:
@@ -2241,81 +2241,6 @@ func (q *Queries) GetRiskExclusionForUpdate(ctx context.Context, arg GetRiskExcl
 		&i.DeletedAt,
 		&i.Deleted,
 	)
-	return i, err
-}
-
-const getRiskOverviewFindingCounts = `-- name: GetRiskOverviewFindingCounts :one
-SELECT
-    COUNT(*)::BIGINT AS findings
-  , COUNT(DISTINCT cm.chat_id)::BIGINT AS flagged_sessions
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-WHERE rr.project_id = $1
-  AND rr.created_at >= $2
-  AND rr.created_at < $3
-  AND rr.found IS TRUE
-  AND rr.excluded_at IS NULL
-  AND rr.false_positive_at IS NULL
-`
-
-type GetRiskOverviewFindingCountsParams struct {
-	ProjectID uuid.UUID
-	FromTime  pgtype.Timestamptz
-	ToTime    pgtype.Timestamptz
-}
-
-type GetRiskOverviewFindingCountsRow struct {
-	Findings        int64
-	FlaggedSessions int64
-}
-
-// findings + flagged_sessions over the live-found subset. Pushing the found
-// predicate into WHERE lets the partial risk_results_project_found_idx serve the
-// scan, so the JOIN to chat_messages only touches found rows instead of every
-// scanned row. COUNT(DISTINCT cm.chat_id) already skips NULL chat_ids.
-func (q *Queries) GetRiskOverviewFindingCounts(ctx context.Context, arg GetRiskOverviewFindingCountsParams) (GetRiskOverviewFindingCountsRow, error) {
-	row := q.db.QueryRow(ctx, getRiskOverviewFindingCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
-	var i GetRiskOverviewFindingCountsRow
-	err := row.Scan(&i.Findings, &i.FlaggedSessions)
-	return i, err
-}
-
-const getRiskOverviewScanCounts = `-- name: GetRiskOverviewScanCounts :one
-SELECT
-    COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
-  , (
-      SELECT COUNT(*)::BIGINT
-      FROM risk_policies active_rp
-      WHERE active_rp.project_id = $1
-        AND enabled IS TRUE
-        AND deleted IS FALSE
-    ) AS active_policies
-FROM risk_results rr
-WHERE rr.project_id = $1
-  AND rr.created_at >= $2
-  AND rr.created_at < $3
-`
-
-type GetRiskOverviewScanCountsParams struct {
-	ProjectID uuid.UUID
-	FromTime  pgtype.Timestamptz
-	ToTime    pgtype.Timestamptz
-}
-
-type GetRiskOverviewScanCountsRow struct {
-	MessagesScanned int64
-	ActivePolicies  int64
-}
-
-// messages_scanned counts every scanned message in the window regardless of
-// found state. chat_message_id is NOT NULL with a FK to chat_messages, so the
-// old JOIN was lossless — dropping it lets this be an index-only distinct on
-// risk_results_project_created_msg_idx (project_id, created_at, chat_message_id).
-// active_policies is a cheap scalar subquery, folded in here to save a round trip.
-func (q *Queries) GetRiskOverviewScanCounts(ctx context.Context, arg GetRiskOverviewScanCountsParams) (GetRiskOverviewScanCountsRow, error) {
-	row := q.db.QueryRow(ctx, getRiskOverviewScanCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
-	var i GetRiskOverviewScanCountsRow
-	err := row.Scan(&i.MessagesScanned, &i.ActivePolicies)
 	return i, err
 }
 
@@ -3137,6 +3062,40 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 	return items, nil
 }
 
+const listEnabledRiskPolicyIDsByOrganizationProject = `-- name: ListEnabledRiskPolicyIDsByOrganizationProject :many
+SELECT id
+FROM risk_policies
+WHERE organization_id = $1
+  AND project_id = $2
+  AND enabled IS TRUE
+  AND deleted IS FALSE
+`
+
+type ListEnabledRiskPolicyIDsByOrganizationProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ListEnabledRiskPolicyIDsByOrganizationProject(ctx context.Context, arg ListEnabledRiskPolicyIDsByOrganizationProjectParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listEnabledRiskPolicyIDsByOrganizationProject, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnabledShadowMCPPoliciesByProject = `-- name: ListEnabledShadowMCPPoliciesByProject :many
 SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
@@ -3864,245 +3823,6 @@ func (q *Queries) ListRiskFindingPolicies(ctx context.Context, arg ListRiskFindi
 	return items, nil
 }
 
-const listRiskOverviewTimeSeriesFindings = `-- name: ListRiskOverviewTimeSeriesFindings :many
-WITH buckets AS (
-  SELECT generate_series(
-      date_trunc('hour', $1::timestamptz)
-    , date_trunc('hour', ($2::timestamptz - INTERVAL '1 microsecond'))
-    , INTERVAL '1 hour'
-  )::timestamptz AS bucket_start
-),
-categorized AS (
-  SELECT
-      date_trunc('hour', rr.created_at)::timestamptz AS bucket_start
-    , CASE
-        WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
-        WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
-        WHEN rr.rule_id = 'destructive_tool.llm' THEN 'destructive_tool'
-        WHEN rr.rule_id = 'cli_destructive.llm' THEN 'cli_destructive'
-        WHEN rr.rule_id = 'prompt_injection.llm' THEN 'prompt_injection'
-        WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
-        WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
-        WHEN rr.rule_id IN (
-            'pii.us_ssn'
-          , 'pii.us_passport'
-          , 'pii.us_driver_license'
-          , 'pii.us_itin'
-          , 'pii.uk_nhs'
-          , 'pii.uk_nino'
-          , 'pii.uk_passport'
-          , 'pii.es_nif'
-          , 'pii.it_fiscal_code'
-          , 'pii.au_tfn'
-          , 'pii.in_pan'
-          , 'pii.in_aadhaar'
-          , 'pii.sg_nric_fin'
-        ) THEN 'government_ids'
-        WHEN rr.rule_id IN (
-            'pii.medical_license'
-          , 'pii.us_mbi'
-          , 'pii.us_npi'
-          , 'pii.medical_disease_disorder'
-          , 'pii.medical_medication'
-          , 'pii.medical_therapeutic_procedure'
-          , 'pii.medical_clinical_event'
-          , 'pii.medical_biological_attribute'
-          , 'pii.medical_family_history'
-        ) THEN 'healthcare'
-        WHEN rr.rule_id IN (
-            'pii.harmful_content_request'
-          , 'pii.policy_violation'
-          , 'pii.unauthorized_action'
-          , 'pii.topic_boundary_violation'
-        ) THEN 'off_policy'
-        WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
-        -- Scanner-source fallbacks: keep these LAST so any prefixed
-        -- rule_id wins. Stay in sync with the Go classifier in
-        -- internal/risk/categories.
-        WHEN rr.source = 'gitleaks' THEN 'secrets'
-        WHEN rr.source = 'presidio' THEN 'pii'
-        ELSE 'custom'
-      END AS category
-  FROM risk_results rr
-  WHERE rr.project_id = $3::uuid
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    AND rr.skill_version_id IS NULL
-    AND rr.created_at >= $1
-    AND rr.created_at < $2
-),
-categories AS (
-  SELECT DISTINCT category
-  FROM categorized
-),
-findings_by_bucket AS (
-  SELECT
-      bucket_start
-    , category
-    , COUNT(*)::BIGINT AS findings
-  FROM categorized
-  GROUP BY bucket_start, category
-)
-SELECT
-    buckets.bucket_start
-  , categories.category
-  , COALESCE(findings_by_bucket.findings, 0)::BIGINT AS findings
-FROM buckets
-CROSS JOIN categories
-LEFT JOIN findings_by_bucket ON findings_by_bucket.bucket_start = buckets.bucket_start AND findings_by_bucket.category = categories.category
-ORDER BY buckets.bucket_start ASC, categories.category ASC
-`
-
-type ListRiskOverviewTimeSeriesFindingsParams struct {
-	FromTime  pgtype.Timestamptz
-	ToTime    pgtype.Timestamptz
-	ProjectID uuid.UUID
-}
-
-type ListRiskOverviewTimeSeriesFindingsRow struct {
-	BucketStart pgtype.Timestamptz
-	Category    string
-	Findings    int64
-}
-
-func (q *Queries) ListRiskOverviewTimeSeriesFindings(ctx context.Context, arg ListRiskOverviewTimeSeriesFindingsParams) ([]ListRiskOverviewTimeSeriesFindingsRow, error) {
-	rows, err := q.db.Query(ctx, listRiskOverviewTimeSeriesFindings, arg.FromTime, arg.ToTime, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRiskOverviewTimeSeriesFindingsRow
-	for rows.Next() {
-		var i ListRiskOverviewTimeSeriesFindingsRow
-		if err := rows.Scan(&i.BucketStart, &i.Category, &i.Findings); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRiskOverviewTopRules = `-- name: ListRiskOverviewTopRules :many
-SELECT
-  COALESCE(rr.rule_id, '')::TEXT AS rule_id,
-  rr.source,
-  COUNT(*)::BIGINT AS findings
-FROM risk_results rr
-WHERE rr.project_id = $1
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND rr.skill_version_id IS NULL
-  AND rr.created_at >= $2
-  AND rr.created_at < $3
-GROUP BY rr.rule_id, rr.source
-ORDER BY findings DESC, rule_id ASC
-LIMIT $4
-`
-
-type ListRiskOverviewTopRulesParams struct {
-	ProjectID uuid.UUID
-	FromTime  pgtype.Timestamptz
-	ToTime    pgtype.Timestamptz
-	RowLimit  int32
-}
-
-type ListRiskOverviewTopRulesRow struct {
-	RuleID   string
-	Source   string
-	Findings int64
-}
-
-// Project-wide finding counts grouped by rule_id within a window.
-func (q *Queries) ListRiskOverviewTopRules(ctx context.Context, arg ListRiskOverviewTopRulesParams) ([]ListRiskOverviewTopRulesRow, error) {
-	rows, err := q.db.Query(ctx, listRiskOverviewTopRules,
-		arg.ProjectID,
-		arg.FromTime,
-		arg.ToTime,
-		arg.RowLimit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRiskOverviewTopRulesRow
-	for rows.Next() {
-		var i ListRiskOverviewTopRulesRow
-		if err := rows.Scan(&i.RuleID, &i.Source, &i.Findings); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRiskOverviewTopUsers = `-- name: ListRiskOverviewTopUsers :many
-WITH user_findings AS (
-  SELECT
-    COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::TEXT AS external_user_id,
-    COALESCE(
-      NULLIF(u.email, ''),
-      CASE WHEN cm.external_user_id LIKE '%@%' THEN cm.external_user_id END,
-      CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END,
-      'Unknown user'
-    )::TEXT AS email
-  FROM risk_results rr
-  JOIN chat_messages cm ON cm.id = rr.chat_message_id
-  LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-  LEFT JOIN users u ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
-  WHERE rr.project_id = $2
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    AND rr.created_at >= $3
-    AND rr.created_at < $4
-)
-SELECT external_user_id, email, COUNT(*)::BIGINT AS findings
-FROM user_findings
-GROUP BY external_user_id, email
-ORDER BY findings DESC, email ASC
-LIMIT $1
-`
-
-type ListRiskOverviewTopUsersParams struct {
-	RowLimit  int32
-	ProjectID uuid.UUID
-	FromTime  pgtype.Timestamptz
-	ToTime    pgtype.Timestamptz
-}
-
-type ListRiskOverviewTopUsersRow struct {
-	ExternalUserID string
-	Email          string
-	Findings       int64
-}
-
-func (q *Queries) ListRiskOverviewTopUsers(ctx context.Context, arg ListRiskOverviewTopUsersParams) ([]ListRiskOverviewTopUsersRow, error) {
-	rows, err := q.db.Query(ctx, listRiskOverviewTopUsers,
-		arg.RowLimit,
-		arg.ProjectID,
-		arg.FromTime,
-		arg.ToTime,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRiskOverviewTopUsersRow
-	for rows.Next() {
-		var i ListRiskOverviewTopUsersRow
-		if err := rows.Scan(&i.ExternalUserID, &i.Email, &i.Findings); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRiskPolicies = `-- name: ListRiskPolicies :many
 SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
@@ -4762,122 +4482,6 @@ func (q *Queries) ListRiskResultsGroupedByChat(ctx context.Context, arg ListRisk
 	return items, nil
 }
 
-const listRiskRulesByCategory = `-- name: ListRiskRulesByCategory :many
-WITH categorized AS (
-  SELECT
-    COALESCE(rr.rule_id, '')::TEXT AS rule_id,
-    rr.source,
-    CASE
-      WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
-      WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
-      WHEN rr.rule_id = 'destructive_tool.llm' THEN 'destructive_tool'
-      WHEN rr.rule_id = 'cli_destructive.llm' THEN 'cli_destructive'
-      WHEN rr.rule_id = 'prompt_injection.llm' THEN 'prompt_injection'
-      WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
-      WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
-      WHEN rr.rule_id IN (
-          'pii.us_ssn'
-        , 'pii.us_passport'
-        , 'pii.us_driver_license'
-        , 'pii.us_itin'
-        , 'pii.uk_nhs'
-        , 'pii.uk_nino'
-        , 'pii.uk_passport'
-        , 'pii.es_nif'
-        , 'pii.it_fiscal_code'
-        , 'pii.au_tfn'
-        , 'pii.in_pan'
-        , 'pii.in_aadhaar'
-        , 'pii.sg_nric_fin'
-      ) THEN 'government_ids'
-      WHEN rr.rule_id IN (
-          'pii.medical_license'
-        , 'pii.us_mbi'
-        , 'pii.us_npi'
-        , 'pii.medical_disease_disorder'
-        , 'pii.medical_medication'
-        , 'pii.medical_therapeutic_procedure'
-        , 'pii.medical_clinical_event'
-        , 'pii.medical_biological_attribute'
-        , 'pii.medical_family_history'
-      ) THEN 'healthcare'
-      WHEN rr.rule_id IN (
-          'pii.harmful_content_request'
-        , 'pii.policy_violation'
-        , 'pii.unauthorized_action'
-        , 'pii.topic_boundary_violation'
-      ) THEN 'off_policy'
-      WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
-      -- Scanner-source fallbacks: keep these LAST so any prefixed
-      -- rule_id wins. Stay in sync with the Go classifier in
-      -- internal/risk/categories.
-      WHEN rr.source = 'gitleaks' THEN 'secrets'
-      WHEN rr.source = 'presidio' THEN 'pii'
-      ELSE 'custom'
-    END AS category
-  FROM risk_results rr
-  -- Soft-deleted policies keep their findings until the cleanup catches up;
-  -- the breakdown must not count them, matching the listing's visibility.
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
-  WHERE rr.project_id = $3
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    AND rr.skill_version_id IS NULL
-    AND rr.created_at >= $4
-    AND rr.created_at < $5
-)
-SELECT rule_id, source, COUNT(*)::BIGINT AS findings
-FROM categorized
-WHERE category = $1::text
-GROUP BY rule_id, source
-ORDER BY findings DESC, rule_id ASC
-LIMIT $2::int
-`
-
-type ListRiskRulesByCategoryParams struct {
-	Category  string
-	PageLimit pgtype.Int4
-	ProjectID uuid.UUID
-	FromTime  pgtype.Timestamptz
-	ToTime    pgtype.Timestamptz
-}
-
-type ListRiskRulesByCategoryRow struct {
-	RuleID   string
-	Source   string
-	Findings int64
-}
-
-// Returns per-rule_id finding counts for a category within a window.
-// The CASE expression must stay in sync with ListRiskOverviewTimeSeriesFindings;
-// both classify rr.rule_id the same way.
-// A NULL page_limit is LIMIT ALL: the dashboard reads every rule, while
-// bounded callers pass one extra row to detect truncation.
-func (q *Queries) ListRiskRulesByCategory(ctx context.Context, arg ListRiskRulesByCategoryParams) ([]ListRiskRulesByCategoryRow, error) {
-	rows, err := q.db.Query(ctx, listRiskRulesByCategory,
-		arg.Category,
-		arg.PageLimit,
-		arg.ProjectID,
-		arg.FromTime,
-		arg.ToTime,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRiskRulesByCategoryRow
-	for rows.Next() {
-		var i ListRiskRulesByCategoryRow
-		if err := rows.Scan(&i.RuleID, &i.Source, &i.Findings); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRiskUserCategoryBreakdown = `-- name: ListRiskUserCategoryBreakdown :many
 WITH user_findings AS (
   SELECT
@@ -4957,8 +4561,8 @@ type ListRiskUserCategoryBreakdownRow struct {
 }
 
 // Per-category finding counts for a single external_user_id in a window.
-// The category CASE expression must stay in sync with the other ListRisk*
-// queries.
+// The category CASE expression must stay in sync with the Go classifier in
+// internal/risk/categories.
 func (q *Queries) ListRiskUserCategoryBreakdown(ctx context.Context, arg ListRiskUserCategoryBreakdownParams) ([]ListRiskUserCategoryBreakdownRow, error) {
 	rows, err := q.db.Query(ctx, listRiskUserCategoryBreakdown,
 		arg.ProjectID,

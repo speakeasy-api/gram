@@ -202,7 +202,7 @@ function PaygPlanDetails({
   subscription: StripeSubscriptionLike;
 }): JSX.Element {
   const state = paygPlanState(subscription);
-  const copy = planCopy(state);
+  const copy = planCopy(state, subscription);
 
   return (
     <Stack gap={4}>
@@ -244,7 +244,31 @@ function trialingHeadline(on: string | null): string {
   return `Trial — converts to pay as you go on ${on}`;
 }
 
-function activeDetail(on: string | null): string {
+// Checkout anchors the first paid month to the next UTC midnight, so the
+// period right after activation is only that short interval. Two days is
+// longer than that interval and shorter than any real month, so the end date
+// stays once the subscription is on a monthly period.
+const INITIAL_PAYG_PERIOD_MAX_MS = 2 * 24 * 60 * 60 * 1000;
+
+function isInitialPaygBillingInterval(
+  start: Date | null | undefined,
+  end: Date | null | undefined,
+): boolean {
+  if (!(start instanceof Date) || !(end instanceof Date)) return false;
+  const length = end.getTime() - start.getTime();
+  return (
+    Number.isFinite(length) && length > 0 && length < INITIAL_PAYG_PERIOD_MAX_MS
+  );
+}
+
+function activeDetail(
+  start: Date | null | undefined,
+  end: Date | null | undefined,
+): string {
+  const on = formatBillingDate(end);
+  if (on !== null && isInitialPaygBillingInterval(start, end)) {
+    return "You're billed monthly for what you use.";
+  }
   const base = "You're billed for the usage in each billing period.";
   if (on === null) return base;
   return `${base} The current period ends on ${on}.`;
@@ -269,7 +293,10 @@ function endingDetail(trialing: boolean): string {
 }
 
 /** The headline and supporting line for each plan state. */
-function planCopy(state: PaygPlanState): { headline: string; detail: string } {
+function planCopy(
+  state: PaygPlanState,
+  subscription: StripeSubscriptionLike,
+): { headline: string; detail: string } {
   const on = formatBillingDate(state.date);
 
   switch (state.kind) {
@@ -280,7 +307,13 @@ function planCopy(state: PaygPlanState): { headline: string; detail: string } {
           "Your payment method is on file. Billing starts when the trial converts.",
       };
     case "active":
-      return { headline: "Pay as you go", detail: activeDetail(on) };
+      return {
+        headline: "Pay as you go",
+        detail: activeDetail(
+          subscription.currentPeriodStart,
+          subscription.currentPeriodEnd,
+        ),
+      };
     case "ending":
       return {
         headline: endingHeadline(on, state.trialing),

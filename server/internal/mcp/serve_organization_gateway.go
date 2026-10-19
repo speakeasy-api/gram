@@ -24,6 +24,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -118,7 +119,7 @@ func (s *Service) shadowedEndpointHandler(name string, serve func(http.ResponseW
 			rctx = chi.NewRouteContext()
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 		}
-		if _, err := s.LoadResolvedMcpEndpointBySlug(r.Context(), s.logger, shadowedEndpointSlug, "mcp"); err == nil {
+		if _, err := s.loadResolvedMcpEndpointBySlug(r.Context(), s.logger, shadowedEndpointSlug, "mcp", mcpmetrics.LegacyFallbackOrgGatewayProbe); err == nil {
 			rctx.URLParams.Add("mcpSlug", shadowedEndpointSlug)
 			endpointRoute.ServeHTTP(w, r)
 			return
@@ -262,6 +263,7 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, organizationSlug 
 		Name:                organization.Name,
 		// NULL serves Speakeasy's built-in gateway instructions.
 		Instructions:      pgtype.Text{String: "", Valid: false},
+		DiscoveryMode:     "progressive",
 		Visibility:        visibility.Private,
 		NetworkAccessMode: pgtype.Text{String: "", Valid: false},
 		CreatedAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},

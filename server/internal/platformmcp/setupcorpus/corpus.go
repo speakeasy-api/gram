@@ -29,7 +29,7 @@ const (
 	// constant to go.mod, so a dependency bump that forgets the citation fails
 	// CI instead of shipping a guide that cites the wrong export.
 	ModulePath    = "github.com/speakeasy-api/mcp-setup-docs/go"
-	PinnedVersion = "v0.3.0"
+	PinnedVersion = "v0.3.8"
 	// sourceName is the human half of a citation: "mcp-setup-docs/go@v0.3.0".
 	sourceName = "mcp-setup-docs/go"
 

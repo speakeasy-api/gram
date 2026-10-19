@@ -342,7 +342,7 @@ describe("PaygPlanSection", () => {
   });
 
   describe("while pay as you go is active", () => {
-    it("names the plan and when the period ends", () => {
+    it("names the plan and when a monthly period ends", () => {
       render(<PaygPlanSection />);
 
       expect(screen.getByText("Pay as you go")).toBeTruthy();
@@ -352,6 +352,38 @@ describe("PaygPlanSection", () => {
       expect(cancelTrigger()).not.toBeNull();
       expect(resumeButton()).toBeNull();
     });
+
+    // Right after checkout the period only runs to the next UTC midnight, or
+    // the one after that when checkout is near midnight.
+    it.each([
+      {
+        label: "the next UTC midnight",
+        start: "2026-08-14T15:00:00.000Z",
+        end: "2026-08-15T00:00:00.000Z",
+      },
+      {
+        label: "the midnight after a late checkout",
+        start: "2026-08-14T23:45:00.000Z",
+        end: "2026-08-16T00:00:00.000Z",
+      },
+    ])(
+      "describes monthly usage without an end date when the period only runs to $label",
+      ({ start, end }) => {
+        queryState({
+          data: subscription({
+            currentPeriodStart: new Date(start),
+            currentPeriodEnd: new Date(end),
+          }),
+        });
+
+        render(<PaygPlanSection />);
+
+        expect(
+          screen.getByText(/billed monthly for what you use/i),
+        ).toBeTruthy();
+        expect(screen.queryByText(/current period ends/i)).toBeNull();
+      },
+    );
 
     // Stripe keeps retrying a failed payment, so service continues and the plan
     // is still the plan. Saying so a second time here, below the fold, would

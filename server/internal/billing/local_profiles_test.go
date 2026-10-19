@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -57,21 +58,21 @@ func TestStubLocalAccountProfiles(t *testing.T) {
 		missingTable bool
 		checkErr     error
 		readErr      error
-		tier         billing.Tier
+		tier         *billing.Tier
 		active       bool
 		wantErr      bool
 		trialActive  bool
 		trialErr     error
 	}{
-		{name: "missing table", missingTable: true, tier: billing.TierPro, active: true},
-		{name: "missing profile", readErr: pgx.ErrNoRows, tier: billing.TierPro, active: true},
-		{name: "expired trial", profile: "expired-trial", anchor: validAnchor, tier: billing.TierBase},
-		{name: "enterprise", profile: "enterprise", anchor: validAnchor, tier: billing.TierEnterprise, active: true},
-		{name: "active trial", profile: "active-trial", anchor: validAnchor, tier: billing.TierEnterprise, active: true, trialActive: true},
-		{name: "elapsed or demoted active fixture", profile: "active-trial", anchor: validAnchor, tier: billing.TierBase},
+		{name: "missing table", missingTable: true},
+		{name: "missing profile", readErr: pgx.ErrNoRows},
+		{name: "expired trial", profile: "expired-trial", anchor: validAnchor, tier: new(billing.TierBase)},
+		{name: "enterprise", profile: "enterprise", anchor: validAnchor, tier: new(billing.TierEnterprise), active: true},
+		{name: "active trial", profile: "active-trial", anchor: validAnchor, tier: new(billing.TierEnterprise), active: true, trialActive: true},
+		{name: "elapsed or demoted active fixture", profile: "active-trial", anchor: validAnchor, tier: new(billing.TierBase)},
 		{name: "missing active lifecycle", profile: "active-trial", anchor: validAnchor, trialErr: pgx.ErrNoRows, wantErr: true},
 		{name: "active lifecycle read failure", profile: "active-trial", anchor: validAnchor, trialErr: errors.New("unavailable"), wantErr: true},
-		{name: "payg", profile: "payg", anchor: validAnchor, tier: billing.TierPayg, active: true},
+		{name: "payg", profile: "payg", anchor: validAnchor, tier: new(billing.TierPayg), active: true},
 		{name: "unknown profile", profile: "unknown", anchor: validAnchor, wantErr: true},
 		{name: "empty profile", anchor: validAnchor, wantErr: true},
 		{name: "null anchor", profile: "enterprise", wantErr: true},
@@ -88,16 +89,7 @@ func TestStubLocalAccountProfiles(t *testing.T) {
 		reader := &localProfileReader{}
 		reader.Test(t)
 		t.Cleanup(func() { require.True(t, reader.AssertExpectations(t)) })
-		schemaRow := &localProfileRow{}
-		schemaRow.On("Scan", mock.AnythingOfType("*bool")).Run(func(args mock.Arguments) {
-			value0, ok := args.Get(0).(*bool)
-			require.True(t, ok)
-			*value0 = !tt.missingTable
-		}).Return(tt.checkErr).Once()
-		reader.On("QueryRow", mock.Anything, mock.MatchedBy(func(query string) bool {
-			return strings.HasPrefix(query, "-- name: AccountProfilesExist :one")
-		}), []any(nil)).Return(schemaRow).Once()
-		t.Cleanup(func() { require.True(t, schemaRow.AssertExpectations(t)) })
+		expectAccountProfilesExist(t, reader, !tt.missingTable, tt.checkErr, 1)
 		if !tt.missingTable && tt.checkErr == nil {
 			markerRow := &localProfileRow{}
 			markerRow.On("Scan", mock.AnythingOfType("*string"), mock.AnythingOfType("*pgtype.Timestamptz")).Run(func(args mock.Arguments) {
@@ -133,18 +125,75 @@ func TestStubLocalAccountProfiles(t *testing.T) {
 			require.False(t, active)
 		} else {
 			require.NoError(t, err)
-			require.Equal(t, &tt.tier, tier)
+			require.Equal(t, tt.tier, tier)
 			require.Equal(t, tt.active, active)
 		}
 
 	}
 }
 
-func TestStubWithoutLocalProfilesUnchanged(t *testing.T) {
+func TestStubWithoutLocalProfilesReportsNoTier(t *testing.T) {
 	t.Parallel()
 	client := billing.NewStubClient(testenv.NewLogger(t), testenv.NewTracerProvider(t))
 	tier, active, err := client.GetCustomerTier(t.Context(), "org_placeholder")
 	require.NoError(t, err)
-	require.Equal(t, new(billing.TierPro), tier)
-	require.True(t, active)
+	require.Nil(t, tier)
+	require.False(t, active)
+}
+
+// TestStubLocalProfilesKeepPersistedTier runs reconciliation twice because a
+// tier written by the first pass must not be overridden by the second.
+func TestStubLocalProfilesKeepPersistedTier(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name          string
+		missingTable  bool
+		persisted     billing.Tier
+		active        bool
+		billingLookup bool
+	}{
+		{name: "missing table keeps TierBase", missingTable: true, persisted: billing.TierBase, billingLookup: true},
+		{name: "missing profile keeps TierBase", persisted: billing.TierBase, billingLookup: true},
+		{name: "missing profile keeps TierPro", persisted: billing.TierPro, billingLookup: true},
+		{name: "operator-managed TierPayg skips the lookup", persisted: billing.TierPayg, active: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			reader := &localProfileReader{}
+			reader.Test(t)
+			t.Cleanup(func() { require.True(t, reader.AssertExpectations(t)) })
+			if tt.billingLookup {
+				expectAccountProfilesExist(t, reader, !tt.missingTable, nil, 2)
+				if !tt.missingTable {
+					markerRow := &localProfileRow{}
+					markerRow.On("Scan", mock.AnythingOfType("*string"), mock.AnythingOfType("*pgtype.Timestamptz")).Return(pgx.ErrNoRows).Times(2)
+					reader.On("QueryRow", mock.Anything, mock.MatchedBy(func(query string) bool {
+						return strings.HasPrefix(query, "-- name: GetAccountProfile :one")
+					}), []any{pgtype.Text{String: "org_placeholder", Valid: true}}).Return(markerRow).Times(2)
+					t.Cleanup(func() { require.True(t, markerRow.AssertExpectations(t)) })
+				}
+			}
+
+			client := billing.NewStubClientWithLocalProfiles(testenv.NewLogger(t), testenv.NewTracerProvider(t), reader)
+			for range 2 {
+				tier, active := mv.ResolveOrganizationTier(t.Context(), testenv.NewLogger(t), client, "org_placeholder", tt.persisted)
+				require.Equal(t, tt.persisted, tier)
+				require.Equal(t, tt.active, active)
+			}
+		})
+	}
+}
+
+func expectAccountProfilesExist(t *testing.T, reader *localProfileReader, exists bool, err error, times int) {
+	t.Helper()
+	schemaRow := &localProfileRow{}
+	schemaRow.On("Scan", mock.AnythingOfType("*bool")).Run(func(args mock.Arguments) {
+		value0, ok := args.Get(0).(*bool)
+		require.True(t, ok)
+		*value0 = exists
+	}).Return(err).Times(times)
+	reader.On("QueryRow", mock.Anything, mock.MatchedBy(func(query string) bool {
+		return strings.HasPrefix(query, "-- name: AccountProfilesExist :one")
+	}), []any(nil)).Return(schemaRow).Times(times)
+	t.Cleanup(func() { require.True(t, schemaRow.AssertExpectations(t)) })
 }

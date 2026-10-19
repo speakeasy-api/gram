@@ -607,32 +607,33 @@ func setToolsetMcpDisabled(t *testing.T, ctx context.Context, ti *testInstance, 
 	require.NoError(t, err)
 }
 
-// A hosted member whose toolset has MCP turned off is not servable through
-// the gateway, matching the toolset's own endpoint.
-func TestServePublic_MetaEndpoint_HostedMember_McpDisabledNotServable(t *testing.T) {
+// An independent hosted server uses its own visibility, not the backing
+// toolset's legacy MCP enablement, just like direct wrapper dispatch.
+func TestServePublic_MetaEndpoint_HostedMember_LegacyMcpDisabledStillServable(t *testing.T) {
 	t.Parallel()
-
 	ctx, ti := newTestMCPService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
 	setToolsetMcpDisabled(t, ctx, ti, member.toolsetID, *authCtx.ProjectID)
-
-	envelope := callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	envelope := callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{})
 	text, isError := metaToolResultText(t, envelope)
-	require.True(t, isError)
-	require.Contains(t, text, "not currently servable")
-
+	require.False(t, isError)
+	require.Contains(t, text, member.slug)
+	envelope = callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	text, isError = metaToolResultText(t, envelope)
+	require.False(t, isError)
+	require.Contains(t, text, "alpha_tool")
 	envelope = callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
 		"name":      member.slug + "--alpha_tool",
 		"arguments": map[string]any{},
 	})
 	text, isError = metaToolResultText(t, envelope)
 	require.True(t, isError)
-	require.Contains(t, text, "not currently servable")
+	// The fixture tool has no upstream, so this error proves dispatch ran.
+	require.Contains(t, text, "no server URL")
 }
 
 // Snapshot RBAC: a private-visibility member is invisible without
