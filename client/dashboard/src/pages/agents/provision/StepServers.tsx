@@ -4,7 +4,11 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { useState, type JSX } from "react";
+import { useRoutes } from "@/routes";
+import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
+import { ChevronRight } from "lucide-react";
+import { useEffect, useState, type JSX } from "react";
+import { Link } from "react-router";
 import { WizardStepHeader } from "./WizardChrome";
 import type { InventoryServer } from "./useServerInventory";
 
@@ -35,8 +39,20 @@ export function StepServers({
   selected: ServerSelection[];
   onChange: (next: ServerSelection[]) => void;
 }): JSX.Element {
+  const routes = useRoutes();
+  // "Change identity" opens the server's settings in another tab, so the
+  // inventory this list was built from is stale the moment it is used. Coming
+  // back to this tab is the signal that something may have changed.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") onRetry();
+    };
+    window.addEventListener("visibilitychange", refresh);
+    return () => window.removeEventListener("visibilitychange", refresh);
+  }, [onRetry]);
   const [search, setSearch] = useState("");
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+  const [showBlocked, setShowBlocked] = useState(false);
 
   const query = search.trim().toLowerCase();
   const isSelected = (id: string) =>
@@ -47,13 +63,19 @@ export function StepServers({
   // every call to that server, so it is shown and not selectable; the agent's
   // own provisioning section connects the account.
   const needsAccount = (server: InventoryServer) => Boolean(server.issuerId);
-  const shown = servers.filter((server) => {
+  const matches = servers.filter((server) => {
     if (showSelectedOnly && !isSelected(server.id)) return false;
     if (!query) return true;
     return `${server.name} ${server.slug} ${server.projectName}`
       .toLowerCase()
       .includes(query);
   });
+  // Two lists, not one: a per-user server cannot be chosen here at all, and
+  // when most of the organization authorizes that way they crowd out the rows
+  // that can. They stay reachable — a reader looking for one of them needs to
+  // find it and be told why, not find nothing.
+  const shown = matches.filter((server) => !needsAccount(server));
+  const blockedServers = matches.filter(needsAccount);
 
   const toggle = (server: InventoryServer) => {
     onChange(
@@ -114,13 +136,10 @@ export function StepServers({
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={shown.every((server) => needsAccount(server))}
+                disabled={shown.every((server) => isSelected(server.id))}
                 onClick={() => {
                   const additions = shown
-                    .filter(
-                      (server) =>
-                        !isSelected(server.id) && !needsAccount(server),
-                    )
+                    .filter((server) => !isSelected(server.id))
                     .map((server) => ({ server }));
                   onChange([...selected, ...additions]);
                 }}
@@ -146,29 +165,24 @@ export function StepServers({
             <Text muted small className="block px-4 py-10 text-center">
               {servers.length === 0
                 ? "No MCP server in this organization can be reached with an API key yet."
-                : "No servers match the current filters."}
+                : blockedServers.length > 0
+                  ? "Every server matching these filters authorizes each person separately."
+                  : "No servers match the current filters."}
             </Text>
           ) : (
             <ul className="divide-border divide-y">
               {shown.map((server) => {
                 const checked = isSelected(server.id);
-                const blocked = needsAccount(server);
                 return (
                   <li key={server.id}>
                     <label
                       className={cn(
-                        "flex items-center gap-4 px-4 py-3",
-                        blocked ? "cursor-not-allowed" : "cursor-pointer",
-                        checked
-                          ? "bg-accent/40"
-                          : blocked
-                            ? undefined
-                            : "hover:bg-muted/40",
+                        "flex cursor-pointer items-center gap-4 px-4 py-3",
+                        checked ? "bg-accent/40" : "hover:bg-muted/40",
                       )}
                     >
                       <Checkbox
                         checked={checked}
-                        disabled={blocked}
                         onCheckedChange={() => toggle(server)}
                         aria-label={server.name}
                       />
@@ -182,23 +196,83 @@ export function StepServers({
                         <span className="text-muted-foreground block truncate font-mono text-xs">
                           /mcp/{server.slug}
                         </span>
-                        {blocked && (
-                          <Text as="span" muted small className="block">
-                            Needs a connected account. Add this server from the
-                            agent's provisioning section once it exists.
-                          </Text>
-                        )}
                       </span>
-                      {blocked && (
-                        <Badge variant="neutral" size="sm">
-                          Per-user OAuth
-                        </Badge>
-                      )}
                     </label>
                   </li>
                 );
               })}
             </ul>
+          )}
+          {blockedServers.length > 0 && (
+            <div className="border-border border-t">
+              <button
+                type="button"
+                aria-expanded={showBlocked}
+                onClick={() => setShowBlocked((open) => !open)}
+                className="hover:bg-muted/40 flex w-full items-center gap-2 px-4 py-3 text-left"
+              >
+                <ChevronRight
+                  aria-hidden="true"
+                  className={cn(
+                    "size-4 shrink-0 transition-transform",
+                    showBlocked && "rotate-90",
+                  )}
+                />
+                <span className="flex-1 text-sm">
+                  Unavailable servers (need connected service account)
+                </span>
+                <Badge variant="neutral" size="sm">
+                  {blockedServers.length}
+                </Badge>
+              </button>
+              {showBlocked && (
+                <div className="border-border border-t">
+                  {/* Said once for the group rather than on every row, and it
+                      names both ways out: connect the account afterwards, or
+                      stop the server asking each person in the first place. */}
+                  <Text muted small className="block px-4 pt-3">
+                    These authorize each person separately, so an agent cannot
+                    use them until an account is connected from the agent's
+                    provisioning section. A server that should answer to one
+                    shared credential instead can be changed in its settings.
+                  </Text>
+                  <ul className="divide-border divide-y">
+                    {blockedServers.map((server) => (
+                      <li
+                        key={server.id}
+                        className="flex items-center gap-4 px-4 py-3"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="truncate">{server.name}</span>
+                            <Badge variant="neutral" size="sm">
+                              {server.projectName || server.projectSlug}
+                            </Badge>
+                          </span>
+                          <span className="text-muted-foreground block truncate font-mono text-xs">
+                            /mcp/{server.slug}
+                          </span>
+                        </span>
+                        {/* A new tab, because this is a detour: the wizard
+                            holds the name, scope and selections in memory, and
+                            navigating away then coming back loses all of it. */}
+                        <Button size="sm" variant="secondary" asChild>
+                          <Link
+                            to={`${routes.mcp.x.settings.href(
+                              server.slug || server.id,
+                            )}#${MCP_AUTHENTICATION_SECTION_ID}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Change identity
+                          </Link>
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

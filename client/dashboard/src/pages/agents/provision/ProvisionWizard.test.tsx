@@ -10,6 +10,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProvisionWizard } from "./ProvisionWizard";
 
@@ -48,6 +49,9 @@ vi.mock("@/contexts/Sdk", () => ({
     },
     keys: { create: mocks.createKey, list: mocks.listKeys },
   }),
+  // The server list links out to a server's settings, and routes read the
+  // slugs to build that href.
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
 }));
 vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
   useListMcpServersForOrg: (_r: unknown, _s: unknown, options: object) =>
@@ -86,16 +90,18 @@ function setup() {
   });
   const onDone = vi.fn();
   const view = render(
-    <QueryClientProvider client={client}>
-      <ProvisionWizard
-        onDone={(id) => {
-          onDone(id);
-        }}
-        // The real cadence is five seconds, which the verify test would have
-        // to either outwait or race.
-        verifyPollMs={20}
-      />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={client}>
+        <ProvisionWizard
+          onDone={(id) => {
+            onDone(id);
+          }}
+          // The real cadence is five seconds, which the verify test would have
+          // to either outwait or race.
+          verifyPollMs={20}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
   return { ...view, onDone };
 }
