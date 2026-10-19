@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestChatMetadataList_ClickHouseCutover(t *testing.T) {
@@ -58,7 +57,6 @@ func TestChatMetadataList_ClickHouseCutover(t *testing.T) {
 		MessageCreatedAt:  now,
 		EventKind:         chrepo.EventKindFinding,
 	}}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, principal.OrganizationID, true)

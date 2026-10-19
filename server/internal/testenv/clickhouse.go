@@ -9,7 +9,6 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	dockercontainer "github.com/moby/moby/api/types/container"
-	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	clickhousecontainer "github.com/testcontainers/testcontainers-go/modules/clickhouse"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -115,15 +114,4 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 
 		return conn, nil
 	}
-}
-
-// FlushClickHouseAsyncInserts drains ClickHouse's async insert queue. It is
-// not a read-your-writes barrier: the server's background flusher can take an
-// entry off the queue just before the flush looks, and schedule it just after
-// the flush stops waiting. Inserts through the test connection already wait
-// for their own commit (wait_for_async_insert=1), so tests should not need it.
-func FlushClickHouseAsyncInserts(t *testing.T, conn clickhouse.Conn) {
-	t.Helper()
-
-	require.NoError(t, conn.Exec(t.Context(), "SYSTEM FLUSH ASYNC INSERT QUEUE"))
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -953,7 +952,6 @@ func TestListToolUsageTraces_PreservesNameAcrossUnnamedSpans(t *testing.T) {
 		traceID := strings.ReplaceAll(uuid.New().String(), "-", "")
 		for _, name := range names {
 			insertHostedToolEventRow(t, ctx, ti, traceID, now, "payments", name, "")
-			testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 		}
 		// Replay the same spans as a single insert block under a fresh trace ID
 		// to exercise aggregation inside the materialized view as well.

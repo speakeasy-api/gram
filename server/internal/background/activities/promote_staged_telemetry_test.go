@@ -555,8 +555,6 @@ func TestPromoteStagedTelemetry_ShadowPublishesPromotedRows(t *testing.T) {
 	logPublisher := telemetry.NewLogPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), mockPub)
 
 	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t, logPublisher)
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
 
 	projectID := uuid.New()
 	orgID := "org-" + uuid.NewString()
@@ -611,11 +609,6 @@ func TestPromoteStagedTelemetry_ShadowPublishesPromotedRows(t *testing.T) {
 		ServiceVersion:       nil,
 		GramChatID:           &gramChatID,
 	}}))
-
-	// Drain the async insert queue so both staged rows and the pre-inserted
-	// telemetry_logs row are deterministically visible to the pass — no
-	// polling needed.
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	result, err := act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID})
 	require.NoError(t, err)

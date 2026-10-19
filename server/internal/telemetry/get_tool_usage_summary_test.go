@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcpRepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -754,8 +753,6 @@ func TestGetToolUsageSummary_WindowBoundaryTraces(t *testing.T) {
 	insertHostedToolEventRow(t, ctx, ti, inWindowTraceID, now.Add(-10*time.Minute), "inwindow-set", "refund", "")
 	insertHostedToolEventRow(t, ctx, ti, inWindowTraceID, now.Add(5*time.Minute), "inwindow-set", "refund", "late-user")
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
 		From: from.Format(time.RFC3339),
 		To:   now.Format(time.RFC3339),
@@ -818,8 +815,6 @@ func TestGetToolUsageGranularEndpoints_MatchSummary(t *testing.T) {
 		result:         `"ok"`,
 		conversationID: "conv-skill",
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -1001,8 +996,6 @@ func TestGetToolUsageTotals_NarrowsByStatus(t *testing.T) {
 		})
 	}
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
@@ -1054,8 +1047,6 @@ func TestGetToolUsageTotals_NarrowsByQueryOnTheRawPath(t *testing.T) {
 		userEmail:   "bob@example.com",
 		statusCode:  200,
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)

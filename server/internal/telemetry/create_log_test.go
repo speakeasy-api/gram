@@ -9,7 +9,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -559,7 +558,6 @@ func flushAndGetLog(t *testing.T, ctx context.Context, ti *testInstance, project
 
 	var logs []repo.TelemetryLog
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 		var err error
 		logs, err = ti.chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{

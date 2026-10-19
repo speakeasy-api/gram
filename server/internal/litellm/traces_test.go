@@ -986,7 +986,6 @@ func TestTracePersistenceKeepsOnlyAllowlistedAttributes(t *testing.T) {
 	query := telemetryrepo.New(instance.chConn)
 	var logs []telemetryrepo.TelemetryLog
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		testenv.FlushClickHouseAsyncInserts(t, instance.chConn)
 		var err error
 		logs, err = query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
 			GramProjectID: authCtx.ProjectID.String(),

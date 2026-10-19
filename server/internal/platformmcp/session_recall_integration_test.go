@@ -359,7 +359,6 @@ func TestSessionRecallMasksSameSpanWithClickHouseCutover(t *testing.T) {
 		Surface:           scanners.SurfaceContent,
 		EventKind:         chrepo.EventKindFinding,
 	}}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, principal.OrganizationID, false)
 	postgresResult, err := svc.ContinueSession(ctx, principal, ContinueSessionInput{SessionID: sessionID})

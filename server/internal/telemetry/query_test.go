@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -657,7 +656,6 @@ func TestQuery_SkillVersionAttributesFullSessionsWithoutDuplicateMappings(t *tes
 		mapping(uuid.New(), projectID, outsideSession, versionOne),
 		mapping(uuid.New(), foreignProjectID, foreignSession, versionOne),
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-time.Hour).Format(time.RFC3339)
 	to := now.Add(2 * time.Hour).Format(time.RFC3339)
@@ -832,10 +830,6 @@ func TestQuery_EmailFallsBackToHostname(t *testing.T) {
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
-
-	// The MV materializes synchronously with the insert; only the async insert
-	// queue needs draining for the rows to become visible deterministically.
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// Group by email: the identified user keeps their address, the emailless
 	// session surfaces under its hostname, and only the identity-less row
@@ -1174,7 +1168,6 @@ func TestQuery_IncludesOnlyCanonicalLiteLLMModelSpans(t *testing.T) {
 	spoofed.gramURN = "other:otel:traces"
 	insertLiteLLMSpan(t, ctx, spoofed)
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, base.timestamp, uuid.NewString(), 0.25, 20, 5, 0, 0, "opus", "claude@example.test", "Engineering", nil, "main", "", "", "", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)

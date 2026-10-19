@@ -14,7 +14,6 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func createGateway(t *testing.T, ctx context.Context, ti *testInstance, name string) metamcprepo.MetaMcpServer {
@@ -146,7 +145,6 @@ func seedHookObservedGateway(t *testing.T, ctx context.Context, ti *testInstance
 		result:         `"ok"`,
 		conversationID: "conv-shadow",
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	return gatewayTrafficFixture{gateway: gateway, member: member, memberSlug: memberSlug}
 }

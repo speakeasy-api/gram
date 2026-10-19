@@ -186,7 +186,6 @@ func TestOTLPTraceUsesGuardrailCallAttribution(t *testing.T) {
 	query := telemetryrepo.New(ti.chConn)
 	var logs []telemetryrepo.TelemetryLog
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 		var queryErr error
 		logs, queryErr = query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
 			GramProjectID: authCtx.ProjectID.String(),
@@ -242,7 +241,6 @@ func TestOTLPMetricsPersistOnlyOperationalRows(t *testing.T) {
 	query := telemetryrepo.New(ti.chConn)
 	var logs []telemetryrepo.TelemetryLog
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 		var queryErr error
 		logs, queryErr = query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
 			GramProjectID: authCtx.ProjectID.String(),

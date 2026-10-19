@@ -14,7 +14,6 @@ import (
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1333,11 +1332,6 @@ func TestSearchUsers_BasicMetricsOmitsBreakdowns(t *testing.T) {
 	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, 200, 100, 300, 2.0, "tool_calls", "gpt-4", "openai", userID, "")
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:petstore:listPets", 200, 0.5, userID, "")
 
-	// Telemetry writes use ClickHouse async inserts; drain the queue synchronously
-	// so the rows are deterministically visible (no polling — see the telemetry
-	// README).
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
@@ -1397,10 +1391,6 @@ func TestSearchUsers_AgentMetricsSource(t *testing.T) {
 	// not an agent-usage row, so the view can't key it — the supplement must.
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:petstore:listPets", 200, 0.5, emaillessUserID, "")
 
-	// Drain async inserts (and the MV write they trigger) so the view is
-	// deterministically populated before querying (see the telemetry README).
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
@@ -1457,7 +1447,6 @@ func TestSearchUsers_AgentMetricsSourceIncludesLiteLLMUser(t *testing.T) {
 		requestModel: "embedding-group", responseModel: "openai/text-embedding-3-small", email: email,
 		inputTokens: 13, outputTokens: 0, cost: 0.0003,
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
 		Filter: &gen.SearchUsersFilter{

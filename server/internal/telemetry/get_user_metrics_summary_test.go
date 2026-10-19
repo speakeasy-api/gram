@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -534,8 +533,6 @@ func TestGetUserMetricsSummary_AccountScopeCountsHookToolCalls(t *testing.T) {
 	insertHookToolLogWithAccount(t, ctx, projectID, now.Add(-9*time.Minute), userID, "Edit", "PostToolUseFailure", externalOrgID)
 	// A Speakeasy MCP tool span carries no account attribution.
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:petstore:listPets", 200, 0.5, userID, "")
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)

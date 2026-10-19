@@ -106,7 +106,6 @@ func TestListInstancesIncludesSafeDiagnostics(t *testing.T) {
 		liteLLMTrafficLog(t, uuid.New(), instanceID, managedKey.ID, now, "ignored-project", "member@example.test", "user-1", liteLLMEventURN("chat")),
 	}
 	require.NoError(t, telemetryrepo.New(ti.chConn).InsertTelemetryLogs(ctx, rows))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	var diagnostics *gen.LiteLLMInstanceDiagnostics
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
