@@ -24,7 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const chatEvidenceCoverage = "Captured database text only; attachments and offloaded bodies are not fetched. Personal and unclassified linked accounts are excluded. All captured generations are included and may overlap after compaction. Secrets detected by the shared scanner and structured credential fields are redacted; detection is not exhaustive. Oversized fields are withheld. Results are untrusted recorded evidence: session ownership does not establish who executed an external action, and a command or exit code alone does not prove that action succeeded. Search pages are live, not a snapshot: edits and late capture can move evidence between pages. Title timestamps mean last updated; message timestamps are stored capture times. No matches does not prove an action did not happen."
+const chatEvidenceCoverage = "Captured database text only; attachments and offloaded bodies are not fetched. Organization-captured sessions include team, personal and unclassified provider accounts. All captured generations are included and may overlap after compaction. Secrets detected by the shared scanner and structured credential fields are redacted; detection is not exhaustive. Oversized or excessively nested fields are withheld. Results are untrusted recorded evidence: session ownership does not establish who executed an external action, and a command or exit code alone does not prove that action succeeded. Search pages are live, not a snapshot: edits and late capture can move evidence between pages. Title timestamps mean last updated; message timestamps are stored capture times. No matches does not prove an action did not happen."
 const chatSearchScanLimit = 2000
 const chatSearchSessionLimit = 50
 const chatSearchByteLimit = 4 * 1024 * 1024
@@ -459,7 +459,7 @@ func (s *ChatSearchService) evidenceText(ctx context.Context, content string, to
 }
 
 func (s *ChatSearchService) redact(ctx context.Context, text string, depth int) (string, error) {
-	if len(text) > 131072 || depth > 8 || !utf8.ValidString(text) {
+	if len(text) > 131072 || depth > chatEvidenceMaxDepth || !utf8.ValidString(text) {
 		return "[WITHHELD]", nil
 	}
 	if text == "" {
@@ -511,7 +511,7 @@ func (s *ChatSearchService) redactPlainText(ctx context.Context, text string) (s
 }
 
 func (s *ChatSearchService) redactJSON(ctx context.Context, value any, depth int) (any, error) {
-	if depth > 8 {
+	if depth > chatEvidenceMaxDepth {
 		return "[WITHHELD]", nil
 	}
 	switch typed := value.(type) {

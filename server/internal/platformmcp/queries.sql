@@ -3972,9 +3972,8 @@ WITH eligible AS NOT MATERIALIZED (
  SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at
  FROM chats c
  JOIN projects p ON p.id=c.project_id AND p.organization_id=c.organization_id AND p.deleted IS FALSE
- LEFT JOIN user_accounts ua ON ua.id=c.user_account_id AND ua.organization_id=c.organization_id
  WHERE c.organization_id=sqlc.arg('organization_id') AND p.organization_id=sqlc.arg('organization_id') AND c.project_id=sqlc.arg('project_id')
-   AND c.deleted IS FALSE AND (c.user_account_id IS NULL OR ua.account_type='team')
+   AND c.deleted IS FALSE
    AND (sqlc.arg('owner_user_id')::text='' OR c.user_id=sqlc.arg('owner_user_id'))
    AND (COALESCE(cardinality(sqlc.arg('chat_ids')::uuid[]),0)=0 OR c.id=ANY(sqlc.arg('chat_ids')::uuid[]))
    AND (
@@ -4113,10 +4112,8 @@ ORDER BY CASE WHEN sqlc.arg('oldest_first')::boolean THEN session_at END ASC,
 SELECT c.id, c.user_id
 FROM chats c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
-LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id
 WHERE c.id = @chat_id AND c.project_id = @project_id AND c.organization_id = @organization_id
-  AND c.deleted IS FALSE
-  AND (c.user_account_id IS NULL OR ua.account_type = 'team');
+  AND c.deleted IS FALSE;
 
 -- name: ReadPlatformChatEvidence :many
 -- The anchor must belong to this exact session and project. All generations

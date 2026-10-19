@@ -7,6 +7,8 @@ import (
 	"unicode/utf8"
 )
 
+const chatEvidenceMaxDepth = 16
+
 // canonicalEvidenceText preserves compact JSON and decoded string leaves so
 // quoted commands, newlines and nested JSON arguments have literal matches.
 // Apply the same projection before and after redaction; never return raw text.
@@ -34,7 +36,7 @@ func canonicalEvidenceField(field string) string {
 	out.Write(data)
 	var appendLeaves func(any, int) bool
 	appendLeaves = func(item any, depth int) bool {
-		if depth > 8 || out.Len() > 524288 {
+		if depth > chatEvidenceMaxDepth || out.Len() > 524288 {
 			return false
 		}
 		switch typed := item.(type) {

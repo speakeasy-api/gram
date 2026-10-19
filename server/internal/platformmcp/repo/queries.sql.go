@@ -1943,10 +1943,8 @@ const getPlatformChatEvidenceSession = `-- name: GetPlatformChatEvidenceSession 
 SELECT c.id, c.user_id
 FROM chats c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
-LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id
 WHERE c.id = $2 AND c.project_id = $3 AND c.organization_id = $1
   AND c.deleted IS FALSE
-  AND (c.user_account_id IS NULL OR ua.account_type = 'team')
 `
 
 type GetPlatformChatEvidenceSessionParams struct {
@@ -8516,9 +8514,8 @@ WITH eligible AS NOT MATERIALIZED (
  SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at
  FROM chats c
  JOIN projects p ON p.id=c.project_id AND p.organization_id=c.organization_id AND p.deleted IS FALSE
- LEFT JOIN user_accounts ua ON ua.id=c.user_account_id AND ua.organization_id=c.organization_id
  WHERE c.organization_id=$3 AND p.organization_id=$3 AND c.project_id=$4
-   AND c.deleted IS FALSE AND (c.user_account_id IS NULL OR ua.account_type='team')
+   AND c.deleted IS FALSE
    AND ($5::text='' OR c.user_id=$5)
    AND (COALESCE(cardinality($6::uuid[]),0)=0 OR c.id=ANY($6::uuid[]))
    AND (

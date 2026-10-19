@@ -169,7 +169,7 @@ func TestChatEvidenceEnforcesTranscriptGrantAndScope(t *testing.T) {
 	}
 }
 
-func TestChatEvidencePaginationRedactionAndExclusions(t *testing.T) {
+func TestChatEvidencePaginationRedactionAndAccountCoverage(t *testing.T) {
 	t.Parallel()
 	f := newChatEvidenceFixture(t)
 	ctx := f.context(t.Context())
@@ -182,10 +182,18 @@ func TestChatEvidencePaginationRedactionAndExclusions(t *testing.T) {
 	}
 	for _, accountType := range []pgtype.Text{conv.ToPGText("personal"), {}} {
 		account := seedRecallUserAccount(t, ctx, f.db, f.principal.OrganizationID, accountType)
-		chatID := seedRecallChat(t, ctx, f.db, f.project.ID, f.principal.OrganizationID, owner, "excluded-"+account.String(), "literal_needle.%", uuid.NullUUID{UUID: account, Valid: true})
-		anchor := seedRecallMessage(t, ctx, f.db, chatID, f.project.ID, recallMessageSeed{role: "user", content: "literal_needle.%", at: f.base})
-		_, err := f.service.Read(ctx, f.principal, ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chatID.String(), MessageID: anchor.String()})
-		require.ErrorIs(t, err, ErrRiskReadNotFound)
+		chatID := seedRecallChat(t, ctx, f.db, f.project.ID, f.principal.OrganizationID, owner, "account-"+account.String(), "Account coverage", uuid.NullUUID{UUID: account, Valid: true})
+		anchor := seedRecallMessage(t, ctx, f.db, chatID, f.project.ID, recallMessageSeed{role: "user", content: "account_coverage_needle", at: f.base})
+		read, err := f.service.Read(ctx, f.principal, ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chatID.String(), MessageID: anchor.String()})
+		require.NoError(t, err)
+		require.Equal(t, anchor.String(), read.Messages[0].MessageID)
+		page, err := f.service.Search(ctx, f.principal, f.search("account_coverage_needle"))
+		require.NoError(t, err)
+		byChat := map[string]bool{}
+		for _, hit := range page.Hits {
+			byChat[hit.ChatID] = true
+		}
+		require.True(t, byChat[chatID.String()])
 	}
 	deleted := seedRecallChat(t, ctx, f.db, f.project.ID, f.principal.OrganizationID, owner, "evidence-deleted", "literal_needle.%", uuid.NullUUID{})
 	seedRecallMessage(t, ctx, f.db, deleted, f.project.ID, recallMessageSeed{role: "user", content: "literal_needle.%", at: f.base})
@@ -495,4 +503,26 @@ func TestChatEvidenceHeaderThenMessagesAcrossPages(t *testing.T) {
 		}
 		require.Equal(t, want, ids)
 	}
+}
+
+func TestChatEvidenceSearchesNestedBrowserActions(t *testing.T) {
+	t.Parallel()
+	f := newChatEvidenceFixture(t)
+	ctx := f.context(t.Context())
+	chat := seedRecallChat(t, ctx, f.db, f.project.ID, f.principal.OrganizationID, "user_fixture_owner", "browser-evidence", "Browser activity", uuid.NullUUID{})
+	args, err := json.Marshal(map[string]any{"actions": []any{map[string]any{"name": "navigate", "input": map[string]any{"url": "https://apps.example.test/settings/APP_FIXTURE", "authorization": "fixture-nested-credential"}}}})
+	require.NoError(t, err)
+	calls, err := json.Marshal([]any{map[string]any{"function": map[string]any{"name": "browser_batch", "arguments": string(args)}}})
+	require.NoError(t, err)
+	anchor := seedRecallMessage(t, ctx, f.db, chat, f.project.ID, recallMessageSeed{role: "assistant", toolCalls: string(calls), at: f.base})
+	page, err := f.service.Search(ctx, f.principal, f.search("apps.example.test/settings/APP_FIXTURE"))
+	require.NoError(t, err)
+	require.Len(t, page.Hits, 1)
+	require.Equal(t, anchor.String(), page.Hits[0].MessageID)
+	read, err := f.service.Read(ctx, f.principal, ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chat.String(), MessageID: anchor.String(), ContextSize: new(0)})
+	require.NoError(t, err)
+	require.Contains(t, read.Messages[0].Text, "https://apps.example.test/settings/APP_FIXTURE")
+	require.NotContains(t, read.Messages[0].Text, "fixture-nested-credential")
+	require.Contains(t, read.Messages[0].Text, "[REDACTED]")
+	require.False(t, read.Messages[0].Withheld)
 }
