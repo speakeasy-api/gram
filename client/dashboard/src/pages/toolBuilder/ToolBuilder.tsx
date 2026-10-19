@@ -1,3 +1,4 @@
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { Block, BlockInner } from "@/components/block";
 import { DeleteButton } from "@/components/delete-button";
 import { EditableText } from "@/components/editable-text";
@@ -448,6 +449,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
               });
 
               void invalidateAllListToolsets(queryClient);
+              void invalidateAllMcpServers(queryClient);
               routes.customTools.toolBuilder.goTo(name);
             }
 

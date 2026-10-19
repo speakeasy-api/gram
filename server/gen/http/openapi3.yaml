@@ -105230,6 +105230,9 @@ components:
         McpServerToolsetSummary:
             type: object
             properties:
+                description:
+                    type: string
+                    description: The toolset's description, if any
                 external_mcp_proxy_only:
                     type: boolean
                     description: Whether every configured tool is an external MCP proxy tool, so the real tool count is unknown until a user signs in

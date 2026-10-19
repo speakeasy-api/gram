@@ -133,15 +133,23 @@ FROM mcp_servers
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: ListMCPServersByProjectID :many
-SELECT *
-FROM mcp_servers
-WHERE project_id = @project_id
-  AND deleted IS FALSE
-  AND (sqlc.narg('remote_mcp_server_id')::uuid IS NULL OR remote_mcp_server_id = sqlc.narg('remote_mcp_server_id')::uuid)
-  AND (sqlc.narg('tunneled_mcp_server_id')::uuid IS NULL OR tunneled_mcp_server_id = sqlc.narg('tunneled_mcp_server_id')::uuid)
-  AND (sqlc.narg('toolset_id')::uuid IS NULL OR toolset_id = sqlc.narg('toolset_id')::uuid)
-  AND (sqlc.narg('unproxied_mcp_server_id')::uuid IS NULL OR unproxied_mcp_server_id = sqlc.narg('unproxied_mcp_server_id')::uuid)
-ORDER BY created_at DESC;
+-- A toolset-backed row whose toolset is deleted serves nothing, so it is not listed.
+SELECT ms.*
+FROM mcp_servers ms
+WHERE ms.project_id = @project_id
+  AND ms.deleted IS FALSE
+  AND (
+    ms.toolset_id IS NULL
+    OR EXISTS (
+      SELECT 1 FROM toolsets t
+      WHERE t.id = ms.toolset_id AND t.project_id = ms.project_id AND t.deleted IS FALSE
+    )
+  )
+  AND (sqlc.narg('remote_mcp_server_id')::uuid IS NULL OR ms.remote_mcp_server_id = sqlc.narg('remote_mcp_server_id')::uuid)
+  AND (sqlc.narg('tunneled_mcp_server_id')::uuid IS NULL OR ms.tunneled_mcp_server_id = sqlc.narg('tunneled_mcp_server_id')::uuid)
+  AND (sqlc.narg('toolset_id')::uuid IS NULL OR ms.toolset_id = sqlc.narg('toolset_id')::uuid)
+  AND (sqlc.narg('unproxied_mcp_server_id')::uuid IS NULL OR ms.unproxied_mcp_server_id = sqlc.narg('unproxied_mcp_server_id')::uuid)
+ORDER BY ms.created_at DESC;
 
 -- name: ListMCPServersByOrganizationID :many
 -- List every MCP server in an organization via each project's organization_id.
@@ -720,6 +728,7 @@ SELECT
     t.id
   , t.slug
   , t.name
+  , t.description
   , t.tool_selection_mode
   , t.external_oauth_server_id
   , (

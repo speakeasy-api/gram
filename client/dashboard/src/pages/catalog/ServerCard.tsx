@@ -21,7 +21,7 @@ interface ServerCardProps {
 }
 
 /**
- * Server card matching the MCPCard design pattern.
+ * Server card matching the MCPServerCard design pattern.
  *
  * Features:
  * - Pattern illustration header with logo overlay

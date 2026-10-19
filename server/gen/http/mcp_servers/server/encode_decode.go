@@ -3003,6 +3003,7 @@ func marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v 
 		ID:                    v.ID,
 		Slug:                  v.Slug,
 		Name:                  v.Name,
+		Description:           v.Description,
 		ToolCount:             v.ToolCount,
 		ToolSelectionMode:     v.ToolSelectionMode,
 		ExternalMcpProxyOnly:  v.ExternalMcpProxyOnly,

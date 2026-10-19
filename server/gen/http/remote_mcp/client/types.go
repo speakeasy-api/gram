@@ -3435,6 +3435,8 @@ type McpServerToolsetSummaryResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The name of the toolset
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The toolset's description, if any
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The number of distinct configured tools in the latest toolset version,
 	// excluding external MCP proxy tools. Counts configured tool URNs, so it may
 	// differ from the number of tools that resolve against the active deployment.

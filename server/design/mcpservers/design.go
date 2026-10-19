@@ -517,6 +517,7 @@ var McpServerToolsetSummary = Type("McpServerToolsetSummary", func() {
 	})
 	Attribute("slug", String, "The slug of the toolset")
 	Attribute("name", String, "The name of the toolset")
+	Attribute("description", String, "The toolset's description, if any")
 	Attribute("tool_count", Int, "The number of distinct configured tools in the latest toolset version, excluding external MCP proxy tools. Counts configured tool URNs, so it may differ from the number of tools that resolve against the active deployment.")
 	Attribute("tool_selection_mode", String, "The toolset's tool selection mode")
 	Attribute("external_mcp_slugs", ArrayOf(String), "The distinct slugs of the external MCP sources the toolset's configured tools come from, sorted")
