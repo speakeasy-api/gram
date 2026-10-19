@@ -1,6 +1,6 @@
 # Directory ID attribution
 
-This staff-run command processes one exact Gram organization. It queries WorkOS for the complete directory, user, and group inventory before changing data. It only attributes existing rows whose directory ID is null; unmatched IDs, including tombstones, remain untouched. Local examples require a local database and a local WorkOS stub, never shared services or customer tenants.
+This staff-run command processes one exact Speakeasy organization. It queries WorkOS for the complete directory, user, and group inventory before changing data. It only attributes existing rows whose directory ID is null; unmatched IDs, including tombstones, remain untouched. Local examples require a local database and a local WorkOS stub, never shared services or customer tenants.
 
 Dry-run (default, executes changes in a transaction and rolls them back):
 

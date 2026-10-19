@@ -27,7 +27,7 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("directory-id-backfill", flag.ContinueOnError)
-	organizationID := flags.String("organization-id", "", "Exact Gram organization ID to process")
+	organizationID := flags.String("organization-id", "", "Exact Speakeasy organization ID to process")
 	apply := flags.Bool("apply", false, "Commit matched directory ID attribution; default is dry-run")
 	if err := flags.Parse(args); err != nil {
 		return fmt.Errorf("parse flags: %w", err)
