@@ -306,9 +306,17 @@ export function GatewayInstructionsSection({
           <SettingsSection.FooterHint
             className={cn(overLimit && "text-destructive")}
           >
-            {defaultInstructions === undefined
-              ? "Refresh the page to view or restore default instructions for this gateway’s unsupported discovery mode."
-              : `${characterCount.toLocaleString()} / ${INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters.`}
+            {supportsEditing && (
+              <span className="block">
+                {`${characterCount.toLocaleString()} / ${INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters.`}
+              </span>
+            )}
+            {defaultInstructions === undefined && (
+              <span className="block">
+                Refresh the page to view or restore default instructions for
+                this gateway’s unsupported discovery mode.
+              </span>
+            )}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope

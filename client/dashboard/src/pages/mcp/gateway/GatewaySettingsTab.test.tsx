@@ -384,6 +384,7 @@ it.each(["future_mode", "constructor", "__proto__"])(
     expect(textarea().value).toBe("");
     expect(textarea().disabled).toBe(true);
     expect(textarea().placeholder).toBe("Default instructions unavailable");
+    expect(screen.queryByText(/\/ 10,000 characters\./)).toBeNull();
     expect(
       screen.queryByRole("button", { name: /Copy default instructions/i }),
     ).toBeNull();
@@ -409,9 +410,16 @@ it("preserves explicit custom instructions for an unknown mode without inferring
   );
   expect(textarea().value).toBe("Original");
   expect(textarea().disabled).toBe(false);
+  expect(screen.getByText("8 / 10,000 characters.")).toBeTruthy();
+  expect(
+    screen.getByText(
+      /Refresh the page to view or restore default instructions/,
+    ),
+  ).toBeTruthy();
   fireEvent.change(textarea(), {
     target: { value: "Updated custom instructions" },
   });
+  expect(screen.getByText("27 / 10,000 characters.")).toBeTruthy();
   fireEvent.click(save());
   expect(state.mutate).toHaveBeenCalledWith({
     request: {
