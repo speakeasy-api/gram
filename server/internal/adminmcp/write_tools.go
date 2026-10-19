@@ -40,11 +40,14 @@ type ProposalOutput struct {
 	Result      json.RawMessage `json:"result,omitempty"`
 }
 
-// proposalOutputSchema is ProposalOutput's schema with Preview and Result left
-// open. Inferred from the Go type, json.RawMessage reads as []byte, and the SDK
-// then rejects every object preview after the proposal is already stored.
+// proposalOutputSchema is ProposalOutput's schema with Preview and Result typed
+// as JSON objects. Inferred from the Go type, json.RawMessage reads as []byte,
+// and the SDK then rejects every object preview after the proposal is already
+// stored. An empty schema is no better: it serializes as the boolean schema
+// true, which MCP clients reject as a property schema. Every preview and
+// receipt is an encoded struct, so "object" is exact.
 var proposalOutputSchema = func() *jsonschema.Schema {
-	schema, err := jsonschema.For[ProposalOutput](&jsonschema.ForOptions{TypeSchemas: map[reflect.Type]*jsonschema.Schema{reflect.TypeFor[json.RawMessage](): {}}})
+	schema, err := jsonschema.For[ProposalOutput](&jsonschema.ForOptions{TypeSchemas: map[reflect.Type]*jsonschema.Schema{reflect.TypeFor[json.RawMessage](): {Type: "object"}}})
 	if err != nil {
 		panic(fmt.Sprintf("infer proposal output schema: %v", err))
 	}
