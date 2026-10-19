@@ -55,8 +55,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 }
 
 // ServeAuthorize is the post-resolution entry point for the OAuth 2.1
-// authorize endpoint, shared by /mcp's HandleAuthorize (toolset-keyed)
-// and /x/mcp's mcp_endpoint-keyed route registration.
+// authorize endpoint, called by HandleAuthorize after slug resolution.
 func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	if s.redirectToAuthorizationServer(w, r, endpoint) {
 		return nil

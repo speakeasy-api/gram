@@ -17,8 +17,7 @@ import (
 // `GET /mcp/{mcpSlug}/connect/first-party`. It
 // resolves the slug to a `/mcp`-keyed ResolvedMcpEndpoint and delegates to
 // ServeFirstPartyConnect — the dashboard's entry point for linking an
-// issuer-gated server's upstream sessions. /x/mcp registers the equivalent
-// via its mcp_endpoint-keyed adapter (see xmcp.Service.handleFirstPartyConnect).
+// issuer-gated server's upstream sessions.
 func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")

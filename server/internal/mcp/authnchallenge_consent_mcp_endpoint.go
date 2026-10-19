@@ -89,7 +89,7 @@ func (s *Service) HandleConsentMCP(w http.ResponseWriter, r *http.Request) error
 	return s.ServeConsentMCP(w, r, endpoint)
 }
 
-// ServeConsentMCP is the post-resolution handler, shared with /x/mcp.
+// ServeConsentMCP is the post-resolution handler.
 func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)

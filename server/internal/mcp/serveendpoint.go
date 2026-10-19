@@ -45,37 +45,6 @@ import (
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
-// ServeMCPEndpoint resolves a public MCP route; mcpRouteBase preserves the called surface in auth URLs.
-func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug, mcpRouteBase string) error {
-	ctx := r.Context()
-	logger := s.logger.With(attr.SlogToolsetMCPSlug(slug))
-
-	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
-	if err != nil {
-		return err
-	}
-	attributeMCPBandwidthServer(ctx, mcpServer, metaServer, slug)
-
-	if metaServer != nil {
-		// Meta-backed endpoints are served only on the canonical /mcp
-		// surface; /x/mcp stays a generic-backend surface with no meta
-		// exposure.
-		if mcpRouteBase != "mcp" {
-			return oops.E(oops.CodeNotFound, nil, "mcp endpoint not found")
-		}
-		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
-			return err
-		}
-		return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{agentID: uuid.Nil, organization: false}, nil)
-	}
-
-	if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
-		return err
-	}
-
-	return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, slug, mcpRouteBase)
-}
-
 func attributeMCPBandwidthServer(ctx context.Context, mcpServer *mcpserversrepo.McpServer, metaServer *metamcprepo.MetaMcpServer, serverSlug string) {
 	if mcpServer != nil && mcpServer.Slug.Valid && mcpServer.Slug.String != "" {
 		serverSlug = mcpServer.Slug.String
@@ -102,8 +71,8 @@ func attributeMCPBandwidthServer(ctx context.Context, mcpServer *mcpserversrepo.
 // the allowlist for that hostname. The lockdown engages as soon as an allowlist
 // is configured, regardless of whether the domain is verified/activated yet.
 //
-// This guard is wired into runtime MCP dispatch (ServePublic,
-// ServeMCPEndpoint) and the consent-scoped MCP transport, which can enumerate
+// This guard is wired into runtime MCP dispatch (ServePublic) and the
+// consent-scoped MCP transport, which can enumerate
 // live inventories. The install page (ServeInstallPage / HandleGetServer's
 // inline browser path), consent HTML, and OAuth metadata routes are
 // intentionally left ungated: private-MCP install and consent pages must keep
@@ -170,10 +139,8 @@ func (s *Service) organizationCustomDomainLockdown(ctx context.Context, logger *
 // mcp_server) pair: it runs the issuer gate when the mcp_server is
 // issuer-gated and then dispatches to the appropriate backend.
 //
-// Split from ServeMCPEndpoint so ServePublic can avoid a redundant
-// resolve+lookup when it already has the rows in hand (ServePublic tries
-// mcp_endpoints first and falls back to the legacy toolsets lookup on
-// miss; only the hit case needs dispatch).
+// ServePublic tries mcp_endpoints first and falls back to the legacy
+// toolsets lookup on miss; only the hit case needs dispatch.
 func (s *Service) serveResolvedMCPEndpoint(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -513,7 +480,7 @@ func routeFailClosed(ctx context.Context, logger *slog.Logger, reason string, to
 }
 
 // ResolveMCPEndpointAndServer walks the runtime addressing chain shared by
-// the /mcp and /x/mcp slug handlers and the .well-known routes. Public and
+// the /mcp slug handler and the .well-known routes. Public and
 // custom-domain requests use the ordinary context-derived namespace. Private
 // requests re-load their live ingress authority and supply its pinned namespace,
 // organization, and surface explicitly to the centralized resolver.
@@ -583,8 +550,7 @@ func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
 }
 
 // LoadResolvedMcpEndpointBySlug resolves a slug to a *ResolvedMcpEndpoint
-// for the issuer-gated OAuth handlers, shared by both the /mcp and /x/mcp
-// surfaces. It mirrors the well-known handlers' resolution model:
+// for the issuer-gated OAuth handlers. It mirrors the well-known handlers' resolution model:
 //
 //   - Addressing hit, issuer-gated: build the endpoint from the
 //     (mcp_endpoint, mcp_server) pair.
@@ -598,7 +564,7 @@ func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
 //     mcp_servers migration) still resolve. A resolvable-but-unavailable
 //     address (disabled wrapper, dangling backend) is terminal.
 //
-// mcpRouteBase ("mcp" or "x/mcp") propagates into the resolved endpoint's
+// mcpRouteBase propagates into the resolved endpoint's
 // URL building on both the primary and fallback paths.
 //
 // mcpRouteBase "mcp/gateway" resolves slug as an organization slug to that
@@ -649,13 +615,12 @@ func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 // organization id (not carried on mcp_servers directly). Caller is
 // responsible for first checking mcpServer.UserSessionIssuerID.Valid;
 // this helper assumes the column has been validated and 404s if the FK
-// target row has since been deleted. mcpRouteBase ("mcp" or "x/mcp") is
-// applied to the resolved endpoint so subsequent URL building lands on
-// the request's surface.
+// target row has since been deleted. mcpRouteBase is applied to the
+// resolved endpoint so subsequent URL building lands on the request's
+// surface.
 //
-// Exported so /x/mcp's wellknown handlers can build a ResolvedMcpEndpoint
-// from a previously-loaded (mcp_endpoint, mcp_server) pair without
-// re-querying.
+// Lets callers that already hold the (mcp_endpoint, mcp_server) pair
+// build a ResolvedMcpEndpoint without re-querying.
 func (s *Service) BuildResolvedMcpEndpointForServer(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -902,9 +867,9 @@ func (s *Service) prepareProxyBackendContext(
 	// ResolveMCPEndpointAndServer.
 	//
 	// Issuer-gated requests have already been authenticated by
-	// ApplyIssuerGate in ServeMCPEndpoint: the bearer is a user-session JWT
-	// validated against the issuer's audience, and the AuthContext on ctx
-	// is stamped from it. Re-running the legacy identity-auth chain here
+	// authenticateIssuerGate in serveResolvedMCPEndpoint: the bearer is a
+	// user-session JWT validated against the issuer's audience, and the
+	// AuthContext on ctx is stamped from it. Re-running the legacy identity-auth chain here
 	// would only know how to validate API keys / OAuth tokens / chat
 	// sessions, and would reject a perfectly valid user-session JWT. Skip
 	// it and trust the gate.

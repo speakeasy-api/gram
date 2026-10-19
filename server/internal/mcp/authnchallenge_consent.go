@@ -76,8 +76,7 @@ var consentScriptHash = func() string {
 }()
 
 // consentScriptURL is the path the consent template loads the script from.
-// Hardcoded to the /mcp surface (like the install-page script) so the
-// /x/mcp surface reuses the same route rather than registering its own.
+// Hardcoded to the /mcp surface, like the install-page script.
 var consentScriptURL = "/mcp/consent-page-" + consentScriptHash + ".js"
 
 // remoteSetHashEmpty is the SHA-256 of an empty remote-set, used by the
@@ -480,8 +479,8 @@ func (s *Service) ServeConsentScript(w http.ResponseWriter, r *http.Request) err
 }
 
 // ServeConsent is the post-resolution entry point for the consent UI
-// (GET) and consent POST handlers, shared by /mcp's HandleConsent
-// (toolset-keyed) and /x/mcp's mcp_endpoint-keyed route registration.
+// (GET) and consent POST handlers, called by HandleConsent after slug
+// resolution.
 func (s *Service) ServeConsent(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	switch r.Method {
 	case http.MethodGet:

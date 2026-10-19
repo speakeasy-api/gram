@@ -280,8 +280,7 @@ func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds present
 }
 
 // ServeToken is the post-resolution entry point for the OAuth 2.1
-// token endpoint, shared by /mcp's HandleToken (toolset-keyed) and
-// /x/mcp's mcp_endpoint-keyed route registration. Parses the form and
+// token endpoint, called by HandleToken after slug resolution. Parses the form and
 // dispatches on grant_type before any client authentication, so each grant
 // branch applies its own client-authentication requirement.
 func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
