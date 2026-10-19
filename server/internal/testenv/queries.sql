@@ -1152,17 +1152,27 @@ RETURNING id;
 INSERT INTO workload_device_keys (organization_id, workload_issuer_id, subject, public_jwk, thumbprint)
 VALUES (@organization_id, @workload_issuer_id, @subject, @public_jwk, @thumbprint);
 
+-- name: SetWorkloadIssuerKeySourceFixture :execrows
+UPDATE workload_issuers
+SET key_source = @key_source
+WHERE id = @id
+  AND organization_id = @organization_id;
+
 -- name: SoftDeleteWorkloadDeviceKeyFixture :execrows
 UPDATE workload_device_keys
 SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND subject = @subject;
+  AND workload_issuer_id = @workload_issuer_id
+  AND subject = @subject
+  AND deleted IS FALSE;
 
 -- name: SoftDeleteWorkloadAdmissionFixture :execrows
 UPDATE workload_identity_admissions
 SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND subject = @subject;
+  AND workload_issuer_id = @workload_issuer_id
+  AND subject = @subject
+  AND deleted IS FALSE;
 
 -- name: CountLiveWorkloadDeviceKeysFixture :one
 SELECT count(*)

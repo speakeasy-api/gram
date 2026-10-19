@@ -24,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -70,9 +71,11 @@ var (
 // policy lacks org:device_agent_sync, without which an enrolled device could
 // not even poll its policy. Enrollment needs nothing else: hooks access is
 // checked per request against the project each hook names, so an agent with
-// no hooks grant can still enroll devices that only use MCP.
-func (s *Service) requireDeviceEnrollmentGrant(ctx context.Context, organizationID string, agentID uuid.UUID) error {
-	grants, err := runtimepolicy.LoadAgentPolicy(ctx, s.db, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
+// no hooks grant can still enroll devices that only use MCP. db is the
+// caller's transaction when it holds one, so the check never waits on a second
+// pool connection while holding the first.
+func (s *Service) requireDeviceEnrollmentGrant(ctx context.Context, db accessrepo.DBTX, organizationID string, agentID uuid.UUID) error {
+	grants, err := runtimepolicy.LoadAgentPolicy(ctx, db, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading agent policy").LogError(ctx, s.logger)
 	}
@@ -145,7 +148,7 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 		}
 	}
 
-	if err := s.requireDeviceEnrollmentGrant(ctx, t.organizationID, agent.ID); err != nil {
+	if err := s.requireDeviceEnrollmentGrant(ctx, s.db, t.organizationID, agent.ID); err != nil {
 		return nil, err
 	}
 
@@ -263,7 +266,7 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 	// Re-checked too: a grant removed since the token was issued would enroll
 	// a device that cannot poll. Failing here rolls back the redemption, so the
 	// token is not spent.
-	if err := s.requireDeviceEnrollmentGrant(ctx, org, agent.ID); err != nil {
+	if err := s.requireDeviceEnrollmentGrant(ctx, dbtx, org, agent.ID); err != nil {
 		return nil, err
 	}
 

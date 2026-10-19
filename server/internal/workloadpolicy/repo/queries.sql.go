@@ -484,14 +484,16 @@ func (q *Queries) GetOrganizationAgent(ctx context.Context, arg GetOrganizationA
 const getReplayedDeviceRegistration = `-- name: GetReplayedDeviceRegistration :one
 SELECT t.organization_id, t.agent_id, t.consumed_by_subject AS subject, i.issuer
 FROM workload_device_join_tokens t
+JOIN workload_issuers i
+  ON i.organization_id = t.organization_id
+  AND i.project_id IS NULL
+  AND i.key_source = 'device_keys'
+  AND i.deleted IS FALSE
 JOIN workload_device_keys k
-  ON k.organization_id = t.organization_id
+  ON k.organization_id = i.organization_id
+  AND k.workload_issuer_id = i.id
   AND k.subject = t.consumed_by_subject
   AND k.deleted IS FALSE
-JOIN workload_issuers i
-  ON i.organization_id = k.organization_id
-  AND i.id = k.workload_issuer_id
-  AND i.deleted IS FALSE
 JOIN workload_identity_admissions a
   ON a.organization_id = k.organization_id
   AND a.workload_issuer_id = k.workload_issuer_id
@@ -526,6 +528,8 @@ type GetReplayedDeviceRegistrationRow struct {
 
 // The enrollment a spent token produced, for the same key retrying after a crash.
 // Only within the token's lifetime, while the device is still enrolled under its agent.
+// Keys live only under the organization's device issuer, so the key is reached
+// through it and workload_device_keys_subject_key serves the lookup.
 func (q *Queries) GetReplayedDeviceRegistration(ctx context.Context, arg GetReplayedDeviceRegistrationParams) (GetReplayedDeviceRegistrationRow, error) {
 	row := q.db.QueryRow(ctx, getReplayedDeviceRegistration, arg.TokenHash, arg.Thumbprint)
 	var i GetReplayedDeviceRegistrationRow

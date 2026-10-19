@@ -6186,6 +6186,27 @@ func (q *Queries) SetUserSessionIssuerUseAuthenticationHostFixture(ctx context.C
 	return result.RowsAffected(), nil
 }
 
+const setWorkloadIssuerKeySourceFixture = `-- name: SetWorkloadIssuerKeySourceFixture :execrows
+UPDATE workload_issuers
+SET key_source = $1
+WHERE id = $2
+  AND organization_id = $3
+`
+
+type SetWorkloadIssuerKeySourceFixtureParams struct {
+	KeySource      pgtype.Text
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) SetWorkloadIssuerKeySourceFixture(ctx context.Context, arg SetWorkloadIssuerKeySourceFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setWorkloadIssuerKeySourceFixture, arg.KeySource, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setWorkosLastEventIDFixture = `-- name: SetWorkosLastEventIDFixture :exec
 UPDATE organization_metadata
 SET workos_last_event_id = $1
@@ -6511,16 +6532,19 @@ const softDeleteWorkloadAdmissionFixture = `-- name: SoftDeleteWorkloadAdmission
 UPDATE workload_identity_admissions
 SET deleted_at = clock_timestamp()
 WHERE organization_id = $1
-  AND subject = $2
+  AND workload_issuer_id = $2
+  AND subject = $3
+  AND deleted IS FALSE
 `
 
 type SoftDeleteWorkloadAdmissionFixtureParams struct {
-	OrganizationID string
-	Subject        string
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
 }
 
 func (q *Queries) SoftDeleteWorkloadAdmissionFixture(ctx context.Context, arg SoftDeleteWorkloadAdmissionFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, softDeleteWorkloadAdmissionFixture, arg.OrganizationID, arg.Subject)
+	result, err := q.db.Exec(ctx, softDeleteWorkloadAdmissionFixture, arg.OrganizationID, arg.WorkloadIssuerID, arg.Subject)
 	if err != nil {
 		return 0, err
 	}
@@ -6531,16 +6555,19 @@ const softDeleteWorkloadDeviceKeyFixture = `-- name: SoftDeleteWorkloadDeviceKey
 UPDATE workload_device_keys
 SET deleted_at = clock_timestamp()
 WHERE organization_id = $1
-  AND subject = $2
+  AND workload_issuer_id = $2
+  AND subject = $3
+  AND deleted IS FALSE
 `
 
 type SoftDeleteWorkloadDeviceKeyFixtureParams struct {
-	OrganizationID string
-	Subject        string
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
 }
 
 func (q *Queries) SoftDeleteWorkloadDeviceKeyFixture(ctx context.Context, arg SoftDeleteWorkloadDeviceKeyFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, softDeleteWorkloadDeviceKeyFixture, arg.OrganizationID, arg.Subject)
+	result, err := q.db.Exec(ctx, softDeleteWorkloadDeviceKeyFixture, arg.OrganizationID, arg.WorkloadIssuerID, arg.Subject)
 	if err != nil {
 		return 0, err
 	}
