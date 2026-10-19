@@ -59,7 +59,10 @@ describe("TrialStatusCard", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-05T00:00:00.000Z"));
-    mocks.useSession.mockReturnValue({ trial: activeTrial });
+    mocks.useSession.mockReturnValue({
+      trial: activeTrial,
+      organization: { slug: "test-org" },
+    });
     // Off by default so the existing states are asserted without the CTA.
     mocks.flagResult.mockReturnValue({ status: "disabled" });
     mocks.hasScope.mockReturnValue(true);
@@ -290,3 +293,7 @@ describe("TrialStatusCard", () => {
     expect(salesTrigger.getAttribute("type")).toBe("button");
   });
 });
+
+vi.mock("@/components/ui/hooks/useConfig", () => ({
+  useConfig: () => ({ theme: "light" }),
+}));

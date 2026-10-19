@@ -1,3 +1,4 @@
+import { showPaymentMethods } from "@/components/billing/payment-method-visibility";
 import { CancelPaygDialog } from "@/components/billing/cancel-payg-dialog";
 import { usePaygCheckoutAccess } from "@/components/billing/payg-checkout-access";
 import {
@@ -30,11 +31,19 @@ import type { ReactNode } from "react";
  * Unsubscribed PAYG organizations retain a way to finish billing setup.
  * Attached subscriptions expose their live state and management controls.
  */
-export function PaygPlanSection(): JSX.Element | null {
+export function PaygPlanSection({
+  paymentDetails = false,
+}: { paymentDetails?: boolean } = {}): JSX.Element | null {
   const productTier = useProductTier();
   const { eligible, trialLifecycle } = usePaygCheckoutAccess("active-trial");
 
-  if (trialLifecycle === "active") {
+  if (
+    productTier !== "base" &&
+    !showPaymentMethods(productTier, trialLifecycle, eligible)
+  )
+    return null;
+
+  if (trialLifecycle === "active" && !paymentDetails) {
     // The eligibility gate (flag, admin scope) decides whether there is
     // anything to offer; a section whose only content is an action the viewer
     // cannot take would just be announcing a dead end.
@@ -42,9 +51,9 @@ export function PaygPlanSection(): JSX.Element | null {
     return <AddPaymentMethodSection activeTrial />;
   }
 
-  if (productTier === "base") return <BasePaymentSection />;
+  if (productTier === "base" && !paymentDetails) return <BasePaymentSection />;
 
-  if (productTier !== "payg") return null;
+  if (productTier !== "payg" && !paymentDetails) return null;
 
   return (
     <PaymentSection description="Your pay-as-you-go subscription, payment method, and invoices.">

@@ -1,5 +1,8 @@
+import { showPaymentMethods } from "@/components/billing/payment-method-visibility";
+import { BillingTabs } from "@/components/billing/billing-tabs";
+import { Link, Navigate, useLocation } from "react-router";
+import { useSession } from "@/contexts/Auth";
 import { Page } from "@/components/page-layout";
-import { PageEyebrow } from "@/components/page-eyebrow";
 import { ProductTierBadge } from "@/components/product-tier-badge";
 import { productTierColors } from "@/components/product-tier-utils";
 import { Card, Cards, CardSkeleton } from "@/components/ui/Card";
@@ -30,8 +33,7 @@ import {
   PaygPaymentFailedBanner,
 } from "@/components/billing/billing-banners";
 import { InferenceCapsSection } from "@/components/billing/inference-caps-section";
-import { PaygPlanSection } from "@/components/billing/payg-plan-section";
-import { PaygPriceList } from "@/components/billing/payg-price-list";
+import { Alert } from "@/components/ui/Alert";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { MeterUsageSection } from "@/components/billing/meter-usage-section";
 import { SpendBreakdownSection } from "@/components/billing/spend-breakdown-section";
@@ -41,6 +43,16 @@ import { useStripeSubscription } from "@/components/billing/use-stripe-subscript
 import { isNotFoundError } from "@/lib/route-errors";
 
 export default function Billing(): JSX.Element {
+  const location = useLocation();
+  const { organization } = useSession();
+  if (new URLSearchParams(location.search).has("session_id")) {
+    return (
+      <Navigate
+        to={`/${organization.slug}/billing/setup${location.search}`}
+        replace
+      />
+    );
+  }
   return (
     <Page>
       <Page.Header>
@@ -55,7 +67,13 @@ export default function Billing(): JSX.Element {
       </Page.Banner>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <PageEyebrow className="mt-3 -mb-4" />
+          <Page.Section>
+            <Page.Section.Title area="Organization">Billing</Page.Section.Title>
+            <Page.Section.Description>
+              Review your usage and spending, manage your plan, and update
+              payment details.
+            </Page.Section.Description>
+          </Page.Section>
           <BillingInner />
         </RequireScope>
       </Page.Body>
@@ -64,6 +82,7 @@ export default function Billing(): JSX.Element {
 }
 
 function BillingInner() {
+  const { organization } = useSession();
   const productTier = useProductTier();
   const { eligible: canStartCheckout, trialLifecycle } = usePaygCheckoutAccess(
     productTier === "payg" ? "unsubscribed-payg" : "active-trial",
@@ -73,9 +92,10 @@ function BillingInner() {
     usePaygCheckoutAccess("unsubscribed-base");
   const subscription = useStripeSubscription({
     enabled:
-      !activeTrial &&
-      (productTier === "payg" ||
-        (productTier === "base" && canStartBaseCheckout)),
+      (activeTrial && canStartCheckout) ||
+      (!activeTrial &&
+        (productTier === "payg" ||
+          (productTier === "base" && canStartBaseCheckout))),
   });
 
   let paymentRequired = activeTrial && canStartCheckout;
@@ -100,57 +120,47 @@ function BillingInner() {
       isNotFoundError(subscription.error);
   }
 
-  const baseSubscriptionError =
-    productTier === "base" &&
-    !activeTrial &&
-    canStartBaseCheckout &&
-    subscription.isError &&
-    !isNotFoundError(subscription.error);
+  // A live subscription (including a Stripe trial) already has billing setup.
+  // Unknown status must not offer checkout; confirmed absence retains the
+  // existing PAYG recovery precedence over stale cached subscription data.
+  const needsSetup = paymentRequired && isNotFoundError(subscription.error);
 
-  const paymentGroup = (activeTrial ||
-    baseSubscriptionError ||
-    productTier === "payg" ||
-    paymentRequired) && (
-    <div
-      key="payment"
-      className={cn(
-        "grid min-w-0 grid-cols-1 gap-x-8",
-        activeTrial && canStartCheckout && "@3xl/main:grid-cols-2",
+  const content = (
+    <Stack gap={6}>
+      {needsSetup && (
+        <Alert
+          variant="warning"
+          iconName="credit-card"
+          className="px-6 py-4 [&>div]:flex-1 [&>div>div:last-child]:min-w-0 [&>div>div:last-child]:flex-1"
+        >
+          <Stack
+            direction="horizontal"
+            align="center"
+            justify="space-between"
+            gap={3}
+          >
+            <Text>
+              {activeTrial
+                ? "Keep using Speakeasy after your trial ends. Add a payment method to avoid interruption."
+                : "Add a payment method to start using Speakeasy."}
+            </Text>
+            <Button asChild variant="primary" size="sm" className="shrink-0">
+              <Link to={`/${organization.slug}/billing/setup`}>
+                Add payment method
+              </Link>
+            </Button>
+          </Stack>
+        </Alert>
       )}
-    >
-      {baseSubscriptionError ? (
-        <Page.Section>
-          <Page.Section.Title area="">Payment</Page.Section.Title>
-          <Page.Section.Body>
-            <Stack direction="horizontal" align="center" gap={3}>
-              <Text muted small role="alert">
-                Couldn't load your subscription.
-              </Text>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={subscription.isFetching}
-                onClick={() => void subscription.refetch()}
-              >
-                {subscription.isFetching ? "RETRYING..." : "RETRY"}
-              </Button>
-            </Stack>
-          </Page.Section.Body>
-        </Page.Section>
-      ) : (
-        <PaygPlanSection />
-      )}
-      <PaygPriceList />
-    </div>
-  );
-  const usage = <BillingUsage key="usage" productTier={productTier} />;
-
-  return (
-    <>
-      {paymentRequired ? [paymentGroup, usage] : [usage, paymentGroup]}
+      <BillingUsage productTier={productTier} />
       {/* Enterprise contracts handle notifications through their contract. */}
       {productTier === "payg" && <BillingEmailSection />}
-    </>
+    </Stack>
+  );
+  return showPaymentMethods(productTier, trialLifecycle, canStartCheckout) ? (
+    <BillingTabs value="overview">{content}</BillingTabs>
+  ) : (
+    content
   );
 }
 

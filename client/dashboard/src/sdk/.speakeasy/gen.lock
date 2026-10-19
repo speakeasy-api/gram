@@ -788,6 +788,7 @@ trackedFiles:
   src/funcs/usageGetPaygBillingSummary.ts: {}
   src/funcs/usageGetPeriodUsage.ts: {}
   src/funcs/usageGetSpendBreakdown.ts: {}
+  src/funcs/usageGetStripeCheckoutStatus.ts: {}
   src/funcs/usageGetStripeSubscription.ts: {}
   src/funcs/usageGetTokensUnderManagement.ts: {}
   src/funcs/usageGetUsageTiers.ts: {}
@@ -1216,6 +1217,7 @@ trackedFiles:
   src/models/components/getsetupdocsresponsebody.ts: {}
   src/models/components/getsignedasseturlform.ts: {}
   src/models/components/getskillresult.ts: {}
+  src/models/components/getstripecheckoutstatusresponsebody.ts: {}
   src/models/components/gettoolusageclientsresult.ts: {}
   src/models/components/gettoolusageclienttoolbreakdownresult.ts: {}
   src/models/components/gettoolusagefilteroptionspayload.ts: {}
@@ -1866,6 +1868,7 @@ trackedFiles:
   src/models/components/spendruletargetcondition.ts: {}
   src/models/components/spendruleusage.ts: {}
   src/models/components/startonboardingrequestbody.ts: {}
+  src/models/components/stripeembeddedcheckout.ts: {}
   src/models/components/stripesubscription.ts: {}
   src/models/components/submitfeedbackrequestbody.ts: {}
   src/models/components/submitidentityproviderconnectionclientidrequestbody.ts: {}
@@ -2427,6 +2430,7 @@ trackedFiles:
   src/models/operations/getspendbreakdown.ts: {}
   src/models/operations/getspendrule.ts: {}
   src/models/operations/getspendrulesoverview.ts: {}
+  src/models/operations/getstripecheckoutstatus.ts: {}
   src/models/operations/getstripesubscription.ts: {}
   src/models/operations/gettemplate.ts: {}
   src/models/operations/gettokensundermanagement.ts: {}
@@ -3279,6 +3283,8 @@ trackedFiles:
   src/react-query/getSourceEnvironment.ts: {}
   src/react-query/getSpendBreakdown.core.ts: {}
   src/react-query/getSpendBreakdown.ts: {}
+  src/react-query/getStripeCheckoutStatus.core.ts: {}
+  src/react-query/getStripeCheckoutStatus.ts: {}
   src/react-query/getStripeSubscription.core.ts: {}
   src/react-query/getStripeSubscription.ts: {}
   src/react-query/getTokensUnderManagement.core.ts: {}
@@ -5447,9 +5453,12 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   createStripeCheckout:
     speakeasy-default-create-stripe-checkout:
+      parameters:
+        query:
+          theme: "light"
       responses:
         "200":
-          application/json: "<value>"
+          application/json: {"client_secret": "<value>", "publishable_key": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -8174,6 +8183,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getStripeCheckoutStatus:
+    speakeasy-default-get-stripe-checkout-status:
+      parameters:
+        query:
+          session_id: "<id>"
+      responses:
+        "200":
+          application/json: {"billing_ready": true, "payment_status": "unpaid", "status": "open"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getStripeSubscription:
     speakeasy-default-get-stripe-subscription:
       responses:
