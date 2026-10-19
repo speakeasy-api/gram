@@ -98,6 +98,8 @@ func TestNotifyDMsEachApprover(t *testing.T) {
 		require.Contains(t, text, approvalID.String())
 		require.Contains(t, text, "https://app.speakeasy.test/")
 		require.Contains(t, text, "tab=tool-approvals")
+		require.Contains(t, text, "request="+approvalID.String())
+		require.Contains(t, text, "*Server*\nTeam Slack")
 		require.Contains(t, text, "> Tell the team the deploy finished.")
 		// Agent-written text cannot ping the channel or render a link.
 		require.Contains(t, text, "&lt;!channel&gt;")

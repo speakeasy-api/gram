@@ -397,6 +397,31 @@ func (q *Queries) GetApprovalProjectSlugs(ctx context.Context, arg GetApprovalPr
 	return i, err
 }
 
+const getApprovalServer = `-- name: GetApprovalServer :one
+SELECT name, slug
+FROM mcp_servers
+WHERE id = $1
+  AND project_id = $2
+`
+
+type GetApprovalServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetApprovalServerRow struct {
+	Name pgtype.Text
+	Slug pgtype.Text
+}
+
+// The MCP server a held call went to, named on the approver's card.
+func (q *Queries) GetApprovalServer(ctx context.Context, arg GetApprovalServerParams) (GetApprovalServerRow, error) {
+	row := q.db.QueryRow(ctx, getApprovalServer, arg.ID, arg.ProjectID)
+	var i GetApprovalServerRow
+	err := row.Scan(&i.Name, &i.Slug)
+	return i, err
+}
+
 const insertApprovalMessage = `-- name: InsertApprovalMessage :one
 INSERT INTO risk_policy_approval_messages (
   organization_id

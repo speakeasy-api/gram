@@ -435,8 +435,13 @@ func (c *Cards) input(ctx context.Context, row repo.RiskPolicyApproval, policyNa
 		Status:        c.approvals.EffectiveStatus(row),
 		PolicyName:    policyName,
 		RequesterName: requesterName(row.RequesterUrn, names),
+		ServerName:    "",
 		DeciderName:   "",
 		DashboardURL:  "",
+	}
+	content.ServerName, err = c.serverName(ctx, row)
+	if err != nil {
+		return cardInput{}, err
 	}
 	if decider, ok := strings.CutPrefix(row.DecidedByUrn.String, string(urn.PrincipalTypeUser)+":"); ok && row.DecidedByUrn.Valid {
 		content.DeciderName = conv.Default(names[decider], "a former member")
@@ -499,7 +504,23 @@ func requesterName(requesterURN string, names map[string]string) string {
 	return requesterURN
 }
 
-// dashboardURL opens the request's project on the Tool approvals tab.
+// serverName names the MCP server the held call went to, or "" when the
+// request did not record one or the server is gone.
+func (c *Cards) serverName(ctx context.Context, row repo.RiskPolicyApproval) (string, error) {
+	if !row.McpServerID.Valid {
+		return "", nil
+	}
+	server, err := repo.New(c.db).GetApprovalServer(ctx, repo.GetApprovalServerParams{ID: row.McpServerID.UUID, ProjectID: row.ProjectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get approval server: %w", err)
+	}
+	return conv.Default(server.Name.String, server.Slug.String), nil
+}
+
+// dashboardURL opens the request on the Tool approvals tab.
 func (c *Cards) dashboardURL(ctx context.Context, row repo.RiskPolicyApproval) (string, error) {
 	if c.hosts == nil {
 		return "", nil
@@ -516,7 +537,7 @@ func (c *Cards) dashboardURL(ctx context.Context, row repo.RiskPolicyApproval) (
 		return "", nil
 	}
 	link := siteURL.JoinPath(slugs.OrganizationSlug, "projects", slugs.ProjectSlug, "risk-policies")
-	link.RawQuery = url.Values{"tab": {"tool-approvals"}}.Encode()
+	link.RawQuery = url.Values{"tab": {"tool-approvals"}, "request": {row.ID.String()}}.Encode()
 	return link.String(), nil
 }
 

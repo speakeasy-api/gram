@@ -263,3 +263,10 @@ WHERE provider = 'slack'
   AND deleted IS FALSE
 ORDER BY created_at, id
 LIMIT 1;
+
+-- name: GetApprovalServer :one
+-- The MCP server a held call went to, named on the approver's card.
+SELECT name, slug
+FROM mcp_servers
+WHERE id = @id
+  AND project_id = @project_id;

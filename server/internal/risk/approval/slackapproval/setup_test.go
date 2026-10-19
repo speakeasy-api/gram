@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -75,6 +77,8 @@ type fixture struct {
 	// approverID is the signed-in test user, the policy's first approver.
 	approverID string
 	agentURN   string
+	// serverID is the MCP server, Team Slack, that held calls go to.
+	serverID uuid.UUID
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -98,6 +102,31 @@ func newFixture(t *testing.T) *fixture {
 	cards := slackapproval.NewCards(conn, approvals, orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}))
 	slack := newFakeSlack(t)
 	workspaces := &fakeWorkspaces{workspaces: []slackdirectoryconnections.MessagingWorkspace{{ConnectionID: uuid.New(), TeamID: testTeamID, Token: testBotToken}}}
+	// The MCP server held calls go to, so cards can name it.
+	toolsetID, err := testrepo.New(conn).CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{
+		ID:             uuid.New(),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Name:           "Team Slack tools",
+		Slug:           "team-slack-tools-" + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                    uuid.New(),
+		ProjectID:             *authCtx.ProjectID,
+		Name:                  conv.ToPGText("Team Slack"),
+		Slug:                  conv.ToPGText("team-slack-" + uuid.NewString()[:8]),
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: toolsetID, Valid: true},
+		UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            "private",
+		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
 	return &fixture{
 		db:             conn,
 		approvals:      approvals,
@@ -109,6 +138,7 @@ func newFixture(t *testing.T) *fixture {
 		projectID:      *authCtx.ProjectID,
 		approverID:     authCtx.UserID,
 		agentURN:       urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()).String(),
+		serverID:       server.ID,
 	}
 }
 
@@ -174,7 +204,7 @@ func (f *fixture) pendingRequest(t *testing.T, policy policycore.Policy, request
 		RequesterUserID: requesterUserID,
 		Surface:         "hosted_mcp",
 		ToolsetID:       "",
-		ServerID:        uuid.NewSHA1(uuid.Nil, []byte("server")).String(),
+		ServerID:        f.serverID.String(),
 		ToolName:        "slack__post_message",
 		ChatID:          "",
 		Arguments:       []byte(`{"channel":"C123","text":"Deploy <!channel> finished"}`),

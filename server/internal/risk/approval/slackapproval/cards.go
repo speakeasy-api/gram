@@ -148,10 +148,14 @@ type cardInput struct {
 	// RequesterName names who made the call.
 	RequesterName string
 
+	// ServerName names the MCP server the tool belongs to. Empty when the
+	// request did not record one.
+	ServerName string
+
 	// DeciderName names who decided, once someone has.
 	DeciderName string
 
-	// DashboardURL opens the request's project on the Tool approvals tab.
+	// DashboardURL opens the request on the Tool approvals tab.
 	DashboardURL string
 }
 
@@ -222,8 +226,11 @@ func decidedHeadline(in cardInput) (string, string) {
 func detailFields(in cardInput) block {
 	fields := []textObject{
 		{Type: "mrkdwn", Text: "*Requester*\n" + escape(in.RequesterName)},
-		{Type: "mrkdwn", Text: "*Policy*\n" + escape(in.PolicyName)},
 	}
+	if in.ServerName != "" {
+		fields = append(fields, textObject{Type: "mrkdwn", Text: "*Server*\n" + escape(in.ServerName)})
+	}
+	fields = append(fields, textObject{Type: "mrkdwn", Text: "*Policy*\n" + escape(in.PolicyName)})
 	if in.Approval.ExpiresAt.Valid {
 		fields = append(fields, textObject{Type: "mrkdwn", Text: "*Expires*\n" + slackDate(in.Approval.ExpiresAt.Time)})
 	}
