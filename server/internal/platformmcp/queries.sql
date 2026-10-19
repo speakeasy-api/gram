@@ -3962,3 +3962,81 @@ LEFT JOIN directory_groups AS dg
 WHERE drm.organization_id = @organization_id
   AND drm.deleted IS FALSE
 ORDER BY drm.role_urn, drm.source_kind DESC, dg.name, drm.attribute_key, drm.attribute_value, drm.id;
+
+
+-- name: SearchPlatformChatEvidence :many
+-- Session titles and captured messages are separate evidence hits. No tokenized
+-- matching: identifiers, command names, and punctuation are literal substrings.
+-- Raw candidate matches are checked again AFTER redaction by the caller.
+WITH visible_chats AS (
+    SELECT c.id, c.title, c.user_id, c.updated_at
+    FROM chats c
+    JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+    LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id
+    WHERE c.organization_id = @organization_id AND c.project_id = @project_id
+      AND c.deleted IS FALSE
+      AND (c.user_account_id IS NULL OR ua.account_type = 'team')
+      AND (@owner_user_id::text = '' OR c.user_id = @owner_user_id)
+      AND (sqlc.narg('chat_id')::uuid IS NULL OR c.id = sqlc.narg('chat_id'))
+), candidates AS (
+    SELECT c.id AS chat_id, c.user_id, c.id AS evidence_id, 0::bigint AS seq,
+           c.updated_at AS created_at, 'session'::text AS role, 0::integer AS generation,
+           COALESCE(c.title, '')::text AS content, NULL::jsonb AS tool_calls,
+           NULL::jsonb AS content_raw, NULL::text AS tool_call_id, NULL::text AS source,
+           false AS offloaded
+    FROM visible_chats c
+    WHERE c.updated_at >= @from_time AND c.updated_at < @to_time
+      AND strpos(lower(COALESCE(c.title, '')), lower(@query::text)) > 0
+    UNION ALL
+    SELECT c.id, c.user_id, cm.id, cm.seq, cm.created_at, cm.role, cm.generation,
+           cm.content, cm.tool_calls, cm.content_raw, cm.tool_call_id, cm.source,
+           (cm.content_asset_url IS NOT NULL AND cm.content_raw IS NULL) AS offloaded
+    FROM visible_chats c
+    JOIN chat_messages cm ON cm.chat_id = c.id AND cm.project_id = @project_id
+    WHERE @query::text <> '' AND cm.created_at >= @from_time AND cm.created_at < @to_time
+      AND strpos(lower(cm.content || ' ' || COALESCE(cm.tool_calls::text, '') || ' ' || COALESCE(cm.content_raw::text, '')), lower(@query)) > 0
+)
+SELECT chat_id, user_id, evidence_id, seq, created_at, role, generation,
+       CASE WHEN octet_length(content) <= 131072 THEN content ELSE '' END::text AS content,
+       CASE WHEN octet_length(tool_calls::text) <= 131072 THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
+       CASE WHEN octet_length(content_raw::text) <= 131072 THEN content_raw ELSE NULL END::jsonb AS content_raw,
+       tool_call_id, source, offloaded,
+       (octet_length(content) > 131072 OR COALESCE(octet_length(tool_calls::text), 0) > 131072 OR COALESCE(octet_length(content_raw::text), 0) > 131072) AS oversized
+FROM candidates
+WHERE (candidates.created_at, candidates.seq, candidates.evidence_id) < (@before_time::timestamptz, @before_seq::bigint, @before_id::uuid)
+ORDER BY created_at DESC, seq DESC, evidence_id DESC
+LIMIT @row_limit;
+
+-- name: GetPlatformChatEvidenceSession :one
+SELECT c.id, c.user_id
+FROM chats c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id
+WHERE c.id = @chat_id AND c.project_id = @project_id AND c.organization_id = @organization_id
+  AND c.deleted IS FALSE
+  AND (c.user_account_id IS NULL OR ua.account_type = 'team');
+
+-- name: ReadPlatformChatEvidence :many
+-- The anchor must belong to this exact session and project. All generations
+-- remain available as historical evidence, and are explicitly labelled.
+WITH anchor AS (
+    SELECT cm.seq FROM chat_messages cm
+    WHERE (sqlc.narg('message_id')::uuid IS NULL OR cm.id = sqlc.narg('message_id')) AND cm.chat_id = @chat_id AND cm.project_id = @project_id
+    ORDER BY cm.seq DESC LIMIT 1
+), preceding AS (
+    SELECT cm.* FROM chat_messages cm, anchor a
+     WHERE cm.chat_id = @chat_id AND cm.project_id = @project_id AND cm.seq < a.seq
+     ORDER BY cm.seq DESC LIMIT @context_size::integer
+), following AS (
+    SELECT cm.* FROM chat_messages cm, anchor a
+     WHERE cm.chat_id = @chat_id AND cm.project_id = @project_id AND cm.seq >= a.seq
+     ORDER BY cm.seq ASC LIMIT @following_limit::integer
+), neighbors AS (SELECT * FROM preceding UNION ALL SELECT * FROM following)
+SELECT id, seq, created_at, role, generation,
+       CASE WHEN octet_length(content) <= 131072 THEN content ELSE '' END::text AS content,
+       CASE WHEN octet_length(tool_calls::text) <= 131072 THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
+       CASE WHEN octet_length(content_raw::text) <= 131072 THEN content_raw ELSE NULL END::jsonb AS content_raw,
+       tool_call_id, source,
+       (content_asset_url IS NOT NULL AND content_raw IS NULL) AS offloaded,
+       (octet_length(content) > 131072 OR COALESCE(octet_length(tool_calls::text), 0) > 131072 OR COALESCE(octet_length(content_raw::text), 0) > 131072) AS oversized
+FROM neighbors ORDER BY seq;

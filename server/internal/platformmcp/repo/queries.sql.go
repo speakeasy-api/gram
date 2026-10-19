@@ -1939,6 +1939,34 @@ func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatFor
 	return i, err
 }
 
+const getPlatformChatEvidenceSession = `-- name: GetPlatformChatEvidenceSession :one
+SELECT c.id, c.user_id
+FROM chats c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id
+WHERE c.id = $2 AND c.project_id = $3 AND c.organization_id = $1
+  AND c.deleted IS FALSE
+  AND (c.user_account_id IS NULL OR ua.account_type = 'team')
+`
+
+type GetPlatformChatEvidenceSessionParams struct {
+	OrganizationID string
+	ChatID         uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformChatEvidenceSessionRow struct {
+	ID     uuid.UUID
+	UserID pgtype.Text
+}
+
+func (q *Queries) GetPlatformChatEvidenceSession(ctx context.Context, arg GetPlatformChatEvidenceSessionParams) (GetPlatformChatEvidenceSessionRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformChatEvidenceSession, arg.OrganizationID, arg.ChatID, arg.ProjectID)
+	var i GetPlatformChatEvidenceSessionRow
+	err := row.Scan(&i.ID, &i.UserID)
+	return i, err
+}
+
 const getPlatformMCPActiveNetworkIngress = `-- name: GetPlatformMCPActiveNetworkIngress :one
 SELECT
     ingress.provider,
@@ -7411,6 +7439,94 @@ func (q *Queries) PlatformMCPOperationReceiptInputClaimed(ctx context.Context, a
 	return exists, err
 }
 
+const readPlatformChatEvidence = `-- name: ReadPlatformChatEvidence :many
+WITH anchor AS (
+    SELECT cm.seq FROM chat_messages cm
+    WHERE ($1::uuid IS NULL OR cm.id = $1) AND cm.chat_id = $2 AND cm.project_id = $3
+    ORDER BY cm.seq DESC LIMIT 1
+), preceding AS (
+    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
+     WHERE cm.chat_id = $2 AND cm.project_id = $3 AND cm.seq < a.seq
+     ORDER BY cm.seq DESC LIMIT $4::integer
+), following AS (
+    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
+     WHERE cm.chat_id = $2 AND cm.project_id = $3 AND cm.seq >= a.seq
+     ORDER BY cm.seq ASC LIMIT $5::integer
+), neighbors AS (SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM preceding UNION ALL SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM following)
+SELECT id, seq, created_at, role, generation,
+       CASE WHEN octet_length(content) <= 131072 THEN content ELSE '' END::text AS content,
+       CASE WHEN octet_length(tool_calls::text) <= 131072 THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
+       CASE WHEN octet_length(content_raw::text) <= 131072 THEN content_raw ELSE NULL END::jsonb AS content_raw,
+       tool_call_id, source,
+       (content_asset_url IS NOT NULL AND content_raw IS NULL) AS offloaded,
+       (octet_length(content) > 131072 OR COALESCE(octet_length(tool_calls::text), 0) > 131072 OR COALESCE(octet_length(content_raw::text), 0) > 131072) AS oversized
+FROM neighbors ORDER BY seq
+`
+
+type ReadPlatformChatEvidenceParams struct {
+	MessageID      uuid.NullUUID
+	ChatID         uuid.UUID
+	ProjectID      uuid.NullUUID
+	ContextSize    int32
+	FollowingLimit int32
+}
+
+type ReadPlatformChatEvidenceRow struct {
+	ID         uuid.UUID
+	Seq        int64
+	CreatedAt  pgtype.Timestamptz
+	Role       string
+	Generation int32
+	Content    string
+	ToolCalls  []byte
+	ContentRaw []byte
+	ToolCallID pgtype.Text
+	Source     pgtype.Text
+	Offloaded  pgtype.Bool
+	Oversized  pgtype.Bool
+}
+
+// The anchor must belong to this exact session and project. All generations
+// remain available as historical evidence, and are explicitly labelled.
+func (q *Queries) ReadPlatformChatEvidence(ctx context.Context, arg ReadPlatformChatEvidenceParams) ([]ReadPlatformChatEvidenceRow, error) {
+	rows, err := q.db.Query(ctx, readPlatformChatEvidence,
+		arg.MessageID,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.ContextSize,
+		arg.FollowingLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadPlatformChatEvidenceRow
+	for rows.Next() {
+		var i ReadPlatformChatEvidenceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Generation,
+			&i.Content,
+			&i.ToolCalls,
+			&i.ContentRaw,
+			&i.ToolCallID,
+			&i.Source,
+			&i.Offloaded,
+			&i.Oversized,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recordPlatformMCPCatalogExplored = `-- name: RecordPlatformMCPCatalogExplored :execrows
 INSERT INTO platform_mcp_onboarding_milestones (
     organization_id,
@@ -8393,6 +8509,128 @@ func (q *Queries) RotatePlatformMCPSession(ctx context.Context, arg RotatePlatfo
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const searchPlatformChatEvidence = `-- name: SearchPlatformChatEvidence :many
+WITH visible_chats AS (
+    SELECT c.id, c.title, c.user_id, c.updated_at
+    FROM chats c
+    JOIN projects p ON p.id = c.project_id AND p.organization_id = $5 AND p.deleted IS FALSE
+    LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id
+    WHERE c.organization_id = $5 AND c.project_id = $6
+      AND c.deleted IS FALSE
+      AND (c.user_account_id IS NULL OR ua.account_type = 'team')
+      AND ($7::text = '' OR c.user_id = $7)
+      AND ($8::uuid IS NULL OR c.id = $8)
+), candidates AS (
+    SELECT c.id AS chat_id, c.user_id, c.id AS evidence_id, 0::bigint AS seq,
+           c.updated_at AS created_at, 'session'::text AS role, 0::integer AS generation,
+           COALESCE(c.title, '')::text AS content, NULL::jsonb AS tool_calls,
+           NULL::jsonb AS content_raw, NULL::text AS tool_call_id, NULL::text AS source,
+           false AS offloaded
+    FROM visible_chats c
+    WHERE c.updated_at >= $9 AND c.updated_at < $10
+      AND strpos(lower(COALESCE(c.title, '')), lower($11::text)) > 0
+    UNION ALL
+    SELECT c.id, c.user_id, cm.id, cm.seq, cm.created_at, cm.role, cm.generation,
+           cm.content, cm.tool_calls, cm.content_raw, cm.tool_call_id, cm.source,
+           (cm.content_asset_url IS NOT NULL AND cm.content_raw IS NULL) AS offloaded
+    FROM visible_chats c
+    JOIN chat_messages cm ON cm.chat_id = c.id AND cm.project_id = $6
+    WHERE $11::text <> '' AND cm.created_at >= $9 AND cm.created_at < $10
+      AND strpos(lower(cm.content || ' ' || COALESCE(cm.tool_calls::text, '') || ' ' || COALESCE(cm.content_raw::text, '')), lower($11)) > 0
+)
+SELECT chat_id, user_id, evidence_id, seq, created_at, role, generation,
+       CASE WHEN octet_length(content) <= 131072 THEN content ELSE '' END::text AS content,
+       CASE WHEN octet_length(tool_calls::text) <= 131072 THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
+       CASE WHEN octet_length(content_raw::text) <= 131072 THEN content_raw ELSE NULL END::jsonb AS content_raw,
+       tool_call_id, source, offloaded,
+       (octet_length(content) > 131072 OR COALESCE(octet_length(tool_calls::text), 0) > 131072 OR COALESCE(octet_length(content_raw::text), 0) > 131072) AS oversized
+FROM candidates
+WHERE (candidates.created_at, candidates.seq, candidates.evidence_id) < ($1::timestamptz, $2::bigint, $3::uuid)
+ORDER BY created_at DESC, seq DESC, evidence_id DESC
+LIMIT $4
+`
+
+type SearchPlatformChatEvidenceParams struct {
+	BeforeTime     pgtype.Timestamptz
+	BeforeSeq      int64
+	BeforeID       uuid.UUID
+	RowLimit       int32
+	OrganizationID string
+	ProjectID      uuid.UUID
+	OwnerUserID    string
+	ChatID         uuid.NullUUID
+	FromTime       pgtype.Timestamptz
+	ToTime         pgtype.Timestamptz
+	Query          string
+}
+
+type SearchPlatformChatEvidenceRow struct {
+	ChatID     uuid.UUID
+	UserID     pgtype.Text
+	EvidenceID uuid.UUID
+	Seq        int64
+	CreatedAt  pgtype.Timestamptz
+	Role       string
+	Generation int32
+	Content    string
+	ToolCalls  []byte
+	ContentRaw []byte
+	ToolCallID pgtype.Text
+	Source     pgtype.Text
+	Offloaded  bool
+	Oversized  pgtype.Bool
+}
+
+// Session titles and captured messages are separate evidence hits. No tokenized
+// matching: identifiers, command names, and punctuation are literal substrings.
+// Raw candidate matches are checked again AFTER redaction by the caller.
+func (q *Queries) SearchPlatformChatEvidence(ctx context.Context, arg SearchPlatformChatEvidenceParams) ([]SearchPlatformChatEvidenceRow, error) {
+	rows, err := q.db.Query(ctx, searchPlatformChatEvidence,
+		arg.BeforeTime,
+		arg.BeforeSeq,
+		arg.BeforeID,
+		arg.RowLimit,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.OwnerUserID,
+		arg.ChatID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.Query,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchPlatformChatEvidenceRow
+	for rows.Next() {
+		var i SearchPlatformChatEvidenceRow
+		if err := rows.Scan(
+			&i.ChatID,
+			&i.UserID,
+			&i.EvidenceID,
+			&i.Seq,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Generation,
+			&i.Content,
+			&i.ToolCalls,
+			&i.ContentRaw,
+			&i.ToolCallID,
+			&i.Source,
+			&i.Offloaded,
+			&i.Oversized,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const searchPlatformMCPAccessMembers = `-- name: SearchPlatformMCPAccessMembers :many
