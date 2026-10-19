@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"log"
 	"net/http"
@@ -57,12 +58,22 @@ func TestKitGKEGatewayClientTLS(t *testing.T) {
 			client, err := kitGKEGatewayClient(policy, []string{"127.0.0.1/32"}, trustedPEM, name)
 			require.NoError(t, err)
 			t.Cleanup(client.CloseIdleConnections)
+			if scenario == "wrong hostname" {
+				transport, ok := client.Transport.(*http.Transport)
+				require.True(t, ok)
+				transport.TLSClientConfig.RootCAs = x509.NewCertPool()
+				require.True(t, transport.TLSClientConfig.RootCAs.AppendCertsFromPEM(certPEM))
+			}
 			request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
 			require.NoError(t, err)
 			request.Header.Set("Authorization", "Bearer test-runtime-token")
 			response, err := client.Do(request)
 			if scenario == "untrusted certificate" || scenario == "wrong hostname" {
 				require.Error(t, err)
+				if scenario == "wrong hostname" {
+					var hostnameError x509.HostnameError
+					require.ErrorAs(t, err, &hostnameError)
+				}
 				require.Nil(t, response)
 				require.Zero(t, received.Load(), "bearer must not reach an untrusted endpoint")
 				return

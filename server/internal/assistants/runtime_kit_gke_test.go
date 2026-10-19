@@ -57,11 +57,15 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.Equal(t, map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitFileConfig + "model = \"openai/gpt-4.1-mini\"\n"), "speakeasy.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken, "checkpoint-marker": in.CheckpointMarker, "tls.crt": in.TLSCertificate, "tls.key": in.TLSPrivateKey, "nginx.conf": []byte(kitGKETLSProxyConfig(in.GuestPort))}, secret.Data)
 	require.Equal(t, in.Identity.labels(), secret.Labels)
 	pod := kitPodTemplate(t, objects)
+	foundBootstrap := false
 	for _, volume := range pod.Spec.Volumes {
 		if volume.Name == "bootstrap" {
+			foundBootstrap = true
+			require.NotNil(t, volume.Secret)
 			require.Contains(t, volume.Secret.Items, corev1.KeyToPath{Key: "speakeasy.json", Path: "credentials/" + KitInferenceCredentialFilename})
 		}
 	}
+	require.True(t, foundBootstrap, "bootstrap volume must exist")
 	require.Equal(t, in.Identity.labels(), pod.Labels)
 	require.NotContains(t, pod.Annotations, "podsnapshot.gke.io/ps-name")
 	require.Equal(t, "false", pod.Annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"])

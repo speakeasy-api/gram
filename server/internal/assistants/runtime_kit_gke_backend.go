@@ -140,6 +140,7 @@ type kitGKEBackendMetadata struct {
 	TLSCertificate    []byte    `json:"tls_certificate"`
 	Provisioning      bool      `json:"provisioning,omitempty"`
 	CheckpointMarker  string    `json:"checkpoint_marker"`
+	ProxyImageDigest  string    `json:"proxy_image_digest"`
 	ImageDigest       string    `json:"image_digest"`
 	ContainerID       string    `json:"container_id"`
 	AuthorityUID      types.UID `json:"authority_uid,omitempty"`
@@ -166,7 +167,7 @@ func (k *KitGKERuntimeBackend) metadata(r assistantRuntimeRecord) (kitGKEBackend
 	if err := json.Unmarshal(r.BackendMetadataJSON, &m); err != nil {
 		return m, fmt.Errorf("decode Kit GKE authority: %w", err)
 	}
-	if m.CheckpointMarker == "" || m.AuthorityNotAfter.IsZero() || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.SecretUID == "" || m.SecretName == "" || (!m.Provisioning && (m.ImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "")) {
+	if m.CheckpointMarker == "" || m.AuthorityNotAfter.IsZero() || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.SecretUID == "" || m.SecretName == "" || (!m.Provisioning && (m.ImageDigest == "" || m.ProxyImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "")) {
 		return m, fmt.Errorf("kit GKE authority or exact compatibility mismatch; explicit fenced reset required")
 	}
 	return m, nil
@@ -287,7 +288,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	}
 	maps.Copy(podAnnotations, annotations)
 	_ = unstructured.SetNestedStringMap(objects.Template.Object, podAnnotations, "spec", "podTemplate", "metadata", "annotations")
-	m := kitGKEBackendMetadata{TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
+	m := kitGKEBackendMetadata{TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ProxyImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
 	for _, step := range []struct {
 		gvr schema.GroupVersionResource
 		obj *unstructured.Unstructured
@@ -345,6 +346,10 @@ func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assist
 		return RuntimeBackendEnsureResult{}, err
 	}
 	m.ImageDigest, m.ContainerID, err = kitGKEProcessIdentity(pod)
+	if err != nil {
+		return RuntimeBackendEnsureResult{}, err
+	}
+	m.ProxyImageDigest, err = kitGKEProxyImageDigest(pod)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, err
 	}
@@ -418,6 +423,13 @@ func (k *KitGKERuntimeBackend) checkPod(r assistantRuntimeRecord, p *unstructure
 	digest, containerID, err := kitGKEProcessIdentity(p)
 	if err != nil {
 		return err
+	}
+	proxyDigest, err := kitGKEProxyImageDigest(p)
+	if err != nil {
+		return err
+	}
+	if m.ProxyImageDigest != "" && m.ProxyImageDigest != proxyDigest {
+		return fmt.Errorf("kit GKE observed TLS proxy image digest compatibility mismatch")
 	}
 	if m.ImageDigest != "" && m.ImageDigest != digest {
 		return fmt.Errorf("kit GKE observed image digest compatibility mismatch")
@@ -584,26 +596,46 @@ func kitGKEProcessIdentity(p *unstructured.Unstructured) (string, string, error)
 	if !ok || restarts != 0 {
 		return "", "", fmt.Errorf("kit GKE process restarted outside admission")
 	}
-	image, ok := status["imageID"].(string)
-	if !ok {
-		return "", "", fmt.Errorf("kit GKE observed image identity missing")
-	}
-	start := strings.LastIndex(image, "sha256:")
-	if start < 0 {
-		return "", "", fmt.Errorf("kit GKE observed image has no digest")
-	}
-	digest := image[start:]
-	if len(digest) != 71 {
-		return "", "", fmt.Errorf("kit GKE observed image digest invalid")
-	}
-	if _, err := hex.DecodeString(digest[7:]); err != nil {
-		return "", "", fmt.Errorf("kit GKE observed image digest invalid")
+	digest, err := kitGKEImageDigest(status)
+	if err != nil {
+		return "", "", err
 	}
 	container, ok := status["containerID"].(string)
 	if !ok || container == "" {
 		return "", "", fmt.Errorf("kit GKE process identity missing")
 	}
 	return digest, container, nil
+}
+
+// Explicit release tags are accepted; observed identities are retained across restore.
+func kitGKEProxyImageDigest(p *unstructured.Unstructured) (string, error) {
+	statuses, _, _ := unstructured.NestedSlice(p.Object, "status", "containerStatuses")
+	for _, raw := range statuses {
+		status, ok := raw.(map[string]any)
+		if ok && status["name"] == "acp-tls" {
+			return kitGKEImageDigest(status)
+		}
+	}
+	return "", fmt.Errorf("kit GKE TLS proxy image identity missing")
+}
+
+func kitGKEImageDigest(status map[string]any) (string, error) {
+	image, ok := status["imageID"].(string)
+	if !ok {
+		return "", fmt.Errorf("kit GKE observed image identity missing")
+	}
+	start := strings.LastIndex(image, "sha256:")
+	if start < 0 {
+		return "", fmt.Errorf("kit GKE observed image has no digest")
+	}
+	digest := image[start:]
+	if len(digest) != 71 {
+		return "", fmt.Errorf("kit GKE observed image digest invalid")
+	}
+	if _, err := hex.DecodeString(digest[7:]); err != nil {
+		return "", fmt.Errorf("kit GKE observed image digest invalid")
+	}
+	return digest, nil
 }
 
 // kitAdmissionProgressKey carries the admission owner's durable metadata writer.

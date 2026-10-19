@@ -202,6 +202,9 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 		if e != nil {
 			return e
 		}
+		if e = k.checkPod(r, pod, state.Metadata); e != nil {
+			return e
+		}
 		if e = k.config.Snapshots.VerifySettled(ctx, r, pod); e != nil {
 			return fmt.Errorf("kit GKE Stop: %w", e)
 		}
@@ -520,6 +523,9 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	}
 	pod, err = k.get(ctx, r, gkePodGVR, state.Metadata.PodName, state.Metadata.PodUID)
 	if err != nil {
+		return empty, err
+	}
+	if err = k.checkPod(r, pod, state.Metadata); err != nil {
 		return empty, err
 	}
 	digest, _, e := kitGKEProcessIdentity(pod)
