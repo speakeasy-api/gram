@@ -22,7 +22,7 @@ func TestKitMCPStartupDesiredSetPolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := validateKitMCPStartup(tc.resuming, tc.provided)
-			if errors.Is(err, ErrKitMCPDesiredSetUnsupported) != tc.rejected {
+			if (!tc.rejected && err != nil) || (tc.rejected && !errors.Is(err, ErrKitMCPDesiredSetUnsupported)) {
 				t.Fatalf("unexpected policy result: %v", err)
 			}
 		})

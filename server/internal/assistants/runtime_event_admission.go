@@ -27,7 +27,7 @@ func (s *ServiceCore) claimRuntimeEvent(ctx context.Context, runtime assistantRu
 	if err := queries.AcquireAssistantAdvisoryLock(ctx, runtime.AssistantID.String()); err != nil {
 		return zero, false, fmt.Errorf("lock runtime event admission: %w", err)
 	}
-	row, err := queries.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ID: runtime.ID, ProjectID: runtime.ProjectID})
+	row, err := queries.GetAssistantRuntimeForAdmission(ctx, assistantrepo.GetAssistantRuntimeForAdmissionParams{ID: runtime.ID, ProjectID: runtime.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return zero, false, errRuntimeAuthorityRetired
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/stretchr/testify/require"
 )
 
@@ -102,5 +103,32 @@ func TestInferenceChatOwnership(t *testing.T) {
 	_, err = m.BindInferenceChat(other, f.chatID)
 	require.Error(t, err)
 	_, err = m.BindInferenceChat(t.Context(), f.chatID)
+	require.Error(t, err)
+}
+
+func TestInferenceCredentialAttributionKind(t *testing.T) {
+	t.Parallel()
+	ctx := context.WithValue(t.Context(), inferenceContextKey{}, assistantidentity.Identity{})
+	require.True(t, InferenceTranscriptOwned(ctx))
+	require.False(t, IsKitAPIKey(ctx), "startup inference uses canonical chat attribution")
+	kitCtx := context.WithValue(ctx, kitAPIKeyContextKey{}, true)
+	require.True(t, IsKitAPIKey(kitCtx))
+	require.True(t, InferenceTranscriptOwned(kitCtx))
+}
+
+func TestBindInferenceChatCanonicalAttribution(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "inference_canonical_attribution")
+	m := &Manager{tokens: tokenrepo.New(f.conn)}
+	ctx := context.WithValue(t.Context(), inferenceContextKey{}, assistantidentity.Identity{ProjectID: f.projectID, AssistantID: f.assistantID})
+	bound, err := m.BindInferenceChat(ctx, f.chatID)
+	require.NoError(t, err)
+	chatID, ok := RuntimeChatID(bound)
+	require.True(t, ok)
+	require.Equal(t, f.chatID, chatID)
+	principal, ok := contextvalues.GetAssistantPrincipal(bound)
+	require.True(t, ok)
+	require.Equal(t, f.threadID, principal.ThreadID)
+	_, err = m.BindInferenceChat(ctx, uuid.New())
 	require.Error(t, err)
 }

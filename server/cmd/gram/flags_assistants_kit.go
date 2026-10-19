@@ -26,12 +26,11 @@ func assistantKitRuntimeFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{Name: "assistant-kit-mcp-auth-method", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_AUTH_METHOD"}, Value: "client_secret_basic", Usage: "Local Kit workload authentication: client_secret_basic or private_key_jwt."},
 		&cli.StringFlag{Name: "assistant-kit-network", EnvVars: []string{"GRAM_ASSISTANT_KIT_NETWORK"}, Usage: "Isolated local container network with a trusted TLS relay for ai.speakeasy.com."},
-		&cli.StringFlag{Name: "assistant-kit-image", EnvVars: []string{"GRAM_ASSISTANT_KIT_IMAGE"}, Usage: "Opt in to local Kit v3 using this exact tagged image; empty leaves legacy runtime composition unchanged."},
+		&cli.StringFlag{Name: "assistant-kit-image", EnvVars: []string{"GRAM_ASSISTANT_KIT_IMAGE"}, Usage: "Opt in to local Kit v3 using this exact tagged image; requires the legacy local runtime image too so versions 1 and 2 remain supported. Empty leaves legacy composition unchanged."},
 		&cli.StringFlag{Name: "assistant-kit-mcp-resource", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_RESOURCE"}, Usage: "Exact HTTPS URL of the attached issuer-gated MCP resource to provision for local Kit."},
 		&cli.StringFlag{Name: "assistant-kit-mcp-issuer", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_ISSUER"}, Usage: "Expected OAuth issuer advertised by the configured Kit MCP resource."},
 		&cli.StringFlag{Name: "assistant-kit-mcp-issuer-id", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_ISSUER_ID"}, Usage: "Persisted user-session issuer UUID for the configured local Kit resource."},
 		&cli.StringFlag{Name: "assistant-kit-root-trigger-id", EnvVars: []string{"GRAM_ASSISTANT_KIT_ROOT_TRIGGER_ID"}, Usage: "Optional existing root trigger UUID; required when the assistant has multiple roots."},
-		&cli.BoolFlag{Name: "assistant-kit-allow-insecure-inference", EnvVars: []string{"GRAM_ASSISTANT_KIT_ALLOW_INSECURE_INFERENCE"}, Usage: "Explicit local-only HTTP inference opt-in. MCP machine authentication still requires HTTPS."},
 	}
 }
 
@@ -72,7 +71,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 	provisioner := mcp.NewAssistantRuntimeWorkloadProvisioner(db, auditLogger)
 	err = core.InstallKitLocalRuntime(assistants.KitLocalCompositionConfig{
 		Environment: c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
-		Origin: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, Network: c.String("assistant-kit-network"), AllowInsecureInference: c.Bool("assistant-kit-allow-insecure-inference"),
+		Origin: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, Network: c.String("assistant-kit-network"), AllowInsecureInference: false,
 		MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: issuerID, RootTriggerID: root, TurnStream: chat.NewTurnStream(redisClient),
 		ProvisionMCP: func(ctx context.Context, r assistants.KitMCPProvisionRequest) (assistants.KitMCPProvisionResult, error) {
 			var zero assistants.KitMCPProvisionResult

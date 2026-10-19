@@ -102,7 +102,7 @@ func (m *Manager) AuthorizeKitAPIKey(ctx context.Context, raw string) (context.C
 	if !managed {
 		return ctx, false, nil
 	}
-	digest := sha256.Sum256([]byte(raw))
+	digest := sha256.Sum256([]byte(bearerToken(raw)))
 	row, err := m.tokens.ReadInferenceCredential(ctx, digest[:])
 	if err != nil || row.ID != keyID || ac.ProjectID == nil || *ac.ProjectID != row.ProjectID {
 		return ctx, true, oops.C(oops.CodeUnauthorized)
@@ -119,5 +119,15 @@ func (m *Manager) AuthorizeKitAPIKey(ctx context.Context, raw string) (context.C
 		return ctx, true, oops.C(oops.CodeUnauthorized)
 	}
 	ctx = context.WithValue(ctx, inferenceContextKey{}, identity)
+	ctx = context.WithValue(ctx, kitAPIKeyContextKey{}, true)
 	return context.WithValue(ctx, inferenceRuntimeContextKey{}, row.RuntimeID), true, nil
+}
+
+// kitAPIKeyContextKey distinguishes native Kit session attribution from startup credentials.
+type kitAPIKeyContextKey struct{}
+
+// IsKitAPIKey reports whether inference was authenticated with a native Kit API key.
+func IsKitAPIKey(ctx context.Context) bool {
+	kit, _ := ctx.Value(kitAPIKeyContextKey{}).(bool)
+	return kit
 }

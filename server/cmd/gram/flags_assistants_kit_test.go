@@ -54,16 +54,34 @@ func TestKitWorkloadAuthMethodConfiguration(t *testing.T) {
 		_, _, err := kitWorkloadClientCredentials(method)
 		require.Error(t, err)
 	}
+	found := false
 	for _, f := range assistantKitRuntimeFlags() {
 		if f.Names()[0] == "assistant-kit-mcp-auth-method" {
+			found = true
 			value, ok := f.(*cli.StringFlag)
 			require.True(t, ok)
 			require.Equal(t, "client_secret_basic", value.Value)
 			require.Equal(t, []string{"GRAM_ASSISTANT_KIT_MCP_AUTH_METHOD"}, value.EnvVars)
 		}
 	}
+	require.True(t, found, "authentication method flag must be registered")
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	set.String("assistant-kit-image", "kit:test", "")
 	set.String("assistant-kit-mcp-auth-method", "invalid", "")
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(cli.NewContext(nil, set, nil), nil, nil, nil, nil, nil), "invalid assistant-kit-mcp-auth-method")
+}
+
+func TestPrivateIngressRegistersAssistantRuntimeFlags(t *testing.T) {
+	t.Parallel()
+	flags := map[string]bool{}
+	for _, f := range privateIngressServerFlags() {
+		for _, name := range f.Names() {
+			require.False(t, flags[name], "duplicate flag %s", name)
+			flags[name] = true
+		}
+	}
+	for _, f := range assistantRuntimeFlags() {
+		require.True(t, flags[f.Names()[0]], "missing flag %s", f.Names()[0])
+	}
+	require.False(t, flags["assistant-kit-allow-insecure-inference"], "Kit requires its fixed HTTPS provider origin")
 }

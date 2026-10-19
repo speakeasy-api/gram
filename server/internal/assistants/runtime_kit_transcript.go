@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/google/uuid"
@@ -167,6 +168,26 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 		return out, err
 	case "state_update":
 		out.ForegroundState, out.StopReason = u.State, u.StopReason
+		if u.State == "idle" && u.StopReason != "" && u.MessageID != "" {
+			id := KitTranscriptMessageID(b, "agent_message", u.MessageID)
+			changed, err := p.writer.ProjectMessage(ctx, b.ProjectID, id, func(ctx context.Context, tx pgx.Tx) error { return p.guard(ctx, tx, b) }, func(old *chatrepo.ChatMessage) (chat.MessageWrite, bool, error) {
+				// A terminal event cannot invent a message when the turn emitted no output.
+				if old == nil {
+					var write chat.MessageWrite
+					return write, false, nil
+				}
+				terminal := u
+				terminal.SessionUpdate = "agent_message"
+				terminal.Content = nil
+				write, apply, _, _, err := translateKitMessage(b, id, terminal, envelope.Update, old)
+				return write, apply, err
+			})
+			if err != nil {
+				return out, fmt.Errorf("project kit terminal reason: %w", err)
+			}
+			out.Changed = changed
+		}
+
 		// This marks only the dashboard foreground turn. Never use it as a snapshot fence.
 		err := p.guarded(ctx, b, func(_ pgx.Tx) error {
 			if u.State == "idle" {
@@ -215,6 +236,14 @@ func translateKitMessage(b KitTranscriptBinding, id uuid.UUID, u kitTranscriptUp
 	write.Params.Source = pgtype.Text{String: "kit", Valid: true}
 	write.Params.MessageID = pgtype.Text{String: id.String(), Valid: true}
 	write.AssistantID, write.WorkloadSource = b.AssistantID, metering.WorkloadSourceAssistant
+	// Keep the authoritative Kit reason verbatim; do not infer completion from idle.
+	if old != nil {
+		write.Params.FinishReason = old.FinishReason
+	}
+	if role == "assistant" && u.StopReason != "" {
+		write.Params.FinishReason = pgtype.Text{String: u.StopReason, Valid: true}
+	}
+
 	var text string
 	var content []byte
 	var generic []string
@@ -231,9 +260,7 @@ func translateKitMessage(b KitTranscriptBinding, id uuid.UUID, u kitTranscriptUp
 		if err := json.Unmarshal(raw, &patch); err != nil {
 			return write, false, "", nil, fmt.Errorf("translate kit transcript content: %w", err)
 		}
-		for key, value := range patch {
-			merged[key] = value
-		}
+		maps.Copy(merged, patch)
 		encoded, err := json.Marshal(merged)
 		if err != nil {
 			return write, false, "", nil, fmt.Errorf("translate kit transcript content: %w", err)
@@ -243,7 +270,13 @@ func translateKitMessage(b KitTranscriptBinding, id uuid.UUID, u kitTranscriptUp
 		write.Params.ToolCallID = pgtype.Text{String: u.ToolCallID, Valid: true}
 	} else {
 		if len(u.Content) == 0 && old != nil {
-			return write, false, "", nil, nil
+			if role != "assistant" || u.StopReason == "" {
+				return write, false, "", nil, nil
+			}
+			write.Params.Content, write.Params.ContentRaw = old.Content, old.ContentRaw
+			write.Params.ToolCalls, write.Params.ContentHash = old.ToolCalls, old.ContentHash
+			write.Params.Generation, write.Params.CreatedAt = old.Generation, old.CreatedAt
+			return write, true, old.Content, nil, nil
 		}
 		var blocks []json.RawMessage
 		if len(u.Content) != 0 && string(u.Content) != "null" {

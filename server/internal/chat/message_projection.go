@@ -68,7 +68,7 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	write = writes[0]
 	var changed int64
 	if exists {
-		changed, err = q.PatchKitProjectionMessage(ctx, repo.PatchKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: write.Params.ChatID, ID: messageID, Content: write.Params.Content, ContentRaw: write.Params.ContentRaw, ToolCalls: write.Params.ToolCalls, ContentHash: write.Params.ContentHash})
+		changed, err = q.PatchKitProjectionMessage(ctx, repo.PatchKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: write.Params.ChatID, ID: messageID, Content: write.Params.Content, ContentRaw: write.Params.ContentRaw, ToolCalls: write.Params.ToolCalls, ContentHash: write.Params.ContentHash, FinishReason: write.Params.FinishReason})
 	} else {
 		changed, err = q.CreateChatMessage(ctx, []repo.CreateChatMessageParams{write.Params})
 		if err == nil && changed > 0 {

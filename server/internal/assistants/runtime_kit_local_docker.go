@@ -13,6 +13,21 @@ import (
 	"strconv"
 )
 
+// Kit's native roots honor SSL_CERT_FILE as a replacement, not an addition.
+// Build a private bundle as UID 1000 without changing system trust. Paths and
+// the gateway command are positional arguments, never shell source.
+const kitLocalCABundleScript = `set -eu
+umask 077
+bundle=$(mktemp /tmp/kit-ca-bundle.XXXXXX)
+trap 'rm -f "$bundle"' EXIT
+cat "$1" > "$bundle"
+printf '\n' >> "$bundle"
+cat "$2" >> "$bundle"
+shift 2
+export SSL_CERT_FILE="$bundle"
+exec "$@"
+`
+
 // These extensions leave the legacy Run path unchanged. Kit must be created
 // stopped so credentials can be copied before its gateway process ever starts.
 func (d *dockerCLIEngine) CreateKit(ctx context.Context, spec kitLocalContainerSpec) (string, error) {
@@ -30,9 +45,7 @@ func kitLocalCreateArgs(port int, spec kitLocalContainerSpec) []string {
 	}
 	if spec.ExtraCACertFile != "" {
 		args = append(args, "--volume", spec.ExtraCACertFile+":"+localRuntimeCACertMountPath+":ro")
-		// The image must honor standard TLS CA environment variables. There is no
-		// legacy runner init script and no mutation of the image's system trust store.
-		args = append(args, "--env", "SSL_CERT_FILE="+localRuntimeCACertMountPath, "--env", "NODE_EXTRA_CA_CERTS="+localRuntimeCACertMountPath)
+		args = append(args, "--env", "NODE_EXTRA_CA_CERTS="+localRuntimeCACertMountPath)
 	}
 	for _, key := range slices.Sorted(maps.Keys(spec.Labels)) {
 		args = append(args, "--label", key+"="+spec.Labels[key])
@@ -42,8 +55,13 @@ func kitLocalCreateArgs(port int, spec kitLocalContainerSpec) []string {
 			args = append(args, "--env", key+"="+spec.Env[key])
 		}
 	}
-	args = append(args, "--entrypoint", spec.Command[0], spec.Image)
-	args = append(args, spec.Command[1:]...)
+	if spec.ExtraCACertFile != "" {
+		args = append(args, "--entrypoint", "/bin/sh", spec.Image, "-c", kitLocalCABundleScript, "kit-ca-bundle", "/etc/ssl/certs/ca-certificates.crt", localRuntimeCACertMountPath)
+		args = append(args, spec.Command...)
+	} else {
+		args = append(args, "--entrypoint", spec.Command[0], spec.Image)
+		args = append(args, spec.Command[1:]...)
+	}
 	args = append(args, spec.Args...)
 	return args
 }

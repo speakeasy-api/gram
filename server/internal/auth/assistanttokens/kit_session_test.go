@@ -1,7 +1,9 @@
 package assistanttokens
 
 import (
+	"context"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -16,6 +18,7 @@ func TestKitProviderSessionID(t *testing.T) {
 
 func TestBindKitSessionRequiresRuntimeAuthority(t *testing.T) {
 	t.Parallel()
-	_, err := new(Manager).BindKitSession(t.Context(), uuid.New())
+	ctx := context.WithValue(t.Context(), inferenceContextKey{}, assistantidentity.Identity{ProjectID: uuid.New(), AssistantID: uuid.New()})
+	_, err := new(Manager).BindKitSession(ctx, uuid.New())
 	require.Error(t, err)
 }

@@ -46,6 +46,7 @@ type reply struct {
 type pending struct {
 	session string
 	ch      chan reply
+	cancel  context.CancelFunc
 }
 
 // Notification contains the original v2 payload and source stream.
@@ -264,16 +265,15 @@ func (c *Client) Call(ctx context.Context, method string, params any, session st
 	c.next++
 	id := strconv.FormatUint(c.next, 10)
 	ch := make(chan reply, 1)
-	c.pending[id] = pending{session, ch}
+	reqCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	c.pending[id] = pending{session: session, ch: ch, cancel: cancel}
 	c.mu.Unlock()
 	defer func() { c.mu.Lock(); delete(c.pending, id); c.mu.Unlock() }()
 	body, err := marshal(method, params, json.RawMessage(id))
 	if err != nil {
 		return nil, err
 	}
-	reqCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	c.cancelWhenClosed(reqCtx, cancel)
 	res, err := c.request(reqCtx, http.MethodPost, session, body)
 	if err != nil {
 		return nil, err
@@ -346,6 +346,9 @@ func (c *Client) fail(err error) {
 	c.terminal = err
 	c.cancel()
 	for _, p := range c.pending {
+		if p.cancel != nil {
+			p.cancel()
+		}
 		select {
 		case p.ch <- reply{err: err, result: nil}:
 		default:

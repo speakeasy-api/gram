@@ -1874,7 +1874,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// A caller holding an assistant runtime token IS the assistants surface;
 	// its telemetry tag follows the credential, not the header, so a runner
 	// request can never be tagged (and billed) as another surface.
-	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {
+	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant || assistanttokens.InferenceTranscriptOwned(ctx) {
 		source = billing.ModelUsageSourceAssistants
 	}
 	// risk-analysis is reserved for the platform's own scanning inference
@@ -1974,7 +1974,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		if err != nil {
 			return oops.C(oops.CodeForbidden)
 		}
-		ctx, err = s.assistantTokens.BindKitSession(ctx, id)
+		if assistanttokens.IsKitAPIKey(ctx) {
+			ctx, err = s.assistantTokens.BindKitSession(ctx, id)
+		} else {
+			ctx, err = s.assistantTokens.BindInferenceChat(ctx, id)
+		}
 		if err != nil {
 			return fmt.Errorf("bind inference chat: %w", err)
 		}

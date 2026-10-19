@@ -56,11 +56,21 @@ func (p *KitRuntimeProtocol) acknowledgeKitInterrupt(ctx context.Context, r assi
 	if req.EventID == uuid.Nil || req.EventAttempt <= 0 {
 		return nil
 	}
-	err := assistantrepo.New(p.config.Core.db).AcknowledgeKitInterrupt(ctx, assistantrepo.AcknowledgeKitInterruptParams{
+	queries := assistantrepo.New(p.config.Core.db)
+	count, err := queries.AcknowledgeKitInterrupt(ctx, assistantrepo.AcknowledgeKitInterruptParams{
 		ProjectID: r.ProjectID, RuntimeID: r.ID, EventID: req.EventID, Attempt: int64(req.EventAttempt), Outcome: outcome,
 	})
 	if err != nil {
 		return fmt.Errorf("acknowledge Kit interruption: %w", err)
+	}
+	if count == 0 {
+		pending, err := queries.HasPendingKitInterruptRequest(ctx, assistantrepo.HasPendingKitInterruptRequestParams{ProjectID: r.ProjectID, RuntimeID: r.ID, EventID: req.EventID, Attempt: int64(req.EventAttempt)})
+		if err != nil {
+			return fmt.Errorf("verify Kit interruption acknowledgment: %w", err)
+		}
+		if pending {
+			return ErrKitInterruptPending
+		}
 	}
 	return nil
 }

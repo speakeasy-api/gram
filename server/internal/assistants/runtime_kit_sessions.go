@@ -108,6 +108,12 @@ func (s *ServiceCore) ValidateKitRuntimeSessionInTx(ctx context.Context, tx pgx.
 	if err := queries.AcquireAssistantAdvisoryLock(ctx, key.AssistantID.String()); err != nil {
 		return kitRuntimeSession{}, fmt.Errorf("lock Kit callback binding: %w", err)
 	}
+	if _, err := queries.GetLiveKitRuntimeAuthority(ctx, assistantrepo.GetLiveKitRuntimeAuthorityParams{ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeID: key.RuntimeID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return kitRuntimeSession{}, ErrKitRuntimeBinding
+		}
+		return kitRuntimeSession{}, fmt.Errorf("validate Kit callback authority: %w", err)
+	}
 	binding, found, err := loadKitSessionBinding(ctx, queries, key)
 	if err != nil {
 		return kitRuntimeSession{}, err
@@ -132,6 +138,16 @@ func loadKitSessionBinding(ctx context.Context, queries *assistantrepo.Queries, 
 }
 
 func (s *ServiceCore) beginKitRuntimeTransaction(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID) (pgx.Tx, *assistantrepo.Queries, error) {
+	return s.beginKitRuntimeAuthorityTransaction(ctx, projectID, assistantID, runtimeID, false)
+}
+
+// Lifecycle control can inspect a stopped guest to settle or restart it, but
+// that credential is not permission to append sessions or accept callbacks.
+func (s *ServiceCore) beginKitRuntimeControlTransaction(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID) (pgx.Tx, *assistantrepo.Queries, error) {
+	return s.beginKitRuntimeAuthorityTransaction(ctx, projectID, assistantID, runtimeID, true)
+}
+
+func (s *ServiceCore) beginKitRuntimeAuthorityTransaction(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID, control bool) (pgx.Tx, *assistantrepo.Queries, error) {
 	if projectID == uuid.Nil || assistantID == uuid.Nil || runtimeID == uuid.Nil {
 		return nil, nil, ErrKitRuntimeBinding
 	}
@@ -144,7 +160,11 @@ func (s *ServiceCore) beginKitRuntimeTransaction(ctx context.Context, projectID,
 		_ = tx.Rollback(ctx)
 		return nil, nil, fmt.Errorf("lock Kit runtime authority: %w", err)
 	}
-	_, err = queries.GetLiveKitRuntimeAuthority(ctx, assistantrepo.GetLiveKitRuntimeAuthorityParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID})
+	if control {
+		_, err = queries.GetKitRuntimeControlAuthority(ctx, assistantrepo.GetKitRuntimeControlAuthorityParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID})
+	} else {
+		_, err = queries.GetLiveKitRuntimeAuthority(ctx, assistantrepo.GetLiveKitRuntimeAuthorityParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID})
+	}
 	if err != nil {
 		_ = tx.Rollback(ctx)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -170,7 +190,7 @@ func (s *ServiceCore) StoreKitGatewayToken(ctx context.Context, projectID, assis
 	if token == "" || s.encryptionClient == nil {
 		return errKitGatewayCredential
 	}
-	tx, queries, err := s.beginKitRuntimeTransaction(ctx, projectID, assistantID, runtimeID)
+	tx, queries, err := s.beginKitRuntimeControlTransaction(ctx, projectID, assistantID, runtimeID)
 	if err != nil {
 		return err
 	}
@@ -198,14 +218,25 @@ func (s *ServiceCore) StoreKitGatewayToken(ctx context.Context, projectID, assis
 
 // LoadKitGatewayToken is trusted internal access. Validate and lock the current
 // runtime authority before reading ciphertext or attempting decryption. A
-// stopped process may reconnect while its runtime row remains live; an ended,
+// stopped process may reconnect for lifecycle control while its row remains live; an ended,
 // deleted, superseded, cross-project, or non-Kit authority cannot decrypt it.
 func (s *ServiceCore) LoadKitGatewayToken(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID) (string, error) {
-	tx, queries, err := s.beginKitRuntimeTransaction(ctx, projectID, assistantID, runtimeID)
-	if err != nil {
-		return "", err
+	queries, inSwitch := ctx.Value(runtimeSwitchQueriesKey{}).(*assistantrepo.Queries)
+	var tx pgx.Tx
+	if !inSwitch {
+		var err error
+		tx, queries, err = s.beginKitRuntimeControlTransaction(ctx, projectID, assistantID, runtimeID)
+		if err != nil {
+			return "", err
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+	} else {
+		// The switch owns the advisory lock and transaction. Reuse it rather
+		// than deadlocking on a second connection and the same advisory lock.
+		if _, err := queries.GetKitRuntimeControlAuthority(ctx, assistantrepo.GetKitRuntimeControlAuthorityParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID}); err != nil {
+			return "", ErrKitRuntimeBinding
+		}
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
 	ciphertext, err := queries.LoadKitGatewayCredential(ctx, assistantrepo.LoadKitGatewayCredentialParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrKitGatewayTokenNotFound
@@ -224,8 +255,10 @@ func (s *ServiceCore) LoadKitGatewayToken(ctx context.Context, projectID, assist
 	if envelope.ProjectID != projectID || envelope.AssistantID != assistantID || envelope.RuntimeID != runtimeID || envelope.Token == "" {
 		return "", errKitGatewayCredential
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("commit Kit gateway credential read: %w", err)
+	if tx != nil {
+		if err := tx.Commit(ctx); err != nil {
+			return "", fmt.Errorf("commit Kit gateway credential read: %w", err)
+		}
 	}
 	return envelope.Token, nil
 }
@@ -235,7 +268,7 @@ func (s *ServiceCore) LoadKitGatewayToken(ctx context.Context, projectID, assist
 // credentials. Persist and use its returned token before launching the gateway.
 // StoreKitGatewayToken remains the explicit rotation operation.
 func (s *ServiceCore) EnsureKitGatewayToken(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID, candidate string) (string, error) {
-	tx, queries, err := s.beginKitRuntimeTransaction(ctx, projectID, assistantID, runtimeID)
+	tx, queries, err := s.beginKitRuntimeControlTransaction(ctx, projectID, assistantID, runtimeID)
 	if err != nil {
 		return "", err
 	}

@@ -4047,19 +4047,20 @@ func (q *Queries) MarkClaudeTagMessages(ctx context.Context, arg MarkClaudeTagMe
 
 const patchKitProjectionMessage = `-- name: PatchKitProjectionMessage :execrows
 UPDATE chat_messages SET content = $1, content_raw = $2,
- tool_calls = $3, content_hash = $4
-WHERE project_id = $5 AND chat_id = $6 AND id = $7 AND source = 'kit'
-AND (content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3)
+ tool_calls = $3, content_hash = $4, finish_reason = $5
+WHERE project_id = $6 AND chat_id = $7 AND id = $8 AND source = 'kit'
+AND (content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3 OR finish_reason IS DISTINCT FROM $5)
 `
 
 type PatchKitProjectionMessageParams struct {
-	Content     string
-	ContentRaw  []byte
-	ToolCalls   []byte
-	ContentHash []byte
-	ProjectID   uuid.NullUUID
-	ChatID      uuid.UUID
-	ID          uuid.UUID
+	Content      string
+	ContentRaw   []byte
+	ToolCalls    []byte
+	ContentHash  []byte
+	FinishReason pgtype.Text
+	ProjectID    uuid.NullUUID
+	ChatID       uuid.UUID
+	ID           uuid.UUID
 }
 
 func (q *Queries) PatchKitProjectionMessage(ctx context.Context, arg PatchKitProjectionMessageParams) (int64, error) {
@@ -4068,6 +4069,7 @@ func (q *Queries) PatchKitProjectionMessage(ctx context.Context, arg PatchKitPro
 		arg.ContentRaw,
 		arg.ToolCalls,
 		arg.ContentHash,
+		arg.FinishReason,
 		arg.ProjectID,
 		arg.ChatID,
 		arg.ID,

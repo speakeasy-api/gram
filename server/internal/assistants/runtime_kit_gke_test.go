@@ -3,6 +3,9 @@ package assistants
 import (
 	"context"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -306,4 +309,58 @@ func TestKitGKERejectsUnboundedOrMutableProvisioning(t *testing.T) {
 			require.Empty(t, client.Actions())
 		})
 	}
+}
+
+func TestKitGKEAllowsExplicitReleaseTags(t *testing.T) {
+	t.Parallel()
+	for _, image := range []string{KitIntegrationImage, "registry.invalid:5000/kit:0.2.17"} {
+		t.Run(image, func(t *testing.T) {
+			t.Parallel()
+			in := kitGKEInput()
+			in.Image = image
+			objects, err := RenderKitGKEProvision(in)
+			require.NoError(t, err)
+			pod := kitPodTemplate(t, objects)
+			require.Equal(t, image, pod.Spec.Containers[0].Image)
+			require.Equal(t, in.Identity.CompatibilityGeneration, pod.Labels["gram.ai/compatibility-generation"])
+		})
+	}
+	for _, image := range []string{"kit", "registry.invalid:5000/kit", "kit:latest", "kit:LATEST", "kit:", "kit:bad tag"} {
+		require.False(t, validKitGKEImage(image), image)
+	}
+}
+
+func TestKitGKEBootstrapClearsRetiredCredentials(t *testing.T) {
+	t.Parallel()
+	clearIndex := strings.Index(kitBootstrapScript, "rm -rf /home/kit/.kit/credentials")
+	create := strings.Index(kitBootstrapScript, "mkdir -p /home/kit/.kit/credentials")
+	copyIndex := strings.Index(kitBootstrapScript, "cp -R /bootstrap/credentials/.")
+	require.NotEqual(t, -1, clearIndex)
+	require.Less(t, clearIndex, create)
+	require.Less(t, create, copyIndex)
+}
+
+func TestKitGKEBootstrapReplacesCredentialDirectory(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	bootstrap := filepath.Join(root, "bootstrap")
+	credentials := filepath.Join(home, ".kit", "credentials")
+	require.NoError(t, os.MkdirAll(credentials, 0700))
+	require.NoError(t, os.MkdirAll(filepath.Join(bootstrap, "credentials"), 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(credentials, "retired-key.pem"), []byte("retired"), 0600))
+	for _, file := range []string{"AGENTS.md", "config.toml", "credentials/gateway-token"} {
+		require.NoError(t, os.WriteFile(filepath.Join(bootstrap, file), []byte("fresh"), 0600))
+	}
+	script := strings.NewReplacer("/home/kit", home, "/bootstrap", bootstrap).Replace(kitBootstrapScript)
+	output, err := exec.CommandContext(t.Context(), "/bin/sh", "-ec", script).CombinedOutput()
+	require.NoError(t, err, string(output))
+	_, err = os.Stat(filepath.Join(credentials, "retired-key.pem"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+	fresh, err := os.ReadFile(filepath.Join(credentials, "gateway-token"))
+	require.NoError(t, err)
+	require.Equal(t, "fresh", string(fresh))
+	info, err := os.Stat(filepath.Join(credentials, "gateway-token"))
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0600), info.Mode().Perm())
 }

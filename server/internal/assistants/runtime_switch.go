@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 var (
@@ -108,11 +110,20 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 			BackendMetadataJSON: row.BackendMetadataJson, State: row.State, WarmUntil: row.WarmUntil,
 		})
 	}
+	pending, err := queries.HasPendingRuntimeSwitchRetirement(ctx, assistantrepo.HasPendingRuntimeSwitchRetirementParams{ProjectID: projectID, AssistantID: assistantID})
+	if err != nil {
+		return nil, fmt.Errorf("check pending runtime retirement: %w", err)
+	}
+	if pending {
+		// In particular, do not switch back and reuse a legacy resource
+		// while a previous stop of that resource still needs a retry.
+		return nil, errRuntimeSwitchBusy
+	}
 	coordinator, ok := s.runtime.(runtimeSwitchCoordinator)
 	if !ok {
 		return nil, errRuntimeSwitchUnavailable
 	}
-	readiness, err := coordinator.PrepareRuntimeSwitch(ctx, assistantRecordFromGetRow(current), runtimes, desiredVersion)
+	readiness, err := coordinator.PrepareRuntimeSwitch(context.WithValue(ctx, runtimeSwitchQueriesKey{}, queries), assistantRecordFromGetRow(current), runtimes, desiredVersion)
 	if err != nil {
 		return readiness.Release, fmt.Errorf("prepare runtime switch: %w", err)
 	}
@@ -121,11 +132,6 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 	}
 	if !readiness.Settled {
 		return readiness.Release, errRuntimeSwitchBusy
-	}
-	for _, runtime := range runtimes {
-		if err := s.runtime.Stop(ctx, runtime); err != nil {
-			return readiness.Release, fmt.Errorf("retire previous runtime: %w", err)
-		}
 	}
 	if err := queries.RetireAssistantRuntimesForSwitch(ctx, assistantrepo.RetireAssistantRuntimesForSwitchParams{ProjectID: projectID, AssistantID: assistantID}); err != nil {
 		return readiness.Release, fmt.Errorf("retire runtime bindings: %w", err)
@@ -139,5 +145,61 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 	if updated != 1 {
 		return readiness.Release, errRuntimeSwitchConflict
 	}
-	return readiness.Release, nil
+	return func() {
+		defer readiness.Release()
+		// The caller has ended its transaction. On rollback these rows will
+		// not be pending retirement, so no external resource is stopped.
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		for _, runtime := range runtimes {
+			if err := s.finishRuntimeSwitchRetirement(cleanup, runtime); err != nil && s.logger != nil {
+				s.logger.ErrorContext(cleanup, "runtime switch retirement pending retry", attr.SlogError(err))
+			}
+		}
+	}, nil
+}
+
+// runtimeSwitchQueriesKey carries the lock-holding transaction through backend
+// callbacks. These callbacks must not borrow another pool connection.
+type runtimeSwitchQueriesKey struct{}
+
+func runtimeSwitchQueries(ctx context.Context, db assistantrepo.DBTX) *assistantrepo.Queries {
+	if queries, ok := ctx.Value(runtimeSwitchQueriesKey{}).(*assistantrepo.Queries); ok {
+		return queries
+	}
+	return assistantrepo.New(db)
+}
+
+// finishRuntimeSwitchRetirement consumes the durable retirement intent only
+// after the backend stop succeeds. Both rollback and crash recovery are safe:
+// rollback leaves no intent; a crash leaves it for the stopped-runtime janitor.
+func (s *ServiceCore) finishRuntimeSwitchRetirement(ctx context.Context, runtime assistantRuntimeRecord) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin runtime retirement: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := assistantrepo.New(tx)
+	if err := queries.AcquireAssistantAdvisoryLock(ctx, runtime.AssistantID.String()); err != nil {
+		return fmt.Errorf("lock runtime retirement: %w", err)
+	}
+	row, err := queries.GetAssistantRuntimeForAdmission(ctx, assistantrepo.GetAssistantRuntimeForAdmissionParams{ID: runtime.ID, ProjectID: runtime.ProjectID})
+	if err != nil {
+		return fmt.Errorf("read pending runtime retirement: %w", err)
+	}
+	if row.State != "switch_retiring" || !row.Ended {
+		return nil
+	}
+	// Stop does not construct a protocol or read a credential; it operates on
+	// the immutable backend resource while admission and switching are fenced.
+	if err := s.runtime.Stop(ctx, runtime); err != nil {
+		return fmt.Errorf("stop retired runtime: %w", err)
+	}
+	if err := queries.CompleteRuntimeSwitchRetirement(ctx, assistantrepo.CompleteRuntimeSwitchRetirementParams{ID: runtime.ID, ProjectID: runtime.ProjectID}); err != nil {
+		return fmt.Errorf("complete runtime retirement: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit runtime retirement: %w", err)
+	}
+	return nil
 }

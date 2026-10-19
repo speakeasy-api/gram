@@ -52,7 +52,6 @@ files or command output.
    GRAM_ASSISTANT_KIT_IMAGE = "localhost/kit-control-plane:2c4a35e"
    GRAM_ASSISTANT_KIT_NETWORK = "<ISOLATED_NETWORK>"
    GRAM_ASSISTANT_RUNTIME_LOCAL_CA_FILE = "<ABSOLUTE_CA_BUNDLE_PATH>"
-   GRAM_ASSISTANT_KIT_ALLOW_INSECURE_INFERENCE = "false"
    # Default is client_secret_basic; use private_key_jwt to test ES256 startup.
    GRAM_ASSISTANT_KIT_MCP_AUTH_METHOD = "client_secret_basic"
    GRAM_ASSISTANT_KIT_MCP_RESOURCE = "https://<RESOURCE_HOST>/mcp/<SLUG>"
@@ -284,10 +283,10 @@ credential revocation or a general retry API.
 
 Provisioning writes private credentials before the gateway starts. Do not print,
 copy into transcripts, or commit those files. Fresh process starts require
-revoked/reissued inference credentials; a bearer recovered from a snapshot must
-not be reused.
+revoked/reissued native inference API keys; a key recovered from a snapshot must
+not be reused. This startup requirement does not establish cold-restore correctness.
 
-Adapter maintainers can find the exact file names, permissions, ACP metadata,
+Adapter maintainers can find the exact file names, permissions, control-plane chat binding,
 projection rules, and restore constraints in the
 [Kit assistant adapter reference](../design/kit-assistant-adapter.md).
 

@@ -86,19 +86,18 @@ func (s *Service) provisionAssistantWorkloadClient(ctx context.Context, p Provis
 	if err != nil {
 		return zero, err
 	}
-	identityService := new(assistantidentity.Service)
-	resolved, err := identityService.Resolve(ctx, s.db, p.OrganizationID, p.ProjectID, p.AssistantID, p.TriggerID)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return zero, fmt.Errorf("provision assistant workload client: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	resolved, err := new(assistantidentity.Service).ResolveLocked(ctx, tx, p.OrganizationID, p.ProjectID, p.AssistantID, p.TriggerID)
 	if err != nil {
 		return zero, fmt.Errorf("provision assistant workload client: %w", err)
 	}
 	if resolved.State != assistantidentity.Active || resolved.Identity == nil {
 		return zero, assistantidentity.ErrInvalidIdentity
 	}
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return zero, fmt.Errorf("provision assistant workload client: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 	q := usersessions_repo.New(tx)
 	var noSecretExpiry pgtype.Timestamptz
 	row, err := q.CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
