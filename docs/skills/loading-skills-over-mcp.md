@@ -10,17 +10,17 @@ Two surfaces serve skills.
 
 **Hosted MCP servers.** The endpoint of a toolset with MCP enabled, including any MCP server record fronting that toolset, serves the managed skills distributed to the plugins that include the server. Each entry is the skill's current served version: the version the distribution is pinned to, or else the latest version that passes Agent Skills validation. Versions that fail validation are never served, even when they are newer.
 
-**The platform toolset.** The Platform MCP that administrators and managed assistants connect to serves the reviewed Platform MCP skills that ship inside the Platform plugin, straight from the binary. They are the same `SKILL.md` files kept under `server/internal/plugins/platform_mcp_skills/<name>/SKILL.md`, so what the plugin package carries and what the endpoint serves are byte-identical. Every caller whose organization has the flag receives the whole catalog; there is no per-caller filtering.
+**The Platform MCP.** Both Platform MCP endpoints serve the reviewed Platform MCP skills that ship inside the Platform plugin, straight from the binary: the external Platform MCP at `/platform-mcp`, which administrators reach through the Platform plugin with OAuth, and the platform toolset at `/platform/mcp/{toolsetSlug}`, which managed assistants call with their runtime token. Both build their catalog from `mcpskills.NewEmbeddedCatalog`, and its entries are the same `SKILL.md` files kept under `server/internal/plugins/platform_mcp_skills/<name>/SKILL.md`, so what the plugin package carries and what the endpoints serve are byte-identical. Every caller whose organization has the flag receives the whole catalog; there is no per-caller filtering.
 
 A skill is served as a single file. Its entry has exactly one resource:
 
-| Field                 | Value                                                                                                                                                     |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `uri`                 | `skill://<name>/SKILL.md`, where `<name>` is the skill's canonical name                                                                                   |
-| `resources[0].uri`    | the same URI                                                                                                                                              |
-| `resources[0].digest` | `sha256:<hex>` over the served bytes: the version's `skill_versions.raw_sha256` on a hosted endpoint, a hash of the embedded file on the platform toolset |
-| `resources[0].size`   | the length of those bytes                                                                                                                                 |
-| `frontmatter`         | the version's YAML frontmatter rendered verbatim as JSON: `name`, `description`, and every other field the author wrote                                   |
+| Field                 | Value                                                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `uri`                 | `skill://<name>/SKILL.md`, where `<name>` is the skill's canonical name                                                                               |
+| `resources[0].uri`    | the same URI                                                                                                                                          |
+| `resources[0].digest` | `sha256:<hex>` over the served bytes: the version's `skill_versions.raw_sha256` on a hosted endpoint, a hash of the embedded file on the Platform MCP |
+| `resources[0].size`   | the length of those bytes                                                                                                                             |
+| `frontmatter`         | the version's YAML frontmatter rendered verbatim as JSON: `name`, `description`, and every other field the author wrote                               |
 
 The frontmatter is never curated. `allowed-tools`, `license`, `metadata` and any future field appear only when the author wrote them. The extension requires the frontmatter `name` to equal the URI's final segment. Validation trims the name before checking it, so a version whose author quoted a padded name (`name: "refunds "`) is stored valid under the trimmed name while its frontmatter keeps the padding; such a version is never served (the resolver skips it with an error log, and the platform catalog refuses to build), so every served entry's frontmatter `name`, canonical name and URI segment agree.
 
@@ -42,9 +42,9 @@ A server included in several plugins serves the union of the caller's assigned p
 
 `skills-over-mcp` is a PostHog flag targeted by organization, like budgets. In Go it is `feature.FlagSkillsOverMCP`; the dashboard reads the same key as `FEATURE_FLAGS.skillsOverMcp`.
 
-It is evaluated for the organization that owns the endpoint (hosted) or the caller's active organization (platform), at most once per request, and never per entry. On a hosted endpoint that happens on `initialize`, `server/discover`, the extension methods and `skill://` reads; on the platform toolset also on `resources/*`. `tools/*` never evaluates it. Evaluation is an organization metadata lookup (one primary-key read, for the slug the flag's group targets) plus a decision from the flag provider's locally cached definitions (`IsFlagEnabledLocal`): the PostHog SDK polls definitions in the background and the decision never falls back to a remote request, so no handshake waits on PostHog. When local definitions are unavailable or inconclusive, or the server runs without a PostHog personal API key, the decision fails closed and the extension stays off.
+It is evaluated for the organization that owns the endpoint (hosted), the caller's active organization (platform toolset), or the organization the OAuth caller signed in to (external Platform MCP), at most once per request, and never per entry. On a hosted endpoint that happens on `initialize`, `server/discover`, the extension methods and `skill://` reads; on the platform toolset also on `resources/*`; on the external Platform MCP on `initialize`, `server/discover`, the extension methods and `skill://` reads. `tools/*` never evaluates it. Evaluation is an organization metadata lookup (one primary-key read, for the slug the flag's group targets) plus a decision from the flag provider's locally cached definitions (`IsFlagEnabledLocal`): the PostHog SDK polls definitions in the background and the decision never falls back to a remote request, so no handshake waits on PostHog. When local definitions are unavailable or inconclusive, or the server runs without a PostHog personal API key, the decision fails closed and the extension stays off.
 
-Off, the surface is exactly what it was before: the `extensions` capability is absent, `skills/list` and `skills/get` answer method-not-found (`-32601`), a `resources/read` of a `skill://` URI on a hosted endpoint is an ordinary resource lookup that is not found, and on the platform toolset `resources/*` stays method-not-found. The dashboard hides every surface described below.
+Off, the surface is exactly what it was before: the `extensions` capability is absent, `skills/list` and `skills/get` answer method-not-found (`-32601`), a `resources/read` of a `skill://` URI on a hosted endpoint is an ordinary resource lookup that is not found, on the platform toolset `resources/*` stays method-not-found, and on the external Platform MCP a `skill://` read is a resource that is not found, as before. The dashboard hides every surface described below.
 
 ## The wire surface
 
@@ -63,7 +63,7 @@ Both surfaces advertise the extension in `initialize` and `server/discover` when
 }
 ```
 
-The platform toolset otherwise declares only `tools`. With the flag on it declares `tools`, `resources` and `extensions`, and nothing else: `resources` is added because the extension depends on the Resources primitive, and `prompts` is never declared on that surface.
+The platform toolset otherwise declares only `tools`. With the flag on it declares `tools`, `resources` and `extensions`, and nothing else: `resources` is added because the extension depends on the Resources primitive, and `prompts` is never declared on that surface. The external Platform MCP always declares `tools`, `resources` and `logging`, for its setup guides; with the flag on it adds `extensions`. That server's capabilities are shared by every caller, so the extension is added to each caller's `initialize` and `server/discover` result rather than to the server's options.
 
 `directoryRead` is not declared: skills are single files and `resources/directory/read` is not implemented.
 
@@ -125,7 +125,7 @@ Params are `{"uri": "skill://<name>/SKILL.md"}`. The result carries the served v
 
 A skill read is answered from the distribution, not from a toolset resource. It invokes nothing, so it is not metered, not billed, writes no tool-call telemetry row, and runs no risk scan on the way out; the content was validated when the version was recorded. An unknown or unassigned URI answers `-32602`. On a hosted endpoint, any `resources/read` whose URI does not have the `skill://<name>/SKILL.md` shape takes the existing toolset resource path untouched. The platform toolset has no other resources to read: a `resources/read` of any other URI there stays method-not-found (`-32601`), flag on or off.
 
-Skills never appear in `resources/list`. The platform toolset answers `resources/list` with an empty list while the flag is on, so its declared `resources` capability is honest.
+Skills never appear in `resources/list`. The platform toolset answers `resources/list` with an empty list while the flag is on, so its declared `resources` capability is honest. The external Platform MCP keeps listing and reading its setup guides as before; only `skill://` URIs are answered from the catalog.
 
 ### Cache hints
 
@@ -147,7 +147,7 @@ The `mcp.request` counter keeps `skills/list`, `skills/get` and `resources/direc
 
 ## Activation and reporting
 
-A successful hosted read attempts to record one `skill_observations` row with provider and source `mcp`, source level `plugin`, source path set to the skill URI, the caller's user id and the MCP session id, and the skill and version already linked (`reconciled_at` set at insert time, since the served version is known). The idempotency key is `mcp:<session id>:<raw sha256>`, so a repeat read of the same content within one session inserts no second row and does not inflate counts; a new session or a new version records a new activation. The insert also bumps the skill's first-seen, last-seen and seen-count fields, the part of hook reconciliation that would otherwise run later. Reads of the platform toolset's embedded catalog record nothing: there is no stored version to activate.
+A successful hosted read attempts to record one `skill_observations` row with provider and source `mcp`, source level `plugin`, source path set to the skill URI, the caller's user id and the MCP session id, and the skill and version already linked (`reconciled_at` set at insert time, since the served version is known). The idempotency key is `mcp:<session id>:<raw sha256>`, so a repeat read of the same content within one session inserts no second row and does not inflate counts; a new session or a new version records a new activation. The insert also bumps the skill's first-seen, last-seen and seen-count fields, the part of hook reconciliation that would otherwise run later. Reads of the embedded catalog, on either Platform MCP endpoint, record nothing: there is no stored version to activate.
 
 MCP activations stay out of the two downstream pipelines that consume reconciled, session-bearing observations. An MCP session id is neither a dev nor an assistant session, so the row would be labelled a dev-surface sighting that never joins a hook session, and it names no chat transcript to score. The row is therefore born complete for both: the insert stamps `metrics_synced_at` and `efficacy_enqueued_at` alongside `reconciled_at`, so the project finders that fan out the ClickHouse `skill_session_versions` sync and the efficacy enqueue never select a project for an MCP read, and no sweep is launched for work that would not drain. The batch queries of both pipelines additionally exclude `provider = 'mcp'` as belt and braces. An MCP read counts on the skill (seen count, last seen, `last_loaded_over_mcp_at`) and on the `mcp.skill.read` metric, and nowhere else.
 
@@ -155,7 +155,7 @@ A skills listing serves at most 1000 skills. The query keeps one version per ski
 
 The management API exposes the most recent such read as `last_loaded_over_mcp_at` on `SkillDistribution` (returned by `skills.distribute`) and `PluginSkillDistribution` (returned by `skills.listDistributions`). It is a per-skill value, so every distribution of one skill carries the same time, and it reflects only reads over a Speakeasy-hosted MCP server: a load of the same skill reported by a coding-agent hook does not move it.
 
-Reads are counted on the `mcp.skill.read` counter with `gram.mcp.surface` (`hosting` or `platform`), `gram.mcp.skill.origin` (`distribution` for a managed skill, `embedded` for the platform catalog) and the network surface. Only successful reads count, and nothing is recorded per server or per skill, so the counter stays bounded.
+Reads are counted on the `mcp.skill.read` counter with `gram.mcp.surface` (`hosting` or `platform`), `gram.mcp.skill.origin` (`distribution` for a managed skill, `embedded` for the platform catalog) and the network surface. Reads on the external Platform MCP are not counted: `gram.mcp.surface` has no value for that endpoint. Only successful reads count, and nothing is recorded per server or per skill, so the counter stays bounded.
 
 ## Client support
 

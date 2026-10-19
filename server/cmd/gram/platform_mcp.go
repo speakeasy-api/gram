@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -563,6 +564,10 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
+	runtime, err = withPlatformMCPSkills(runtime, config)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("serve local Platform MCP skills: %w", err)
+	}
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
@@ -580,6 +585,16 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 // library, none of which this constructor supplies, so hanging them off its
 // success would report them unavailable whenever an unrelated Shadow MCP
 // dependency is missing. Callers attach the two independently.
+// withPlatformMCPSkills serves the embedded Platform MCP skills over the
+// Skills extension on the external endpoint, behind the skills-over-mcp flag.
+func withPlatformMCPSkills(runtime *platformmcp.Runtime, config platformMCPConfig) (*platformmcp.Runtime, error) {
+	catalog, err := mcpskills.NewEmbeddedCatalog()
+	if err != nil {
+		return nil, fmt.Errorf("load embedded skill catalog: %w", err)
+	}
+	return runtime.WithSkills(catalog, platformmcp.NewFeatureSkillsGate(config.Logger, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB)))
+}
+
 func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMCPConfig, budget platformmcp.OperationBudget) bool {
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
 	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budget, config.JWTSigningKey)
@@ -1176,6 +1191,10 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
+	runtime, err = withPlatformMCPSkills(runtime, config)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("serve browser Platform MCP skills: %w", err)
+	}
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))

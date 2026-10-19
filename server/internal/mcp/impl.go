@@ -128,7 +128,7 @@ type Service struct {
 	skillResolver *mcpskills.Resolver
 	// platformSkills is the embedded reviewed skill catalog the platform
 	// toolset serves over the Skills extension, built once at construction.
-	platformSkills  *platformSkillCatalog
+	platformSkills  *mcpskills.EmbeddedCatalog
 	authRepo        *auth_repo.Queries
 	toolsetsRepo    *toolsets_repo.Queries
 	mcpMetadataRepo *metadata_repo.Queries
@@ -501,7 +501,7 @@ func NewService(
 	if err != nil {
 		return nil, fmt.Errorf("initialize ID-JAG validator: %w", err)
 	}
-	platformSkills, err := newPlatformSkillCatalog()
+	platformSkills, err := mcpskills.NewEmbeddedCatalog()
 	if err != nil {
 		return nil, fmt.Errorf("initialize platform skill catalog: %w", err)
 	}
