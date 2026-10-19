@@ -52,7 +52,8 @@ func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.Fak
 			return KitLocalBootstrap{AgentsMD: input.AgentsMD, InferenceJSON: input.InferenceJSON, MCPJSON: input.MCPJSON, GatewayToken: []byte(uuid.NewString())}, nil
 		},
 		Fence: func(context.Context, assistantRuntimeRecord) error { *fences++; return nil },
-		Protocol: func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error) {
+		Protocol: func(_ context.Context, _ assistantRuntimeRecord, endpoint *url.URL) (runtimeProtocol, error) {
+			require.Equal(t, "https", endpoint.Scheme)
 			return &kitGKEBackendProtocol{settled: true}, nil
 		},
 	})
@@ -72,8 +73,8 @@ func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.Fak
 			labels[gkeClaimUIDLabel] = string(obj.GetUID())
 			pod.SetLabels(labels)
 			pod.SetAnnotations(obj.GetAnnotations())
-			pod.Object["spec"] = map[string]any{"containers": []any{map[string]any{"name": "kit", "image": k.ImageRef()}}}
-			pod.Object["status"] = map[string]any{"phase": "Running", "podIP": "10.1.2.3", "containerStatuses": []any{map[string]any{"name": "kit", "ready": true, "restartCount": int64(0), "imageID": "containerd://sha256:" + strings.Repeat("a", 64), "containerID": "containerd://instance"}}}
+			pod.Object["spec"] = map[string]any{"containers": []any{map[string]any{"name": "kit", "image": k.ImageRef()}, map[string]any{"name": "acp-tls", "image": kitGKETLSProxyImage}}}
+			pod.Object["status"] = map[string]any{"phase": "Running", "podIP": "10.1.2.3", "containerStatuses": []any{map[string]any{"name": "kit", "ready": true, "restartCount": int64(0), "imageID": "containerd://sha256:" + strings.Repeat("a", 64), "containerID": "containerd://instance"}, map[string]any{"name": "acp-tls", "ready": true, "restartCount": int64(0)}}}
 			require.NoError(t, client.Tracker().Create(gkePodGVR, pod, k.config.GKE.Namespace))
 		}
 		return false, nil, nil
@@ -212,6 +213,8 @@ func TestKitGKEBackendCheckpointRestorePersistsAuthority(t *testing.T) {
 	state, _, err := k.loadAuthority(t.Context(), r)
 	require.NoError(t, err)
 	require.Equal(t, "stopped", state.Phase)
+	previousCertificate := append([]byte(nil), state.Metadata.TLSCertificate...)
+	require.NotEmpty(t, previousCertificate)
 	require.Equal(t, types.UID("snapshot-uid"), state.SnapshotUID)
 	require.NoError(t, k.Stop(t.Context(), r))
 	require.Equal(t, 1, *fences)
@@ -225,6 +228,9 @@ func TestKitGKEBackendCheckpointRestorePersistsAuthority(t *testing.T) {
 	state, _, err = k.loadAuthority(t.Context(), r)
 	require.NoError(t, err)
 	require.Equal(t, "active", state.Phase)
+	require.NotEqual(t, previousCertificate, state.Metadata.TLSCertificate)
+	_, err = kitGKETLSConfig(state.Metadata.TLSCertificate, kitGKEName(r)+".kit.internal")
+	require.NoError(t, err)
 	template, err := client.Resource(kitTemplateGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
 	require.NoError(t, err)
 	selected, _, err := unstructured.NestedString(template.Object, "spec", "podTemplate", "metadata", "annotations", "podsnapshot.gke.io/ps-name")
@@ -274,7 +280,7 @@ func (d *kitGKEFakeCheckpointDriver) PrepareColdRestore(_ context.Context, _ ass
 
 func TestKitGKEBackendObservedProcessIdentity(t *testing.T) {
 	t.Parallel()
-	for _, change := range []string{"image", "restart", "not-ready", "container"} {
+	for _, change := range []string{"image", "restart", "not-ready", "container", "tls-not-ready", "tls-restart", "tls-missing"} {
 		t.Run(change, func(t *testing.T) {
 			t.Parallel()
 			k, client, r, _ := kitGKEBackendFixture(t)
@@ -297,6 +303,16 @@ func TestKitGKEBackendObservedProcessIdentity(t *testing.T) {
 				status["ready"] = false
 			case "container":
 				status["containerID"] = "containerd://replacement"
+			case "tls-not-ready", "tls-restart":
+				proxy, ok := statuses[1].(map[string]any)
+				require.True(t, ok)
+				if change == "tls-not-ready" {
+					proxy["ready"] = false
+				} else {
+					proxy["restartCount"] = int64(1)
+				}
+			case "tls-missing":
+				statuses = statuses[:1]
 			}
 			require.NoError(t, unstructured.SetNestedSlice(pod.Object, statuses, "status", "containerStatuses"))
 			_, err = client.Resource(gkePodGVR).Namespace(m.Namespace).Update(t.Context(), pod, metav1.UpdateOptions{})

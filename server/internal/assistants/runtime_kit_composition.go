@@ -131,11 +131,25 @@ func (s *ServiceCore) kitProtocolFactory(c KitLocalCompositionConfig, cidrs []st
 	// the global egress policy. Do not enable retries for ACP POSTs.
 	gatewayClient := s.guardianPolicy.PooledClient(guardian.WithAllowedCIDRBlocks(cidrs...))
 	return func(ctx context.Context, r assistantRuntimeRecord, endpoint *url.URL) (runtimeProtocol, error) {
+		if endpoint == nil || (r.Backend == runtimeBackendGKE && endpoint.Scheme != "https") {
+			return nil, ErrKitRuntimeBinding
+		}
 		token, err := s.loadKitGatewayTokenAlreadyLocked(ctx, r)
 		if err != nil {
 			return nil, err
 		}
-		protocol, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: s, Endpoint: endpoint, HTTPClient: gatewayClient, Projector: projector, CWD: KitWorkspacePath, GatewayToken: token})
+		client := gatewayClient
+		if endpoint.Scheme == "https" {
+			var metadata kitGKEBackendMetadata
+			if err := json.Unmarshal(r.BackendMetadataJSON, &metadata); err != nil || metadata.RuntimeID != r.ID || metadata.AssistantID != r.AssistantID || metadata.ProjectID != r.ProjectID {
+				return nil, ErrKitRuntimeBinding
+			}
+			client, err = kitGKEGatewayClient(s.guardianPolicy, cidrs, metadata.TLSCertificate, kitGKEName(r)+".kit.internal")
+			if err != nil {
+				return nil, err
+			}
+		}
+		protocol, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: s, Endpoint: endpoint, HTTPClient: client, Projector: projector, CWD: KitWorkspacePath, GatewayToken: token})
 		if err != nil {
 			return nil, err
 		}

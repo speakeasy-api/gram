@@ -5,17 +5,74 @@ for newly created assistants only. Existing assistants and conversations retain
 their runtime and canonical transcript. This path does not import legacy history
 or migrate existing conversations.
 
-## ACP transport deployment gate
+## Verified ACP transport
 
-Do not enable production Kit workloads until the server-to-gateway ACP connection
-has verified, authenticated encryption. The current backend connects to the Pod
-over HTTP and sends a bearer credential. CIDR restrictions and NetworkPolicy do
-not encrypt this traffic. HTTPS inference and MCP endpoints do not protect this
-separate connection.
+The production backend uses `https://<PodIP>:<guest-port>/acp/v2`. Each cold
+bootstrap and snapshot restore creates a fresh ECDSA TLS key and certificate,
+scoped to `kit-<runtime-uuid>.kit.internal`. The server trusts only that
+bootstrap's certificate, verifies its DNS identity, and retains the guarded
+Pod-CIDR dial policy. Redirects and transport retries are disabled. No insecure
+TLS verification or plaintext production fallback is available.
 
-Verified gateway TLS or an authenticated encrypted mesh requires a coordinated
-runtime and infrastructure contract; neither is established by this installer.
-Keep production opt-in disabled until that contract is implemented and tested.
+Kit's released v0.2.17 `gateway` contract has an HTTP listener, not native TLS
+flags (`src/gateway.rs`). The renderer therefore uses the repository's
+unprivileged nginx pattern: `nginxinc/nginx-unprivileged:1.28-alpine` terminates
+TLS on the guest port, then forwards to Kit on `127.0.0.1:17766` inside the same
+Pod. Kit uses its supported `--listen`, `--credential-file`, and `--project`
+arguments, without wildcard binding. SSE buffering, proxy retries, and access
+logs are disabled; request headers and bearer credentials must never be logged.
+This does not require another Kit release or a service mesh.
+
+TLS private keys exist only in the runtime's immutable bootstrap Secret and its
+read-only `tls` projection, not the Kit root filesystem. The Kit container does
+not mount the TLS key. Fresh bootstrap also removes restored `.kit/tls` and the
+entire old credential directory. Only the public certificate is persisted in
+lifecycle authority. New bootstrap replaces the Secret and trust certificate;
+existing UID-fenced cleanup removes the old Secret. Certificates expire after
+30 days; existing startup-authority expiry fences the runtime sooner and
+requires checkpoint/refresh rather than extending trust silently.
+
+Infrastructure contract (review/apply separately):
+
+- Permit pulling both the configured released Kit image and the nginx image
+  above. The sandbox has two ordinary containers (`kit`, `acp-tls`), UID/GID
+  1000, no capabilities, and no service account token.
+- Keep server/worker ingress limited to the configured guest TCP port and
+  source CIDR. The guest port now speaks TLS, not HTTP. Do not expose port
+  17766; it is loopback-only and excluded from ingress policy.
+- Permit the existing bootstrap Secret projection plus a read-only `tls`
+  projection and 32 MiB memory-backed `tls-tmp` volume. No extra RBAC, external
+  CA, DNS record, shared private key, or load balancer is needed.
+- Budget the proxy's 10m CPU/16 MiB requests and 100m CPU/64 MiB limits in
+  addition to Kit resources. Rootfs-only snapshot policy must cover this
+  two-container Pod; Secret and memory volumes are projected fresh on restore.
+- The TLS transport/image participate in the runtime compatibility fingerprint.
+  Do not reuse plaintext-era authority or snapshots across this rollout.
+
+Local Docker remains a loopback-published development transport; these changes
+apply to production GKE, not the local image smoke fixture. Platform MCP tool
+contracts and demo seed data are unchanged: this is internal transport plumbing.
+
+### Transport verification
+
+Run the focused transport and lifecycle regression tests:
+
+```sh
+mise run test:server ./internal/assistants -run '^TestKit' -count=1
+```
+
+With the pinned local Kit integration image and the nginx image available to
+the container engine, run the actual encrypted ACP transport smoke test (no
+inference provider or production cluster required):
+
+```sh
+GRAM_KIT_TLS_PROXY_SMOKE=1 mise run test:server ./internal/assistants \
+  -run '^TestKitGKETLSProxyImageSmoke$' -count=1
+```
+
+The smoke test checks authenticated ACP initialization through nginx, plaintext
+rejection, wrong-certificate and wrong-hostname rejection, and invalid-bearer
+rejection. It does not prove GKE controller or snapshot infrastructure health.
 
 ## Deployment inputs
 

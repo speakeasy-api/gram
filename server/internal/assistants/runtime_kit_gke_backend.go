@@ -67,7 +67,7 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 		p.Command, p.Args = KitGatewayCommand(int(p.GuestPort))
 	}
 	if p.Identity.CompatibilityGeneration == "" {
-		p.Identity.CompatibilityGeneration = "kit-acp-v2-rootfs-v2"
+		p.Identity.CompatibilityGeneration = "kit-acp-v2-rootfs-tls-v3"
 	}
 	p.Command = slices.Clone(p.Command)
 	p.Args = slices.Clone(p.Args)
@@ -88,7 +88,7 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	if p.Identity.CompatibilityGeneration == "" || !kitGKEExplicitImage(p.Image) {
 		return nil, fmt.Errorf("kit GKE requires explicit compatibility generation and tagged or digest-pinned image")
 	}
-	if p.GuestPort < 1 || p.GuestPort > 65535 {
+	if p.GuestPort < 1 || p.GuestPort > 65535 || p.GuestPort == kitGKEPlaintextPort {
 		return nil, fmt.Errorf("invalid Kit GKE port")
 	}
 	if err := validateKitGatewayCommand(p.Command, p.Args, int(p.GuestPort)); err != nil {
@@ -108,7 +108,9 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	p.MCPJSON = nil
 	p.GatewayToken = nil
 	p.MCPFiles = nil
+	p.TLSCertificate, p.TLSPrivateKey = nil, nil
 	raw, err := json.Marshal(map[string]any{
+		"tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1,
 		"identity": p.Identity.labels(), "namespace": p.Identity.Namespace, "image": p.Image,
 		"ingress_cidr": p.IngressCIDR, "guest_port": p.GuestPort, "command": p.Command, "args": p.Args,
 		"allow_insecure_http": p.AllowInsecureHTTP, "resources": p.Resources, "work_size_limit": p.WorkSizeLimit,
@@ -135,6 +137,7 @@ func (k *KitGKERuntimeBackend) validate(r assistantRuntimeRecord) error {
 }
 
 type kitGKEBackendMetadata struct {
+	TLSCertificate    []byte    `json:"tls_certificate"`
 	Provisioning      bool      `json:"provisioning,omitempty"`
 	CheckpointMarker  string    `json:"checkpoint_marker"`
 	ImageDigest       string    `json:"image_digest"`
@@ -263,6 +266,10 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	in.GatewayToken = b.GatewayToken
 	in.MCPFiles = b.MCPFiles
 	in.CheckpointMarker = []byte(uuid.NewString())
+	in.TLSCertificate, in.TLSPrivateKey, err = newKitGKETLSCertificate(in.Name + ".kit.internal")
+	if err != nil {
+		return RuntimeBackendEnsureResult{}, err
+	}
 	objects, err := RenderKitGKEProvision(in)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, err
@@ -280,7 +287,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	}
 	maps.Copy(podAnnotations, annotations)
 	_ = unstructured.SetNestedStringMap(objects.Template.Object, podAnnotations, "spec", "podTemplate", "metadata", "annotations")
-	m := kitGKEBackendMetadata{Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
+	m := kitGKEBackendMetadata{TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
 	for _, step := range []struct {
 		gvr schema.GroupVersionResource
 		obj *unstructured.Unstructured
@@ -426,12 +433,16 @@ func (k *KitGKERuntimeBackend) checkPod(r assistantRuntimeRecord, p *unstructure
 		return fmt.Errorf("kit GKE source pod was replaced outside admission")
 	}
 	containers, _, _ := unstructured.NestedSlice(p.Object, "spec", "containers")
-	if len(containers) != 1 {
+	if len(containers) != 2 {
 		return fmt.Errorf("unexpected Kit GKE pod containers")
 	}
 	c, ok := containers[0].(map[string]any)
 	if !ok || c["name"] != "kit" || c["image"] != k.ImageRef() {
 		return fmt.Errorf("kit GKE pod image compatibility mismatch")
+	}
+	proxy, ok := containers[1].(map[string]any)
+	if !ok || proxy["name"] != "acp-tls" || proxy["image"] != kitGKETLSProxyImage {
+		return fmt.Errorf("kit GKE TLS proxy compatibility mismatch")
 	}
 	return nil
 }
@@ -468,7 +479,7 @@ func (k *KitGKERuntimeBackend) protocol(ctx context.Context, r assistantRuntimeR
 	if phase != "Running" || net.ParseIP(ip) == nil {
 		return nil, fmt.Errorf("%w: Kit GKE pod is not running", ErrRuntimeUnhealthy)
 	}
-	p, err := k.config.Protocol(ctx, r, &url.URL{Scheme: "http", Host: net.JoinHostPort(ip, strconv.Itoa(int(k.config.Provision.GuestPort))), Path: "/acp/v2"})
+	p, err := k.config.Protocol(ctx, r, &url.URL{Scheme: "https", Host: net.JoinHostPort(ip, strconv.Itoa(int(k.config.Provision.GuestPort))), Path: "/acp/v2"})
 	if err != nil {
 		return nil, err
 	}
@@ -545,10 +556,27 @@ func kitGKEExplicitImage(image string) bool {
 // Container identity, not a mutable tag or Pod phase, proves process continuity.
 func kitGKEProcessIdentity(p *unstructured.Unstructured) (string, string, error) {
 	statuses, _, _ := unstructured.NestedSlice(p.Object, "status", "containerStatuses")
-	if len(statuses) != 1 {
+	if len(statuses) != 2 {
 		return "", "", fmt.Errorf("kit GKE container readiness is unknown")
 	}
-	status, ok := statuses[0].(map[string]any)
+	// Kubernetes does not guarantee container status ordering.
+	var main, proxy map[string]any
+	for _, raw := range statuses {
+		status, ok := raw.(map[string]any)
+		if !ok {
+			return "", "", fmt.Errorf("kit GKE container status invalid")
+		}
+		switch status["name"] {
+		case "kit":
+			main = status
+		case "acp-tls":
+			proxy = status
+		}
+	}
+	if proxy == nil || proxy["ready"] != true || proxy["restartCount"] != int64(0) {
+		return "", "", fmt.Errorf("kit GKE TLS proxy is not ready or restarted")
+	}
+	status, ok := main, main != nil
 	if !ok || status["name"] != "kit" || status["ready"] != true {
 		return "", "", fmt.Errorf("kit GKE container is not ready")
 	}

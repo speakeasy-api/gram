@@ -403,6 +403,10 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	in.CheckpointMarker = []byte(uuid.NewString())
 	in.ExpectedCheckpointMarker = []byte(state.Source.CheckpointMarker)
 	in.Restore, in.RestoreSource = verified, &verified.binding
+	in.TLSCertificate, in.TLSPrivateKey, err = newKitGKETLSCertificate(in.Name + ".kit.internal")
+	if err != nil {
+		return empty, err
+	}
 	objects, err := RenderKitGKEProvision(in)
 	if err != nil {
 		return empty, err
@@ -433,6 +437,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	oldSecretName, oldSecretUID := state.Metadata.SecretName, state.Metadata.SecretUID
 	state.Metadata.SecretName, state.Metadata.SecretUID = secret.GetName(), secret.GetUID()
 	state.Metadata.CheckpointMarker = string(in.CheckpointMarker)
+	state.Metadata.TLSCertificate = in.TLSCertificate
 	obj, err = k.saveAuthority(ctx, obj, state)
 	if err != nil {
 		return empty, err
@@ -540,7 +545,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if net.ParseIP(ip) == nil {
 		return empty, fmt.Errorf("restored Pod has no valid IP")
 	}
-	protocol, err := k.config.Protocol(readyCtx, r, &url.URL{Scheme: "http", Host: net.JoinHostPort(ip, strconv.Itoa(int(k.config.Provision.GuestPort))), Path: "/acp/v2"})
+	protocol, err := k.config.Protocol(readyCtx, r, &url.URL{Scheme: "https", Host: net.JoinHostPort(ip, strconv.Itoa(int(k.config.Provision.GuestPort))), Path: "/acp/v2"})
 	if err != nil {
 		return empty, err
 	}

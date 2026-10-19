@@ -6,6 +6,7 @@ package assistants
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 	"maps"
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -65,6 +67,7 @@ type KitGKEProvisionInput struct {
 	Command, Args                                  []string
 	AgentsMD, InferenceJSON, MCPJSON, GatewayToken []byte
 	MCPFiles                                       map[string][]byte
+	TLSCertificate, TLSPrivateKey                  []byte
 	AllowInsecureHTTP                              bool
 	Resources                                      corev1.ResourceRequirements
 	WorkSizeLimit, TmpSizeLimit                    string
@@ -93,7 +96,7 @@ func kitObject(kind, version, name string, i KitGKEIdentity) *unstructured.Unstr
 // RenderKitGKEProvision is pure. Returned objects contain credentials and must
 // never be logged. ProvisionKitGKE creates them in Secret -> Template -> Claim order.
 //
-//nolint:exhaustruct // Only renderer-defined Kubernetes fields are set; optional fields must retain API defaults.
+//nolint:exhaustruct,exhaustive // Only renderer-defined Kubernetes fields and CPU/memory budgets are set; optional fields retain API defaults.
 func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	var out KitGKEObjects
 	if err := in.Identity.validate(); err != nil {
@@ -111,7 +114,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	if len(in.Command) == 0 || in.Command[0] == "" || in.Args == nil {
 		return out, fmt.Errorf("kit command and explicit args are required")
 	}
-	if in.GuestPort < 1 || in.GuestPort > 65535 {
+	if in.GuestPort < 1 || in.GuestPort > 65535 || in.GuestPort == kitGKEPlaintextPort {
 		return out, fmt.Errorf("invalid Kit guest port")
 	}
 	if _, _, err := net.ParseCIDR(in.IngressCIDR); err != nil {
@@ -121,6 +124,12 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		return out, err
 	}
 	if err := validateKitBootstrap(KitLocalBootstrap{AgentsMD: in.AgentsMD, InferenceJSON: in.InferenceJSON, MCPJSON: in.MCPJSON, GatewayToken: in.GatewayToken, MCPFiles: in.MCPFiles}); err != nil {
+		return out, err
+	}
+	if _, err := tls.X509KeyPair(in.TLSCertificate, in.TLSPrivateKey); err != nil {
+		return out, fmt.Errorf("kit GKE requires fresh TLS key pair")
+	}
+	if _, err := kitGKETLSConfig(in.TLSCertificate, in.Name+".kit.internal"); err != nil {
 		return out, err
 	}
 	origin, err := kitInferenceOrigin(in.InferenceJSON)
@@ -159,12 +168,17 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	}
 	data := map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitBootstrapConfig(KitLocalBootstrap{Model: in.Model})), "speakeasy.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}
 	maps.Copy(data, in.MCPFiles)
+	data["tls.crt"], data["tls.key"] = in.TLSCertificate, in.TLSPrivateKey
+	data["nginx.conf"] = []byte(kitGKETLSProxyConfig(in.GuestPort))
 	data["checkpoint-marker"] = in.CheckpointMarker
 	if in.Restore != nil {
 		data["expected-checkpoint-marker"] = in.ExpectedCheckpointMarker
 	}
 	items := make([]corev1.KeyToPath, 0, len(data))
 	for _, name := range slices.Sorted(maps.Keys(data)) {
+		if name == "tls.crt" || name == "tls.key" || name == "nginx.conf" {
+			continue
+		}
 		path := "credentials/" + name
 		if name == "speakeasy.json" {
 			path = "credentials/" + KitInferenceCredentialFilename
@@ -208,16 +222,22 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	// remain on the container rootfs, not on a mount excluded from snapshots.
 	// Main-process bootstrap runs on each fresh process, in the same rootfs.
 	args := append([]string{kitBootstrapScript + "exec \"$@\"\n", "kit-bootstrap"}, in.Command...)
-	args = append(args, in.Args...)
+	args = append(args, "gateway", "--listen", "127.0.0.1:"+strconv.Itoa(kitGKEPlaintextPort), "--credential-file", "/home/kit/.kit/credentials/gateway-token", "--project", KitWorkspacePath)
 	pod := corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: in.Identity.labels(), Annotations: annotations}, Spec: corev1.PodSpec{
 		RuntimeClassName: new("gvisor"), AutomountServiceAccountToken: &no,
 		DNSPolicy: corev1.DNSNone, DNSConfig: &corev1.PodDNSConfig{Nameservers: []string{"8.8.8.8", "1.1.1.1"}},
 		NodeSelector:    map[string]string{"sandbox.gke.io/runtime": "gvisor", "workload-type": "sandbox"},
 		Tolerations:     []corev1.Toleration{{Key: "sandbox.gke.io/runtime", Operator: corev1.TolerationOpEqual, Value: "gvisor", Effect: corev1.TaintEffectNoSchedule}, {Key: "workload-type", Operator: corev1.TolerationOpEqual, Value: "sandbox", Effect: corev1.TaintEffectNoSchedule}},
 		SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: &yes, RunAsUser: &uid, RunAsGroup: &uid, FSGroup: &uid},
-		Containers:      []corev1.Container{{Name: "kit", Image: in.Image, Command: []string{"/bin/sh", "-ec"}, Args: args, WorkingDir: "/home/kit", Ports: []corev1.ContainerPort{{ContainerPort: in.GuestPort}}, Env: environment, SecurityContext: security, Resources: resources, VolumeMounts: []corev1.VolumeMount{{Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}, {Name: "tmp", MountPath: "/tmp"}}}},
+		Containers:      []corev1.Container{{Name: "kit", Image: in.Image, Command: []string{"/bin/sh", "-ec"}, Args: args, WorkingDir: "/home/kit", Env: environment, SecurityContext: security, Resources: resources, VolumeMounts: []corev1.VolumeMount{{Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}, {Name: "tmp", MountPath: "/tmp"}}}},
 		Volumes:         []corev1.Volume{tmp, {Name: "bootstrap", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secretName, DefaultMode: &mode, Items: items}}}},
 	}}
+	proxyTmp, err := kitMemoryVolume("tls-tmp", "32Mi")
+	if err != nil {
+		return out, err
+	}
+	pod.Spec.Volumes = append(pod.Spec.Volumes, proxyTmp, corev1.Volume{Name: "tls", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secretName, DefaultMode: &mode, Items: []corev1.KeyToPath{{Key: "tls.crt", Path: "tls.crt"}, {Key: "tls.key", Path: "tls.key"}, {Key: "nginx.conf", Path: "nginx.conf"}}}}})
+	pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{Name: "acp-tls", Image: kitGKETLSProxyImage, Command: []string{"nginx"}, Args: []string{"-c", "/tls/nginx.conf", "-g", "daemon off;"}, Ports: []corev1.ContainerPort{{ContainerPort: in.GuestPort}}, SecurityContext: security, Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("16Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("64Mi")}}, VolumeMounts: []corev1.VolumeMount{{Name: "tls", MountPath: "/tls", ReadOnly: true}, {Name: "tls-tmp", MountPath: "/tmp"}}})
 	if in.SnapshotsEnabled {
 		pod.Labels["gram.ai/snapshots"] = "enabled"
 	}
@@ -246,6 +266,7 @@ if [ -f /bootstrap/expected-checkpoint-marker ]; then
   cmp -s /bootstrap/expected-checkpoint-marker /home/kit/.kit/checkpoint-marker ||
     cmp -s /bootstrap/checkpoint-marker /home/kit/.kit/checkpoint-marker
 fi
+rm -rf /home/kit/.kit/tls
 rm -rf /home/kit/.kit/credentials
 mkdir -p /home/kit/.kit/credentials /home/kit/workspace
 chmod 700 /home/kit/.kit /home/kit/.kit/credentials /home/kit/workspace

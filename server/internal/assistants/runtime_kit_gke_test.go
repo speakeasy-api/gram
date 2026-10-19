@@ -21,7 +21,12 @@ import (
 
 //nolint:exhaustive // Container resource budgets intentionally specify only CPU and memory.
 func kitGKEInput() KitGKEProvisionInput {
+	cert, key, err := newKitGKETLSCertificate("kit-test-runtime.kit.internal")
+	if err != nil {
+		panic(err)
+	}
 	return KitGKEProvisionInput{
+		TLSCertificate: cert, TLSPrivateKey: key,
 		CheckpointMarker: []byte("11111111-1111-4111-8111-111111111111"),
 		Identity:         KitGKEIdentity{Namespace: "kit-test", AssistantID: "assistant-test", Lineage: "lineage-one", CompatibilityGeneration: "generation-one"},
 		Name:             "kit-test-runtime", Image: "example.invalid/kit@sha256:" + strings.Repeat("a", 64), IngressCIDR: "10.1.0.0/16", GuestPort: 8080,
@@ -49,11 +54,11 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	var secret corev1.Secret
 	require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(objects.Secret.Object, &secret))
 	require.True(t, *secret.Immutable)
-	require.Equal(t, map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitFileConfig + "model = \"openai/gpt-4.1-mini\"\n"), "speakeasy.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken, "checkpoint-marker": in.CheckpointMarker}, secret.Data)
+	require.Equal(t, map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitFileConfig + "model = \"openai/gpt-4.1-mini\"\n"), "speakeasy.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken, "checkpoint-marker": in.CheckpointMarker, "tls.crt": in.TLSCertificate, "tls.key": in.TLSPrivateKey, "nginx.conf": []byte(kitGKETLSProxyConfig(in.GuestPort))}, secret.Data)
 	require.Equal(t, in.Identity.labels(), secret.Labels)
 	pod := kitPodTemplate(t, objects)
 	for _, volume := range pod.Spec.Volumes {
-		if volume.Secret != nil {
+		if volume.Name == "bootstrap" {
 			require.Contains(t, volume.Secret.Items, corev1.KeyToPath{Key: "speakeasy.json", Path: "credentials/" + KitInferenceCredentialFilename})
 		}
 	}
@@ -71,21 +76,41 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.Equal(t, map[string]string{"sandbox.gke.io/runtime": "gvisor", "workload-type": "sandbox"}, pod.Spec.NodeSelector)
 	require.Len(t, pod.Spec.Tolerations, 2)
 	require.Empty(t, pod.Spec.InitContainers)
-	require.Len(t, pod.Spec.Containers, 1)
+	require.Len(t, pod.Spec.Containers, 2)
 	main := pod.Spec.Containers[0]
 	require.Equal(t, []string{"/bin/sh", "-ec"}, main.Command)
-	require.Equal(t, append(append([]string{}, in.Command...), in.Args...), main.Args[2:])
+	require.Equal(t, append(append([]string{}, in.Command...), "gateway", "--listen", "127.0.0.1:17766", "--credential-file", "/home/kit/.kit/credentials/gateway-token", "--project", KitWorkspacePath), main.Args[2:])
 	require.Equal(t, kitBootstrapScript+"exec \"$@\"\n", main.Args[0])
 	require.Equal(t, []corev1.EnvVar{{Name: "HOME", Value: "/home/kit"}, {Name: "SPEAKEASY_ORIGIN", Value: "https://ai.speakeasy.com"}}, main.Env)
 	require.Equal(t, "/home/kit", main.WorkingDir)
 	require.Equal(t, []corev1.VolumeMount{{Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}, {Name: "tmp", MountPath: "/tmp"}}, main.VolumeMounts)
-	for _, container := range []corev1.Container{main} {
+	proxy := pod.Spec.Containers[1]
+	require.Equal(t, "acp-tls", proxy.Name)
+	require.Equal(t, kitGKETLSProxyImage, proxy.Image)
+	require.Equal(t, []string{"nginx"}, proxy.Command)
+	require.Equal(t, []string{"-c", "/tls/nginx.conf", "-g", "daemon off;"}, proxy.Args)
+	require.Equal(t, []corev1.ContainerPort{{ContainerPort: in.GuestPort}}, proxy.Ports)
+	require.Equal(t, []corev1.VolumeMount{{Name: "tls", MountPath: "/tls", ReadOnly: true}, {Name: "tls-tmp", MountPath: "/tmp"}}, proxy.VolumeMounts)
+	for _, directive := range []string{
+		"access_log off;", "proxy_buffering off;", "proxy_request_buffering off;",
+		"proxy_cache off;", "proxy_next_upstream off;", "proxy_http_version 1.1;",
+		"proxy_pass http://127.0.0.1:17766;", "listen 8080 ssl;",
+		"ssl_certificate /tls/tls.crt;", "ssl_certificate_key /tls/tls.key;",
+	} {
+		require.Contains(t, string(secret.Data["nginx.conf"]), directive)
+	}
+	for _, container := range pod.Spec.Containers {
 		require.False(t, *container.SecurityContext.AllowPrivilegeEscalation)
 		require.Equal(t, []corev1.Capability{"ALL"}, container.SecurityContext.Capabilities.Drop)
 	}
 	require.Equal(t, corev1.StorageMediumMemory, pod.Spec.Volumes[0].EmptyDir.Medium)
 	require.Equal(t, secret.Name, pod.Spec.Volumes[1].Secret.SecretName)
-	require.Len(t, pod.Spec.Volumes, 2)
+	require.Len(t, pod.Spec.Volumes, 4)
+	require.Equal(t, "tls-tmp", pod.Spec.Volumes[2].Name)
+	require.Equal(t, corev1.StorageMediumMemory, pod.Spec.Volumes[2].EmptyDir.Medium)
+	require.Equal(t, "tls", pod.Spec.Volumes[3].Name)
+	require.Equal(t, secret.Name, pod.Spec.Volumes[3].Secret.SecretName)
+	require.ElementsMatch(t, []corev1.KeyToPath{{Key: "tls.crt", Path: "tls.crt"}, {Key: "tls.key", Path: "tls.key"}, {Key: "nginx.conf", Path: "nginx.conf"}}, pod.Spec.Volumes[3].Secret.Items)
 	require.Equal(t, resource.MustParse(in.WorkSizeLimit), main.Resources.Limits[corev1.ResourceEphemeralStorage])
 	require.Equal(t, int32(0440), *pod.Spec.Volumes[1].Secret.DefaultMode)
 	require.Len(t, pod.Spec.Volumes[1].Secret.Items, 6)
@@ -140,6 +165,10 @@ func TestKitGKEProvisionCreateOrderingAndFailure(t *testing.T) {
 func TestKitGKEProvisionValidation(t *testing.T) {
 	t.Parallel()
 	cases := map[string]func(*KitGKEProvisionInput){
+		"missing TLS key":              func(in *KitGKEProvisionInput) { in.TLSPrivateKey = nil },
+		"missing TLS certificate":      func(in *KitGKEProvisionInput) { in.TLSCertificate = nil },
+		"wrong TLS identity":           func(in *KitGKEProvisionInput) { in.Name = "another-runtime" },
+		"reserved plaintext port":      func(in *KitGKEProvisionInput) { in.GuestPort = kitGKEPlaintextPort },
 		"legacy":                       func(in *KitGKEProvisionInput) { in.Name = "gram-asst" },
 		"missing command":              func(in *KitGKEProvisionInput) { in.Command = nil },
 		"unspecified args":             func(in *KitGKEProvisionInput) { in.Args = nil },
@@ -349,6 +378,9 @@ func TestKitGKEBootstrapReplacesCredentialDirectory(t *testing.T) {
 	home := filepath.Join(root, "home")
 	bootstrap := filepath.Join(root, "bootstrap")
 	credentials := filepath.Join(home, ".kit", "credentials")
+	staleTLS := filepath.Join(home, ".kit", "tls")
+	require.NoError(t, os.MkdirAll(staleTLS, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(staleTLS, "tls.key"), []byte("retired"), 0600))
 	require.NoError(t, os.MkdirAll(credentials, 0700))
 	require.NoError(t, os.MkdirAll(filepath.Join(bootstrap, "credentials"), 0700))
 	require.NoError(t, os.WriteFile(filepath.Join(credentials, "retired-key.pem"), []byte("retired"), 0600))
@@ -358,6 +390,8 @@ func TestKitGKEBootstrapReplacesCredentialDirectory(t *testing.T) {
 	script := strings.NewReplacer("/home/kit", home, "/bootstrap", bootstrap).Replace(kitBootstrapScript)
 	output, err := exec.CommandContext(t.Context(), "/bin/sh", "-ec", script).CombinedOutput()
 	require.NoError(t, err, string(output))
+	_, err = os.Stat(staleTLS)
+	require.ErrorIs(t, err, os.ErrNotExist)
 	_, err = os.Stat(filepath.Join(credentials, "retired-key.pem"))
 	require.ErrorIs(t, err, os.ErrNotExist)
 	fresh, err := os.ReadFile(filepath.Join(credentials, "gateway-token"))
