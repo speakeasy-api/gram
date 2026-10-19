@@ -135,11 +135,12 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 	}
 
 	return &gen.GetPluginsResult{
-		Etag:          hex.EncodeToString(etag.Sum(nil)),
-		Marketplaces:  marketplaces,
-		Plugins:       plugins,
-		Configuration: nil,
-		Principal:     nil,
+		Etag:                   hex.EncodeToString(etag.Sum(nil)),
+		Marketplaces:           marketplaces,
+		Plugins:                plugins,
+		Configuration:          nil,
+		OrganizationGatewayURL: nil,
+		Principal:              nil,
 	}
 }
 
