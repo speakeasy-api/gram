@@ -224,6 +224,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        session.ID,
 		Source:              upstreamclients.SelectionSourceIssuance,
+		// A dashboard mint has no consent page, so it picks nothing.
+		PickedMcpServerIds: []uuid.UUID{},
+		PickedClientIds:    []uuid.UUID{},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)
 	}
