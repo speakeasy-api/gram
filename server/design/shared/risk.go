@@ -19,6 +19,12 @@ import (
 // call — which now passes. Transports that cannot complete that round-trip fall
 // back to block (fail-safe).
 //
+// "require_approval" holds an MCP tool call until a listed approver approves
+// it. The call is denied with a request token; the agent files the request
+// with request_approval on the Approvals MCP server, waits on a watcher, and
+// retries the same call once approved. Approvers are set per policy in
+// approval_config. Only MCP-scoped policies may use it.
+//
 // "quarantine" is block plus a session circuit: the triggering event is denied,
 // and later deniable events in the same hook conversation are denied until an
 // org admin releases the quarantine.
@@ -36,7 +42,7 @@ import (
 //   - https://docs.claude.com/en/docs/claude-code/hooks
 //   - https://cursor.com/docs/agent/hooks
 func RiskPolicyActionEnum() {
-	Enum("flag", "warn", "block", "quarantine")
+	Enum("flag", "warn", "block", "quarantine", "require_approval")
 }
 
 // RiskPolicyTypeEnum applies the allowed-values constraint to a policy_type
@@ -56,6 +62,18 @@ var RiskPolicyModelConfig = Type("RiskPolicyModelConfig", func() {
 
 	Attribute("temperature", Float64, "Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.")
 	Attribute("fail_open", Boolean, "When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.")
+})
+
+// RiskPolicyApprovalConfig is who may approve calls held by a
+// require_approval policy.
+var RiskPolicyApprovalConfig = Type("RiskPolicyApprovalConfig", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("approvers", ArrayOf(String), "Principal URNs that may approve held calls: specific users (user:...) or roles (role:...). Everyone is not allowed.", func() {
+		MinLength(1)
+	})
+
+	Required("approvers")
 })
 
 // RiskPolicyAudienceTypeEnum applies the allowed-values constraint to a policy
@@ -181,7 +199,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
-	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.", func() {
+	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
 		RiskPolicyActionEnum()
 		Default("flag")
 	})
@@ -198,6 +216,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("user_message", String, "Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.")
 	Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.")
 	Attribute("model_config", RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Null for standard policies.")
+	Attribute("approval_config", RiskPolicyApprovalConfig, "For require_approval policies: who may approve held calls. Null for every other action.")
 	Attribute("score", Float64, "CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.", func() {
 		Minimum(0.1)
 		Maximum(10)

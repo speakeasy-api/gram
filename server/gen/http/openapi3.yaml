@@ -99558,13 +99558,16 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
+                    description: 'Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
                     default: flag
                     enum:
                         - flag
                         - warn
                         - block
                         - quarantine
+                        - require_approval
+                approval_config:
+                    $ref: '#/components/schemas/RiskPolicyApprovalConfig'
                 approved_email_domains:
                     type: array
                     items:
@@ -116910,13 +116913,16 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
+                    description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
                     default: flag
                     enum:
                         - flag
                         - warn
                         - block
                         - quarantine
+                        - require_approval
+                approval_config:
+                    $ref: '#/components/schemas/RiskPolicyApprovalConfig'
                 approved_email_domains:
                     type: array
                     items:
@@ -117046,6 +117052,17 @@ components:
                 - version
                 - created_at
                 - updated_at
+        RiskPolicyApprovalConfig:
+            type: object
+            properties:
+                approvers:
+                    type: array
+                    items:
+                        type: string
+                    description: 'Principal URNs that may approve held calls: specific users (user:...) or roles (role:...). Everyone is not allowed.'
+                    minItems: 1
+            required:
+                - approvers
         RiskPolicyBypassApprovalRequestBody:
             type: object
             properties:
@@ -127382,12 +127399,15 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
+                    description: 'Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
                     enum:
                         - flag
                         - warn
                         - block
                         - quarantine
+                        - require_approval
+                approval_config:
+                    $ref: '#/components/schemas/RiskPolicyApprovalConfig'
                 approved_email_domains:
                     type: array
                     items:

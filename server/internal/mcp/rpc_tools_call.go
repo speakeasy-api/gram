@@ -513,6 +513,11 @@ func handleToolsCall(
 		ToolAnnotations: nil,
 	}, mcpriskscan.BorrowPayload(params.Arguments))
 	decision := scan.Scan(ctx, requestSubject)
+	if decision.HeldForApproval() {
+		// A held call is an instruction, not a refusal: the agent reads the
+		// tool result, requests approval and retries.
+		return marshalMetaToolError(ctx, logger, req.ID, decision.UserMessage)
+	}
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 		recordToolCallErrorStatus(ctx, rw, failure)

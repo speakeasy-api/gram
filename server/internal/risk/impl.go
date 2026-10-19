@@ -394,6 +394,10 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		// detection sources. Persist an empty (non-null) source set.
 		sources = []string{}
 	} else {
+		if sources == nil && action == policycore.ActionRequireApproval {
+			// require_approval holds calls by MCP scope alone, with no detectors.
+			sources = []string{}
+		}
 		if sources == nil {
 			sources = []string{ra.SourceGitleaks}
 		}
@@ -508,6 +512,14 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err := policycore.ValidateMCPScope(mcpScope, sources, action); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
+	approvalConfig := approvalConfigFromPayload(payload.ApprovalConfig)
+	if err := policycore.ValidateApprovalPolicy(action, policyType, sources, payload.CustomRuleIds, approvalConfig); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	approvalConfigJSON, err := policycore.MarshalApprovalConfig(approvalConfig)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "encode approval config").LogError(ctx, s.logger)
+	}
 
 	result, err := s.policies.CreatePolicy(ctx, policycore.CreateMutation{
 		Params: repo.CreateRiskPolicyParams{
@@ -531,6 +543,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
 			Prompt:               prompt,
 			ModelConfig:          modelConfig,
+			ApprovalConfig:       approvalConfigJSON,
 			Score:                pgtype.Float8{Float64: payload.Score, Valid: true},
 		},
 		AudiencePrincipals: audiencePrincipals,
@@ -959,6 +972,21 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	if err := validateSourceAction(sources, action); err != nil {
 		return nil, err
 	}
+	approvalConfig := policycore.Project(current, nil).ApprovalConfig
+	if payload.ApprovalConfig != nil {
+		approvalConfig = approvalConfigFromPayload(payload.ApprovalConfig)
+	}
+	if action != policycore.ActionRequireApproval && payload.ApprovalConfig == nil {
+		// Moving off require_approval drops the approvers it no longer uses.
+		approvalConfig = nil
+	}
+	if err := policycore.ValidateApprovalPolicy(action, current.PolicyType, sources, customRuleIds, approvalConfig); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	approvalConfigJSON, err := policycore.MarshalApprovalConfig(approvalConfig)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "encode approval config").LogError(ctx, s.logger)
+	}
 
 	audienceType := current.AudienceType
 	if payload.AudienceType != nil {
@@ -1118,6 +1146,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			UserMessage:          userMessage,
 			Prompt:               prompt,
 			ModelConfig:          modelConfig,
+			ApprovalConfig:       approvalConfigJSON,
 			Score:                conv.PtrToPGFloat8(payload.Score),
 		},
 		AudiencePrincipals:   audiencePrincipals,
@@ -3784,6 +3813,9 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 	if len(parts) > maxParts {
 		parts = parts[:maxParts]
 	}
+	if len(parts) == 0 && action == policycore.ActionRequireApproval {
+		parts = append(parts, "Tool")
+	}
 	if len(parts) == 0 {
 		parts = append(parts, "Risk")
 	}
@@ -3796,6 +3828,8 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 		actionLabel = "Warner"
 	case "quarantine":
 		actionLabel = "Quarantiner"
+	case policycore.ActionRequireApproval:
+		actionLabel = "Approval"
 	}
 
 	return strings.Join(parts, " & ") + " " + actionLabel
@@ -3962,6 +3996,15 @@ func validatePromptPolicyFields(promptPtr *string, mc *types.RiskPolicyModelConf
 type promptModelConfig struct {
 	Temperature *float64 `json:"temperature,omitempty"`
 	FailOpen    *bool    `json:"fail_open,omitempty"`
+}
+
+// approvalConfigFromPayload converts an API approval config to its domain
+// form. A nil config stays nil.
+func approvalConfigFromPayload(c *types.RiskPolicyApprovalConfig) *policycore.ApprovalConfig {
+	if c == nil {
+		return nil
+	}
+	return &policycore.ApprovalConfig{Approvers: c.Approvers}
 }
 
 // marshalModelConfig encodes an API model config into the JSONB column value.

@@ -1,0 +1,558 @@
+// Package approval implements Speakeasy Approvals: MCP tool calls that a
+// require_approval risk policy holds until a listed approver approves them.
+//
+// The gateway holds a covered call and returns a request token. The agent
+// files the request with request_approval on the Approvals MCP server, waits
+// on a watcher that polls the watch endpoint with the token, and retries the
+// same call once it is approved. An exact-once approval is consumed by that
+// retry.
+package approval
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/url"
+	"slices"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+// Status is the lifecycle state of an approval request.
+type Status string
+
+const (
+	// StatusBlocked is a held call whose agent has not requested approval yet.
+	StatusBlocked Status = "blocked"
+
+	// StatusPending is a requested approval waiting for an approver.
+	StatusPending Status = "pending"
+
+	// StatusApproved is an approval not yet used by a retry.
+	StatusApproved Status = "approved"
+
+	// StatusDenied is a request an approver turned down.
+	StatusDenied Status = "denied"
+
+	// StatusConsumed is an exact-once approval that a retry has used.
+	StatusConsumed Status = "consumed"
+
+	// StatusExpired is a request nobody decided before it expired.
+	StatusExpired Status = "expired"
+)
+
+// DecidedVia names where a decision came from.
+type DecidedVia string
+
+const (
+	// DecidedViaSlack is a decision clicked in an approver's Slack DM.
+	DecidedViaSlack DecidedVia = "slack"
+
+	// DecidedViaDashboard is a decision made in the dashboard.
+	DecidedViaDashboard DecidedVia = "dashboard"
+
+	// DecidedViaAPI is a decision made through the management API.
+	DecidedViaAPI DecidedVia = "api"
+)
+
+// ScopeExactOnce approves one retry of the exact call that was held. It is the
+// default and, until always-allow rules ship, the only scope.
+const ScopeExactOnce = "exact_once"
+
+const (
+	// defaultRequestTTL is how long an agent waits for a decision when it does
+	// not say: long enough for an approver to see a Slack DM during the day.
+	defaultRequestTTL = 30 * time.Minute
+
+	// maxRequestTTL caps how long a request stays open, so a forgotten request
+	// cannot be approved days later.
+	maxRequestTTL = 24 * time.Hour
+
+	// minRequestTTL keeps an agent from asking for a window too short for any
+	// person to answer.
+	minRequestTTL = time.Minute
+
+	// maxReasonRunes bounds the agent's reason, which approvers read on a
+	// Slack card: one or two sentences.
+	maxReasonRunes = 500
+
+	// maxPreviewStringRunes truncates each string argument in the preview
+	// approvers see, so a long body cannot flood the card or the row.
+	maxPreviewStringRunes = 200
+
+	// maxPreviewKeys bounds how many top-level arguments the preview keeps.
+	maxPreviewKeys = 20
+)
+
+var (
+	// ErrNotFound is returned for an unknown token or request, and for a token
+	// presented by a principal other than the requester, so a caller cannot
+	// tell those apart.
+	ErrNotFound = errors.New("approval request not found")
+
+	// ErrNotPending is returned when deciding a request that is no longer
+	// waiting for a decision.
+	ErrNotPending = errors.New("approval request is not pending")
+
+	// ErrNotApprover is returned when the decider is not on the policy's
+	// approver list.
+	ErrNotApprover = errors.New("decider is not an approver for this policy")
+
+	// ErrSelfApproval is returned when the person who made the call tries to
+	// approve it.
+	ErrSelfApproval = errors.New("the requester cannot decide their own request")
+
+	// ErrInvalidRequest is returned for a request_approval call with invalid
+	// arguments.
+	ErrInvalidRequest = errors.New("invalid approval request")
+)
+
+// Service holds, requests, watches and decides approval requests.
+type Service struct {
+	logger    *slog.Logger
+	db        *pgxpool.Pool
+	serverURL *url.URL
+	now       func() time.Time
+}
+
+var _ mcpriskscan.ApprovalGate = (*Service)(nil)
+
+// NewService creates an approval service. serverURL is the public base URL
+// that request instructions point agents at.
+func NewService(logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL) *Service {
+	return &Service{
+		logger:    logger.With(attr.SlogComponent("risk_approval")),
+		db:        db,
+		serverURL: serverURL,
+		now:       time.Now,
+	}
+}
+
+// WatchURL is the endpoint the watcher polls.
+func (s *Service) WatchURL() string {
+	return s.serverURL.JoinPath(WatchPath).String()
+}
+
+// MCPServerURL is the Approvals MCP server agents call request_approval on.
+func (s *Service) MCPServerURL() string {
+	return s.serverURL.JoinPath(MCPPath).String()
+}
+
+// HoldCall lets the call through when an approved exact-once request covers
+// it, consuming that approval. Otherwise it records the held call, or finds
+// its still-open request, and returns the token with instructions.
+func (s *Service) HoldCall(ctx context.Context, call mcpriskscan.ApprovalCall) (mcpriskscan.ApprovalOutcome, error) {
+	fingerprint, err := CallFingerprint(call.ServerID, call.ToolName, call.Arguments)
+	if err != nil {
+		return mcpriskscan.ApprovalOutcome{}, fmt.Errorf("fingerprint call: %w", err)
+	}
+
+	queries := repo.New(s.db)
+	consumed, err := queries.ConsumeApprovedApproval(ctx, repo.ConsumeApprovedApprovalParams{
+		ProjectID:       call.ProjectID,
+		RiskPolicyID:    call.Policy.ID,
+		RequesterUrn:    call.RequesterURN,
+		ToolName:        call.ToolName,
+		CallFingerprint: fingerprint,
+	})
+	switch {
+	case err == nil:
+		s.logger.InfoContext(ctx, "approved call released", attr.SlogRiskPolicyApprovalID(consumed.ID.String()))
+		return mcpriskscan.ApprovalOutcome{Allowed: true, Token: "", UserMessage: ""}, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return mcpriskscan.ApprovalOutcome{}, fmt.Errorf("consume approval: %w", err)
+	}
+
+	if err := queries.ExpireLapsedOpenApproval(ctx, repo.ExpireLapsedOpenApprovalParams{
+		ProjectID:       call.ProjectID,
+		RiskPolicyID:    call.Policy.ID,
+		RequesterUrn:    call.RequesterURN,
+		ToolName:        call.ToolName,
+		CallFingerprint: fingerprint,
+	}); err != nil {
+		return mcpriskscan.ApprovalOutcome{}, fmt.Errorf("expire lapsed approval: %w", err)
+	}
+
+	token, err := NewToken()
+	if err != nil {
+		return mcpriskscan.ApprovalOutcome{}, err
+	}
+	row, err := queries.UpsertBlockedApproval(ctx, repo.UpsertBlockedApprovalParams{
+		OrganizationID:   call.OrganizationID,
+		ProjectID:        call.ProjectID,
+		RiskPolicyID:     call.Policy.ID,
+		PolicyVersion:    call.Policy.Version,
+		Token:            token,
+		RequesterUrn:     call.RequesterURN,
+		RequesterUserID:  conv.ToPGTextEmpty(call.RequesterUserID),
+		Surface:          call.Surface,
+		SourceAdapter:    pgtype.Text{String: "", Valid: false},
+		SessionID:        pgtype.Text{String: "", Valid: false},
+		ChatID:           parseNullUUID(call.ChatID),
+		ToolsetID:        parseNullUUID(call.ToolsetID),
+		ServerUrl:        pgtype.Text{String: "", Valid: false},
+		ToolName:         call.ToolName,
+		CallFingerprint:  fingerprint,
+		ArgumentsPreview: argumentsPreview(call.Arguments),
+	})
+	if err != nil {
+		return mcpriskscan.ApprovalOutcome{}, fmt.Errorf("record held call: %w", err)
+	}
+	return mcpriskscan.ApprovalOutcome{
+		Allowed:     false,
+		Token:       row.Token,
+		UserMessage: s.holdMessage(call.Policy.Name, call.ToolName, row),
+	}, nil
+}
+
+// RequestInput is a request_approval call.
+type RequestInput struct {
+	// Token is the request token from the block message.
+	Token string
+
+	// RequesterURN is the authenticated caller, which must match the principal
+	// that made the held call.
+	RequesterURN string
+
+	// OrganizationID is the caller's organization.
+	OrganizationID string
+
+	// Reason is the agent's one-sentence reason, shown to approvers.
+	Reason string
+
+	// Scope is what the agent asks to be approved. Empty means exact_once.
+	Scope string
+
+	// ExpiresIn is how long the agent will wait. Zero means the default.
+	ExpiresIn time.Duration
+}
+
+// Request files a held call's approval request. Repeating it on a request that
+// is already pending, or already decided, returns that request unchanged.
+func (s *Service) Request(ctx context.Context, input RequestInput) (repo.RiskPolicyApproval, Status, error) {
+	if !IsToken(input.Token) {
+		return repo.RiskPolicyApproval{}, "", ErrNotFound
+	}
+	queries := repo.New(s.db)
+	row, err := queries.GetApprovalByToken(ctx, input.Token)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return repo.RiskPolicyApproval{}, "", ErrNotFound
+	}
+	if err != nil {
+		return repo.RiskPolicyApproval{}, "", fmt.Errorf("get approval by token: %w", err)
+	}
+	if row.RequesterUrn != input.RequesterURN || row.OrganizationID != input.OrganizationID {
+		return repo.RiskPolicyApproval{}, "", ErrNotFound
+	}
+	if Status(row.Status) != StatusBlocked {
+		return row, s.effectiveStatus(row), nil
+	}
+
+	reason := strings.TrimSpace(input.Reason)
+	if reason == "" {
+		return repo.RiskPolicyApproval{}, "", fmt.Errorf("%w: reason is required", ErrInvalidRequest)
+	}
+	if utf8.RuneCountInString(reason) > maxReasonRunes {
+		return repo.RiskPolicyApproval{}, "", fmt.Errorf("%w: reason must be at most %d characters", ErrInvalidRequest, maxReasonRunes)
+	}
+	scope := input.Scope
+	if scope == "" {
+		scope = ScopeExactOnce
+	}
+	if scope != ScopeExactOnce {
+		return repo.RiskPolicyApproval{}, "", fmt.Errorf("%w: scope %q is not supported yet; use %s", ErrInvalidRequest, scope, ScopeExactOnce)
+	}
+	ttl := input.ExpiresIn
+	if ttl == 0 {
+		ttl = defaultRequestTTL
+	}
+	if ttl < minRequestTTL || ttl > maxRequestTTL {
+		return repo.RiskPolicyApproval{}, "", fmt.Errorf("%w: expires_in must be between %s and %s", ErrInvalidRequest, minRequestTTL, maxRequestTTL)
+	}
+	requestedScope, err := json.Marshal(scopeDocument{Kind: scope})
+	if err != nil {
+		return repo.RiskPolicyApproval{}, "", fmt.Errorf("encode requested scope: %w", err)
+	}
+
+	updated, err := queries.MarkApprovalRequested(ctx, repo.MarkApprovalRequestedParams{
+		Reason:         conv.ToPGText(reason),
+		RequestedScope: requestedScope,
+		ExpiresAt:      pgtype.Timestamptz{Time: s.now().Add(ttl), InfinityModifier: pgtype.Finite, Valid: true},
+		ProjectID:      row.ProjectID,
+		ID:             row.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// A concurrent request_approval won the race; report its result.
+		current, getErr := queries.GetApproval(ctx, repo.GetApprovalParams{ProjectID: row.ProjectID, ID: row.ID})
+		if getErr != nil {
+			return repo.RiskPolicyApproval{}, "", fmt.Errorf("reload approval: %w", getErr)
+		}
+		return current, s.effectiveStatus(current), nil
+	}
+	if err != nil {
+		return repo.RiskPolicyApproval{}, "", fmt.Errorf("mark approval requested: %w", err)
+	}
+	s.logger.InfoContext(ctx, "approval requested", attr.SlogRiskPolicyApprovalID(updated.ID.String()))
+	return updated, StatusPending, nil
+}
+
+// WatchStatus is the status a watcher sees for a token: approved once an
+// approver approved it (and still after the retry used it), otherwise pending,
+// blocked, denied or expired.
+func (s *Service) WatchStatus(ctx context.Context, token string) (Status, error) {
+	if !IsToken(token) {
+		return "", ErrNotFound
+	}
+	row, err := repo.New(s.db).GetApprovalByToken(ctx, token)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("get approval by token: %w", err)
+	}
+	status := s.effectiveStatus(row)
+	if status == StatusConsumed {
+		return StatusApproved, nil
+	}
+	return status, nil
+}
+
+// DecideInput is an approver's decision on a pending request.
+type DecideInput struct {
+	// ProjectID is the project the request belongs to.
+	ProjectID uuid.UUID
+
+	// ApprovalID is the request being decided.
+	ApprovalID uuid.UUID
+
+	// Approve is true to approve and false to deny.
+	Approve bool
+
+	// DeciderUserID is the person deciding.
+	DeciderUserID string
+
+	// Via is where the decision came from.
+	Via DecidedVia
+
+	// Note is an optional message for the agent.
+	Note string
+}
+
+// Decide records an approver's decision. The decider must be on the policy's
+// approver list, directly or through a role, and must not be the person who
+// made the call.
+func (s *Service) Decide(ctx context.Context, input DecideInput) (repo.RiskPolicyApproval, error) {
+	queries := repo.New(s.db)
+	row, err := queries.GetApproval(ctx, repo.GetApprovalParams{ProjectID: input.ProjectID, ID: input.ApprovalID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return repo.RiskPolicyApproval{}, ErrNotFound
+	}
+	if err != nil {
+		return repo.RiskPolicyApproval{}, fmt.Errorf("get approval: %w", err)
+	}
+	if row.RequesterUserID.Valid && row.RequesterUserID.String == input.DeciderUserID {
+		return repo.RiskPolicyApproval{}, ErrSelfApproval
+	}
+
+	policyRow, err := riskrepo.New(s.db).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: row.RiskPolicyID, ProjectID: row.ProjectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return repo.RiskPolicyApproval{}, ErrNotFound
+	}
+	if err != nil {
+		return repo.RiskPolicyApproval{}, fmt.Errorf("get policy: %w", err)
+	}
+	if err := s.requireApprover(ctx, row.OrganizationID, input.DeciderUserID, policycore.Project(policyRow, nil).ApprovalConfig); err != nil {
+		return repo.RiskPolicyApproval{}, err
+	}
+
+	status := StatusDenied
+	grantedScope := []byte(nil)
+	if input.Approve {
+		status = StatusApproved
+		grantedScope = row.RequestedScope
+	}
+	decided, err := queries.DecideApproval(ctx, repo.DecideApprovalParams{
+		Status:       string(status),
+		DecidedByUrn: conv.ToPGText(urn.NewPrincipal(urn.PrincipalTypeUser, input.DeciderUserID).String()),
+		DecidedVia:   conv.ToPGText(string(input.Via)),
+		DecisionNote: conv.ToPGTextEmpty(strings.TrimSpace(input.Note)),
+		GrantedScope: grantedScope,
+		ProjectID:    input.ProjectID,
+		ID:           input.ApprovalID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return repo.RiskPolicyApproval{}, ErrNotPending
+	}
+	if err != nil {
+		return repo.RiskPolicyApproval{}, fmt.Errorf("decide approval: %w", err)
+	}
+	s.logger.InfoContext(ctx, "approval decided", attr.SlogRiskPolicyApprovalID(decided.ID.String()), attr.SlogRiskPolicyApprovalStatus(string(status)))
+	return decided, nil
+}
+
+func (s *Service) requireApprover(ctx context.Context, organizationID, userID string, config *policycore.ApprovalConfig) error {
+	if config == nil || len(config.Approvers) == 0 || userID == "" {
+		return ErrNotApprover
+	}
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, organizationID, userID)
+	if err != nil {
+		return fmt.Errorf("resolve decider principals: %w", err)
+	}
+	for _, principal := range principals {
+		if principal.ID == urn.AllUsersPrincipalID {
+			continue
+		}
+		if slices.Contains(config.Approvers, principal.String()) {
+			return nil
+		}
+	}
+	return ErrNotApprover
+}
+
+// effectiveStatus reports an open request whose window has passed as expired,
+// without waiting for a sweep to rewrite the row.
+func (s *Service) effectiveStatus(row repo.RiskPolicyApproval) Status {
+	status := Status(row.Status)
+	open := status == StatusBlocked || status == StatusPending
+	if open && row.ExpiresAt.Valid && !row.ExpiresAt.Time.After(s.now()) {
+		return StatusExpired
+	}
+	return status
+}
+
+func (s *Service) holdMessage(policyName, toolName string, row repo.RiskPolicyApproval) string {
+	if s.effectiveStatus(row) == StatusPending {
+		return fmt.Sprintf(`Waiting: calling %s needs approval under risk policy %q, and approval was already requested.
+Request token: %s
+Run the watcher from your request_approval result if it is not running. When it prints APPROVED, retry this exact call with the same arguments.`,
+			toolName, policyName, row.Token)
+	}
+	return fmt.Sprintf(`Blocked: calling %s needs approval under risk policy %q.
+Request token: %s
+1. Call request_approval on the speakeasy-approvals MCP server (%s) with this token and a one-sentence reason.
+2. Run the watcher it returns. When it prints APPROVED, retry this exact call with the same arguments.`,
+		toolName, policyName, row.Token, s.MCPServerURL())
+}
+
+// scopeDocument is the stored form of a requested or granted scope.
+type scopeDocument struct {
+	// Kind is the scope kind, such as exact_once.
+	Kind string `json:"kind"`
+}
+
+// CallFingerprint is the SHA-256 (hex) of the server, the tool and the
+// canonical JSON of the arguments. Two calls get the same fingerprint exactly
+// when they target the same tool with the same arguments, whatever the key
+// order or whitespace.
+func CallFingerprint(serverID, toolName string, arguments []byte) (string, error) {
+	canonical, err := canonicalJSON(arguments)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.New()
+	sum.Write([]byte(serverID))
+	sum.Write([]byte{0})
+	sum.Write([]byte(toolName))
+	sum.Write([]byte{0})
+	sum.Write(canonical)
+	return hex.EncodeToString(sum.Sum(nil)), nil
+}
+
+// canonicalJSON re-encodes JSON with sorted object keys and no insignificant
+// whitespace. Numbers keep their literal form. Empty input is treated as an
+// empty object.
+func canonicalJSON(raw []byte) ([]byte, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return []byte("{}"), nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(trimmed))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, fmt.Errorf("decode arguments: %w", err)
+	}
+	canonical, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("encode canonical arguments: %w", err)
+	}
+	return canonical, nil
+}
+
+// argumentsPreview keeps a bounded copy of the arguments for approvers: at
+// most maxPreviewKeys top-level keys, with long strings and nested values
+// truncated. It always returns a JSON object.
+func argumentsPreview(raw []byte) []byte {
+	var args map[string]any
+	if err := json.Unmarshal(raw, &args); err != nil || len(args) == 0 {
+		return []byte("{}")
+	}
+	keys := make([]string, 0, len(args))
+	for key := range args {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	if len(keys) > maxPreviewKeys {
+		keys = keys[:maxPreviewKeys]
+	}
+	preview := make(map[string]any, len(keys))
+	for _, key := range keys {
+		preview[key] = previewValue(args[key])
+	}
+	encoded, err := json.Marshal(preview)
+	if err != nil {
+		return []byte("{}")
+	}
+	return encoded
+}
+
+func previewValue(value any) any {
+	switch v := value.(type) {
+	case string:
+		return truncateRunes(v, maxPreviewStringRunes)
+	case map[string]any, []any:
+		encoded, err := json.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		return truncateRunes(string(encoded), maxPreviewStringRunes)
+	default:
+		return v
+	}
+}
+
+func truncateRunes(value string, limit int) string {
+	if utf8.RuneCountInString(value) <= limit {
+		return value
+	}
+	runes := []rune(value)
+	return string(runes[:limit]) + "…"
+}
+
+func parseNullUUID(value string) uuid.NullUUID {
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: id, Valid: true}
+}
