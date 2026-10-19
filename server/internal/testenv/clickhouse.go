@@ -9,7 +9,6 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	dockercontainer "github.com/moby/moby/api/types/container"
-	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	clickhousecontainer "github.com/testcontainers/testcontainers-go/modules/clickhouse"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -75,8 +74,13 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 				Password: "gram",
 			},
 			Settings: clickhouse.Settings{
-				"async_insert":          0,
-				"wait_for_async_insert": 0,
+				"async_insert": 0,
+				// Inserts that opt into async_insert per query leave the wait
+				// to the connection, which is fire-and-forget in production.
+				// Waiting here acks each insert only once its rows, and the
+				// materialized views they feed, are committed, so tests read
+				// their own writes without flushing or polling.
+				"wait_for_async_insert": 1,
 			},
 		})
 		if err != nil {
@@ -110,13 +114,4 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 
 		return conn, nil
 	}
-}
-
-// FlushClickHouseAsyncInserts synchronously drains ClickHouse's async insert
-// queue. Some write paths use server-side async fire-and-forget inserts, so
-// rows only become visible to queries after a buffer flush.
-func FlushClickHouseAsyncInserts(t *testing.T, conn clickhouse.Conn) {
-	t.Helper()
-
-	require.NoError(t, conn.Exec(t.Context(), "SYSTEM FLUSH ASYNC INSERT QUEUE"))
 }

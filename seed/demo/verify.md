@@ -553,6 +553,8 @@ that URL.
       Authorization section: `acme-workforce` does not trust Acme Identity,
       on purpose, so interactive sign-in through it (GitHub, the organization
       gateway) keeps working.
+    - Both servers are seeded disabled. Connect through the organization
+      gateway: its consent page must not list Acme Tracker or Acme Wiki.
 
 31. **Gateway discovery modes**
     - Open a gateway with tools.

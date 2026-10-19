@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -193,6 +194,9 @@ func TestConsentPagePreview(t *testing.T) {
 	// section hiding, button relabeling) rather than a static rendering.
 	require.NoError(t, os.WriteFile(filepath.Join(outDir, "consent-page.js"), consentScriptData, 0o600))
 
+	require.NoError(t, os.WriteFile(filepath.Join(outDir, "consent-tools.js"), consentToolsScriptData, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(outDir, strings.TrimPrefix(consentToolsScriptURL, "/")), consentToolsScriptData, 0o600))
+
 	var index strings.Builder
 	index.WriteString("<!doctype html><meta charset=\"utf-8\"><title>Consent page variants</title>")
 	index.WriteString("<style>body{font-family:system-ui;margin:3rem;line-height:2}</style><h1>Consent page variants</h1><ul>")
@@ -205,8 +209,13 @@ func TestConsentPagePreview(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(outDir, v.name+".html"), page.Bytes(), 0o600))
 		fmt.Fprintf(&index, `<li><a href="%s.html">%s</a></li>`, template.HTMLEscapeString(v.name), template.HTMLEscapeString(v.name))
 	}
-	index.WriteString("</ul>")
+	// The automatic check is a separate template, but belongs to this same
+	// catalogue so it receives the fonts and scripts above in a fresh directory.
+	reuse := httptest.NewRecorder()
+	require.NoError(t, renderConsentReuse(reuse, &ResolvedMcpEndpoint{RouteBase: "mcp", Slug: "example"}, AuthnChallengeState{ID: "preview-state", CSRFToken: "preview-csrf"}))
+	require.NoError(t, os.WriteFile(filepath.Join(outDir, "reuse.html"), reuse.Body.Bytes(), 0o600))
+	index.WriteString(`<li><a href="reuse.html">Checking sign-in status</a></li></ul>`)
 	require.NoError(t, os.WriteFile(filepath.Join(outDir, "index.html"), []byte(index.String()), 0o600))
 
-	t.Logf("wrote %d consent page variants to %s", len(variants), outDir)
+	t.Logf("wrote %d consent page variants to %s", len(variants)+1, outDir)
 }

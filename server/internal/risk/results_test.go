@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -149,7 +148,6 @@ func TestListRiskResults_ByPolicy_DisabledPolicyShowsHistoricalFindings(t *testi
 	at := time.Now().UTC().Add(-time.Hour)
 	finding := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, at, at, "gitleaks", "aws-access-key-id", "", "AKIA**************LE", "", "")
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// Turn the policy off after it produced the finding.
 	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
@@ -201,7 +199,6 @@ func TestListRiskResults_ByPolicyAndRuleID(t *testing.T) {
 	// Same rule under another policy: the rule filter alone would match it.
 	otherInjection := chListFinding(t, projectID, orgID, injChat, injMsg, otherPolicy.ID, at, at.Add(2*time.Minute), "prompt_injection", "prompt_injection", "", "", "", "")
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{injection, email, otherInjection}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	ruleID := "prompt_injection"
 	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
@@ -264,7 +261,6 @@ func TestListRiskResults_ByChatID_ClickHouseCutover(t *testing.T) {
 	deadLetter := chListFinding(t, *authCtx.ProjectID, authCtx.ActiveOrganizationID, chatID, msgID, active.ID, at, at, "gitleaks", "secret.dead", "", "***", "", "")
 	deadLetter.DeadLetterReason = "fixture"
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{live, disabledFinding, excluded, dismissed, shadow, deadLetter}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	chatIDString := chatID.String()
 	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ChatID: &chatIDString})
@@ -376,7 +372,6 @@ func TestListRiskResults_ProjectIncludesContentPartFindings(t *testing.T) {
 	finding.ChatMessageID = ""
 	finding.ContentPartID = partID.String()
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
 	require.NoError(t, err)
@@ -540,7 +535,6 @@ func TestListRiskResultsForAgent_RedactsGitleaksMatch(t *testing.T) {
 	finding.StartPos = 0
 	finding.EndPos = int32(len(secret))
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListRiskResultsForAgent(ctx, &gen.ListRiskResultsForAgentPayload{
 		PolicyID: &policy.ID,
@@ -577,7 +571,6 @@ func TestListRiskResultsForAgent_ShadowMCPPassthrough(t *testing.T) {
 	at := time.Now().UTC().Add(-time.Hour)
 	finding := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, at, at, "shadow_mcp", "unapproved-mcp", "", maskdisplay.Display("shadow_mcp", "unapproved-mcp", shadowMatch), "", "")
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListRiskResultsForAgent(ctx, &gen.ListRiskResultsForAgentPayload{
 		PolicyID: &policy.ID,

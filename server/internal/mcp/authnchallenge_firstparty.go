@@ -77,7 +77,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
 	}
-	challengeState := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+	challengeState := AuthnChallengeState{ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 		Browser:    nil,
 		Federation: nil,
 

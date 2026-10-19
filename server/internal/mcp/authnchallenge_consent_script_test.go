@@ -140,7 +140,7 @@ setTimeout(() => {
   const ok = cards.connected;
   assert.equal(ok.status.getAttribute('data-chain-check'), 'connected');
   assert.equal(ok.status.className, 'text-xs text-default-success');
-  assert.equal(ok.status.textContent, 'Connected through your identity provider');
+  assert.equal(ok.status.textContent, 'Service connected through your identity provider');
   assert.equal(ok.fallback.className, fallbackClass, 'connected keeps the quiet fallback');
   assert.equal(summary.textContent, '2 of 5 connected');
 

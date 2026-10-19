@@ -1210,7 +1210,7 @@ func TestServeConsentAction_ToolsetEndpointOffersNoRecheck(t *testing.T) {
 
 	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: stateID, subject: subject, member: member, clientID: clientID, name: ""}
 	page := renderConsent(t, fx)
-	require.Contains(t, page, "Connected")
+	require.Contains(t, page, "Service connected")
 	require.NotContains(t, page, "Verify")
 	require.NotContains(t, page, "data-validation")
 

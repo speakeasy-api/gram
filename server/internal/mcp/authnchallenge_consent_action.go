@@ -352,6 +352,9 @@ func (s *Service) buildRemoteConnectURL(
 	challengeURL, hop, berr := s.startRemoteLogin(ctx, challengeState, s.remoteChallengeMgr.RemoteLoginCallbackOrigin(client), parent, func(parent remotesessions.ParentChallenge) (string, error) {
 		return s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, client)
 	})
+	if errors.Is(berr, remotesessions.ErrIssuerNoAuthorizationEndpoint) {
+		return "", false, oops.E(oops.CodeBadRequest, berr, "This service doesn't support signing in from Speakeasy.").LogWarn(ctx, logger)
+	}
 	if berr != nil {
 		return "", false, oops.E(oops.CodeUnexpected, berr, "build authorization url").LogError(ctx, logger)
 	}
