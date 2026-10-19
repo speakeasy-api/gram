@@ -19,8 +19,9 @@ VALUES (@id, @project_id, @organization_id, @name, 'standard',
 
 -- name: RiskInsertApproval :exec
 -- One tool call held by the approval policy, at a point in its life cycle.
--- Times are relative to now() so the Tool approvals tab always shows a fresh
--- pending request next to decided ones. The project delete cascades these.
+-- Times are relative to now(). The pending request gets the longest window,
+-- 24 hours, so it is still waiting until the daily reseed replaces it. The
+-- project delete cascades these.
 INSERT INTO risk_policy_approvals
   (id, organization_id, project_id, risk_policy_id, policy_version, token,
    requester_urn, surface, toolset_id, tool_name, call_fingerprint,
@@ -36,7 +37,7 @@ VALUES
    now() - make_interval(mins => @held_minutes_ago::int) + interval '20 seconds',
    CASE WHEN sqlc.narg(decided_by_urn)::text IS NOT NULL
         THEN now() - make_interval(mins => @held_minutes_ago::int) + interval '3 minutes' END,
-   now() - make_interval(mins => @held_minutes_ago::int) + interval '30 minutes',
+   now() - make_interval(mins => @held_minutes_ago::int) + make_interval(mins => @window_minutes::int),
    CASE WHEN @status::text = 'consumed'
         THEN now() - make_interval(mins => @held_minutes_ago::int) + interval '3 minutes 10 seconds' END,
    now() - make_interval(mins => @held_minutes_ago::int),

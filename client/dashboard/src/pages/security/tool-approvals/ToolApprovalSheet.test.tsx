@@ -63,7 +63,7 @@ describe("ToolApprovalSheet", () => {
       <ToolApprovalSheet
         approval={approval()}
         members={[]}
-        onOpenChange={vi.fn()}
+        onOpenChange={vi.fn<(open: boolean) => void>()}
       />,
     );
 
@@ -92,7 +92,7 @@ describe("ToolApprovalSheet", () => {
       <ToolApprovalSheet
         approval={approval({ canDecide: false })}
         members={[]}
-        onOpenChange={vi.fn()}
+        onOpenChange={vi.fn<(open: boolean) => void>()}
       />,
     );
 

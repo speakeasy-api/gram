@@ -145,6 +145,7 @@ function ApproversPicker({
         setUserSearch={setUserSearch}
         selectedAudiencePrincipalUrns={approvers}
         onTogglePrincipal={toggle}
+        emptyHint={null}
       />
       <div className="border-border border">
         <AudiencePrincipalSection title="Roles">

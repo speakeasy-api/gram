@@ -79,7 +79,7 @@ VALUES
    now() - make_interval(mins => $15::int) + interval '20 seconds',
    CASE WHEN $12::text IS NOT NULL
         THEN now() - make_interval(mins => $15::int) + interval '3 minutes' END,
-   now() - make_interval(mins => $15::int) + interval '30 minutes',
+   now() - make_interval(mins => $15::int) + make_interval(mins => $16::int),
    CASE WHEN $11::text = 'consumed'
         THEN now() - make_interval(mins => $15::int) + interval '3 minutes 10 seconds' END,
    now() - make_interval(mins => $15::int),
@@ -102,11 +102,13 @@ type RiskInsertApprovalParams struct {
 	DecidedVia       pgtype.Text
 	DecisionNote     pgtype.Text
 	HeldMinutesAgo   int32
+	WindowMinutes    int32
 }
 
 // One tool call held by the approval policy, at a point in its life cycle.
-// Times are relative to now() so the Tool approvals tab always shows a fresh
-// pending request next to decided ones. The project delete cascades these.
+// Times are relative to now(). The pending request gets the longest window,
+// 24 hours, so it is still waiting until the daily reseed replaces it. The
+// project delete cascades these.
 func (q *Queries) RiskInsertApproval(ctx context.Context, arg RiskInsertApprovalParams) error {
 	_, err := q.db.Exec(ctx, riskInsertApproval,
 		arg.ID,
@@ -124,6 +126,7 @@ func (q *Queries) RiskInsertApproval(ctx context.Context, arg RiskInsertApproval
 		arg.DecidedVia,
 		arg.DecisionNote,
 		arg.HeldMinutesAgo,
+		arg.WindowMinutes,
 	)
 	return err
 }

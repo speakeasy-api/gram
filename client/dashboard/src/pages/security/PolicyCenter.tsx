@@ -1402,12 +1402,15 @@ export function SpecificUsersAudienceSection({
   setUserSearch,
   selectedAudiencePrincipalUrns,
   onTogglePrincipal,
+  emptyHint = "Select at least one user to save a targeted policy.",
 }: {
   members: AccessMember[];
   userSearch: string;
   setUserSearch: (value: string) => void;
   selectedAudiencePrincipalUrns: Set<string>;
   onTogglePrincipal: (principalUrn: string, checked: boolean) => void;
+  /** Shown while no user is selected; null shows nothing. */
+  emptyHint?: string | null;
 }): JSX.Element {
   const memberByPrincipalUrn = useMemo(
     () => new Map(members.map((member) => [member.principalUrn, member])),
@@ -1500,9 +1503,9 @@ export function SpecificUsersAudienceSection({
         />
       </div>
 
-      {selectedUserPrincipalUrns.length === 0 && (
+      {selectedUserPrincipalUrns.length === 0 && emptyHint !== null && (
         <p className="text-muted-foreground border-border border-t px-4 py-3 text-xs">
-          Select at least one user to save a targeted policy.
+          {emptyHint}
         </p>
       )}
     </div>

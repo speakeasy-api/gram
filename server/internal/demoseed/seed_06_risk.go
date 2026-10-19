@@ -426,6 +426,16 @@ func riskStrpos(haystack, needle string) int {
 // The old per-row loop becomes three COPYs (chats, then messages, then
 // findings) with rows in the loop's order, so FKs hold and
 // chat_messages.seq comes out the same.
+// approvalWindowMinutes is how long a seeded request waits for a decision: the
+// 24-hour maximum for the pending one, so it outlives the time until the next
+// daily reseed, and the 30-minute default for the rest.
+func approvalWindowMinutes(status string) int32 {
+	if status == "pending" {
+		return 24 * 60
+	}
+	return 30
+}
+
 // seedToolApprovals writes one held Slack post per status the Tool approvals
 // tab shows: waiting, approved and used, denied with a note, and expired.
 func (s *seeder) seedToolApprovals(ctx context.Context) error {
@@ -469,6 +479,7 @@ func (s *seeder) seedToolApprovals(ctx context.Context) error {
 			DecidedVia:       pgtype.Text{String: "", Valid: false},
 			DecisionNote:     pgtype.Text{String: "", Valid: false},
 			HeldMinutesAgo:   r.minutesAgo,
+			WindowMinutes:    approvalWindowMinutes(r.status),
 		}
 		if r.decided {
 			params.DecidedByUrn = riskText(approver)
