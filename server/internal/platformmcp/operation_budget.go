@@ -53,6 +53,8 @@ const (
 	PluginRepublishOrganizationLimitName          = "platform-mcp-plugin-republish-organization"
 	ProjectMutationConnectionLimitName            = "platform-mcp-project-mutation-connection"
 	ProjectMutationOrganizationLimitName          = "platform-mcp-project-mutation-organization"
+	GatewayMutationConnectionLimitName            = "platform-mcp-gateway-mutation-connection"
+	GatewayMutationOrganizationLimitName          = "platform-mcp-gateway-mutation-organization"
 )
 
 const (
@@ -143,6 +145,13 @@ const (
 	// carrying the server.
 	ToolExposureMutationsPerConnectionPerMinute   = 5
 	ToolExposureMutationsPerOrganizationPerMinute = 50
+
+	// GatewayMutationsPer* bound creating gateways and setting their members
+	// on one allowance, so alternating between the two cannot multiply the
+	// write rate. Each allowed call locks the gateway and may republish every
+	// plugin carrying it.
+	GatewayMutationsPerConnectionPerMinute   = 5
+	GatewayMutationsPerOrganizationPerMinute = 50
 
 	// DataExportTogglesPer* bound pausing and resuming data export routes on
 	// their own allowance. Both tools share it, so alternating between them
