@@ -28,6 +28,7 @@ func TestHTTPToolCallResultContentContract(t *testing.T) {
 		{"empty error", http.StatusInternalServerError, "", "", `{"content":[],"isError":true}`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			rw := toolCallResponseWriter{statusCode: tt.status, headers: make(http.Header), body: bytes.NewBufferString(tt.body)}
 			rw.headers.Set("Content-Type", tt.contentType)
 			content, structured, err := formatResult(rw, gateway.ToolKindHTTP)

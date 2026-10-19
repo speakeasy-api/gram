@@ -193,6 +193,7 @@ func TestValidatorBoundaryAdmittedWorkloadSession(t *testing.T) {
 		{"user proof", boundary, validatedSession(t, urn.NewUserSubject("user_test")), agentID},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			_, ok := mcpidentity.FromContext(tc.boundary.StampValidatedWorkloadSession(t.Context(), tc.session, tc.agentID))
 			require.False(t, ok)
 		})

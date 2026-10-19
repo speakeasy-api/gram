@@ -2271,3 +2271,18 @@ JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
 WHERE t.project_id = @project_id AND t.assistant_id = @assistant_id AND t.id = @thread_id AND t.chat_id = @chat_id
 AND r.id = @runtime_id AND r.runtime_version = 3 AND NOT r.deleted AND NOT r.ended
 AND NOT t.deleted AND NOT c.deleted AND NOT a.deleted AND a.status = 'active';
+
+-- name: SetKitCompletionRuntimeFixture :exec
+-- Test fixture: exercise live runtime admission independently of key validity.
+UPDATE assistant_runtimes
+SET runtime_version = @runtime_version, ended_at = sqlc.narg(ended_at)::timestamptz
+WHERE id = @runtime_id AND project_id = @project_id;
+
+-- name: RevokeKitCompletionBindingFixture :exec
+-- Test fixture: revoke only the binding, keeping the principal API key live.
+UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id;
+
+-- name: DeleteKitCompletionBindingFixture :exec
+-- Test fixture: remove only the binding, keeping the principal API key live.
+DELETE FROM assistant_inference_credentials WHERE id = @id AND project_id = @project_id;

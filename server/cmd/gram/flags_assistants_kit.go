@@ -114,7 +114,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 // kitWorkloadClientCredentials runs for every runtime startup. Only the public
 // JWKS reaches persisted workload registration; the private key is bootstrap-only.
 func kitWorkloadClientCredentials(method string) (mcp.AssistantRuntimeWorkloadClientConfig, []byte, error) {
-	c := mcp.AssistantRuntimeWorkloadClientConfig{AuthMethod: method}
+	c := mcp.AssistantRuntimeWorkloadClientConfig{AuthMethod: method, UserSessionIssuerID: uuid.Nil, TriggerID: uuid.Nil, Secret: "", JWKS: nil, JWKSURI: ""}
 	switch method {
 	case "client_secret_basic":
 		return c, nil, nil
@@ -135,7 +135,7 @@ func kitWorkloadClientCredentials(method string) (mcp.AssistantRuntimeWorkloadCl
 		if err != nil {
 			return c, nil, fmt.Errorf("encode Kit workload public key: %w", err)
 		}
-		return c, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), nil
+		return c, pem.EncodeToMemory(&pem.Block{Headers: nil, Type: "PRIVATE KEY", Bytes: der}), nil
 	default:
 		return c, nil, fmt.Errorf("invalid assistant-kit-mcp-auth-method")
 	}

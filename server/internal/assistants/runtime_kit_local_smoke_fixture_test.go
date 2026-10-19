@@ -32,7 +32,10 @@ type kitNativeCatalogFixture struct {
 }
 
 type kitNativeCatalogStats struct {
-	Catalog, Completions, Rejected, Unexpected int64
+	Catalog     int64 `json:"Catalog"`
+	Completions int64 `json:"Completions"`
+	Rejected    int64 `json:"Rejected"`
+	Unexpected  int64 `json:"Unexpected"`
 }
 
 func newKitNativeCatalogFixture(t *testing.T, image string) kitNativeCatalogFixture {

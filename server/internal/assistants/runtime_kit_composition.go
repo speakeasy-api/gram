@@ -211,13 +211,15 @@ func kitCompositionMCP(c KitLocalCompositionConfig, client KitMCPProvisionResult
 		if client.Secret == "" || len(client.PrivateKeyPEM) != 0 {
 			return nil, nil, errors.New("invalid Kit shared-secret credentials")
 		}
-		filename, credential = "mcp-workload-secret", []byte(client.Secret)
+		filename = "mcp-workload-secret"
+		credential = []byte(client.Secret)
 		method = map[string]string{"type": "client_secret", "client_secret_file": "/home/kit/.kit/credentials/" + filename}
 	case "private_key_jwt":
 		if len(client.PrivateKeyPEM) == 0 || client.Secret != "" {
 			return nil, nil, errors.New("invalid Kit private-key credentials")
 		}
-		filename, credential = "mcp-workload-private-key.pem", client.PrivateKeyPEM
+		filename = "mcp-workload-private-key.pem"
+		credential = client.PrivateKeyPEM
 		method = map[string]string{"type": "private_key_jwt", "private_key_file": "/home/kit/.kit/credentials/" + filename, "signing_algorithm": "ES256"}
 	default:
 		return nil, nil, errors.New("unsupported Kit MCP authentication method")

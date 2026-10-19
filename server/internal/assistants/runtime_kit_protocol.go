@@ -188,7 +188,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	projection := make(chan error, 1)
 	flush := make(chan chan error)
 	reducer := newKitTranscriptReducer()
-	interrupt := &kitInterruptState{}
+	interrupt := new(kitInterruptState)
 	go func() {
 		err := kitConsumeNotifications(work, c.Notifications(), flush, func(n kitacp.Notification) error {
 			if n.SessionID != session.SessionID {

@@ -56,7 +56,8 @@ func TestKitWorkloadAuthMethodConfiguration(t *testing.T) {
 	}
 	for _, f := range assistantKitRuntimeFlags() {
 		if f.Names()[0] == "assistant-kit-mcp-auth-method" {
-			value := f.(*cli.StringFlag)
+			value, ok := f.(*cli.StringFlag)
+			require.True(t, ok)
 			require.Equal(t, "client_secret_basic", value.Value)
 			require.Equal(t, []string{"GRAM_ASSISTANT_KIT_MCP_AUTH_METHOD"}, value.EnvVars)
 		}

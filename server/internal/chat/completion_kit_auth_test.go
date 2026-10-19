@@ -8,12 +8,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
@@ -30,18 +33,17 @@ func TestCompletionKitAPIKeyAdmission(t *testing.T) {
 	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: ti.orgID, UserID: pgtype.Text{String: "test-owner", Valid: true}})
 	require.NoError(t, err)
 	assistantID := seedAssistant(t, ctx, ti)
-	_, err = ti.conn.Exec(ctx, "UPDATE assistants SET runtime_version = 3 WHERE id = $1", assistantID)
+	err = assistantsrepo.New(ti.conn).SetAssistantDesiredRuntimeVersionForTest(ctx, assistantsrepo.SetAssistantDesiredRuntimeVersionForTestParams{AssistantID: assistantID, ProjectID: ti.projectID, RuntimeVersion: 3})
 	require.NoError(t, err)
 	trigger, err := triggerrepo.New(ti.conn).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
 		OrganizationID: ti.orgID, ProjectID: ti.projectID, DefinitionSlug: "slack", Name: "Test trigger", TargetKind: "assistant", TargetRef: assistantID.String(), TargetDisplay: "Assistant", ConfigJson: []byte(`{}`), Status: "active",
 	})
 	require.NoError(t, err)
 	identities := assistantidentity.New("https://example.test", audit.NewLogger())
-	tx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer tx.Rollback(ctx)
-	require.NoError(t, identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: ti.orgID, ProjectID: ti.projectID, AssistantID: assistantID, ActorUserID: "test-owner"}))
-	require.NoError(t, tx.Commit(ctx))
+	require.NoError(t, pgx.BeginFunc(ctx, ti.conn, func(tx pgx.Tx) error {
+		require.NoError(t, identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: ti.orgID, ProjectID: ti.projectID, AssistantID: assistantID, ActorUserID: "test-owner"}))
+		return nil
+	}))
 	resolved, err := identities.Resolve(ctx, ti.conn, ti.orgID, ti.projectID, assistantID, trigger.ID)
 	require.NoError(t, err)
 	require.NotNil(t, resolved.Identity)
@@ -50,7 +52,7 @@ func TestCompletionKitAPIKeyAdmission(t *testing.T) {
 	require.NoError(t, assistantsrepo.New(ti.conn).CreateAssistantRuntime(ctx, assistantsrepo.CreateAssistantRuntimeParams{
 		ID: runtimeID, AssistantID: assistantID, ProjectID: ti.projectID, Backend: "local", BackendMetadataJson: []byte(`{}`), State: "running", WarmUntil: now, LastHeartbeatAt: now, UpdatedAt: now,
 	}))
-	_, err = ti.conn.Exec(ctx, "UPDATE assistant_runtimes SET runtime_version = 3 WHERE id = $1", runtimeID)
+	err = chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3, EndedAt: pgtype.Timestamptz{}})
 	require.NoError(t, err)
 	tokens := ti.service.TestingCompletionTokens()
 	key, err := tokens.IssueKitAPIKey(ctx, assistanttokens.InferenceIssueInput{Identity: *resolved.Identity, RuntimeID: runtimeID, Lifetime: time.Hour}, "test")
@@ -72,25 +74,25 @@ func TestCompletionKitAPIKeyAdmission(t *testing.T) {
 	require.Error(t, err, "runtime key must not enter transcript authentication")
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request("wrong-project"), true)
 	require.Error(t, err)
-	_, err = ti.conn.Exec(ctx, "UPDATE assistant_runtimes SET ended_at = clock_timestamp() WHERE id = $1", runtimeID)
+	err = chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3, EndedAt: now})
 	require.NoError(t, err)
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
 	require.Error(t, err, "ended runtime must fail even while its API key is live")
-	_, err = ti.conn.Exec(ctx, "UPDATE assistant_runtimes SET ended_at = NULL WHERE id = $1", runtimeID)
+	err = chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3, EndedAt: pgtype.Timestamptz{}})
 	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, "UPDATE agents SET suspended_at = clock_timestamp() WHERE id = $1", resolved.Identity.AgentID)
+	_, err = agentrepo.New(ti.conn).SuspendAgent(ctx, agentrepo.SuspendAgentParams{OrganizationID: ti.orgID, ID: resolved.Identity.AgentID})
 	require.NoError(t, err)
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
 	require.Error(t, err, "live actor suspension must reject the runtime key")
-	_, err = ti.conn.Exec(ctx, "UPDATE agents SET suspended_at = NULL WHERE id = $1", resolved.Identity.AgentID)
+	_, err = agentrepo.New(ti.conn).ResumeAgent(ctx, agentrepo.ResumeAgentParams{OrganizationID: ti.orgID, ID: resolved.Identity.AgentID})
 	require.NoError(t, err)
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
 	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, "UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp() WHERE id = $1", key.ID)
+	err = chatrepo.New(ti.conn).RevokeKitCompletionBindingFixture(ctx, chatrepo.RevokeKitCompletionBindingFixtureParams{ID: key.ID, ProjectID: ti.projectID})
 	require.NoError(t, err)
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
 	require.Error(t, err, "revoked binding must not fall back to ordinary chat")
-	_, err = ti.conn.Exec(ctx, "DELETE FROM assistant_inference_credentials WHERE id = $1", key.ID)
+	err = chatrepo.New(ti.conn).DeleteKitCompletionBindingFixture(ctx, chatrepo.DeleteKitCompletionBindingFixtureParams{ID: key.ID, ProjectID: ti.projectID})
 	require.NoError(t, err)
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
 	require.Error(t, err, "unbound principal key must not enter completion authentication")

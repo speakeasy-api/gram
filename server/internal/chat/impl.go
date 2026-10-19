@@ -297,7 +297,7 @@ func (s *Service) directAuthorizeWithKitAdmission(ctx context.Context, r *http.R
 		var managed bool
 		authorizedCtx, managed, err = s.assistantTokens.AuthorizeKitAPIKey(authorizedCtx, r.Header.Get(constants.APIKeyHeader))
 		if err != nil {
-			return authorizedCtx, nil, "", err
+			return authorizedCtx, nil, "", fmt.Errorf("authorize Kit API key: %w", err)
 		}
 		if requireKitBinding && !managed {
 			return authorizedCtx, nil, "", oops.C(oops.CodeUnauthorized)

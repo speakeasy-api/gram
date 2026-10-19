@@ -57,7 +57,7 @@ func kitInferenceOrigin(raw []byte) (string, error) {
 		if secret, found := strings.CutPrefix(credential.APIKey, prefix); found && len(secret) == 64 {
 			validKey = true
 			for _, c := range secret {
-				if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+				if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 					validKey = false
 					break
 				}
@@ -105,7 +105,7 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 // contract. Caller must install Bootstrap, Protocol and authenticated Ready.
 func DefaultKitLocalRuntimeConfig(origin *url.URL) KitLocalRuntimeConfig {
 	command, args := KitGatewayCommand(8081)
-	return KitLocalRuntimeConfig{Environment: "local", Image: KitIntegrationImage, Command: command, Args: args, GuestPort: 8081, ServerURL: origin, CompatibilityGeneration: "kit-native-api-key-v1", HomeOwnedByRuntimeUser: true, Env: nil, ExtraCACertFile: "", Bootstrap: nil, Protocol: nil, Ready: nil}
+	return KitLocalRuntimeConfig{Network: "", Environment: "local", Image: KitIntegrationImage, Command: command, Args: args, GuestPort: 8081, ServerURL: origin, CompatibilityGeneration: "kit-native-api-key-v1", HomeOwnedByRuntimeUser: true, Env: nil, ExtraCACertFile: "", Bootstrap: nil, Protocol: nil, Ready: nil}
 }
 
 type KitStartupBootstrapInput struct {
@@ -125,7 +125,7 @@ type KitStartupBootstrapInput struct {
 // The caller must likewise refresh/revoke its MCP machine credentials separately.
 func PrepareKitStartupBootstrap(ctx context.Context, manager *assistanttokens.Manager, in KitStartupBootstrapInput) (KitLocalBootstrap, uuid.UUID, error) {
 	b := KitLocalBootstrap{Model: in.Model, InferenceJSON: nil, AgentsMD: in.AgentsMD, MCPJSON: in.MCPJSON, GatewayToken: in.GatewayToken, MCPFiles: in.MCPFiles}
-	b.InferenceJSON, _ = json.Marshal(kitInferenceFile{APIKey: "gram_local_" + strings.Repeat("a", 64), Project: "validation"})
+	b.InferenceJSON, _ = json.Marshal(kitInferenceFile{Email: nil, OrganizationID: nil, APIKey: "gram_local_" + strings.Repeat("a", 64), Project: "validation"})
 	if err := validateKitBootstrap(b); err != nil {
 		return KitLocalBootstrap{}, uuid.Nil, err
 	}
@@ -139,7 +139,7 @@ func PrepareKitStartupBootstrap(ctx context.Context, manager *assistanttokens.Ma
 	if err != nil {
 		return KitLocalBootstrap{}, uuid.Nil, fmt.Errorf("issue kit inference credential: %w", err)
 	}
-	b.InferenceJSON, _ = json.Marshal(kitInferenceFile{APIKey: credential.Key, Project: credential.ProjectSlug})
+	b.InferenceJSON, _ = json.Marshal(kitInferenceFile{Email: nil, OrganizationID: nil, APIKey: credential.Key, Project: credential.ProjectSlug})
 	return b, credential.ID, nil
 }
 

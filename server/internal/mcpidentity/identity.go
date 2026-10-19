@@ -206,5 +206,5 @@ func (b *ValidatorBoundary) StampValidatedWorkloadSession(ctx context.Context, s
 	if b == nil || !b.initialized || !session.Valid() || session.Subject().Kind != urn.SessionSubjectKindWorkload || agentID == uuid.Nil {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID.String(), expiresAt: session.ExpiresAt(), sessionJTI: session.JTI()})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, userID: "", apiKeyID: "", agentID: agentID.String(), expiresAt: session.ExpiresAt(), sessionJTI: session.JTI()})
 }

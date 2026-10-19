@@ -82,6 +82,7 @@ func TestWorkloadAdmissionRetainsOnlyValidAgentPrincipal(t *testing.T) {
 	t.Parallel()
 	for _, principal := range []string{"agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001", "user:user_test", "agent:invalid", "agent:00000000-0000-0000-0000-000000000000", ""} {
 		t.Run(principal, func(t *testing.T) {
+			t.Parallel()
 			engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{
 				AdmitWorkloadSession: func(context.Context, *pgxpool.Pool) (WorkloadSessionAdmission, error) {
 					return WorkloadSessionAdmission{AgentPrincipal: principal, OwnerUserID: "user_test"}, nil

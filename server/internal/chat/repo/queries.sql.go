@@ -600,6 +600,21 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 	return err
 }
 
+const deleteKitCompletionBindingFixture = `-- name: DeleteKitCompletionBindingFixture :exec
+DELETE FROM assistant_inference_credentials WHERE id = $1 AND project_id = $2
+`
+
+type DeleteKitCompletionBindingFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test fixture: remove only the binding, keeping the principal API key live.
+func (q *Queries) DeleteKitCompletionBindingFixture(ctx context.Context, arg DeleteKitCompletionBindingFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteKitCompletionBindingFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const disableRiskPoliciesForTest = `-- name: DisableRiskPoliciesForTest :exec
 UPDATE risk_policies SET enabled = FALSE WHERE project_id = $1
 `
@@ -4159,6 +4174,22 @@ func (q *Queries) RenameChat(ctx context.Context, arg RenameChatParams) error {
 	return err
 }
 
+const revokeKitCompletionBindingFixture = `-- name: RevokeKitCompletionBindingFixture :exec
+UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2
+`
+
+type RevokeKitCompletionBindingFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test fixture: revoke only the binding, keeping the principal API key live.
+func (q *Queries) RevokeKitCompletionBindingFixture(ctx context.Context, arg RevokeKitCompletionBindingFixtureParams) error {
+	_, err := q.db.Exec(ctx, revokeKitCompletionBindingFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const seedAssistant = `-- name: SeedAssistant :one
 INSERT INTO assistants (project_id, organization_id, name, model, instructions)
 VALUES ($1, $2, $3, 'anthropic/claude-opus-4.8', 'be helpful')
@@ -4514,6 +4545,30 @@ type SetInferenceActorKeyParams struct {
 // key never changes for a chat, so an existing value is kept.
 func (q *Queries) SetInferenceActorKey(ctx context.Context, arg SetInferenceActorKeyParams) error {
 	_, err := q.db.Exec(ctx, setInferenceActorKey, arg.InferenceActorKey, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setKitCompletionRuntimeFixture = `-- name: SetKitCompletionRuntimeFixture :exec
+UPDATE assistant_runtimes
+SET runtime_version = $1, ended_at = $2::timestamptz
+WHERE id = $3 AND project_id = $4
+`
+
+type SetKitCompletionRuntimeFixtureParams struct {
+	RuntimeVersion int16
+	EndedAt        pgtype.Timestamptz
+	RuntimeID      uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Test fixture: exercise live runtime admission independently of key validity.
+func (q *Queries) SetKitCompletionRuntimeFixture(ctx context.Context, arg SetKitCompletionRuntimeFixtureParams) error {
+	_, err := q.db.Exec(ctx, setKitCompletionRuntimeFixture,
+		arg.RuntimeVersion,
+		arg.EndedAt,
+		arg.RuntimeID,
+		arg.ProjectID,
+	)
 	return err
 }
 
