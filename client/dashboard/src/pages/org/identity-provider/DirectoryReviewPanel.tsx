@@ -145,7 +145,8 @@ function ReviewRow({
 
   return (
     <li className="flex flex-wrap items-center gap-3 px-3 py-2">
-      <div className="min-w-0 flex-1">
+      {/* The text keeps a readable width; the controls wrap below it. */}
+      <div className="min-w-64 flex-1">
         <Text className="truncate font-medium">{title}</Text>
         <Text muted small>
           {reviewItemDetail(item, roleNames)}

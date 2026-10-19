@@ -127,7 +127,7 @@ describe("DirectoryReviewPanel", () => {
     expect(screen.getByText("Group deleted: Contractors")).toBeTruthy();
     expect(
       screen.getByText(
-        /Still mapped to Support, which grant nothing while it is gone. It came back once before/,
+        /Still mapped to Support, which grants nothing while it is gone. It came back once before/,
       ),
     ).toBeTruthy();
   });
