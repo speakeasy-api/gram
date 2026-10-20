@@ -30,8 +30,8 @@ function mcpServerKind(server: McpServer): McpServerKind | undefined {
 
 /**
  * Every server with a backend. A hosted wrapper other than its toolset's own
- * server is listed only when it has its own address; without one it is a
- * gateway's member wrapper and shows under that gateway instead.
+ * server is hidden when it has no endpoint: it is a gateway's member wrapper
+ * and shows under that gateway. When has_endpoint is unknown it is listed.
  */
 export function listedMcpServers(servers: McpServer[]): ListedMcpServer[] {
   const listed: ListedMcpServer[] = [];
@@ -41,7 +41,7 @@ export function listedMcpServers(servers: McpServer[]): ListedMcpServer[] {
     if (
       kind === "hosted" &&
       !isCanonicalHostedWrapper(server) &&
-      !server.primaryEndpointId
+      server.hasEndpoint === false
     ) {
       continue;
     }

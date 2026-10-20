@@ -495,6 +495,7 @@ var McpServer = Type("McpServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("primary_endpoint_url", String, "The public MCP URL of the primary endpoint. Absent when the server has no addressable endpoint.")
+	Attribute("has_endpoint", Boolean, "Whether any endpoint routes to this server, including one on a custom domain that is not live yet. Absent when it could not be read.")
 	Attribute("created_at", String, func() {
 		Description("When the MCP server was created")
 		Format(FormatDateTime)

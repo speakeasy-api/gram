@@ -777,3 +777,14 @@ WHERE t.id = ANY(@toolset_ids::uuid[])
   AND t.organization_id = @organization_id
   AND t.project_id = ANY(@project_ids::uuid[])
   AND t.deleted IS FALSE;
+
+-- name: ListMCPServerIDsWithEndpoints :many
+-- Any live endpoint counts, addressable or not.
+SELECT DISTINCT e.mcp_server_id::uuid AS mcp_server_id
+FROM mcp_endpoints e
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.organization_id = @organization_id
+WHERE e.project_id = ANY(@project_ids::uuid[])
+  AND e.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND e.deleted IS FALSE;

@@ -153,6 +153,7 @@ func requireNoEnrichment(t *testing.T, got *types.McpServer) {
 	require.Nil(t, got.PrimaryEndpointID)
 	require.Nil(t, got.PrimaryEndpointURL)
 	require.Nil(t, got.PlatformEndpointSlug)
+	require.False(t, got.HasEndpoint != nil && *got.HasEndpoint, "a foreign tenant's endpoint never counts")
 }
 
 func TestMcpServerSummary_HostedAcrossReads(t *testing.T) {
@@ -503,4 +504,34 @@ func TestCreateAndUpdateMcpServer_ResponsesCarrySummary(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, remoteUpdated.Toolset)
 	require.Equal(t, conv.PtrEmpty(remoteEndpoint.ID.String()), remoteUpdated.PrimaryEndpointID)
+}
+
+func TestMcpServerSummary_HasEndpointCountsAnyLiveEndpoint(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	withSummaryServerURL(t, ti)
+	orgID, projectID := summaryAuth(t, ctx)
+
+	toolset := seedSummaryToolset(t, ctx, ti, orgID, projectID)
+	bare := seedSummaryServer(t, ctx, ti, projectID, toolset.ID)
+	platform := seedSummaryServer(t, ctx, ti, projectID, toolset.ID)
+	seedSummaryEndpoint(t, ctx, ti, projectID, platform.ID, uuid.NullUUID{})
+	pending := seedSummaryServer(t, ctx, ti, projectID, toolset.ID)
+	domain := seedSummaryCustomDomain(t, ctx, ti, orgID, false)
+	seedSummaryEndpoint(t, ctx, ti, projectID, pending.ID, uuid.NullUUID{UUID: domain.ID, Valid: true})
+
+	want := map[uuid.UUID]bool{bare.ID: false, platform.ID: true, pending.ID: true}
+	for _, forOrg := range []bool{false, true} {
+		byID := listSummaryServers(t, ctx, ti, forOrg)
+		for id, has := range want {
+			got := byID[id.String()]
+			require.NotNil(t, got)
+			require.NotNil(t, got.HasEndpoint)
+			require.Equal(t, has, *got.HasEndpoint)
+		}
+	}
+	got := getSummaryServer(t, ctx, ti, pending.ID)
+	require.NotNil(t, got.HasEndpoint)
+	require.True(t, *got.HasEndpoint, "an endpoint on a domain that is not live yet still counts")
+	require.Nil(t, got.PrimaryEndpointID)
 }

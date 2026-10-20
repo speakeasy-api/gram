@@ -12,7 +12,7 @@ function listed(fields: Partial<McpServer>): ListedMcpServer {
     {
       id: "server-1",
       visibility: "private",
-      primaryEndpointId: "endpoint-1",
+      hasEndpoint: true,
       ...fields,
     } as McpServer,
   ]);

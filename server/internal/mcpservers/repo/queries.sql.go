@@ -839,6 +839,44 @@ func (q *Queries) ListMCPServerIDsByUserSessionIssuerID(ctx context.Context, arg
 	return items, nil
 }
 
+const listMCPServerIDsWithEndpoints = `-- name: ListMCPServerIDsWithEndpoints :many
+SELECT DISTINCT e.mcp_server_id::uuid AS mcp_server_id
+FROM mcp_endpoints e
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.organization_id = $1
+WHERE e.project_id = ANY($2::uuid[])
+  AND e.mcp_server_id = ANY($3::uuid[])
+  AND e.deleted IS FALSE
+`
+
+type ListMCPServerIDsWithEndpointsParams struct {
+	OrganizationID string
+	ProjectIds     []uuid.UUID
+	McpServerIds   []uuid.UUID
+}
+
+// Any live endpoint counts, addressable or not.
+func (q *Queries) ListMCPServerIDsWithEndpoints(ctx context.Context, arg ListMCPServerIDsWithEndpointsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMCPServerIDsWithEndpoints, arg.OrganizationID, arg.ProjectIds, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServerToolMetadata = `-- name: ListMCPServerToolMetadata :many
 SELECT id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 FROM mcp_server_tool_metadata

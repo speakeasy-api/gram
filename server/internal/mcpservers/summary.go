@@ -15,8 +15,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 )
 
-// EnrichViews fills each view's toolset summary, primary endpoint and platform
-// endpoint slug in two queries, whatever the number of servers. views[i] must
+// EnrichViews fills each view's toolset summary, primary endpoint, platform
+// endpoint slug and has_endpoint in three queries, whatever the number of servers. views[i] must
 // be servers[i]'s view. A failed query is logged and leaves its fields empty;
 // endpointsResolved reports whether the endpoint fields could be read.
 func EnrichViews(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, organizationID string, servers []repo.McpServer, views []*types.McpServer) (endpointsResolved bool) {
@@ -69,10 +69,26 @@ func EnrichViews(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ser
 	if err != nil {
 		logger.WarnContext(ctx, "list mcp server primary endpoints", attr.SlogError(err))
 	}
+	withEndpoints, endpointsErr := repo.New(db).ListMCPServerIDsWithEndpoints(ctx, repo.ListMCPServerIDsWithEndpointsParams{
+		OrganizationID: organizationID,
+		ProjectIds:     projectIDs,
+		McpServerIds:   serverIDs,
+	})
+	if endpointsErr != nil {
+		logger.WarnContext(ctx, "list mcp servers with endpoints", attr.SlogError(endpointsErr))
+	}
+	hasEndpoint := make(map[uuid.UUID]struct{}, len(withEndpoints))
+	for _, id := range withEndpoints {
+		hasEndpoint[id] = struct{}{}
+	}
 
 	for i, server := range servers {
 		if server.ToolsetID.Valid {
 			views[i].Toolset = summaries[server.ToolsetID.UUID]
+		}
+		if endpointsErr == nil {
+			_, has := hasEndpoint[server.ID]
+			views[i].HasEndpoint = new(has)
 		}
 		primary, ok := primaries[server.ID]
 		if !ok {

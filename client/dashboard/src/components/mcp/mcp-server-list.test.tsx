@@ -146,39 +146,44 @@ describe("listedMcpServers", () => {
 });
 
 describe("hosted wrappers", () => {
-  const extra = (id: string, name: string, primaryEndpointId?: string) =>
+  const extra = (id: string, name: string, hasEndpoint?: boolean) =>
     server({
       id,
       name,
       slug: id,
       toolsetId: "toolset-1",
       toolset,
-      primaryEndpointId,
+      hasEndpoint,
     });
 
-  it("hides a non-canonical wrapper with no address of its own", () => {
-    renderRows([extra("wrapper-2", "Support (gateway)"), HOSTED]);
+  it("hides a non-canonical wrapper with no endpoint of its own", () => {
+    renderRows([extra("wrapper-2", "Support (gateway)", false), HOSTED]);
     expect(
       screen.getAllByRole("link").map((link) => link.getAttribute("href")),
     ).toEqual(["/mcp/hosted-tools"]);
   });
 
-  it("hides a toolset's only wrapper when it has no address", () => {
-    renderRows([extra("wrapper-2", "Support (gateway)"), REMOTE]);
+  it("hides a toolset's only wrapper when it has no endpoint", () => {
+    renderRows([extra("wrapper-2", "Support (gateway)", false), REMOTE]);
     expect(screen.queryByText("Support (gateway)")).toBeNull();
   });
 
-  it("lists an addressable non-canonical wrapper as its own server", () => {
-    renderRows([HOSTED, extra("wrapper-2", "Support (staging)", "endpoint-2")]);
+  it("lists a non-canonical wrapper with its own endpoint as its own server", () => {
+    renderRows([HOSTED, extra("wrapper-2", "Support (staging)", true)]);
     expect(
       screen.getAllByRole("link").map((link) => link.getAttribute("href")),
     ).toEqual(["/mcp/hosted-tools", "/mcp/x/wrapper-2"]);
     expect(screen.getByText("Support (staging)")).toBeTruthy();
   });
 
-  it("sends an addressable wrapper waiting on OAuth to its own settings", () => {
+  it("lists a non-canonical wrapper when has_endpoint could not be read", () => {
+    renderRows([HOSTED, extra("wrapper-2", "Support (unknown)")]);
+    expect(screen.getByText("Support (unknown)")).toBeTruthy();
+  });
+
+  it("sends a wrapper with an endpoint waiting on OAuth to its own settings", () => {
     mocks.oauthStatus = "required-unconfigured";
-    renderCards([extra("wrapper-2", "Support (staging)", "endpoint-2")]);
+    renderCards([extra("wrapper-2", "Support (staging)", true)]);
     expect(screen.getByText("Set up")).toBeTruthy();
     expect(screen.getByRole("link").getAttribute("href")).toBe(
       "/mcp/x/wrapper-2/settings",
