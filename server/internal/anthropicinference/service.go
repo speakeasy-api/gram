@@ -32,18 +32,14 @@ import (
 
 const (
 	// verdictBudget fits the exchange within Anthropic's default 5-second timeout.
-	verdictBudget = 3750 * time.Millisecond
-	// backlogBudget bounds how long a verdict waits on unaccepted stored content.
-	backlogBudget = time.Second
+	verdictBudget = 4250 * time.Millisecond
 	// scanConcurrency bounds how many inputs of one transcript are evaluated
 	// at once.
 	scanConcurrency = 4
-	// checkpointBudget bounds the marker write that follows scanning.
-	checkpointBudget = 500 * time.Millisecond
-	// responseBudget reserves time to serialize the verdict after checkpointing.
+	// responseBudget reserves time to serialize the verdict.
 	responseBudget = 250 * time.Millisecond
 	// requestBudget leaves 500ms of Anthropic's default 5-second timeout for the network.
-	requestBudget = verdictBudget + checkpointBudget + responseBudget
+	requestBudget = verdictBudget + responseBudget
 	// titleScheduleTimeout bounds the goroutine that asks for a title, so a
 	// degraded Temporal frontend cannot pin one goroutine per inference request.
 	titleScheduleTimeout = 2 * time.Second
@@ -58,7 +54,6 @@ var errPolicyDenied = errors.New("inference policy denied")
 // budget or an earlier denial cut off stays unevaluated.
 type inputScan struct {
 	evaluated bool
-	complete  bool
 	result    *risk.ScanResult
 }
 
@@ -91,11 +86,8 @@ type transcriptStore interface {
 	// methods.
 	ResolveConversation(context.Context, Config, Frame) (uuid.UUID, string, error)
 	ResolveActor(context.Context, Config, Frame) (string, error)
-	Begin(context.Context, Config, Frame, string) (checkpointSession, error)
-	// Save archives the frame's conversation messages that are not yet stored
-	// and returns the index, within conversationMessages(frame.Messages), of
-	// the first message it had not seen before.
-	Save(context.Context, Config, Frame, string) (int, error)
+	// Save archives the frame's conversation messages that are not yet stored.
+	Save(context.Context, Config, Frame, string) error
 }
 
 // Service archives transcripts and runs the existing risk-policy scanner.
@@ -115,8 +107,9 @@ func NewService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgx
 	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer, titles: titles, logger: logger}, scanner: scanner, metrics: newMetrics(meterProvider, logger)}
 }
 
-// Process archives attempts independently of enforcement. Only a successfully
-// evaluated checkpoint can exempt historical content from another scan.
+// Process archives the transcript and evaluates its latest exchange. Earlier
+// messages were evaluated when they arrived, and every archived message also
+// gets asynchronous risk analysis, so they are not scanned again.
 func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verdict, error) {
 	ctx = policyflags.WithRequestMemo(ctx)
 	budget, cancel := verdictContext(ctx)
@@ -146,73 +139,38 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	if err != nil {
 		return Verdict{}, fmt.Errorf("resolve inference hook actor: %w", err)
 	}
-	freshStart, err := s.store.Save(budget, config, frame, userID)
-	if err != nil {
+	if err := s.store.Save(budget, config, frame, userID); err != nil {
 		return Verdict{}, fmt.Errorf("store inference transcript: %w", err)
 	}
-	session, err := s.store.Begin(budget, config, frame, userID)
-	if err != nil {
-		return Verdict{}, fmt.Errorf("begin inference checkpoint: %w", err)
-	}
-	accepted, err := session.Load(budget)
-	if err != nil {
-		return Verdict{}, fmt.Errorf("load inference checkpoint: %w", err)
-	}
-	hashes := transcriptHashes(messages)
-	matched := acceptedPrefix(accepted, hashes)
-	scope := newScanRange(messages, matched, freshStart).inputs(inputs)
-	scans, err := s.scanInputs(budget, config, frame, userID, inputs, scope)
+	start := firstInputAt(inputs, latestExchangeStart(messages))
+	scans, err := s.scanInputs(budget, config, frame, userID, inputs, start)
 	if err != nil {
 		return Verdict{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
 	}
-	if match := firstDenial(scans[scope.start:]); match != nil {
-		// Denied content is never accepted, so a retry scans it again.
+	if match := firstDenial(scans[start:]); match != nil {
 		return denyVerdict(conv.Default(conv.PtrValOr(match.UserMessage, ""), "This request was blocked by your organization's security policy.")), nil
 	}
-	cleanThrough := cleanPrefix(inputs, scans, scope.start, len(messages))
-	verdict := allowVerdict()
-	if slices.ContainsFunc(scans[scope.live:], func(scan inputScan) bool { return !scan.evaluated }) {
+	if slices.ContainsFunc(scans[start:], func(scan inputScan) bool { return !scan.evaluated }) {
 		// A failed evaluation must not silently allow inference, including when
 		// Anthropic's administrator selected allow-on-webhook-failure.
 		s.logger.WarnContext(ctx, "inference verdict budget exhausted",
 			attr.SlogOrganizationID(config.OrganizationID), attr.SlogProjectID(config.ProjectID.String()),
-			attr.SlogInferenceInputCount(len(inputs)-scope.start), attr.SlogInferenceAcceptedMessages(cleanThrough))
-		verdict = denyVerdict(unavailableDenyReason)
+			attr.SlogInferenceInputCount(len(inputs)-start))
+		return denyVerdict(unavailableDenyReason), nil
 	}
-	// Re-accepting a complete frame refreshes the marker's token.
-	advances, fullyAccepted := cleanThrough > matched, cleanThrough == len(messages)
-	if advances || fullyAccepted {
-		if err := s.accept(ctx, session, hashes[:cleanThrough], verdict); err != nil {
-			return Verdict{}, err
-		}
-	}
-	return verdict, nil
+	return allowVerdict(), nil
 }
 
-// verdictContext keeps checkpoint and response headroom before ctx's deadline.
+// verdictContext keeps response headroom before ctx's deadline.
 func verdictContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	duration := verdictBudget
 	if deadline, ok := ctx.Deadline(); ok {
-		duration = min(duration, time.Until(deadline)-checkpointBudget-responseBudget)
+		duration = min(duration, time.Until(deadline)-responseBudget)
 	}
 	return context.WithTimeout(ctx, duration)
-}
-
-// scanRange holds message positions: [start, live) is stored content the
-// checkpoint never accepted (backlog), and [live, end) gates the verdict.
-type scanRange struct{ start, live int }
-
-func newScanRange(messages []Message, accepted, fresh int) scanRange {
-	live := min(currentTurnStart(messages), max(accepted, fresh))
-	return scanRange{start: min(accepted, live), live: live}
-}
-
-// inputs maps the range onto policy-input indexes, which follow message order.
-func (r scanRange) inputs(inputs []policyInput) scanRange {
-	return scanRange{start: firstInputAt(inputs, r.start), live: firstInputAt(inputs, r.live)}
 }
 
 func firstInputAt(inputs []policyInput, message int) int {
@@ -222,47 +180,36 @@ func firstInputAt(inputs []policyInput, message int) int {
 	return len(inputs)
 }
 
-// scanInputs scans live inputs before backlog; backlog errors only leave inputs unevaluated.
-func (s *Service) scanInputs(ctx context.Context, config Config, frame Frame, userID string, inputs []policyInput, scope scanRange) ([]inputScan, error) {
+// scanInputs evaluates inputs[start:]. A policy match stops the remaining scans.
+func (s *Service) scanInputs(ctx context.Context, config Config, frame Frame, userID string, inputs []policyInput, start int) ([]inputScan, error) {
 	scans := make([]inputScan, len(inputs))
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(scanConcurrency)
-	submit := func(scanCtx context.Context, from, to int, backlog bool) {
-		for index := from; index < to && scanCtx.Err() == nil; index++ {
-			group.Go(func() error {
-				// group.Go can block on a free slot past the budget, so the loop
-				// check may be stale by the time this runs.
-				if scanCtx.Err() != nil {
-					return nil
-				}
-				outcome, err := s.scanner.ScanForInferenceEnforcement(scanCtx, scanRequest(config, frame, userID, index, inputs[index]))
-				switch {
-				case err == nil:
-				case scanCtx.Err() != nil:
-					return nil
-				case backlog:
-					s.logger.WarnContext(ctx, "scan inference backlog input", attr.SlogError(err))
-					return nil
-				default:
-					return fmt.Errorf("scan input %d: %w", index, err)
-				}
-				scan := inputScan{evaluated: true, complete: false, result: nil}
-				if outcome != nil {
-					scan.complete, scan.result = outcome.Complete, outcome.Result
-				}
-				scans[index] = scan
-				if denies(scan.result) {
-					return errPolicyDenied
-				}
+	for index := start; index < len(inputs) && groupCtx.Err() == nil; index++ {
+		group.Go(func() error {
+			// group.Go can block on a free slot past the budget, so the loop
+			// check may be stale by the time this runs.
+			if groupCtx.Err() != nil {
 				return nil
-			})
-		}
+			}
+			outcome, err := s.scanner.ScanForInferenceEnforcement(groupCtx, scanRequest(config, frame, userID, index, inputs[index]))
+			if err != nil {
+				if groupCtx.Err() != nil {
+					return nil
+				}
+				return fmt.Errorf("scan input %d: %w", index, err)
+			}
+			scan := inputScan{evaluated: true, result: nil}
+			if outcome != nil {
+				scan.result = outcome.Result
+			}
+			scans[index] = scan
+			if denies(scan.result) {
+				return errPolicyDenied
+			}
+			return nil
+		})
 	}
-	submit(groupCtx, scope.live, len(inputs), false)
-	// The backlog window opens once every live input holds a slot.
-	backlogCtx, cancelBacklog := context.WithTimeout(groupCtx, backlogBudget)
-	defer cancelBacklog()
-	submit(backlogCtx, scope.start, scope.live, true)
 	if err := group.Wait(); err != nil && !errors.Is(err, errPolicyDenied) {
 		return nil, fmt.Errorf("evaluate inference policy: %w", err)
 	}
@@ -276,43 +223,6 @@ func firstDenial(scans []inputScan) *risk.ScanResult {
 		}
 	}
 	return nil
-}
-
-// cleanPrefix is how many leading messages can be accepted: up to the first
-// scanned input that did not evaluate complete. Accepting them after a cut-off
-// makes the redelivery incremental instead of repeating the same scans into
-// the same budget.
-func cleanPrefix(inputs []policyInput, scans []inputScan, start, messages int) int {
-	for index := start; index < len(scans); index++ {
-		if !scans[index].evaluated || !scans[index].complete {
-			return inputs[index].message
-		}
-	}
-	return messages
-}
-
-// accept gets its own window because the scan budget may already be spent.
-func (s *Service) accept(ctx context.Context, session checkpointSession, hashes [][]byte, verdict Verdict) error {
-	acceptCtx, cancel := context.WithTimeout(ctx, checkpointBudget)
-	defer cancel()
-	err := session.Accept(acceptCtx, hashes)
-	switch {
-	case err == nil:
-		return nil
-	case ctx.Err() != nil:
-		return fmt.Errorf("accept inference checkpoint context: %w", ctx.Err())
-	case errors.Is(err, errCheckpointConflict):
-		// Another fully scanned delivery won. Keep its marker, without
-		// turning this optimization into an artificial denial.
-		return nil
-	case verdict.Action == "deny":
-		// The verdict already fails closed; the marker only makes the
-		// redelivery incremental.
-		s.logger.WarnContext(ctx, "accept partial inference checkpoint", attr.SlogError(err))
-		return nil
-	default:
-		return fmt.Errorf("accept inference checkpoint: %w", err)
-	}
 }
 
 func scanRequest(config Config, frame Frame, userID string, index int, input policyInput) risk.RealtimeScanRequest {
@@ -439,7 +349,14 @@ func (s *postgresStore) ResolveActor(ctx context.Context, config Config, frame F
 	return conversation.UserID.String, nil
 }
 
-func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, userID string) (int, error) {
+func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, userID string) error {
+	_, err := s.archive(ctx, config, frame, userID)
+	return err
+}
+
+// archive stores the frame's new messages and returns the index, within
+// conversationMessages(frame.Messages), of the first one it had not seen before.
+func (s *postgresStore) archive(ctx context.Context, config Config, frame Frame, userID string) (int, error) {
 	if len(frame.Messages) == 0 {
 		return 0, nil
 	}

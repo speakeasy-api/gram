@@ -754,6 +754,18 @@ func (q *Queries) PostflightIDSelfClients(ctx context.Context, arg PostflightIDS
 	return count, err
 }
 
+const postflightIDServerClientAssociations = `-- name: PostflightIDServerClientAssociations :one
+SELECT count(*) FROM mcp_server_remote_session_clients
+WHERE project_id = $1::uuid AND deleted IS FALSE
+`
+
+func (q *Queries) PostflightIDServerClientAssociations(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDServerClientAssociations, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDServiceAccountHeaders = `-- name: PostflightIDServiceAccountHeaders :one
 SELECT count(*)
 FROM remote_mcp_server_headers header
