@@ -528,6 +528,64 @@ func BuildCreateDeviceJoinTokenPayload(workloadIdentitiesCreateDeviceJoinTokenBo
 	return v, nil
 }
 
+// BuildCreateDeviceInstallCommandPayload builds the payload for the
+// workloadIdentities createDeviceInstallCommand endpoint from CLI flags.
+func BuildCreateDeviceInstallCommandPayload(workloadIdentitiesCreateDeviceInstallCommandBody string, workloadIdentitiesCreateDeviceInstallCommandSessionToken string, workloadIdentitiesCreateDeviceInstallCommandApikeyToken string, workloadIdentitiesCreateDeviceInstallCommandProjectSlugInput string) (*workloadidentities.CreateDeviceInstallCommandPayload, error) {
+	var err error
+	var body CreateDeviceInstallCommandRequestBody
+	{
+		err = json.Unmarshal([]byte(workloadIdentitiesCreateDeviceInstallCommandBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expires_in_seconds\": 61,\n      \"hooks_project_slug\": \"0\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.hooks_project_slug", body.HooksProjectSlug, "^[a-z0-9_-]{1,128}$"))
+		if body.ExpiresInSeconds < 60 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_in_seconds", body.ExpiresInSeconds, 60, true))
+		}
+		if body.ExpiresInSeconds > 86400 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_in_seconds", body.ExpiresInSeconds, 86400, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if workloadIdentitiesCreateDeviceInstallCommandSessionToken != "" {
+			sessionToken = &workloadIdentitiesCreateDeviceInstallCommandSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesCreateDeviceInstallCommandApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesCreateDeviceInstallCommandApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesCreateDeviceInstallCommandProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesCreateDeviceInstallCommandProjectSlugInput
+		}
+	}
+	v := &workloadidentities.CreateDeviceInstallCommandPayload{
+		AgentID:          body.AgentID,
+		HooksProjectSlug: body.HooksProjectSlug,
+		ExpiresInSeconds: body.ExpiresInSeconds,
+	}
+	{
+		var zero int
+		if v.ExpiresInSeconds == zero {
+			v.ExpiresInSeconds = 3600
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListDeviceJoinTokensPayload builds the payload for the
 // workloadIdentities listDeviceJoinTokens endpoint from CLI flags.
 func BuildListDeviceJoinTokensPayload(workloadIdentitiesListDeviceJoinTokensAgentID string, workloadIdentitiesListDeviceJoinTokensCursor string, workloadIdentitiesListDeviceJoinTokensLimit string, workloadIdentitiesListDeviceJoinTokensSessionToken string, workloadIdentitiesListDeviceJoinTokensApikeyToken string, workloadIdentitiesListDeviceJoinTokensProjectSlugInput string) (*workloadidentities.ListDeviceJoinTokensPayload, error) {

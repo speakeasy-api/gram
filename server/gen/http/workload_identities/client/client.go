@@ -60,6 +60,10 @@ type Client struct {
 	// createDeviceJoinToken endpoint.
 	CreateDeviceJoinTokenDoer goahttp.Doer
 
+	// CreateDeviceInstallCommand Doer is the HTTP client used to make requests to
+	// the createDeviceInstallCommand endpoint.
+	CreateDeviceInstallCommandDoer goahttp.Doer
+
 	// ListDeviceJoinTokens Doer is the HTTP client used to make requests to the
 	// listDeviceJoinTokens endpoint.
 	ListDeviceJoinTokensDoer goahttp.Doer
@@ -93,25 +97,26 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListDoer:                  doer,
-		ListPlatformsDoer:         doer,
-		GetCustomFlowsDoer:        doer,
-		ListTokenEndpointsDoer:    doer,
-		RegisterIssuerDoer:        doer,
-		UpdateIssuerDoer:          doer,
-		WithdrawIssuerDoer:        doer,
-		AdmitSubjectDoer:          doer,
-		UpdateSubjectDoer:         doer,
-		WithdrawSubjectDoer:       doer,
-		CreateDeviceJoinTokenDoer: doer,
-		ListDeviceJoinTokensDoer:  doer,
-		RevokeDeviceJoinTokenDoer: doer,
-		RegisterDeviceDoer:        doer,
-		RestoreResponseBody:       restoreBody,
-		scheme:                    scheme,
-		host:                      host,
-		decoder:                   dec,
-		encoder:                   enc,
+		ListDoer:                       doer,
+		ListPlatformsDoer:              doer,
+		GetCustomFlowsDoer:             doer,
+		ListTokenEndpointsDoer:         doer,
+		RegisterIssuerDoer:             doer,
+		UpdateIssuerDoer:               doer,
+		WithdrawIssuerDoer:             doer,
+		AdmitSubjectDoer:               doer,
+		UpdateSubjectDoer:              doer,
+		WithdrawSubjectDoer:            doer,
+		CreateDeviceJoinTokenDoer:      doer,
+		CreateDeviceInstallCommandDoer: doer,
+		ListDeviceJoinTokensDoer:       doer,
+		RevokeDeviceJoinTokenDoer:      doer,
+		RegisterDeviceDoer:             doer,
+		RestoreResponseBody:            restoreBody,
+		scheme:                         scheme,
+		host:                           host,
+		decoder:                        dec,
+		encoder:                        enc,
 	}
 }
 
@@ -374,6 +379,30 @@ func (c *Client) CreateDeviceJoinToken() goa.Endpoint {
 		resp, err := c.CreateDeviceJoinTokenDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "createDeviceJoinToken", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateDeviceInstallCommand returns an endpoint that makes HTTP requests to
+// the workloadIdentities service createDeviceInstallCommand server.
+func (c *Client) CreateDeviceInstallCommand() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateDeviceInstallCommandRequest(c.encoder)
+		decodeResponse = DecodeCreateDeviceInstallCommandResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateDeviceInstallCommandRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateDeviceInstallCommandDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "createDeviceInstallCommand", err)
 		}
 		return decodeResponse(resp)
 	}
