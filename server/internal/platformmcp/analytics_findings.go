@@ -50,7 +50,7 @@ func (s *AnalyticsService) FindSignalSessions(ctx context.Context, principal Pri
 	}
 	if input.Evidence {
 		auth, ok := contextvalues.GetAuthContext(ctx)
-		if !ok || auth == nil || auth.ActiveOrganizationID != principal.OrganizationID {
+		if !ok || auth == nil || principal.UserID == "" || auth.UserID != principal.UserID || auth.ActiveOrganizationID != principal.OrganizationID {
 			return zero, ErrForbidden
 		}
 		bound := *auth

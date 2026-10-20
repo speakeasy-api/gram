@@ -78,9 +78,9 @@ even when the gates pass.
 Evidence samples the most recent hit from at most twenty conversations and applies
 the transcript service's exact-resource access check to every candidate. Owners,
 explicit chat grants, managed runtimes, external-user credentials and support
-impersonation retain their underlying rules. Returned references contain the
-sensor/window context, message/reading/conversation coordinates, probability and
-definition fingerprint, never transcript content. Absence is not evidence of no
+impersonation retain their underlying rules. The enclosing measurement provides
+sensor/window context; each reference contains message/reading/conversation
+coordinates, probability and a definition fingerprint, never transcript content. Absence is not evidence of no
 matching activity. Export both values and context for later interpretation.
 
 ## Reproducible local benchmark

@@ -116,11 +116,12 @@ export function SignalSessions({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {peer.signalIds.map((id) => (
-                  <SelectItem
-                    key={id}
-                    value={id}
-                  >{`${peer.mode === "ordered_score" ? "At least " : ""}${names.get(id) ?? "Removed signal"}`}</SelectItem>
+                {peer.signalIds.map((id, index) => (
+                  <SelectItem key={id} value={id}>
+                    {peer.mode === "ordered_score"
+                      ? `Level ${index + 1} and higher`
+                      : (names.get(id) ?? "Removed signal")}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -295,11 +296,7 @@ function SessionFindings({
       )}
       <div className="space-y-2 border-t pt-4">
         <p className="text-eyebrow">Supporting conversations</p>
-        <p className="text-muted-foreground text-sm">
-          This sample includes only conversations you can access.{" "}
-          {result.peer &&
-            "Both selected signals occur in each example conversation."}
-        </p>
+        <p className="text-muted-foreground text-sm">{result.evidenceScope}</p>
         {result.evidence.length === 0 && (
           <p className="text-sm">
             No permitted examples in this bounded sample.
@@ -382,5 +379,14 @@ function comparisonReason(reason: string): string {
     return "the current window ends within the last five minutes and may still receive readings";
   if (reason === "definition_changed_mixed_or_unknown")
     return "measurement definitions changed, are mixed, or are unknown";
+  if (reason === "evaluated_models_missing")
+    return "some measured answers have no recorded model metadata";
+  if (
+    reason === "classifier_models_changed_mixed_or_unknown" ||
+    reason === "evaluated_models_changed_mixed_or_unknown"
+  )
+    return "classifier models changed, are mixed, or are unknown";
+  if (reason === "classifier_providers_changed_mixed_or_unknown")
+    return "classifier providers changed, are mixed, or are unknown";
   return "classifier or input settings changed, are mixed, or are unknown";
 }

@@ -88,7 +88,7 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 	definition := &mcp.Tool{Name: getSignalDefinitionToolName, Title: "Inspect a Signal Measurement Definition", Description: "Read the immutable question, signal criteria, ordering and input contract behind a definition_hash returned by a signal measurement. Select the exact project, sensor and fingerprint. An absent historical snapshot is reported as unavailable, never reconstructed from current configuration. Requires Signals Intelligence and project:read; returns definition content, not conversation content.", Annotations: readOnlyAnnotations(), InputSchema: analyticsProjectSchema(map[string]*jsonschema.Schema{"sensor_id": uuidSchema("Contributing sensor UUID."), "definition_hash": stringSchema("Exact 64-character semantic fingerprint from the measurement.", 64, 64)}, []string{"project_id", "sensor_id", "definition_hash"})}
 
 	finder := &mcp.Tool{Name: findSignalSessionsToolName, Title: "Find Cross-session Signal Patterns", Description: "Measure signal presence, breadth and concentration across conversations in one exact project. Optionally select a peer predicate for separately named same-message and same-session co-occurrence with joint-answer denominators, and compare an equal-duration previous window with explicit comparability gates. signal_query uses the chart's sensor, probability rule, trigger/run and filters, without group_by. Evidence is an opt-in sample of at most twenty recent permitted conversations, containing reference coordinates only; open transcripts in the dashboard. Coverage remains unknown and differences are exploratory, not causal or significance claims. Requires Signals Intelligence and project:read; every evidence reference additionally passes chat access checks.", Annotations: readOnlyAnnotations(), InputSchema: analyticsProjectSchema(map[string]*jsonschema.Schema{
-		"from": dateTimeSchema("Inclusive source-time boundary."), "to": dateTimeSchema("Exclusive source-time boundary."), "signal_query": signalQuerySchema(), "peer": signalSelectionSchema(), "compare_previous": {Type: "boolean", Description: "Compare the adjacent equal-duration window, with comparability markers."}, "evidence": {Type: "boolean", Description: "Include bounded, permission-checked conversation references. Defaults to false."},
+		"from": dateTimeSchema("Inclusive source-time boundary."), "to": dateTimeSchema("Exclusive source-time boundary."), "signal_query": signalFindingsQuerySchema(), "peer": signalSelectionSchema(), "compare_previous": {Type: "boolean", Description: "Compare the adjacent equal-duration window, with comparability markers."}, "evidence": {Type: "boolean", Description: "Include bounded, permission-checked conversation references. Defaults to false."},
 	}, []string{"project_id", "from", "to", "signal_query"})}
 	if !live {
 		for _, tool := range []*mcp.Tool{describe, values, query, definition, finder} {
@@ -285,4 +285,12 @@ func signalQuerySchema() *jsonschema.Schema {
 		"groups":    {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(20)), Description: "Top groups over the complete window; default five."},
 		"points":    {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(10000)), Description: "Complete-series point budget across all selected groups; default 2000."},
 	}, []string{"selection"})
+}
+
+func signalFindingsQuerySchema() *jsonschema.Schema {
+	schema := signalQuerySchema()
+	for _, field := range []string{"group_by", "groups", "points"} {
+		delete(schema.Properties, field)
+	}
+	return schema
 }

@@ -46,8 +46,11 @@ func TestConversationEvidenceUsesPlatformMemberOwnershipAndExactGrants(t *testin
 	require.NoError(t, err)
 	require.Empty(t, missing)
 	support := member
+	support.IsAdmin = true
 	support.SupportOrganizationID = support.ActiveOrganizationID
-	allowed, err = ti.service.ReadableConversations(contextvalues.SetAuthContext(granted, &support), []string{other.String()})
+	supportCtx := contextvalues.WithValidatedSupportSession(contextvalues.SetAuthContext(granted, &support), &support)
+	require.True(t, contextvalues.IsSupportSession(supportCtx))
+	allowed, err = ti.service.ReadableConversations(supportCtx, []string{other.String()})
 	require.NoError(t, err)
 	require.Empty(t, allowed, "support impersonation cannot obtain evidence references")
 }

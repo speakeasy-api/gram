@@ -104,6 +104,11 @@ func TestSignalComparisonRequiresStableDefinitionsAndSufficientBreadth(t *testin
 	result := compareSignals(ctx, baseline, current)
 	require.True(t, result.Comparable)
 	require.InDelta(t, .1, *result.DeltaShare, .000001)
+	current["evaluated_sessions"] = int64(4)
+	result = compareSignals(ctx, baseline, current)
+	require.False(t, result.Comparable)
+	require.Contains(t, result.Reasons, "insufficient_observations")
+	current["evaluated_sessions"] = int64(15)
 	current["definition_hashes"] = []string{"changed"}
 	result = compareSignals(ctx, baseline, current)
 	require.False(t, result.Comparable)
