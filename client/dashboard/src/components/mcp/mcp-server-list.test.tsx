@@ -146,41 +146,43 @@ describe("listedMcpServers", () => {
 });
 
 describe("hosted wrappers", () => {
-  const extra = (id: string, name: string) =>
-    server({ id, name, slug: id, toolsetId: "toolset-1", toolset });
+  const extra = (id: string, name: string, primaryEndpointId?: string) =>
+    server({
+      id,
+      name,
+      slug: id,
+      toolsetId: "toolset-1",
+      toolset,
+      primaryEndpointId,
+    });
 
-  it("lists a toolset once, via its canonical wrapper, when it has extra wrappers", () => {
-    renderRows([extra("wrapper-2", "Support (staging)"), HOSTED]);
+  it("hides a non-canonical wrapper with no address of its own", () => {
+    renderRows([extra("wrapper-2", "Support (gateway)"), HOSTED]);
     expect(
       screen.getAllByRole("link").map((link) => link.getAttribute("href")),
     ).toEqual(["/mcp/hosted-tools"]);
   });
 
-  it("opens a toolset's only, non-canonical wrapper on its server page", () => {
-    renderCards([extra("wrapper-2", "Support (staging)")]);
-    expect(screen.getByText("Support (staging)")).toBeTruthy();
-    expect(screen.getByRole("link").getAttribute("href")).toBe(
-      "/mcp/x/wrapper-2",
-    );
+  it("hides a toolset's only wrapper when it has no address", () => {
+    renderRows([extra("wrapper-2", "Support (gateway)"), REMOTE]);
+    expect(screen.queryByText("Support (gateway)")).toBeNull();
   });
 
-  it("sends a non-canonical wrapper waiting on OAuth to its own settings", () => {
+  it("lists an addressable non-canonical wrapper as its own server", () => {
+    renderRows([HOSTED, extra("wrapper-2", "Support (staging)", "endpoint-2")]);
+    expect(
+      screen.getAllByRole("link").map((link) => link.getAttribute("href")),
+    ).toEqual(["/mcp/hosted-tools", "/mcp/x/wrapper-2"]);
+    expect(screen.getByText("Support (staging)")).toBeTruthy();
+  });
+
+  it("sends an addressable wrapper waiting on OAuth to its own settings", () => {
     mocks.oauthStatus = "required-unconfigured";
-    renderCards([extra("wrapper-2", "Support (staging)")]);
+    renderCards([extra("wrapper-2", "Support (staging)", "endpoint-2")]);
     expect(screen.getByText("Set up")).toBeTruthy();
     expect(screen.getByRole("link").getAttribute("href")).toBe(
       "/mcp/x/wrapper-2/settings",
     );
-  });
-
-  it("lists only the first of a toolset's non-canonical wrappers", () => {
-    renderRows([
-      extra("wrapper-2", "Support A"),
-      extra("wrapper-3", "Support B"),
-    ]);
-    expect(
-      screen.getAllByRole("link").map((link) => link.getAttribute("href")),
-    ).toEqual(["/mcp/x/wrapper-2"]);
   });
 });
 

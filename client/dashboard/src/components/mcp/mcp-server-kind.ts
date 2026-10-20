@@ -28,18 +28,22 @@ function mcpServerKind(server: McpServer): McpServerKind | undefined {
   return undefined;
 }
 
-/** Every server with a backend; a toolset lists once, via its canonical wrapper or else its first. */
+/**
+ * Every server with a backend. A hosted wrapper other than its toolset's own
+ * server is listed only when it has its own address; without one it is a
+ * gateway's member wrapper and shows under that gateway instead.
+ */
 export function listedMcpServers(servers: McpServer[]): ListedMcpServer[] {
-  const listedToolsets = new Set(
-    servers.filter(isCanonicalHostedWrapper).map((s) => s.toolsetId),
-  );
   const listed: ListedMcpServer[] = [];
   for (const server of servers) {
     const kind = mcpServerKind(server);
     if (kind === undefined) continue;
-    if (kind === "hosted" && !isCanonicalHostedWrapper(server)) {
-      if (listedToolsets.has(server.toolsetId)) continue;
-      listedToolsets.add(server.toolsetId);
+    if (
+      kind === "hosted" &&
+      !isCanonicalHostedWrapper(server) &&
+      !server.primaryEndpointId
+    ) {
+      continue;
     }
     listed.push({ server, kind });
   }

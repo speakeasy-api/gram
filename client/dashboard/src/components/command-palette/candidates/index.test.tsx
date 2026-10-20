@@ -292,6 +292,7 @@ const HOSTED_ROW = {
   environmentId: "env-1",
   toolVariationsGroupId: "tvg-1",
   toolset: { id: "toolset-1", name: "Hosted", slug: "hosted" },
+  primaryEndpointId: "endpoint-hosted",
 };
 
 /** The options object every SDK list hook in this file receives. */
@@ -566,7 +567,7 @@ describe("useMcpServerCandidates", () => {
     expect(hosted?.verbs).toEqual(["open"]);
   });
 
-  it("lists a toolset once, via its canonical wrapper, alongside other servers", () => {
+  it("lists the canonical wrapper and addressable extra wrappers, hiding the rest", () => {
     mocks.mcpServers = [
       { ...HOSTED_ROW, visibility: "private" },
       {
@@ -574,6 +575,7 @@ describe("useMcpServerCandidates", () => {
         id: "server-hosted-2",
         slug: "hosted-x2",
         visibility: "private",
+        primaryEndpointId: undefined,
       },
       { ...HOSTED_ROW, id: "toolset-1", slug: "hosted", visibility: "public" },
       mcpServer("Slack", "slack-a1", "private"),
@@ -582,6 +584,7 @@ describe("useMcpServerCandidates", () => {
     const servers = byKind(result.current, "mcp_server");
 
     expect(servers.map((server) => server.id).sort()).toEqual([
+      "mcp:server-hosted",
       "mcp:server-slack-a1",
       "mcp:toolset-1",
     ]);

@@ -9,7 +9,12 @@ import { mcpServerFacets, pluginMembership } from "./mcp-filter-schema";
 
 function listed(fields: Partial<McpServer>): ListedMcpServer {
   const [row] = listedMcpServers([
-    { id: "server-1", visibility: "private", ...fields } as McpServer,
+    {
+      id: "server-1",
+      visibility: "private",
+      primaryEndpointId: "endpoint-1",
+      ...fields,
+    } as McpServer,
   ]);
   if (!row) throw new Error("fixture has no backend");
   return row;
