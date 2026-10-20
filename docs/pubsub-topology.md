@@ -17,6 +17,10 @@ flowchart LR
 
   t_gram_authz_v1_challenge(["gram-authz-v1-challenge<br/>(topic)"]):::topic
   t_gram_conversation_v1_message_event(["gram-conversation-v1-message-event<br/>(topic)"]):::topic
+  t_gram_mcpevents_v1_delivery(["gram-mcpevents-v1-delivery<br/>(topic)"]):::topic
+  t_gram_mcpevents_v1_review_changed(["gram-mcpevents-v1-review-changed<br/>(topic)"]):::topic
+  t_gram_mcpevents_v1_review_router_dlq(["gram-mcpevents-v1-review-router-dlq<br/>(dlq)"]):::dlq
+  t_gram_mcpevents_v1_webhook_sender_dlq(["gram-mcpevents-v1-webhook-sender-dlq<br/>(dlq)"]):::dlq
   t_gram_metering_v1_meter_reading(["gram-metering-v1-meter-reading<br/>(topic)"]):::topic
   t_gram_networkingress_v1_reconcile_requested(["gram-networkingress-v1-reconcile-requested<br/>(topic)"]):::topic
   t_gram_otel_v1_inbound_log_record(["gram-otel-v1-inbound-log-record<br/>(topic)"]):::topic
@@ -47,6 +51,8 @@ flowchart LR
   t_gram_telemetry_v1_session_observed(["gram-telemetry-v1-session-observed<br/>(topic)"]):::topic
   t_gram_webhooks_v1_event(["gram-webhooks-v1-event<br/>(topic)"]):::topic
   s_gram_authz_v1_challenge_ch_writer["gram-authz-v1-challenge-ch-writer<br/>(sub)"]:::sub
+  s_gram_mcpevents_v1_review_router["gram-mcpevents-v1-review-router<br/>(sub)"]:::sub
+  s_gram_mcpevents_v1_webhook_sender["gram-mcpevents-v1-webhook-sender<br/>(sub)"]:::sub
   s_gram_metering_v1_meter_reading_ch_writer["gram-metering-v1-meter-reading-ch-writer<br/>(sub)"]:::sub
   s_gram_metering_v1_meter_reading_stripe_exporter["gram-metering-v1-meter-reading-stripe-exporter<br/>(sub)"]:::sub
   s_gram_networkingress_v1_reconciler["gram-networkingress-v1-reconciler<br/>(sub)"]:::sub
@@ -152,6 +158,10 @@ flowchart LR
   p30[/"📤<br/>server/internal/outbox/webhooks.go"/]:::go
   p30 --> t_gram_webhooks_v1_event
   t_gram_authz_v1_challenge --> s_gram_authz_v1_challenge_ch_writer
+  t_gram_mcpevents_v1_review_changed --> s_gram_mcpevents_v1_review_router
+  s_gram_mcpevents_v1_review_router -. dead-letter .-> t_gram_mcpevents_v1_review_router_dlq
+  t_gram_mcpevents_v1_delivery --> s_gram_mcpevents_v1_webhook_sender
+  s_gram_mcpevents_v1_webhook_sender -. dead-letter .-> t_gram_mcpevents_v1_webhook_sender_dlq
   t_gram_metering_v1_meter_reading --> s_gram_metering_v1_meter_reading_ch_writer
   t_gram_metering_v1_meter_reading --> s_gram_metering_v1_meter_reading_stripe_exporter
   t_gram_networkingress_v1_reconcile_requested --> s_gram_networkingress_v1_reconciler
@@ -277,6 +287,10 @@ flowchart LR
 | --- | --- | --- | --- |
 | [`gram-authz-v1-challenge`](../infra/proto/gram/authz/v1/challenge.proto) | topic | 7d | [`server/internal/authz/challenge_logger.go`](../server/internal/authz/challenge_logger.go) |
 | [`gram-conversation-v1-message-event`](../infra/proto/gram/conversation/v1/message_event.proto) | topic | 4d | [`server/internal/chat/message_publication.go`](../server/internal/chat/message_publication.go) |
+| [`gram-mcpevents-v1-delivery`](../infra/proto/gram/mcpevents/v1/delivery.proto) | topic | 7d | — |
+| [`gram-mcpevents-v1-review-changed`](../infra/proto/gram/mcpevents/v1/review_changed.proto) | topic | 7d | — |
+| [`gram-mcpevents-v1-review-router-dlq`](../infra/proto/gram/mcpevents/v1/review_router.proto) | DLQ | — | — |
+| [`gram-mcpevents-v1-webhook-sender-dlq`](../infra/proto/gram/mcpevents/v1/webhook_sender.proto) | DLQ | — | — |
 | [`gram-metering-v1-meter-reading`](../infra/proto/gram/metering/v1/meter_reading.proto) | topic | 4d | [`pystreams/src/pystreams/risk/metering.py`](../pystreams/src/pystreams/risk/metering.py) |
 | [`gram-networkingress-v1-reconcile-requested`](../infra/proto/gram/networkingress/v1/reconcile_requested.proto) | topic | 7d | [`server/internal/networkingress/reconcile_requests.go`](../server/internal/networkingress/reconcile_requests.go) |
 | [`gram-otel-v1-inbound-log-record`](../infra/proto/gram/otel/v1/inbound_log_record.proto) | topic | — | [`server/internal/hooks/otel_tee.go`](../server/internal/hooks/otel_tee.go)<br/>[`server/internal/otelpub/convert.go`](../server/internal/otelpub/convert.go) |
@@ -312,6 +326,8 @@ flowchart LR
 | Subscription | Topic | Ack | DLQ | Consumed by |
 | --- | --- | --- | --- | --- |
 | [`gram-authz-v1-challenge-ch-writer`](../infra/proto/gram/authz/v1/challenge_ch_writer.proto) | `gram-authz-v1-challenge` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-mcpevents-v1-review-router`](../infra/proto/gram/mcpevents/v1/review_router.proto) | `gram-mcpevents-v1-review-changed` | 1m | `gram-mcpevents-v1-review-router-dlq` | — |
+| [`gram-mcpevents-v1-webhook-sender`](../infra/proto/gram/mcpevents/v1/webhook_sender.proto) | `gram-mcpevents-v1-delivery` | 1m | `gram-mcpevents-v1-webhook-sender-dlq` | — |
 | [`gram-metering-v1-meter-reading-ch-writer`](../infra/proto/gram/metering/v1/meter_reading_ch_writer.proto) | `gram-metering-v1-meter-reading` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-metering-v1-meter-reading-stripe-exporter`](../infra/proto/gram/metering/v1/meter_reading_stripe_exporter.proto) | `gram-metering-v1-meter-reading` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-networkingress-v1-reconciler`](../infra/proto/gram/networkingress/v1/reconciler.proto) | `gram-networkingress-v1-reconcile-requested` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
@@ -354,10 +370,14 @@ flowchart LR
 
 ## Notes
 
+- Topic `gram-mcpevents-v1-delivery` has no publisher in `server/` or `pystreams/`.
+- Topic `gram-mcpevents-v1-review-changed` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-inbound-metric` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-inbound-span` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-log-record` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-metric` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-span` has no publisher in `server/` or `pystreams/`.
+- Subscription `gram-mcpevents-v1-review-router` has no consumer in `server/` or `pystreams/`.
+- Subscription `gram-mcpevents-v1-webhook-sender` has no consumer in `server/` or `pystreams/`.
 - Storage subscription `gram-sigint-v1-lake-primary` requires an explicitly installed Go runner; generated binding call sites are not inferred by this diagram.
 

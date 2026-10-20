@@ -1,0 +1,14 @@
+edition = "2024";
+package gram.mcpevents.v1;
+import "gcp/pubsub/v1/options.proto";
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/mcpevents/v1;mcpeventsv1";
+
+
+message ReviewRouter {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.mcpevents.v1.ReviewChanged"
+    ack_deadline: {seconds: 60}
+    retry_policy: {minimum_backoff: {seconds: 10} maximum_backoff: {seconds: 600}}
+    dead_letter: {max_delivery_attempts: 10}
+  };
+}
