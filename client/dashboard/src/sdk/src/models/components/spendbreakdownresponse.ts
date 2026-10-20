@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import * as openEnums from "../../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -30,12 +30,12 @@ export type Availability = OpenEnum<typeof Availability>;
 export const Currency = {
   Usd: "USD",
 } as const;
-export type Currency = ClosedEnum<typeof Currency>;
+export type Currency = OpenEnum<typeof Currency>;
 
 export const PricingBasis = {
   CurrentPaygListPrice: "current_payg_list_price",
 } as const;
-export type PricingBasis = ClosedEnum<typeof PricingBasis>;
+export type PricingBasis = OpenEnum<typeof PricingBasis>;
 
 export type SpendBreakdownResponse = {
   /**
@@ -68,13 +68,12 @@ export const Availability$inboundSchema: z.ZodMiniType<Availability, unknown> =
   openEnums.inboundSchema(Availability);
 
 /** @internal */
-export const Currency$inboundSchema: z.ZodMiniEnum<typeof Currency> = z.enum(
-  Currency,
-);
+export const Currency$inboundSchema: z.ZodMiniType<Currency, unknown> =
+  openEnums.inboundSchema(Currency);
 
 /** @internal */
-export const PricingBasis$inboundSchema: z.ZodMiniEnum<typeof PricingBasis> = z
-  .enum(PricingBasis);
+export const PricingBasis$inboundSchema: z.ZodMiniType<PricingBasis, unknown> =
+  openEnums.inboundSchema(PricingBasis);
 
 /** @internal */
 export const SpendBreakdownResponse$inboundSchema: z.ZodMiniType<

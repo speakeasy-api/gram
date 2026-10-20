@@ -44,6 +44,7 @@ import {
   vouchedFor,
   providerFixLink,
   providerView,
+  supportsProvider,
   serviceName,
   addIssuerStep,
   crossAppAccessStep,
@@ -162,7 +163,11 @@ function stateCopy(
         tone: "destructive",
       };
   }
-  return { label: "Unknown", variant: "neutral" };
+  return {
+    label: "Unknown",
+    tone: "neutral",
+    next: "Refresh the page to check for an update before changing this setup.",
+  };
 }
 
 function ClientPicker({
@@ -477,11 +482,18 @@ export function IdentityChainingField({
   // Who can vouch for people on this server follows from its sign-in and the
   // organization's Speakeasy issuer; nothing is chosen here.
   const emaProviders = read.data?.emaProviders;
+  const supportedProviders = (emaProviders?.providers ?? []).every(
+    supportsProvider,
+  );
   const listed = (emaProviders?.providers ?? []).filter(
     (provider) =>
-      provider.kind === "speakeasy" || !!provider.remoteSessionIssuerId,
+      !supportsProvider(provider) ||
+      provider.kind === "speakeasy" ||
+      !!provider.remoteSessionIssuerId,
   );
-  const usable = listed.filter((provider) => !provider.unavailableReason);
+  const usable = listed.filter(
+    (provider) => supportsProvider(provider) && !provider.unavailableReason,
+  );
   const trustedIssuerId = userSessionIssuer.trustedRemoteSessionIssuerId;
   const issuers = useRemoteSessionIssuersByIds([
     ...(trustedIssuerId ? [trustedIssuerId] : []),
@@ -532,6 +544,7 @@ export function IdentityChainingField({
       : allVouchers;
   // The service doesn't accept the one provider this sign-in goes through.
   const notAccepted =
+    supportedProviders &&
     !!emaProviders &&
     !emaProviders.isDefault &&
     !vouchedFor(emaProviders.providers, {
@@ -539,7 +552,8 @@ export function IdentityChainingField({
     });
   // Speakeasy's issuer URL is withheld without org:read; it still vouches.
   const trusts = usableVouchers;
-  const noneUsable = !!emaProviders && usable.length === 0;
+  const noneUsable =
+    supportedProviders && !!emaProviders && usable.length === 0;
   // The vendor already trusts one of these, somewhere in the organization.
   const trusted = trusts.find((row) => row.lastAcceptedAt);
 
@@ -551,6 +565,7 @@ export function IdentityChainingField({
       !scopesValid ||
       !grantDeclaration ||
       publicClient ||
+      !supportedProviders ||
       noneUsable
     )
       return;
@@ -597,6 +612,7 @@ export function IdentityChainingField({
   const shownState = read.data ? displayedChainingState(read.data) : null;
   const canUnlink = chainingUnlinkable(read.data);
   const enableBlocked =
+    !supportedProviders ||
     noneUsable ||
     publicClient ||
     !scopesValid ||
@@ -758,7 +774,7 @@ export function IdentityChainingField({
             generation={read.data.generation}
             recorded={read.data.scopes}
             connection={read.data.connectionScopes ?? []}
-            canApply={ready && canWrite && !grantsBlocked}
+            canApply={ready && canWrite && !grantsBlocked && supportedProviders}
             canWrite={canWrite}
             busy={pending}
             onApplyingChange={setApplyingScopes}
@@ -785,8 +801,20 @@ export function IdentityChainingField({
 
         <ChainLink
           label="Vouched for by"
-          tone={usableVouchers.length > 0 ? "success" : "warning"}
+          tone={
+            !supportedProviders
+              ? "neutral"
+              : usableVouchers.length > 0
+                ? "success"
+                : "warning"
+          }
         >
+          {!supportedProviders && (
+            <Text muted small>
+              Refresh the page before changing this unsupported identity
+              provider configuration.
+            </Text>
+          )}
           {!emaProviders ? (
             <Text muted small>
               Checking…

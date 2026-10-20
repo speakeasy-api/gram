@@ -547,6 +547,39 @@ describe("identity chaining vouched for by Speakeasy", () => {
     screen.getByRole("button", {
       name: "Turn on",
     }) as HTMLButtonElement;
+  it("keeps an unknown provider visible and blocks turning on without claiming it can vouch", () => {
+    read.data = {
+      state: "unlinked",
+      generation: 1,
+      scopes: [],
+      emaProviders: providersOf({ kind: "future_provider" }),
+    };
+    render(speakeasyField());
+    expect(enableButton().disabled).toBe(true);
+    fireEvent.click(enableButton());
+    expect(screen.getByText("Unknown identity provider")).toBeTruthy();
+    expect(screen.getByText(/Unknown availability/)).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "No identity provider can vouch for people on this server.",
+      ),
+    ).toBeNull();
+  });
+
+  it("explains an unknown preparation state without a success or failure label", () => {
+    read.data = {
+      ...bound("first"),
+      state: "future_state",
+      emaProviders: providersOf(speakeasy),
+    };
+    render(speakeasyField());
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Refresh the page to check for an update before changing this setup/,
+      ),
+    ).toBeTruthy();
+  });
   const chain = () => screen.getByRole("list", { name: "How people get in" });
   const vouchers = () =>
     within(screen.getByRole("list", { name: "Identity providers" }))

@@ -1042,3 +1042,74 @@ describe("one service", () => {
     ).toBeTruthy();
   });
 });
+
+describe("unsupported enabled identity providers", () => {
+  it.each([
+    { kind: "future_provider" as ProviderView["kind"] },
+    { unavailableReason: "future_reason" as ProviderView["unavailableReason"] },
+  ])(
+    "blocks edits and restoring defaults for unsupported settings: %j",
+    (settings) => {
+      mocks.rows = [
+        { ...linear, isDefault: false, providers: [view(settings)] },
+      ];
+      show();
+      expect(editButton().disabled).toBe(true);
+      const restore = screen.getByRole("button", {
+        name: "Use default",
+      }) as HTMLButtonElement;
+      expect(restore.disabled).toBe(true);
+      fireEvent.click(editButton());
+      fireEvent.click(restore);
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+      expect(
+        screen.getByText(/unsupported identity provider configuration/),
+      ).toBeTruthy();
+      expect(mocks.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it("stops a dirty draft when an unsupported provider arrives in a refetch", () => {
+    mocks.rows = [{ ...linear, isDefault: false, providers: [speakeasy] }];
+    const rendered = show();
+    fireEvent.click(editButton());
+    fireEvent.click(box("Speakeasy"));
+    mocks.rows = [
+      {
+        ...linear,
+        isDefault: false,
+        providers: [
+          speakeasy,
+          view({
+            key: "future",
+            kind: "future_provider" as ProviderView["kind"],
+            name: "Unknown identity provider",
+          }),
+        ],
+      },
+    ];
+    rendered.rerender(tree());
+    expect(saveButton().disabled).toBe(true);
+    fireEvent.click(saveButton());
+    fireEvent.click(screen.getByRole("button", { name: "Use default" }));
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("does not let an unsupported default be replaced by the current candidate list", () => {
+    mocks.rows = [
+      {
+        ...linear,
+        providers: [
+          view({
+            kind: "future_provider" as ProviderView["kind"],
+            name: "Unknown identity provider",
+          }),
+        ],
+      },
+    ];
+    show();
+    expect(editButton().disabled).toBe(true);
+    expect(accepted().join(" ")).toContain("Unknown identity provider");
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+});

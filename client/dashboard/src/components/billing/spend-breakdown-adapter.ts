@@ -24,6 +24,16 @@ function fractionalDigits(value: string): number {
 export function validateSpendBreakdown(
   data: SpendBreakdownData,
 ): SpendBreakdownData {
+  if (
+    (data.availability !== "available" &&
+      data.availability !== "unsupported_plan") ||
+    data.currency !== "USD" ||
+    data.pricingBasis !== "current_payg_list_price"
+  ) {
+    throw new Error(
+      "Refresh the page to display these newer spend estimate settings.",
+    );
+  }
   fractionalDigits(data.totalCostUsd);
   for (const product of data.products) {
     fractionalDigits(product.costUsd);

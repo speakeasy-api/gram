@@ -161,6 +161,8 @@ export const AGENT_POLICY_SCOPE_GROUPS: ScopeGroup[] = [
  */
 export type AgentPolicyDraft = Record<string, Selector[] | null>;
 
+type EditableAgentPolicyGrant = AgentPolicyGrantForm & { effect: "allow" };
+
 /**
  * Whether this permission offers a resource choice.
  *
@@ -245,13 +247,13 @@ function policySelector(
  */
 export function agentPolicyGrantsFromDraft(
   draft: AgentPolicyDraft,
-): AgentPolicyGrantForm[] {
-  const forms: AgentPolicyGrantForm[] = [];
+): EditableAgentPolicyGrant[] {
+  const forms: EditableAgentPolicyGrant[] = [];
   const seen = new Set<string>();
   for (const [scope, selectors] of Object.entries(draft)) {
     const sources = selectors === null ? [undefined] : selectors;
     for (const source of sources) {
-      const form: AgentPolicyGrantForm = {
+      const form: EditableAgentPolicyGrant = {
         effect: "allow",
         scope,
         selector: policySelector(scope, source),
@@ -303,6 +305,7 @@ function constrainedDimensions(
 export function isAgentPolicyGrantRepresentable(
   grant: AgentPolicyGrant,
 ): boolean {
+  if (grant.effect !== "allow") return false;
   if (grant.selector.resourceKind !== agentPolicyResourceKind(grant.scope)) {
     return false;
   }
@@ -398,7 +401,7 @@ export function agentPolicyFingerprint(grants: AgentPolicyGrant[]): string {
         JSON.stringify([
           grant.id,
           delegableGrantKey({
-            effect: "allow",
+            effect: grant.effect,
             scope: grant.scope,
             selector: grant.selector,
           }),
@@ -409,7 +412,7 @@ export function agentPolicyFingerprint(grants: AgentPolicyGrant[]): string {
 }
 
 export interface AgentPolicyDiff {
-  create: AgentPolicyGrantForm[];
+  create: EditableAgentPolicyGrant[];
   remove: AgentPolicyGrant[];
 }
 
@@ -420,12 +423,12 @@ export interface AgentPolicyDiff {
  */
 export function diffAgentPolicyGrants(
   stored: AgentPolicyGrant[],
-  next: AgentPolicyGrantForm[],
+  next: EditableAgentPolicyGrant[],
 ): AgentPolicyDiff {
   const storedByKey = new Map(
     stored.map((grant) => [
       delegableGrantKey({
-        effect: "allow",
+        effect: grant.effect,
         scope: grant.scope,
         selector: grant.selector,
       }),

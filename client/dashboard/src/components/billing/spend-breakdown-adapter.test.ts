@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
   adaptSpendChart,
   formatScaledUsd,
@@ -21,6 +22,25 @@ const storage: SpendProduct = {
 };
 
 describe("metered spend precision", () => {
+  it.each(["availability", "currency", "pricingBasis"] as const)(
+    "does not present unknown %s as current PAYG pricing in USD",
+    (field) => {
+      const day = new Date("2026-09-19T00:00:00Z");
+      const data: SpendBreakdownData = {
+        availability: "available",
+        currency: "USD",
+        pricingBasis: "current_payg_list_price",
+        queriedAt: day,
+        window: { from: day, to: day },
+        billingCycles: [],
+        totalCostUsd: "1",
+        products: [{ ...storage, costUsd: "1" }],
+      };
+      data[field] = unrecognized("future_value");
+      expect(() => validateSpendBreakdown(data)).toThrow("Refresh the page");
+    },
+  );
+
   it("sums selected products beyond double precision without including unselected costs", () => {
     const risk: SpendProduct = {
       ...storage,

@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import * as openEnums from "../../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -57,7 +57,7 @@ export const OktaIdentityProviderConnectionProvider = {
 /**
  * Identity provider; always okta.
  */
-export type OktaIdentityProviderConnectionProvider = ClosedEnum<
+export type OktaIdentityProviderConnectionProvider = OpenEnum<
   typeof OktaIdentityProviderConnectionProvider
 >;
 
@@ -200,9 +200,8 @@ export const OktaIdentityProviderConnectionListingMode$inboundSchema:
 
 /** @internal */
 export const OktaIdentityProviderConnectionProvider$inboundSchema:
-  z.ZodMiniEnum<typeof OktaIdentityProviderConnectionProvider> = z.enum(
-    OktaIdentityProviderConnectionProvider,
-  );
+  z.ZodMiniType<OktaIdentityProviderConnectionProvider, unknown> = openEnums
+    .inboundSchema(OktaIdentityProviderConnectionProvider);
 
 /** @internal */
 export const OktaIdentityProviderConnectionStatus$inboundSchema: z.ZodMiniType<

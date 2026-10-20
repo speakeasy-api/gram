@@ -1,5 +1,8 @@
 import { requireKnownEnumValue } from "@/lib/enum";
-import { UpdatePromptTemplateFormKind } from "@gram/client/models/components/updateprompttemplateform.js";
+import {
+  UpdatePromptTemplateFormEngine,
+  UpdatePromptTemplateFormKind,
+} from "@gram/client/models/components/updateprompttemplateform.js";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
@@ -531,6 +534,10 @@ function ToolsetPanel({
         updatePromptTemplateForm: {
           ...tool,
           ...updates,
+          engine: requireKnownEnumValue(
+            UpdatePromptTemplateFormEngine,
+            tool.engine,
+          ),
           kind: requireKnownEnumValue(UpdatePromptTemplateFormKind, tool.kind),
         },
       });

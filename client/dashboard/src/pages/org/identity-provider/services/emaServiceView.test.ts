@@ -77,3 +77,29 @@ describe("providerView", () => {
     });
   });
 });
+
+describe("unsupported providers", () => {
+  it.each([
+    { kind: "future_provider" },
+    { kind: "external", unavailableReason: "future_reason" },
+    { kind: "speakeasy", unavailableReason: "future_reason" },
+  ])("keeps availability unknown without inventing a fix: %j", (unknown) => {
+    const provider = providerView(
+      unknown as Parameters<typeof providerView>[0],
+      {
+        issuer: undefined,
+        speakeasyIssuerUrl: "https://example.com/issuer",
+      },
+    );
+    expect(provider.usable).toBe(false);
+    expect(provider.placeholder).toBe(false);
+    expect(provider.unavailable).toContain("Unknown availability");
+    expect(provider.fix).toBeUndefined();
+    expect(provider.issuerUrl).toBeUndefined();
+    if (unknown.kind === "future_provider") {
+      expect(provider.name).toBe("Unknown identity provider");
+      expect(provider.key).not.toBe("external-default");
+      expect(provider.key).not.toBe("speakeasy");
+    }
+  });
+});

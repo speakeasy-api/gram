@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import * as openEnums from "../../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -23,7 +23,7 @@ export const DestinationDestinationType = {
 /**
  * Destination transport type.
  */
-export type DestinationDestinationType = ClosedEnum<
+export type DestinationDestinationType = OpenEnum<
   typeof DestinationDestinationType
 >;
 
@@ -80,9 +80,10 @@ export type Destination = {
 };
 
 /** @internal */
-export const DestinationDestinationType$inboundSchema: z.ZodMiniEnum<
-  typeof DestinationDestinationType
-> = z.enum(DestinationDestinationType);
+export const DestinationDestinationType$inboundSchema: z.ZodMiniType<
+  DestinationDestinationType,
+  unknown
+> = openEnums.inboundSchema(DestinationDestinationType);
 
 /** @internal */
 export const DestinationSensitiveData$inboundSchema: z.ZodMiniType<

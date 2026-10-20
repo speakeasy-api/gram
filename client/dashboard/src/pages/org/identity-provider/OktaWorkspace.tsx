@@ -28,6 +28,8 @@ import {
 
 export function OktaProviderCard(): JSX.Element {
   const { query, connection } = useOktaConnection();
+  if (connection != null && connection.provider !== "okta")
+    return <UnknownConnectionProvider />;
   const connected = isConnected(connection);
   const unknownStatus =
     connection != null && !connected && connection.status !== "revoked";
@@ -111,6 +113,8 @@ export function OktaWorkspace(): JSX.Element {
   );
   const navigate = useNavigate();
   const { query, connection } = useOktaConnection();
+  if (connection != null && connection.provider !== "okta")
+    return <UnknownConnectionProvider />;
   const connected = isConnected(connection);
   const unknownStatus =
     connection != null && !connected && connection.status !== "revoked";
@@ -201,6 +205,14 @@ function UnknownConnectionStatus(): JSX.Element {
   return (
     <Text small muted>
       Connection status is unknown. Refresh the page before managing Okta.
+    </Text>
+  );
+}
+
+function UnknownConnectionProvider(): JSX.Element {
+  return (
+    <Text small muted>
+      Refresh the page before managing this unsupported identity provider.
     </Text>
   );
 }

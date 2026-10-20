@@ -1,4 +1,9 @@
-import type { EMAProvider } from "@gram/client/models/components/emaprovider.js";
+import {
+  EMAProviderKind,
+  UnavailableReason,
+  type EMAProvider,
+} from "@gram/client/models/components/emaprovider.js";
+import { isKnownEnumValue } from "@/lib/enum";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { formatRelativeTime } from "@/lib/dates";
 
@@ -59,9 +64,22 @@ export const PLACEHOLDER_SCOPE =
   "For servers with identity provider sign-in. Set this up in that identity provider’s Cross App Access.";
 
 function providerKey(provider: EMAProvider): string {
+  if (!isKnownEnumValue(EMAProviderKind, provider.kind))
+    return `unknown-${provider.kind}-${provider.remoteSessionIssuerId ?? provider.internalSessionIssuerId ?? "default"}`;
   return provider.kind === "speakeasy"
     ? "speakeasy"
     : `external-${provider.remoteSessionIssuerId ?? "default"}`;
+}
+
+/** Unknown provider settings must not be interpreted or overwritten. */
+export function supportsProvider(
+  provider: Pick<EMAProvider, "kind" | "unavailableReason">,
+): boolean {
+  return (
+    isKnownEnumValue(EMAProviderKind, provider.kind) &&
+    (provider.unavailableReason === undefined ||
+      isKnownEnumValue(UnavailableReason, provider.unavailableReason))
+  );
 }
 
 export function issuerDisplayName(
@@ -95,6 +113,20 @@ export function providerView(
     lastAcceptedAt: provider.lastAcceptedAt ?? undefined,
     unusedBySignIn: provider.unavailableReason === "not_trusted_by_endpoint",
   };
+  if (!supportsProvider(provider)) {
+    return {
+      ...base,
+      name:
+        provider.kind === "speakeasy"
+          ? "Speakeasy"
+          : provider.kind === "external"
+            ? issuerDisplayName(issuer)
+            : "Unknown identity provider",
+      usable: false,
+      unavailable:
+        "Unknown availability. Refresh the page to check for an update.",
+    };
+  }
   if (provider.kind === "external") {
     if (!provider.remoteSessionIssuerId) {
       return {
@@ -144,7 +176,8 @@ export function providerView(
         };
     }
   }
-  const name = "Speakeasy";
+  const name =
+    provider.kind === "external" ? issuerDisplayName(issuer) : "Speakeasy";
   switch (provider.unavailableReason) {
     case undefined:
       return {
@@ -201,6 +234,13 @@ export function providerView(
         fix: "speakeasy",
       };
   }
+  return {
+    ...base,
+    name,
+    usable: false,
+    unavailable:
+      "Unknown availability. Refresh the page to check for an update.",
+  };
 }
 
 /** The link that fixes a provider, as a search string on the Identity page. */
