@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -252,7 +253,23 @@ func (s *recordingSkillsManagement) ListLinks(_ context.Context, payload *genski
 		}
 		out = append(out, link)
 	}
-	return &genskills.ListSkillLinksResult{Links: out, NextCursor: nil}, nil
+	// Pages like the skills service: the cursor is the offset of the next
+	// link, and a page holds at most Limit links.
+	start := 0
+	if payload.Cursor != nil {
+		offset, err := strconv.Atoi(*payload.Cursor)
+		if err != nil || offset < 0 || offset > len(out) {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid skill link cursor")
+		}
+		start = offset
+	}
+	out = out[start:]
+	var next *string
+	if payload.Limit > 0 && len(out) > payload.Limit {
+		out = out[:payload.Limit]
+		next = new(strconv.Itoa(start + payload.Limit))
+	}
+	return &genskills.ListSkillLinksResult{Links: out, NextCursor: next}, nil
 }
 
 type stubSkillTargets struct{ targets []SkillTarget }

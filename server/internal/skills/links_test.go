@@ -309,6 +309,30 @@ func TestSkillLinkRBAC(t *testing.T) {
 	require.NoError(t, ti.service.Unlink(serverWriter, &gen.UnlinkPayload{LinkID: visibleLink.ID}))
 }
 
+func TestSkillLinkGatewayVisibleWithProjectMCPRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, _ := newLinkTestService(t)
+	created := createSkill(t, ctx, ti, "gateway-read", "Valid.")
+	gatewayID := createLinkGateway(t, ctx, ti, "read-gateway")
+	gatewayLink, err := ti.service.Link(ctx, &gen.LinkPayload{ID: created.Skill.ID, TargetKind: "meta_mcp_server", MetaMcpServerID: new(gatewayID.String())})
+	require.NoError(t, err)
+
+	reader := authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String()),
+		authz.NewGrant(authz.ScopeMCPRead, ti.projectID.String()),
+	)
+	listed, err := ti.service.ListLinks(reader, listLinks(gen.ListLinksPayload{}))
+	require.NoError(t, err)
+	require.Len(t, listed.Links, 1)
+	require.Equal(t, gatewayLink.ID, listed.Links[0].ID, "project mcp read, which the gateway read APIs check, shows gateway links")
+
+	skillOnly := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String()))
+	listed, err = ti.service.ListLinks(skillOnly, listLinks(gen.ListLinksPayload{}))
+	require.NoError(t, err)
+	require.Empty(t, listed.Links, "without mcp read the gateway link stays hidden")
+}
+
 func TestSkillLinkValidation(t *testing.T) {
 	t.Parallel()
 

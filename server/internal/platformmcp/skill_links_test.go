@@ -29,8 +29,32 @@ type stubSkillAndMCPTargets struct {
 	mcp []SkillMCPTarget
 }
 
-func (s stubSkillAndMCPTargets) SkillMCPTargets(_ context.Context, _ string, _ uuid.UUID, _ int) ([]SkillMCPTarget, error) {
-	return s.mcp, nil
+func (s stubSkillAndMCPTargets) SkillMCPTargets(_ context.Context, _ string, _ uuid.UUID, kind SkillMCPTargetKind, wanted string) ([]SkillMCPTarget, error) {
+	return matchingMCPTargets(s.mcp, kind, wanted), nil
+}
+
+// countingMCPTargets records whether MCP target resolution was ever
+// consulted.
+type countingMCPTargets struct {
+	mcp   []SkillMCPTarget
+	calls int
+}
+
+func (s *countingMCPTargets) SkillMCPTargets(_ context.Context, _ string, _ uuid.UUID, kind SkillMCPTargetKind, wanted string) ([]SkillMCPTarget, error) {
+	s.calls++
+	return matchingMCPTargets(s.mcp, kind, wanted), nil
+}
+
+// matchingMCPTargets narrows an inventory the way the database query does:
+// one kind, matched on id, slug or name.
+func matchingMCPTargets(all []SkillMCPTarget, kind SkillMCPTargetKind, wanted string) []SkillMCPTarget {
+	out := []SkillMCPTarget{}
+	for _, target := range all {
+		if target.Kind == kind && matchesTargetName(target.ID, target.Slug, target.Name, wanted) {
+			out = append(out, target)
+		}
+	}
+	return out
 }
 
 func testMCPTargets() []SkillMCPTarget {
@@ -147,12 +171,14 @@ func TestLinkSkillToMCPChecksSkillReadBeforeResolvingTheTarget(t *testing.T) {
 		Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
 		Organization: &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
 	})
-	service.mcpTargets = stubSkillAndMCPTargets{mcp: testMCPTargets()}
+	mcpTargets := &countingMCPTargets{mcp: testMCPTargets()}
+	service.mcpTargets = mcpTargets
 
 	_, err := service.LinkSkillToMCP(t.Context(), testPrincipal(), linkInput("mcp_server", "nowhere", "", ""))
 	code, _, ok := skillsRefusalCode(err)
 	require.True(t, ok)
 	require.Equal(t, "forbidden", code, "a caller without skill read learns nothing about the target")
+	require.Zero(t, mcpTargets.calls, "the target is not resolved before skill read is granted")
 	require.Empty(t, management.linked)
 }
 
@@ -221,6 +247,30 @@ func TestListSkillDistributionsReportsServedBy(t *testing.T) {
 	encoded, err := json.Marshal(off)
 	require.NoError(t, err)
 	require.Contains(t, string(encoded), `"served_by":[]`)
+}
+
+func TestListSkillDistributionsReportsServedByTruncation(t *testing.T) {
+	t.Parallel()
+
+	management := &recordingSkillsManagement{skill: testSkill()}
+	for range maxSkillLinkLookup + 1 {
+		management.links = append(management.links, &types.SkillLink{
+			ID: uuid.NewString(), SkillID: testSkillID, SkillName: "add-mcp", SkillDisplayName: "add-mcp",
+			TargetKind: "mcp_server", McpServerID: new(uuid.NewString()), TargetName: new("Docs Server"), CreatedAt: "2026-10-20T00:00:00Z",
+		})
+	}
+	service := testLinkSkillsService(t, management)
+
+	out, err := service.ListSkillDistributions(t.Context(), testPrincipal(), ListSkillDistributionsInput{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID})
+	require.NoError(t, err)
+	require.Len(t, out.ServedBy, maxSkillLinkLookup)
+	require.True(t, out.ServedByTruncated, "a skill served by more surfaces than one page holds says so")
+
+	management.links = management.links[:maxSkillLinkLookup]
+	out, err = service.ListSkillDistributions(t.Context(), testPrincipal(), ListSkillDistributionsInput{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID})
+	require.NoError(t, err)
+	require.Len(t, out.ServedBy, maxSkillLinkLookup)
+	require.False(t, out.ServedByTruncated)
 }
 
 func TestSkillLinkToolsRequireConfirmationAndMapTheRollout(t *testing.T) {

@@ -1268,7 +1268,7 @@ func (s *SkillsService) authoringResult(ctx context.Context, principal Principal
 		CreatedSkill:        result.CreatedSkill,
 		CreatedVersion:      result.CreatedVersion,
 		Distributed:         false,
-		InertMessage:        "This skill is saved, but no agent loads it yet. Give it to a plugin or an assistant with distribute_skill for it to take effect.",
+		InertMessage:        "This skill is saved, but no agent loads it yet. Give it to a plugin or an assistant with distribute_skill, or serve it from an MCP server or gateway with link_skill_to_mcp, for it to take effect.",
 		NextAction:          "distribute_skill",
 		DistributionTargets: targets,
 	}

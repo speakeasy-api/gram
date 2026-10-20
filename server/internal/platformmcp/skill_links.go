@@ -51,11 +51,11 @@ type SkillMCPTarget struct {
 	Slug string             `json:"slug,omitempty"`
 }
 
-// SkillMCPTargetInventory names the MCP servers and gateways a skill may be
-// linked to in one project. It is optional on SkillsService: without it the
-// link tools refuse as unavailable.
+// SkillMCPTargetInventory finds the MCP servers or gateways of one kind in
+// one project that an exact id, slug or name could refer to. It is optional
+// on SkillsService: without it the link tools refuse as unavailable.
 type SkillMCPTargetInventory interface {
-	SkillMCPTargets(ctx context.Context, organizationID string, projectID uuid.UUID, limit int) ([]SkillMCPTarget, error)
+	SkillMCPTargets(ctx context.Context, organizationID string, projectID uuid.UUID, kind SkillMCPTargetKind, wanted string) ([]SkillMCPTarget, error)
 }
 
 // SkillMCPLinkSummary is one live link: which skill an MCP surface serves, and
@@ -176,13 +176,14 @@ func (s *SkillsService) resolveMCPTarget(ctx context.Context, principal Principa
 		return SkillMCPTarget{}, ErrRegistrationInvalid
 	}
 
-	candidates, err := s.mcpTargets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, maxSkillTargetLookup)
+	targetKind := SkillMCPTargetKind(strings.TrimSpace(kind))
+	candidates, err := s.mcpTargets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, targetKind, wanted)
 	if err != nil {
 		return SkillMCPTarget{}, err
 	}
 	matches := make([]SkillMCPTarget, 0, 2)
 	for _, candidate := range candidates {
-		if string(candidate.Kind) == strings.TrimSpace(kind) && matchesTargetName(candidate.ID, candidate.Slug, candidate.Name, wanted) {
+		if candidate.Kind == targetKind && matchesTargetName(candidate.ID, candidate.Slug, candidate.Name, wanted) {
 			matches = append(matches, candidate)
 		}
 	}
@@ -426,17 +427,19 @@ func skillLinkRefusal(err error) (skillsRefusalResult, bool) {
 	}
 }
 
-// SkillMCPTargets lists the MCP servers and gateways a skill can be linked to
-// in one project.
-func (s *PostgresSkillTargets) SkillMCPTargets(ctx context.Context, organizationID string, projectID uuid.UUID, limit int) ([]SkillMCPTarget, error) {
+// SkillMCPTargets finds the MCP servers or gateways of one kind in one
+// project whose id, slug or name is wanted. The match runs in the database
+// over every live server, so no cap can hide a target the project has.
+func (s *PostgresSkillTargets) SkillMCPTargets(ctx context.Context, organizationID string, projectID uuid.UUID, kind SkillMCPTargetKind, wanted string) ([]SkillMCPTarget, error) {
 	if s == nil || s.db == nil || organizationID == "" || projectID == uuid.Nil {
 		return nil, ErrSkillsUnavailable
 	}
-	bounded := int32(min(max(limit, 1), maxSkillTargetLookup))
 	rows, err := platformrepo.New(s.db).ListPlatformMCPProjectSkillLinkServers(ctx, platformrepo.ListPlatformMCPProjectSkillLinkServersParams{
+		Kind:           string(kind),
 		ProjectID:      projectID,
 		OrganizationID: organizationID,
-		ResultLimit:    bounded,
+		Wanted:         wanted,
+		ResultLimit:    maxSkillTargetLookup,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list platform mcp skill link targets: %w", err)

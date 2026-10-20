@@ -516,8 +516,9 @@ func (s *Service) ListLinks(ctx context.Context, payload *gen.ListLinksPayload) 
 }
 
 // readableLinkTargets reports, per row, whether the caller may read the
-// link's target: mcp:read on a stored MCP server or gateway. The
-// organization gateway has no row to grant on, so skill read is enough.
+// link's target: mcp:read on a stored MCP server, and mcp:read on the project
+// for a gateway, as the gateway read APIs check. The organization gateway has
+// no row to grant on, so skill read is enough.
 func (s *Service) readableLinkTargets(ctx context.Context, projectID uuid.UUID, rows []mcpskillsrepo.ListMCPSkillLinksRow) ([]bool, error) {
 	readable := make([]bool, len(rows))
 	checks := make([]authz.Check, 0, len(rows))
@@ -529,7 +530,7 @@ func (s *Service) readableLinkTargets(ctx context.Context, projectID uuid.UUID, 
 			checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, mcpGrantResourceID(link.McpServerID.UUID, row.McpServerToolsetID), projectID.String()))
 			checkRows = append(checkRows, i)
 		case link.TargetKind == string(skilllink.TargetMetaMCPServer) && link.MetaMcpServerID.Valid:
-			checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, link.MetaMcpServerID.UUID.String(), projectID.String()))
+			checks = append(checks, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil})
 			checkRows = append(checkRows, i)
 		default:
 			readable[i] = true
