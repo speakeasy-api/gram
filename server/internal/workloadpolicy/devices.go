@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
@@ -31,7 +30,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -49,11 +47,6 @@ const (
 	// deviceIssuerName labels the issuer Speakeasy creates for an organization's
 	// enrolled devices.
 	deviceIssuerName = "Speakeasy devices"
-
-	// deviceIssuerPath is where the device issuer lives under the server URL.
-	// The issuer string is never fetched: device assertions verify against the
-	// key registered for each subject.
-	deviceIssuerPath = "/workload/devices/"
 
 	// deviceSubjectPrefix marks a subject Speakeasy minted for an enrolled device.
 	deviceSubjectPrefix = "device:"
@@ -83,28 +76,6 @@ func (s *Service) requireDeviceEnrollmentGrant(ctx context.Context, db accessrep
 		return oops.E(oops.CodeFailedPrecondition, nil, "the agent's policy must grant %s on the organization before a device can enroll under it", authz.ScopeOrgDeviceAgentSync)
 	}
 	return nil
-}
-
-// DeviceIssuer is the issuer an organization's enrolled devices sign as.
-func DeviceIssuer(serverURL, organizationID string) string {
-	return strings.TrimRight(serverURL, "/") + deviceIssuerPath + organizationID
-}
-
-// isReservedDeviceIssuer reports whether issuer falls under the device issuer
-// namespace once canonicalized the way issuer lookup canonicalizes it, so a
-// spelling such as an explicit :443 or an uppercase host cannot claim it.
-func isReservedDeviceIssuer(issuer, serverURL string) bool {
-	prefix := strings.TrimRight(serverURL, "/") + strings.TrimRight(deviceIssuerPath, "/")
-	canonicalPrefix, err := issuerurl.Parse(prefix)
-	if err != nil {
-		return strings.HasPrefix(strings.TrimSpace(issuer), prefix)
-	}
-	canonical, err := issuerurl.Parse(issuer)
-	if err != nil {
-		return false
-	}
-	c, p := canonical.String(), canonicalPrefix.String()
-	return c == p || strings.HasPrefix(c, p+"/")
 }
 
 func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.CreateDeviceJoinTokenPayload) (*gen.WorkloadDeviceJoinToken, error) {
@@ -418,7 +389,7 @@ func (s *Service) deviceIssuer(ctx context.Context, dbtx pgx.Tx, org string, act
 	}
 	created := false
 	if len(issuers) == 0 {
-		issuerURL := DeviceIssuer(s.sharedHosts.ServerURL, org)
+		issuerURL := workloadidentity.DeviceIssuerURL(s.sharedHosts.ServerURL, org)
 		row, err := q.CreateDeviceIssuer(ctx, repo.CreateDeviceIssuerParams{
 			OrganizationID: org,
 			Name:           deviceIssuerName,
