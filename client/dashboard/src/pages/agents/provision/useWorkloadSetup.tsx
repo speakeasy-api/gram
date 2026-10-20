@@ -7,11 +7,11 @@ import {
 } from "@gram/client/react-query/workloadIdentities.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { claudeTagSetupInstructions } from "./ClaudeTagSetupInstructions";
 import {
   customSetupInstructions,
   CUSTOM_PLATFORM_KEY,
 } from "./CustomSetupInstructions";
+import { platformSetup } from "./platformSetups";
 import { ComputedStatus } from "./SetupFields";
 import type { SetupContext, SetupStep } from "./setupInstructions";
 import {
@@ -116,9 +116,11 @@ export function useWorkloadSetup({
   const [error, setError] = useState<string | null>(null);
   const setupValues = useSetupValues();
 
-  // Set once this flow has trusted the platform, so a retry after a later
-  // failure does not try to trust it a second time.
-  const [trusted, setTrusted] = useState(false);
+  // The issuer this flow has already trusted, so a retry after a later failure
+  // does not try to trust it a second time. The URL rather than a flag: a
+  // custom platform's issuer can still be edited afterwards, and registering
+  // the new one is exactly what the retry then has to do.
+  const [trustedIssuer, setTrustedIssuer] = useState<string | null>(null);
   // The rule this flow saved, which the refetched list then holds; it is not
   // a duplicate of itself.
   const [admittedSubject, setAdmittedSubject] = useState<string | null>(
@@ -128,21 +130,22 @@ export function useWorkloadSetup({
   const registerIssuer = useRegisterWorkloadIssuerMutation();
   const admitSubject = useAdmitWorkloadSubjectMutation();
 
-  // One catalog platform ships instructions today, plus the custom flow for
-  // everything the catalog does not know. A second one makes this a lookup.
+  // The catalog's platforms come from the same map the picker offers tiles
+  // from, plus the custom flow for everything the catalog does not know.
   const setup =
     platformKey === CUSTOM_PLATFORM_KEY
       ? customSetupInstructions()
-      : entry?.key === "claude-tag"
-        ? claudeTagSetupInstructions(entry)
-        : undefined;
+      : entry === undefined
+        ? undefined
+        : platformSetup(entry);
 
   const connection = setup?.connection(values) ?? null;
   const platformName = entry?.displayName ?? "this platform";
 
   const isTrusted =
     connection !== null &&
-    (trusted || connectedIssuer(connection.issuer, issuers) !== undefined);
+    (connection.issuer === trustedIssuer ||
+      connectedIssuer(connection.issuer, issuers) !== undefined);
   // The rule this flow has already written, or the one the agent being
   // edited already holds. Read from the prop rather than from state seeded
   // with it: the admission arrives a render or two after the first one, and
@@ -168,6 +171,13 @@ export function useWorkloadSetup({
    */
   const connect = async (): Promise<boolean> => {
     if (connection === null || connecting) return false;
+    // A clash the list already shows is refused by the server anyway, and
+    // going ahead would create the agent first and strand it behind a failure
+    // the step had been naming all along.
+    if (ruleConflict !== null) {
+      setError(ruleConflict);
+      return false;
+    }
     setConnecting(true);
     setError(null);
     // Registering the issuer conflicts on a duplicate name, admitting the rule
@@ -187,7 +197,7 @@ export function useWorkloadSetup({
             },
           },
         });
-        setTrusted(true);
+        setTrustedIssuer(connection.issuer);
       }
       admitting = true;
       await admitSubject.mutateAsync({

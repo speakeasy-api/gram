@@ -70,14 +70,23 @@ export interface CatalogEntry {
  */
 export type ComputedValueKey = "token_endpoint" | "issuer_url" | "mcp_host";
 
-/** The catalog the server ships. The server validates it; this reshapes. */
-export function useCatalogEntries(): {
+/**
+ * The catalog the server ships. The server validates it; this reshapes.
+ *
+ * `enabled` is for a caller that may not need the catalog at all: reading it
+ * is a workload-policy request, so a screen that never shows a platform
+ * should not make one.
+ */
+export function useCatalogEntries(enabled = true): {
   entries: CatalogEntry[];
   isPending: boolean;
   isError: boolean;
   refetch: () => void;
 } {
-  const query = useWorkloadPlatforms({}, undefined, { throwOnError: false });
+  const query = useWorkloadPlatforms({}, undefined, {
+    enabled,
+    throwOnError: false,
+  });
   const entries = useMemo(
     () => (query.data?.platforms ?? []).map(toCatalogEntry),
     [query.data],
@@ -90,7 +99,7 @@ export function useCatalogEntries(): {
   };
 }
 
-export function toCatalogEntry(platform: WorkloadPlatform): CatalogEntry {
+function toCatalogEntry(platform: WorkloadPlatform): CatalogEntry {
   return {
     key: platform.key,
     displayName: platform.displayName,
@@ -113,7 +122,7 @@ export function toCatalogEntry(platform: WorkloadPlatform): CatalogEntry {
 }
 
 /** An empty string, which the server sends for an unset field, as absent. */
-export function optional(value: string): string | undefined {
+function optional(value: string): string | undefined {
   return value === "" ? undefined : value;
 }
 

@@ -12,6 +12,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { invalidateAgentPolicy } from "../agent-policy-grants";
 import { ProvisionWizard } from "./ProvisionWizard";
 
 const mocks = vi.hoisted(() => ({
@@ -353,11 +354,15 @@ async function reachPlatformSetup() {
 }
 
 describe("Federating a platform's own tokens", () => {
-  it("keeps the credential to API keys without permission to trust a platform", () => {
+  it("keeps the credential to API keys without permission to trust a platform", async () => {
     mocks.canFederate = false;
     mocks.platforms.mockReturnValue([platform]);
-    setup();
+    await reachCredentialStep();
 
+    // The choice is on screen but cannot be taken, so the platforms behind it
+    // are never offered either.
+    const workload = screen.getByRole("radio", { name: /Workload/ });
+    expect(workload.getAttribute("data-disabled")).not.toBeNull();
     expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
   });
 
@@ -512,10 +517,26 @@ describe("Editing an agent that already exists", () => {
   it("ticks off the credential steps, which editing does not revisit", () => {
     editing();
     // Marked done rather than ahead: an agent that exists has settled what
-    // it signs in with.
-    expect(
-      screen.getByRole("button", { name: /Credential \(done\)|Credential/ }),
-    ).toBeTruthy();
+    // it signs in with. The state is asserted, not merely the label: a cell
+    // carries its state in its own accessible name.
+    const credential = screen.getByRole("button", { name: /Credential/ });
+    expect(credential.textContent).toContain("Done");
+    expect(credential.textContent).not.toContain("Current");
+    // The step the reader is on keeps its place even though everything from
+    // the credential on is settled.
+    const current = screen.getByRole("button", { name: /Name & scope/ });
+    expect(current.getAttribute("aria-current")).toBe("step");
+    expect(current.textContent).toContain("Current");
+  });
+
+  it("marks a settled step the reader jumped to as the one they are on", () => {
+    editing();
+    // Settled steps are still destinations, and a reader standing on one has
+    // to be able to see where they are.
+    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+    const credential = screen.getByRole("button", { name: /Credential/ });
+    expect(credential.getAttribute("aria-current")).toBe("step");
+    expect(credential.textContent).toContain("Current");
   });
 
   it("checks the servers the agent already reaches", async () => {
@@ -612,6 +633,62 @@ describe("Editing an agent that already exists", () => {
 
     await waitFor(() => expect(mocks.renameAgent).not.toHaveBeenCalled());
     expect(mocks.createAgent).not.toHaveBeenCalled();
+  });
+
+  it("says so when a wildcard grant already reaches every server", async () => {
+    // The list leaves the wildcard out on purpose, and a save would not
+    // remove it, so an unticked list is not this agent's reach.
+    editing({
+      grants: [
+        {
+          id: "grant_all",
+          effect: "allow",
+          scope: "mcp:connect",
+          selector: { resourceKind: "mcp", resourceId: "*" },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    expect(
+      screen.getByText(/reaches every MCP server through a wildcard grant/),
+    ).toBeTruthy();
+  });
+
+  it("will not save while the server list has not loaded", async () => {
+    // An unread list leaves the selection empty, which is indistinguishable
+    // from "no servers chosen" — and saving that withdraws every grant.
+    mocks.mcpServers.mockRejectedValue(new Error("server list refused"));
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const save = (await screen.findByRole("button", {
+      name: "Save changes and exit",
+    })) as HTMLButtonElement;
+    await waitFor(() => expect(save.disabled).toBe(true));
+    fireEvent.click(save);
+    expect(mocks.deleteGrant).not.toHaveBeenCalled();
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
+
+  it("drops the agent's cached policy once the grants are written", async () => {
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+
+    await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(1));
+    // Saving leads to the agent's own page, which reads its servers from
+    // these caches.
+    expect(vi.mocked(invalidateAgentPolicy)).toHaveBeenCalledWith(
+      expect.anything(),
+      "org_example",
+      "user_owner",
+      "agent_one",
+    );
   });
 
   it("says why a save failed and stays on the step", async () => {

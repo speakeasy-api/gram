@@ -113,6 +113,7 @@ export function AgentAPIKeys({
             agent={agent}
             organizationId={organization.id}
             userId={user.id}
+            federated={federated}
             onCreate={onCreate}
           />
         </SettingsSection.Body>

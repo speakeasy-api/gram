@@ -41,6 +41,8 @@ export function FormPage({
 }: TemplateFrameProps &
   TemplateHeaderProps & {
     children: ReactNode;
+    /** Where a crumb points, when its own path is not a page. */
+    breadcrumbUrlSubstitutions?: Record<string, string>;
     width?: "narrow" | "wide" | "full";
     className?: string;
   }): JSX.Element {

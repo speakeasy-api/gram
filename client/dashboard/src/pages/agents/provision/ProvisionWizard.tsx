@@ -1,3 +1,4 @@
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -8,7 +9,14 @@ import { useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type JSX } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+} from "react";
 import { useSearchParams } from "react-router";
 import {
   agentPolicyGrantsFromDraft,
@@ -28,6 +36,8 @@ import {
   CONNECT_SCOPE,
   grantChanges,
   grantedServers,
+  hasWildcardConnectGrant,
+  type GrantedServer,
 } from "@/pages/agents/agentPolicyEdit";
 import { useAgentsCreatePolicyGrantMutation } from "@gram/client/react-query/agentsCreatePolicyGrant.js";
 import { useAgentsDeletePolicyGrantMutation } from "@gram/client/react-query/agentsDeletePolicyGrant.js";
@@ -72,17 +82,30 @@ type Credential = "api-key" | "workload";
 const KEY_LIFETIME_DAYS = 90;
 
 /**
+ * What the agent API accepts as a name. The input's own `maxLength` stops
+ * typing past it but not a value this file writes into state, which would be
+ * refused on submit with nothing on screen to explain why.
+ */
+const NAME_LIMIT = 120;
+
+/**
  * The preset name, with a number appended while the organization already
  * has one: the server refuses a duplicate, and a prefilled field that is
  * refused on submit is worse than no prefill at all.
  */
 function freeName(base: string, taken: Set<string>): string {
-  if (!taken.has(base)) return base;
-  for (let suffix = 2; suffix < 100; suffix++) {
-    const candidate = `${base} ${suffix}`;
-    if (!taken.has(candidate)) return candidate;
-  }
-  return base;
+  const plain = base.slice(0, NAME_LIMIT);
+  if (!taken.has(plain)) return plain;
+  // The suffix is what makes the name free, so the base gives up the
+  // characters it needs rather than the suffix falling off the end.
+  const numbered = (suffix: number) =>
+    `${base.slice(0, NAME_LIMIT - ` ${suffix}`.length)} ${suffix}`;
+  // Every candidate ends in its own number, so they are all distinct and one
+  // of the first `taken.size + 1` of them must be free: the loop ends on a
+  // name the server will accept rather than giving up on the occupied one.
+  let suffix = 2;
+  while (taken.has(numbered(suffix))) suffix++;
+  return numbered(suffix);
 }
 
 type Scope = "project" | "organization";
@@ -169,19 +192,27 @@ export function ProvisionWizard({
   // page the reader came from, and the wizard has its own Back.
   const [params, setParams] = useSearchParams();
   const defaultStep = initialPlatformKey === undefined ? 0 : 1;
-  const fromUrl = Number(params.get("step"));
+  // Presence first: `Number(null)` and `Number("")` are both 0, which reads as
+  // a deep link to the first step and leaves `defaultStep` unreachable.
+  const linked = params.get("step");
+  const fromUrl =
+    linked === null || linked.trim() === "" ? Number.NaN : Number(linked);
   const step =
     Number.isInteger(fromUrl) && fromUrl >= 0 ? fromUrl : defaultStep;
-  const setStep = (next: number) => {
-    setParams(
-      (current) => {
-        const updated = new URLSearchParams(current);
-        updated.set("step", String(next));
-        return updated;
-      },
-      { replace: true },
-    );
-  };
+  // Stable, so an effect that corrects the step can depend on it.
+  const setStep = useCallback(
+    (next: number) => {
+      setParams(
+        (current) => {
+          const updated = new URLSearchParams(current);
+          updated.set("step", String(next));
+          return updated;
+        },
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
   const [name, setName] = useState(agent?.name ?? "");
   // null until the person picks, so the default can follow the project as it
   // resolves. A useState initializer would run once, before useProject has an
@@ -209,10 +240,14 @@ export function ProvisionWizard({
   const adopted = useRef(false);
   useEffect(() => {
     if (adopted.current || !editing || admitted === undefined) return;
+    // Both, not just the admission: the entry is looked up in the catalog, so
+    // running before it arrives latches the custom key, and `adopted` then
+    // stops the real platform from ever being recognised.
+    if (catalog.isPending) return;
     adopted.current = true;
     setCredential("workload");
     setPlatformKey(admittedEntry?.key ?? CUSTOM_PLATFORM_KEY);
-  }, [editing, admitted, admittedEntry]);
+  }, [editing, admitted, admittedEntry, catalog.isPending]);
   // The catalog loads after the first render, so the preset name is filled
   // in when it arrives rather than in a state initializer that has nothing
   // to read yet. Only while the field is still untouched.
@@ -227,18 +262,37 @@ export function ProvisionWizard({
   // The servers the agent already reaches, filled in once its grants and the
   // server list have both arrived, and only once: after that the selection
   // is the reader's.
-  const filled = useRef(false);
+  //
+  // Only a server list that actually loaded counts. A failed read leaves the
+  // selection empty, which is indistinguishable from "no servers chosen" —
+  // and saving that against the stored grants withdraws every one of them, so
+  // nothing may be saved until this has run.
+  const [reconciled, setReconciled] = useState(false);
+  // The grants as the save last knew them, so a retry after a partial save
+  // writes what is still missing rather than creating a grant a second time.
+  const applied = useRef(new Map<string, GrantedServer>());
   useEffect(() => {
-    if (filled.current || grants === undefined) return;
-    if (inventory.servers.length === 0) return;
-    filled.current = true;
+    if (reconciled || grants === undefined) return;
+    if (inventory.isLoading || inventory.isError) return;
     const granted = grantedServers(grants);
+    applied.current = granted;
     setSelected(
       inventory.servers
         .filter((server) => granted.has(server.resourceId))
         .map((server) => ({ server })),
     );
-  }, [grants, inventory.servers]);
+    setReconciled(true);
+  }, [
+    grants,
+    inventory.servers,
+    inventory.isLoading,
+    inventory.isError,
+    reconciled,
+  ]);
+  // A wildcard grant reaches every server and is deliberately not a row in
+  // the list, so the reader has to be told it is there.
+  const reachesEveryServer =
+    editing && grants !== undefined && hasWildcardConnectGrant(grants);
 
   // What provisioning produced. The secret is held only while this page is
   // open; nothing writes it to storage or to the query cache.
@@ -258,9 +312,10 @@ export function ProvisionWizard({
   useEffect(() => {
     // Minting counts as busy too: the key exists by then, and leaving while
     // the setup command is still being prepared throws away the one chance
-    // to copy a secret that is shown once.
-    onBusy?.(provisioning || minting);
-  }, [provisioning, minting, onBusy]);
+    // to copy a secret that is shown once. So does saving: it writes one
+    // grant per request, and leaving part-way through stores half an edit.
+    onBusy?.(provisioning || minting || saving);
+  }, [provisioning, minting, saving, onBusy]);
 
   // Project leads once one is available; an explicit pick always wins. Until
   // a project resolves, project scope would send an empty id, which the server
@@ -382,6 +437,9 @@ export function ProvisionWizard({
    */
   const save = async (): Promise<void> => {
     if (agent === undefined || grants === undefined) return;
+    // The selection is only the agent's reach once the grants have been
+    // reconciled into it; before that every grant would read as withdrawn.
+    if (!reconciled || saving) return;
     setSaving(true);
     setError(null);
     try {
@@ -390,15 +448,25 @@ export function ProvisionWizard({
           request: { renameAgentForm: { id: agent.id, name: name.trim() } },
         });
       }
+      // Only the grants whose server this list offers: one naming a server the
+      // reader was never shown cannot have been unchecked, so an absence from
+      // the selection does not mean they gave it up.
+      const offered = new Set(
+        inventory.servers.map((server) => server.resourceId),
+      );
       const changes = grantChanges(
-        grantedServers(grants),
+        new Map(
+          [...applied.current].filter(([resourceId]) =>
+            offered.has(resourceId),
+          ),
+        ),
         selected.map((entry) => ({
           resourceId: entry.server.resourceId,
           projectId: entry.server.projectId,
         })),
       );
       for (const server of changes.add) {
-        await createGrant.mutateAsync({
+        const created = await createGrant.mutateAsync({
           request: {
             createAgentPolicyGrantForm: {
               agentId: agent.id,
@@ -412,15 +480,34 @@ export function ProvisionWizard({
             },
           },
         });
+        // Recorded as each write lands, so a later failure does not send the
+        // whole diff again on the next attempt.
+        applied.current.set(server.resourceId, {
+          grantIds: [created.id],
+          resourceId: server.resourceId,
+          projectId: server.projectId,
+        });
       }
       for (const grantId of changes.remove) {
         await deleteGrant.mutateAsync({
           request: { agentPolicyGrantIDForm: { agentId: agent.id, grantId } },
         });
+        for (const [resourceId, server] of applied.current) {
+          const left = server.grantIds.filter((id) => id !== grantId);
+          // A server can be reached through several grants, so it is only off
+          // the list once the last of them is gone.
+          if (left.length === 0) applied.current.delete(resourceId);
+          else applied.current.set(resourceId, { ...server, grantIds: left });
+        }
       }
-      void queryClient.invalidateQueries({
-        queryKey: ["managed-agents", organization.id],
-      });
+      // The agent's own page reads its servers from these, and it is where
+      // saving leads.
+      void invalidateAgentPolicy(
+        queryClient,
+        organization.id,
+        user.id,
+        agent.id,
+      );
       // Saving is the end of editing: what follows are the platform's own
       // settings, which this flow only describes.
       onDone();
@@ -484,6 +571,15 @@ export function ProvisionWizard({
   /** The platform setup step on screen, when one is. */
   const workloadStep =
     credential === "workload" ? workload.steps[step - 3] : undefined;
+  // How many steps there are is only known here, once the platform's own have
+  // been counted, so an out-of-range link is corrected rather than refused:
+  // the URL is rewritten to the last real step instead of leaving the wizard
+  // on a step that does not exist.
+  const lastStep = stepNames.length - 1;
+  useEffect(() => {
+    if (step <= lastStep) return;
+    setStep(lastStep);
+  }, [step, lastStep, setStep]);
 
   /**
    * Create the agent, discover what it may delegate, issue its first key, and
@@ -673,7 +769,7 @@ export function ProvisionWizard({
                   setHighlight("Name");
                 }}
                 placeholder="Release Bot"
-                maxLength={120}
+                maxLength={NAME_LIMIT}
                 // An existing agent's name is its own while this flow is only
                 // issuing it a key. Editing is the flow that may change it.
                 disabled={existing && !editing}
@@ -746,28 +842,45 @@ export function ProvisionWizard({
         );
       case 1:
         return (
-          <StepServers
-            servers={inventory.servers.filter(
-              (server) =>
-                scopedProjectID === undefined ||
-                server.projectId === scopedProjectID,
+          <div className="space-y-5">
+            {/* A wildcard grant is not a server anyone picked, so the list
+                below leaves it out — and a save writes only the servers that
+                changed, so it stays. Without this the reader would read an
+                unticked list as the agent's whole reach. */}
+            {reachesEveryServer && (
+              <Alert variant="warning" alignTop>
+                <span>
+                  This agent reaches every MCP server through a wildcard grant,
+                  which the list below does not show. Saving a narrower list
+                  leaves that grant in place, so the agent keeps reaching
+                  everything. Remove it from the agent&rsquo;s permissions
+                  first.
+                </span>
+              </Alert>
             )}
-            isLoading={inventory.isLoading}
-            isError={inventory.isError}
-            onRetry={inventory.refetch}
-            selected={selected}
-            onChange={(next) => {
-              setSelected(next);
-              // The one just added, or the last one left when removing.
-              const added = next.find(
-                (entry) =>
-                  !selected.some((old) => old.server.id === entry.server.id),
-              );
-              setHighlight(
-                added === undefined ? null : `server:${added.server.id}`,
-              );
-            }}
-          />
+            <StepServers
+              servers={inventory.servers.filter(
+                (server) =>
+                  scopedProjectID === undefined ||
+                  server.projectId === scopedProjectID,
+              )}
+              isLoading={inventory.isLoading}
+              isError={inventory.isError}
+              onRetry={inventory.refetch}
+              selected={selected}
+              onChange={(next) => {
+                setSelected(next);
+                // The one just added, or the last one left when removing.
+                const added = next.find(
+                  (entry) =>
+                    !selected.some((old) => old.server.id === entry.server.id),
+                );
+                setHighlight(
+                  added === undefined ? null : `server:${added.server.id}`,
+                );
+              }}
+            />
+          </div>
         );
       case 2:
         return (
@@ -880,7 +993,11 @@ export function ProvisionWizard({
           note={
             step === 0
               ? "Renaming an agent is recorded in the organization audit log."
-              : "Changing what an agent reaches is recorded in the organization audit log."
+              : reconciled
+                ? "Changing what an agent reaches is recorded in the organization audit log."
+                : inventory.isError
+                  ? "The server list could not be loaded, so the servers this agent reaches are not known. Retry the list before saving."
+                  : "Reading the servers this agent reaches…"
           }
           onBack={step === 0 ? undefined : () => setStep(step - 1)}
           primary={
@@ -892,7 +1009,12 @@ export function ProvisionWizard({
                 Continue
               </Button>
             ) : (
-              <Button disabled={saving} onClick={() => void save()}>
+              <Button
+                // Nothing may be written until the stored grants are in the
+                // selection: the diff against an empty one withdraws them all.
+                disabled={saving || !reconciled}
+                onClick={() => void save()}
+              >
                 {saving ? "Saving…" : "Save changes and exit"}
               </Button>
             )

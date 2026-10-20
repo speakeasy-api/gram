@@ -46,16 +46,23 @@ export function WizardStepper({
   const crowded = steps.length > 7;
 
   return (
-    <ol aria-label="Provisioning steps" className="border-border flex border">
+    // Narrow enough and the cells have nowhere left to go, so the row scrolls
+    // rather than squeezing every name into a clipped column.
+    <ol
+      aria-label="Provisioning steps"
+      className="border-border flex overflow-x-auto border md:overflow-x-visible"
+    >
       {steps.map(({ label, short }, index) => {
+        // The step the reader is on is tested first: a settled step they are
+        // standing on is still where they are, and marking it done would
+        // leave the row showing no position at all.
         const state: WizardStepState =
-          settledFrom !== undefined && index >= settledFrom
-            ? "done"
-            : index < current
+          index === current
+            ? "current"
+            : index < current ||
+                (settledFrom !== undefined && index >= settledFrom)
               ? "done"
-              : index === current
-                ? "current"
-                : "todo";
+              : "todo";
         // A step behind gives up its name once the row is full: it is done,
         // and its name is not what the reader needs. A step ahead keeps a
         // name, shortened, because a column of bare numbers says nothing
@@ -137,7 +144,11 @@ export function WizardStepper({
             key={label}
             className={cn(
               "border-border flex border-r last:border-r-0",
-              collapsed || shortened ? "shrink-0" : "min-w-0 flex-1",
+              collapsed || shortened
+                ? "shrink-0"
+                : // Below md the cell keeps a readable width and the row
+                  // scrolls; from md up it shares the row as before.
+                  "max-md:w-40 max-md:shrink-0 md:min-w-0 md:flex-1",
             )}
           >
             {/* A tick alone does not say which step it was, and the native

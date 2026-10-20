@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { ExternalLink } from "lucide-react";
 import { useState, type JSX, type ReactNode } from "react";
+import { toast } from "sonner";
 
 /** A value to paste into the platform's console, with its own label. */
 export type ConsoleField = {
@@ -86,9 +87,12 @@ function CopyField({ field }: { field: ConsoleField }): JSX.Element {
             disabled={!field.value}
             onClick={() => {
               if (!field.value) return;
-              void navigator.clipboard
-                .writeText(field.value)
-                .then(() => setCopied(true));
+              void navigator.clipboard.writeText(field.value).then(
+                () => setCopied(true),
+                // A clipboard the browser refuses leaves the value unpasted,
+                // and silence here reads as a copy that worked.
+                () => toast.error("Could not copy. Select the value instead."),
+              );
             }}
           >
             <Button.Text>{copied ? "Copied" : "Copy"}</Button.Text>

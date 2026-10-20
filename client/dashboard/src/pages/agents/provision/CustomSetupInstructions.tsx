@@ -15,12 +15,31 @@ import type { Connection, PlatformSetup } from "./setupInstructions";
 /** The key the picker uses for the platform that is not in the catalog. */
 export const CUSTOM_PLATFORM_KEY = "custom";
 
+/**
+ * Whether this is an https URL the server will also accept.
+ *
+ * RFC 8414 §2 wants an issuer identifier to be an https URL with no query or
+ * fragment, and the server holds both URLs to that. Accepting one it refuses
+ * here only means the reader finds out after Connect.
+ */
 function https(value: string): boolean {
+  let url: URL;
   try {
-    return new URL(value).protocol === "https:";
+    url = new URL(value);
   } catch {
     return false;
   }
+  if (url.protocol !== "https:") return false;
+  if (url.username !== "" || url.password !== "") return false;
+  // Read off the string rather than the parsed parts, as the server does: a
+  // bare "?" or "#" leaves search and hash empty, and an encoded one stays
+  // percent-encoded in the path, so the delimiter is the dependable signal.
+  return !value.includes("?") && !value.includes("#");
+}
+
+/** Whether the subject carries a `*` of the reader's own. */
+function starred(subject: string): boolean {
+  return subject.includes("*");
 }
 
 /**
@@ -41,6 +60,10 @@ export function customSetupInstructions(): PlatformSetup {
       const wildcard = values["match_kind"] === "wildcard";
       if (name === "" || subject === "") return null;
       if (!https(issuer) || !https(jwksUri)) return null;
+      // The `*` belongs to the match kind, not to the subject: appending one
+      // to a starred stem makes `...**`, and an exact rule carrying one is
+      // refused outright.
+      if (starred(subject)) return null;
       // A wildcard rule is a stem: everything under it is admitted, so the
       // reader writes the stem and the `*` is ours to add.
       return {
@@ -113,7 +136,10 @@ export function customSetupInstructions(): PlatformSetup {
         short: "Subject",
         title: "Which workloads",
         phase: "create",
-        complete: ({ values }) => (values["subject"] ?? "").trim().length > 0,
+        complete: ({ values }) => {
+          const subject = (values["subject"] ?? "").trim();
+          return subject.length > 0 && !starred(subject);
+        },
         body: ({ values, setValue, agentName, ruleConflict }) => (
           <>
             <TextField
@@ -124,6 +150,13 @@ export function customSetupInstructions(): PlatformSetup {
               placeholder="repo:acme/api:ref:refs/heads/main"
               help="The sub claim to accept. For a prefix, choose Any subject below and end it on a separator."
             />
+            {starred((values["subject"] ?? "").trim()) && (
+              <Text small destructive>
+                Leave the * out. Choose &ldquo;Any subject starting with
+                it&rdquo; below and Speakeasy matches everything under what you
+                wrote.
+              </Text>
+            )}
             <Stack gap={2}>
               <Label htmlFor="custom-match">Match</Label>
               <Select

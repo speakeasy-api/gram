@@ -1,6 +1,7 @@
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/Button";
+import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
 import {
@@ -40,7 +41,13 @@ export function AgentIdentityProfile({
   const [params, setParams] = useSearchParams();
   // A federated agent authenticates by exchanging its platform's token, so
   // the page must not lead with, or insist on, a key it will never hold.
-  const federated = useAgentAdmissions(agent.id).admissions.length > 0;
+  const admissions = useAgentAdmissions(agent.id);
+  // Which way in the agent uses is a fact about it, not a default: while the
+  // read is in flight, and after it fails, "not federated" would be a guess,
+  // and the guess is the one that tells a federated agent it cannot
+  // authenticate until a key is issued.
+  const credentialKnown = !admissions.isPending && !admissions.isError;
+  const federated = credentialKnown && admissions.admissions.length > 0;
   const issuing = params.get("credential") === "new";
   const setIssuing = (open: boolean) => {
     const next = new URLSearchParams(params);
@@ -113,9 +120,11 @@ export function AgentIdentityProfile({
         <IdentitySection
           title="Provisioning"
           meta={
-            federated
-              ? "Point the agent's runtime here; its platform signs it in"
-              : "Point the agent's runtime here, then issue it a key"
+            !credentialKnown
+              ? "Point the agent's runtime here"
+              : federated
+                ? "Point the agent's runtime here; its platform signs it in"
+                : "Point the agent's runtime here, then issue it a key"
           }
         >
           <IdentityPanel title="Endpoint" contentClassName="p-4">
@@ -126,15 +135,32 @@ export function AgentIdentityProfile({
               the panel only opens its own wizard in creation mode. */}
           {/* Whichever way in the agent actually uses comes first: a
               federated agent never holds a key, and leading with the key
-              panel told it that it could not authenticate. */}
-          {federated && <AgentFederatedAccess agent={agent} />}
-          <AgentAPIKeys
-            agent={agent}
-            variant="bare"
-            federated={federated}
-            onCreate={() => setIssuing(true)}
-          />
-          {!federated && <AgentFederatedAccess agent={agent} />}
+              panel told it that it could not authenticate. Which way that is
+              has to be known first, so nothing below is ordered or worded
+              until the read settles. */}
+          {!credentialKnown ? (
+            admissions.isError ? (
+              <div role="alert" className="space-y-2">
+                <Text>Could not check how this agent signs in.</Text>
+                <Button variant="secondary" onClick={admissions.refetch}>
+                  Try again
+                </Button>
+              </div>
+            ) : (
+              <Text muted>Checking how this agent signs in…</Text>
+            )
+          ) : (
+            <>
+              {federated && <AgentFederatedAccess agent={agent} />}
+              <AgentAPIKeys
+                agent={agent}
+                variant="bare"
+                federated={federated}
+                onCreate={() => setIssuing(true)}
+              />
+              {!federated && <AgentFederatedAccess agent={agent} />}
+            </>
+          )}
         </IdentitySection>
       );
     default:

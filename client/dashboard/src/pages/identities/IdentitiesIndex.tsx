@@ -830,19 +830,36 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     () => new Map(registeredAgents.map((agent) => [agent.id, agent])),
     [registeredAgents],
   );
-  // How each agent signs in. An agent holds at most one admission in this
-  // flow, so the first one found is the platform the row names.
-  const catalog = useCatalogEntries();
-  const workloads = useWorkloadIdentities({});
-  const admissionsByAgent = useMemo(
-    () =>
-      new Map(
-        (workloads.data?.admissions ?? [])
-          .filter((admission) => admission.agentId !== "")
-          .map((admission) => [admission.agentId, admission]),
-      ),
-    [workloads.data],
-  );
+  // How each agent signs in. Only the agents roster shows it, and both reads
+  // are workload-policy requests: asking for them on the people roster is a
+  // request whose every answer is discarded, over a wider authorization
+  // surface than the page needs.
+  const catalog = useCatalogEntries(kind === "agent");
+  const workloads = useWorkloadIdentities({}, undefined, {
+    enabled: kind === "agent",
+    throwOnError: false,
+  });
+  // An agent can be admitted from more than one platform, so each row keeps
+  // every one of them: a map of one admission per agent reported whichever
+  // happened to come last.
+  const platformsByAgent = useMemo(() => {
+    const byAgent = new Map<string, string[]>();
+    for (const admission of workloads.data?.admissions ?? []) {
+      if (admission.agentId === "") continue;
+      // A catalog platform by its own name; anything else was registered by
+      // hand and carries the label its operator gave it. "Custom" is the
+      // fallback for one that was left unnamed, not the name of all of them.
+      const known = catalog.entries.find(
+        (entry) => entry.issuer.value === admission.issuer,
+      );
+      const label =
+        known?.displayName ?? (admission.issuerName.trim() || "Custom");
+      const names = byAgent.get(admission.agentId);
+      if (names === undefined) byAgent.set(admission.agentId, [label]);
+      else if (!names.includes(label)) names.push(label);
+    }
+    return byAgent;
+  }, [workloads.data, catalog.entries]);
   // An agent has no roles, no linked accounts and no inbox: those columns were
   // an em dash on every row. What it does have is a lifecycle, an owner and a
   // date it was registered, which is what someone scanning this table wants.
@@ -861,24 +878,34 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
         header: "Platform",
         width: "160px",
         render: (identity) => {
-          const admission = admissionsByAgent.get(
+          // "API key" means "this agent holds no admission", which only a
+          // read that came back can say. While it is in flight, or after it
+          // fails, the column would otherwise call every federated agent
+          // key-authenticated.
+          if (!workloads.isSuccess) {
+            return (
+              <Text muted small className="truncate">
+                {workloads.isError ? "Unknown" : "—"}
+              </Text>
+            );
+          }
+          const platforms = platformsByAgent.get(
             identity.registeredAgentId ?? "",
           );
-          if (!admission) {
+          if (platforms === undefined) {
             return (
               <Text muted small className="truncate">
                 API key
               </Text>
             );
           }
-          // A catalog platform by its own name; anything else was registered
-          // by hand and carries only the name it was given.
-          const known = catalog.entries.find(
-            (entry) => entry.issuer.value === admission.issuer,
-          );
+          // One platform by name. Several is a fact about the agent, so the
+          // column says how many rather than picking one of them.
           return (
-            <Text small className="truncate">
-              {known?.displayName ?? "Custom"}
+            <Text small className="truncate" title={platforms.join(", ")}>
+              {platforms.length === 1
+                ? platforms[0]
+                : `${platforms.length} platforms`}
             </Text>
           );
         },
@@ -979,7 +1006,13 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
         },
       },
     ],
-    [agentsById, admissionsByAgent, catalog.entries, routes],
+    [
+      agentsById,
+      platformsByAgent,
+      workloads.isSuccess,
+      workloads.isError,
+      routes,
+    ],
   );
   // One sorted list, split by what the row is. The filters above still narrow
   // both; the Kind column is dropped inside each table because the heading

@@ -77,6 +77,7 @@ func TestParseRefusesInvalidPlatforms(t *testing.T) {
 		wantErr string
 	}{
 		{name: "unknown field", from: "enabled: true", to: "enabled: true\nenabeld: true", wantErr: "enabeld"},
+		{name: "setup block", from: "enabled: true", to: "enabled: true\nsetup:\n  steps: []", wantErr: "setup"},
 		{name: "http issuer", from: "value: https://issuer.example.com\n", to: "value: http://issuer.example.com\n", wantErr: "https"},
 		{name: "bad visibility", from: "visibility: hidden", to: "visibility: secret", wantErr: "visibility"},
 		{name: "undeclared variable", from: "{org_id}/agent/", to: "{tenant}/agent/", wantErr: "undeclared variable"},

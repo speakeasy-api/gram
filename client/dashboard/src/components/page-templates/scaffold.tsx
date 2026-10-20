@@ -24,8 +24,6 @@ export interface TemplateFrameProps {
   resourceId?: string;
   /** Breadcrumb label overrides, e.g. `{ [slug]: entity?.name }`. */
   breadcrumbSubstitutions?: Record<string, string | undefined>;
-  /** Where a crumb points, when its own path is not a page. */
-  breadcrumbUrlSubstitutions?: Record<string, string>;
 }
 
 /** Props for the single, canonical page header. */
@@ -58,6 +56,12 @@ export function TemplateFrame({
   fullWidthBreadcrumbs,
   children,
 }: TemplateFrameProps & {
+  /**
+   * Where a crumb points, when its own path is not a page. Not on
+   * `TemplateFrameProps`: only FormPage passes it on, and a prop every
+   * template accepts and all but one drops is a type that lies.
+   */
+  breadcrumbUrlSubstitutions?: Record<string, string>;
   fullWidth?: boolean;
   fullHeight?: boolean;
   noPadding?: boolean;

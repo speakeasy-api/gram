@@ -20,7 +20,7 @@ import type { ComputedValueKey } from "./workloadCatalog";
  * Connect button goes, and `connect` steps describe work in another product's
  * console against a rule that has to exist first.
  */
-export type SetupPhase = "collect" | "create" | "connect";
+type SetupPhase = "collect" | "create" | "connect";
 
 /** What a step's body is given. */
 export type SetupContext = {

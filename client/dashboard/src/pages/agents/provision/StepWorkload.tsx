@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
+import { hasPlatformSetup } from "./platformSetups";
 import type { SetupStep } from "./setupInstructions";
 import type { CatalogEntry } from "./workloadCatalog";
 
@@ -26,9 +27,6 @@ function PlatformMark({ entry }: { entry: PickerEntry }): JSX.Element | null {
     />
   );
 }
-
-/** The catalog platforms this wizard ships instructions for. */
-const INSTRUCTED = new Set(["claude-tag"]);
 
 /** A tile in the picker: a catalog platform, the custom flow, or a plan. */
 type PickerEntry = {
@@ -96,7 +94,7 @@ export function WorkloadPlatformPicker({
   // offered only where this wizard also ships instructions for it.
   const available: PickerEntry[] = [
     ...entries
-      .filter((entry) => entry.enabled && INSTRUCTED.has(entry.key))
+      .filter((entry) => entry.enabled && hasPlatformSetup(entry.key))
       .map((entry) => ({
         key: entry.key,
         displayName: entry.displayName,
@@ -129,7 +127,7 @@ export function WorkloadPlatformPicker({
   // unsupported or merely absent today.
   const soon: PickerEntry[] = [
     ...entries
-      .filter((entry) => !INSTRUCTED.has(entry.key))
+      .filter((entry) => !hasPlatformSetup(entry.key))
       .map((entry) => ({
         key: entry.key,
         displayName: entry.displayName,
@@ -161,6 +159,9 @@ export function WorkloadPlatformPicker({
               <label
                 className={cn(
                   "border-border flex h-full items-start gap-3 border p-3",
+                  // The radio itself is hidden, so the tile has to carry the
+                  // focus ring or keyboard focus lands nowhere visible.
+                  "has-[input:focus-visible]:ring-ring/40 has-[input:focus-visible]:ring-1",
                   disabled ? "cursor-default" : "cursor-pointer",
                   chosen
                     ? "border-foreground bg-accent/40"

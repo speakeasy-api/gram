@@ -5,8 +5,13 @@ export const CONNECT_SCOPE = "mcp:connect";
 
 /** One server an agent may reach, as its grants record it. */
 export type GrantedServer = {
-  /** The grant row, so a removal can name it. */
-  grantId: string;
+  /**
+   * Every grant row that reaches this server, so a removal can name all of
+   * them. A policy can hold more than one — the same server granted twice, or
+   * once per project — and removing only the first would leave the agent still
+   * connected through the rest.
+   */
+  grantIds: string[];
   resourceId: string;
   projectId: string;
 };
@@ -14,7 +19,9 @@ export type GrantedServer = {
 /**
  * The servers an agent's policy grants it, by the resource id the server
  * list uses. A wildcard grant is left out: it is not a server anyone picked,
- * and rewriting it as one would narrow the agent on the next save.
+ * and rewriting it as one would narrow the agent on the next save. Ask
+ * `hasWildcardConnectGrant` whether one is there, because a selection that
+ * silently omits it is a narrower list than the policy enforces.
  */
 export function grantedServers(
   grants: AgentPolicyGrant[],
@@ -24,13 +31,35 @@ export function grantedServers(
     if (grant.scope !== CONNECT_SCOPE) continue;
     if (grant.selector.resourceKind !== "mcp") continue;
     if (grant.selector.resourceId === "*") continue;
+    const seen = servers.get(grant.selector.resourceId);
+    if (seen !== undefined) {
+      seen.grantIds.push(grant.id);
+      continue;
+    }
     servers.set(grant.selector.resourceId, {
-      grantId: grant.id,
+      grantIds: [grant.id],
       resourceId: grant.selector.resourceId,
       projectId: grant.selector.projectId ?? "",
     });
   }
   return servers;
+}
+
+/**
+ * Whether the policy reaches every MCP server through a wildcard grant.
+ *
+ * Such an agent has no server selection to show: the picker would come up
+ * empty, saving it would look like a narrowing, and the wildcard would stay
+ * in place and keep granting everything. The caller has to say so rather than
+ * present a list it cannot enforce.
+ */
+export function hasWildcardConnectGrant(grants: AgentPolicyGrant[]): boolean {
+  return grants.some(
+    (grant) =>
+      grant.scope === CONNECT_SCOPE &&
+      grant.selector.resourceKind === "mcp" &&
+      grant.selector.resourceId === "*",
+  );
 }
 
 /**
@@ -53,6 +82,6 @@ export function grantChanges(
     add: chosen.filter((server) => !granted.has(server.resourceId)),
     remove: [...granted.values()]
       .filter((server) => !wanted.has(server.resourceId))
-      .map((server) => server.grantId),
+      .flatMap((server) => server.grantIds),
   };
 }

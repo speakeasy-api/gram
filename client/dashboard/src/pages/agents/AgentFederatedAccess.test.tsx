@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   isError: false,
   withdraw: vi.fn(),
   isWithdrawing: false,
+  refetch: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
@@ -18,7 +19,7 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
     data: { issuers: [], admissions: mocks.admissions },
     isPending: mocks.isPending,
     isError: mocks.isError,
-    refetch: vi.fn(),
+    refetch: mocks.refetch,
   }),
   invalidateAllWorkloadIdentities: vi.fn(),
 }));
@@ -62,11 +63,16 @@ function renderPanel() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const tree = () => (
     <QueryClientProvider client={client}>
       <AgentFederatedAccess agent={agent} />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = render(tree());
+  // The hooks are mocked, so a flag flipped mid-test only reaches the panel on
+  // a render it did not ask for itself. A fresh element each time, because
+  // React bails out of re-rendering the one it already holds.
+  return { ...view, redraw: () => view.rerender(tree()) };
 }
 
 afterEach(() => {
@@ -76,6 +82,7 @@ afterEach(() => {
   mocks.isError = false;
   mocks.isWithdrawing = false;
   mocks.withdraw.mockReset();
+  mocks.refetch.mockReset();
 });
 
 it("lists only the platforms admitted as this agent", () => {
@@ -110,6 +117,36 @@ it("does not withdraw anything until the dialog is confirmed", () => {
     screen.getByRole("button", { name: "Remove Claude Tag access" }),
   );
   expect(mocks.withdraw).not.toHaveBeenCalled();
+});
+
+it("waits rather than claiming nothing signs in while the read is in flight", () => {
+  mocks.isPending = true;
+  const { container } = renderPanel();
+  expect(container.querySelector("[aria-busy=true]")).toBeTruthy();
+  expect(screen.queryByText(/No platform signs in as this agent/)).toBeNull();
+});
+
+it("says a failed read failed, and retries it", () => {
+  mocks.isError = true;
+  renderPanel();
+  expect(screen.getByText("This panel could not be loaded.")).toBeTruthy();
+  expect(screen.queryByText(/No platform signs in as this agent/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(mocks.refetch).toHaveBeenCalledTimes(1);
+});
+
+it("names the removal in flight rather than offering it again", () => {
+  mocks.admissions = [admission()];
+  const { redraw } = renderPanel();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Remove Claude Tag access" }),
+  );
+  mocks.isWithdrawing = true;
+  redraw();
+
+  const confirm = screen.getByRole("button", { name: "Removing…" });
+  expect((confirm as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("button", { name: "Remove access" })).toBeNull();
 });
 
 it("flags a wildcard rule the platform has not turned on", () => {

@@ -252,12 +252,6 @@ type Step struct {
 	Blocks []Block `yaml:"blocks"`
 }
 
-// Setup is an entry's guided setup.
-type Setup struct {
-	// Steps run in order: collect steps, the create step, then connect steps.
-	Steps []Step `yaml:"steps"`
-}
-
 // Platform is one catalog entry.
 type Platform struct {
 	// Key identifies the entry permanently: it is written onto the rows the
@@ -288,10 +282,6 @@ type Platform struct {
 
 	// Subject is the access rule the entry produces.
 	Subject Subject `yaml:"subject"`
-
-	// Setup is the guided setup. Without one, the entry is listed as coming
-	// soon and cannot be opened.
-	Setup *Setup `yaml:"setup"`
 }
 
 // Source provides the catalog. Files are the only source today; a staff-edited

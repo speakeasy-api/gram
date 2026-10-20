@@ -13,7 +13,20 @@ export function useAgentAdmissions(agentID: string): {
   isError: boolean;
   refetch: () => void;
 } {
-  const identities = useWorkloadIdentities({});
+  // The server reports an admission with no agent assigned as `agentId: ""`,
+  // so matching on an empty id would read a stray unassigned rule as this
+  // agent's. The new-agent flow asks with an empty id until the agent exists.
+  const known = agentID !== "";
+  const identities = useWorkloadIdentities({}, undefined, { enabled: known });
+  if (!known) {
+    return {
+      admissions: [],
+      // Nothing was asked for, so nothing is in flight and nothing failed.
+      isPending: false,
+      isError: false,
+      refetch: () => {},
+    };
+  }
   return {
     admissions: (identities.data?.admissions ?? []).filter(
       (admission) => admission.agentId === agentID,
