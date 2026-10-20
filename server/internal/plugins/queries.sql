@@ -585,6 +585,7 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.mcp_server_id,
+  COALESCE(lt.mcp_slug, s.slug) AS mcp_server_slug,
   COALESCE(lt.mcp_is_public, s.visibility = 'public')::bool AS mcp_server_is_public,
   (CASE WHEN lt.id IS NOT NULL THEN lt.user_session_issuer_id ELSE s.user_session_issuer_id END IS NOT NULL)::bool AS mcp_server_is_oauth,
   COALESCE(ep.slug, '')::text AS endpoint_slug,

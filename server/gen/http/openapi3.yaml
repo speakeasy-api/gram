@@ -708,7 +708,7 @@ paths:
             x-speakeasy-name-override: previewExternalMcpMigration
     /admin/hookClients.get:
         get:
-            description: 'Fleet-wide hook client grids: which hook client (legacy curl or hooks binary version) each organization''s new sessions use per day, and inference hook traffic per Claude app.'
+            description: 'Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization''s new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.'
             operationId: adminGetHookClients
             parameters:
                 - allowEmptyValue: true
@@ -723,12 +723,12 @@ paths:
                     minimum: 1
                     type: integer
                 - allowEmptyValue: true
-                  description: Skip the one-hour cache and read ClickHouse now.
+                  description: Skip the cache and read ClickHouse now.
                   in: query
                   name: refresh
                   schema:
                     default: false
-                    description: Skip the one-hour cache and read ClickHouse now.
+                    description: Skip the cache and read ClickHouse now.
                     type: boolean
             responses:
                 "200":
@@ -7529,6 +7529,234 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/upstreamOAuthMigration.organizations:
+        get:
+            description: Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.
+            operationId: adminListUpstreamOAuthMigrationOrganizations
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationOrganizations'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listUpstreamOAuthMigrationOrganizations admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listUpstreamOAuthMigrationOrganizations
+    /admin/upstreamOAuthMigration.run:
+        post:
+            description: 'Migrates one organization''s upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential''s client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.'
+            operationId: adminRunUpstreamOAuthMigration
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RunUpstreamOAuthMigrationRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationRun'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: runUpstreamOAuthMigration admin
+            tags:
+                - admin
+            x-speakeasy-name-override: runUpstreamOAuthMigration
+    /admin/upstreamOAuthMigration.status:
+        get:
+            description: Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.
+            operationId: adminGetUpstreamOAuthMigrationStatus
+            parameters:
+                - allowEmptyValue: true
+                  description: The organization ID.
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    description: The organization ID.
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getUpstreamOAuthMigrationStatus admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getUpstreamOAuthMigrationStatus
     /admin/users.list:
         get:
             tags:
@@ -14477,6 +14705,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - device_agent_token_header_Authorization: []
                 - apikey_header_Gram-Key: []
             summary: getPlugins agent
             tags:
@@ -32180,6 +32409,8 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
             security:
+                - device_agent_token_header_Authorization: []
+                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
     /rpc/hooks.cursor:
@@ -32286,6 +32517,8 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
             security:
+                - device_agent_token_header_Authorization: []
+                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
     /rpc/hooks.deleteServerNameOverride:
@@ -32691,7 +32924,7 @@ paths:
             tags:
                 - hooks
             summary: logs hooks
-            description: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.
+            description: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.
             operationId: hooks#logs
             parameters:
                 - name: Gram-Key
@@ -32772,6 +33005,8 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
             security:
+                - device_agent_token_header_Authorization: []
+                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
     /rpc/hooks.otel/v1/metrics:
@@ -32779,7 +33014,7 @@ paths:
             tags:
                 - hooks
             summary: metrics hooks
-            description: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.
+            description: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.
             operationId: hooks#metrics
             parameters:
                 - name: Gram-Key
@@ -32860,6 +33095,8 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
             security:
+                - device_agent_token_header_Authorization: []
+                  project_slug_header_Gram-Project: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
     /rpc/hooks.skillFeedback:
@@ -60092,6 +60329,106 @@ paths:
             tags:
                 - remoteSessions
             x-speakeasy-name-override: detachBinding
+    /rpc/remoteSessions.detachServerClientAssociation:
+        post:
+            description: 'Remove one MCP server''s association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer''s client binding and is refused here with a conflict: turn off User Identity on the server instead. Requires mcp:write on the server.'
+            operationId: detachServerClientAssociation
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DetachServerClientAssociationRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: detachServerClientAssociation remoteSessions
+            tags:
+                - remoteSessions
+            x-speakeasy-name-override: detachServerClientAssociation
+            x-speakeasy-react-hook:
+                name: DetachServerClientAssociation
     /rpc/remoteSessions.getServerIdentityImpact:
         get:
             description: Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
@@ -60488,6 +60825,113 @@ paths:
             tags:
                 - remoteSessions
             x-speakeasy-name-override: listBindings
+    /rpc/remoteSessions.listServerClientAssociations:
+        get:
+            description: 'List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Associations are recorded ahead of the serving path that will read them; until then the server keeps signing in through its user session issuer''s bindings. Requires mcp:read on the server.'
+            operationId: listServerClientAssociations
+            parameters:
+                - allowEmptyValue: true
+                  description: The MCP server.
+                  in: query
+                  name: mcp_server_id
+                  required: true
+                  schema:
+                    description: The MCP server.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListServerClientAssociationsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listServerClientAssociations remoteSessions
+            tags:
+                - remoteSessions
+            x-speakeasy-name-override: listServerClientAssociations
+            x-speakeasy-react-hook:
+                name: ServerClientAssociations
     /rpc/remoteSessions.revoke:
         post:
             description: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.
@@ -88345,6 +88789,29 @@ components:
             required:
                 - location
                 - cache_control
+        AdminDeviceAgentCell:
+            type: object
+            properties:
+                day:
+                    type: string
+                    description: The UTC day, as YYYY-MM-DD.
+                    format: date
+                machines:
+                    type: integer
+                    description: Machines whose agent polled on this day, by the last version each reported that day.
+                    format: int64
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                version:
+                    type: string
+                    description: The speakeasyd version, or empty for the organization-day total.
+            description: One (organization, day, version) cell of the device agent grid.
+            required:
+                - organization_id
+                - day
+                - version
+                - machines
         AdminExternalMcpMigrationCandidate:
             type: object
             properties:
@@ -88511,7 +88978,7 @@ components:
                 slug:
                     type: string
                     description: The organization slug. Absent when the organization no longer exists.
-            description: An organization that appears in either hook client grid.
+            description: An organization that appears in any of the fleet health grids.
             required:
                 - id
         AdminHookClientSessionCell:
@@ -88550,9 +89017,14 @@ components:
         AdminHookClientsResult:
             type: object
             properties:
+                device_agents:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminDeviceAgentCell'
+                    description: The device agent version grid. Empty for days before versions were recorded.
                 from_cache:
                     type: boolean
-                    description: True when the grids came from the one-hour cache rather than a fresh ClickHouse read.
+                    description: True when the grids came from the cache rather than a fresh ClickHouse read. Cached grids last 24 hours and refresh in the background once an hour old.
                 inference:
                     type: array
                     items:
@@ -88562,7 +89034,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AdminHookClientOrganization'
-                    description: Every organization that appears in either grid.
+                    description: Every organization that appears in any grid.
                 queried_at:
                     type: string
                     description: When the grids were read from ClickHouse.
@@ -88576,7 +89048,7 @@ components:
                     type: integer
                     description: Length of the window in days.
                     format: int64
-            description: Fleet-wide hook client grids over a fixed window.
+            description: 'Fleet-wide client health grids over a fixed window: hook clients, inference hook traffic and device agent versions.'
             required:
                 - window_days
                 - queried_at
@@ -88584,6 +89056,7 @@ components:
                 - organizations
                 - sessions
                 - inference
+                - device_agents
         AdminInferenceHookCell:
             type: object
             properties:
@@ -90309,6 +90782,120 @@ components:
                 - id
                 - customer_id
                 - status
+        AdminUpstreamOAuthMigrationOrganization:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The organization ID.
+                name:
+                    type: string
+                    description: The organization name.
+                servers:
+                    type: integer
+                    description: Live MCP servers in the organization signed in through a user session issuer.
+                    format: int64
+                slug:
+                    type: string
+                    description: The organization slug.
+            description: 'An organization the upstream OAuth migration applies to: it has a live MCP server signed in through a user session issuer.'
+            required:
+                - id
+                - name
+                - slug
+                - servers
+        AdminUpstreamOAuthMigrationOrganizations:
+            type: object
+            properties:
+                organizations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminUpstreamOAuthMigrationOrganization'
+                    description: Every organization the migration applies to, by name.
+            required:
+                - organizations
+        AdminUpstreamOAuthMigrationRun:
+            type: object
+            properties:
+                associations_skipped:
+                    type: integer
+                    description: Associations not recorded because their configuration changed during the run. Run again to pick them up.
+                    format: int64
+                associations_written:
+                    type: integer
+                    description: Server to client associations recorded.
+                    format: int64
+                selections_written:
+                    type: integer
+                    description: Credential choices recorded.
+                    format: int64
+                status:
+                    $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+            description: What one migration run wrote, and the organization's status after it.
+            required:
+                - associations_written
+                - associations_skipped
+                - selections_written
+                - status
+        AdminUpstreamOAuthMigrationServer:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    description: The MCP server ID.
+                    format: uuid
+                project_id:
+                    type: string
+                    description: The server's project ID.
+                    format: uuid
+            description: An MCP server whose upstream OAuth client the existing configuration does not prove. An administrator must associate its client before the organization is migrated.
+            required:
+                - mcp_server_id
+                - project_id
+        AdminUpstreamOAuthMigrationStatus:
+            type: object
+            properties:
+                credentials:
+                    type: integer
+                    description: Live user session credentials scanned.
+                    format: int64
+                migrated:
+                    type: boolean
+                    description: Whether the organization has nothing left to write and no server needing configuration.
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                pending_associations:
+                    type: integer
+                    description: Server to client associations the configuration proves that are not yet recorded.
+                    format: int64
+                pending_selections:
+                    type: integer
+                    description: Credential choices the configuration decides that are not yet recorded.
+                    format: int64
+                reconnect_credentials:
+                    type: integer
+                    description: Credentials with at least one server they will be asked to reconnect to, because no single client is decided for them.
+                    format: int64
+                servers:
+                    type: integer
+                    description: MCP servers on a user session issuer that the association backfill decided.
+                    format: int64
+                unresolved_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminUpstreamOAuthMigrationServer'
+                    description: Servers whose upstream OAuth client must be associated by an administrator.
+            description: 'Where one organization stands in the upstream OAuth migration, read from a dry run of both backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices.'
+            required:
+                - organization_id
+                - migrated
+                - servers
+                - pending_associations
+                - unresolved_servers
+                - credentials
+                - pending_selections
+                - reconnect_credentials
         AdminUser:
             type: object
             properties:
@@ -90422,6 +91009,33 @@ components:
                     format: uuid
             required:
                 - agent_id
+        AgentMCPServer:
+            type: object
+            properties:
+                audience:
+                    type: string
+                    description: The exact `aud` the identity assertion must carry for token_endpoint. Present exactly when token_endpoint is.
+                name:
+                    type: string
+                    description: 'Stable key the agent writes the server under in each tool''s MCP configuration: `speakeasy-` followed by the server''s slug, using only lowercase letters, digits and `-`. Unique within the response; a second server with the same name gets a numeric suffix such as `speakeasy-linear-2`.'
+                    pattern: ^speakeasy-[a-z0-9-]+$
+                resource:
+                    type: string
+                    description: Resource indicator (RFC 8707) to send with the grant. Present only when token_endpoint mints sessions for this one server; absent when it mints one session for every server of its issuer.
+                token_endpoint:
+                    type: string
+                    description: Token endpoint where a workload exchanges an identity assertion (RFC 7523 JWT bearer grant) for a session that reaches this server. Absent when the server's authorization server offers no workload grant, so the server cannot be reached without a person.
+                tools:
+                    type: array
+                    items:
+                        type: string
+                    description: Stable IDs of the managed tools this server applies to. Absent or empty means every managed tool.
+                url:
+                    type: string
+                    description: The server's streamable-HTTP URL.
+            required:
+                - name
+                - url
         AgentMarketplace:
             type: object
             properties:
@@ -94835,7 +95449,6 @@ components:
                     description: The kind of prompt the template is used for
                     enum:
                         - prompt
-                        - higher_order_tool
                 name:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -96673,6 +97286,20 @@ components:
                 - principal_id
                 - user_session_issuer_id
                 - id
+        DetachServerClientAssociationRequestBody:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    description: The MCP server.
+                    format: uuid
+                remote_session_client_id:
+                    type: string
+                    description: The associated remote session client.
+                    format: uuid
+            required:
+                - mcp_server_id
+                - remote_session_client_id
         DetachUserSessionIssuerForm:
             type: object
             properties:
@@ -99724,12 +100351,17 @@ components:
                     $ref: '#/components/schemas/DeviceAgentConfiguration'
                 etag:
                     type: string
-                    description: Opaque revision identifier covering the marketplace, plugin, remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
+                    description: Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
                 marketplaces:
                     type: array
                     items:
                         $ref: '#/components/schemas/AgentMarketplace'
                     description: Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
+                mcp_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentMCPServer'
+                    description: 'Speakeasy-hosted MCP servers the agent registers directly in each managed tool''s configuration, authorized by the device''s own mcp:connect credential. Populated only when the caller polls as an agent (an agent API key, or a workload acting for its assigned agent), from the MCP servers in the plugins assigned to that agent; always empty for people, who reach these servers through their plugins. Always present: an empty list tells the agent to remove the entries it wrote earlier.'
                 organization_gateway_url:
                     type: string
                     description: URL of the active organization's gateway. Absent when the organization gateway is unavailable.
@@ -99745,6 +100377,7 @@ components:
                 - etag
                 - marketplaces
                 - plugins
+                - mcp_servers
         GetProjectForm:
             type: object
             properties:
@@ -104044,6 +104677,16 @@ components:
                     description: The scopes available in access control.
             required:
                 - scopes
+        ListServerClientAssociationsResult:
+            type: object
+            properties:
+                associations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ServerClientAssociation'
+                    description: The server's associated upstream OAuth clients, oldest first.
+            required:
+                - associations
         ListServerHeadersResult:
             type: object
             properties:
@@ -110828,7 +111471,6 @@ components:
                     description: The kind of prompt the template is used for
                     enum:
                         - prompt
-                        - higher_order_tool
                 prompt:
                     type: string
                     description: The template content to render
@@ -113302,6 +113944,14 @@ components:
                 - id
                 - name
                 - key_prefix
+        RunUpstreamOAuthMigrationRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: The organization ID.
+            required:
+                - organization_id
         SaveDashboardFiltersRequestBody:
             type: object
             properties:
@@ -114203,6 +114853,54 @@ components:
                 - content_type
                 - content_length
                 - last_modified
+        ServerClientAssociation:
+            type: object
+            properties:
+                associated_at:
+                    type: string
+                    description: When the association was recorded.
+                    format: date-time
+                client_id:
+                    type: string
+                    description: The provider-issued client_id.
+                issuer_name:
+                    type: string
+                    description: Display name of the remote session issuer, if set.
+                issuer_slug:
+                    type: string
+                    description: Slug of the remote session issuer.
+                issuer_url:
+                    type: string
+                    description: The remote session issuer's issuer identifier.
+                remote_session_client_id:
+                    type: string
+                    description: The associated remote session client.
+                    format: uuid
+                remote_session_issuer_id:
+                    type: string
+                    description: 'The client''s remote session issuer: the upstream authorization server it signs in with.'
+                    format: uuid
+                scope:
+                    type: string
+                    description: Who owns the client.
+                    enum:
+                        - project
+                        - organization
+                        - global
+                server_count:
+                    type: integer
+                    description: How many live MCP servers are associated with this client, including this one.
+                    format: int64
+            description: One upstream OAuth client an MCP server is associated with. Client secrets are never returned.
+            required:
+                - remote_session_client_id
+                - client_id
+                - remote_session_issuer_id
+                - issuer_slug
+                - issuer_url
+                - scope
+                - server_count
+                - associated_at
         ServerIdentityClientConfiguration:
             type: object
             properties:
@@ -121784,7 +122482,6 @@ components:
                     description: The kind of prompt the template is used for
                     enum:
                         - prompt
-                        - higher_order_tool
                 name:
                     type: string
                     description: The name of the prompt template. Will be updated via variation
@@ -124875,6 +125572,10 @@ components:
             type: http
             description: Speakeasy Chat Sessions token based auth.
             scheme: bearer
+        device_agent_token_header_Authorization:
+            type: http
+            description: Device-agent token from the workload assertion grant at /oauth/workload/device-agent/{organization_id}/token.
+            scheme: bearer
         function_token_header_Authorization:
             type: http
             description: Speakeasy Functions token based auth.
@@ -124895,7 +125596,7 @@ tags:
     - name: access
       description: Manage roles, team member access control, and authorization challenge events.
     - name: agent
-      description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
+      description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. A headless device enrolled as a workload may call getPlugins with a device-agent token instead. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
     - name: agents
       description: Human-only management of first-class agent principals.
     - name: aiIntegrations
@@ -125041,7 +125742,7 @@ tags:
     - name: telemetry
       description: Fetch telemetry data for tools in Speakeasy.
     - name: templates
-      description: Manages re-usable prompt templates and higher-order tools for a project.
+      description: Manages re-usable prompt templates for a project.
     - name: tokenExchange
       description: 'Device-agent token exchange: trade an org-scoped install credential (an API key with the ''agent'' scope) plus a vouched user email for a long-lived, per-user API key scoped for the device agent.'
     - name: tools

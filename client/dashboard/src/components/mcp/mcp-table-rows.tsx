@@ -16,6 +16,7 @@ import {
   mcpServerHref,
   type McpServerKind,
 } from "./mcp-server-kind";
+import { SpeakeasyMark } from "./OrganizationGatewayCard";
 import { AlertTriangleIcon, Link2, Network } from "lucide-react";
 import { useHostedMcpOAuthConfigStatus } from "../sources/sources-hooks";
 
@@ -102,6 +103,58 @@ export function GatewayTableRow({
       <td className={CELL}>
         <Text small muted>
           {`${memberCount} ${memberCount === 1 ? "member" : "members"}`}
+        </Text>
+      </td>
+    </DotRow>
+  );
+}
+
+/** The Organization Gateway: every server a person can reach. */
+export function OrganizationGatewayTableRow({
+  url,
+  isOff,
+}: {
+  url: string | undefined;
+  isOff: boolean;
+}): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <DotRow
+      href={routes.mcp.organizationGateway.href()}
+      ariaLabel="Open Organization Gateway"
+      icon={<SpeakeasyMark className="h-5 w-5" />}
+    >
+      <NameCell name="Organization Gateway">
+        {isOff && <Badge variant="warning">Off</Badge>}
+      </NameCell>
+      <td className={CELL}>
+        <Badge variant="neutral">Gateway</Badge>
+      </td>
+      <td className={`max-w-xs ${CELL}`}>
+        {url ? (
+          <div
+            className="relative z-20 flex items-center gap-1.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Text small muted className="truncate font-mono text-xs">
+              {url.replace(/^https?:\/\//, "")}
+            </Text>
+            <CopyButton
+              text={url}
+              size="sm"
+              icon={Link2}
+              tooltip="Copy MCP URL"
+            />
+          </div>
+        ) : (
+          <Text small muted>
+            —
+          </Text>
+        )}
+      </td>
+      <td className={CELL}>
+        <Text small muted>
+          Every server your team can reach
         </Text>
       </td>
     </DotRow>

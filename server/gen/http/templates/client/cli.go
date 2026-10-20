@@ -25,7 +25,7 @@ func BuildCreateTemplatePayload(templatesCreateTemplateBody string, templatesCre
 	{
 		err = json.Unmarshal([]byte(templatesCreateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"abc123\",\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"aaa\",\n      \"prompt\": \"abc123\",\n      \"tool_urns_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"tools_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"abc123\",\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"name\": \"aaa\",\n      \"prompt\": \"abc123\",\n      \"tool_urns_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"tools_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.Name) > 40 {
@@ -37,8 +37,8 @@ func BuildCreateTemplatePayload(templatesCreateTemplateBody string, templatesCre
 		if !(body.Engine == "mustache") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.engine", body.Engine, []any{"mustache"}))
 		}
-		if !(body.Kind == "prompt" || body.Kind == "higher_order_tool") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", body.Kind, []any{"prompt", "higher_order_tool"}))
+		if !(body.Kind == "prompt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", body.Kind, []any{"prompt"}))
 		}
 		if len(body.ToolsHint) > 20 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools_hint", body.ToolsHint, len(body.ToolsHint), 20, false))
@@ -103,7 +103,7 @@ func BuildUpdateTemplatePayload(templatesUpdateTemplateBody string, templatesUpd
 	{
 		err = json.Unmarshal([]byte(templatesUpdateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"abc123\",\n      \"engine\": \"mustache\",\n      \"id\": \"abc123\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"tool_urns_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"tools_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"abc123\",\n      \"engine\": \"mustache\",\n      \"id\": \"abc123\",\n      \"kind\": \"prompt\",\n      \"name\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"tool_urns_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"tools_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.Arguments != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.arguments", *body.Arguments, goa.FormatJSON))
@@ -114,8 +114,8 @@ func BuildUpdateTemplatePayload(templatesUpdateTemplateBody string, templatesUpd
 			}
 		}
 		if body.Kind != nil {
-			if !(*body.Kind == "prompt" || *body.Kind == "higher_order_tool") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"prompt", "higher_order_tool"}))
+			if !(*body.Kind == "prompt") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"prompt"}))
 			}
 		}
 		if len(body.ToolsHint) > 20 {
@@ -353,7 +353,7 @@ func BuildRenderTemplatePayload(templatesRenderTemplateBody string, templatesRen
 	{
 		err = json.Unmarshal([]byte(templatesRenderTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": {\n         \"abc123\": \"abc123\"\n      },\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"prompt\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": {\n         \"abc123\": \"abc123\"\n      },\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"prompt\": \"abc123\"\n   }'")
 		}
 		if body.Arguments == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("arguments", "body"))
@@ -361,8 +361,8 @@ func BuildRenderTemplatePayload(templatesRenderTemplateBody string, templatesRen
 		if !(body.Engine == "mustache") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.engine", body.Engine, []any{"mustache"}))
 		}
-		if !(body.Kind == "prompt" || body.Kind == "higher_order_tool") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", body.Kind, []any{"prompt", "higher_order_tool"}))
+		if !(body.Kind == "prompt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", body.Kind, []any{"prompt"}))
 		}
 		if err != nil {
 			return nil, err

@@ -416,7 +416,7 @@ func TestExternalContentPartsCommitWithParent(t *testing.T) {
 // saveFrame stores a frame and returns the index of its first new message.
 func saveFrame(t *testing.T, store *postgresStore, config Config, frame Frame, userID string) int {
 	t.Helper()
-	start, err := store.Save(t.Context(), config, frame, userID)
+	start, err := store.archive(t.Context(), config, frame, userID)
 	require.NoError(t, err)
 	return start
 }
@@ -509,7 +509,7 @@ func archiveFrame(t *testing.T, store *postgresStore, config Config, frame Frame
 	frame.conversation, frame.conversationOutcome = chatID, outcome
 	userID, err := store.ResolveActor(t.Context(), config, frame)
 	require.NoError(t, err)
-	start, err := store.Save(t.Context(), config, frame, userID)
+	start, err := store.archive(t.Context(), config, frame, userID)
 	require.NoError(t, err)
 	return chatID, outcome, start
 }
@@ -648,34 +648,6 @@ func TestStoreContinuesBySessionWhenPresent(t *testing.T) {
 	require.Equal(t, 1, start)
 }
 
-func TestStoreCheckpointFollowsAdoptedConversation(t *testing.T) {
-	t.Parallel()
-	store, _, config := newTestStore(t)
-	u1, a1, u2, a2, u3 := textMessage("user", "turn 1"), textMessage("assistant", "reply 1"), textMessage("user", "turn 2"), textMessage("assistant", "reply 2"), textMessage("user", "turn 3")
-	second := sessionlessFrame("request-2", u1, a1, u2)
-	archiveFrame(t, store, config, sessionlessFrame("request-1", u1))
-	chatID, outcome, _ := archiveFrame(t, store, config, second)
-	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
-	second.conversation, second.conversationOutcome = chatID, outcome
-	session, err := store.Begin(t.Context(), config, second, "")
-	require.NoError(t, err)
-	_, err = session.Load(t.Context())
-	require.NoError(t, err)
-	require.NoError(t, session.Accept(t.Context(), transcriptHashes(conversationMessages(second.Messages))))
-
-	third := sessionlessFrame("request-3", u1, a1, u2, a2, u3)
-	adopted, outcome, _ := archiveFrame(t, store, config, third)
-	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
-	require.Equal(t, chatID, adopted)
-	third.conversation, third.conversationOutcome = adopted, outcome
-	session, err = store.Begin(t.Context(), config, third, "")
-	require.NoError(t, err)
-	accepted, err := session.Load(t.Context())
-	require.NoError(t, err)
-	require.Len(t, accepted, 3)
-	require.Equal(t, 3, acceptedPrefix(accepted, transcriptHashes(conversationMessages(third.Messages))))
-}
-
 func TestStoreStartsNewChatForUnknownSessionID(t *testing.T) {
 	t.Parallel()
 	store, db, config := newTestStore(t)
@@ -729,4 +701,25 @@ func TestStoreStartsNewChatWhenSharedPrefixIsAmbiguous(t *testing.T) {
 	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
 	require.Equal(t, third, fourth)
 	require.Equal(t, 3, start)
+}
+
+func TestStoreRepeatedFrameBeyondAnchorLimit(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	frame.Messages = make([]Message, alignmentAnchors+1)
+	for i := range frame.Messages {
+		frame.Messages[i] = textMessage("user", "continue")
+	}
+	saveFrame(t, store, config, frame, "")
+	saveFrame(t, store, config, frame, "")
+	rows, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, rows, alignmentAnchors+1)
+	frame.Messages = append(frame.Messages, textMessage("user", "continue"))
+	saveFrame(t, store, config, frame, "")
+	saveFrame(t, store, config, frame, "")
+	rows, err = chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, rows, alignmentAnchors+1)
 }

@@ -1,6 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
-import { OrganizationGatewayButton } from "@/components/mcp/OrganizationGatewayButton";
+import { OrganizationGatewayCard } from "@/components/mcp/OrganizationGatewayCard";
+import { useOrganizationGatewayEntry } from "@/components/mcp/useOrganizationGatewayEntry";
 import {
   MCPServerCard,
   MCPServerCardSkeleton,
@@ -12,6 +13,7 @@ import {
 import {
   GatewayTableRow,
   MCPServerTableRow,
+  OrganizationGatewayTableRow,
   MCPTableRowSkeleton,
 } from "@/components/mcp/mcp-table-rows";
 import { Page } from "@/components/page-layout";
@@ -72,9 +74,6 @@ export const MCPPage = (): JSX.Element => {
               The servers your agents can reach, what they are built from, and
               the versions those arrive in.
             </Page.Section.Description>
-            <Page.Section.CTA>
-              <OrganizationGatewayButton />
-            </Page.Section.CTA>
           </Page.Section>
           <McpTabs active="servers" />
           <MCPOverview />
@@ -309,6 +308,16 @@ function MCPOverview() {
   // Also shown when the list failed to load: the toolbar carries the retry and
   // "Add new", which are exactly what you need when nothing came back.
   const showFilters = !isLoading && (hasItems || hasRefreshError);
+  // The Organization Gateway is the organization's, not one of this project's servers,
+  // so it leads the unfiltered list and steps aside once the list is narrowed.
+  const organizationGateway = useOrganizationGatewayEntry();
+  const showOrganizationGateway =
+    organizationGateway.show &&
+    search === "" &&
+    !hasActiveMcpFilters(mcpFilters.values);
+  const organizationGatewayCard = showOrganizationGateway && (
+    <OrganizationGatewayCard isOff={organizationGateway.isOff} />
+  );
   const showNoMatches =
     !isLoading &&
     (search !== "" || hasActiveMcpFilters(mcpFilters.values)) &&
@@ -347,6 +356,11 @@ function MCPOverview() {
   ) {
     return (
       <>
+        {organizationGatewayCard && (
+          <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
+            {organizationGatewayCard}
+          </div>
+        )}
         <MCPEmptyState cta={newMcpServerButton} />
       </>
     );
@@ -414,6 +428,7 @@ function MCPOverview() {
               </>
             ) : (
               <>
+                {organizationGatewayCard}
                 {filteredGateways.map((gateway) => (
                   <GatewayCard key={gateway.id} gateway={gateway} />
                 ))}
@@ -441,6 +456,12 @@ function MCPOverview() {
               </>
             ) : (
               <>
+                {showOrganizationGateway && (
+                  <OrganizationGatewayTableRow
+                    url={organizationGateway.url}
+                    isOff={organizationGateway.isOff}
+                  />
+                )}
                 {filteredGateways.map((gateway) => (
                   <GatewayTableRow
                     key={gateway.id}
