@@ -523,17 +523,19 @@ func (q *Queries) GetSignal(ctx context.Context, arg GetSignalParams) (SigintCus
 }
 
 const listDefinitionSnapshots = `-- name: ListDefinitionSnapshots :many
-SELECT definition_hash, definition, created_at
-FROM sigint_definition_snapshots
-WHERE project_id = $1::uuid AND sensor_id = $2::uuid
-ORDER BY created_at, definition_hash
-LIMIT $3
+SELECT snapshot.definition_hash, snapshot.definition, snapshot.created_at
+FROM sigint_definition_snapshots snapshot
+JOIN projects p ON p.id = snapshot.project_id AND p.organization_id = $1
+WHERE snapshot.project_id = $2::uuid AND snapshot.sensor_id = $3::uuid
+ORDER BY snapshot.created_at, snapshot.definition_hash
+LIMIT $4
 `
 
 type ListDefinitionSnapshotsParams struct {
-	ProjectID  uuid.UUID
-	SensorID   uuid.UUID
-	LimitValue int32
+	OrganizationID string
+	ProjectID      uuid.UUID
+	SensorID       uuid.UUID
+	LimitValue     int32
 }
 
 type ListDefinitionSnapshotsRow struct {
@@ -543,7 +545,12 @@ type ListDefinitionSnapshotsRow struct {
 }
 
 func (q *Queries) ListDefinitionSnapshots(ctx context.Context, arg ListDefinitionSnapshotsParams) ([]ListDefinitionSnapshotsRow, error) {
-	rows, err := q.db.Query(ctx, listDefinitionSnapshots, arg.ProjectID, arg.SensorID, arg.LimitValue)
+	rows, err := q.db.Query(ctx, listDefinitionSnapshots,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SensorID,
+		arg.LimitValue,
+	)
 	if err != nil {
 		return nil, err
 	}

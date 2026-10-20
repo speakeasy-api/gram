@@ -18,10 +18,11 @@ WHERE snapshot.project_id = @project_id::uuid
   AND snapshot.sensor_id = @sensor_id::uuid AND snapshot.definition_hash = @definition_hash;
 
 -- name: ListDefinitionSnapshots :many
-SELECT definition_hash, definition, created_at
-FROM sigint_definition_snapshots
-WHERE project_id = @project_id::uuid AND sensor_id = @sensor_id::uuid
-ORDER BY created_at, definition_hash
+SELECT snapshot.definition_hash, snapshot.definition, snapshot.created_at
+FROM sigint_definition_snapshots snapshot
+JOIN projects p ON p.id = snapshot.project_id AND p.organization_id = @organization_id
+WHERE snapshot.project_id = @project_id::uuid AND snapshot.sensor_id = @sensor_id::uuid
+ORDER BY snapshot.created_at, snapshot.definition_hash
 LIMIT @limit_value;
 
 -- name: LoadEvaluationSensors :many
