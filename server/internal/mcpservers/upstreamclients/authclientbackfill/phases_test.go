@@ -688,6 +688,13 @@ func TestRun_HoldsTheOrganizationLock(t *testing.T) {
 		require.ErrorIs(t, err, ErrRunInProgress, "a run never waits for a concurrent one")
 		require.Less(t, time.Since(start), 5*time.Second)
 	}
+	// A run that found the lock taken leaves the holder's lock in place.
+	other, err := f.pool.Acquire(t.Context())
+	require.NoError(t, err)
+	stillHeld, err := New(other).TryLockOrganizationBackfill(t.Context(), f.orgID)
+	other.Release()
+	require.NoError(t, err)
+	require.False(t, stillHeld)
 
 	require.NoError(t, tx.Rollback(t.Context()))
 	_, err = Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
@@ -1226,4 +1233,13 @@ func TestRun_HoldsTheLockAcrossPhases(t *testing.T) { //nolint:paralleltest // s
 	f.run(true)
 	require.NotNil(t, lockedElsewhere)
 	require.False(t, *lockedElsewhere, "another run cannot take the lock between phases")
+
+	// The run released its lock: another session can take it.
+	conn, err := f.pool.Acquire(t.Context())
+	require.NoError(t, err)
+	defer conn.Release()
+	free, err := New(conn).TryLockOrganizationBackfill(t.Context(), f.orgID)
+	require.NoError(t, err)
+	require.True(t, free)
+	require.NoError(t, New(conn).UnlockOrganizationBackfill(t.Context(), f.orgID))
 }

@@ -44,8 +44,8 @@ func (s *Service) GetUpstreamOAuthMigrationStatus(ctx context.Context, p *gen.Ge
 	return s.upstreamOAuthMigrationStatus(ctx, organizationID)
 }
 
-// authClientRunTimeout bounds a typed auth client apply, which outlives the
-// request so a closed tab does not cut a phase short.
+// authClientRunTimeout bounds a migration run, which outlives the request so
+// a closed tab does not cut a phase short.
 const authClientRunTimeout = 15 * time.Minute
 
 // authClientStatusTimeout bounds the status read that follows a run.
@@ -62,22 +62,26 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
 
+	// Every phase outlives the request, so a closed tab does not cut one
+	// short; each is idempotent and safe to run again.
+	detached := context.WithoutCancel(ctx)
+	migrationCtx, cancelMigration := context.WithTimeout(detached, authClientRunTimeout)
+	defer cancelMigration()
+
 	// Associations first: a credential's choice is only recorded for a client
 	// associated with the server.
-	associations, err := associationbackfill.Run(ctx, s.db, associationbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
+	associations, err := associationbackfill.Run(migrationCtx, s.db, associationbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate upstream oauth client associations").LogError(ctx, logger)
 	}
-	selections, err := selectionbackfill.Run(ctx, s.db, selectionbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
+	selections, err := selectionbackfill.Run(migrationCtx, s.db, selectionbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate upstream oauth client selections").LogError(ctx, logger)
 	}
 	// Typed auth clients last, from the associations just recorded. A failure
 	// here is reported beside the run and never fails the migration above.
 	var authClientsError *string
-	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), authClientRunTimeout)
-	authClients, err := authclientbackfill.Run(runCtx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
-	cancel()
+	authClients, err := authclientbackfill.Run(migrationCtx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
 	switch {
 	case errors.Is(err, authclientbackfill.ErrRunInProgress):
 		logger.WarnContext(ctx, "record typed auth clients", attr.SlogError(err))
@@ -109,7 +113,6 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 	}
 	// The writes above are committed even if the caller has gone, so the
 	// audit line and the status read do not depend on the request.
-	detached := context.WithoutCancel(ctx)
 	logger.InfoContext(detached, "upstream oauth migration ran",
 		attr.SlogAuditAction("upstream_oauth_migration:run"),
 		attr.SlogAuditSubject("organization"),

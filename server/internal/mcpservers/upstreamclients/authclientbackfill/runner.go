@@ -490,7 +490,17 @@ func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 	if err != nil {
 		return Report{}, fmt.Errorf("acquire connection: %w", err)
 	}
-	defer conn.Release()
+	// Unlocking is registered before the lock is tried, so a lock taken by a
+	// try that then errored is still released. Unlocking a lock this session
+	// does not hold is a no-op; a connection that cannot unlock is closed
+	// rather than returned to the pool still holding the lock.
+	defer func() {
+		cleanup := context.WithoutCancel(ctx)
+		if err := New(conn).UnlockOrganizationBackfill(cleanup, opts.OrganizationID); err != nil {
+			_ = conn.Conn().Close(cleanup)
+		}
+		conn.Release()
+	}()
 	locked, err := New(conn).TryLockOrganizationBackfill(ctx, opts.OrganizationID)
 	switch {
 	case err != nil:
@@ -498,7 +508,6 @@ func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 	case !locked:
 		return Report{}, ErrRunInProgress
 	}
-	defer func() { _ = New(conn).UnlockOrganizationBackfill(context.WithoutCancel(ctx), opts.OrganizationID) }()
 	return runLocked(ctx, conn, opts)
 }
 
