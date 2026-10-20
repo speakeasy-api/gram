@@ -517,3 +517,9 @@ LEFT JOIN sigint_custom_signals cs
 WHERE ss.project_id = @project_id::uuid AND ss.deleted IS FALSE
   AND (s.id IS NULL OR s.deleted IS TRUE
     OR cs.id IS NULL OR cs.deleted IS TRUE);
+
+-- Bootstrap tokens, one per state, so the agent page's table shows every
+-- badge. Revoked rows are soft-deleted, so they are counted too.
+-- name: PostflightIDDeviceJoinTokens :one
+SELECT count(*) FROM workload_device_join_tokens
+WHERE organization_id = @org_id::text;

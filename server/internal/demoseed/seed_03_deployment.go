@@ -26,7 +26,83 @@ func (s *seeder) seedDeployment(ctx context.Context) error {
 	if err := s.seedDeploymentWorkloads(ctx); err != nil {
 		return err
 	}
+	if err := s.seedDeploymentBootstrapTokens(ctx); err != nil {
+		return err
+	}
 	return s.seedDeploymentAssistants(ctx)
+}
+
+// seedDeploymentBootstrapTokens lets one agent enroll headless boxes and gives
+// it a bootstrap token in each state, so the agent page's Bootstrap tokens
+// table shows every badge and the issue sheet opens straight on setup.
+//
+// No device admission is seeded. The device issuer's URL is derived from the
+// server's own URL, which the seed does not know, and a wrong one would be
+// reused by real enrollments in local development and refuse every device. So
+// the redeemed token names a device subject that has no admission, which the
+// page renders as an unnamed device.
+func (s *seeder) seedDeploymentBootstrapTokens(ctx context.Context) error {
+	org := s.orgID()
+	agent := s.det("managed-agent-4")
+	principal := "agent:" + agent.String()
+
+	grants := []struct {
+		name      string
+		scope     string
+		selectors map[string]string
+	}{
+		{"device-sync", "org:device_agent_sync", map[string]string{"resource_kind": "org", "resource_id": org}},
+		{"hooks-ingest", "org:hooks_ingest", map[string]string{"resource_kind": "org", "resource_id": org, "project_id": s.projectID().String()}},
+	}
+	for _, g := range grants {
+		selectors, err := json.Marshal(g.selectors)
+		if err != nil {
+			return fmt.Errorf("marshal demo device agent grant selectors: %w", err)
+		}
+		if err := s.q.DeployInsertPrincipalGrant(ctx, repo.DeployInsertPrincipalGrantParams{
+			ID:             s.det("device-agent-grant-" + g.name),
+			OrganizationID: org,
+			PrincipalUrn:   principal,
+			Scope:          g.scope,
+			Selectors:      selectors,
+		}); err != nil {
+			return fmt.Errorf("insert demo device agent grant %s: %w", g.scope, err)
+		}
+	}
+
+	redeemedBy := pgtype.Text{String: "device:" + s.det("device-subject-1").String(), Valid: true}
+	tokens := []struct {
+		n                                              string
+		creator                                        demoUser
+		expiresIn, consumedAgo, createdAgo, revokedAgo string
+		consumedBy                                     pgtype.Text
+	}{
+		// Active: issued a few minutes ago, waiting for its box.
+		{"1", demoUsers[0], "50 minutes", "", "10 minutes", "", pgtype.Text{}},
+		// Redeemed: the box enrolled shortly after it was issued.
+		{"2", demoUsers[0], "-2 days", "3 days", "3 days 1 hour", "", redeemedBy},
+		// Expired: nobody ran the install in time.
+		{"3", demoUsers[1], "-5 days", "", "5 days 1 hour", "", pgtype.Text{}},
+		// Revoked: withdrawn before it was used.
+		{"4", demoUsers[1], "-6 days", "", "7 days", "6 days 23 hours", pgtype.Text{}},
+	}
+	for _, t := range tokens {
+		if err := s.q.DeployInsertDeviceJoinToken(ctx, repo.DeployInsertDeviceJoinTokenParams{
+			ID:                s.det("device-join-token-" + t.n),
+			OrganizationID:    org,
+			TokenHash:         "DEMO-NOT-A-VALID-HASH-" + s.det("device-join-token-hash-"+t.n).String(),
+			AgentID:           agent,
+			CreatedByUserID:   s.userID(t.creator.handle),
+			ExpiresIn:         t.expiresIn,
+			ConsumedAgo:       t.consumedAgo,
+			ConsumedBySubject: t.consumedBy,
+			CreatedAgo:        t.createdAgo,
+			RevokedAgo:        t.revokedAgo,
+		}); err != nil {
+			return fmt.Errorf("insert demo bootstrap token %s: %w", t.n, err)
+		}
+	}
+	return nil
 }
 
 // seedDeploymentStack writes one completed deployment with 8 HTTP tools whose

@@ -364,6 +364,56 @@ func (q *Queries) DeployInsertDeploymentStatus(ctx context.Context, deploymentID
 	return err
 }
 
+const deployInsertDeviceJoinToken = `-- name: DeployInsertDeviceJoinToken :exec
+INSERT INTO workload_device_join_tokens
+  (id, organization_id, token_hash, agent_id, created_by_user_id, expires_at,
+   consumed_at, consumed_by_subject, created_at, deleted_at)
+VALUES
+  ($1::uuid, $2::text, $3::text, $4::uuid,
+   $5::text,
+   now() + ($6::text)::interval,
+   CASE WHEN $7::text = '' THEN NULL
+        ELSE now() - ($7::text)::interval END,
+   $8::text,
+   now() - ($9::text)::interval,
+   CASE WHEN $10::text = '' THEN NULL
+        ELSE now() - ($10::text)::interval END)
+`
+
+type DeployInsertDeviceJoinTokenParams struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	TokenHash         string
+	AgentID           uuid.UUID
+	CreatedByUserID   string
+	ExpiresIn         string
+	ConsumedAgo       string
+	ConsumedBySubject pgtype.Text
+	CreatedAgo        string
+	RevokedAgo        string
+}
+
+// A bootstrap token (a "device join token") an administrator issued to enroll
+// a headless box as an agent. Display-only: the hash is not the SHA-256 of
+// any token, so nothing can redeem it. Status is derived from the timestamps,
+// so one row per state is written by varying them. The agent's delete cascade
+// cleans these on every reseed.
+func (q *Queries) DeployInsertDeviceJoinToken(ctx context.Context, arg DeployInsertDeviceJoinTokenParams) error {
+	_, err := q.db.Exec(ctx, deployInsertDeviceJoinToken,
+		arg.ID,
+		arg.OrganizationID,
+		arg.TokenHash,
+		arg.AgentID,
+		arg.CreatedByUserID,
+		arg.ExpiresIn,
+		arg.ConsumedAgo,
+		arg.ConsumedBySubject,
+		arg.CreatedAgo,
+		arg.RevokedAgo,
+	)
+	return err
+}
+
 const deployInsertExternalOAuthMetadata = `-- name: DeployInsertExternalOAuthMetadata :exec
 INSERT INTO external_oauth_server_metadata
   (id, project_id, slug, metadata, authorization_server_issuer)

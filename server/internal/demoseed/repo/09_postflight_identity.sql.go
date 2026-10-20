@@ -273,6 +273,20 @@ func (q *Queries) PostflightIDConnections(ctx context.Context, projectID uuid.UU
 	return count, err
 }
 
+const postflightIDDeviceJoinTokens = `-- name: PostflightIDDeviceJoinTokens :one
+SELECT count(*) FROM workload_device_join_tokens
+WHERE organization_id = $1::text
+`
+
+// Bootstrap tokens, one per state, so the agent page's table shows every
+// badge. Revoked rows are soft-deleted, so they are counted too.
+func (q *Queries) PostflightIDDeviceJoinTokens(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDDeviceJoinTokens, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDDirectoryRoleMappings = `-- name: PostflightIDDirectoryRoleMappings :one
 SELECT count(*) FROM directory_role_mappings
 WHERE organization_id = $1::text AND deleted IS FALSE
