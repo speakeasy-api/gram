@@ -32,7 +32,7 @@ func TestToolsCallClickHouseLogInterceptor_Name(t *testing.T) {
 
 func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 	t.Parallel()
-	for _, caller := range []string{"legacy", "managed agent", "anonymous", "other organization"} {
+	for _, caller := range []string{"legacy", "managed agent", "workload", "anonymous", "other organization"} {
 		t.Run(caller, func(t *testing.T) { t.Parallel(); testToolsCallClickHouseEmission(t, caller) })
 	}
 }
@@ -74,6 +74,13 @@ func testToolsCallClickHouseEmission(t *testing.T, caller string) {
 			urn.NewPrincipal(urn.PrincipalTypeAgent, agentID),
 			contextvalues.PrincipalCredential{AuthorizerUserID: "approver-id"})
 		ctx = contextvalues.WithPrincipalCredentialOwner(ctx, "owner-id")
+	}
+	workload := urn.NewWorkloadPrincipal(uuid.New(), "repo:acme/api:ref:refs/heads/main")
+	if caller == "workload" {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		ctx = contextvalues.WithAuthenticatedActor(ctx, authCtx, workload)
+		ctx = contextvalues.WithWorkloadAgent(ctx, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID))
 	}
 
 	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, proxy.ServerIdentity{
@@ -166,18 +173,33 @@ func testToolsCallClickHouseEmission(t *testing.T, caller string) {
 		require.Empty(t, apiKeyID)
 		require.Empty(t, actorID)
 	}
-	if caller == "managed agent" {
-		var actorType, actorID, authorizerID string
+	if caller == "workload" {
+		var actorType, actorID, rowAgentID string
 		err := chConn.QueryRow(t.Context(), `SELECT
     toString(attributes.gram.authorization.actor.type),
     toString(attributes.gram.authorization.actor.id),
-    toString(attributes.gram.authorization.authorizer_user_id)
+    toString(attributes.gram.authorization.agent.id)
    FROM telemetry_logs WHERE gram_project_id = ? AND gram_urn = ? LIMIT 1`,
-			projectID.String(), expectedURN).Scan(&actorType, &actorID, &authorizerID)
+			projectID.String(), expectedURN).Scan(&actorType, &actorID, &rowAgentID)
+		require.NoError(t, err)
+		require.Equal(t, "workload", actorType)
+		require.Equal(t, workload.ID, actorID)
+		require.Equal(t, agentID, rowAgentID)
+	}
+	if caller == "managed agent" {
+		var actorType, actorID, authorizerID, rowAgentID string
+		err := chConn.QueryRow(t.Context(), `SELECT
+    toString(attributes.gram.authorization.actor.type),
+    toString(attributes.gram.authorization.actor.id),
+    toString(attributes.gram.authorization.authorizer_user_id),
+    toString(attributes.gram.authorization.agent.id)
+   FROM telemetry_logs WHERE gram_project_id = ? AND gram_urn = ? LIMIT 1`,
+			projectID.String(), expectedURN).Scan(&actorType, &actorID, &authorizerID, &rowAgentID)
 		require.NoError(t, err)
 		require.Equal(t, "agent", actorType)
 		require.Equal(t, agentID, actorID)
 		require.Equal(t, "approver-id", authorizerID)
+		require.Equal(t, agentID, rowAgentID)
 		// Raw rows can become visible before their materialized-view projection.
 		require.Eventually(t, func() bool {
 			var summarizedAgentID string

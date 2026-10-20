@@ -60,6 +60,7 @@ func workloadDevice(ctx context.Context) (issuerID string, subject string, ok bo
 var spoofableAttributionKeys = []string{
 	string(attr.AuthorizationActorTypeKey),
 	string(attr.AuthorizationActorIDKey),
+	string(attr.AuthorizationAgentIDKey),
 	string(attr.WorkloadIssuerIDKey),
 	string(attr.WorkloadSubjectKey),
 }

@@ -52,6 +52,7 @@ const (
 	AuthorizationAPIKeyIDKey         = attribute.Key("gram.authorization.api_key_id")
 	AuthorizationAuthorizerUserIDKey = attribute.Key("gram.authorization.authorizer_user_id")
 	AuthorizationOwnerUserIDKey      = attribute.Key("gram.authorization.owner_user_id")
+	AuthorizationAgentIDKey          = attribute.Key("gram.authorization.agent.id")
 
 	WideEventKey = attribute.Key("gram.wide_event")
 
@@ -3598,6 +3599,10 @@ func SlogAuthorizationAuthorizerUserID(v string) slog.Attr {
 
 func SlogAuthorizationOwnerUserID(v string) slog.Attr {
 	return slog.String(string(AuthorizationOwnerUserIDKey), v)
+}
+
+func SlogAuthorizationAgentID(v string) slog.Attr {
+	return slog.String(string(AuthorizationAgentIDKey), v)
 }
 
 func SlogAdminOIDCSubject(v string) slog.Attr { return slog.String(string(AdminOIDCSubjectKey), v) }

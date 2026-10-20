@@ -278,10 +278,12 @@ func TestWithAgentActor_StripsSpoofedActorOnHumanRequests(t *testing.T) {
 	attrs := map[attr.Key]any{
 		attr.AuthorizationActorTypeKey: "agent",
 		attr.AuthorizationActorIDKey:   "spoofed",
+		attr.AuthorizationAgentIDKey:   "spoofed",
 	}
 	withAgentActor(t.Context(), attrs)
 	require.NotContains(t, attrs, attr.AuthorizationActorTypeKey)
 	require.NotContains(t, attrs, attr.AuthorizationActorIDKey)
+	require.NotContains(t, attrs, attr.AuthorizationAgentIDKey)
 }
 
 func TestAgentSessionView_RejectsOtherTenant(t *testing.T) {

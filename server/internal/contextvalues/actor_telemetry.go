@@ -6,11 +6,17 @@ import "context"
 // attributes. Empty values mean the attribute must be removed, not retained from
 // caller input. Human identity is never inferred from an owner or authorizer.
 // Use only for telemetry describing this request, not bulk ingested events.
+//
+// The agent attribute names the agent the request acts for: the actor itself
+// for an agent key, or the agent an admitted workload acts under. A workload
+// stays the actor, so the agent is recorded separately, as it was in effect
+// when the request ran.
 func ActorTelemetryAttributes(ctx context.Context) map[string]string {
 	attrs := map[string]string{
 		"gram.authorization.organization_id":    "",
 		"gram.authorization.actor.type":         "",
 		"gram.authorization.actor.id":           "",
+		"gram.authorization.agent.id":           "",
 		"gram.authorization.api_key_id":         "",
 		"gram.authorization.authorizer_user_id": "",
 		"gram.authorization.owner_user_id":      "",
@@ -22,6 +28,9 @@ func ActorTelemetryAttributes(ctx context.Context) map[string]string {
 	if actor, ok := AuthenticatedActor(ctx); ok {
 		attrs["gram.authorization.actor.type"] = string(actor.Type)
 		attrs["gram.authorization.actor.id"] = actor.ID
+	}
+	if agent, ok := EffectiveAgent(ctx); ok {
+		attrs["gram.authorization.agent.id"] = agent.ID
 	}
 	if authorizer, owner, ok := PrincipalCredentialProvenance(ctx); ok {
 		attrs["gram.authorization.authorizer_user_id"] = authorizer

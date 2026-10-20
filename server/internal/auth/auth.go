@@ -294,6 +294,7 @@ func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
 		attr.SlogAuthorizationAPIKeyID(actorAttrs[string(attr.AuthorizationAPIKeyIDKey)]),
 		attr.SlogAuthorizationAuthorizerUserID(actorAttrs[string(attr.AuthorizationAuthorizerUserIDKey)]),
 		attr.SlogAuthorizationOwnerUserID(actorAttrs[string(attr.AuthorizationOwnerUserIDKey)]),
+		attr.SlogAuthorizationAgentID(actorAttrs[string(attr.AuthorizationAgentIDKey)]),
 	} {
 		if a.Value.String() != "" && !wide.Contains(ctx, a.Key) {
 			attrs = append(attrs, a)
