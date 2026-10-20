@@ -39,6 +39,10 @@ const (
 	// mcpFindingEvidenceStoreTimeout bounds secondary evidence persistence
 	// without extending the policy evaluation deadline.
 	mcpFindingEvidenceStoreTimeout = time.Second
+
+	// mcpPayloadStorageLookupTimeout bounds the payload storage setting lookup
+	// on its own so a slow lookup cannot consume the evidence store budget.
+	mcpPayloadStorageLookupTimeout = 250 * time.Millisecond
 )
 
 // PolicyConfig controls bounded MCP policy evaluation.
@@ -78,10 +82,16 @@ type MCPFindingEvidenceWriter interface {
 // PolicyEvaluatorOption configures optional evaluator dependencies.
 type PolicyEvaluatorOption func(*policyEvaluator)
 
-// WithMCPFindingEvidenceWriter enables encrypted evidence persistence.
-func WithMCPFindingEvidenceWriter(writer MCPFindingEvidenceWriter) PolicyEvaluatorOption {
+// PayloadStorageCheck reports whether an organization allows storing scanned
+// tool payloads.
+type PayloadStorageCheck = func(ctx context.Context, organizationID string) (bool, error)
+
+// WithMCPFindingEvidenceWriter enables encrypted evidence persistence. Scanned
+// payloads are stored only for organizations payloadStorage admits.
+func WithMCPFindingEvidenceWriter(writer MCPFindingEvidenceWriter, payloadStorage PayloadStorageCheck) PolicyEvaluatorOption {
 	return func(evaluator *policyEvaluator) {
 		evaluator.evidenceWriter = writer
+		evaluator.payloadStorage = payloadStorage
 	}
 }
 
@@ -91,6 +101,7 @@ type policyEvaluator struct {
 	detector        PolicyDetector
 	publisher       gcp.Publisher[*riskv1.Finding]
 	evidenceWriter  MCPFindingEvidenceWriter
+	payloadStorage  PayloadStorageCheck
 	config          PolicyConfig
 	flagSlots       chan struct{}
 	flagScans       sync.WaitGroup
@@ -126,6 +137,7 @@ func NewPolicyEvaluator(
 		detector:        detector,
 		publisher:       publisher,
 		evidenceWriter:  nil,
+		payloadStorage:  nil,
 		config:          config,
 		flagSlots:       make(chan struct{}, config.FlagConcurrency),
 		flagScans:       sync.WaitGroup{},
@@ -172,7 +184,8 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 	}
 
 	blockPolicies, flagPolicies := partitionPolicies(policies)
-	defer p.scheduleFlagLane(ctx, subject, flagPolicies)
+	payloadSettled := false
+	defer func() { p.scheduleFlagLane(ctx, subject, flagPolicies, payloadSettled) }()
 	if len(blockPolicies) == 0 {
 		return Allow()
 	}
@@ -180,13 +193,14 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 		return p.resolveIndeterminate(ctx, event.Phase(), fmt.Errorf("MCP payload is %s", subject.Payload.Availability()))
 	}
 
-	match, scanErr := p.scanBlockPolicies(scanCtx, blockPolicies, policyScanRequest(subject, subject.Payload.Bytes()))
+	request := policyScanRequest(subject, subject.Payload.Bytes())
+	match, scanErr := p.scanBlockPolicies(scanCtx, blockPolicies, request)
 	if match != nil {
 		outcome := riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED
 		if event.Phase() == PhaseResponse {
 			outcome = riskv1.Finding_ENFORCEMENT_OUTCOME_WITHHELD
 		}
-		p.publish(scanCtx, subject.Event, match.policy, match.findings, outcome)
+		payloadSettled = p.publish(scanCtx, subject.Event, match.policy, match.findings, outcome, request.Text)
 		return deniedDecision(subject.Event.Phase(), match.policy, match.findings[0])
 	}
 	if scanErr != nil || scanCtx.Err() != nil {
@@ -245,7 +259,10 @@ func (p *policyEvaluator) scanBlockPolicies(ctx context.Context, policies []poli
 	return match, scanErr
 }
 
-func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subject, policies []policycore.Policy) {
+// scheduleFlagLane scans flag policies off the request path. payloadSettled
+// reports that the block lane already stored this phase's payload or found
+// its storage disallowed.
+func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subject, policies []policycore.Policy, payloadSettled bool) {
 	if len(policies) == 0 {
 		return
 	}
@@ -272,10 +289,16 @@ func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subje
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), p.config.Deadline)
 		defer cancel()
 		request := policyScanRequest(subject, payload)
+		// Every policy scans the same text, so it is settled with the first
+		// persisted findings only.
+		unstoredPayload := request.Text
+		if payloadSettled {
+			unstoredPayload = ""
+		}
 		for _, policy := range policies {
 			findings, err := p.detector.ScanMCPPolicy(ctx, policy, request)
-			if len(findings) > 0 {
-				p.publish(ctx, subject.Event, policy, findings, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED)
+			if len(findings) > 0 && p.publish(ctx, subject.Event, policy, findings, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED, unstoredPayload) {
+				unstoredPayload = ""
 			}
 			if err != nil {
 				p.logger.WarnContext(ctx, "MCP flag policy scan failed", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
@@ -298,10 +321,13 @@ func (p *policyEvaluator) drain(ctx context.Context) error {
 	}
 }
 
-func (p *policyEvaluator) publish(ctx context.Context, event Event, policy policycore.Policy, findings []scanners.Finding, outcome riskv1.Finding_EnforcementOutcome) {
+// publish emits findings and stores their evidence. A non-empty payload is
+// the scanned text, stored once per execution phase; publish reports whether
+// it is settled: persisted, or disallowed for the organization.
+func (p *policyEvaluator) publish(ctx context.Context, event Event, policy policycore.Policy, findings []scanners.Finding, outcome riskv1.Finding_EnforcementOutcome, payload string) bool {
 	if p.publisher == nil {
 		p.logger.WarnContext(ctx, "MCP policy findings publisher is unavailable", attr.SlogRiskPolicyID(policy.ID.String()))
-		return
+		return false
 	}
 	principal := event.Principal()
 	attribution := riskv1.Finding_Attribution_builder{
@@ -343,17 +369,22 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 		p.logger.WarnContext(ctx, "failed to publish MCP policy findings", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
 	}
 	if p.evidenceWriter == nil {
-		return
+		return false
 	}
 	projectID, err := uuid.Parse(event.ProjectID)
 	if err != nil {
 		p.logger.WarnContext(ctx, "failed to parse MCP finding evidence project id", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
-		return
+		return false
 	}
 	ids := scanners.FindingIDs(meta, findings)
 	evidence := make([]risk.MCPFindingEvidence, 0, len(findings))
 	for i, finding := range findings {
 		evidence = append(evidence, risk.MCPFindingEvidence{ID: ids[i], Match: finding.Match})
+	}
+	disallowed := payload != "" && !p.payloadStorageAllowed(ctx, event.OrganizationID)
+	var scanned *risk.MCPExecutionPayload
+	if payload != "" && !disallowed {
+		scanned = &risk.MCPExecutionPayload{ExecutionID: event.ExecutionID(), Phase: event.Phase(), Payload: payload}
 	}
 	storeCtx, cancel := context.WithTimeout(ctx, mcpFindingEvidenceStoreTimeout)
 	defer cancel()
@@ -362,9 +393,28 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 		ProjectID:      projectID,
 		CreatedAt:      time.Now().UTC(),
 		Findings:       evidence,
+		Execution:      scanned,
 	}); err != nil {
 		p.logger.WarnContext(ctx, "failed to store MCP policy finding evidence", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
+		return disallowed
 	}
+	return disallowed || scanned != nil
+}
+
+// payloadStorageAllowed fails closed: a lookup error keeps the payload out of
+// storage.
+func (p *policyEvaluator) payloadStorageAllowed(ctx context.Context, organizationID string) bool {
+	if p.payloadStorage == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, mcpPayloadStorageLookupTimeout)
+	defer cancel()
+	allowed, err := p.payloadStorage(ctx, organizationID)
+	if err != nil {
+		p.logger.WarnContext(ctx, "failed to check MCP payload storage setting", attr.SlogError(err))
+		return false
+	}
+	return allowed
 }
 
 func (p *policyEvaluator) resolveIndeterminate(ctx context.Context, phase string, err error) Decision {

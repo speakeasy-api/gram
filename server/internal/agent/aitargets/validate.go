@@ -166,7 +166,7 @@ func isSpaceOrControl(r rune) bool {
 // it can verify — so a matcher that could never match is rejected at write
 // time rather than read as a silently inert block.
 func validateGatewayClient(category Category, gateway GatewayClient, fail func(string, ...any) error) error {
-	// A harness and an assistant both call Gram's MCP gateway, so both can
+	// A harness and an assistant both call Speakeasy's MCP gateway, so both can
 	// name a caller. An open model run locally is software on a laptop and
 	// nothing else, so a matcher on one would name a caller that cannot exist.
 	if !CallsGateway(category) && !gateway.IsZero() {
@@ -188,7 +188,7 @@ func validateGatewayClient(category Category, gateway GatewayClient, fail func(s
 			return fail("cimd vendor key %q must match %s", key, vendorKeyPattern)
 		}
 		if !aivendors.BlockableVendorKey(key) {
-			return fail("cimd vendor key %q does not name a single CIMD-publishing vendor Gram can recognize at the gateway; name the client id metadata document url instead", key)
+			return fail("cimd vendor key %q does not name a single CIMD-publishing vendor Speakeasy can recognize at the gateway; name the client id metadata document url instead", key)
 		}
 	}
 	// Blocking is CIMD-only, and a CIMD client_id IS the https URL its

@@ -1,6 +1,7 @@
 import { IdentityLink } from "@/components/identity-link";
 import { formatCompact } from "@/lib/format";
 import type { IdentityRef } from "@/lib/identity-urn";
+import { Link } from "react-router";
 
 export type RankedBarListItem = {
   key: string;
@@ -8,9 +9,10 @@ export type RankedBarListItem = {
   value: number;
   // Optional display override for the value (e.g. "42%"); bar width still uses `value`.
   valueLabel?: string;
-  // When the item names a person, the identity their label links to. Omitted
-  // for non-person rankings (servers, tools, rules), which stay plain text.
+  // When the item names a person, the identity their label links to.
   identifier?: IdentityRef | null;
+  // Optional drill-down for non-person rankings such as tools.
+  href?: string;
   // Makes the label a button. Ignored when the item links to a person.
   onSelect?: () => void;
 };
@@ -52,6 +54,13 @@ export function RankedBarList({
               <IdentityLink identifier={item.identifier}>
                 {item.label}
               </IdentityLink>
+            ) : item.href ? (
+              <Link
+                to={item.href}
+                className="focus-visible:ring-ring rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+              >
+                {item.label}
+              </Link>
             ) : item.onSelect ? (
               <button
                 type="button"

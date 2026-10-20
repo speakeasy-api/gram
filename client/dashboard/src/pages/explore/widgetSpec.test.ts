@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ExploreSpec } from "./exploreModel";
 import {
   differsFromWidget,
+  specFromStoredWidget,
   specFromWidget,
   widgetFromSpec,
   widgetKey,
@@ -105,6 +106,15 @@ describe("specFromWidget", () => {
     ["a ranking", { ...spec, chartType: "ranked" }],
     ["the server's default limit", { ...spec, chartType: "table", limit: 0 }],
     ["a timeseries", { ...spec, orderBy: "", limit: 0 }],
+    [
+      "a distinct count over a dimension",
+      {
+        ...spec,
+        chartType: "table",
+        measures: [{ op: "count_distinct", field: "user" }],
+        orderBy: "count_distinct_user",
+      },
+    ],
   ])("restores %s exactly as it was saved", (_, value) => {
     expect(roundTrip(value)).toEqual(value);
   });
@@ -183,12 +193,48 @@ describe("widgetKey and differsFromWidget", () => {
     expect(widgetKey({ ...spec, window: "30d" })).not.toBe(widgetKey(spec));
   });
 
+  it("save a stack as picked with a breakdown, and as the plain chart without one", () => {
+    const stacked: ExploreSpec = {
+      ...spec,
+      measures: [{ op: "count", field: "" }],
+      orderBy: "",
+      chartType: "stacked_area",
+    };
+    expect(widgetFromSpec(stacked).visualization).toEqual({
+      type: "stacked_area",
+      options: {},
+    });
+    expect(roundTrip(stacked)).toEqual({ ...stacked, limit: 0 });
+
+    const flat: ExploreSpec = { ...stacked, dimensions: [] };
+    expect(widgetFromSpec(flat).visualization.type).toBe("area");
+    const stored = { dataset: "sessions", ...widgetFromSpec(flat) };
+    expect(differsFromWidget(flat, stored)).toBe(false);
+    expect(differsFromWidget({ ...flat, chartType: "area" }, stored)).toBe(
+      false,
+    );
+  });
+
   it("see a rows widget as unchanged whatever chart the builder shows", () => {
     const rows: ExploreSpec = { ...spec, measures: [], orderBy: "" };
     const stored = { dataset: "sessions", ...widgetFromSpec(rows) };
     expect(differsFromWidget({ ...rows, chartType: "bar" }, stored)).toBe(
       false,
     );
-    expect(differsFromWidget({ ...rows, window: "24h" }, stored)).toBe(true);
+    expect(differsFromWidget({ ...rows, window: "1d" }, stored)).toBe(true);
+  });
+
+  it("open a widget saved with the builder's old spelling of a day as 1d, unchanged", () => {
+    const stored = {
+      dataset: "sessions",
+      ...widgetFromSpec({ ...spec, window: "1d" }),
+    };
+    const legacy = {
+      ...stored,
+      query: { ...stored.query, window: "24h" },
+    };
+    const opened = specFromStoredWidget(legacy);
+    expect(opened?.window).toBe("1d");
+    expect(differsFromWidget(opened!, legacy)).toBe(false);
   });
 });

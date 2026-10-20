@@ -16,7 +16,7 @@ class PingHandler:
 
     async def handle(self, message: ping_pb2.Message, meta: MessageMetadata) -> None:
         # Returning acks the message; raising nacks it (triggering redelivery
-        # and eventual dead-lettering per PyProcessor's dead_letter policy).
+        # until the subscription's retention expires).
         self.logger.log(
             self.log_level,
             "received message",

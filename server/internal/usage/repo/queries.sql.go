@@ -174,11 +174,17 @@ func (q *Queries) CreateStripeSubscriptionBillingMetadataFixture(ctx context.Con
 const deactivatePaygBillingMetadata = `-- name: DeactivatePaygBillingMetadata :execrows
 UPDATE billing_metadata
 SET stripe_subscription_id = NULL,
-    stripe_billing_cycle_anchor = NULL,
+    -- The original partner anchor remains accounting provenance after cancellation.
+    stripe_billing_cycle_anchor = CASE WHEN EXISTS (
+      SELECT 1 FROM organization_promotion_applications application
+      WHERE application.organization_id = billing_metadata.organization_id
+        AND application.stripe_subscription_id = billing_metadata.stripe_subscription_id
+        AND application.redeemed_at IS NOT NULL
+    ) THEN stripe_billing_cycle_anchor ELSE NULL END,
     updated_at = clock_timestamp()
-WHERE organization_id = $1
-  AND stripe_customer_id = $2
-  AND stripe_subscription_id = $3
+WHERE billing_metadata.organization_id = $1
+  AND billing_metadata.stripe_customer_id = $2
+  AND billing_metadata.stripe_subscription_id = $3
 `
 
 type DeactivatePaygBillingMetadataParams struct {
@@ -369,12 +375,18 @@ func (q *Queries) GetBillingOrganizationAccountType(ctx context.Context, organiz
 
 const getEnabledServerCount = `-- name: GetEnabledServerCount :one
 SELECT COUNT(*)
-FROM toolsets
-WHERE organization_id = $1
-  AND mcp_enabled IS TRUE
-  AND deleted IS FALSE
+FROM toolsets t
+LEFT JOIN mcp_servers w
+  ON w.id = t.id
+ AND w.toolset_id = t.id
+ AND w.project_id = t.project_id
+ AND w.deleted IS FALSE
+WHERE t.organization_id = $1
+  AND t.deleted IS FALSE
+  AND CASE WHEN w.id IS NULL THEN t.mcp_enabled ELSE w.visibility <> 'disabled' END
 `
 
+// Hosted servers count via their canonical wrapper; unwrapped enabled toolsets by flag.
 func (q *Queries) GetEnabledServerCount(ctx context.Context, organizationID string) (int64, error) {
 	row := q.db.QueryRow(ctx, getEnabledServerCount, organizationID)
 	var count int64
@@ -425,6 +437,8 @@ SELECT
     billing_metadata.id AS billing_metadata_id
   , billing_metadata.stripe_customer_id
   , billing_metadata.stripe_subscription_id
+  , billing_metadata.stripe_checkout_session_id
+  , billing_metadata.stripe_checkout_idempotency_key
   , billing_metadata.stripe_billing_cycle_anchor
   , billing_metadata.billing_cycle_anchor_day
   , organization_metadata.name AS organization_name
@@ -439,15 +453,17 @@ FOR UPDATE OF billing_metadata, organization_metadata
 `
 
 type GetPaygActivationStateRow struct {
-	BillingMetadataID        uuid.UUID
-	StripeCustomerID         pgtype.Text
-	StripeSubscriptionID     pgtype.Text
-	StripeBillingCycleAnchor pgtype.Timestamptz
-	BillingCycleAnchorDay    int32
-	OrganizationName         string
-	OrganizationSlug         string
-	GramAccountType          string
-	Whitelisted              bool
+	BillingMetadataID            uuid.UUID
+	StripeCustomerID             pgtype.Text
+	StripeSubscriptionID         pgtype.Text
+	StripeCheckoutSessionID      pgtype.Text
+	StripeCheckoutIdempotencyKey pgtype.Text
+	StripeBillingCycleAnchor     pgtype.Timestamptz
+	BillingCycleAnchorDay        int32
+	OrganizationName             string
+	OrganizationSlug             string
+	GramAccountType              string
+	Whitelisted                  bool
 }
 
 func (q *Queries) GetPaygActivationState(ctx context.Context, organizationID string) (GetPaygActivationStateRow, error) {
@@ -457,6 +473,8 @@ func (q *Queries) GetPaygActivationState(ctx context.Context, organizationID str
 		&i.BillingMetadataID,
 		&i.StripeCustomerID,
 		&i.StripeSubscriptionID,
+		&i.StripeCheckoutSessionID,
+		&i.StripeCheckoutIdempotencyKey,
 		&i.StripeBillingCycleAnchor,
 		&i.BillingCycleAnchorDay,
 		&i.OrganizationName,
@@ -628,6 +646,75 @@ func (q *Queries) GetStripeWebhookReceipt(ctx context.Context, stripeEventID str
 	var i GetStripeWebhookReceiptRow
 	err := row.Scan(&i.OrganizationID, &i.EventType)
 	return i, err
+}
+
+const hasActivatedPaygSubscription = `-- name: HasActivatedPaygSubscription :one
+SELECT EXISTS (SELECT 1 FROM audit_logs WHERE organization_id = $1 AND action = 'organization:payg_activated')
+`
+
+// Completion receipts also record ignored terminal failures. Activation's audit
+// is committed atomically with PAYG activation and survives cancellation.
+func (q *Queries) HasActivatedPaygSubscription(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActivatedPaygSubscription, organizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasRedeemedSelectedPromotion = `-- name: HasRedeemedSelectedPromotion :one
+SELECT COALESCE((
+  SELECT redeemed_at IS NOT NULL FROM organization_promotion_applications
+  WHERE organization_id = $1::text
+  ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+  LIMIT 1
+), false)::boolean AS redeemed
+`
+
+func (q *Queries) HasRedeemedSelectedPromotion(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasRedeemedSelectedPromotion, organizationID)
+	var redeemed bool
+	err := row.Scan(&redeemed)
+	return redeemed, err
+}
+
+const insertOrganizationPromotionApplicationFixture = `-- name: InsertOrganizationPromotionApplicationFixture :exec
+INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id, stripe_subscription_id, redeemed_at)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertOrganizationPromotionApplicationFixtureParams struct {
+	OrganizationID        pgtype.Text
+	StripePromotionCodeID string
+	StripeSubscriptionID  pgtype.Text
+	RedeemedAt            pgtype.Timestamptz
+}
+
+func (q *Queries) InsertOrganizationPromotionApplicationFixture(ctx context.Context, arg InsertOrganizationPromotionApplicationFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertOrganizationPromotionApplicationFixture,
+		arg.OrganizationID,
+		arg.StripePromotionCodeID,
+		arg.StripeSubscriptionID,
+		arg.RedeemedAt,
+	)
+	return err
+}
+
+const isRedeemedPartnerSubscription = `-- name: IsRedeemedPartnerSubscription :one
+SELECT EXISTS (SELECT 1 FROM organization_promotion_applications
+WHERE organization_id = $1 AND stripe_subscription_id = $2
+AND redeemed_at IS NOT NULL)
+`
+
+type IsRedeemedPartnerSubscriptionParams struct {
+	OrganizationID       pgtype.Text
+	StripeSubscriptionID pgtype.Text
+}
+
+func (q *Queries) IsRedeemedPartnerSubscription(ctx context.Context, arg IsRedeemedPartnerSubscriptionParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isRedeemedPartnerSubscription, arg.OrganizationID, arg.StripeSubscriptionID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listBillingCycleUsage = `-- name: ListBillingCycleUsage :many
@@ -836,6 +923,40 @@ func (q *Queries) ListOpenRouterInferenceSpendByMonth(ctx context.Context, arg L
 	return items, nil
 }
 
+const listOrganizationPromotionRedemptions = `-- name: ListOrganizationPromotionRedemptions :many
+SELECT redeemed_at, created_at, updated_at, organization_id, stripe_promotion_code_id, stripe_subscription_id, id FROM organization_promotion_applications WHERE organization_id = $1
+  AND redeemed_at IS NOT NULL
+ORDER BY redeemed_at, id
+`
+
+func (q *Queries) ListOrganizationPromotionRedemptions(ctx context.Context, organizationID pgtype.Text) ([]OrganizationPromotionApplication, error) {
+	rows, err := q.db.Query(ctx, listOrganizationPromotionRedemptions, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationPromotionApplication
+	for rows.Next() {
+		var i OrganizationPromotionApplication
+		if err := rows.Scan(
+			&i.RedeemedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.OrganizationID,
+			&i.StripePromotionCodeID,
+			&i.StripeSubscriptionID,
+			&i.ID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStripeInvoicesFixture = `-- name: ListStripeInvoicesFixture :many
 SELECT stripe_invoice_id, organization_id, stripe_customer_id, stripe_subscription_id, service_period_start, service_period_end, invoice_state, finalized_at, created_at, updated_at
 FROM stripe_invoices
@@ -954,31 +1075,32 @@ WITH locked AS (
     , (
         stripe_checkout_idempotency_key IS NOT NULL
         AND stripe_checkout_billing_cycle_anchor IS NOT NULL
-        AND stripe_checkout_expires_at > $1::timestamptz
-        AND right(stripe_checkout_idempotency_key, length($2::text) + 1) = ':' || $2::text
+        AND stripe_checkout_idempotency_key IS DISTINCT FROM $1::text
+        AND stripe_checkout_expires_at > $2::timestamptz
+        AND right(stripe_checkout_idempotency_key, length($3::text) + 1) = ':' || $3::text
       ) AS reuse_existing_intent
   FROM billing_metadata
-  WHERE organization_id = $3::text
-    AND stripe_customer_id = $4::text
+  WHERE organization_id = $4::text
+    AND stripe_customer_id = $5::text
   FOR UPDATE
 ), prepared AS (
   UPDATE billing_metadata AS metadata
   SET
       stripe_checkout_idempotency_key = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_idempotency_key
-        ELSE $5::text
+        ELSE $6::text
       END
     , stripe_checkout_billing_cycle_anchor = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_billing_cycle_anchor
-        ELSE $6::timestamptz
+        ELSE $7::timestamptz
       END
     , stripe_checkout_trial_end = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_trial_end
-        ELSE $7::timestamptz
+        ELSE $8::timestamptz
       END
     , stripe_checkout_expires_at = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_expires_at
-        ELSE $8::timestamptz
+        ELSE $9::timestamptz
       END
     , stripe_checkout_session_id = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_session_id
@@ -992,17 +1114,17 @@ WITH locked AS (
   WHERE metadata.id = locked.id
     AND metadata.stripe_subscription_id IS NULL
     -- A known expired session rotates only after the caller verifies it. A
-    -- lifecycle-stale intent rotates only after the caller expires its remote
-    -- session and authorizes this exact old intent key.
+    -- obsolete intent rotates only after the caller expires its remote session
+    -- or Stripe rejects its trial end, and authorizes this exact old intent key.
     AND (
       locked.reuse_existing_intent
-      OR locked.stripe_checkout_session_id = $9::text
-      OR locked.stripe_checkout_idempotency_key = $10::text
+      OR locked.stripe_checkout_session_id = $10::text
+      OR locked.stripe_checkout_idempotency_key = $1::text
       OR (
         locked.stripe_checkout_session_id IS NULL
         AND (
           locked.stripe_checkout_idempotency_key IS NULL
-          OR locked.stripe_checkout_expires_at <= $1::timestamptz
+          OR locked.stripe_checkout_expires_at <= $2::timestamptz
         )
       )
     )
@@ -1029,6 +1151,7 @@ FROM prepared
 `
 
 type PrepareStripeCheckoutIntentParams struct {
+	ReplaceLifecycleIntentKey        pgtype.Text
 	PreparedAt                       pgtype.Timestamptz
 	TrialFingerprint                 string
 	OrganizationID                   string
@@ -1038,7 +1161,6 @@ type PrepareStripeCheckoutIntentParams struct {
 	StripeCheckoutTrialEnd           pgtype.Timestamptz
 	StripeCheckoutExpiresAt          pgtype.Timestamptz
 	ReplaceExpiredSessionID          pgtype.Text
-	ReplaceLifecycleIntentKey        pgtype.Text
 }
 
 type PrepareStripeCheckoutIntentRow struct {
@@ -1058,6 +1180,7 @@ type PrepareStripeCheckoutIntentRow struct {
 // intent may be replaced only while no subscription has been activated.
 func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareStripeCheckoutIntentParams) (PrepareStripeCheckoutIntentRow, error) {
 	row := q.db.QueryRow(ctx, prepareStripeCheckoutIntent,
+		arg.ReplaceLifecycleIntentKey,
 		arg.PreparedAt,
 		arg.TrialFingerprint,
 		arg.OrganizationID,
@@ -1067,7 +1190,6 @@ func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareSt
 		arg.StripeCheckoutTrialEnd,
 		arg.StripeCheckoutExpiresAt,
 		arg.ReplaceExpiredSessionID,
-		arg.ReplaceLifecycleIntentKey,
 	)
 	var i PrepareStripeCheckoutIntentRow
 	err := row.Scan(
@@ -1081,6 +1203,28 @@ func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareSt
 		&i.ReuseExistingIntent,
 	)
 	return i, err
+}
+
+const recordOrganizationPromotionRedemption = `-- name: RecordOrganizationPromotionRedemption :execrows
+UPDATE organization_promotion_applications
+SET redeemed_at = clock_timestamp(), stripe_subscription_id = $1, updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND stripe_promotion_code_id = $3
+  AND redeemed_at IS NULL
+`
+
+type RecordOrganizationPromotionRedemptionParams struct {
+	StripeSubscriptionID  pgtype.Text
+	OrganizationID        pgtype.Text
+	StripePromotionCodeID string
+}
+
+func (q *Queries) RecordOrganizationPromotionRedemption(ctx context.Context, arg RecordOrganizationPromotionRedemptionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordOrganizationPromotionRedemption, arg.StripeSubscriptionID, arg.OrganizationID, arg.StripePromotionCodeID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const recoverPaygOpenRouterChatKey = `-- name: RecoverPaygOpenRouterChatKey :execrows

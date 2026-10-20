@@ -42,12 +42,15 @@ type UpdateMetaMcpServerRequestBody struct {
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The allowed network surfaces. Omit to preserve the stored mode.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
-	// Custom server instructions replace Gram's built-in gateway instructions in
-	// MCP initialize and server/discover responses. Omit to leave them unchanged;
-	// send an empty string to restore Gram's built-in gateway instructions.
-	// Limited to 10000 Unicode characters after removing NUL characters and
-	// trimming whitespace.
+	// Custom server instructions replace Speakeasy's built-in gateway instructions
+	// in MCP initialize and server/discover responses. Omit to leave them
+	// unchanged; send an empty string to restore Speakeasy's built-in gateway
+	// instructions. Limited to 10000 Unicode characters after removing NUL
+	// characters and trimming whitespace.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// The default discovery mode for connections without an explicit override.
+	// Omit to preserve the stored default.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
 }
 
 // AddMetaMcpMemberRequestBody is the type of the "metaMcp" service
@@ -89,9 +92,12 @@ type CreateMetaMcpServerResponseBody struct {
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// Operator-authored server instructions returned in the gateway's MCP
-	// initialize response. Null when the gateway serves Gram's built-in
+	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// The effective default discovery mode. Unconfigured connections follow this
+	// value.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the meta MCP server was last updated
@@ -119,9 +125,12 @@ type GetMetaMcpServerResponseBody struct {
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// Operator-authored server instructions returned in the gateway's MCP
-	// initialize response. Null when the gateway serves Gram's built-in
+	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// The effective default discovery mode. Unconfigured connections follow this
+	// value.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the meta MCP server was last updated
@@ -155,9 +164,12 @@ type UpdateMetaMcpServerResponseBody struct {
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// Operator-authored server instructions returned in the gateway's MCP
-	// initialize response. Null when the gateway serves Gram's built-in
+	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// The effective default discovery mode. Unconfigured connections follow this
+	// value.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the meta MCP server was last updated
@@ -1895,9 +1907,12 @@ type MetaMcpServerResponseBody struct {
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// Operator-authored server instructions returned in the gateway's MCP
-	// initialize response. Null when the gateway serves Gram's built-in
+	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// The effective default discovery mode. Unconfigured connections follow this
+	// value.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the meta MCP server was last updated
@@ -1946,6 +1961,7 @@ func NewUpdateMetaMcpServerRequestBody(p *metamcp.UpdateMetaMcpServerPayload) *U
 		Name:                p.Name,
 		UserSessionIssuerID: p.UserSessionIssuerID,
 		Instructions:        p.Instructions,
+		DiscoveryMode:       p.DiscoveryMode,
 	}
 	if p.Visibility != nil {
 		visibility := string(*p.Visibility)
@@ -1991,6 +2007,7 @@ func NewCreateMetaMcpServerMetaMcpServerOK(body *CreateMetaMcpServerResponseBody
 		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
 		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
 		Instructions:        body.Instructions,
+		DiscoveryMode:       *body.DiscoveryMode,
 		CreatedAt:           *body.CreatedAt,
 		UpdatedAt:           *body.UpdatedAt,
 		MemberCount:         body.MemberCount,
@@ -2161,6 +2178,7 @@ func NewGetMetaMcpServerMetaMcpServerOK(body *GetMetaMcpServerResponseBody) *typ
 		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
 		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
 		Instructions:        body.Instructions,
+		DiscoveryMode:       *body.DiscoveryMode,
 		CreatedAt:           *body.CreatedAt,
 		UpdatedAt:           *body.UpdatedAt,
 		MemberCount:         body.MemberCount,
@@ -2497,6 +2515,7 @@ func NewUpdateMetaMcpServerMetaMcpServerOK(body *UpdateMetaMcpServerResponseBody
 		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
 		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
 		Instructions:        body.Instructions,
+		DiscoveryMode:       *body.DiscoveryMode,
 		CreatedAt:           *body.CreatedAt,
 		UpdatedAt:           *body.UpdatedAt,
 		MemberCount:         body.MemberCount,
@@ -3470,6 +3489,9 @@ func ValidateCreateMetaMcpServerResponseBody(body *CreateMetaMcpServerResponseBo
 	if body.NetworkAccessMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
 	}
+	if body.DiscoveryMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3493,6 +3515,11 @@ func ValidateCreateMetaMcpServerResponseBody(body *CreateMetaMcpServerResponseBo
 	if body.NetworkAccessMode != nil {
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
+		}
+	}
+	if body.DiscoveryMode != nil {
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3525,6 +3552,9 @@ func ValidateGetMetaMcpServerResponseBody(body *GetMetaMcpServerResponseBody) (e
 	if body.NetworkAccessMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
 	}
+	if body.DiscoveryMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3548,6 +3578,11 @@ func ValidateGetMetaMcpServerResponseBody(body *GetMetaMcpServerResponseBody) (e
 	if body.NetworkAccessMode != nil {
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
+		}
+	}
+	if body.DiscoveryMode != nil {
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3596,6 +3631,9 @@ func ValidateUpdateMetaMcpServerResponseBody(body *UpdateMetaMcpServerResponseBo
 	if body.NetworkAccessMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
 	}
+	if body.DiscoveryMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3619,6 +3657,11 @@ func ValidateUpdateMetaMcpServerResponseBody(body *UpdateMetaMcpServerResponseBo
 	if body.NetworkAccessMode != nil {
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
+		}
+	}
+	if body.DiscoveryMode != nil {
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -5869,6 +5912,9 @@ func ValidateMetaMcpServerResponseBody(body *MetaMcpServerResponseBody) (err err
 	if body.NetworkAccessMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
 	}
+	if body.DiscoveryMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5892,6 +5938,11 @@ func ValidateMetaMcpServerResponseBody(body *MetaMcpServerResponseBody) (err err
 	if body.NetworkAccessMode != nil {
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
+		}
+	}
+	if body.DiscoveryMode != nil {
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
 		}
 	}
 	if body.CreatedAt != nil {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +69,18 @@ func TestConsentPagePreview(t *testing.T) {
 		IssuerDisplay: "Slack",
 	}
 
+	chainedCard := func(check, message string) remoteSessionCard {
+		return remoteSessionCard{
+			ClientID:           "client-supabase",
+			IssuerSlug:         "supabase",
+			IssuerDisplay:      "Supabase",
+			Chained:            true,
+			ChainCheck:         check,
+			ChainMessage:       message,
+			AutoRefreshChecked: true,
+		}
+	}
+
 	withIsland := func(d consentTemplateData) consentTemplateData {
 		d.ShowToolsIsland = true
 		d.ConsentToolsURL = "/mcp/example/connect/mcp"
@@ -77,7 +90,7 @@ func TestConsentPagePreview(t *testing.T) {
 	withCards := func(d consentTemplateData, cards ...remoteSessionCard) consentTemplateData {
 		d.RemoteSessionCards = cards
 		for _, c := range cards {
-			if c.Connected {
+			if c.Connected || c.ChainCheck == chainCheckConnected {
 				d.ConnectedCardCount++
 			}
 		}
@@ -104,6 +117,11 @@ func TestConsentPagePreview(t *testing.T) {
 			return d
 		}()},
 		{"multi-service-mixed", withIsland(withCards(base, connectedCard, expiredCard, disconnectedCard))},
+		// The script settles a pending check in place; a static preview has no
+		// server to answer it, so the pending card reads neutral.
+		{"identity-chained-pending", withIsland(withCards(base, connectedCard, chainedCard(chainCheckPending, "")))},
+		{"identity-chained-connected", withIsland(withCards(base, connectedCard, chainedCard(chainCheckConnected, "")))},
+		{"identity-chained-rejected", withIsland(withCards(base, connectedCard, chainedCard(chainCheckRejected, "Supabase didn't accept your identity provider sign-in. Ask your administrator, or use a separate sign-in.")))},
 		{"loopback-warning", func() consentTemplateData {
 			d := withIsland(withCards(base, connectedCard))
 			d.ClientIDOrigin = "claude.ai"
@@ -124,7 +142,7 @@ func TestConsentPagePreview(t *testing.T) {
 		{"first-party-incomplete", func() consentTemplateData {
 			d := withCards(base, connectedCard, disconnectedCard)
 			d.FirstParty = true
-			d.ClientName = "Gram"
+			d.ClientName = "Speakeasy"
 			d.RedirectURI = ""
 			d.SessionDurationOptions = nil
 			return d
@@ -132,7 +150,7 @@ func TestConsentPagePreview(t *testing.T) {
 		{"first-party-auto-close", func() consentTemplateData {
 			d := withCards(base, connectedCard)
 			d.FirstParty = true
-			d.ClientName = "Gram"
+			d.ClientName = "Speakeasy"
 			d.RedirectURI = ""
 			d.SessionDurationOptions = nil
 			d.AutoClose = true
@@ -174,6 +192,9 @@ func TestConsentPagePreview(t *testing.T) {
 	// section hiding, button relabeling) rather than a static rendering.
 	require.NoError(t, os.WriteFile(filepath.Join(outDir, "consent-page.js"), consentScriptData, 0o600))
 
+	require.NoError(t, os.WriteFile(filepath.Join(outDir, "consent-tools.js"), consentToolsScriptData, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(outDir, strings.TrimPrefix(consentToolsScriptURL, "/")), consentToolsScriptData, 0o600))
+
 	var index strings.Builder
 	index.WriteString("<!doctype html><meta charset=\"utf-8\"><title>Consent page variants</title>")
 	index.WriteString("<style>body{font-family:system-ui;margin:3rem;line-height:2}</style><h1>Consent page variants</h1><ul>")
@@ -186,8 +207,13 @@ func TestConsentPagePreview(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(outDir, v.name+".html"), page.Bytes(), 0o600))
 		fmt.Fprintf(&index, `<li><a href="%s.html">%s</a></li>`, template.HTMLEscapeString(v.name), template.HTMLEscapeString(v.name))
 	}
-	index.WriteString("</ul>")
+	// The automatic check is a separate template, but belongs to this same
+	// catalogue so it receives the fonts and scripts above in a fresh directory.
+	reuse := httptest.NewRecorder()
+	require.NoError(t, renderConsentReuse(reuse, &ResolvedMcpEndpoint{RouteBase: "mcp", Slug: "example"}, AuthnChallengeState{ID: "preview-state", CSRFToken: "preview-csrf"}))
+	require.NoError(t, os.WriteFile(filepath.Join(outDir, "reuse.html"), reuse.Body.Bytes(), 0o600))
+	index.WriteString(`<li><a href="reuse.html">Checking sign-in status</a></li></ul>`)
 	require.NoError(t, os.WriteFile(filepath.Join(outDir, "index.html"), []byte(index.String()), 0o600))
 
-	t.Logf("wrote %d consent page variants to %s", len(variants), outDir)
+	t.Logf("wrote %d consent page variants to %s", len(variants)+1, outDir)
 }

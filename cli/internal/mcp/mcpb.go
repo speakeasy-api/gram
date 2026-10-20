@@ -63,9 +63,9 @@ func GenerateMCPBManifest(info *ToolsetInfo, useEnvVar bool) ([]byte, error) {
 		ManifestVersion: "0.3",
 		Name:            info.Name,
 		Version:         "1.0.0",
-		Description:     fmt.Sprintf("Gram MCP server for %s", info.Name),
+		Description:     fmt.Sprintf("MCP server for %s", info.Name),
 		Author: MCPBAuthor{
-			Name: "Gram",
+			Name: "Speakeasy",
 		},
 		Server: MCPBServer{
 			Type:       "node",

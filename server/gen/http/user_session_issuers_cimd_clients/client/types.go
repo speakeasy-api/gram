@@ -65,8 +65,8 @@ type VerifyURLResponseBody struct {
 	// the URL names the client they intended.
 	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
 	// The validated document rendered as JSON, set only when verified. Re-encoded
-	// from what Gram parsed rather than echoed from the wire, so it shows what the
-	// authorization server will act on.
+	// from what Speakeasy parsed rather than echoed from the wire, so it shows
+	// what the authorization server will act on.
 	Document *string `form:"document,omitempty" json:"document,omitempty" xml:"document,omitempty"`
 }
 
@@ -1260,7 +1260,7 @@ type CimdClientPresetResponseBody struct {
 	// widens the host.
 	IsPattern *bool `form:"is_pattern,omitempty" json:"is_pattern,omitempty" xml:"is_pattern,omitempty"`
 	// Whether presets-mode issuers currently admit this entry. Disabled entries
-	// are listed so operators can see that Gram knows about the vendor.
+	// are listed so operators can see that Speakeasy knows about the vendor.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 

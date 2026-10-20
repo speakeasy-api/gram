@@ -20,14 +20,32 @@ interface Series {
   unit: string;
   /** One point per bucket, null where the series had no row. */
   points: (number | null)[];
+  /**
+   * The fold of every series past the cap, summed per bucket, so a stack's
+   * height is the real total. Marked here rather than by label, so a
+   * dimension value that happens to be called "Other" is never mistaken for
+   * it.
+   */
+  other?: boolean;
 }
 
 export interface SeriesSet {
   /** Bucket starts, ISO 8601, ascending. */
   buckets: string[];
   series: Series[];
-  /** Series dropped past MAX_SERIES, smallest totals first. */
+  /**
+   * Series past MAX_SERIES, smallest totals first: dropped from the chart,
+   * or, when folded, summed into the trailing Other series.
+   */
   hidden: number;
+}
+
+/**
+ * The label of the series the fold is drawn as. It says how many series it
+ * holds, which also keeps it apart from a dimension value called "Other".
+ */
+export function otherLabel(count: number): string {
+  return `Other (${count} series)`;
 }
 
 /** A row's dimension values as one label; the empty tuple reads as "all". */
@@ -40,12 +58,17 @@ export function tupleLabel(row: ResultRow, dimensions: string[]): string {
  * Pivot bucketed rows into one series per (dimension tuple × measure). A
  * single measure names each series by its tuple; several measures name them
  * by measure, with the tuple appended when there is one.
+ *
+ * Past MAX_SERIES the smallest series are dropped, or, with `fold`, summed
+ * into one trailing Other series: a line chart stays true with lines left
+ * out, but a stack's height reads as the total, so a stack folds.
  */
 export function seriesFromRows(
   rows: ResultRow[],
   dimensions: string[],
   measures: MeasureDraft[],
   dataset: AnalyticsDataset | undefined,
+  fold = false,
 ): SeriesSet {
   const buckets = [
     ...new Set(rows.map((row) => textCell(row[TIME_BUCKET_COLUMN]))),
@@ -82,7 +105,7 @@ export function seriesFromRows(
     }
   }
 
-  const ranked = order
+  const ranked: Series[] = order
     .map((key) => ({
       label: labels.get(key) ?? "",
       unit: units.get(key) ?? "",
@@ -90,10 +113,45 @@ export function seriesFromRows(
     }))
     .sort((a, b) => total(b.points) - total(a.points));
 
+  if (!fold || ranked.length <= MAX_SERIES) {
+    return {
+      buckets,
+      series: ranked.slice(0, MAX_SERIES),
+      hidden: Math.max(0, ranked.length - MAX_SERIES),
+    };
+  }
+
+  // The named bands plus Other never exceed the cap, so a stack has no more
+  // bands than a line chart has lines.
+  const named = ranked.slice(0, MAX_SERIES - 1);
+  const rest = ranked.slice(MAX_SERIES - 1);
   return {
     buckets,
-    series: ranked.slice(0, MAX_SERIES),
-    hidden: Math.max(0, ranked.length - MAX_SERIES),
+    series: [...named, foldOf(rest, buckets.length)],
+    hidden: rest.length,
+  };
+}
+
+/**
+ * One series summing the given ones per bucket; a bucket none of them had a
+ * row for stays null, since nothing was there to add.
+ */
+function foldOf(folded: Series[], bucketCount: number): Series {
+  const points: (number | null)[] = [];
+  for (let at = 0; at < bucketCount; at++) {
+    let sum: number | null = null;
+    for (const one of folded) {
+      const point = one.points[at];
+      if (point === null || point === undefined) continue;
+      sum = (sum ?? 0) + point;
+    }
+    points.push(sum);
+  }
+  return {
+    label: otherLabel(folded.length),
+    unit: folded[0]?.unit ?? "",
+    points,
+    other: true,
   };
 }
 

@@ -10,28 +10,49 @@ import (
 )
 
 type DataExportRoute struct {
-	ID                uuid.UUID
-	OrganizationID    string
-	ProjectID         uuid.UUID
-	DataSource        string
-	Enabled           bool
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	DataSource string
+	// @access: confidential
+	Enabled bool
+	// @access: confidential
 	OtelDestinationID uuid.NullUUID
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	DeletedAt         pgtype.Timestamptz
-	Deleted           bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type OtelDestination struct {
-	ID               uuid.UUID
-	OrganizationID   string
-	ProjectID        uuid.UUID
-	Name             string
-	EndpointUrl      string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: restricted
+	EndpointUrl string
+	// @access: secret-restricted
 	HeadersEncrypted pgtype.Text
-	SensitiveData    pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
+	// @access: confidential
+	SensitiveData pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

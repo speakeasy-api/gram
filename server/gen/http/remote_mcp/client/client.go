@@ -41,6 +41,14 @@ type Client struct {
 	// requests to the discoverProtectedResourceMetadata endpoint.
 	DiscoverProtectedResourceMetadataDoer goahttp.Doer
 
+	// GetServerScopes Doer is the HTTP client used to make requests to the
+	// getServerScopes endpoint.
+	GetServerScopesDoer goahttp.Doer
+
+	// SetServerScopePin Doer is the HTTP client used to make requests to the
+	// setServerScopePin endpoint.
+	SetServerScopePinDoer goahttp.Doer
+
 	// ProbeURL Doer is the HTTP client used to make requests to the probeURL
 	// endpoint.
 	ProbeURLDoer goahttp.Doer
@@ -99,6 +107,8 @@ func NewClient(
 		GetServerDoer:                         doer,
 		UpdateServerDoer:                      doer,
 		DiscoverProtectedResourceMetadataDoer: doer,
+		GetServerScopesDoer:                   doer,
+		SetServerScopePinDoer:                 doer,
 		ProbeURLDoer:                          doer,
 		VerifyURLDoer:                         doer,
 		DeleteServerDoer:                      doer,
@@ -254,6 +264,54 @@ func (c *Client) DiscoverProtectedResourceMetadata() goa.Endpoint {
 		resp, err := c.DiscoverProtectedResourceMetadataDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteMcp", "discoverProtectedResourceMetadata", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetServerScopes returns an endpoint that makes HTTP requests to the
+// remoteMcp service getServerScopes server.
+func (c *Client) GetServerScopes() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetServerScopesRequest(c.encoder)
+		decodeResponse = DecodeGetServerScopesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetServerScopesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetServerScopesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteMcp", "getServerScopes", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetServerScopePin returns an endpoint that makes HTTP requests to the
+// remoteMcp service setServerScopePin server.
+func (c *Client) SetServerScopePin() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetServerScopePinRequest(c.encoder)
+		decodeResponse = DecodeSetServerScopePinResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetServerScopePinRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetServerScopePinDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteMcp", "setServerScopePin", err)
 		}
 		return decodeResponse(resp)
 	}

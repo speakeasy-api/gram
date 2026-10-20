@@ -1,3 +1,4 @@
+import type { DateRangePreset } from "@/elements";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import type { AnalyticsField } from "@gram/client/models/components/analyticsfield.js";
 import type { AnalyticsFilter } from "@gram/client/models/components/analyticsfilter.js";
@@ -10,8 +11,20 @@ import type { AnalyticsQueryResult } from "@gram/client/models/components/analyt
 // fields each has, what each field can be filtered or aggregated by. Nothing
 // here knows a dataset by name, so a new dataset ships with no client change.
 
-export type ChartType = "line" | "area" | "bar" | "ranked" | "table" | "number";
-export type WindowPreset = "1h" | "24h" | "7d" | "30d" | "90d";
+export type ChartType =
+  | "line"
+  | "area"
+  | "bar"
+  | "stacked_bar"
+  | "stacked_area"
+  | "ranked"
+  | "table"
+  | "number";
+/**
+ * A relative window: the dashboard's date-range presets, so a widget, the
+ * builder and the page around them speak one vocabulary.
+ */
+export type WindowPreset = DateRangePreset;
 export type Grain = NonNullable<AnalyticsQueryPayload["grain"]>;
 export type MeasureOp = AnalyticsMeasure["op"];
 export type FilterOperator = AnalyticsFilter["operator"];
@@ -23,6 +36,8 @@ export type ResultRow = AnalyticsQueryResult["rows"][number];
 export const MAX_DIMENSIONS = 3;
 export const DEFAULT_LIMIT = 100;
 export const MAX_LIMIT = 1000;
+// Rows at the dataset's grain are capped lower than a grouped result.
+export const MAX_ROWS_LIMIT = 200;
 
 // Result columns the server adds beside the requested ones: the bucket start
 // of a grouped, bucketed query and the event time of a row.
@@ -33,31 +48,75 @@ export const CHART_TYPE_OPTIONS: { value: ChartType; label: string }[] = [
   { value: "line", label: "Line" },
   { value: "area", label: "Area" },
   { value: "bar", label: "Bar" },
+  { value: "stacked_bar", label: "Stacked bar" },
+  { value: "stacked_area", label: "Stacked area" },
   { value: "ranked", label: "Ranked" },
   { value: "table", label: "Table" },
   { value: "number", label: "Number" },
 ];
 
-export const WINDOW_OPTIONS: { value: WindowPreset; label: string }[] = [
-  { value: "1h", label: "Last hour" },
-  { value: "24h", label: "Last 24 hours" },
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
-  { value: "90d", label: "Last 90 days" },
+/** The windows the builder offers, shortest first: every dashboard preset. */
+export const WINDOW_PRESETS: readonly WindowPreset[] = [
+  "15m",
+  "1h",
+  "4h",
+  "1d",
+  "2d",
+  "3d",
+  "7d",
+  "15d",
+  "30d",
+  "90d",
 ];
 
 // Queries run as you build, and the dataset is scanned across the whole
 // window however selective the filters are, so the window opens short and
 // widening it is the moment someone chooses to pay for more.
-const DEFAULT_WINDOW: WindowPreset = "24h";
+const DEFAULT_WINDOW: WindowPreset = "1d";
 
 const WINDOW_SECONDS: Record<WindowPreset, number> = {
+  "15m": 900,
   "1h": 3_600,
-  "24h": 86_400,
+  "4h": 14_400,
+  "1d": 86_400,
+  "2d": 172_800,
+  "3d": 259_200,
   "7d": 604_800,
+  "15d": 1_296_000,
   "30d": 2_592_000,
   "90d": 7_776_000,
 };
+
+// The builder's first spelling of a day, before it took the dashboard's
+// presets. Widgets and links saved with it still open, as "1d".
+const LEGACY_WINDOWS: Record<string, WindowPreset> = { "24h": "1d" };
+
+/**
+ * A stored or linked window in today's vocabulary, or null when it is not
+ * one: a preset as it is, or an older spelling of one.
+ */
+export function windowPreset(value: unknown): WindowPreset | null {
+  if (isWindowPreset(value)) return value;
+  if (typeof value === "string" && Object.hasOwn(LEGACY_WINDOWS, value)) {
+    return LEGACY_WINDOWS[value]!;
+  }
+  return null;
+}
+
+/**
+ * The longest of some stored or linked windows, in today's vocabulary, or
+ * undefined when none is one. WINDOW_PRESETS runs shortest first.
+ */
+export function longestWindow(
+  values: readonly unknown[],
+): WindowPreset | undefined {
+  let longest = -1;
+  for (const value of values) {
+    const window = windowPreset(value);
+    if (window) longest = Math.max(longest, WINDOW_PRESETS.indexOf(window));
+  }
+  return longest < 0 ? undefined : WINDOW_PRESETS[longest];
+}
 
 /** One VISUALIZE row: an aggregation and its target field ("" for count). */
 export interface MeasureDraft {
@@ -89,17 +148,39 @@ export interface ExploreSpec {
    */
   limit: number;
   window: WindowPreset;
+  /**
+   * An absolute range that replaces the window, set when a page asks a
+   * widget over its own time range or a chart is dragged across. A widget
+   * keeps a relative window, so a spec with a range cannot be saved as one.
+   */
+  range?: TimeRange | undefined;
   chartType: ChartType;
 }
 
-/** Resolve a relative window into a stable, hour-aligned [from, to) range. */
+/**
+ * An absolute [from, to) range, in Unix milliseconds, with the label the
+ * date picker gave it ("Last Tuesday"), if any.
+ */
+export interface TimeRange {
+  from: number;
+  to: number;
+  label?: string | undefined;
+}
+
+/**
+ * Resolve a relative window into a stable [from, to) range. It ends on the
+ * next hour, so a query's cache key holds within the hour; a window shorter
+ * than an hour ends on the next minute instead, or most of it would lie in
+ * the future.
+ */
 export function windowRange(
   window: WindowPreset,
   now: number = Date.now(),
 ): { from: Date; to: Date } {
-  const hourMs = 3_600_000;
-  const to = new Date(Math.ceil(now / hourMs) * hourMs);
-  const from = new Date(to.getTime() - WINDOW_SECONDS[window] * 1000);
+  const span = WINDOW_SECONDS[window] * 1000;
+  const step = span < 3_600_000 ? 60_000 : 3_600_000;
+  const to = new Date(Math.ceil(now / step) * step);
+  const from = new Date(to.getTime() - span);
   return { from, to };
 }
 
@@ -108,21 +189,76 @@ export function windowRange(
  * still yields a readable series. The catalog's finest grain is an hour.
  */
 export function autoGrain(window: WindowPreset): Grain {
-  switch (window) {
-    case "1h":
-    case "24h":
-      return "hour";
-    case "7d":
-    case "30d":
-      return "day";
-    case "90d":
-      return "week";
+  return grainForSpan(WINDOW_SECONDS[window] * 1000);
+}
+
+/**
+ * The bucket width for a span of time: hours up to three days, days up to
+ * thirty, weeks past that.
+ */
+function grainForSpan(ms: number): Grain {
+  if (ms <= WINDOW_SECONDS["3d"] * 1000) return "hour";
+  if (ms <= WINDOW_SECONDS["30d"] * 1000) return "day";
+  return "week";
+}
+
+/** The [from, to) a spec asks over: its range, or its window resolved. */
+export function specRange(
+  spec: Pick<ExploreSpec, "window" | "range">,
+  now: number = Date.now(),
+): { from: Date; to: Date } {
+  if (spec.range) {
+    return { from: new Date(spec.range.from), to: new Date(spec.range.to) };
   }
+  return windowRange(spec.window, now);
+}
+
+/** The bucket width a spec's timeseries is drawn at. */
+export function specGrain(spec: Pick<ExploreSpec, "window" | "range">): Grain {
+  return spec.range
+    ? grainForSpan(spec.range.to - spec.range.from)
+    : autoGrain(spec.window);
 }
 
 /** Whether the chart type renders a bucketed timeseries. */
 function isTimeseries(chartType: ChartType): boolean {
-  return chartType === "line" || chartType === "area" || chartType === "bar";
+  return (
+    chartType === "line" ||
+    chartType === "area" ||
+    chartType === "bar" ||
+    isStacked(chartType)
+  );
+}
+
+/**
+ * Whether the chart stacks its series. A line, bar or area answers "how did
+ * each series move"; a stack answers "what made up the total", so it needs a
+ * breakdown to stack by.
+ */
+export function isStacked(chartType: ChartType): boolean {
+  return chartType === "stacked_bar" || chartType === "stacked_area";
+}
+
+/**
+ * Whether a measure's values add up across the groups it is broken down
+ * by, so a stack of them is a total: a count or a sum is, an average or a
+ * percentile is not. The server holds the same rule.
+ */
+export function additiveOp(op: MeasureOp): boolean {
+  return op === "count" || op === "sum";
+}
+
+/**
+ * The chart a spec is drawn with and saved as, as the server will check it.
+ * Rows draw only as a table, and a stack with no breakdown is the bar or
+ * area it is, whatever the builder's controls were last left on.
+ */
+export function drawnChart(spec: ExploreSpec): ChartType {
+  if (isRowsMode(spec)) return "table";
+  if (isStacked(spec.chartType) && queryDimensions(spec).length === 0) {
+    return spec.chartType === "stacked_bar" ? "bar" : "area";
+  }
+  return spec.chartType;
 }
 
 export function findDataset(
@@ -146,11 +282,17 @@ export function dimensionFields(
   return (dataset?.fields ?? []).filter((field) => field.role === "dimension");
 }
 
-/** The dataset's numeric quantities. */
-function measureFields(
+/**
+ * Fields an aggregation can target: anything the catalog declares
+ * aggregations for. A measure declares sums and percentiles; a dimension
+ * declares count_distinct over its own values.
+ */
+function aggregatableFields(
   dataset: AnalyticsDataset | undefined,
 ): AnalyticsField[] {
-  return (dataset?.fields ?? []).filter((field) => field.role === "measure");
+  return (dataset?.fields ?? []).filter(
+    (field) => (field.aggregations ?? []).length > 0,
+  );
 }
 
 /** Fields a WHERE row can target: anything the catalog declares operators for. */
@@ -165,6 +307,7 @@ export function filterableFields(
 // The order aggregations are offered in, whichever fields declare them.
 const MEASURE_OP_ORDER: MeasureOp[] = [
   "count",
+  "count_distinct",
   "sum",
   "avg",
   "min",
@@ -180,13 +323,13 @@ export function isMeasureOp(value: unknown): value is MeasureOp {
 
 /**
  * The aggregations a dataset admits: count (every dataset), then every op
- * at least one measure field declares.
+ * at least one field declares.
  */
 export function opsForDataset(
   dataset: AnalyticsDataset | undefined,
 ): MeasureOp[] {
   const declared = new Set<string>();
-  for (const field of measureFields(dataset)) {
+  for (const field of aggregatableFields(dataset)) {
     for (const aggregation of field.aggregations ?? []) {
       declared.add(aggregation);
     }
@@ -194,13 +337,13 @@ export function opsForDataset(
   return MEASURE_OP_ORDER.filter((op) => op === "count" || declared.has(op));
 }
 
-/** The measure fields an aggregation can target; count targets none. */
+/** The fields an aggregation can target; count targets none. */
 export function fieldsForOp(
   dataset: AnalyticsDataset | undefined,
   op: MeasureOp,
 ): AnalyticsField[] {
   if (op === "count") return [];
-  return measureFields(dataset).filter((field) =>
+  return aggregatableFields(dataset).filter((field) =>
     (field.aggregations ?? []).includes(op),
   );
 }
@@ -216,8 +359,8 @@ export function isFilterOperator(value: unknown): value is FilterOperator {
   );
 }
 
-export function isWindowPreset(value: unknown): value is WindowPreset {
-  return WINDOW_OPTIONS.some((option) => option.value === value);
+function isWindowPreset(value: unknown): value is WindowPreset {
+  return WINDOW_PRESETS.some((preset) => preset === value);
 }
 
 export function isChartType(value: unknown): value is ChartType {
@@ -429,11 +572,14 @@ export function specProblem(
   return "";
 }
 
-/** Parse the LIMIT control's text into a spec limit (0 = server default). */
-export function parseLimit(raw: string): number {
+/**
+ * Parse the LIMIT control's text into a spec limit (0 = server default),
+ * capped at what the server allows for rows or for a grouped result.
+ */
+export function parseLimit(raw: string, rows = false): number {
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) return 0;
-  return Math.min(parsed, MAX_LIMIT);
+  return Math.min(parsed, rows ? MAX_ROWS_LIMIT : MAX_LIMIT);
 }
 
 /**
@@ -462,7 +608,7 @@ export function hasChartShape(spec: ExploreSpec): boolean {
  * the chart to a table.
  */
 export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
-  const { from, to } = windowRange(spec.window);
+  const { from, to } = specRange(spec);
   const measures = completeMeasures(spec.measures);
   const dimensions = queryDimensions(spec);
   const filters = completeFilters(spec.filters);
@@ -470,7 +616,8 @@ export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
 
   if (measures.length === 0) {
     // Rows at the dataset's grain, newest first; the dimensions are the
-    // projection rather than a grouping.
+    // projection rather than a grouping. A limit carried over from a grouped
+    // query is clamped to what rows allow.
     return {
       dataset: spec.dataset,
       from,
@@ -479,7 +626,7 @@ export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
       dimensions,
       filters,
       ungrouped: true,
-      limit,
+      limit: limit === undefined ? undefined : Math.min(limit, MAX_ROWS_LIMIT),
     };
   }
 
@@ -499,7 +646,7 @@ export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
     // Buckets multiply rows: a day of hourly buckets over ten users is 240
     // of them, so the cap is the server's maximum rather than the builder's
     // limit. Bucketed rows come back in time order, so no order is sent.
-    return { ...base, grain: autoGrain(spec.window), limit: MAX_LIMIT };
+    return { ...base, grain: specGrain(spec), limit: MAX_LIMIT };
   }
   const aliases = measures.map(measureAlias);
   return {

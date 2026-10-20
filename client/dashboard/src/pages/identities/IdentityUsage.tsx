@@ -1,3 +1,4 @@
+import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import {
   StatTile,
   StatTileGroup,
@@ -48,6 +49,7 @@ export default function IdentityUsage(): JSX.Element {
   const { from, to } = useIdentityWindow();
   const location = useLocation();
   const routes = useRoutes();
+  const canViewToolLogs = useCanViewToolLogs();
   const orgRoutes = useOrgRoutes();
   // No handoff on this page filters by principal, so the member list this
   // would otherwise fetch is not worth the request.
@@ -235,7 +237,7 @@ export default function IdentityUsage(): JSX.Element {
         <IdentityPanel
           title="Tools"
           handoffLabel="Tool Logs"
-          handoffHref={handoffs.toolLogs}
+          handoffHref={canViewToolLogs ? handoffs.toolLogs : undefined}
           loading={metricsQuery.isLoading}
           loadingVariant="block"
           error={metricsQuery.isError && tools.length === 0}

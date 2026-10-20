@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -61,13 +62,11 @@ type AnalyzeBatch struct {
 	promptPolicyPub        gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	llmPub                 gcp.Publisher[*riskv1.LLMAnalysis]
-	// llmAnalyzerEnabled reports whether the streams process has a fine-tuned
-	// risk model to evaluate LLM analysis requests (GRAM_RISK_LLM_URL set).
-	// Without it the flag alone must not divert covered sources away from the
-	// legacy engines: the consumer would ack every request with no findings.
+	toolCallPub            gcp.Publisher[*riskv1.ToolCallAnalysis]
+	accountIdentityPub     gcp.Publisher[*riskv1.AccountIdentityAnalysis]
+	// llmAnalyzerEnabled prevents diverting work to an unconfigured consumer.
 	llmAnalyzerEnabled     bool
 	llmFallbackOnce        sync.Once
-	findingsPub            gcp.Publisher[*riskv1.Finding]
 	riskRecorder           *metering.RiskRecorder
 	customRuleScanner      *customruleanalyzer.Scanner
 	cliDestructiveScanner  *clidestructive.Scanner
@@ -97,7 +96,8 @@ func NewAnalyzeBatch(
 	promptPolicyPub gcp.Publisher[*riskv1.PromptPolicyAnalysis],
 	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
 	llmPub gcp.Publisher[*riskv1.LLMAnalysis],
-	findingsPub gcp.Publisher[*riskv1.Finding],
+	toolCallPub gcp.Publisher[*riskv1.ToolCallAnalysis],
+	accountIdentityPub gcp.Publisher[*riskv1.AccountIdentityAnalysis],
 	customRuleScanner *customruleanalyzer.Scanner,
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
@@ -113,8 +113,11 @@ func NewAnalyzeBatch(
 	if promptInjectionScanner == nil {
 		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 	}
-	if findingsPub == nil {
-		findingsPub = gcp.NewNoopPublisher[*riskv1.Finding]()
+	if toolCallPub == nil {
+		return nil, errors.New("tool call analysis publisher is required")
+	}
+	if accountIdentityPub == nil {
+		return nil, errors.New("account identity analysis publisher is required")
 	}
 	recommended, err := CompileRecommended(celEng)
 	if err != nil {
@@ -149,7 +152,8 @@ func NewAnalyzeBatch(
 		promptPolicyPub:        promptPolicyPub,
 		customRulesPub:         customRulesPub,
 		llmPub:                 llmPub,
-		findingsPub:            findingsPub,
+		toolCallPub:            toolCallPub,
+		accountIdentityPub:     accountIdentityPub,
 		riskRecorder:           riskRecorder,
 		customRuleScanner:      customRuleScanner,
 		cliDestructiveScanner:  clidestructive.NewScanner(),
@@ -244,6 +248,10 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	args.ApprovedEmailDomains = ApprovedEmailDomainsFromConfig(policy.AnalyzerConfig)
 	args.BuiltinPresetsEnabled = BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig)
 	args.DetectionScopes = DetectionScopesFromConfig(policy.AnalyzerConfig)
+	judgeInHandlers := false
+	if policy.PolicyType == PolicyTypePromptBased || slices.Contains(args.Sources, SourcePromptInjection) {
+		judgeInHandlers = a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagRiskFindingsClickHouseCutover)
+	}
 
 	messages, err := a.fetchContent(ctx, args)
 	if err != nil {
@@ -292,12 +300,12 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 
 		switch policy.PolicyType {
 		case PolicyTypePromptBased:
-			findings, err = a.scanPromptPolicy(ctx, args, policy, messages, masks)
+			findings, err = a.scanPromptPolicy(ctx, args, policy, messages, masks, judgeInHandlers)
 			if err != nil {
 				return nil, err
 			}
 		default:
-			findings, err = a.scanStandardPolicy(ctx, args, messages, policy.CustomRuleIds, exclusions, masks)
+			findings, err = a.scanStandardPolicy(ctx, args, messages, policy.CustomRuleIds, exclusions, masks, judgeInHandlers)
 			if err != nil {
 				return nil, err
 			}
@@ -313,20 +321,8 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}
 
 	rowsToWrite, findingsCount := a.buildRows(ctx, args, ids, findings)
-	written, err := a.writeResults(ctx, args, rowsToWrite)
-	if err != nil {
+	if _, err := a.writeResults(ctx, args, rowsToWrite); err != nil {
 		return nil, err
-	}
-	// Mirror the stream scanners onto the shared findings topic for sources
-	// that have no stream publisher (ClickHouse would otherwise never see
-	// them). Only after a committed write: a batch dropped because its policy
-	// was deleted mid-analysis must not leak findings into ClickHouse that
-	// Postgres never stored. A publish failure fails the activity — the
-	// redriven batch repeats only idempotent writes, so the retry converges.
-	if written {
-		if err := a.publishBatchOnlyFindings(ctx, args, ids, findings); err != nil {
-			return nil, err
-		}
 	}
 
 	span.SetAttributes(
@@ -395,6 +391,7 @@ func mergeSessionFindings(ids []batchMessage, findings [][]scanners.Finding, ses
 				UserID:                 "",
 				CreatedAt:              time.Time{},
 				Source:                 "",
+				Truncated:              false,
 			})
 			findings = append(findings, kept)
 		}
@@ -435,11 +432,24 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 		}
 		messages = append(messages, newContentPartBatchMessages(rows, contents)...)
 	}
+	for _, msg := range messages {
+		if !msg.Truncated {
+			continue
+		}
+		a.logger.WarnContext(ctx, "risk analysis: truncated oversized batch input",
+			attr.SlogProjectID(args.ProjectID.String()),
+			attr.SlogMessageID(msg.ID.String()),
+		)
+		a.metrics.RecordBatchInputTruncation(ctx, args.OrganizationID, msg.ContentPart)
+	}
 	return messages, nil
 }
 
 const maxConcurrentContentPartAssetReads = 32
-const maxContentPartAssetReadSize = 20 * 1024 * 1024 // 20 MiB
+
+// contentPartAssetReadLimit reads one byte past the bound so bound can tell a
+// cut asset from one that fits exactly.
+const contentPartAssetReadLimit = batchScanMaxContentBytes + 1
 
 func (a *AnalyzeBatch) hydrateContentPartBatch(ctx context.Context, rows []repo.GetContentPartBatchRow) ([]string, error) {
 	contents := make([]string, len(rows))
@@ -462,7 +472,7 @@ func (a *AnalyzeBatch) hydrateContentPartBatch(ctx context.Context, rows []repo.
 }
 
 func (a *AnalyzeBatch) readContentPartAsset(ctx context.Context, contentPartID uuid.UUID, rawURL string) (string, error) {
-	content, err := blobio.ReadAllString(ctx, a.assetStorage, rawURL, maxContentPartAssetReadSize)
+	content, err := blobio.ReadAllString(ctx, a.assetStorage, rawURL, contentPartAssetReadLimit)
 	if err != nil {
 		return "", fmt.Errorf("read content part asset for %s: %w", contentPartID, err)
 	}

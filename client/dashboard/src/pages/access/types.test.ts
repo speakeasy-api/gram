@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  isProjectFilteredResourceType,
+  isProjectSelectableResourceType,
   isUnrestrictedResourceType,
   toRoleSlug,
   unrestrictedResourceLabel,
@@ -43,5 +45,36 @@ describe("unrestricted resource types", () => {
   it("treats agents as unrestricted", () => {
     expect(isUnrestrictedResourceType("agent")).toBe(true);
     expect(unrestrictedResourceLabel("agent")).toBe("All agents");
+  });
+});
+
+describe("isProjectSelectableResourceType", () => {
+  it.each(["project", "skill"] as const)(
+    "allows selecting projects for %s scopes",
+    (resourceType) => {
+      expect(isProjectSelectableResourceType(resourceType)).toBe(true);
+    },
+  );
+
+  it.each([
+    "org",
+    "mcp",
+    "environment",
+    "assistant",
+    "risk_policy",
+    "chat",
+  ] as const)(
+    "does not treat %s scopes as project resources",
+    (resourceType) => {
+      expect(isProjectSelectableResourceType(resourceType)).toBe(false);
+    },
+  );
+});
+
+describe("isProjectFilteredResourceType", () => {
+  it("narrows assistant grants to projects through projectId", () => {
+    expect(isProjectFilteredResourceType("assistant")).toBe(true);
+    expect(isProjectFilteredResourceType("skill")).toBe(false);
+    expect(isProjectFilteredResourceType("mcp")).toBe(false);
   });
 });

@@ -237,7 +237,7 @@ func (c *Client) ValidateIDToken(ctx context.Context, idToken string) (token *Va
 // Speakeasy-authenticated caller should run, in order:
 //
 //  1. UpsertUser — persist a Gram user row keyed on the Speakeasy user id.
-//     Required so we have a stable Gram user_id to put on URNs and audit logs.
+//     Required so we have a stable Speakeasy user_id to put on URNs and audit logs.
 //  2. Posthog "is_first_time_user_signup" event — only fires when the upsert
 //     creates a fresh row. No-ops if posthog is nil.
 //  3. WorkOS membership sync — reconciles the user's WorkOS identity and
@@ -358,7 +358,7 @@ func (c *Client) syncWorkOSMemberships(ctx context.Context, user userRepo.Upsert
 }
 
 // authHeaders sets the shared header pair every Speakeasy IDP call sends:
-// the shared-secret authenticating Gram + (optionally) the user's id token.
+// the shared-secret authenticating Speakeasy + (optionally) the user's id token.
 func (c *Client) authHeaders(req *http.Request, idToken string) {
 	req.Header.Set("speakeasy-auth-provider-key", c.secretKey)
 	if idToken != "" {

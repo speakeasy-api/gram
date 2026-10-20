@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // firstPartyConsent re-mints the fixture's consent challenge as a first-party
@@ -41,6 +43,28 @@ func firstPartyConsent(t *testing.T, ctx context.Context, fx consentActionFixtur
 	return fx
 }
 
+// markVerified records a valid verdict on the subject's grant, as a probe
+// would: a page waits on an unverified grant its server can check.
+func markVerified(t *testing.T, ctx context.Context, fx consentActionFixture, clientID uuid.UUID) {
+	t.Helper()
+	repo := remotesessions_repo.New(fx.ti.conn)
+	session, err := repo.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: fx.subject, RemoteSessionClientID: clientID})
+	require.NoError(t, err)
+	rows, err := repo.SetRemoteSessionValidation(ctx, remotesessions_repo.SetRemoteSessionValidationParams{
+		LastValidatedAt:       pgtype.Timestamptz{Time: time.Now(), Valid: true, InfinityModifier: pgtype.Finite},
+		ValidationStatus:      "valid",
+		ValidationReason:      pgtype.Text{String: "", Valid: false},
+		ID:                    session.ID,
+		SubjectUrn:            fx.subject,
+		RemoteSessionClientID: clientID,
+		ExpectedUpdatedAt:     session.UpdatedAt,
+		ProjectID:             fx.projectID,
+		OrganizationID:        fx.orgID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+}
+
 func expectFirstPartyAutoClose(t *testing.T, fx consentActionFixture) {
 	t.Helper()
 	code, html, _ := render(t, fx)
@@ -54,20 +78,22 @@ func expectFirstPartyAutoClose(t *testing.T, fx consentActionFixture) {
 
 func TestServeConsent_Unchanged_FirstPartyAutoClosesWhenGrantAlreadyCarriesOpenID(t *testing.T) {
 	t.Parallel()
-	ctx, fx, _, clientID, issuerID := metaConsent(t, "unchanged-fp-openid")
-	fx = firstPartyConsent(t, ctx, fx)
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "unchanged-fp-openid")
+	fx = focusClaimingMember(t, ctx, firstPartyConsent(t, ctx, fx), metaID, issuerID, "unchanged-fp-openid-member")
 
 	advertise(t, ctx, fx, issuerID, []string{"read", "openid"})
 	grantScoped(t, ctx, fx, clientID, []string{"read", "openid"})
+	markVerified(t, ctx, fx, clientID)
 	expectFirstPartyAutoClose(t, fx)
 }
 
 func TestServeConsent_Unchanged_FirstPartyAutoClosesWhenIssuerDoesNotAdvertiseOpenID(t *testing.T) {
 	t.Parallel()
-	ctx, fx, _, clientID, issuerID := metaConsent(t, "unchanged-fp-no-openid")
-	fx = firstPartyConsent(t, ctx, fx)
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "unchanged-fp-no-openid")
+	fx = focusClaimingMember(t, ctx, firstPartyConsent(t, ctx, fx), metaID, issuerID, "unchanged-fp-no-openid-member")
 
 	advertise(t, ctx, fx, issuerID, []string{"read"})
 	grantScoped(t, ctx, fx, clientID, []string{"read"})
+	markVerified(t, ctx, fx, clientID)
 	expectFirstPartyAutoClose(t, fx)
 }

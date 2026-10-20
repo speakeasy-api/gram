@@ -141,6 +141,30 @@ func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUse
 	return err
 }
 
+const attributePartnerSignup = `-- name: AttributePartnerSignup :execrows
+INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id)
+SELECT $1, $2
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_promotion_applications WHERE organization_id = $1
+)
+ON CONFLICT DO NOTHING
+`
+
+type AttributePartnerSignupParams struct {
+	OrganizationID        pgtype.Text
+	StripePromotionCodeID string
+}
+
+// Acceptance is immutable even after redemption. Call only during signup or a
+// verified first partner Checkout, under the billing/offer acceptance locks.
+func (q *Queries) AttributePartnerSignup(ctx context.Context, arg AttributePartnerSignupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, attributePartnerSignup, arg.OrganizationID, arg.StripePromotionCodeID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearOnboardingDefaultPlaybook = `-- name: ClearOnboardingDefaultPlaybook :exec
 UPDATE onboarding_playbooks
 SET is_default = false, updated_at = clock_timestamp()
@@ -322,10 +346,6 @@ INSERT INTO organization_metadata (
     $8::text
 )
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -387,9 +407,9 @@ type CreateOrganizationMetadataFromWorkOSWithRequestsRow struct {
 	DisabledAt         pgtype.Timestamptz
 }
 
-// Create a Gram organization row from a WorkOS organization event. The caller
-// chooses the Gram org ID from WorkOS external_id or a deterministic fallback.
-// Slug is a Gram-owned initial value and is never updated by WorkOS sync.
+// Create a Speakeasy organization row from a WorkOS organization event. The caller
+// chooses the Speakeasy org ID from WorkOS external_id or a deterministic fallback.
+// Slug is a Speakeasy-owned initial value and is never updated by WorkOS sync.
 func (q *Queries) CreateOrganizationMetadataFromWorkOSWithRequests(ctx context.Context, arg CreateOrganizationMetadataFromWorkOSWithRequestsParams) (CreateOrganizationMetadataFromWorkOSWithRequestsRow, error) {
 	row := q.db.QueryRow(ctx, createOrganizationMetadataFromWorkOSWithRequests,
 		arg.ID,
@@ -433,10 +453,6 @@ WITH written AS (
 INSERT INTO organization_metadata (id, name, slug, default_host)
 VALUES ($1, $2, $3, $4::text)
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, TRUE AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -691,7 +707,7 @@ type FilterOrganizationMemberUserIDsParams struct {
 	UserIds        []string
 }
 
-// Returns the subset of the given Gram user IDs that are active members of
+// Returns the subset of the given Speakeasy user IDs that are active members of
 // the organization. Used to mask Speakeasy staff identities in customer-facing
 // audit feeds.
 func (q *Queries) FilterOrganizationMemberUserIDs(ctx context.Context, arg FilterOrganizationMemberUserIDsParams) ([]string, error) {
@@ -712,6 +728,37 @@ func (q *Queries) FilterOrganizationMemberUserIDs(ctx context.Context, arg Filte
 		return nil, err
 	}
 	return items, nil
+}
+
+const getAcceptedSignupOfferFlow = `-- name: GetAcceptedSignupOfferFlow :one
+SELECT 'tailscale_partner_gateway'::text AS signup_flow
+FROM organization_promotion_applications
+WHERE organization_id = $1::text
+LIMIT 1
+`
+
+// All accepted applications originate in the partner gateway signup path.
+// Derive display context from that immutable acceptance, not mutable offer mappings.
+// Persist the accepted flow before introducing another signup flow or ledger writer.
+func (q *Queries) GetAcceptedSignupOfferFlow(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getAcceptedSignupOfferFlow, organizationID)
+	var signup_flow string
+	err := row.Scan(&signup_flow)
+	return signup_flow, err
+}
+
+const getEnabledSignupOffer = `-- name: GetEnabledSignupOffer :one
+SELECT id FROM signup_offers
+WHERE stripe_promotion_code_id = $1
+  AND signup_flow = 'tailscale_partner_gateway' AND enabled
+FOR SHARE
+`
+
+func (q *Queries) GetEnabledSignupOffer(ctx context.Context, stripePromotionCodeID string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getEnabledSignupOffer, stripePromotionCodeID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getInvitationByID = `-- name: GetInvitationByID :one
@@ -1092,6 +1139,28 @@ func (q *Queries) GetOrganizationOnboardingStack(ctx context.Context, organizati
 	return i, err
 }
 
+const getOrganizationPromotionApplication = `-- name: GetOrganizationPromotionApplication :one
+SELECT redeemed_at, created_at, updated_at, organization_id, stripe_promotion_code_id, stripe_subscription_id, id FROM organization_promotion_applications
+WHERE organization_id = $1::text
+ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetOrganizationPromotionApplication(ctx context.Context, organizationID string) (OrganizationPromotionApplication, error) {
+	row := q.db.QueryRow(ctx, getOrganizationPromotionApplication, organizationID)
+	var i OrganizationPromotionApplication
+	err := row.Scan(
+		&i.RedeemedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.StripePromotionCodeID,
+		&i.StripeSubscriptionID,
+		&i.ID,
+	)
+	return i, err
+}
+
 const getOrganizationRelationshipForUser = `-- name: GetOrganizationRelationshipForUser :one
 SELECT id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 FROM organization_user_relationships
@@ -1318,7 +1387,7 @@ type HasActiveOrganizationUserParams struct {
 	OrganizationID string
 }
 
-// Returns whether a Gram user is an active member of the organization.
+// Returns whether a Speakeasy user is an active member of the organization.
 func (q *Queries) HasActiveOrganizationUser(ctx context.Context, arg HasActiveOrganizationUserParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasActiveOrganizationUser, arg.UserID, arg.OrganizationID)
 	var exists bool
@@ -1572,7 +1641,7 @@ WHERE our.organization_id = $1
   AND u.deleted_at IS NULL
 `
 
-// Returns the Gram user IDs of active members of the organization. Used to
+// Returns the Speakeasy user IDs of active members of the organization. Used to
 // suppress challenges raised by users outside the organization (e.g. Speakeasy
 // staff impersonating a customer org) from the Challenge UI.
 func (q *Queries) ListActiveOrganizationUserIDs(ctx context.Context, organizationID string) ([]string, error) {
@@ -2588,7 +2657,7 @@ type ReassignOrganizationUserWorkOSIDParams struct {
 	UserID          pgtype.Text
 }
 
-// Login reuses a Gram user after WorkOS delete-and-signup, so membership
+// Login reuses a Speakeasy user after WorkOS delete-and-signup, so membership
 // rows still pointing at a previous WorkOS user id must follow the new one.
 // Matches any leftover id so a retry after overwrite still converges.
 func (q *Queries) ReassignOrganizationUserWorkOSID(ctx context.Context, arg ReassignOrganizationUserWorkOSIDParams) error {
@@ -3213,7 +3282,7 @@ upserted AS (
         $2
     FROM input_role_urns
     ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
-        -- COALESCE preserves a backfilled user_id if the sync fires before the Gram user exists.
+        -- COALESCE preserves a backfilled user_id if the sync fires before the Speakeasy user exists.
         user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
         workos_membership_id = EXCLUDED.workos_membership_id,
         workos_updated_at = EXCLUDED.workos_updated_at,
@@ -3243,7 +3312,7 @@ type SyncUserOrganizationRoleAssignmentsParams struct {
 	WorkosMembershipID pgtype.Text
 }
 
-// Declaratively set all WorkOS role assignments for a known Gram user in an
+// Declaratively set all WorkOS role assignments for a known Speakeasy user in an
 // org. Role slugs are resolved from role sync tables and stale assignments for
 // this WorkOS user are removed.
 func (q *Queries) SyncUserOrganizationRoleAssignments(ctx context.Context, arg SyncUserOrganizationRoleAssignmentsParams) error {
@@ -3394,8 +3463,8 @@ type UpdateOrganizationMetadataFromWorkOSParams struct {
 }
 
 // Update an existing organization row from a WorkOS organization event. Caller
-// must have already resolved the Gram organization and passed the row through
-// ShouldProcessEvent. WorkOS does not own Gram slugs, so this only updates
+// must have already resolved the Speakeasy organization and passed the row through
+// ShouldProcessEvent. WorkOS does not own Speakeasy slugs, so this only updates
 // WorkOS-owned metadata and cursor columns.
 func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg UpdateOrganizationMetadataFromWorkOSParams) (OrganizationMetadatum, error) {
 	row := q.db.QueryRow(ctx, updateOrganizationMetadataFromWorkOS,
@@ -3497,10 +3566,6 @@ ON CONFLICT (id) DO UPDATE SET
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -3561,9 +3626,9 @@ type UpsertOrganizationMetadataFromWorkOSWithRequestsRow struct {
 	DisabledAt         pgtype.Timestamptz
 }
 
-// Upsert a Gram organization row from a WorkOS organization event.
-// The caller must only use this when WorkOS external_id is set and is the Gram
-// org ID. Slug is a Gram-owned initial value chosen by the caller and is never
+// Upsert a Speakeasy organization row from a WorkOS organization event.
+// The caller must only use this when WorkOS external_id is set and is the Speakeasy
+// org ID. Slug is a Speakeasy-owned initial value chosen by the caller and is never
 // updated by WorkOS sync after creation.
 func (q *Queries) UpsertOrganizationMetadataFromWorkOSWithRequests(ctx context.Context, arg UpsertOrganizationMetadataFromWorkOSWithRequestsParams) (UpsertOrganizationMetadataFromWorkOSWithRequestsRow, error) {
 	row := q.db.QueryRow(ctx, upsertOrganizationMetadataFromWorkOSWithRequests,
@@ -3641,10 +3706,6 @@ ON CONFLICT (id) DO UPDATE SET
     -- URLs to another host.
     updated_at = clock_timestamp()
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,

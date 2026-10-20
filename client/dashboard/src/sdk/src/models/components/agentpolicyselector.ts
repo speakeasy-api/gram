@@ -34,6 +34,7 @@ export const AgentPolicySelectorResourceKind = {
   Org: "org",
   Environment: "environment",
   Skill: "skill",
+  Assistant: "assistant",
   RiskPolicy: "risk_policy",
   Chat: "chat",
   Agent: "agent",
@@ -55,7 +56,7 @@ export type AgentPolicySelector = {
    */
   disposition?: AgentPolicySelectorDisposition | undefined;
   /**
-   * Project filter (MCP scopes only).
+   * Project filter (MCP, environment, and assistant scopes).
    */
   projectId?: string | undefined;
   /**

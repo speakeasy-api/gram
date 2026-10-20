@@ -44,7 +44,7 @@ func TestIsAbsoluteHTTP(t *testing.T) {
 	require.False(t, urls.IsAbsoluteHTTPSOrLoopback("http://user:secret@127.0.0.1/introspect"))
 }
 
-// The loopback carve-out is a security boundary: it decides which URLs Gram
+// The loopback carve-out is a security boundary: it decides which URLs Speakeasy
 // will send a token to in plaintext, so the cases that must stay rejected
 // matter more than the ones that pass.
 func TestIsAbsoluteHTTPSOrLoopback(t *testing.T) {

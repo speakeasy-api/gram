@@ -28,8 +28,11 @@ const CARD_GAP_PX = 24;
 const GRID_MAX_WIDTH_PX = 1200;
 const GRID_INSET_PX = 96;
 
-type CardGeometry = {
-  transform: string;
+// Matches the ghost card's rounded-[14px], so a parked pane has the same corners.
+export const CARD_RADIUS_PX = 14;
+
+/** A card slot, in viewport coordinates. */
+export type CardGeometry = {
   left: number;
   top: number;
   width: number;
@@ -43,34 +46,90 @@ export type Grid = {
   scale: number;
 };
 
-/** Where each mode's card sits, and the transform from the live pane. */
+/**
+ * The on-screen part of a pane. The dashboard scrolls the document, so its pane
+ * is usually taller than the viewport and may be scrolled; only the part the
+ * user is looking at becomes the card. The sticky impersonation banner covers
+ * the top of the viewport once the document scrolls, so the slice starts below
+ * it.
+ */
+function visibleSlice(rect: DOMRect): { top: number; height: number } {
+  const banner = document.querySelector<HTMLElement>("[data-chrome-banner]");
+  const unobscuredTop = Math.max(
+    banner?.getBoundingClientRect().bottom ?? 0,
+    0,
+  );
+  const top = Math.max(rect.top, unobscuredTop);
+  const bottom = Math.min(rect.bottom, window.innerHeight);
+  return { top, height: Math.max(bottom - top, 0) };
+}
+
+/** Where each mode's card sits, sized from the live pane's on-screen slice. */
 export function computeGrid(): Grid {
   const surface = document.querySelector<HTMLElement>("[data-mode-surface]");
   const surfaceRect = surface?.getBoundingClientRect();
-  const paneTop = surfaceRect?.top ?? 0;
+  const slice = surfaceRect
+    ? visibleSlice(surfaceRect)
+    : { top: 0, height: window.innerHeight };
+  const paneLeft = surfaceRect?.left ?? 0;
   const paneWidth = surfaceRect?.width ?? window.innerWidth;
-  const paneHeight = surfaceRect?.height ?? window.innerHeight;
+  const paneHeight = slice.height;
   const available = Math.min(paneWidth - GRID_INSET_PX, GRID_MAX_WIDTH_PX);
   const cardWidth = (available - CARD_GAP_PX) / 2;
   const scale = cardWidth / paneWidth;
   const cardHeight = paneHeight * scale;
-  const originLeft = (paneWidth - (cardWidth * 2 + CARD_GAP_PX)) / 2;
-  const top = paneTop + (paneHeight - cardHeight) / 2;
+  const originLeft = paneLeft + (paneWidth - (cardWidth * 2 + CARD_GAP_PX)) / 2;
+  const top = slice.top + (paneHeight - cardHeight) / 2;
 
-  const cards = [0, 1].map((index) => {
-    const left = originLeft + index * (cardWidth + CARD_GAP_PX);
-    return {
-      left,
-      top,
-      width: cardWidth,
-      height: cardHeight,
-      // transform-origin is the pane's top-left corner, so the translate is the
-      // plain delta between the pane origin and the card origin.
-      transform: `translate(${left}px, ${top - paneTop}px) scale(${scale})`,
-    };
-  }) as [CardGeometry, CardGeometry];
+  const cards = [0, 1].map((index) => ({
+    left: originLeft + index * (cardWidth + CARD_GAP_PX),
+    top,
+    width: cardWidth,
+    height: cardHeight,
+  })) as [CardGeometry, CardGeometry];
 
   return { cards, paneWidth, paneHeight, scale };
+}
+
+export type Parking = {
+  transform: string;
+  /** Rounds its corners with --mode-card-radius, so they animate with it. */
+  clipPath: string;
+  /** Distance from the pane's top edge to the top of its on-screen slice. */
+  clipTop: number;
+  sliceHeight: number;
+  /**
+   * The corner radius, in the pane's own pixels, that reads as CARD_RADIUS_PX
+   * once the pane is scaled onto its card.
+   */
+  parkedRadius: number;
+};
+
+/**
+ * The transform that lands a pane's on-screen slice on its card, and the clip
+ * that hides the rest of the pane. Measured from the pane itself, so it must
+ * run while the pane is untransformed.
+ */
+export function parkOnCard(
+  surface: HTMLElement,
+  card: CardGeometry,
+  scale: number,
+): Parking {
+  const rect = surface.getBoundingClientRect();
+  const slice = visibleSlice(rect);
+  const clipTop = slice.top - rect.top;
+  const clipBottom = Math.max(rect.bottom - (slice.top + slice.height), 0);
+  // transform-origin is the pane's top-left corner, so a point `y` below the
+  // pane top lands at rect.top + translateY + y * scale.
+  const translateX = card.left - rect.left;
+  const translateY = card.top - rect.top - clipTop * scale;
+  return {
+    transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`,
+    clipPath: `inset(${clipTop}px 0 ${clipBottom}px 0 round var(--mode-card-radius))`,
+    clipTop,
+    sliceHeight: slice.height,
+    parkedRadius: CARD_RADIUS_PX / scale,
+  };
 }
 
 type Phase = "idle" | "shrinking" | "zooming";

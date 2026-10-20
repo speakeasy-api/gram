@@ -14,19 +14,19 @@ export type ListResourceAudienceSecurity = {
 /**
  * The kind of resource to describe.
  */
-export const ResourceKind = {
+export const QueryParamResourceKind = {
   Mcp: "mcp",
 } as const;
 /**
  * The kind of resource to describe.
  */
-export type ResourceKind = ClosedEnum<typeof ResourceKind>;
+export type QueryParamResourceKind = ClosedEnum<typeof QueryParamResourceKind>;
 
 export type ListResourceAudienceRequest = {
   /**
    * The kind of resource to describe.
    */
-  resourceKind: ResourceKind;
+  resourceKind: QueryParamResourceKind;
   /**
    * The resource to describe.
    */
@@ -75,8 +75,9 @@ export function listResourceAudienceSecurityToJSON(
 }
 
 /** @internal */
-export const ResourceKind$outboundSchema: z.ZodMiniEnum<typeof ResourceKind> = z
-  .enum(ResourceKind);
+export const QueryParamResourceKind$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamResourceKind
+> = z.enum(QueryParamResourceKind);
 
 /** @internal */
 export type ListResourceAudienceRequest$Outbound = {
@@ -92,7 +93,7 @@ export const ListResourceAudienceRequest$outboundSchema: z.ZodMiniType<
   ListResourceAudienceRequest
 > = z.pipe(
   z.object({
-    resourceKind: ResourceKind$outboundSchema,
+    resourceKind: QueryParamResourceKind$outboundSchema,
     resourceId: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),

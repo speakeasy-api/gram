@@ -12,7 +12,10 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { IdentityProviderConnectionChecklistItem } from "@gram/client/models/components/identityproviderconnectionchecklistitem.js";
 
 import { STEP_AFFORDANCES } from "./checklistAffordances";
-import { ConnectionChecklist } from "./ConnectionChecklist";
+import {
+  ChecklistOverridesProvider,
+  ConnectionChecklist,
+} from "./ConnectionChecklist";
 import type { ChecklistGroupId, LiveConnection } from "../../connectionView";
 import { makeChecklistItem, makeConnection } from "./testFixtures";
 
@@ -114,6 +117,37 @@ describe("ConnectionChecklist", () => {
     ).toBe("https://acme-admin.okta.com");
   });
 
+  it("renders the OIN steps with an API Service Integrations link and a secret field", () => {
+    renderChecklist(
+      makeConnection({
+        listingMode: "oin",
+        jwksUrl: undefined,
+        clientIdSubmitted: false,
+        checklist: [
+          item("add_oin_app", "connect"),
+          item("grant_scopes", "connect"),
+          item("assign_admin_roles", "connect"),
+          item("submit_client_id", "connect", false),
+          item("record_ai_agent", "cross_app_access"),
+        ],
+      }),
+    );
+    expect(screen.getByText("Step add_oin_app")).toBeTruthy();
+    expect(screen.queryByText("Step public_key_auth")).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: "Open API Service Integrations in Okta" })
+        .getAttribute("href"),
+    ).toBe("https://acme-admin.okta.com/admin/apps/api-service-integrations");
+    expect(screen.getByLabelText("Client secret")).toBeTruthy();
+    const scopes = screen.getByText("Step grant_scopes").closest("li")!;
+    const credentials = screen
+      .getByText("Step submit_client_id")
+      .closest("li")!;
+    expect(scopes.textContent).toContain("Not checked");
+    expect(credentials.textContent).toContain("Needs attention");
+  });
+
   it("expands the agent phase once verified and ticks observed steps", () => {
     renderChecklist(
       connectionWith("verified", [
@@ -207,7 +241,7 @@ describe("ConnectionChecklist", () => {
     ).toBeNull();
   });
 
-  it("links the first connection step to the server readiness table on the same tab", () => {
+  it("links the first connection step to the Server connections section on the same tab", () => {
     renderChecklist(
       connectionWith("verified", [
         ...pendingChecklist,
@@ -219,7 +253,7 @@ describe("ConnectionChecklist", () => {
       .closest("li")!;
     expect(
       within(step)
-        .getByRole("link", { name: "Review server readiness below" })
+        .getByRole("link", { name: "Go to Server connections" })
         .getAttribute("href"),
     ).toBe("#readiness");
   });
@@ -382,7 +416,9 @@ describe("ConnectionChecklist", () => {
   it("follows the active group until the admin toggles one", () => {
     const tree = (connection: LiveConnection) => (
       <MemoryRouter>
-        <ConnectionChecklist connection={connection} />
+        <TooltipProvider>
+          <ConnectionChecklist connection={connection} />
+        </TooltipProvider>
       </MemoryRouter>
     );
     const expandedGroups = () =>
@@ -402,5 +438,88 @@ describe("ConnectionChecklist", () => {
     );
     rerender(tree(connectionWith("degraded", pendingChecklist)));
     expect(expandedGroups()).toEqual(["Connect, 0 of 3 complete"]);
+  });
+
+  it("hides the description of a complete Cross App Access group", () => {
+    renderChecklist(
+      connectionWith("verified", [
+        item("record_ai_agent", "cross_app_access", true),
+      ]),
+      ["cross_app_access"],
+    );
+    expect(
+      screen
+        .getByRole("button", {
+          name: "Cross App Access setup, 1 of 1 complete",
+        })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+    expect(screen.queryByText(/Enterprise Managed Auth lets/)).toBeNull();
+  });
+
+  describe("under a shared overrides provider", () => {
+    const tree = (
+      connection: LiveConnection | null,
+      groups: ChecklistGroupId[] = ["cross_app_access"],
+    ) => (
+      <MemoryRouter>
+        <TooltipProvider>
+          <ChecklistOverridesProvider>
+            {connection && (
+              <ConnectionChecklist connection={connection} groups={groups} />
+            )}
+          </ChecklistOverridesProvider>
+        </TooltipProvider>
+      </MemoryRouter>
+    );
+    const expanded = (name: string) =>
+      screen.getByRole("button", { name }).getAttribute("aria-expanded");
+    const toggle = (name: string) =>
+      fireEvent.click(screen.getByRole("button", { name }));
+    const agentGroup = "Cross App Access setup, 0 of 1 complete";
+
+    it("keeps a collapsed group collapsed across a tab switch", () => {
+      const connection = connectionWith("verified", pendingChecklist);
+      const { rerender } = render(tree(connection));
+      expect(expanded(agentGroup)).toBe("true");
+      toggle(agentGroup);
+      rerender(tree(null));
+      rerender(tree(connection));
+      expect(expanded(agentGroup)).toBe("false");
+    });
+
+    it("does not carry a collapse over to another tab's checklist", () => {
+      const connection = connectionWith("verified", pendingChecklist);
+      const { rerender } = render(tree(connection));
+      toggle(agentGroup);
+      rerender(tree(connection, ["connect"]));
+      expect(expanded("Connect, 0 of 3 complete")).toBe("true");
+    });
+
+    it("drops a toggle once the default group changes", () => {
+      const agent = item("record_ai_agent", "cross_app_access");
+      const { rerender } = render(
+        tree(
+          connectionWith("verified", [
+            item("submit_client_id", "connect", true),
+            agent,
+          ]),
+          ["connect"],
+        ),
+      );
+      toggle("Connect, 1 of 1 complete");
+      toggle("Connect, 1 of 1 complete");
+      expect(expanded("Connect, 1 of 1 complete")).toBe("false");
+      rerender(
+        tree(
+          connectionWith("degraded", [
+            item("submit_client_id", "connect", false),
+            agent,
+          ]),
+          ["connect"],
+        ),
+      );
+      expect(expanded("Connect, 0 of 1 complete")).toBe("true");
+    });
   });
 });

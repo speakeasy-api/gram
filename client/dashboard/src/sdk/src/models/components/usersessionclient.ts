@@ -32,7 +32,7 @@ export type UserSessionClient = {
    */
   activeSessionCount: number;
   /**
-   * The client_id. Minted by Gram for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.
+   * The client_id. Minted by Speakeasy for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.
    */
   clientId: string;
   clientIdIssuedAt: Date;

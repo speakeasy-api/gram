@@ -7,7 +7,7 @@
   "private": true,
   "keywords": [
     "mcp",
-    "getgram.ai"
+    "speakeasy"
   ],
   "license": "ISC",
   "main": "dist/functions.js",
@@ -21,13 +21,13 @@
   "scripts": {
     "dev": "mcp-inspector node ./src/server.ts",
     "lint": "tsc --noEmit",
-    "push": "gf push",
+    "push": "speakeasy functions push",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build",
-    "build": "gf build"
+    "build": "speakeasy functions build"
   },
   "dependencies": {
-    "@gram-ai/functions": "^0.8.1",
+    "@speakeasy-api/functions": "^0.20.0",
     "@modelcontextprotocol/sdk": "^1.20.1",
     "ragie": "^1.13.1",
     "zod": "^4"

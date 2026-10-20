@@ -104,6 +104,8 @@ describe("AUDIT_ACTIONS", () => {
           "data_export_route:create",
           "data_export_route:update",
           "data_export_route:delete",
+          "data_export_route:pause",
+          "data_export_route:resume",
           "otel_destination:create",
           "otel_destination:update",
           "otel_destination:delete",
@@ -113,6 +115,8 @@ describe("AUDIT_ACTIONS", () => {
       "created data export route",
       "updated data export route",
       "deleted data export route",
+      "paused data export route",
+      "resumed data export route",
       "created OpenTelemetry destination",
       "updated OpenTelemetry destination",
       "deleted OpenTelemetry destination",
@@ -125,6 +129,8 @@ describe("AUDIT_ACTIONS", () => {
         [
           "identity-provider-connection:create",
           "identity-provider-connection:submit-client-id",
+          "identity-provider-connection:replace-client-secret",
+          "identity-provider-connection:set-setup-method",
           "identity-provider-connection:verify",
           "identity-provider-connection:record-agent",
           "identity-provider-connection:revoke",
@@ -133,10 +139,18 @@ describe("AUDIT_ACTIONS", () => {
     ).toEqual([
       "connected identity provider okta",
       "submitted client ID for identity provider okta",
+      "replaced client secret for identity provider okta",
+      "changed setup method for identity provider okta",
       "verified identity provider connection to okta",
       "recorded agent for identity provider okta",
       "revoked identity provider connection to okta",
     ]);
+  });
+
+  it("names the scope pin the way the dashboard does", () => {
+    expect(staticActionPhrase("mcp-server:update-scope-pin")).toBe(
+      "updated pinned scopes on MCP server",
+    );
   });
 
   it("rejects actions it doesn't know", () => {

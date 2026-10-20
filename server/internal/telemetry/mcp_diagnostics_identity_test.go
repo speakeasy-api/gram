@@ -12,13 +12,13 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type proxiedToolEventParams struct {
 	projectID   string
 	timestamp   time.Time
 	mcpServerID string
+	toolsetSlug string
 	toolName    string
 	userID      string
 	statusCode  int
@@ -27,7 +27,7 @@ type proxiedToolEventParams struct {
 // insertProxiedToolEvent inserts the row the remote MCP proxy records for one
 // tools/call it forwarded: an event_source of tool_call, the configured
 // server's id, a tools: URN, a status code, a duration, and a trace id. It
-// carries no toolset slug, which is what distinguishes it from a hosted call.
+// optionally carries a toolset slug to model hosted calls, including gateway members.
 func insertProxiedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, p proxiedToolEventParams) {
 	t.Helper()
 
@@ -38,6 +38,12 @@ func insertProxiedToolEvent(t *testing.T, ctx context.Context, ti *testInstance,
 		"http.response.status_code":    p.statusCode,
 		"http.server.request.duration": 0.4,
 		"user.id":                      p.userID,
+	}
+	if p.mcpServerID == "" {
+		delete(attrs, "gram.mcp_server.id")
+	}
+	if p.toolsetSlug != "" {
+		attrs["gram.toolset.slug"] = p.toolsetSlug
 	}
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)
@@ -82,8 +88,6 @@ func TestGetMCPOutcomeBreakdown_MatchesProxiedCallsByConfiguredServerID(t *testi
 	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-4 * time.Minute), mcpServerID: selected, toolName: "search", userID: "user-2", statusCode: 502})
 	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-3 * time.Minute), mcpServerID: other, toolName: "quote", userID: "user-3", statusCode: 200})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
 		MCPServerIDs:   []string{selected},
@@ -109,6 +113,59 @@ func TestGetMCPOutcomeBreakdown_MatchesProxiedCallsByConfiguredServerID(t *testi
 		telemetryRepo.MCPOutcomeSuccess:     2,
 		telemetryRepo.MCPOutcomeServerError: 1,
 	}, outcomeCounts(all))
+}
+
+// TestServerReads_LeaveToolsetRowsOfOtherServers pins that a hosted server's
+// toolset slug does not pull in calls stamped with another server on the same
+// toolset, such as a gateway member.
+func TestServerReads_LeaveToolsetRowsOfOtherServers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+	selected := uuid.New().String()
+	member := uuid.New().String()
+	slug := "hosted-" + uuid.NewString()[:8]
+
+	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-5 * time.Minute), toolsetSlug: slug, toolName: "search", userID: "user-1", statusCode: 200})
+	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-4 * time.Minute), mcpServerID: selected, toolsetSlug: slug, toolName: "search", userID: "user-2", statusCode: 502})
+	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-3 * time.Minute), mcpServerID: member, toolsetSlug: slug, toolName: "search", userID: "user-3", statusCode: 200})
+
+	start, end := now.Add(-time.Hour).UnixNano(), now.UnixNano()
+	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
+		GramProjectIDs: []string{projectID},
+		ToolsetSlugs:   []string{slug},
+		MCPServerIDs:   []string{selected},
+		TimeStart:      start,
+		TimeEnd:        end,
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]uint64{
+		telemetryRepo.MCPOutcomeSuccess:     1,
+		telemetryRepo.MCPOutcomeServerError: 1,
+	}, outcomeCounts(rows))
+
+	counts, err := ti.chClient.GetActiveCounts(ctx, telemetryRepo.GetActiveCountsParams{
+		GramProjectID: projectID,
+		TimeStart:     start,
+		TimeEnd:       end,
+		ToolsetSlug:   slug,
+		MCPServerID:   selected,
+	})
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), counts.ActiveUsersCount)
+
+	summary, err := ti.chClient.GetOverviewSummary(ctx, telemetryRepo.GetOverviewSummaryParams{
+		GramProjectID:       projectID,
+		TimeStart:           start,
+		TimeEnd:             end,
+		ToolsetSlug:         slug,
+		ToolsetSlugServerID: selected,
+	})
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), summary.TotalToolCalls)
 }
 
 // TestGetMCPOutcomeBreakdown_MatchesHookCallsByReportedServerName pins that a
@@ -146,8 +203,6 @@ func TestGetMCPOutcomeBreakdown_MatchesHookCallsByReportedServerName(t *testing.
 		projectID: projectID, deploymentID: deploymentID, timestamp: now.Add(-3 * time.Minute), traceID: uuid.New().String(),
 		hookSource: "claude-code", toolSource: "plugin_acme-tools_Shipping", toolName: "quote", result: `"ok"`,
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// ToolSources is the resolver's spelling set for the server: the configured
 	// casing "External Acme Chat" differs from the inserted row, which matches
@@ -211,8 +266,6 @@ func TestListMCPUsageUsers_ScopesByReportedServerName(t *testing.T) {
 		userEmail: "bob@example.com",
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	users, err := ti.chClient.ListMCPUsageUsers(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
 		// The configured casing differs from alice's row; the lower-cased
@@ -245,8 +298,6 @@ func TestGetActiveCounts_ScopesByConfiguredServerID(t *testing.T) {
 	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-3 * time.Minute), mcpServerID: selected, toolName: "search", userID: "user-2", statusCode: 200})
 	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-2 * time.Minute), mcpServerID: other, toolName: "quote", userID: "user-3", statusCode: 200})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	counts, err := ti.chClient.GetActiveCounts(ctx, telemetryRepo.GetActiveCountsParams{
 		GramProjectID: projectID,
 		TimeStart:     now.Add(-time.Hour).UnixNano(),
@@ -272,7 +323,6 @@ func TestGetTopServers_IncludesProxiedServers(t *testing.T) {
 		projectID: projectID, timestamp: now.Add(-time.Minute), mcpServerID: serverID,
 		toolName: "search", userID: "user-1", statusCode: 200,
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	servers, err := ti.chClient.GetTopServers(ctx, telemetryRepo.GetTopServersParams{
 		GramProjectID:     projectID,
@@ -339,8 +389,6 @@ func TestGetActiveCounts_CountsHookObservedUsers(t *testing.T) {
 		hookSource: "claude-code", toolSource: "plugin_acme-tools_Shipping", toolName: "quote", result: `"ok"`,
 		userEmail: "carol@example.com",
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	counts, err := ti.chClient.GetActiveCounts(ctx, telemetryRepo.GetActiveCountsParams{
 		GramProjectID:        projectID,

@@ -15,8 +15,11 @@ import (
 // BuildWidgetView renders a widget. invalidReason is what validation said is
 // wrong with it, if anything. A stored query or visualization that is not
 // even a JSON object is reported the same way rather than failing the whole
-// list.
-func BuildWidgetView(row widgetsrepo.Widget, invalidReason string) *gen.Widget {
+// list. dashboards are the ones it is placed on; nil renders as none.
+func BuildWidgetView(row widgetsrepo.Widget, invalidReason string, dashboards []*gen.WidgetDashboard) *gen.Widget {
+	if dashboards == nil {
+		dashboards = []*gen.WidgetDashboard{}
+	}
 	query, reason := decodeWidgetObject("query", row.Query)
 	if invalidReason == "" {
 		invalidReason = reason
@@ -37,6 +40,7 @@ func BuildWidgetView(row widgetsrepo.Widget, invalidReason string) *gen.Widget {
 		Query:           query,
 		Visualization:   visualization,
 		InvalidReason:   conv.PtrEmpty(invalidReason),
+		Dashboards:      dashboards,
 		CreatedAt:       conv.FromPGTimestamptz(row.CreatedAt),
 		UpdatedAt:       conv.FromPGTimestamptz(row.UpdatedAt),
 	}

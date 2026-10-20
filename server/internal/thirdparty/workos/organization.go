@@ -13,7 +13,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
 )
 
-// Organization represents a WorkOS organization with the fields used by Gram.
+// Organization represents a WorkOS organization with the fields used by Speakeasy.
 type Organization struct {
 	ID         string
 	Name       string
@@ -61,7 +61,7 @@ func (p *OrganizationDomainPolicy) VerifiedDomains() []string {
 	return verified
 }
 
-// NormalizeDomain returns the form of a domain name Gram stores. Domain names
+// NormalizeDomain returns the form of a domain name Speakeasy stores. Domain names
 // are case-insensitive and a trailing dot only marks a fully qualified name,
 // so they are stored trimmed, without one trailing dot, and in lower case.
 func NormalizeDomain(domain string) string {
@@ -104,7 +104,7 @@ func (wc *Client) GetOrganizationDomainPolicy(ctx context.Context, orgID string)
 }
 
 // CreateOrganization creates a WorkOS organization with the given name and
-// sets its external_id to the Gram org ID. Returns the WorkOS org ID.
+// sets its external_id to the Speakeasy org ID. Returns the WorkOS org ID.
 func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error) {
 	o, err := wc.orgs.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
 		Name:           name,

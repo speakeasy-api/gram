@@ -82,9 +82,18 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 		return nil, err
 	}
 
-	commit := s.identity.Prepare(req.plan(authCtx, target))
+	// Only an automatic registration names what the first login will request.
+	var registrationResource *ResourceScopes
+	if req.clientMode == serverIdentityClientModeAuto {
+		registrationResource = s.registrationResource(ctx, logger, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.ID)
+	}
+	plan := req.plan(authCtx, target, registrationResource)
+	commit := s.identity.Prepare(plan)
 	if err := commit.Preflight(ctx); err != nil {
 		return nil, identityOopsError(err, "check identity configuration").LogError(ctx, logger)
+	}
+	if plan.Provider.create != nil {
+		s.recordCreateDiscovery(ctx, logger, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, plan.Provider.create, time.Now())
 	}
 	reg, err := commit.Register(ctx)
 	if err != nil {
@@ -202,9 +211,30 @@ func (s *Service) checkServerIdentityRequest(ctx context.Context, logger *slog.L
 	return nil
 }
 
+// registrationResource reads the server's protected resource live, as the
+// first login through a scopeless client of it will, for registration to name
+// what that login requests. A server with no remote URL has none.
+func (s *Service) registrationResource(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, organizationID string, mcpServerID uuid.UUID) *ResourceScopes {
+	resourceURL, err := repo.New(s.db).GetRemoteURLForMcpServer(ctx, repo.GetRemoteURLForMcpServerParams{McpServerID: mcpServerID, ProjectID: projectID})
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			logger.WarnContext(ctx, "get remote url for registration scope", attr.SlogError(err))
+		}
+		return nil
+	}
+	resolved := s.resources.ResolveForLogin(ctx, logger, projectID, organizationID, resourceURL)
+	out := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resolved.ScopesSupported, Live: resolved.Live, UseDiscovered: true}
+	if resolved.Row != nil {
+		out.Pin = resolved.Row.ScopeOverride
+		out.ChallengeScopes = resolved.Row.ChallengeScopes
+	}
+	return &out
+}
+
 // plan describes the request as an identity plan: the server's current
-// clients are replaced by the requested one.
-func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target mcpserversrepo.McpServer) IdentityPlan {
+// clients are replaced by the requested one. registrationResource is what a
+// registered client without scopes will discover at login.
+func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target mcpserversrepo.McpServer, registrationResource *ResourceScopes) IdentityPlan {
 	provider := UseProvider(r.providerID)
 	if r.createProvider != nil {
 		provider = CreateProvider(createServerIdentityProviderParams(*authCtx.ProjectID, authCtx.ActiveOrganizationID, r.createProvider, r.logoAssetID))
@@ -228,6 +258,7 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 	default:
 		client = RegisterClient(RegistrationPolicy{
 			Scope:                   r.clientConfiguration.Scope,
+			RegistrationResource:    registrationResource,
 			Audience:                r.clientConfiguration.Audience,
 			TokenEndpointAuthMethod: r.clientConfiguration.TokenEndpointAuthMethod,
 			RequireClientSecret:     false,
@@ -481,6 +512,7 @@ func createServerIdentityProviderParams(projectID uuid.UUID, organizationID stri
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(form.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(form.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              scopeOverride(form.ScopeOverride),
+		OmitScopeFallback:                          conv.PtrToPGBool(form.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(form.ResourceIndicatorSupported),
 		Metadata:                                   nil,
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},

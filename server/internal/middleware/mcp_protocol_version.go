@@ -30,7 +30,7 @@ import (
 // non-conforming client actually sent is the diagnostic point. Non-MCP routes
 // are untouched.
 //
-// Gram is not the only reader: the remote MCP proxy forwards this header
+// Speakeasy is not the only reader: the remote MCP proxy forwards this header
 // upstream untouched, so nothing here may mutate it.
 func MCPProtocolVersionTelemetry(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -75,14 +75,8 @@ func isMCPJSONRPCEndpoint(path string) bool {
 		// /mcp/{mcpSlug} — the hosted toolset endpoint. A further slash means
 		// an OAuth or metadata sub-route, not the MCP endpoint itself.
 		// GET /mcp/remote_login_bind is the remote login browser hop. The consent
-		// page or the bind stop on another platform host navigates here. It is
-		// registered under /mcp/ only, so under /x/mcp/ the name is a slug.
+		// page or the bind stop on another platform host navigates here.
 		return isEndpointSlug(tail) && !isSlugSiblingRoute(tail) && tail != "remote_login_bind"
-	case "x":
-		// /x/mcp/{slug} — toolset-backed, remote-backed, and tunneled. Carries
-		// the same OAuth callback siblings as /mcp/ (internal/xmcp/service.go).
-		slug, ok := strings.CutPrefix(tail, "mcp/")
-		return ok && isEndpointSlug(slug) && !isSlugSiblingRoute(slug)
 	case "platform":
 		// /platform/mcp/{toolsetSlug}. Nothing static is registered beside it,
 		// so every one-segment tail here really is a slug.
@@ -95,7 +89,7 @@ func isMCPJSONRPCEndpoint(path string) bool {
 		// one-segment tail here is the endpoint itself.
 		return isEndpointSlug(tail)
 	case "platform-mcp":
-		// POST /platform-mcp is Gram's own platform MCP server
+		// POST /platform-mcp is Speakeasy's own platform MCP server
 		// (internal/platformmcp), served by the go-sdk's Streamable HTTP
 		// handler. It carries no slug — the bare path is the endpoint — and
 		// everything below it (/authorize, /token, /provider-setup) is OAuth or
@@ -115,7 +109,7 @@ func isEndpointSlug(seg string) bool {
 }
 
 // isSlugSiblingRoute reports whether seg names a static route registered
-// directly under /mcp/ or /x/mcp/ rather than an endpoint slug.
+// directly under /mcp/ rather than an endpoint slug.
 //
 // chi resolves a static pattern ahead of a parameterized one, so these paths
 // always reach their own handler and never the MCP endpoint handler. This
@@ -132,11 +126,11 @@ func isEndpointSlug(seg string) bool {
 // original predicate did to production.
 func isSlugSiblingRoute(seg string) bool {
 	switch seg {
-	// GET /mcp/idp_callback and GET /x/mcp/idp_callback: the upstream IdP
+	// GET /mcp/idp_callback: the upstream IdP
 	// redirects the browser here to complete an authorization code exchange.
 	case "idp_callback":
 		return true
-	// GET /mcp/remote_login_callback and GET /x/mcp/remote_login_callback: the
+	// GET /mcp/remote_login_callback: the
 	// same, for the remote-session login flow that writes remote_sessions.
 	case "remote_login_callback":
 		return true

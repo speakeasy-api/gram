@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
@@ -51,6 +52,7 @@ type serviceInstance struct {
 	provisioner  *identityproviderconnections.Provisioner
 	authCtx      *contextvalues.AuthContext
 	credentialID uuid.UUID
+	enc          *encryption.Client
 
 	// build constructs another service over the same fixtures with a
 	// different provisioner (nil models an unconfigured deployment).
@@ -176,6 +178,11 @@ func newTestServiceWithFlags(t *testing.T, features feature.Provider) (context.C
 
 func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxConns int32) (context.Context, *serviceInstance) {
 	t.Helper()
+	return newTestServiceWithClientFactory(t, features, maxConns, nil)
+}
+
+func newTestServiceWithClientFactory(t *testing.T, features feature.Provider, maxConns int32, wrap func(okta.ClientFactory) okta.ClientFactory) (context.Context, *serviceInstance) {
+	t.Helper()
 
 	ctx, ti := newTestDB(t)
 	if maxConns > 0 {
@@ -216,7 +223,13 @@ func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxCon
 	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 	discovery := newFakeDiscovery()
 	fakes := okta.NewFakeFactory(oktaFixtures())
+	var clients okta.ClientFactory = fakes
+	if wrap != nil {
+		clients = wrap(clients)
+	}
 	syncTrigger := &fakeSyncTrigger{}
+	enc, err := encryption.NewWithBytes(make([]byte, 32))
+	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	build := func(provisioner *identityproviderconnections.Provisioner) *identityproviderconnections.Service {
@@ -230,7 +243,8 @@ func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxCon
 			audit.NewLogger(),
 			features,
 			provisioner,
-			fakes,
+			clients,
+			enc,
 			discovery.discover,
 			ratelimit.NewRedisStore(redisClient),
 			syncTrigger,
@@ -250,6 +264,7 @@ func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxCon
 		provisioner:  provisioner,
 		authCtx:      authCtx,
 		credentialID: credentialID,
+		enc:          enc,
 		build:        build,
 	}
 }
@@ -299,7 +314,7 @@ func createConnection(t *testing.T, ctx context.Context, si *serviceInstance, or
 func submitClientID(t *testing.T, ctx context.Context, si *serviceInstance, id string) *gen.OktaIdentityProviderConnection {
 	t.Helper()
 
-	submitted, err := si.svc.SubmitClientID(ctx, &gen.SubmitClientIDPayload{SessionToken: nil, ID: id, ClientID: testClientID})
+	submitted, err := si.svc.SubmitClientID(ctx, &gen.SubmitClientIDPayload{SessionToken: nil, ID: id, ClientID: testClientID, ClientSecret: nil})
 	require.NoError(t, err)
 	require.NotNil(t, submitted)
 	return submitted

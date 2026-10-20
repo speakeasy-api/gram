@@ -1,9 +1,15 @@
 -- name: GetEnabledServerCount :one
+-- Hosted servers count via their canonical wrapper; unwrapped enabled toolsets by flag.
 SELECT COUNT(*)
-FROM toolsets
-WHERE organization_id = @organization_id
-  AND mcp_enabled IS TRUE
-  AND deleted IS FALSE;
+FROM toolsets t
+LEFT JOIN mcp_servers w
+  ON w.id = t.id
+ AND w.toolset_id = t.id
+ AND w.project_id = t.project_id
+ AND w.deleted IS FALSE
+WHERE t.organization_id = @organization_id
+  AND t.deleted IS FALSE
+  AND CASE WHEN w.id IS NULL THEN t.mcp_enabled ELSE w.visibility <> 'disabled' END;
 
 -- name: GetBillingMetadata :one
 SELECT *
@@ -176,6 +182,7 @@ WITH locked AS (
     , (
         stripe_checkout_idempotency_key IS NOT NULL
         AND stripe_checkout_billing_cycle_anchor IS NOT NULL
+        AND stripe_checkout_idempotency_key IS DISTINCT FROM sqlc.narg(replace_lifecycle_intent_key)::text
         AND stripe_checkout_expires_at > sqlc.arg(prepared_at)::timestamptz
         AND right(stripe_checkout_idempotency_key, length(sqlc.arg(trial_fingerprint)::text) + 1) = ':' || sqlc.arg(trial_fingerprint)::text
       ) AS reuse_existing_intent
@@ -214,8 +221,8 @@ WITH locked AS (
   WHERE metadata.id = locked.id
     AND metadata.stripe_subscription_id IS NULL
     -- A known expired session rotates only after the caller verifies it. A
-    -- lifecycle-stale intent rotates only after the caller expires its remote
-    -- session and authorizes this exact old intent key.
+    -- obsolete intent rotates only after the caller expires its remote session
+    -- or Stripe rejects its trial end, and authorizes this exact old intent key.
     AND (
       locked.reuse_existing_intent
       OR locked.stripe_checkout_session_id = sqlc.narg(replace_expired_session_id)::text
@@ -349,6 +356,8 @@ SELECT
     billing_metadata.id AS billing_metadata_id
   , billing_metadata.stripe_customer_id
   , billing_metadata.stripe_subscription_id
+  , billing_metadata.stripe_checkout_session_id
+  , billing_metadata.stripe_checkout_idempotency_key
   , billing_metadata.stripe_billing_cycle_anchor
   , billing_metadata.billing_cycle_anchor_day
   , organization_metadata.name AS organization_name
@@ -393,11 +402,17 @@ WHERE id = @organization_id;
 -- name: DeactivatePaygBillingMetadata :execrows
 UPDATE billing_metadata
 SET stripe_subscription_id = NULL,
-    stripe_billing_cycle_anchor = NULL,
+    -- The original partner anchor remains accounting provenance after cancellation.
+    stripe_billing_cycle_anchor = CASE WHEN EXISTS (
+      SELECT 1 FROM organization_promotion_applications application
+      WHERE application.organization_id = billing_metadata.organization_id
+        AND application.stripe_subscription_id = billing_metadata.stripe_subscription_id
+        AND application.redeemed_at IS NOT NULL
+    ) THEN stripe_billing_cycle_anchor ELSE NULL END,
     updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND stripe_customer_id = @stripe_customer_id
-  AND stripe_subscription_id = @stripe_subscription_id;
+WHERE billing_metadata.organization_id = @organization_id
+  AND billing_metadata.stripe_customer_id = @stripe_customer_id
+  AND billing_metadata.stripe_subscription_id = @stripe_subscription_id;
 
 -- name: DeactivatePaygOrganization :execrows
 UPDATE organization_metadata
@@ -602,3 +617,37 @@ WHERE organization_id = @organization_id
 UPDATE openrouter_api_keys
 SET created_at = @created_at
 WHERE organization_id = @organization_id;
+
+-- name: HasRedeemedSelectedPromotion :one
+SELECT COALESCE((
+  SELECT redeemed_at IS NOT NULL FROM organization_promotion_applications
+  WHERE organization_id = @organization_id::text
+  ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+  LIMIT 1
+), false)::boolean AS redeemed;
+
+-- name: RecordOrganizationPromotionRedemption :execrows
+UPDATE organization_promotion_applications
+SET redeemed_at = clock_timestamp(), stripe_subscription_id = sqlc.narg(stripe_subscription_id), updated_at = clock_timestamp()
+WHERE organization_id = sqlc.narg(organization_id)
+  AND stripe_promotion_code_id = @stripe_promotion_code_id
+  AND redeemed_at IS NULL;
+
+-- name: ListOrganizationPromotionRedemptions :many
+SELECT * FROM organization_promotion_applications WHERE organization_id = sqlc.narg(organization_id)
+  AND redeemed_at IS NOT NULL
+ORDER BY redeemed_at, id;
+
+-- name: InsertOrganizationPromotionApplicationFixture :exec
+INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id, stripe_subscription_id, redeemed_at)
+VALUES (sqlc.narg(organization_id), @stripe_promotion_code_id, sqlc.narg(stripe_subscription_id), sqlc.narg(redeemed_at));
+
+-- name: HasActivatedPaygSubscription :one
+-- Completion receipts also record ignored terminal failures. Activation's audit
+-- is committed atomically with PAYG activation and survives cancellation.
+SELECT EXISTS (SELECT 1 FROM audit_logs WHERE organization_id = @organization_id AND action = 'organization:payg_activated');
+
+-- name: IsRedeemedPartnerSubscription :one
+SELECT EXISTS (SELECT 1 FROM organization_promotion_applications
+WHERE organization_id = @organization_id AND stripe_subscription_id = @stripe_subscription_id
+AND redeemed_at IS NOT NULL);

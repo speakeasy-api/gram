@@ -27,7 +27,7 @@ type PublicationPackageAddress struct {
 }
 
 // ResolvePublicationEvidence returns freshness and selected package addresses
-// for exact plugin slugs in a project. It only reads Gram's current package
+// for exact plugin slugs in a project. It only reads Speakeasy's current package
 // inputs and stored publication fingerprints. It does not contact GitHub, expose
 // the marketplace bearer URL, or mint credentials.
 func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID string, projectID uuid.UUID, pluginSlugs []string) ([]PublicationEvidence, error) {
@@ -82,7 +82,7 @@ func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID
 	if err != nil {
 		return nil, fmt.Errorf("read observability plugin setting: %w", err)
 	}
-	cfg := s.generateConfig(ctx, project.ID, project.Slug, project.ProjectSlug, projectID)
+	cfg := s.generateConfig(ctx, project.ID, project.Slug, project.ProjectSlug, projectID, conn.PublishedHooksConfig)
 	fingerprints, err := MCPFingerprints(allInfos, cfg, observabilityEnabled)
 	if err != nil {
 		return nil, fmt.Errorf("compute publication fingerprints: %w", err)

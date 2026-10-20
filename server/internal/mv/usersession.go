@@ -130,7 +130,7 @@ func buildWorkloadView(subject urn.SessionSubject, workloads map[WorkloadKey]*ty
 }
 
 // UpstreamKey identifies the (subject, issuer) pair that joins a user_session
-// to the remote_sessions Gram holds on that subject's behalf. Both tables carry
+// to the remote_sessions Speakeasy holds on that subject's behalf. Both tables carry
 // the pair for direct grants; agent grants resolve through a live attachment
 // and retain the requesting agent subject in this key.
 type UpstreamKey struct {
@@ -226,7 +226,7 @@ func BuildUserSessionView(row repo.ListUserSessionsByProjectIDRow, upstreams []*
 		RevokedAt:       revokedAt,
 		LastUsedAt:      conv.PtrEmpty(conv.FromPGTimestamptz(row.LastUsedAt)),
 		// Never nil: the field is required, and a session with no upstream is a
-		// meaningful state (it reaches only Gram-native tools) that the client
+		// meaningful state (it reaches only Speakeasy-native tools) that the client
 		// renders differently from an absent one.
 		Upstreams: upstreams,
 		Workload:  workload,

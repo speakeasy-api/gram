@@ -141,7 +141,7 @@ func (x LogRecord_SeverityNumber) Number() protoreflect.EnumNumber {
 // every field OTLP defines keeps OTLP's exact field number and scalar type, so
 // these bytes unmarshal directly into an OTLP LogRecord and vice versa. That is
 // why the numbering below is not sequential — it is OTLP's numbering, not ours,
-// and it must not be renumbered. Everything Gram adds lives at 1000+, where an
+// and it must not be renumbered. Everything Speakeasy adds lives at 1000+, where an
 // OTLP parser skips it as unknown fields.
 //
 // This message is the high-resolution record of what was observed. Storage
@@ -731,7 +731,7 @@ func (b0 LogRecord_builder) Build() *LogRecord {
 
 // Provenance is where a record came from: which component emitted it and
 // which tenant it belongs to. Its presence answers whether a record passed
-// through the Gram ingest edge at all — one relayed straight from an OTLP
+// through the Speakeasy ingest edge at all — one relayed straight from an OTLP
 // producer has none.
 //
 // Retention, data classification and anything else policy-derived does not

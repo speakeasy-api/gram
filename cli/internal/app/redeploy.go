@@ -21,7 +21,7 @@ func newRedeployCommand() *cli.Command {
 		Description: `
 Redeploy an existing deployment by cloning it with the same assets.
 
-If no deployment ID is provided, redeploys the latest deployment.`,
+If no deployment ID is provided, redeploys the latest deployment.`[1:],
 		Flags: []cli.Flag{
 			flags.APIEndpoint(),
 			flags.APIKey(),

@@ -7,7 +7,21 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+ */
+export const UpdateMetaMcpServerFormDiscoveryMode = {
+  Progressive: "progressive",
+  Direct: "direct",
+} as const;
+/**
+ * The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+ */
+export type UpdateMetaMcpServerFormDiscoveryMode = ClosedEnum<
+  typeof UpdateMetaMcpServerFormDiscoveryMode
+>;
+
+/**
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export const UpdateMetaMcpServerFormNetworkAccessMode = {
   PublicOnly: "public_only",
@@ -15,7 +29,7 @@ export const UpdateMetaMcpServerFormNetworkAccessMode = {
   PrivateOnly: "private_only",
 } as const;
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export type UpdateMetaMcpServerFormNetworkAccessMode = ClosedEnum<
   typeof UpdateMetaMcpServerFormNetworkAccessMode
@@ -40,11 +54,15 @@ export type UpdateMetaMcpServerFormVisibility = ClosedEnum<
  */
 export type UpdateMetaMcpServerForm = {
   /**
+   * The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+   */
+  discoveryMode?: UpdateMetaMcpServerFormDiscoveryMode | undefined;
+  /**
    * The ID of the meta MCP server to update
    */
   id: string;
   /**
-   * Custom server instructions replace Gram's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
+   * Custom server instructions replace Speakeasy's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Speakeasy's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
    */
   instructions?: string | undefined;
   /**
@@ -52,7 +70,7 @@ export type UpdateMetaMcpServerForm = {
    */
   name: string;
   /**
-   * The network surfaces through which a Gram-hosted MCP server may be reached.
+   * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
    */
   networkAccessMode?: UpdateMetaMcpServerFormNetworkAccessMode | undefined;
   /**
@@ -64,6 +82,11 @@ export type UpdateMetaMcpServerForm = {
    */
   visibility?: UpdateMetaMcpServerFormVisibility | undefined;
 };
+
+/** @internal */
+export const UpdateMetaMcpServerFormDiscoveryMode$outboundSchema: z.ZodMiniEnum<
+  typeof UpdateMetaMcpServerFormDiscoveryMode
+> = z.enum(UpdateMetaMcpServerFormDiscoveryMode);
 
 /** @internal */
 export const UpdateMetaMcpServerFormNetworkAccessMode$outboundSchema:
@@ -78,6 +101,7 @@ export const UpdateMetaMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 
 /** @internal */
 export type UpdateMetaMcpServerForm$Outbound = {
+  discovery_mode?: string | undefined;
   id: string;
   instructions?: string | undefined;
   name: string;
@@ -92,6 +116,9 @@ export const UpdateMetaMcpServerForm$outboundSchema: z.ZodMiniType<
   UpdateMetaMcpServerForm
 > = z.pipe(
   z.object({
+    discoveryMode: z.optional(
+      UpdateMetaMcpServerFormDiscoveryMode$outboundSchema,
+    ),
     id: z.string(),
     instructions: z.optional(z.string()),
     name: z.string(),
@@ -103,6 +130,7 @@ export const UpdateMetaMcpServerForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      discoveryMode: "discovery_mode",
       networkAccessMode: "network_access_mode",
       userSessionIssuerId: "user_session_issuer_id",
     });

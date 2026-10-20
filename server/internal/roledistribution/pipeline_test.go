@@ -138,16 +138,15 @@ func TestRoleDistributionPipeline_SourceRollback(t *testing.T) {
 	require.Zero(t, count)
 }
 
-func TestRoleDistributionPipeline_Disabled(t *testing.T) {
+func TestRoleDistributionPipeline_WithoutFeatureFlag(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	f := newPipelineFixture(t)
 	fixtures := testrepo.New(f.db)
-	require.NoError(t, fixtures.SourceDisableRoleDistributionSetup(ctx, f.event.GetOrganizationId()))
 	require.NoError(t, f.handler.HandleRoleDistributionSetupRequested(ctx, f.event, gcp.MessageMetadata{ID: "pipeline-message"}))
 	count, err := fixtures.PipelineCountPlugins(ctx, f.project)
 	require.NoError(t, err)
-	require.Zero(t, count)
+	require.EqualValues(t, 1, count)
 }
 
 func TestRoleDistributionPipeline_PublicationRollback(t *testing.T) {
@@ -188,8 +187,6 @@ func newPipelineFixture(t *testing.T) pipelineFixture {
 	err = fixtures.CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{ID: org, Name: "Pipeline", Slug: "pipeline", GramAccountType: "free", Whitelisted: true, FreeTrialStartedAt: conv.ToPGTimestamptz(time.Now()), FreeTrialEndsAt: conv.ToPGTimestamptz(time.Now().Add(14 * 24 * time.Hour))})
 	require.NoError(t, err)
 	_, err = fixtures.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: project, OrganizationID: org, Name: "Pipeline", Slug: "pipeline"})
-	require.NoError(t, err)
-	err = fixtures.PipelineEnableRoleDistribution(ctx, org)
 	require.NoError(t, err)
 	pub := &pipelinePublisher{}
 	drain := relay.New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), db, pub)

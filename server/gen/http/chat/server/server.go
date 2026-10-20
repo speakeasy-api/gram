@@ -22,6 +22,7 @@ type Server struct {
 	ListChats                  http.Handler
 	GetAssistantSessionSummary http.Handler
 	GetWorkUnitsTrend          http.Handler
+	LoadChatOverview           http.Handler
 	LoadChat                   http.Handler
 	GenerateTitle              http.Handler
 	CreditUsage                http.Handler
@@ -64,6 +65,7 @@ func New(
 			{"ListChats", "GET", "/rpc/chat.list"},
 			{"GetAssistantSessionSummary", "GET", "/rpc/chat.getAssistantSessionSummary"},
 			{"GetWorkUnitsTrend", "GET", "/rpc/chat.getWorkUnitsTrend"},
+			{"LoadChatOverview", "GET", "/rpc/chat.loadOverview"},
 			{"LoadChat", "GET", "/rpc/chat.load"},
 			{"GenerateTitle", "POST", "/rpc/chat.generateTitle"},
 			{"CreditUsage", "GET", "/rpc/chat.creditUsage"},
@@ -78,6 +80,7 @@ func New(
 		ListChats:                  NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
 		GetAssistantSessionSummary: NewGetAssistantSessionSummaryHandler(e.GetAssistantSessionSummary, mux, decoder, encoder, errhandler, formatter),
 		GetWorkUnitsTrend:          NewGetWorkUnitsTrendHandler(e.GetWorkUnitsTrend, mux, decoder, encoder, errhandler, formatter),
+		LoadChatOverview:           NewLoadChatOverviewHandler(e.LoadChatOverview, mux, decoder, encoder, errhandler, formatter),
 		LoadChat:                   NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
 		GenerateTitle:              NewGenerateTitleHandler(e.GenerateTitle, mux, decoder, encoder, errhandler, formatter),
 		CreditUsage:                NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
@@ -99,6 +102,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListChats = m(s.ListChats)
 	s.GetAssistantSessionSummary = m(s.GetAssistantSessionSummary)
 	s.GetWorkUnitsTrend = m(s.GetWorkUnitsTrend)
+	s.LoadChatOverview = m(s.LoadChatOverview)
 	s.LoadChat = m(s.LoadChat)
 	s.GenerateTitle = m(s.GenerateTitle)
 	s.CreditUsage = m(s.CreditUsage)
@@ -119,6 +123,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListChatsHandler(mux, h.ListChats)
 	MountGetAssistantSessionSummaryHandler(mux, h.GetAssistantSessionSummary)
 	MountGetWorkUnitsTrendHandler(mux, h.GetWorkUnitsTrend)
+	MountLoadChatOverviewHandler(mux, h.LoadChatOverview)
 	MountLoadChatHandler(mux, h.LoadChat)
 	MountGenerateTitleHandler(mux, h.GenerateTitle)
 	MountCreditUsageHandler(mux, h.CreditUsage)
@@ -273,6 +278,59 @@ func NewGetWorkUnitsTrendHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getWorkUnitsTrend")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountLoadChatOverviewHandler configures the mux to serve the "chat" service
+// "loadChatOverview" endpoint.
+func MountLoadChatOverviewHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/chat.loadOverview", f)
+}
+
+// NewLoadChatOverviewHandler creates a HTTP handler which loads the HTTP
+// request and calls the "chat" service "loadChatOverview" endpoint.
+func NewLoadChatOverviewHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeLoadChatOverviewRequest(mux, decoder)
+		encodeResponse = EncodeLoadChatOverviewResponse(encoder)
+		encodeError    = EncodeLoadChatOverviewError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "loadChatOverview")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -1,39 +1,18 @@
-import { useIconConfetti } from "@/components/icon-confetti";
+import { useIconDither } from "@/components/icon-dither";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { AlertTriangleIcon, ArrowRight, Network, Package } from "lucide-react";
-import { useMemo } from "react";
-import {
-  useCatalogIconMap,
-  useExternalMcpOAuthConfigStatus,
-} from "../sources/sources-hooks";
+import { AlertTriangleIcon, ArrowRight, Package } from "lucide-react";
+import { useExternalMcpOAuthConfigStatus } from "../sources/sources-hooks";
+import { MCPToolsetIcon } from "./MCPToolsetIcon";
 import { Badge } from "@/components/ui/Badge";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
   const routes = useRoutes();
-  const { canvasRef, start, stop } = useIconConfetti();
-  const catalogIconMap = useCatalogIconMap();
-  const { data: deploymentResult } = useLatestDeployment();
+  const { canvasRef, start, stop } = useIconDither();
   const oauthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
-
-  const externalMcpLogoUrl = useMemo(() => {
-    const externalMcpUrn = toolset.toolUrns?.find((urn) =>
-      urn.includes(":externalmcp:"),
-    );
-    const slug = externalMcpUrn?.split(":")[2];
-    if (!slug) return undefined;
-
-    const matchingMcp = deploymentResult?.deployment?.externalMcps?.find(
-      (mcp) => mcp.slug === slug,
-    );
-    return matchingMcp?.registryServerSpecifier
-      ? catalogIconMap.get(matchingMcp.registryServerSpecifier)
-      : undefined;
-  }, [toolset.toolUrns, catalogIconMap, deploymentResult]);
 
   const handleClick = () => {
     if (oauthStatus === "required-unconfigured") {
@@ -85,17 +64,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
             )}
           </>
         }
-        icon={
-          externalMcpLogoUrl ? (
-            <img
-              src={externalMcpLogoUrl}
-              alt={toolset.name}
-              className="h-12 w-12 object-contain"
-            />
-          ) : (
-            <Network className="text-muted-foreground h-8 w-8" />
-          )
-        }
+        icon={<MCPToolsetIcon toolset={toolset} />}
       >
         {/* Header row with name */}
         <div className="mb-2 flex items-start justify-between gap-2">

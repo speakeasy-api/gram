@@ -285,7 +285,7 @@ export type SlackManifestInput = {
   extraScopes?: readonly string[];
   extraBotEvents?: readonly string[];
   /**
-   * Hostnames of the Gram dashboard (e.g. app.getgram.ai, ai.speakeasy.com).
+   * Hostnames of the Speakeasy dashboard (e.g. app.getgram.ai, ai.speakeasy.com).
    * When set alongside webhookUrl, they are registered as Slack unfurl domains
    * so link_shared events fire for dashboard links and the webhook can unfurl
    * them with the Speakeasy logo. Hostnames without a dot (e.g. localhost) are
@@ -361,7 +361,7 @@ export function buildSlackManifest(
   };
   if (input.webhookUrl) {
     // Slack interactivity (button clicks, modal submissions) uses a separate
-    // `request_url` from event_subscriptions, even though Gram answers both
+    // `request_url` from event_subscriptions, even though Speakeasy answers both
     // on the same trigger webhook. Without this Slack shows "This app is
     // not configured to handle interactive responses" the moment a user
     // clicks a Block Kit button. Always enable it when we have a webhook —

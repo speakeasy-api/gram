@@ -448,10 +448,10 @@ func TestServePublic_MetaEndpoint_ListServers_ExcludesSluglessMember(t *testing.
 	require.Empty(t, listed.Servers)
 }
 
-// A notification carrying a bad protocol-version declaration is dropped, not
-// answered: JSON-RPC 2.0 forbids responding to notifications, even with an
-// error.
-func TestServePublic_MetaEndpoint_NotificationWithBadVersionIsDropped(t *testing.T) {
+// A notification declaring an unsupported revision is refused with an HTTP
+// error status, as every revision requires for a notification the server
+// cannot accept, under a null id because it answers no request.
+func TestServePublic_MetaEndpoint_NotificationWithUnsupportedVersionIsRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -468,11 +468,10 @@ func TestServePublic_MetaEndpoint_NotificationWithBadVersionIsDropped(t *testing
 	require.NoError(t, err)
 
 	w, err := servePublicHTTP(t, ctx, ti, slug, body, "", map[string]string{
-		mcpversions.HTTPHeader: "2031-01-01",
+		mcpversions.HTTPHeader: unservedProtocolVersion,
 	})
 	require.NoError(t, err)
-	require.Equal(t, http.StatusAccepted, w.Code, "body=%s", w.Body.String())
-	require.Empty(t, w.Body.String())
+	requireRefusedNotification(t, w, unservedProtocolVersion, mcpversions.SupportedMetaServer())
 }
 
 // Challenge-resumption arms of the meta endpoint resolver, driven through
@@ -608,32 +607,33 @@ func setToolsetMcpDisabled(t *testing.T, ctx context.Context, ti *testInstance, 
 	require.NoError(t, err)
 }
 
-// A hosted member whose toolset has MCP turned off is not servable through
-// the gateway, matching the toolset's own endpoint.
-func TestServePublic_MetaEndpoint_HostedMember_McpDisabledNotServable(t *testing.T) {
+// An independent hosted server uses its own visibility, not the backing
+// toolset's legacy MCP enablement, just like direct wrapper dispatch.
+func TestServePublic_MetaEndpoint_HostedMember_LegacyMcpDisabledStillServable(t *testing.T) {
 	t.Parallel()
-
 	ctx, ti := newTestMCPService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
 	setToolsetMcpDisabled(t, ctx, ti, member.toolsetID, *authCtx.ProjectID)
-
-	envelope := callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	envelope := callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{})
 	text, isError := metaToolResultText(t, envelope)
-	require.True(t, isError)
-	require.Contains(t, text, "not currently servable")
-
+	require.False(t, isError)
+	require.Contains(t, text, member.slug)
+	envelope = callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	text, isError = metaToolResultText(t, envelope)
+	require.False(t, isError)
+	require.Contains(t, text, "alpha_tool")
 	envelope = callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
 		"name":      member.slug + "--alpha_tool",
 		"arguments": map[string]any{},
 	})
 	text, isError = metaToolResultText(t, envelope)
 	require.True(t, isError)
-	require.Contains(t, text, "not currently servable")
+	// The fixture tool has no upstream, so this error proves dispatch ran.
+	require.Contains(t, text, "no server URL")
 }
 
 // Snapshot RBAC: a private-visibility member is invisible without
@@ -904,6 +904,7 @@ func TestServePublic_MetaEndpoint_ToolSelectionSessionRejected(t *testing.T) {
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
 		ToolSelection:       selection,
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 

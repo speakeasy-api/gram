@@ -1,7 +1,9 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
-import { MoreActions } from "@/components/ui/MoreActions";
-import { SearchBar } from "@/components/ui/SearchBar";
+import {
+  MoreActions,
+  type Action as MoreActionsItem,
+} from "@/components/ui/MoreActions";
 import {
   Select,
   SelectContent,
@@ -16,10 +18,12 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useUser } from "@/contexts/Auth";
 import { formatRelativeTime } from "@/lib/dates";
 import type { Widget } from "@gram/client/models/components/widget.js";
+import type { WidgetDashboard } from "@gram/client/models/components/widgetdashboard.js";
 import {
   ChartArea,
   ChartBar,
   ChartColumn,
+  ChartColumnStacked,
   ChartLine,
   Hash,
   LayoutGrid,
@@ -28,9 +32,17 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useMemo, useState, type JSX } from "react";
+import { useLocation, useSearchParams } from "react-router";
+import { Page } from "@/components/page-layout";
+import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
+import { AddToDashboard } from "./AddToDashboard";
+import { WidgetCards } from "./WidgetCards";
+import { longestWindow, type ExploreSpec } from "./exploreModel";
+import { pageFieldsFor, usePageFilters } from "./usePageFilters";
 import { useCanEditWidget } from "./useCanEditWidget";
 import { useCreatorName } from "./useCreatorName";
 import { useWidgetMutations } from "./useWidgetMutations";
+import { describeDashboards } from "./widgetUsage";
 import { DeleteWidgetDialog, WidgetDetailsDialog } from "./WidgetDialogs";
 
 // The sort the list opens on: the server's own order, most recently updated
@@ -45,6 +57,8 @@ const CHART_ICONS: Record<string, { icon: LucideIcon; label: string }> = {
   line: { icon: ChartLine, label: "Line" },
   area: { icon: ChartArea, label: "Area" },
   bar: { icon: ChartColumn, label: "Bar" },
+  stacked_bar: { icon: ChartColumnStacked, label: "Stacked bar" },
+  stacked_area: { icon: ChartArea, label: "Stacked area" },
   ranked: { icon: ChartBar, label: "Ranked" },
   table: { icon: TableIcon, label: "Table" },
   number: { icon: Hash, label: "Number" },
@@ -60,9 +74,11 @@ export function WidgetList({
   isPending,
   isError,
   onOpen,
+  onOpenQuery,
   confirmLeave,
   onDeleted,
   onExplore,
+  onOpenDashboard,
   onRetry,
 }: {
   widgets: Widget[];
@@ -70,6 +86,8 @@ export function WidgetList({
   isError: boolean;
   /** Open a widget in the Explore tab. */
   onOpen: (widget: Widget) => void;
+  /** Open a question in the Explore tab: a saved widget's, or its own. */
+  onOpenQuery: (spec: ExploreSpec, widgetId: string | null) => void;
   /**
    * Run this once leaving the open widget's unsaved edits is confirmed,
    * before anything is opened or copied.
@@ -79,6 +97,8 @@ export function WidgetList({
   onDeleted: (id: string) => void;
   /** Switch to the Explore tab with nothing open. */
   onExplore: () => void;
+  /** Open a dashboard, once a widget is placed on it. */
+  onOpenDashboard: (dashboardId: string) => void;
   onRetry: () => void;
 }): JSX.Element {
   const user = useUser();
@@ -86,17 +106,82 @@ export function WidgetList({
   const canEdit = useCanEditWidget();
   const mutations = useWidgetMutations();
 
+  const [view, setView] = useListView();
   const [search, setSearch] = useState("");
   const [createdBy, setCreatedBy] = useState(ANYONE);
   const [dataset, setDataset] = useState(ALL_DATASETS);
   const [sort, setSort] = useState<SortDescriptor | null>(DEFAULT_SORT);
   const [renaming, setRenaming] = useState<Widget | null>(null);
   const [deleting, setDeleting] = useState<Widget | null>(null);
+  const [placing, setPlacing] = useState<Widget | null>(null);
 
   const datasets = useMemo(
     () => [...new Set(widgets.map((widget) => widget.dataset))].sort(),
     [widgets],
   );
+  // The cards' filter values are read over the longest window any widget
+  // asks, so a value only its oldest days hold can still be picked.
+  const optionsWindow = useMemo(
+    () => longestWindow(widgets.map((widget) => widget.query.window)),
+    [widgets],
+  );
+  // The cards' filter bar offers the fields some widget can be filtered by,
+  // settled on the project's widgets rather than the ones the search leaves,
+  // so it does not change under someone typing. It shows in the cards view
+  // only, and asks for its options only there.
+  const catalog = useAnalyticsDescribe().data?.datasets;
+  const cardFields = useMemo(
+    () => pageFieldsFor(catalog, datasets),
+    [catalog, datasets],
+  );
+  const cardFilters = usePageFilters({
+    fields: cardFields,
+    optionsWindow,
+    optionsDatasets: datasets,
+    optionsEnabled: view === "cards",
+  });
+
+  // The same actions on a row and on a card.
+  const actionsFor = (widget: Widget): MoreActionsItem[] => [
+    {
+      label: "Open",
+      icon: "square-arrow-out-up-right",
+      onClick: () => confirmLeave(() => onOpen(widget)),
+    },
+    ...(canEdit(widget)
+      ? [
+          {
+            label: "Rename",
+            icon: "pencil" as const,
+            onClick: () => setRenaming(widget),
+          },
+        ]
+      : []),
+    {
+      label: "Add to dashboard",
+      icon: "layout-dashboard",
+      onClick: () => setPlacing(widget),
+    },
+    {
+      label: "Duplicate",
+      icon: "copy",
+      disabled: mutations.pending,
+      onClick: () => confirmLeave(() => mutations.duplicate(widget.id, onOpen)),
+    },
+    // Someone else's widget without project write can only be
+    // copied.
+    ...(canEdit(widget)
+      ? [
+          {
+            label: "Delete",
+            icon: "trash" as const,
+            destructive: true,
+            separatorBefore: true,
+            onClick: () => setDeleting(widget),
+          },
+        ]
+      : []),
+  ];
 
   const columns: Column<Widget>[] = [
     {
@@ -146,6 +231,12 @@ export function WidgetList({
       render: (widget) => <ChartTypeCell type={widget.visualization.type} />,
     },
     {
+      key: "dashboards",
+      header: "Dashboards",
+      width: "1fr",
+      render: (widget) => <DashboardsCell dashboards={widget.dashboards} />,
+    },
+    {
       key: "creator",
       header: "Created by",
       width: "1.5fr",
@@ -175,42 +266,7 @@ export function WidgetList({
         <span onClick={(event) => event.stopPropagation()}>
           <MoreActions
             triggerAriaLabel={`Actions for ${widget.name}`}
-            actions={[
-              {
-                label: "Open",
-                icon: "square-arrow-out-up-right",
-                onClick: () => confirmLeave(() => onOpen(widget)),
-              },
-              ...(canEdit(widget)
-                ? [
-                    {
-                      label: "Rename",
-                      icon: "pencil" as const,
-                      onClick: () => setRenaming(widget),
-                    },
-                  ]
-                : []),
-              {
-                label: "Duplicate",
-                icon: "copy",
-                disabled: mutations.pending,
-                onClick: () =>
-                  confirmLeave(() => mutations.duplicate(widget.id, onOpen)),
-              },
-              // Someone else's widget without project write can only be
-              // copied.
-              ...(canEdit(widget)
-                ? [
-                    {
-                      label: "Delete",
-                      icon: "trash" as const,
-                      destructive: true,
-                      separatorBefore: true,
-                      onClick: () => setDeleting(widget),
-                    },
-                  ]
-                : []),
-            ]}
+            actions={actionsFor(widget)}
           />
         </span>
       ),
@@ -267,45 +323,70 @@ export function WidgetList({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <SearchBar
-          value={search}
-          onChange={setSearch}
-          placeholder="Search widgets"
-          className="w-72"
+      {/* The list's own controls on one row; in the cards view, the
+          shared filter bar the cards answer within on the next. */}
+      <Page.Toolbar>
+        <Page.Toolbar.Row>
+          <Page.Toolbar.Search
+            value={search}
+            onChange={setSearch}
+            placeholder="Search widgets"
+          />
+          <Page.Toolbar.Leading>
+            <Select value={createdBy} onValueChange={setCreatedBy}>
+              <SelectTrigger className="h-10 w-44" aria-label="Created by">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ANYONE}>Created by anyone</SelectItem>
+                <SelectItem value={ME}>Created by me</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={dataset} onValueChange={setDataset}>
+              <SelectTrigger className="h-10 w-44" aria-label="Dataset">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_DATASETS}>All datasets</SelectItem>
+                {datasets.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Page.Toolbar.Leading>
+          <Page.Toolbar.ViewAs
+            value={view === "cards" ? "grid" : "table"}
+            onChange={(mode) => setView(mode === "grid" ? "cards" : "list")}
+          />
+        </Page.Toolbar.Row>
+        {view === "cards" ? (
+          <Page.Toolbar.Row>
+            <Page.Toolbar.Filters {...cardFilters.toolbar} />
+          </Page.Toolbar.Row>
+        ) : null}
+      </Page.Toolbar>
+      {view === "cards" ? (
+        <WidgetCards
+          widgets={rows}
+          page={cardFilters.context}
+          actionsFor={actionsFor}
+          onOpen={(spec, widgetId) =>
+            confirmLeave(() => onOpenQuery(spec, widgetId ?? null))
+          }
         />
-        <Select value={createdBy} onValueChange={setCreatedBy}>
-          <SelectTrigger className="w-44" aria-label="Created by">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ANYONE}>Created by anyone</SelectItem>
-            <SelectItem value={ME}>Created by me</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={dataset} onValueChange={setDataset}>
-          <SelectTrigger className="w-44" aria-label="Dataset">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_DATASETS}>All datasets</SelectItem>
-            {datasets.map((name) => (
-              <SelectItem key={name} value={name}>
-                {name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <Table
-        columns={columns}
-        data={rows}
-        rowKey={(widget) => widget.id}
-        onRowClick={(widget) => confirmLeave(() => onOpen(widget))}
-        sort={sort}
-        onSortChange={setSort}
-        noResultsMessage="No widgets match these filters."
-      />
+      ) : (
+        <Table
+          columns={columns}
+          data={rows}
+          rowKey={(widget) => widget.id}
+          onRowClick={(widget) => confirmLeave(() => onOpen(widget))}
+          sort={sort}
+          onSortChange={setSort}
+          noResultsMessage="No widgets match these filters."
+        />
+      )}
 
       <WidgetDetailsDialog
         key={renaming?.id ?? "closed"}
@@ -332,8 +413,14 @@ export function WidgetList({
           );
         }}
       />
+      <AddToDashboard
+        widget={placing}
+        onClose={() => setPlacing(null)}
+        onOpenDashboard={onOpenDashboard}
+      />
       <DeleteWidgetDialog
         name={deleting?.name ?? ""}
+        dashboards={deleting?.dashboards ?? []}
         open={deleting !== null}
         pending={mutations.pending}
         onCancel={() => setDeleting(null)}
@@ -347,6 +434,55 @@ export function WidgetList({
         }}
       />
     </div>
+  );
+}
+
+type ListView = "list" | "cards";
+
+/** The search parameter holding how the Widgets tab shows its widgets. */
+const VIEW_PARAM = "view";
+
+/**
+ * Whether the Widgets tab lists widgets or draws them as cards, kept in the
+ * URL beside the tab so a link opens on the same view. Switching keeps the
+ * history entry's state, as switching tabs does.
+ */
+function useListView(): [ListView, (view: ListView) => void] {
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const view: ListView = params.get(VIEW_PARAM) === "cards" ? "cards" : "list";
+  const set = (next: ListView) =>
+    setParams(
+      (prev) => {
+        const out = new URLSearchParams(prev);
+        if (next === "cards") out.set(VIEW_PARAM, "cards");
+        else out.delete(VIEW_PARAM);
+        return out;
+      },
+      { replace: true, state: location.state },
+    );
+  return [view, set];
+}
+
+/** How many dashboards a widget is on, naming them on hover. */
+function DashboardsCell({
+  dashboards,
+}: {
+  dashboards: WidgetDashboard[];
+}): JSX.Element {
+  if (dashboards.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  // The names are read out where the eye gets a count and a tooltip.
+  return (
+    <SimpleTooltip tooltip={dashboards.map((d) => d.name).join(", ")}>
+      <span>
+        <span className="tabular-nums" aria-hidden>
+          {dashboards.length}
+        </span>
+        <span className="sr-only">On {describeDashboards(dashboards)}</span>
+      </span>
+    </SimpleTooltip>
   );
 }
 

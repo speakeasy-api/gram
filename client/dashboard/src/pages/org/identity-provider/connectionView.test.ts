@@ -9,6 +9,7 @@ import {
   groupChecklist,
   isConnectionChecked,
   isConnectionVerified,
+  usesClientSecret,
 } from "./connectionView";
 
 describe("connectionStep", () => {
@@ -152,5 +153,19 @@ describe("dpopObservation", () => {
     expect(dpopObservation({ ...base, checklist: [dpop(false)] })).toBe(
       "unprotected",
     );
+  });
+});
+
+describe("usesClientSecret", () => {
+  it("follows the stored auth method, not only the listing mode", () => {
+    expect(usesClientSecret({ listingMode: "oin", jwksUrl: undefined })).toBe(
+      true,
+    );
+    expect(
+      usesClientSecret({ listingMode: "oin", jwksUrl: "https://x/jwks.json" }),
+    ).toBe(false);
+    expect(
+      usesClientSecret({ listingMode: "custom_app", jwksUrl: undefined }),
+    ).toBe(false);
   });
 });

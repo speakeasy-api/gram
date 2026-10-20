@@ -21,7 +21,7 @@ type Sentiment = "up" | "down";
  * BlockPage is the standalone durable tool call block page served at
  * /blocks/:id, deliberately rendered OUTSIDE the dashboard shell (no sidebar /
  * header) so it can be opened directly from the slug-free link an agent embeds
- * in its block message. It requires a Gram session but NOT org-admin: the
+ * in its block message. It requires a Speakeasy session but NOT org-admin: the
  * person whose agent was blocked is usually a regular org member, and the
  * backend scopes access to their active organization.
  */

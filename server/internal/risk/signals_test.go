@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -103,8 +102,6 @@ func TestGetRiskSignals_ClickHouse(t *testing.T) {
 		VALUES (?, ?, ?, ?, ?, 'secret.github_pat', 'gitleaks', 'secrets', ?, ?)
 	`, uuid.Must(uuid.NewV7()), from.Add(43*time.Hour), from.Add(43*time.Hour), orgID, projectID.String(), chatA.String(), from.Add(44*time.Hour)))
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	result, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
 		From: new(from.Format(time.RFC3339)),
 		To:   new(to.Format(time.RFC3339)),
@@ -179,6 +176,65 @@ func TestGetRiskSignals_ClickHouse(t *testing.T) {
 	require.InDelta(t, 0.5, result.Exposure[0].Share, 0.001)
 	require.Equal(t, "secrets", result.Exposure[1].Category)
 	require.InDelta(t, 0.5, result.Exposure[1].Share, 0.001)
+}
+
+func TestGetRiskSignals_MCPServerFilterCanonicalizesAndHidesDismissed(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	from := time.Now().UTC().Add(-14 * 24 * time.Hour).Truncate(24 * time.Hour)
+	to := from.Add(7 * 24 * time.Hour)
+	serverID := uuid.NewString()
+	otherServerID := uuid.NewString()
+
+	current := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), from.Add(time.Hour), "gitleaks", "secret.github_pat", "selected@example.com")
+	current.MCPServerID = serverID
+	previous := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), from.Add(-time.Hour), "gitleaks", "secret.github_pat", "selected@example.com")
+	previous.MCPServerID = serverID
+	otherServer := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), from.Add(2*time.Hour), "presidio", "pii.email_address", "other@example.com")
+	otherServer.MCPServerID = otherServerID
+
+	// A direct ClickHouse dismissal copy carries the finding's server id.
+	dismissed := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), from.Add(3*time.Hour), "gitleaks", "secret.github_pat", "dismissed@example.com")
+	dismissed.MCPServerID = serverID
+	dismissedAt := from.Add(4 * time.Hour)
+	dismissal := dismissed
+	dismissal.EventKind = chrepo.EventKindSuppression
+	dismissal.FalsePositiveAt = &dismissedAt
+
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{current, previous, otherServer, dismissed, dismissal}))
+
+	nonCanonicalServerID := "{" + serverID + "}"
+	result, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
+		From:        new(from.Format(time.RFC3339)),
+		To:          new(to.Format(time.RFC3339)),
+		McpServerID: &nonCanonicalServerID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), result.Findings)
+	require.Equal(t, int64(1), result.PreviousFindings)
+	require.Equal(t, int64(1), result.UsersExposed)
+	require.Len(t, result.Signals, 1)
+	require.Equal(t, "secret.github_pat", result.Signals[0].RuleID)
+	require.Equal(t, int64(1), result.Signals[0].Findings)
+
+	otherResult, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
+		From:        new(from.Format(time.RFC3339)),
+		To:          new(to.Format(time.RFC3339)),
+		McpServerID: &otherServerID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), otherResult.Findings)
+	require.Zero(t, otherResult.PreviousFindings)
+	require.Len(t, otherResult.Signals, 1)
+	require.Equal(t, "pii.email_address", otherResult.Signals[0].RuleID)
 }
 
 // TestGetRiskSignals_EmptyWindow asserts an org with no findings gets a clean
@@ -299,7 +355,6 @@ func TestGetRiskSignals_PolicyScoreDrivesBase(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{attributed, bare, prevBare}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
 		From: new(from.Format(time.RFC3339)),
@@ -397,7 +452,6 @@ func TestGetRiskSignals_MCPServerFilter(t *testing.T) {
 		finding(41*time.Hour, "secret.github_pat", uuid.NewString(), "ghost"),
 	}
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, rows))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	window := &gen.GetRiskSignalsPayload{
 		From: new(from.Format(time.RFC3339)),

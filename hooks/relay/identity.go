@@ -45,7 +45,7 @@ func resolveUserEmail(ctx context.Context, typed any) string {
 }
 
 func deviceAgentEmail(ctx context.Context) string {
-	timeout := tenthsDuration("GRAM_DEVICE_AGENT_TIMEOUT_TENTHS", 15)
+	timeout := tenthsDuration("DEVICE_AGENT_TIMEOUT_TENTHS", 15)
 	for _, name := range deviceAgentCommands() {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -64,7 +64,7 @@ func deviceAgentEmail(ctx context.Context) string {
 	// Rescue tier: a daemon running from a location the exec chain can't
 	// guess still owns a socket at a fixed per-OS path — ask it directly.
 	// The env override is a real off switch and silences this tier too.
-	if strings.TrimSpace(os.Getenv("GRAM_DEVICE_AGENT_COMMANDS")) != "" {
+	if Env("DEVICE_AGENT_COMMANDS") != "" {
 		return ""
 	}
 	return socketIdentityEmail(ctx)
@@ -150,7 +150,7 @@ func agentSocketPath() string {
 }
 
 // deviceAgentCommands returns the device-agent commands to exec, in order.
-// GRAM_DEVICE_AGENT_COMMANDS (comma-separated) replaces the default set
+// SPEAKEASY_AI_DEVICE_AGENT_COMMANDS (comma-separated) replaces the default set
 // entirely — and silences the socket rescue in deviceAgentEmail, so it stays
 // a complete off switch. The default is a bare PATH lookup, then static
 // well-known install locations: speakeasyd is typically NOT on PATH (MDM
@@ -159,7 +159,7 @@ func agentSocketPath() string {
 // lookup alone silently loses managed identity attribution. A daemon running
 // somewhere none of these cover is handled by the socket rescue.
 func deviceAgentCommands() []string {
-	if env := strings.TrimSpace(os.Getenv("GRAM_DEVICE_AGENT_COMMANDS")); env != "" {
+	if env := Env("DEVICE_AGENT_COMMANDS"); env != "" {
 		return strings.Split(env, ",")
 	}
 	commands := []string{"speakeasyd"}
@@ -195,7 +195,7 @@ func deviceAgentCommands() []string {
 // machineWideAgentPaths are the install locations outside $HOME, probed after
 // the per-user ones. A var rather than inline literals so a test can neutralize
 // the developer's own installed daemon: $HOME and $PATH cannot reach an
-// absolute path, and GRAM_DEVICE_AGENT_COMMANDS is not usable as a sandbox
+// absolute path, and SPEAKEASY_AI_DEVICE_AGENT_COMMANDS is not usable as a sandbox
 // either — a non-empty value is the documented off switch and silences the
 // socket rescue too, which is exactly the tier under test.
 var machineWideAgentPaths = func() []string {
@@ -266,7 +266,7 @@ func codexAppServerEmail(ctx context.Context) string {
 	if binary == "" {
 		return ""
 	}
-	commandCtx, cancel := context.WithTimeout(ctx, tenthsDuration("GRAM_CODEX_IDENTITY_TIMEOUT_TENTHS", 10))
+	commandCtx, cancel := context.WithTimeout(ctx, tenthsDuration("CODEX_IDENTITY_TIMEOUT_TENTHS", 10))
 	defer cancel()
 	cmd := exec.CommandContext(commandCtx, binary, "app-server", "--stdio")
 	stdin, err := cmd.StdinPipe()
@@ -291,7 +291,7 @@ func codexAppServerEmail(ctx context.Context) string {
 	}()
 
 	scanner := bufio.NewScanner(stdout)
-	if _, err := fmt.Fprintln(stdin, `{"id":71001,"method":"initialize","params":{"clientInfo":{"name":"gram_hooks","title":"Gram Hooks","version":"1.0.0"},"capabilities":{"optOutNotificationMethods":["remoteControl/status/changed"]}}}`); err != nil {
+	if _, err := fmt.Fprintln(stdin, `{"id":71001,"method":"initialize","params":{"clientInfo":{"name":"gram_hooks","title":"Speakeasy Hooks","version":"1.0.0"},"capabilities":{"optOutNotificationMethods":["remoteControl/status/changed"]}}}`); err != nil {
 		return ""
 	}
 	if codexResponse(scanner, 71001) == nil {
@@ -499,7 +499,7 @@ func jwtEmail(token string) string {
 
 func tenthsDuration(name string, fallback int) time.Duration {
 	tenths := fallback
-	if parsed, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name))); err == nil && parsed > 0 {
+	if parsed, err := strconv.Atoi(Env(name)); err == nil && parsed > 0 {
 		tenths = parsed
 	}
 	return time.Duration(tenths) * 100 * time.Millisecond

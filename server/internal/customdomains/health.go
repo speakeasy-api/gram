@@ -116,7 +116,7 @@ const (
 )
 
 // ShouldAutoDisable reports whether both auto-disable thresholds are crossed.
-// check_failed is excluded: a Gram-side probe failure is not a customer fault.
+// check_failed is excluded: a Speakeasy-side probe failure is not a customer fault.
 func ShouldAutoDisable(state HealthState, now time.Time) bool {
 	if state.Status != HealthStatusUnhealthy || state.Issue == HealthIssueCheckFailed {
 		return false
@@ -129,7 +129,7 @@ func ShouldAutoDisable(state HealthState, now time.Time) bool {
 }
 
 func ShouldNotifyUnhealthyTransition(current, next HealthState) bool {
-	// Probe failures are Gram-side and not customer-actionable.
+	// Probe failures are Speakeasy-side and not customer-actionable.
 	if next.Status != HealthStatusUnhealthy || next.Issue == HealthIssueCheckFailed {
 		return false
 	}

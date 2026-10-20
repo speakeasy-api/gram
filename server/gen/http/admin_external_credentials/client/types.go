@@ -18,8 +18,8 @@ import (
 type CreateGcpIamPlatformCredentialRequestBody struct {
 	// A human-readable name for the credential.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The service account Gram impersonates. Set alone for direct impersonation,
-	// or as the hop alongside the wif_* fields.
+	// The service account Speakeasy impersonates. Set alone for direct
+	// impersonation, or as the hop alongside the wif_* fields.
 	ImpersonateServiceAccount *string `form:"impersonate_service_account,omitempty" json:"impersonate_service_account,omitempty" xml:"impersonate_service_account,omitempty"`
 	// Workload Identity Federation pool ID. Set together with the other wif_*
 	// fields.
@@ -40,8 +40,8 @@ type UpdateGcpIamPlatformCredentialRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// A human-readable name for the credential.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The service account Gram impersonates. Set alone for direct impersonation,
-	// or as the hop alongside the wif_* fields.
+	// The service account Speakeasy impersonates. Set alone for direct
+	// impersonation, or as the hop alongside the wif_* fields.
 	ImpersonateServiceAccount *string `form:"impersonate_service_account,omitempty" json:"impersonate_service_account,omitempty" xml:"impersonate_service_account,omitempty"`
 	// Workload Identity Federation pool ID. Set together with the other wif_*
 	// fields.
@@ -58,8 +58,8 @@ type UpdateGcpIamPlatformCredentialRequestBody struct {
 // "adminExternalCredentials" service "createGcpIamPlatformCredential" endpoint
 // HTTP response body.
 type CreateGcpIamPlatformCredentialResponseBody struct {
-	// The service account Gram impersonates (impersonation approach, or the WIF
-	// hop).
+	// The service account Speakeasy impersonates (impersonation approach, or the
+	// WIF hop).
 	ImpersonateServiceAccount *string `form:"impersonate_service_account,omitempty" json:"impersonate_service_account,omitempty" xml:"impersonate_service_account,omitempty"`
 	// Workload Identity Federation pool ID.
 	WifPoolID *string `form:"wif_pool_id,omitempty" json:"wif_pool_id,omitempty" xml:"wif_pool_id,omitempty"`
@@ -93,8 +93,8 @@ type ListPlatformExternalCredentialsResponseBody struct {
 // "adminExternalCredentials" service "updateGcpIamPlatformCredential" endpoint
 // HTTP response body.
 type UpdateGcpIamPlatformCredentialResponseBody struct {
-	// The service account Gram impersonates (impersonation approach, or the WIF
-	// hop).
+	// The service account Speakeasy impersonates (impersonation approach, or the
+	// WIF hop).
 	ImpersonateServiceAccount *string `form:"impersonate_service_account,omitempty" json:"impersonate_service_account,omitempty" xml:"impersonate_service_account,omitempty"`
 	// Workload Identity Federation pool ID.
 	WifPoolID *string `form:"wif_pool_id,omitempty" json:"wif_pool_id,omitempty" xml:"wif_pool_id,omitempty"`
@@ -120,8 +120,8 @@ type UpdateGcpIamPlatformCredentialResponseBody struct {
 // "adminExternalCredentials" service "getGcpIamPlatformCredential" endpoint
 // HTTP response body.
 type GetGcpIamPlatformCredentialResponseBody struct {
-	// The service account Gram impersonates (impersonation approach, or the WIF
-	// hop).
+	// The service account Speakeasy impersonates (impersonation approach, or the
+	// WIF hop).
 	ImpersonateServiceAccount *string `form:"impersonate_service_account,omitempty" json:"impersonate_service_account,omitempty" xml:"impersonate_service_account,omitempty"`
 	// Workload Identity Federation pool ID.
 	WifPoolID *string `form:"wif_pool_id,omitempty" json:"wif_pool_id,omitempty" xml:"wif_pool_id,omitempty"`

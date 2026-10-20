@@ -23,7 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
 
-// Header is reserved for Gram's signed caller assertion, without a Bearer prefix.
+// Header is reserved for Speakeasy's signed caller assertion, without a Bearer prefix.
 const Header = "X-Speakeasy-Identity"
 
 // Lifetime bounds the bearer assertion's replay window.
@@ -31,9 +31,10 @@ const Lifetime = time.Minute
 
 // Issuer holds an immutable signing key initialized by New.
 type Issuer struct {
-	key    *rsa.PrivateKey
-	kid    string
-	issuer string
+	key        *rsa.PrivateKey
+	kid        string
+	issuer     string
+	publicKeys *jwks.Set
 }
 
 // Target identifies the actual destination using server-owned metadata.
@@ -51,16 +52,25 @@ type Target struct {
 	ResourceIdentifier string
 }
 
+// ValidateIssuerOrigin reports whether issuerURL is a bare HTTPS origin, the
+// form GRAM_AUTHZ_ISSUER_URL must take. allowHTTP admits HTTP for local use.
+func ValidateIssuerOrigin(issuerURL string, allowHTTP bool) error {
+	u, err := url.Parse(issuerURL)
+	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" ||
+		(u.Scheme != "https" && (!allowHTTP || u.Scheme != "http")) || (u.Path != "" && u.Path != "/") || u.RawPath != "" {
+		return errors.New("caller assertion issuer must be an HTTPS origin (HTTP allowed only locally)")
+	}
+	return nil
+}
+
 // New returns a signer. All three settings are required, and the configuration
 // must contain valid keys and issuer.
 func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, error) {
 	if strings.TrimSpace(privatePEM) == "" || strings.TrimSpace(publicPEM) == "" || strings.TrimSpace(issuerURL) == "" {
 		return nil, errors.New("GRAM_AUTHZ_PRIVATE_KEY, GRAM_AUTHZ_PUBLIC_KEYS and GRAM_AUTHZ_ISSUER_URL are required (run `mise run zero:tunnel-identity` locally)")
 	}
-	u, err := url.Parse(issuerURL)
-	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" ||
-		(u.Scheme != "https" && (!allowHTTP || u.Scheme != "http")) || (u.Path != "" && u.Path != "/") || u.RawPath != "" {
-		return nil, errors.New("caller assertion issuer must be an HTTPS origin (HTTP allowed only locally)")
+	if err := ValidateIssuerOrigin(issuerURL, allowHTTP); err != nil {
+		return nil, err
 	}
 	block, rest := pem.Decode([]byte(privatePEM))
 	if block == nil || block.Type != "PRIVATE KEY" || len(bytes.TrimSpace(rest)) != 0 {
@@ -82,7 +92,7 @@ func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, erro
 	if !publicKeys.Contains(active.KeyID) {
 		return nil, errors.New("active caller assertion public key is missing from GRAM_AUTHZ_PUBLIC_KEYS")
 	}
-	return &Issuer{key: key, kid: active.KeyID, issuer: strings.TrimRight(issuerURL, "/")}, nil
+	return &Issuer{key: key, kid: active.KeyID, issuer: strings.TrimRight(issuerURL, "/"), publicKeys: publicKeys}, nil
 }
 
 // ReservedHeader also matches spellings with underscores for any dash: some

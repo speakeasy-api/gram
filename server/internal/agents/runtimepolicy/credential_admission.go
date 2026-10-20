@@ -20,12 +20,14 @@ import (
 )
 
 // AdmitPrincipalCredential performs authoritative parent admission and loads
-// immutable credential policy R, live direct agent policy A, and the current
-// owner's live policy O as three independent policy sets. The caller must first
-// load and validate the directly active credential row, stamp its immutable
-// profile with contextvalues.WithPrincipalCredentialAuthorization, and call
-// this function before minting credentials, resolving upstream authority, or
-// executing an operation. Successful results must not be cached across requests.
+// credential policy R, live direct agent policy A, and the current owner's live
+// policy O as three independent policy sets. R is the credential's stored
+// delegated policy, or, for a credential that stores none, the policy derived
+// from A, O, and the authorizing user's live policy. The caller must first
+// load and validate the credential, stamp its profile with
+// contextvalues.WithPrincipalCredentialAuthorization, and call this function
+// before minting credentials, resolving upstream authority, or executing an
+// operation. Successful results must not be cached across requests.
 func AdmitPrincipalCredential(ctx context.Context, db *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
 	if !hasPrincipalCredentialAdmissionContext(ctx) {
 		return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
@@ -62,20 +64,32 @@ func AdmitPrincipalCredentialWithDBTX(ctx context.Context, tx accessrepo.DBTX) (
 		return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
 	}
 
-	policy, err := DecodeDelegatedPolicy(DelegatedPolicyVersion(credential.DelegatedGrantsVersion), credential.DelegatedGrants)
-	if err != nil {
-		if errors.Is(err, ErrInvalidDelegatedPolicy) {
+	var storedPolicy []authz.Grant
+	if credential.DerivesPolicyAtAdmission {
+		if len(credential.DelegatedGrants) != 0 {
 			return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
 		}
-		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("decode delegated credential policy: %w", err)
+	} else {
+		policy, err := DecodeDelegatedPolicy(DelegatedPolicyVersion(credential.DelegatedGrantsVersion), credential.DelegatedGrants)
+		if err != nil {
+			if errors.Is(err, ErrInvalidDelegatedPolicy) {
+				return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
+			}
+			return authz.PrincipalCredentialAdmission{}, fmt.Errorf("decode delegated credential policy: %w", err)
+		}
+		storedPolicy = policy.RuntimeGrants()
 	}
 
 	if mode, hasMode := contextvalues.APIKeyAuthorization(ctx); hasMode && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		// An API key row always stores its delegated policy.
+		if credential.DerivesPolicyAtAdmission {
+			return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
+		}
 		apiKeyID, parseErr := uuid.Parse(authCtx.APIKeyID)
 		if parseErr != nil {
 			return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
 		}
-		_, err = keysrepo.New(tx).GetActivePrincipalAPIKeyForAdmission(ctx, keysrepo.GetActivePrincipalAPIKeyForAdmissionParams{
+		_, err := keysrepo.New(tx).GetActivePrincipalAPIKeyForAdmission(ctx, keysrepo.GetActivePrincipalAPIKeyForAdmissionParams{
 			ID:                     apiKeyID,
 			OrganizationID:         authCtx.ActiveOrganizationID,
 			SubjectUrn:             pgtype.Text{String: actor.String(), Valid: true},
@@ -102,20 +116,9 @@ func AdmitPrincipalCredentialWithDBTX(ctx context.Context, tx accessrepo.DBTX) (
 		return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
 	}
 
-	ownerPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, agent.OwnerUserID)
-	ownerPrincipals, err := authz.ResolveUserPrincipals(ctx, tx, authCtx.ActiveOrganizationID, agent.OwnerUserID)
+	ownerPrincipals, ownerEligible, err := ResolveEligibleUser(ctx, tx, authCtx.ActiveOrganizationID, agent.OwnerUserID)
 	if err != nil {
-		if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
-			return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
-		}
 		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("resolve credential owner: %w", err)
-	}
-	ownerEligible := false
-	for _, principal := range ownerPrincipals {
-		if principal.String() == ownerPrincipal.String() {
-			ownerEligible = true
-			break
-		}
 	}
 	if !ownerEligible {
 		return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
@@ -130,7 +133,26 @@ func AdmitPrincipalCredentialWithDBTX(ctx context.Context, tx accessrepo.DBTX) (
 		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("load live owner policy: %w", err)
 	}
 
-	return authz.PrincipalCredentialAdmission{OwnerUserID: agent.OwnerUserID, Credential: policy.RuntimeGrants(), Agent: agentPolicy, Owner: ownerPolicy}, nil
+	credentialPolicy := storedPolicy
+	if credential.DerivesPolicyAtAdmission {
+		authorizerPrincipals, authorizerEligible, err := ResolveEligibleUser(ctx, tx, authCtx.ActiveOrganizationID, credential.AuthorizerUserID)
+		if err != nil {
+			return authz.PrincipalCredentialAdmission{}, fmt.Errorf("resolve credential authorizer: %w", err)
+		}
+		if !authorizerEligible {
+			return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
+		}
+		authorizerPolicy, err := authz.LoadGrants(ctx, tx, authCtx.ActiveOrganizationID, authorizerPrincipals)
+		if err != nil {
+			return authz.PrincipalCredentialAdmission{}, fmt.Errorf("load live authorizer policy: %w", err)
+		}
+		credentialPolicy, err = DelegatedRuntimeGrants(agentPolicy, ownerPolicy, authorizerPolicy)
+		if err != nil {
+			return authz.PrincipalCredentialAdmission{}, fmt.Errorf("derive credential policy: %w", err)
+		}
+	}
+
+	return authz.PrincipalCredentialAdmission{OwnerUserID: agent.OwnerUserID, Credential: credentialPolicy, Agent: agentPolicy, Owner: ownerPolicy}, nil
 }
 
 func hasPrincipalCredentialAdmissionContext(ctx context.Context) bool {

@@ -49,18 +49,30 @@ type QueryOrderBy struct {
 type ChartType string
 
 const (
-	ChartLine   ChartType = "line"
-	ChartArea   ChartType = "area"
-	ChartBar    ChartType = "bar"
-	ChartRanked ChartType = "ranked"
-	ChartTable  ChartType = "table"
-	ChartNumber ChartType = "number"
+	ChartLine        ChartType = "line"
+	ChartArea        ChartType = "area"
+	ChartBar         ChartType = "bar"
+	ChartStackedBar  ChartType = "stacked_bar"
+	ChartStackedArea ChartType = "stacked_area"
+	ChartRanked      ChartType = "ranked"
+	ChartTable       ChartType = "table"
+	ChartNumber      ChartType = "number"
 )
 
 // normalize returns the type lowercased, the form it is checked and stored
 // in, so "Line" is checked as a line chart.
 func (t ChartType) normalize() ChartType {
 	return ChartType(strings.ToLower(string(t)))
+}
+
+// stackable reports whether a query's measures can be stacked: exactly one,
+// and one whose values add up across the groups it is broken down by.
+func stackable(measures []QueryMeasure) bool {
+	if len(measures) != 1 {
+		return false
+	}
+	op := strings.ToLower(measures[0].Op)
+	return op == "count" || op == string(analytics.AggregationSum)
 }
 
 // Visualization is how a widget's question is drawn. The chart vocabulary
@@ -71,26 +83,54 @@ type Visualization struct {
 	Options json.RawMessage `json:"options"`
 }
 
-// windows are the relative windows a widget may ask over. A widget is a
-// recurring question and keeps its own window wherever it is shown, so it
-// follows you forward in time; absolute ranges are what the shareable URL
-// is for.
+// windows are the relative windows a widget may ask over: the dashboard's
+// date-range presets, so a widget and the page it sits on speak the same
+// vocabulary. A widget is a recurring question and keeps its own window
+// wherever it is shown, so it follows you forward in time; absolute ranges
+// are what the shareable URL is for.
 var windows = map[string]time.Duration{
+	"15m": 15 * time.Minute,
 	"1h":  time.Hour,
-	"24h": 24 * time.Hour,
+	"4h":  4 * time.Hour,
+	"1d":  24 * time.Hour,
+	"2d":  2 * 24 * time.Hour,
+	"3d":  3 * 24 * time.Hour,
 	"7d":  7 * 24 * time.Hour,
+	"15d": 15 * 24 * time.Hour,
 	"30d": 30 * 24 * time.Hour,
 	"90d": 90 * 24 * time.Hour,
+	// The builder's first spelling of a day, before it took the dashboard's
+	// presets. Widgets saved with it still read; new ones save "1d".
+	"24h": 24 * time.Hour,
 }
 
-// validate returns what is wrong with a widget, or "" when it works: the
+// windowNames lists the windows a widget can be saved with, for messages.
+const windowNames = "15m, 1h, 4h, 1d, 2d, 3d, 7d, 15d, 30d, 90d"
+
+// CanonicalWindow returns the spelling a relative window is saved with, for
+// a dashboard's date range to share a widget's vocabulary: "24h", the
+// builder's old spelling of a day, reads as "1d". ok is false for a window
+// a widget cannot be saved with.
+func CanonicalWindow(window string) (string, bool) {
+	if _, ok := windows[window]; !ok {
+		return "", false
+	}
+	if window == "24h" {
+		return "1d", true
+	}
+	return window, true
+}
+
+// Validate returns what is wrong with a widget, or "" when it works: the
 // question is planned against the catalog, then the chart is checked against
 // the question. Used on save, so a mistake is rejected immediately, and on
 // read, so a catalog change is visible breakage naming what went missing
 // instead of quietly wrong numbers. An error is a failure that is not the
 // widget's fault: a write fails with it as a server error, and a read logs
-// it and reports only that the widget could not be validated.
-func validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualization []byte, now time.Time) (string, error) {
+// it and reports only that the widget could not be validated. Exported for
+// another service that stores a widget's shape, such as dashboards copying
+// cards into saved widgets.
+func Validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualization []byte, now time.Time) (string, error) {
 	query, err := decodeQuery(rawQuery)
 	if err != nil {
 		return "invalid query: " + err.Error(), nil
@@ -109,7 +149,7 @@ func validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualiza
 func validateQuery(catalog *analytics.Catalog, dataset string, query Query, now time.Time) (string, error) {
 	window, ok := windows[query.Window]
 	if !ok {
-		return fmt.Sprintf("window %q is not one of 1h, 24h, 7d, 30d, 90d", query.Window), nil
+		return fmt.Sprintf("window %q is not one of %s", query.Window, windowNames), nil
 	}
 
 	req := analytics.Request{
@@ -147,8 +187,9 @@ func validateQuery(catalog *analytics.Catalog, dataset string, query Query, now 
 	}
 
 	// Tenancy is bound as arguments and never reaches the plan, so any
-	// placeholder validates the shape.
-	if _, err := analytics.Compile(catalog, "validate", "validate", req); err != nil {
+	// placeholder validates the shape; no lookup is loaded, so a dimension
+	// that reads through one plans as the plain column.
+	if _, err := analytics.Compile(catalog, analytics.Tenant{OrganizationID: "validate", ProjectID: "validate"}, nil, req); err != nil {
 		if invalid, ok := errors.AsType[*analytics.Error](err); ok {
 			return invalid.Error(), nil
 		}
@@ -178,9 +219,15 @@ func validateVisualization(visualization Visualization, query Query) string {
 	// stores the type lowercased.
 	chart := visualization.Type.normalize()
 	switch chart {
-	case ChartLine, ChartArea, ChartBar:
+	case ChartLine, ChartArea, ChartBar, ChartStackedBar, ChartStackedArea:
 		if !grained || !aggregated {
 			return fmt.Sprintf("unsatisfiable: a %s chart draws a timeseries, so its query needs a grain and at least one measure", chart)
+		}
+		// A stack adds its bands up, and folds the smallest into one Other
+		// band by adding them, so only a measure whose values add can be
+		// stacked: an average of averages is not a number anyone asked for.
+		if (chart == ChartStackedBar || chart == ChartStackedArea) && !stackable(query.Measures) {
+			return fmt.Sprintf("unsatisfiable: a %s chart adds its bands up, so its query needs one measure that is a count or a sum", chart)
 		}
 	case ChartNumber:
 		if !aggregated || grained || len(query.Dimensions) > 0 {

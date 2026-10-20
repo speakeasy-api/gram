@@ -15,11 +15,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcpRepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,56 +122,46 @@ func TestGetToolUsageSummary_AggregatesHostedShadowLocalAndSkills(t *testing.T) 
 		conversationID: "conv-skill",
 	})
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
-			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
-		})
-		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
+	res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.NotNil(t, res)
 
-		assert.Equal(c, int64(5), res.Totals.EventCount)
-		assert.Equal(c, int64(4), res.Totals.SuccessCount)
-		assert.Equal(c, int64(1), res.Totals.FailureCount)
-		assert.InEpsilon(c, 0.2, res.Totals.FailureRate, 0.001)
-		assert.Equal(c, int64(4), res.Totals.UniqueTools)
-		assert.Equal(c, int64(4), res.Totals.UniqueUsers)
-		assert.Equal(c, int64(4), res.Totals.UniqueTargets)
+	require.Equal(t, int64(5), res.Totals.EventCount)
+	require.Equal(t, int64(4), res.Totals.SuccessCount)
+	require.Equal(t, int64(1), res.Totals.FailureCount)
+	require.InEpsilon(t, 0.2, res.Totals.FailureRate, 0.001)
+	require.Equal(t, int64(4), res.Totals.UniqueTools)
+	require.Equal(t, int64(4), res.Totals.UniqueUsers)
+	require.Equal(t, int64(4), res.Totals.UniqueTargets)
 
-		targets := toolUsageTargetsByKey(res.Targets)
-		hosted := targets["hosted_mcp_server:server:payments"]
-		if assert.NotNil(c, hosted) {
-			assert.Equal(c, "payments", hosted.TargetLabel)
-			assert.Equal(c, int64(2), hosted.EventCount)
-			assert.Equal(c, int64(1), hosted.SuccessCount)
-			assert.Equal(c, int64(1), hosted.FailureCount)
-			assert.InEpsilon(c, 0.5, hosted.FailureRate, 0.001)
-		}
+	targets := toolUsageTargetsByKey(res.Targets)
+	hosted := targets["hosted_mcp_server:server:payments"]
+	require.NotNil(t, hosted)
+	require.Equal(t, "payments", hosted.TargetLabel)
+	require.Equal(t, int64(2), hosted.EventCount)
+	require.Equal(t, int64(1), hosted.SuccessCount)
+	require.Equal(t, int64(1), hosted.FailureCount)
+	require.InEpsilon(t, 0.5, hosted.FailureRate, 0.001)
 
-		shadow := targets["shadow_mcp_server:server:shadow-db"]
-		if assert.NotNil(c, shadow) {
-			assert.Equal(c, int64(1), shadow.EventCount)
-		}
+	shadow := targets["shadow_mcp_server:server:shadow-db"]
+	require.NotNil(t, shadow)
+	require.Equal(t, int64(1), shadow.EventCount)
 
-		local := targets["local_tool:local_tools:local"]
-		if assert.NotNil(c, local) {
-			assert.Equal(c, "Local Tools", local.TargetLabel)
-		}
+	local := targets["local_tool:local_tools:local"]
+	require.NotNil(t, local)
+	require.Equal(t, "Local Tools", local.TargetLabel)
 
-		skill := targets["skill:skill:golang"]
-		if assert.NotNil(c, skill) {
-			assert.Equal(c, "golang", skill.TargetLabel)
-		}
+	skill := targets["skill:skill:golang"]
+	require.NotNil(t, skill)
+	require.Equal(t, "golang", skill.TargetLabel)
 
-		assert.NotEmpty(c, res.TargetTimeSeries)
-		assert.NotEmpty(c, res.UserTimeSeries)
-		assert.NotEmpty(c, res.UsersByTarget)
-		assert.NotEmpty(c, res.TargetToolBreakdown)
-	}, 10*time.Second, 200*time.Millisecond)
+	require.NotEmpty(t, res.TargetTimeSeries)
+	require.NotEmpty(t, res.UserTimeSeries)
+	require.NotEmpty(t, res.UsersByTarget)
+	require.NotEmpty(t, res.TargetToolBreakdown)
 }
 
 func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
@@ -211,25 +199,17 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 		conversationID: "conv-hosted-hook",
 	})
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
-			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
-		})
-		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.NotEmpty(c, res.Targets) {
-			return
-		}
+	res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.NotNil(t, res)
+	require.NotEmpty(t, res.Targets)
 
-		targets := toolUsageTargetsByKey(res.Targets)
-		assert.NotNil(c, targets["hosted_mcp_server:server:hosted-payments"])
-		assert.Nil(c, targets["shadow_mcp_server:server:hosted.example.com"])
-	}, 10*time.Second, 200*time.Millisecond)
+	targets := toolUsageTargetsByKey(res.Targets)
+	require.NotNil(t, targets["hosted_mcp_server:server:hosted-payments"])
+	require.Nil(t, targets["shadow_mcp_server:server:hosted.example.com"])
 }
 
 func TestGetToolUsageSummary_ClassifiesDirectTunneledMCP(t *testing.T) {
@@ -254,32 +234,23 @@ func TestGetToolUsageSummary_ClassifiesDirectTunneledMCP(t *testing.T) {
 		statusCode:  200,
 	})
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
-			From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:          now.Add(1 * time.Hour).Format(time.RFC3339),
-			TargetTypes: []gen.ToolUsageTargetType{"tunneled_mcp_server"},
-		})
-		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Equal(c, int64(1), res.Totals.EventCount) {
-			return
-		}
+	res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
+		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:          now.Add(1 * time.Hour).Format(time.RFC3339),
+		TargetTypes: []gen.ToolUsageTargetType{"tunneled_mcp_server"},
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.NotNil(t, res)
+	require.Equal(t, int64(1), res.Totals.EventCount)
 
-		targets := toolUsageTargetsByKey(res.Targets)
-		tunneled := targets["tunneled_mcp_server:server:postgres-tunnel"]
-		if assert.NotNil(c, tunneled) {
-			assert.Equal(c, "Tunneled Postgres MCP", tunneled.TargetLabel)
-			assert.Equal(c, int64(1), tunneled.EventCount)
-			assert.Equal(c, int64(1), tunneled.SuccessCount)
-			assert.Equal(c, int64(0), tunneled.FailureCount)
-		}
-		assert.Nil(c, targets["shadow_mcp_server:server:"+fixture.sourceID.String()])
-	}, 10*time.Second, 200*time.Millisecond)
+	targets := toolUsageTargetsByKey(res.Targets)
+	tunneled := targets["tunneled_mcp_server:server:postgres-tunnel"]
+	require.NotNil(t, tunneled)
+	require.Equal(t, "Tunneled Postgres MCP", tunneled.TargetLabel)
+	require.Equal(t, int64(1), tunneled.EventCount)
+	require.Equal(t, int64(1), tunneled.SuccessCount)
+	require.Equal(t, int64(0), tunneled.FailureCount)
+	require.Nil(t, targets["shadow_mcp_server:server:"+fixture.sourceID.String()])
 }
 
 func TestGetToolUsageSummary_FiltersByHookSource(t *testing.T) {
@@ -333,14 +304,11 @@ func TestGetToolUsageSummary_FiltersByHookSource(t *testing.T) {
 		HookSources: []string{"cowork"},
 	}
 
-	// Poll until ClickHouse reflects the inserts (eventual consistency). Only the
-	// cowork event matches the filter, so the count settles at exactly 1.
-	var result *gen.GetToolUsageSummaryResult
-	require.Eventually(t, func() bool {
-		var err error
-		result, err = ti.service.GetToolUsageSummary(ctx, payload)
-		return err == nil && result != nil && result.Totals.EventCount == 1
-	}, 10*time.Second, 200*time.Millisecond, "expected only the cowork hook event in the filtered summary")
+	// Only the cowork event matches the filter.
+	result, err := ti.service.GetToolUsageSummary(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, int64(1), result.Totals.EventCount, "expected only the cowork hook event in the filtered summary")
 
 	targets := toolUsageTargetsByKey(result.Targets)
 	require.NotNil(t, targets["shadow_mcp_server:server:shadow-db"])
@@ -372,21 +340,15 @@ func TestGetToolUsageFilterOptions_ReturnsUncappedShadowServersAndUsers(t *testi
 		})
 	}
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
-			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Empty(c, res.HostedServers)
-		assert.Len(c, res.ShadowServers, 30)
-		assert.Len(c, res.Users, 30)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Empty(t, res.HostedServers)
+	require.Len(t, res.ShadowServers, 30)
+	require.Len(t, res.Users, 30)
 
 	userOptionsOnly, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
 		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
@@ -447,28 +409,19 @@ func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T)
 		conversationID: "conv-hosted-hook",
 	})
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
-			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
-			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Len(c, res.HostedServers, 1) {
-			return
-		}
-		assert.Equal(c, "hosted-payments", res.HostedServers[0].ToolsetSlug)
-		assert.Equal(c, "Hosted Payments", res.HostedServers[0].ToolsetName)
-		assert.Equal(c, int64(1), res.HostedServers[0].EventCount)
-		assert.Empty(c, res.ShadowServers)
-		if assert.Len(c, res.Users, 1) {
-			assert.Equal(c, "alice@example.com", res.Users[0].UserKey)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.HostedServers, 1)
+	require.Equal(t, "hosted-payments", res.HostedServers[0].ToolsetSlug)
+	require.Equal(t, "Hosted Payments", res.HostedServers[0].ToolsetName)
+	require.Equal(t, int64(1), res.HostedServers[0].EventCount)
+	require.Empty(t, res.ShadowServers)
+	require.Len(t, res.Users, 1)
+	require.Equal(t, "alice@example.com", res.Users[0].UserKey)
 
 	hostedOptionsOnly, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
 		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
@@ -511,7 +464,7 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 		"gen_ai.conversation.id":         uuid.New().String(),
 		"gen_ai.response.finish_reasons": []string{"tool_calls"},
 	}
-	// Left off entirely when unset, so a fixture can model a caller Gram never
+	// Left off entirely when unset, so a fixture can model a caller Speakeasy never
 	// saw an initialize handshake for.
 	if p.clientName != "" {
 		attrs["gram.mcp.client.name"] = p.clientName
@@ -754,8 +707,6 @@ func TestGetToolUsageSummary_WindowBoundaryTraces(t *testing.T) {
 	insertHostedToolEventRow(t, ctx, ti, inWindowTraceID, now.Add(-10*time.Minute), "inwindow-set", "refund", "")
 	insertHostedToolEventRow(t, ctx, ti, inWindowTraceID, now.Add(5*time.Minute), "inwindow-set", "refund", "late-user")
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
 		From: from.Format(time.RFC3339),
 		To:   now.Format(time.RFC3339),
@@ -818,8 +769,6 @@ func TestGetToolUsageGranularEndpoints_MatchSummary(t *testing.T) {
 		result:         `"ok"`,
 		conversationID: "conv-skill",
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -909,7 +858,7 @@ func TestGetToolUsageClients_FoldsCaseAndUnattributed(t *testing.T) {
 		toolsetSlug: "payments", toolName: "charge", userEmail: "bob@example.com",
 		statusCode: 200, clientName: "Cursor", clientVersion: "1.7.42",
 	})
-	// Reported no client at all: handshaked before Gram recorded identities,
+	// Reported no client at all: handshaked before Speakeasy recorded identities,
 	// or never handshaked.
 	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
 		projectID: projectID, timestamp: now.Add(-17 * time.Minute),
@@ -1001,8 +950,6 @@ func TestGetToolUsageTotals_NarrowsByStatus(t *testing.T) {
 		})
 	}
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
@@ -1054,8 +1001,6 @@ func TestGetToolUsageTotals_NarrowsByQueryOnTheRawPath(t *testing.T) {
 		userEmail:   "bob@example.com",
 		statusCode:  200,
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)

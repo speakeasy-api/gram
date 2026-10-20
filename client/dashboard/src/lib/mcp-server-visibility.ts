@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import type {
   McpServer,
   McpServerVisibility,
@@ -59,6 +60,7 @@ export async function invalidateMcpServerQueries(
 ): Promise<void> {
   await Promise.all([
     invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+    invalidateAllResourceAudience(queryClient, { refetchType: "all" }),
     invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
     invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
     invalidateAllPlugins(queryClient, { refetchType: "all" }),

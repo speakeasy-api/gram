@@ -18,6 +18,9 @@ import {
   KeyRoundIcon,
   PlugZapIcon,
   ListChecksIcon,
+  ChartColumnStackedIcon,
+  ArrowRightLeftIcon,
+  ActivityIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -71,6 +74,12 @@ export const ADMIN_NAV_GROUPS = [
         icon: Grid2X2Icon,
       },
       {
+        to: "/signup-offers",
+        label: "Signup offers",
+        keywords: "signup stripe promotion tailscale partner gateway",
+        icon: BookOpenIcon,
+      },
+      {
         to: "/onboarding-steps",
         label: "Steps",
         keywords: "onboarding steps setup wizard cards groups playbooks",
@@ -89,10 +98,31 @@ export const ADMIN_NAV_GROUPS = [
         icon: KeyRoundIcon,
       },
       {
+        to: "/external-mcp-migration",
+        label: "External MCP migration",
+        keywords: "external mcp attachments remote servers migrate cutover",
+        icon: ArrowRightLeftIcon,
+      },
+      {
+        to: "/hook-clients",
+        label: "Hook clients",
+        keywords: "hooks curl binary versions inference sessions rollout",
+        icon: ActivityIcon,
+      },
+      {
         to: "/mcp-setup",
         label: "Admin MCP",
         keywords: "install connect agents claude codex cursor tailscale",
         icon: PlugZapIcon,
+      },
+      {
+        to: "/customer-usage",
+        label: "Customer usage",
+        keywords: "spend billing usage customers paying growth estimate",
+        icon: ChartColumnStackedIcon,
+        // Rendered after the external Demo organization link rather than in
+        // array order, so the sidebar lists it below that link.
+        afterDemoOrganization: true,
       },
     ],
   },

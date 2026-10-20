@@ -203,6 +203,49 @@ func TestPluginsService_CreatePlugin_DuplicateSlugReturnsConflict(t *testing.T) 
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
 }
 
+// The management API and the Platform MCP share one metadata core, so a slug
+// that is not already normalized is refused here with the same sentinel the
+// Platform MCP maps into its own refusal.
+func TestPluginsService_CreatePlugin_UnnormalizedSlugReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	_, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{
+		Name: "Unnormalized",
+		Slug: new("Not A Slug"),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, plugins.ErrPluginSlugInvalid.Error(), oopsErr.Error())
+}
+
+// plugins.slug holds at most 60 characters. A supplied slug over that is a bad
+// request, and a long name has its derived slug cut to fit, rather than either
+// failing as a database constraint violation.
+func TestPluginsService_CreatePlugin_KeepsSlugWithinTableLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	_, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{
+		Name: "Long slug",
+		Slug: new(strings.Repeat("a", plugins.MaxPluginSlugLength+1)),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, plugins.ErrPluginSlugTooLong.Error(), oopsErr.Error())
+
+	longName := strings.Repeat("support tools ", 10)
+	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: longName})
+	require.NoError(t, err)
+	require.Equal(t, longName, created.Name)
+	require.LessOrEqual(t, len(created.Slug), plugins.MaxPluginSlugLength)
+	require.False(t, strings.HasSuffix(created.Slug, "-"))
+}
+
 func TestPluginsService_CreatePlugin_ForbiddenWithoutOrgAdmin(t *testing.T) {
 	t.Parallel()
 
@@ -794,6 +837,7 @@ func TestPluginsService_SetPluginAssignments_PreservesUnavailableDirectoryAssign
 	require.NoError(t, err)
 
 	_, err = directoryRepo.DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
 		WorkosDeletedAt:        conv.ToPGTimestamptz(now),
 		WorkosLastEventID:      conv.ToPGTextEmpty(""),
 		WorkosDirectoryGroupID: groupWorkOSID,
@@ -1459,7 +1503,7 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 		"codex observability plugin slug %q not found among published files", *status.CodexObservabilityPlugin)
 }
 
-// An unproxied-backed server has no mcp_endpoints row (Gram never proxies
+// An unproxied-backed server has no mcp_endpoints row (Speakeasy never proxies
 // it), so ListPluginsWithMcpServersForProject must resolve it via its own
 // unproxied_mcp_servers URL rather than dropping it for lacking an endpoint
 // slug — otherwise a server that AddPluginServer successfully attaches
@@ -1499,10 +1543,10 @@ func TestPluginsService_PublishPlugins_UnproxiedBackedServerAppearsInBundle(t *t
 	server, ok := config.MCPServers["Vendor Widget"]
 	require.True(t, ok, "unproxied server missing from published .mcp.json")
 	require.Equal(t, "https://vendor.example.com/mcp", server.URL,
-		"unproxied server must publish its own vendor URL, not a Gram-hosted endpoint")
+		"unproxied server must publish its own vendor URL, not a Speakeasy-hosted endpoint")
 	require.Empty(t, server.Headers,
-		"unproxied server must never carry Gram's API key (or any other Gram-managed credential): "+
-			"MCPURL points straight at the vendor, so any header here leaks a Gram credential to a third party")
+		"unproxied server must never carry Speakeasy's API key (or any other Speakeasy-managed credential): "+
+			"MCPURL points straight at the vendor, so any header here leaks a Speakeasy credential to a third party")
 }
 
 // Reproduces the plugin_github_connections_installation_repo_key conflict:
@@ -1782,7 +1826,7 @@ func TestPluginsService_PublishPlugins_McpServerBacked(t *testing.T) {
 	require.Equal(t, "https://app.getgram.ai/mcp/"+mcpServer.endpointSlug, server.URL)
 	// No static auth header for OAuth (mcp_server-backed) remotes.
 	require.Empty(t, server.Headers["Authorization"])
-	// And no Gram API key is baked in for a Remote MCP-backed server.
+	// And no Speakeasy API key is baked in for a Remote MCP-backed server.
 	require.NotContains(t, string(claudeMCP), "gram_local_")
 }
 
@@ -2049,7 +2093,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 	require.NotNil(t, claudeMCP)
 	require.Contains(t, string(claudeMCP), "${user_config.ANALYTICS_API_KEY}")
 
-	// Verify NO Gram API key is injected for public servers.
+	// Verify NO Speakeasy API key is injected for public servers.
 	require.NotContains(t, string(cursorMCP), "gram_local_")
 }
 
@@ -2187,7 +2231,7 @@ func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
 	require.NoError(t, json.Unmarshal(cursorMCP, &cursorConfig))
 
 	require.Contains(t, cursorConfig.MCPServers, "Server enabled-toolset", "enabled toolset should appear in published config")
-	require.NotContains(t, cursorConfig.MCPServers, "Server disabled-toolset", "disabled toolset must be filtered out by ListPluginsWithServersForProject")
+	require.NotContains(t, cursorConfig.MCPServers, "Server disabled-toolset", "disabled toolset must be filtered out by ListPluginsWithMcpServersForProject")
 	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 	require.NoError(t, err)
 	require.False(t, fetched.AgentPluginsV1Compatible, "an active attachment whose backing was disabled must fail closed")

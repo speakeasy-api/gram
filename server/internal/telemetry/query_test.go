@@ -17,8 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -474,23 +472,18 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// Group by department (eventual consistency on the MV).
-	var deptResult *gen.QueryResult
-	require.Eventually(t, func() bool {
-		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:                   from,
-			To:                     to,
-			GroupBy:                conv.PtrEmpty("department_name"),
-			TopN:                   10,
-			SortBy:                 "total_cost",
-			IncludeDimensionValues: true,
-		})
-		if err != nil || res == nil {
-			return false
-		}
-		deptResult = res
-		return len(res.Table) == 2
-	}, 10*time.Second, 200*time.Millisecond)
+	// Group by department.
+	deptResult, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:                   from,
+		To:                     to,
+		GroupBy:                conv.PtrEmpty("department_name"),
+		TopN:                   10,
+		SortBy:                 "total_cost",
+		IncludeDimensionValues: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, deptResult)
+	require.Len(t, deptResult.Table, 2)
 
 	require.Equal(t, "department_name", deptResult.GroupBy)
 	require.Equal(t, int64(3600), deptResult.IntervalSeconds)
@@ -657,7 +650,6 @@ func TestQuery_SkillVersionAttributesFullSessionsWithoutDuplicateMappings(t *tes
 		mapping(uuid.New(), projectID, outsideSession, versionOne),
 		mapping(uuid.New(), foreignProjectID, foreignSession, versionOne),
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-time.Hour).Format(time.RFC3339)
 	to := now.Add(2 * time.Hour).Format(time.RFC3339)
@@ -833,10 +825,6 @@ func TestQuery_EmailFallsBackToHostname(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// The MV materializes synchronously with the insert; only the async insert
-	// queue needs draining for the rows to become visible deterministically.
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	// Group by email: the identified user keeps their address, the emailless
 	// session surfaces under its hostname, and only the identity-less row
 	// remains in the '' bucket.
@@ -910,19 +898,14 @@ func TestQuery_DefaultSortByAndTopN(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	var res *gen.QueryResult
-	require.Eventually(t, func() bool {
-		r, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("department_name"),
-		})
-		if err != nil || r == nil {
-			return false
-		}
-		res = r
-		return len(r.Table) == 11
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("department_name"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Table, 11)
 
 	require.Equal(t, "D1", res.Table[0].GroupValue, "default sort_by should rank by total_cost")
 	require.Equal(t, "D10", res.Table[9].GroupValue)
@@ -957,21 +940,16 @@ func TestQuery_SortByLLMTokens(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	var res *gen.QueryResult
-	require.Eventually(t, func() bool {
-		r, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("email"),
-			SortBy:  "llm_tokens",
-			TopN:    1,
-		})
-		if err != nil || r == nil {
-			return false
-		}
-		res = r
-		return len(r.Table) == 2
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("email"),
+		SortBy:  "llm_tokens",
+		TopN:    1,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Table, 2)
 
 	require.Equal(t, "llm@x.com", res.Table[0].GroupValue)
 	require.Equal(t, "Other", res.Table[1].GroupValue)
@@ -1026,20 +1004,16 @@ func TestQuery_CountsToolCalls(t *testing.T) {
 
 	// Org total (no group_by): four counted calls — Bash (deduped), github
 	// search, Read, and the Cursor Grep call.
-	var totalResult *gen.QueryResult
-	require.Eventually(t, func() bool {
-		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:   from,
-			To:     to,
-			TopN:   10,
-			SortBy: "total_tool_calls",
-		})
-		if err != nil || res == nil || len(res.Table) != 1 {
-			return false
-		}
-		totalResult = res
-		return totalResult.Table[0].Measures.TotalToolCalls == 4
-	}, 10*time.Second, 200*time.Millisecond)
+	totalResult, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:   from,
+		To:     to,
+		TopN:   10,
+		SortBy: "total_tool_calls",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, totalResult)
+	require.Len(t, totalResult.Table, 1)
+	require.Equal(t, int64(4), totalResult.Table[0].Measures.TotalToolCalls)
 
 	require.NotNil(t, totalResult, "expected an aggregate row with tool calls")
 	require.EqualValues(t, 4, totalResult.Table[0].Measures.TotalToolCalls)
@@ -1073,27 +1047,23 @@ func TestQuery_FallsBackToRowCountedToolCalls(t *testing.T) {
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	var result *gen.QueryResult
-	require.Eventually(t, func() bool {
-		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:   from,
-			To:     to,
-			TopN:   10,
-			SortBy: "total_tool_calls",
-		})
-		if err != nil || res == nil || len(res.Table) != 1 {
-			return false
-		}
-		result = res
-		return res.Table[0].Measures.TotalToolCalls == 3
-	}, 10*time.Second, 200*time.Millisecond)
+	result, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:   from,
+		To:     to,
+		TopN:   10,
+		SortBy: "total_tool_calls",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Table, 1)
+	require.Equal(t, int64(3), result.Table[0].Measures.TotalToolCalls)
 
 	require.EqualValues(t, 3, result.Table[0].Measures.TotalToolCalls)
 	require.InDelta(t, 0.75, result.Table[0].Measures.TotalCost, 1e-9)
 }
 
 // TestQuery_ExcludesAssistantChatCompletions guards the provenance rule: the
-// aggregate covers the three agent surfaces only, so Gram-hosted assistant
+// aggregate covers the three agent surfaces only, so Speakeasy-hosted assistant
 // chat completions never reach attribute_metrics_summaries even when they
 // carry cost.
 func TestQuery_ExcludesAssistantChatCompletions(t *testing.T) {
@@ -1120,21 +1090,17 @@ func TestQuery_ExcludesAssistantChatCompletions(t *testing.T) {
 
 	// Once the Claude row is aggregated, the assistants row must not be: it is
 	// excluded by the MV's provenance WHERE clause, not by timing.
-	var result *gen.QueryResult
-	require.Eventually(t, func() bool {
-		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("hook_source"),
-			TopN:    10,
-			SortBy:  "total_cost",
-		})
-		if err != nil || res == nil || len(res.Table) != 1 {
-			return false
-		}
-		result = res
-		return res.Table[0].GroupValue == "claude-code"
-	}, 10*time.Second, 200*time.Millisecond)
+	result, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("hook_source"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Table, 1)
+	require.Equal(t, "claude-code", result.Table[0].GroupValue)
 
 	require.Len(t, result.Table, 1)
 	require.Equal(t, "claude-code", result.Table[0].GroupValue)
@@ -1174,22 +1140,18 @@ func TestQuery_IncludesOnlyCanonicalLiteLLMModelSpans(t *testing.T) {
 	spoofed.gramURN = "other:otel:traces"
 	insertLiteLLMSpan(t, ctx, spoofed)
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, base.timestamp, uuid.NewString(), 0.25, 20, 5, 0, 0, "opus", "claude@example.test", "Engineering", nil, "main", "", "", "", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
-	var result *gen.QueryResult
-	require.Eventually(t, func() bool {
-		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From: from, To: to, GroupBy: conv.PtrEmpty("hook_source"),
-			TopN: 10, SortBy: "total_cost",
-		})
-		if err != nil || res == nil || len(res.Table) != 2 {
-			return false
-		}
-		result = res
-		return res.Table[0].GroupValue == "claude-code" && res.Table[1].GroupValue == "litellm"
-	}, 10*time.Second, 200*time.Millisecond)
+	result, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From: from, To: to, GroupBy: conv.PtrEmpty("hook_source"),
+		TopN: 10, SortBy: "total_cost",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Table, 2)
+	require.Equal(t, "claude-code", result.Table[0].GroupValue)
+	require.Equal(t, "litellm", result.Table[1].GroupValue)
 
 	require.EqualValues(t, 20, result.Table[0].Measures.TotalInputTokens)
 	require.EqualValues(t, 5, result.Table[0].Measures.TotalOutputTokens)
@@ -1233,22 +1195,18 @@ func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	var byServer *gen.QueryResult
-	require.Eventually(t, func() bool {
-		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:                   from,
-			To:                     to,
-			GroupBy:                conv.PtrEmpty("mcp_server_name"),
-			TopN:                   10,
-			SortBy:                 "cache_creation_input_tokens",
-			IncludeDimensionValues: true,
-		})
-		if err != nil || res == nil || len(res.Table) != 1 {
-			return false
-		}
-		byServer = res
-		return res.Table[0].GroupValue == "github"
-	}, 10*time.Second, 200*time.Millisecond)
+	byServer, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:                   from,
+		To:                     to,
+		GroupBy:                conv.PtrEmpty("mcp_server_name"),
+		TopN:                   10,
+		SortBy:                 "cache_creation_input_tokens",
+		IncludeDimensionValues: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, byServer)
+	require.Len(t, byServer.Table, 1)
+	require.Equal(t, "github", byServer.Table[0].GroupValue)
 
 	row := byServer.Table[0]
 	require.Equal(t, "github", row.GroupValue)
@@ -1301,26 +1259,22 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	var res *gen.QueryResult
-	require.Eventually(t, func() bool {
-		r, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("department_name"),
-			TopN:    2,
-			SortBy:  "total_cost",
-		})
-		if err != nil || r == nil {
-			return false
-		}
-		res = r
-		// 4 distinct departments visible before rollup.
-		var total float64
-		for _, row := range r.Table {
-			total += row.Measures.TotalCost
-		}
-		return total >= 9.99 && len(r.Table) == 3
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("department_name"),
+		TopN:    2,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	// 4 distinct departments visible before rollup.
+	var total float64
+	for _, row := range res.Table {
+		total += row.Measures.TotalCost
+	}
+	require.GreaterOrEqual(t, total, 9.99)
+	require.Len(t, res.Table, 3)
 
 	require.Equal(t, "D1", res.Table[0].GroupValue)
 	require.Equal(t, "D2", res.Table[1].GroupValue)
@@ -1339,8 +1293,8 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 }
 
 // insertRetainedGramAggregateRow seeds attribute_metrics_summaries directly
-// with a Gram-hosted completion row, the shape RETAINED from before the
-// provenance-first MV cutover stopped admitting Gram completions. The
+// with a Speakeasy-hosted completion row, the shape RETAINED from before the
+// provenance-first MV cutover stopped admitting Speakeasy completions. The
 // tokens-under-management reads must exclude these at read time — that
 // exclusion is untestable through the MV (it no longer ingests such rows),
 // hence the direct aggregate-state insert.
@@ -1414,9 +1368,9 @@ func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 1000, 200, 50000, 300, "claude-4.6", "fleet@example.com", "Engineering", []string{"dev"}, "main", "", "", "", "")
 	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.2, 400, "gpt-5.4-codex", "codex", "codex@example.com", "Engineering", nil)
 
-	// Gram-hosted completion rows retained in the aggregate from before the
+	// Speakeasy-hosted completion rows retained in the aggregate from before the
 	// provenance-first cutover: a user-facing playground chat and the
-	// platform's scanning inference. Both are Gram-spent inference — never
+	// platform's scanning inference. Both are Speakeasy-spent inference — never
 	// tokens under management — and must not appear anywhere in the details.
 	insertRetainedGramAggregateRow(t, ctx, projectID, ts, "playground", 777)
 	insertRetainedGramAggregateRow(t, ctx, projectID, ts, "risk-analysis", 333)
@@ -1424,23 +1378,18 @@ func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// The retained rows are direct aggregate inserts (visible immediately), so
-	// the totals below can only converge once BOTH observed rows materialized
-	// AND the exclusion holds — it cannot pass vacuously.
-	var result *gen.TumDetailsResult
-	require.Eventually(t, func() bool {
-		res, resErr := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
-			SessionToken: nil,
-			From:         from,
-			To:           to,
-			ProjectID:    nil,
-		})
-		if resErr != nil || res.Totals == nil {
-			return false
-		}
-		result = res
-		return res.Totals.TotalTokens == 1900
-	}, 10*time.Second, 200*time.Millisecond)
+	// The retained rows are direct aggregate inserts, visible as soon as they
+	// return, so the totals below check both that the observed rows
+	// materialized and that the exclusion holds — they cannot pass vacuously.
+	result, resErr := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
+		SessionToken: nil,
+		From:         from,
+		To:           to,
+		ProjectID:    nil,
+	})
+	require.NoError(t, resErr)
+	require.NotNil(t, result.Totals)
+	require.Equal(t, int64(1900), result.Totals.TotalTokens)
 
 	require.Equal(t, int64(1400), result.Totals.InputTokens)
 	require.Equal(t, int64(200), result.Totals.OutputTokens)
@@ -1460,7 +1409,7 @@ func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 		}
 	}
 	require.Equal(t, map[string]int64{"claude-code": 1500, "codex": 400}, rowsByKey["hook_source"],
-		"the agent breakdown holds exactly the observed surfaces — no Gram-hosted rows")
+		"the agent breakdown holds exactly the observed surfaces — no Speakeasy-hosted rows")
 	require.Equal(t, map[string]int64{"claude-4.6": 1500, "gpt-5.4-codex": 400}, rowsByKey["model"])
 	require.Equal(t, map[string]int64{"anthropic": 1500, "": 400}, rowsByKey["provider"])
 	require.Equal(t, map[string]int64{"team": 1500, "": 400}, rowsByKey["account_type"])
@@ -1513,19 +1462,16 @@ func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, resErr := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
-			SessionToken: nil,
-			From:         from,
-			To:           to,
-			ProjectID:    nil,
-		})
-		if !assert.NoError(c, resErr) || !assert.NotNil(c, res.Totals) {
-			return
-		}
-		assert.Equal(c, int64(1250), res.Totals.TotalTokens,
-			"the deleted project's usage must still count toward the billing breakdowns")
-	}, 10*time.Second, 200*time.Millisecond)
+	res, resErr := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
+		SessionToken: nil,
+		From:         from,
+		To:           to,
+		ProjectID:    nil,
+	})
+	require.NoError(t, resErr)
+	require.NotNil(t, res.Totals)
+	require.Equal(t, int64(1250), res.Totals.TotalTokens,
+		"the deleted project's usage must still count toward the billing breakdowns")
 }
 
 // The include_dimension_values default is applied when the HTTP body is

@@ -128,3 +128,46 @@ func TestHookDeviceTelemetryIgnoresNonHookRoutes(t *testing.T) {
 	_, found := attrs[attr.HookDeviceOSKey]
 	require.False(t, found, "device attributes must not be stamped on non-hook routes")
 }
+
+func TestHookDeviceTelemetryCarriesDeviceAttributesOnContext(t *testing.T) {
+	t.Parallel()
+
+	// No otelhttp in front, so the span is not recording, as for an unsampled
+	// request: the telemetry rows still need the device attributes.
+	var device map[attr.Key]string
+	handler := middleware.HookDeviceTelemetry(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		device = middleware.HookDeviceAttributes(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc/hooks.ingest", nil)
+	req.Header.Set("X-Gram-Device-Binary-Version", "1.2.3")
+	req.Header.Set("X-Gram-Device-Harness", "claude")
+	req.Header.Set("X-Gram-Device-Arch", "arm\x0164")
+	req.Header.Set("X-Gram-Device-Elapsed-Ms", "42")
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	require.Equal(t, map[attr.Key]string{
+		attr.HookDeviceBinaryVersionKey: "1.2.3",
+		attr.HookDeviceHarnessKey:       "claude",
+	}, device, "only sanitized string values ride on the context; elapsed time stays span-only")
+}
+
+func TestHookDeviceTelemetryLeavesContextEmptyWithoutHeaders(t *testing.T) {
+	t.Parallel()
+
+	device := map[attr.Key]string{attr.HookDeviceOSKey: "sentinel"}
+	handler := middleware.HookDeviceTelemetry(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		device = middleware.HookDeviceAttributes(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/rpc/hooks.ingest", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	require.Nil(t, device, "a request without device headers carries no device attributes")
+}

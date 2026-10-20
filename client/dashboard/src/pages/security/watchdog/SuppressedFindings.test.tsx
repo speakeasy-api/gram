@@ -608,7 +608,7 @@ describe("Suppressed MCP finding context", () => {
     expect(drawer().getByText("MCP context")).toBeTruthy();
     expect(drawer().getByText("Issue tracker MCP")).toBeTruthy();
     expect(
-      drawer().getByText("Hosted MCP · create_issue · Blocked"),
+      drawer().getByText("create_issue · Hosted MCP · Blocked"),
     ).toBeTruthy();
     expect(drawer().queryByText("Untitled")).toBeNull();
     expect(drawer().queryByRole("button", { name: "View session" })).toBeNull();

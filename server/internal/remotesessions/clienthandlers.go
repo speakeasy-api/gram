@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -192,8 +193,29 @@ func (s *Service) clientView(row repo.RemoteSessionClient, userSessionIssuerIDs 
 	if err != nil {
 		return nil, fmt.Errorf("build remote session client view: %w", err)
 	}
-	view.CallbackURL = new(s.origins.ClientCallbackURL(row.CallbackBaseUrl))
+	view.CallbackURL = s.clientCallbackURL(row)
+	view.FederatedCallbackURL = s.origins.ClientFederatedCallbackURL(row)
 	return view, nil
+}
+
+// clientCallbackURL is the redirect URI a client registers upstream. A self
+// client never sends a browser to its issuer, so it has none.
+func (s *Service) clientCallbackURL(row repo.RemoteSessionClient) *string {
+	if CredentialOwner(row.CredentialOwner) == CredentialOwnerSelf {
+		return nil
+	}
+
+	return new(s.origins.ClientCallbackURL(row.CallbackBaseUrl))
+}
+
+// newClientCallbackBaseURL is the callback_base_url a client created now
+// records. A self client records none, because it has no callback.
+func (s *Service) newClientCallbackBaseURL(owner CredentialOwner) pgtype.Text {
+	if owner == CredentialOwnerSelf {
+		return pgtype.Text{String: "", Valid: false}
+	}
+
+	return s.origins.NewClientBaseURL(true)
 }
 
 func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.CreateRemoteSessionClientPayload) (*types.RemoteSessionClient, error) {
@@ -223,7 +245,21 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "client_id is required").LogError(ctx, logger)
 	}
 
-	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+	owner, err := parseCreateCredentialOwner(ctx, logger, payload.CredentialOwner)
+	if err != nil {
+		return nil, err
+	}
+
+	authMethod := selfClientCreateAuthMethod(owner, payload.TokenEndpointAuthMethod)
+	hasSecret := payload.ClientSecret != nil && *payload.ClientSecret != ""
+
+	if err := requireSelfClientCredential(clientCredentialState{
+		owner:             owner,
+		method:            conv.PtrValOr(authMethod, ""),
+		hasSecret:         hasSecret,
+		hasKeySet:         payload.JSONWebKeySetID != nil,
+		legacyCallbackURL: false,
+	}); err != nil {
 		return nil, err
 	}
 
@@ -233,7 +269,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 	}
 
 	var secretCiphertext pgtype.Text
-	if payload.ClientSecret != nil && *payload.ClientSecret != "" {
+	if hasSecret {
 		encrypted, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
 		if encErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
@@ -249,7 +285,21 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	txRepo := repo.New(dbtx)
 
-	if _, err := s.validateNewClientIssuers(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs); err != nil {
+	issuer, err := s.validateNewClientIssuers(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := requireSelfClientIssuer(owner, issuer); err != nil {
+		return nil, err
+	}
+
+	keySetID, err := s.resolveCreateKeySet(ctx, logger, txRepo, payload.JSONWebKeySetID, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := requirePrivateKeyJWTKeySet(authMethod, keySetID); err != nil {
 		return nil, err
 	}
 
@@ -261,14 +311,16 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		ClientSecretEncrypted:           secretCiphertext,
 		ClientIDIssuedAt:                provenance.clientIDIssuedAt,
 		ClientSecretExpiresAt:           provenance.clientSecretExpiresAt,
-		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		TokenEndpointAuthMethod:         conv.PtrToPGText(authMethod),
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
 		LegacyCallbackUrl:               false,
-		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		JsonWebKeySetID:                 keySetID,
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		CallbackBaseUrl:                 s.origins.NewClientBaseURL(true),
+		CallbackBaseUrl:                 s.newClientCallbackBaseURL(owner),
+		GrantTypes:                      clientCreateGrantTypes(owner),
+		CredentialOwner:                 conv.ToPGText(string(owner)),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
@@ -279,7 +331,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 // CreateCimd registers a remote_session_client in Client ID Metadata Document
 // (CIMD) mode. Unlike the manual create path the caller supplies no client_id
-// or secret: Gram generates the row id, derives the platform-canonical document
+// or secret: Speakeasy generates the row id, derives the platform-canonical document
 // URL from it, and writes that URL as both client_id and client_id_metadata_uri
 // in a single INSERT (token_endpoint_auth_method none, no secret). The owning
 // issuer must advertise client_id_metadata_document support.
@@ -440,6 +492,11 @@ func (s *Service) finalizeClientCreate(
 		}
 	}
 
+	snapshot, err := mv.BuildRemoteSessionClientView(created, userIssuerIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
+	}
+
 	if err := s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -448,6 +505,7 @@ func (s *Service) finalizeClientCreate(
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(created.ID),
 		ClientID:               created.ClientID,
+		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log remote session client creation").LogError(ctx, logger)
 	}
@@ -544,6 +602,10 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		secretCiphertext = conv.ToPGText(encrypted)
 	}
 
+	if err := requireSelfClientCredential(updatedClientCredentialState(existing.RemoteSessionClient, payload.TokenEndpointAuthMethod, secretCiphertext.Valid, payload.LegacyCallbackURL)); err != nil {
+		return nil, err
+	}
+
 	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID); err != nil {
 		return nil, err
 	}
@@ -590,7 +652,8 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 	}
 
 	// Set after the audit snapshot so it matches the snapshot before.
-	afterView.CallbackURL = new(s.origins.ClientCallbackURL(updated.CallbackBaseUrl))
+	afterView.CallbackURL = s.clientCallbackURL(updated)
+	afterView.FederatedCallbackURL = s.origins.ClientFederatedCallbackURL(updated)
 	return afterView, nil
 }
 
@@ -737,6 +800,9 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 	if err := lockUserSessionIssuersForClientBinding(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, []uuid.UUID{userIssuerID}); err != nil {
 		return nil, err
 	}
+	if err := s.refuseOrgWideAttachment(ctx, logger, txRepo, *authCtx, userIssuerID, clientID, true); err != nil {
+		return nil, err
+	}
 
 	// Exclude this client so re-attaching an existing binding is a no-op.
 	if err := s.guardSingleClientPerRemoteIssuer(ctx, logger, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerID, existing.RemoteSessionClient.RemoteSessionIssuerID, clientID); err != nil {
@@ -813,19 +879,8 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
 	}
 
-	// The user_session_issuer must belong to the caller's project. An org-level
-	// client can be bound to user_session_issuers across projects in the same
-	// org, so without this a project admin could detach another project's
-	// binding through the (project-agnostic) join-table delete.
-	if _, err := txRepo.LockProjectUserIssuerForDetach(ctx, repo.LockProjectUserIssuerForDetachParams{
-		ID:             userIssuerID,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+	if err := s.refuseOrgWideAttachment(ctx, logger, txRepo, *authCtx, userIssuerID, clientID, false); err != nil {
+		return nil, err
 	}
 
 	// Lock in preparation's user-issuer -> client order. The scoped lock
@@ -869,6 +924,52 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 			UserSessionIssuerURN:   urn.NewUserSessionIssuer(userIssuerID),
 		})
 	})
+}
+
+// refuseOrgWideAttachment refuses a project-scoped attach or detach of an
+// organization-level client on an organization-level user session issuer: that
+// binding is shared by every project's servers on the issuer.
+func (s *Service) refuseOrgWideAttachment(ctx context.Context, logger *slog.Logger, q *repo.Queries, authCtx contextvalues.AuthContext, userIssuerID, clientID uuid.UUID, attaching bool) error {
+	// Scope and lock the issuer before checking the binding, even for a no-op.
+	// Attach also holds the owner advisory lock; the row lock serializes both
+	// paths against organization detach and preserves issuer-before-client order.
+	if _, err := q.LockProjectUserIssuerForDetach(ctx, repo.LockProjectUserIssuerForDetachParams{
+		ID: userIssuerID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+	}
+	// Re-read after acquiring the lock: the pre-lock snapshot may describe a
+	// no-op that is now an organization-wide change.
+	client, err := q.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ID: clientID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
+	}
+	if slices.Contains(client.UserSessionIssuerIds, userIssuerID) == attaching {
+		return nil // Re-attaching or detaching a missing binding is a no-op.
+	}
+	issuer, err := q.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
+		ID:             userIssuerID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+	}
+	if err := refuseOrgWideBinding(!issuer.ProjectID.Valid, client.RemoteSessionClient.ProjectID); err != nil {
+		return identityOopsError(err, "attach remote session client").LogError(ctx, logger)
+	}
+	return nil
 }
 
 // commitClientAttachmentChange re-reads a client after an attach/detach, records

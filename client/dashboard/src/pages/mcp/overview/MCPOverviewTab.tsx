@@ -21,6 +21,8 @@ import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useProject } from "@/contexts/Auth";
+import { useObserveLogsLink } from "@/components/observe/observeDeepLink";
+import type { ParsedTargetFilter } from "@/components/observe/observeTargetFilters";
 
 // Both variants share the dashboard, but overview telemetry must use the
 // variant's own scope: toolset slug or remote MCP server ID.
@@ -41,11 +43,14 @@ function errorRate(summary: ObservabilitySummary): number {
 
 export function MCPOverviewTab({
   server,
+  logsTarget,
 }: {
   server: HostedServerRef;
+  logsTarget?: ParsedTargetFilter | null;
 }): React.JSX.Element {
   const client = useGramContext();
   const project = useProject();
+  const observeLogsLink = useObserveLogsLink();
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
   const {
@@ -93,29 +98,37 @@ export function MCPOverviewTab({
   const summary = data?.summary;
   const comparison = data?.comparison;
   const timeSeries = useMemo(() => data?.timeSeries ?? [], [data]);
+  const toolLogsTarget =
+    server.kind === "toolset"
+      ? ({ type: "hosted", id: server.slug } satisfies ParsedTargetFilter)
+      : logsTarget;
 
-  const topByCount = useMemo(
-    () =>
-      (data?.topToolsByCount ?? []).map((tool) => ({
+  const topByCount = (data?.topToolsByCount ?? []).map((tool) => {
+    const toolName = toolLabelFromUrn(tool.gramUrn);
+    return {
+      key: tool.gramUrn,
+      label: toolName,
+      value: tool.callCount,
+      href: toolLogsTarget
+        ? observeLogsLink({ target: toolLogsTarget, toolName })
+        : undefined,
+    };
+  });
+
+  const topByFailureRate = (data?.topToolsByFailureRate ?? [])
+    .filter((tool) => tool.failureCount > 0)
+    .map((tool) => {
+      const toolName = toolLabelFromUrn(tool.gramUrn);
+      return {
         key: tool.gramUrn,
-        label: toolLabelFromUrn(tool.gramUrn),
-        value: tool.callCount,
-      })),
-    [data],
-  );
-
-  const topByFailureRate = useMemo(
-    () =>
-      (data?.topToolsByFailureRate ?? [])
-        .filter((tool) => tool.failureCount > 0)
-        .map((tool) => ({
-          key: tool.gramUrn,
-          label: toolLabelFromUrn(tool.gramUrn),
-          value: tool.failureRate * 100,
-          valueLabel: `${(tool.failureRate * 100).toFixed(1)}%`,
-        })),
-    [data],
-  );
+        label: toolName,
+        value: tool.failureRate * 100,
+        valueLabel: `${(tool.failureRate * 100).toFixed(1)}%`,
+        href: toolLogsTarget
+          ? observeLogsLink({ target: toolLogsTarget, toolName })
+          : undefined,
+      };
+    });
 
   return (
     // Container queries, not viewport ones: the side panel narrows this column

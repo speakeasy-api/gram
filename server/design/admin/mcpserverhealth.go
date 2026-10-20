@@ -37,7 +37,7 @@ var AdminMcpServerHealthTrustedRemoteSession = Type("AdminMcpServerHealthTrusted
 	Required("issuer_id", "client_id")
 
 	Attribute("issuer_id", String, "The trusted remote session issuer ID.")
-	Attribute("client_id", String, "The remote session client ID Gram uses with the trusted issuer.")
+	Attribute("client_id", String, "The remote session client ID Speakeasy uses with the trusted issuer.")
 })
 
 var AdminMcpServerHealthServerRef = Type("AdminMcpServerHealthServerRef", func() {
@@ -68,7 +68,7 @@ var AdminMcpServerHealthRemoteSessionIssuer = Type("AdminMcpServerHealthRemoteSe
 	Attribute("name", String, "Display name of the issuer.")
 	Attribute("issuer", String, "The upstream issuer URL.")
 	Attribute("attachment_scope", String, "Where the row is attached. global is platform-wide.", attachmentScopeEnum)
-	Attribute("networking", String, "Whether Gram reaches the issuer over the public internet or a tunnel.", func() {
+	Attribute("networking", String, "Whether Speakeasy reaches the issuer over the public internet or a tunnel.", func() {
 		Enum("public", "tunneled")
 	})
 	Attribute("oidc", Boolean, "Whether the issuer is treated as an OpenID Connect provider.")
@@ -78,6 +78,7 @@ var AdminMcpServerHealthRemoteSessionIssuer = Type("AdminMcpServerHealthRemoteSe
 	})
 	Attribute("cimd_supported", Boolean, "Whether the issuer accepts a Client ID Metadata Document URL as client_id.")
 	Attribute("scope_override", ArrayOf(String), "Operator-pinned scopes sent in place of the discovered set. Absent when unset.")
+	Attribute("omit_scope_fallback", Boolean, "Whether a login with no other scope source sends no scope instead of the issuer's whole scopes_supported. Absent when unset, which behaves as false.")
 	Attribute("metadata_fetched_at", String, "Last successful metadata discovery.", func() { Format(FormatDateTime) })
 	Attribute("metadata_last_error_at", String, "Last failed metadata discovery.", func() { Format(FormatDateTime) })
 	Attribute("jwks_last_error_at", String, "Last failed JWK Set fetch.", func() { Format(FormatDateTime) })
@@ -115,7 +116,7 @@ var AdminMcpServerHealthRemoteSessionClient = Type("AdminMcpServerHealthRemoteSe
 
 var AdminMcpServerHealthUserSessionIssuer = Type("AdminMcpServerHealthUserSessionIssuer", func() {
 	Description("The user session issuer that authenticates the server's users.")
-	Required("id", "slug", "classification", "authn_challenge_mode", "session_duration_hours", "attachment_scope", "use_authentication_host", "other_servers_using_issuer", "created_at", "sessions", "remote_session_clients")
+	Required("id", "slug", "classification", "authn_challenge_mode", "session_duration_hours", "attachment_scope", "use_authentication_host", "authorization_server_mode", "issuer_url_pinned", "other_servers_using_issuer", "created_at", "sessions", "remote_session_clients")
 
 	Attribute("id", String, "The user session issuer ID.")
 	Attribute("slug", String, "The issuer slug.")
@@ -131,6 +132,10 @@ var AdminMcpServerHealthUserSessionIssuer = Type("AdminMcpServerHealthUserSessio
 		Enum("disabled", "presets", "reporting", "open")
 	})
 	Attribute("use_authentication_host", Boolean, "Whether the issuer announces the authentication host as its origin.")
+	Attribute("authorization_server_mode", String, "Which OAuth authorization server the issuer's MCP servers point clients to: one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id} (shared).", func() {
+		Enum("endpoint", "shared")
+	})
+	Attribute("issuer_url_pinned", Boolean, "Whether a shared authorization server's issuer URL is pinned, so it stays the same if the deployment's hosts change.")
 	Attribute("trusted_remote_session", AdminMcpServerHealthTrustedRemoteSession, "Set when the issuer trusts an external authorization server's assertions.")
 	Attribute("other_servers_using_issuer", ArrayOf(AdminMcpServerHealthServerRef), "Other live servers in the project that share this issuer.")
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
@@ -161,7 +166,7 @@ var AdminMcpServerToolCallBucket = Type("AdminMcpServerToolCallBucket", func() {
 })
 
 var AdminMcpServerToolCalls = Type("AdminMcpServerToolCalls", func() {
-	Description("One MCP server's tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization's logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Gram directly.")
+	Description("One MCP server's tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization's logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Speakeasy directly.")
 	Required("type")
 
 	Attribute("type", String, func() {

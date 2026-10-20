@@ -22,6 +22,7 @@ func TestSetupCategoryFromInspection(t *testing.T) {
 	}{
 		{name: "anonymous", inspection: DirectRemoteInspection{Authentication: "anonymous"}},
 		{name: "dynamic registration", inspection: DirectRemoteInspection{Authentication: "authentication_required", OAuthDiscovery: "available_dcr"}, want: SetupCategoryAuthenticationRequired},
+		{name: "client ID metadata document", inspection: DirectRemoteInspection{Authentication: "authentication_required", OAuthDiscovery: "available_cimd"}, want: SetupCategoryAuthenticationRequired},
 		{name: "registration unsupported", inspection: DirectRemoteInspection{Authentication: "authentication_required", OAuthDiscovery: "available"}, want: SetupCategoryDynamicRegistrationUnsupported},
 		{name: "metadata incomplete", inspection: DirectRemoteInspection{Authentication: "authentication_required", OAuthDiscovery: "incomplete"}, want: SetupCategoryOAuthMetadataIncomplete},
 	}
@@ -29,6 +30,28 @@ func TestSetupCategoryFromInspection(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, test.want, setupCategoryFromInspection(test.inspection))
+		})
+	}
+}
+
+func TestAutomaticClientRegistrationFromInspection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		inspection DirectRemoteInspection
+		want       string
+	}{
+		{name: "anonymous", inspection: DirectRemoteInspection{Authentication: "anonymous", OAuthDiscovery: "not_advertised"}},
+		{name: "dynamic registration", inspection: DirectRemoteInspection{Authentication: "authentication_required", OAuthDiscovery: "available_dcr"}, want: AutomaticClientRegistrationDCR},
+		{name: "client ID metadata document", inspection: DirectRemoteInspection{Authentication: "authentication_required", OAuthDiscovery: "available_cimd"}, want: AutomaticClientRegistrationCIMD},
+		{name: "neither", inspection: DirectRemoteInspection{Authentication: "authentication_required", OAuthDiscovery: "available"}, want: AutomaticClientRegistrationNone},
+		{name: "metadata incomplete", inspection: DirectRemoteInspection{Authentication: "authentication_required", OAuthDiscovery: "incomplete"}, want: AutomaticClientRegistrationNone},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, automaticClientRegistrationFromInspection(test.inspection))
 		})
 	}
 }

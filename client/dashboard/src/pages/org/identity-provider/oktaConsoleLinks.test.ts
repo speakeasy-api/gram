@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeOktaOrgUrl,
   oktaAdminConsoleUrl,
+  oktaApiServiceIntegrationsUrl,
   oktaApplicationsUrl,
   oktaConnectionsUrl,
   oktaConsoleUrl,
@@ -120,6 +121,56 @@ describe("normalizeOktaOrgUrl", () => {
     );
   });
 
+  it.each(["okta.com", "oktapreview.com", "okta-emea.com", "okta.mil"])(
+    "resolves an admin console URL on %s to its org",
+    (suffix) => {
+      const org = `https://acme.${suffix}`;
+      expect(normalizeOktaOrgUrl(`https://acme-admin.${suffix}`)).toBe(org);
+      expect(normalizeOktaOrgUrl(`https://Acme-Admin.${suffix}/admin`)).toBe(
+        org,
+      );
+      expect(
+        normalizeOktaOrgUrl(`https://acme-admin.${suffix}/admin/apps/active`),
+      ).toBe(org);
+    },
+  );
+
+  it("leaves orgs that merely contain admin untouched", () => {
+    expect(normalizeOktaOrgUrl("https://myadmin-co.okta.com")).toBe(
+      "https://myadmin-co.okta.com",
+    );
+    expect(normalizeOktaOrgUrl("https://admin-team.okta.com")).toBe(
+      "https://admin-team.okta.com",
+    );
+    expect(normalizeOktaOrgUrl("https://acme-admin.sub.okta.com")).toBe(
+      "https://acme-admin.sub.okta.com",
+    );
+    expect(
+      normalizeOktaOrgUrl("https://sub.acme-admin.okta.com/admin/home"),
+    ).toBe("https://sub.acme.okta.com");
+  });
+
+  it("keeps refusing other paths, even on an admin host", () => {
+    expect(
+      normalizeOktaOrgUrl("https://acme-admin.okta.com/app/UserHome"),
+    ).toBeUndefined();
+    expect(
+      normalizeOktaOrgUrl("https://acme-admin.okta.com/administrator"),
+    ).toBeUndefined();
+    expect(
+      normalizeOktaOrgUrl("https://acme-admin.okta.com/admin/home?x=1"),
+    ).toBeUndefined();
+    expect(normalizeOktaOrgUrl("https://-admin.okta.com")).toBeUndefined();
+    expect(
+      normalizeOktaOrgUrl("https://acme-admin-admin.okta.com"),
+    ).toBeUndefined();
+    for (const path of ["/%61dmin", "/admin%2Fx", "/admin/%zz", "//admin"]) {
+      expect(
+        normalizeOktaOrgUrl(`https://acme-admin.okta.com${path}`),
+      ).toBeUndefined();
+    }
+  });
+
   it("rejects paths, queries, fragments, http, and foreign hosts", () => {
     expect(
       normalizeOktaOrgUrl("https://example.okta.com/admin"),
@@ -152,5 +203,22 @@ describe("normalizeOktaOrgUrl", () => {
     expect(normalizeOktaOrgUrl("https://a.b.okta.mil/")).toBe(
       "https://a.b.okta.mil",
     );
+  });
+});
+
+describe("oktaApiServiceIntegrationsUrl", () => {
+  it("opens the admin console's API Service Integrations page", () => {
+    expect(oktaApiServiceIntegrationsUrl("https://acme.okta.com/")).toBe(
+      "https://acme-admin.okta.com/admin/apps/api-service-integrations",
+    );
+  });
+
+  it("returns no link for a URL that is not an Okta tenant", () => {
+    expect(
+      oktaApiServiceIntegrationsUrl("javascript:alert(1)"),
+    ).toBeUndefined();
+    expect(
+      oktaApiServiceIntegrationsUrl("https://evil.example.com"),
+    ).toBeUndefined();
   });
 });

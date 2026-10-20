@@ -20,7 +20,7 @@ validator boundaries, not claims that upstream or the RFC mandates either result
 Unknown metadata extensions remain open; root official metadata is explicitly
 closed by upstream. Namespace placement is not an additional ownership check.
 
-Gram rules live in record/mutation validation: exact-case name identity, payload
+Speakeasy rules live in record/mutation validation: exact-case name identity, payload
 limits, immutable identity, ordered remote endpoints, and catalog-wide uniqueness
 of every `_meta["com.speakeasy.ai/okta"].oinNames` element across published and
 unpublished entries. That namespace is closed and its issuer must be an https

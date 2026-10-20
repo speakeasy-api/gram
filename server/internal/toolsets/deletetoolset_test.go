@@ -322,12 +322,12 @@ func TestToolsetsService_DeleteToolset_DetachesFromAssistants(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, otherBefore, otherAfter, "another project's independent attachments must survive deletion")
 
-	core := assistants.NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, nil, nil, nil, nil, nil, nil, audit.NewLogger())
+	core := assistants.NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, nil, nil, nil, nil, nil, nil, audit.NewLogger(), nil, nil)
 	reloaded, err := core.GetAssistant(ctx, *authCtx.ProjectID, assistant.ID)
 	require.NoError(t, err)
-	require.Len(t, reloaded.Toolsets, 1)
+	require.Len(t, reloaded.MCPServers, 1)
 	name := "updated assistant"
-	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, []*types.AssistantToolsetRef{{ToolsetSlug: reloaded.Toolsets[0].ToolsetSlug}}, nil, nil, nil, nil)
+	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, []*types.AssistantToolsetRef{{ToolsetSlug: reloaded.MCPServers[0].ToolsetSlug.String}}, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, name, updated.Name)
 }

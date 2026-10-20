@@ -68,11 +68,10 @@ var File_gram_telemetry_v1_session_observed_ch_writer_proto protoreflect.FileDes
 
 const file_gram_telemetry_v1_session_observed_ch_writer_proto_rawDesc = "" +
 	"\n" +
-	"2gram/telemetry/v1/session_observed_ch_writer.proto\x12\x11gram.telemetry.v1\x1a\x1bgcp/pubsub/v1/options.proto\"]\n" +
-	"\x17SessionObservedCHWriter:B\x92\xb5\x18>\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\t\n" +
+	"2gram/telemetry/v1/session_observed_ch_writer.proto\x12\x11gram.telemetry.v1\x1a\x1bgcp/pubsub/v1/options.proto\"Y\n" +
+	"\x17SessionObservedCHWriter:>\x92\xb5\x18:\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\t\n" +
 	"\x02\b\n" +
-	"\x12\x03\b\xd8\x04J\x02\x10\n" +
-	"R!gram.telemetry.v1.SessionObservedBGZEgithub.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1;telemetryv1b\beditionsp\xe9\a"
+	"\x12\x03\b\xd8\x04R!gram.telemetry.v1.SessionObservedBGZEgithub.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1;telemetryv1b\beditionsp\xe9\a"
 
 var file_gram_telemetry_v1_session_observed_ch_writer_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_telemetry_v1_session_observed_ch_writer_proto_goTypes = []any{

@@ -228,7 +228,7 @@ var _ = Service("toolsets", func() {
 	})
 
 	Method("checkMCPSlugAvailability", func() {
-		Description("Check if a MCP slug is available")
+		Description("Check if a MCP slug is taken in any scope (true means taken).\n\nDeprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.")
 
 		Payload(func() {
 			Required("slug")
@@ -242,6 +242,7 @@ var _ = Service("toolsets", func() {
 
 		HTTP(func() {
 			GET("/rpc/toolsets.checkMCPSlugAvailability")
+			Deprecated()
 			Param("slug")
 			security.SessionHeader()
 			security.ByKeyHeader()
@@ -306,7 +307,7 @@ var _ = Service("toolsets", func() {
 	})
 
 	Method("updateExternalOAuthServer", func() {
-		Description("Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association")
+		Description("Change an attached external OAuth server between provider-hosted and Speakeasy-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association")
 
 		Payload(func() {
 			Extend(UpdateExternalOAuthServerForm)
@@ -358,7 +359,7 @@ var _ = Service("toolsets", func() {
 	})
 
 	Method("setUserSessionIssuer", func() {
-		Description("Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.")
+		Description("Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.\n\nDeprecated: use mcpServers.update instead.")
 
 		Payload(func() {
 			Extend(SetUserSessionIssuerForm)
@@ -371,6 +372,7 @@ var _ = Service("toolsets", func() {
 		HTTP(func() {
 			Param("slug")
 			POST("/rpc/toolsets.setUserSessionIssuer")
+			Deprecated()
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -459,15 +461,22 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("prompt_template_names", ArrayOf(String), "List of prompt template names to include (note: for actual prompts, not tools)")
 	Attribute("tool_urns", ArrayOf(String), "List of tool URNs to include in the toolset")
 	Attribute("resource_urns", ArrayOf(String), "List of resource URNs to include in the toolset")
-	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
-	Attribute("mcp_slug", shared.Slug, "The slug of the MCP to use for the toolset")
-	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
-	Attribute("network_access_mode", shared.NetworkAccessMode, "Where the hosted MCP is accessible: public_only, dual, or private_only")
-	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
+	Attribute("mcp_enabled", Boolean, "Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP", deprecatedHostingField("mcpServers.update"))
+	Attribute("mcp_slug", shared.Slug, "Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset", deprecatedHostingField("mcpEndpoints.create or mcpEndpoints.update"))
+	Attribute("mcp_is_public", Boolean, "Deprecated: use mcpServers.update. Whether the toolset is public in MCP", deprecatedHostingField("mcpServers.update"))
+	Attribute("network_access_mode", shared.NetworkAccessMode, "Deprecated: use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only", deprecatedHostingField("mcpServers.update"))
+	Attribute("custom_domain_id", String, "Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset", deprecatedHostingField("mcpEndpoints.create or mcpEndpoints.update"))
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	security.ProjectPayload()
 	Required("slug")
 })
+
+// deprecatedHostingField marks a toolset MCP hosting field; the SDK overlay adds deprecated: true.
+func deprecatedHostingField(replacement string) func() {
+	return func() {
+		Meta("openapi:extension:x-speakeasy-deprecation-message", "Use "+replacement+" instead")
+	}
+}
 
 var AddExternalOAuthServerForm = Type("AddExternalOAuthServerForm", func() {
 	Attribute("slug", shared.Slug, "The slug of the toolset to update")
@@ -478,8 +487,8 @@ var AddExternalOAuthServerForm = Type("AddExternalOAuthServerForm", func() {
 
 var UpdateExternalOAuthServerForm = Type("UpdateExternalOAuthServerForm", func() {
 	Attribute("slug", shared.Slug, "The slug of the toolset whose attached external OAuth server is updated")
-	Attribute("metadata", Any, "JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.")
-	Attribute("authorization_server_issuer", String, "Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.", func() {
+	Attribute("metadata", Any, "JSON object metadata to restore Speakeasy-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.")
+	Attribute("authorization_server_issuer", String, "Exact HTTPS issuer to set for provider-hosted discovery. Speakeasy strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.", func() {
 		Format(FormatURI)
 		Pattern(`^https://`)
 		MaxLength(500)

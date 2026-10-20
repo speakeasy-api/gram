@@ -20,6 +20,7 @@ import {
   type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
 } from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import {
   invalidateAllMcpServers,
   useMcpServers,
@@ -35,10 +36,7 @@ import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  IssuerScopeOverrideAlert,
-  LegacyCallbackAlert,
-} from "@/pages/remote-identity-providers/clientAlerts";
+import { LegacyCallbackAlert } from "@/pages/remote-identity-providers/clientAlerts";
 import {
   ClientAssertionAudienceField,
   ClientCredentialsFields,
@@ -115,7 +113,7 @@ export function ModifyRemoteIdentityProviderSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            Modify Remote Identity Provider
+            Modify Authorization Server
           </SheetTitle>
         </SheetHeader>
 
@@ -195,6 +193,8 @@ function ModifyRemoteIdentityProviderSheetBody({
     jwksUri: issuer.jwksUri ?? "",
     scopesSupported: issuer.scopesSupported ?? [],
     grantTypesSupported: issuer.grantTypesSupported ?? [],
+    authorizationGrantProfilesSupported:
+      issuer.authorizationGrantProfilesSupported ?? [],
     responseTypesSupported: issuer.responseTypesSupported ?? [],
     tokenEndpointAuthMethodsSupported:
       issuer.tokenEndpointAuthMethodsSupported ?? [],
@@ -304,7 +304,7 @@ function ModifyRemoteIdentityProviderSheetBody({
       // NULL"; an omitted field keeps the existing value. Send the trimmed
       // input directly (including "") so blanking out a field in the UI
       // actually clears the saved record — especially registration_endpoint,
-      // which is the signal Gram uses for "DCR is supported on this issuer".
+      // which is the signal Speakeasy uses for "DCR is supported on this issuer".
       await client.remoteSessionIssuers.update({
         updateRemoteSessionIssuerForm: {
           id: issuer.id,
@@ -320,6 +320,9 @@ function ModifyRemoteIdentityProviderSheetBody({
           jwksUri: jwksUri.trim(),
           scopesSupported: discoveredSnapshot?.scopesSupported,
           grantTypesSupported: discoveredSnapshot?.grantTypesSupported,
+          // A reset snapshot means a new issuer URL; its profiles are unknown until rediscovery.
+          authorizationGrantProfilesSupported:
+            discoveredSnapshot?.authorizationGrantProfilesSupported ?? [],
           responseTypesSupported: discoveredSnapshot?.responseTypesSupported,
           tokenEndpointAuthMethodsSupported:
             discoveredSnapshot?.tokenEndpointAuthMethodsSupported,
@@ -391,12 +394,14 @@ function ModifyRemoteIdentityProviderSheetBody({
         // refreshes (AGE-3279).
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        // Issuer overrides feed the scopes a sign-in would request.
+        invalidateAllGetRemoteMcpServerScopes(queryClient),
       ]);
-      toast.success("Identity provider updated");
+      toast.success("Authorization server updated");
       onClose();
     },
     onError: (error) => {
-      console.error("Modify identity provider failed", error);
+      console.error("Modify authorization server failed", error);
     },
   });
 
@@ -437,7 +442,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           <Alert variant="warning" dismissible={false}>
             <Stack gap={2}>
               <Text className="font-medium">
-                Heads up — this identity provider is shared with{" "}
+                Heads up — this authorization server is shared with{" "}
                 {affectedMcpServers.length === 1
                   ? "1 other MCP server"
                   : `${affectedMcpServers.length} other MCP servers`}{" "}
@@ -445,8 +450,8 @@ function ModifyRemoteIdentityProviderSheetBody({
               </Text>
               <Text small>
                 Issuer URL and endpoint edits apply to every server that uses
-                this provider. Client credentials, scope, and audience changes
-                only affect this server.
+                this authorization server. Client credentials, scope, and
+                audience changes only affect this server.
               </Text>
               <Text small mono>
                 {affectedMcpServers
@@ -493,8 +498,8 @@ function ModifyRemoteIdentityProviderSheetBody({
             {issuer.slug}
           </Text>
           <Text muted small>
-            Slug is the stable identifier for this identity provider and can't
-            be renamed here.
+            Slug is the stable identifier for this authorization server and
+            can't be renamed here.
           </Text>
         </Stack>
 
@@ -505,7 +510,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           <Input
             value={name}
             onChange={setName}
-            placeholder="My Identity Provider"
+            placeholder="My Authorization Server"
           />
           <Text muted small>
             Friendly label shown in the dashboard. Clear it to fall back to the
@@ -518,7 +523,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           value={logoAssetId}
           onChange={setLogoAssetId}
           onUploadingChange={setLogoUploading}
-          description="Shown beside this provider in the dashboard and on the connect consent page. Saved with your other changes."
+          description="Shown beside this authorization server in the dashboard and on the connect consent page. Saved with your other changes."
         />
 
         <EndpointsFields
@@ -591,7 +596,6 @@ function ModifyRemoteIdentityProviderSheetBody({
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
-          scopeWarning={<IssuerScopeOverrideAlert issuer={issuer} />}
         />
 
         {submitError && (

@@ -28,6 +28,7 @@ import (
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -331,7 +332,7 @@ func TestServeInstallPage_Instructions(t *testing.T) {
 	assert.Contains(t, body, "Server Instructions", "Should contain instructions section header")
 	assert.Contains(t, body, "Test Hub - Search and analyze test data", "Should contain instructions content")
 	assert.Contains(t, body, "https://www.speakeasy.com/product/mcp-gateway", "Should link to Speakeasy")
-	assert.NotContains(t, body, "https://getgram.ai", "Should not link to the retired Gram marketing site")
+	assert.NotContains(t, body, "https://getgram.ai", "Should not link to the retired Speakeasy marketing site")
 }
 
 func TestServeInstallPage_ToolDetails(t *testing.T) {
@@ -1095,8 +1096,8 @@ func TestServeInstallPage_AntigravityClients_WithSecurityInputs(t *testing.T) {
 }
 
 // TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader regression-tests
-// AGE-1962: a private MCP server with a Gram OAuth proxy attached must not render
-// the GRAM_KEY Authorization header (or gram-environment) in the install snippets.
+// AGE-1962: a private MCP server with a Speakeasy OAuth proxy attached must not render
+// the SPEAKEASY_AI_API_KEY Authorization header (or speakeasy-ai-environment) in the install snippets.
 // OAuth handles identity auth at the HTTP layer, so the install command must not
 // instruct users to set those headers manually.
 // TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey covers the new
@@ -1143,9 +1144,9 @@ func TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code)
 
 	body := rr.Body.String()
-	assert.NotContains(t, body, "gram-key", "issuer-gated install command must not reference the gram-key input")
-	assert.NotContains(t, body, "gram-environment", "issuer-gated install command must not reference the gram-environment input")
-	assert.NotContains(t, body, "GRAM_KEY", "issuer-gated install command must not reference the GRAM_KEY env var")
+	assert.NotContains(t, body, "speakeasy-ai-api-key", "issuer-gated install command must not reference the speakeasy-ai-api-key input")
+	assert.NotContains(t, body, "speakeasy-ai-environment", "issuer-gated install command must not reference the speakeasy-ai-environment input")
+	assert.NotContains(t, body, "SPEAKEASY_AI_API_KEY", "issuer-gated install command must not reference the SPEAKEASY_AI_API_KEY env var")
 }
 
 // TestServeInstallPage_McpServer_UserSessionIssuer_NoGramKey covers the bridge
@@ -1194,8 +1195,8 @@ func TestServeInstallPage_McpServer_UserSessionIssuer_NoGramKey(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code)
 
 	body := rr.Body.String()
-	assert.NotContains(t, body, "gram-key", "issuer-gated mcp_server install command must not reference the gram-key input")
-	assert.NotContains(t, body, "GRAM_KEY", "issuer-gated mcp_server install command must not reference the GRAM_KEY env var")
+	assert.NotContains(t, body, "speakeasy-ai-api-key", "issuer-gated mcp_server install command must not reference the speakeasy-ai-api-key input")
+	assert.NotContains(t, body, "SPEAKEASY_AI_API_KEY", "issuer-gated mcp_server install command must not reference the SPEAKEASY_AI_API_KEY env var")
 }
 
 // TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain verifies that a toolset
@@ -2069,7 +2070,7 @@ func TestServeInstallPage_PrivateNetworkUsesControlPlanePage(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Contains(t, rr.Body.String(), "https://private.example.ts.net/mcp/"+mcpSlug)
 	require.NotContains(t, rr.Body.String(), "private.example.ts.net/mcp/"+mcpSlug+"/install")
-	require.NotEqual(t, overrideURL, rr.Header().Get("Location"), "private installs must remain on the authenticated Gram renderer")
+	require.NotEqual(t, overrideURL, rr.Header().Get("Location"), "private installs must remain on the authenticated Speakeasy renderer")
 
 	unauthenticated := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install?network=private", nil)
 	unauthenticated = unauthenticated.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
@@ -2156,6 +2157,7 @@ type metaEndpointFixtureOptions struct {
 	visibility          string
 	userSessionIssuerID uuid.NullUUID
 	networkAccessMode   networkaccess.Mode
+	customDomainID      uuid.NullUUID
 }
 
 // seedMetaBackedEndpoint creates a gateway (meta_mcp_servers) with a
@@ -2184,7 +2186,7 @@ func seedMetaBackedEndpoint(t *testing.T, ctx context.Context, ti *testInstance,
 
 	_, err = mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID:       *authCtx.ProjectID,
-		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CustomDomainID:  opts.customDomainID,
 		McpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID: uuid.NullUUID{UUID: meta.ID, Valid: true},
 		Slug:            mcpSlug,
@@ -2256,7 +2258,10 @@ func TestServeInstallPage_MetaBackedEndpoint_RendersGateway(t *testing.T) {
 	assert.NotContains(t, body, "Legacy Same-Slug Toolset")
 }
 
-func TestServeInstallPage_MetaBackedEndpoint_NetworkIngressAdmission(t *testing.T) {
+// TestServeInstallPage_MetaBackedEndpoint_PublicSurfaceSkipsIngressAdmission
+// verifies that a gateway the public surface serves renders its public
+// install page whatever the private-ingress rollout state.
+func TestServeInstallPage_MetaBackedEndpoint_PublicSurfaceSkipsIngressAdmission(t *testing.T) {
 	t.Parallel()
 
 	for _, mode := range []networkaccess.Mode{networkaccess.ModePublicOnly, networkaccess.ModeDual} {
@@ -2276,29 +2281,195 @@ func TestServeInstallPage_MetaBackedEndpoint_NetworkIngressAdmission(t *testing.
 				}
 				ctx, ti := newTestMCPMetadataServiceWithAdmission(t, admission)
 				slug := "meta-admission-" + uuid.New().String()[:8]
-				meta := seedMetaBackedEndpoint(t, ctx, ti, slug, metaEndpointFixtureOptions{
+				seedMetaBackedEndpoint(t, ctx, ti, slug, metaEndpointFixtureOptions{
 					visibility:          "",
 					userSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 					networkAccessMode:   mode,
 				})
 
 				rr := serveMetaInstallPage(t, ctx, ti, slug)
-				if mode.IsPublicOnly() || admissionState == "allowed" {
-					require.Equal(t, http.StatusOK, rr.Code)
-					require.Contains(t, rr.Body.String(), "Install Page Gateway")
-				} else {
-					require.Equal(t, http.StatusNotFound, rr.Code)
-					require.NotContains(t, rr.Body.String(), "Install Page Gateway")
-				}
+				require.Equal(t, http.StatusOK, rr.Code)
+				require.Contains(t, rr.Body.String(), "Install Page Gateway")
 				require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
-				if mode.IsPublicOnly() || admissionState == "unavailable" {
-					require.Empty(t, admittedOrg)
-				} else {
-					require.Equal(t, meta.OrganizationID, admittedOrg)
-				}
+				require.Empty(t, admittedOrg)
 			})
 		}
 	}
+}
+
+// TestServeInstallPage_MetaBackedEndpoint_PrivateOnlyNotFoundOnPublicSurface
+// verifies that a private-only gateway stays a 404 on the public install page.
+func TestServeInstallPage_MetaBackedEndpoint_PrivateOnlyNotFoundOnPublicSurface(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataServiceWithAdmission(t, func(context.Context, string) error { return nil })
+
+	slug := "meta-private-only-" + uuid.New().String()[:8]
+	seedMetaBackedEndpoint(t, ctx, ti, slug, metaEndpointFixtureOptions{
+		networkAccessMode: networkaccess.ModePrivateOnly,
+	})
+
+	rr := serveMetaInstallPage(t, ctx, ti, slug)
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.NotContains(t, rr.Body.String(), "Install Page Gateway")
+	require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
+}
+
+// TestServeInstallPage_MetaBackedEndpoint_CustomDomainOnPlatformHost verifies
+// that ?domain=custom on the platform host resolves a gateway slug in the
+// signed-in organization's custom-domain namespace and nowhere else.
+func TestServeInstallPage_MetaBackedEndpoint_CustomDomainOnPlatformHost(t *testing.T) {
+	t.Parallel()
+
+	setup := func(t *testing.T, activated bool) (context.Context, *testInstance, string) {
+		t.Helper()
+		ctx, ti := newTestMCPMetadataService(t)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+
+		domainsRepo := customdomains_repo.New(ti.conn)
+		domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+			OrganizationID:  authCtx.ActiveOrganizationID,
+			Domain:          "gateway-install.example.com",
+			IngressName:     pgtype.Text{String: "", Valid: false},
+			CertSecretName:  pgtype.Text{String: "", Valid: false},
+			ProvisionerKind: "ingress",
+			IpAllowlist:     []string{},
+		})
+		require.NoError(t, err)
+		_, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+			ID:              domain.ID,
+			Verified:        activated,
+			Activated:       activated,
+			IngressName:     pgtype.Text{String: "", Valid: false},
+			CertSecretName:  pgtype.Text{String: "", Valid: false},
+			ProvisionerKind: "ingress",
+		})
+		require.NoError(t, err)
+
+		slug := "meta-domain-" + uuid.New().String()[:8]
+		seedMetaBackedEndpoint(t, ctx, ti, slug, metaEndpointFixtureOptions{
+			networkAccessMode: networkaccess.ModeDual,
+			customDomainID:    uuid.NullUUID{UUID: domain.ID, Valid: true},
+		})
+		platformCtx := requestorigin.WithContext(ctx, requestorigin.Origin{
+			Surface: requestorigin.SurfacePlatform, BaseURL: ti.serverURL.String(),
+		})
+		return platformCtx, ti, slug
+	}
+	hinted := func(slug string) string { return "/mcp/" + slug + "/install?domain=custom" }
+
+	t.Run("renders the custom-domain URL for the owning organization", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti, slug := setup(t, true)
+		rr := serveMetaInstallPageURL(t, ctx, ti, hinted(slug), slug)
+		require.Equal(t, http.StatusOK, rr.Code)
+		body := rr.Body.String()
+		require.Contains(t, body, "Install Page Gateway")
+		require.Contains(t, body, "https://gateway-install.example.com/mcp/"+slug)
+		require.NotContains(t, body, "Legacy Same-Slug Toolset")
+	})
+
+	t.Run("without the hint the platform namespace is authoritative", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti, slug := setup(t, true)
+		rr := serveMetaInstallPage(t, ctx, ti, slug)
+		require.NotContains(t, rr.Body.String(), "Install Page Gateway")
+	})
+
+	t.Run("signed-out visitor is sent to login", func(t *testing.T) {
+		t.Parallel()
+		_, ti, slug := setup(t, true)
+		anonymous := requestorigin.WithContext(context.Background(), requestorigin.Origin{
+			Surface: requestorigin.SurfacePlatform, BaseURL: ti.serverURL.String(),
+		})
+		rr := serveMetaInstallPageURL(t, anonymous, ti, hinted(slug), slug)
+		require.Equal(t, http.StatusFound, rr.Code)
+		loginURL, err := url.Parse(rr.Header().Get("Location"))
+		require.NoError(t, err)
+		require.Equal(t, "/login", loginURL.Path)
+		require.Equal(t, hinted(slug), loginURL.Query().Get("redirect"))
+	})
+
+	t.Run("organization-less session gets not found, not a login loop", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti, slug := setup(t, true)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		noOrgCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			ActiveOrganizationID: "",
+			UserID:               authCtx.UserID,
+			SessionID:            authCtx.SessionID,
+		})
+		rr := serveMetaInstallPageURL(t, noOrgCtx, ti, hinted(slug), slug)
+		require.Equal(t, http.StatusNotFound, rr.Code)
+	})
+
+	t.Run("another organization gets not found", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti, slug := setup(t, true)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		otherOrgCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			ActiveOrganizationID: "org-" + uuid.NewString(),
+			UserID:               authCtx.UserID,
+			SessionID:            authCtx.SessionID,
+			ProjectID:            authCtx.ProjectID,
+		})
+		rr := serveMetaInstallPageURL(t, otherOrgCtx, ti, hinted(slug), slug)
+		require.Equal(t, http.StatusNotFound, rr.Code)
+		require.NotContains(t, rr.Body.String(), "Install Page Gateway")
+		require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
+	})
+
+	t.Run("inactive custom domain gets not found", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti, slug := setup(t, false)
+		rr := serveMetaInstallPageURL(t, ctx, ti, hinted(slug), slug)
+		require.Equal(t, http.StatusNotFound, rr.Code)
+		require.NotContains(t, rr.Body.String(), "gateway-install.example.com")
+	})
+}
+
+// TestServeInstallPage_CustomDomainLoginRedirectKeepsNamespace verifies that a
+// signed-out visitor on a custom domain returns to the platform host with the
+// hint that resolves the slug there.
+func TestServeInstallPage_CustomDomainLoginRedirectKeepsNamespace(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	domainsRepo := customdomains_repo.New(ti.conn)
+	domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "gateway-login.example.com",
+		IngressName:     pgtype.Text{String: "", Valid: false},
+		CertSecretName:  pgtype.Text{String: "", Valid: false},
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	slug := "meta-login-" + uuid.New().String()[:8]
+	seedMetaBackedEndpoint(t, ctx, ti, slug, metaEndpointFixtureOptions{
+		customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+	})
+
+	domainCtx := customdomains.WithContext(context.Background(), &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+	domainCtx = requestorigin.WithContext(domainCtx, requestorigin.Origin{
+		Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://" + domain.Domain,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+
+	rr := serveMetaInstallPage(t, domainCtx, ti, slug)
+	require.Equal(t, http.StatusFound, rr.Code)
+	loginURL, err := url.Parse(rr.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, ti.serverURL.Host, loginURL.Host)
+	require.Equal(t, "/mcp/"+slug+"/install?domain=custom", loginURL.Query().Get("redirect"))
 }
 
 // TestServeInstallPage_PrivateMetaBackedEndpoint_NetworkIngressAdmission verifies
@@ -2559,7 +2730,7 @@ func TestServeInstallPage_ChatGPTDesktop_NoSecurityInputs(t *testing.T) {
 }
 
 // TestServeInstallPage_ChatGPTDesktop_WithSecurityInputs verifies that a
-// private Gram-key server tells ChatGPT Desktop users to use Token auth and
+// private Speakeasy-key server tells ChatGPT Desktop users to use Token auth and
 // does not offer the mcp-remote workaround (ChatGPT is remote-HTTPS only).
 func TestServeInstallPage_ChatGPTDesktop_WithSecurityInputs(t *testing.T) {
 	t.Parallel()
@@ -2594,6 +2765,13 @@ func TestServeInstallPage_ChatGPTDesktop_WithSecurityInputs(t *testing.T) {
 
 	body := rr.Body.String()
 	assert.Contains(t, body, `data-install-target="chatgpt-desktop"`, "should offer ChatGPT Desktop as an install target")
+
+	// Install snippets use the canonical Speakeasy AI names, never the
+	// deprecated Gram ones.
+	assert.Contains(t, body, "Speakeasy-AI-Environment:${SPEAKEASY_AI_ENVIRONMENT}")
+	assert.Contains(t, body, "Authorization:${SPEAKEASY_AI_API_KEY}")
+	assert.NotContains(t, body, "Gram-Environment")
+	assert.NotContains(t, body, "GRAM_")
 
 	section := installTargetTemplateHTML(t, body, "chatgpt-desktop")
 	assert.Contains(t, section, "Set authentication to <strong>Token</strong>", "private servers should use Token auth")
@@ -2654,12 +2832,12 @@ func TestServeInstallPage_ChatGPTDesktop_OAuth(t *testing.T) {
 	assert.Contains(t, section, "Set authentication to <strong>OAuth</strong>", "OAuth-gated servers should use OAuth")
 	assert.NotContains(t, section, "Set authentication to <strong>Token</strong>", "OAuth-gated servers should not ask for Token auth")
 	assert.NotContains(t, section, "Leave authentication as <strong>None</strong>", "OAuth-gated servers should not suggest None auth")
-	assert.NotContains(t, section, "GRAM_KEY", "OAuth-gated install must not ask for a Gram key")
+	assert.NotContains(t, section, "SPEAKEASY_AI_API_KEY", "OAuth-gated install must not ask for a Speakeasy API key")
 }
 
 // TestServeInstallPage_ChatGPTDesktop_PublicWithHeaders verifies that a public
 // server expecting user-provided headers says ChatGPT cannot send them, rather
-// than asking for a Gram API key the server would not accept.
+// than asking for a Speakeasy API key the server would not accept.
 func TestServeInstallPage_ChatGPTDesktop_PublicWithHeaders(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
@@ -2760,7 +2938,7 @@ func TestServeInstallPage_ChatGPTDesktop_PublicWithHeaders(t *testing.T) {
 	section := installTargetTemplateHTML(t, rr.Body.String(), "chatgpt-desktop")
 	assert.Contains(t, section, "headers, which ChatGPT cannot send", "should explain ChatGPT cannot send the server's headers")
 	assert.Contains(t, section, "ACME-X-API-KEY", "should name the header ChatGPT cannot send")
-	assert.NotContains(t, section, "paste your Gram", "public servers must not ask for a Gram API key")
+	assert.NotContains(t, section, "paste your Speakeasy", "public servers must not ask for a Speakeasy API key")
 	assert.NotContains(t, section, "Set authentication to <strong>Token</strong>", "public servers should not ask for Token auth")
 }
 
@@ -2784,5 +2962,55 @@ func installTargetTemplateHTML(t *testing.T, body, target string) string {
 			return body[templateStart : abs+endRel]
 		}
 		searchFrom = abs + len(marker)
+	}
+}
+
+// Legacy install pages must enforce the same canonical-wrapper gate as serving.
+func TestServeInstallPage_LegacyCanonicalWrapper(t *testing.T) {
+	t.Parallel()
+	for _, visibility := range []string{mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate, mcpservers.VisibilityDisabled} {
+		t.Run(visibility, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPMetadataService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx.ProjectID)
+			slug := "legacy-install-" + uuid.NewString()
+			toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+				OrganizationID: authCtx.ActiveOrganizationID,
+				ProjectID:      *authCtx.ProjectID,
+				Name:           "Legacy Install Fixture",
+				Slug:           slug,
+				McpSlug:        conv.ToPGText(slug),
+				McpEnabled:     true,
+			})
+			require.NoError(t, err)
+			require.NoError(t, ti.toolsetRepo.SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+				ID: toolset.ID, ProjectID: toolset.ProjectID, McpIsPublic: true,
+			}))
+			// No endpoint row: force lookup through the legacy slug, with the
+			// canonical wrapper ID equal to the toolset ID.
+			_, err = mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+				ID:                toolset.ID,
+				ProjectID:         toolset.ProjectID,
+				Name:              conv.ToPGText("Canonical Wrapper"),
+				Slug:              conv.ToPGText("wrapper-" + slug),
+				ToolsetID:         uuid.NullUUID{UUID: toolset.ID, Valid: true},
+				Visibility:        visibility,
+				NetworkAccessMode: networkaccess.Storage(networkaccess.ModePublicOnly),
+			})
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/install", nil)
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("mcpSlug", slug)
+			req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+			rr := httptest.NewRecorder()
+			require.NoError(t, ti.service.ServeInstallPage(rr, req))
+			if visibility == mcpservers.VisibilityPublic {
+				require.Equal(t, http.StatusOK, rr.Code)
+			} else {
+				require.Equal(t, http.StatusNotFound, rr.Code)
+			}
+		})
 	}
 }

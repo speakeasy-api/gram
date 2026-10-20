@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/api"
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/auth"
+	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
@@ -112,17 +113,17 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 func newAuthCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "auth",
-		Usage: "Authenticate with Gram",
+		Usage: "Authenticate with the Speakeasy AI Control Plane",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "api-url",
-				Usage:   "URL of the Gram API server",
-				EnvVars: []string{"GRAM_API_URL"},
+				Usage:   "URL of the API server",
+				EnvVars: flags.EnvVars("API_URL"),
 			},
 			&cli.StringFlag{
 				Name:    "dashboard-url",
-				Usage:   "URL of the Gram dashboard for authentication",
-				EnvVars: []string{"GRAM_SITE_URL"},
+				Usage:   "URL of the dashboard to authenticate with",
+				EnvVars: flags.EnvVars("SITE_URL"),
 			},
 		},
 		Subcommands: []*cli.Command{
@@ -141,7 +142,7 @@ func newAuthSwitchCommand() *cli.Command {
 Switch the default project for the current profile.
 
 The project slug must be one of the projects available in your current profile.
-Use 'gram status' to see your current project.`,
+Use 'speakeasy status' to see your current project.`[1:],
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     "project",
@@ -175,7 +176,7 @@ func newAuthClearCommand() *cli.Command {
 Clear all authentication profiles from the profile configuration file.
 
 This will remove all stored API keys and profile information.
-You will need to run 'gram auth' again to authenticate.`,
+You will need to run 'speakeasy auth' again to authenticate.`[1:],
 		Action: func(c *cli.Context) error {
 			profilePath, err := profile.DefaultProfilePath()
 			if err != nil {

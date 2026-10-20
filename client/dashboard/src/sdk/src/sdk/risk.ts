@@ -13,6 +13,7 @@ import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
 import { PolicyBypassRequests } from "./policybypassrequests.js";
 import { PolicyChallenges } from "./policychallenges.js";
+import { Presets } from "./presets.js";
 import { Results } from "./results.js";
 import { Rules } from "./rules.js";
 import { SessionQuarantines } from "./sessionquarantines.js";
@@ -74,6 +75,11 @@ export class Risk extends ClientSDK {
   private _results?: Results;
   get results(): Results {
     return (this._results ??= new Results(this._options));
+  }
+
+  private _presets?: Presets;
+  get presets(): Presets {
+    return (this._presets ??= new Presets(this._options));
   }
 
   private _sessionQuarantines?: SessionQuarantines;

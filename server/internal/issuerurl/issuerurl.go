@@ -21,7 +21,7 @@ import (
 // Deliberately treated as DISTINCT:
 //
 //   - http and https. Same host, different security properties, and an
-//     authorization server reachable over both is a misconfiguration Gram should
+//     authorization server reachable over both is a misconfiguration Speakeasy should
 //     not paper over.
 //   - Path case. Hosts are case-insensitive per RFC 3986; paths are not, and
 //     some issuers do route on path case.
@@ -37,7 +37,7 @@ import (
 // issuer identifier and should not become a lookup key.
 //
 // This is NOT issuerURLsEqual. That one compares a fetched metadata document's
-// self-declared issuer against the URL Gram asked for, which is a trust check on
+// self-declared issuer against the URL Speakeasy asked for, which is a trust check on
 // a discovery response, and it stays strict on purpose. Widening it would let an
 // upstream claim an identity it does not have. Keep the two separate.
 type Canonical struct {

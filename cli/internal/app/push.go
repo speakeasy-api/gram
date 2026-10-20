@@ -36,6 +36,8 @@ type PushResult struct {
 	DeploymentID string
 	Status       string
 	LogsURL      string
+	// ProjectURL is the dashboard URL of the project deployed to.
+	ProjectURL string
 }
 
 func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
@@ -163,32 +165,34 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 		result.Poll(ctx)
 	}
 
+	projectURL := fmt.Sprintf("%s://%s/%s/%s", apiURL.Scheme, apiURL.Host, orgSlug, projectSlug)
+
 	if result.Failed() {
 		if result.Deployment != nil {
 			return &PushResult{
 				DeploymentID: result.Deployment.ID,
 				Status:       result.Deployment.Status,
-				LogsURL:      fmt.Sprintf("%s://%s/%s/%s/deployments/%s", apiURL.Scheme, apiURL.Host, orgSlug, projectSlug, result.Deployment.ID),
+				LogsURL:      projectURL + "/deployments/" + result.Deployment.ID,
+				ProjectURL:   projectURL,
 			}, fmt.Errorf("deployment failed: %w", result.Err)
 		}
 		return nil, fmt.Errorf("failed to push deploy: %w", result.Err)
 	}
 
-	logsURL := fmt.Sprintf("%s://%s/%s/%s/deployments/%s", apiURL.Scheme, apiURL.Host, orgSlug, projectSlug, result.Deployment.ID)
-
 	return &PushResult{
 		DeploymentID: result.Deployment.ID,
 		Status:       result.Deployment.Status,
-		LogsURL:      logsURL,
+		LogsURL:      projectURL + "/deployments/" + result.Deployment.ID,
+		ProjectURL:   projectURL,
 	}, nil
 }
 
 func newPushCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "push",
-		Usage: "Push a deployment to Gram",
+		Usage: "Push a deployment to the Speakeasy AI Control Plane",
 		Description: `
-Push a deployment to Gram.
+Push a deployment to the Speakeasy AI Control Plane.
 
 Sample deployment file
 ======================
@@ -212,13 +216,12 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			flags.Project(),
 			flags.Org(),
 			&cli.PathFlag{
-				Name:     "config",
-				Usage:    "Path to the deployment file",
-				Required: true,
+				Name:  "config",
+				Usage: "Path to the deployment file (default: " + defaultDeployFile + ", or the deprecated " + legacyDeployFile + " when only it exists)",
 			},
 			&cli.StringFlag{
 				Name:  "method",
-				Usage: "When set to 'replace', the deployment replaces any existing deployment artifacts in Gram projects. When set to 'merge', the deployment merges with any existing deployment artifacts in Gram project.",
+				Usage: "When set to 'replace', the deployment replaces any existing deployment artifacts in the project. When set to 'merge', the deployment merges with any existing deployment artifacts in the project.",
 				Action: func(ctx *cli.Context, s string) error {
 					if s != "replace" && s != "merge" {
 						return fmt.Errorf("invalid method: %s (allowed values: replace, merge)", s)
@@ -246,55 +249,72 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 
 			result, err := DoPush(ctx, PushOptions{
 				Profile:        profile.FromContext(ctx),
-				ConfigFile:     c.String("config"),
+				ConfigFile:     resolveDeployFile(c.Path("config"), c.App.ErrWriter),
 				ProjectSlug:    c.String("project"),
 				OrgSlug:        c.String("org"),
 				IdempotencyKey: c.String("idempotency-key"),
 				Method:         c.String("method"),
 				NonBlocking:    c.Bool("skip-poll"),
 				APIKey:         c.String("api-key"),
-				APIURL:         c.String("api-url"),
+				APIURL:         explicitAPIURL(c),
 			})
 
-			if err != nil {
-				if result != nil && result.DeploymentID != "" {
-					statusCommand := fmt.Sprintf("gram status --id %s", result.DeploymentID)
-					logger.WarnContext(
-						ctx,
-						"Deployment issue",
-						slog.String("command", statusCommand),
-						slog.String("error", err.Error()),
-					)
-					return nil
-				}
-				return err
-			}
-
-			slogID := slog.String("deployment_id", result.DeploymentID)
-			logsURL := result.LogsURL
-
-			switch result.Status {
-			case "completed":
-				logger.InfoContext(ctx, "Deployment succeeded", slogID, slog.String("logs_url", logsURL))
-				fmt.Printf("\nView deployment: %s\n", logsURL)
-				return nil
-			case "failed":
-				logger.ErrorContext(ctx, "Deployment failed", slogID, slog.String("logs_url", logsURL))
-				fmt.Printf("\nView deployment logs: %s\n", logsURL)
-				return fmt.Errorf("deployment failed")
-			default:
-				logger.InfoContext(
-					ctx,
-					"Deployment is still in progress",
-					slogID,
-					slog.String("status", result.Status),
-				)
-				fmt.Printf("\nView deployment: %s\n", logsURL)
-			}
-
-			return nil
+			return reportPushResult(ctx, logger, result, err)
 		},
 	}
+}
+
+// explicitAPIURL returns --api-url, SPEAKEASY_AI_API_URL or the deprecated
+// GRAM_API_URL when one is given and "" otherwise, so DoPush uses the
+// profile's URL before the flag's default.
+func explicitAPIURL(c *cli.Context) string {
+	if !c.IsSet("api-url") {
+		return ""
+	}
+	return c.String("api-url")
+}
+
+// reportPushResult logs the outcome of DoPush and prints the deployment link.
+// It returns nil for a deployment that was created but failed to finish, as
+// the logged status command explains what happened.
+func reportPushResult(ctx context.Context, logger *slog.Logger, result *PushResult, err error) error {
+	if err != nil {
+		if result != nil && result.DeploymentID != "" {
+			statusCommand := fmt.Sprintf("speakeasy status --id %s", result.DeploymentID)
+			logger.WarnContext(
+				ctx,
+				"Deployment issue",
+				slog.String("command", statusCommand),
+				slog.String("error", err.Error()),
+			)
+			return nil
+		}
+		return err
+	}
+
+	slogID := slog.String("deployment_id", result.DeploymentID)
+	logsURL := result.LogsURL
+
+	switch result.Status {
+	case "completed":
+		logger.InfoContext(ctx, "Deployment succeeded", slogID, slog.String("logs_url", logsURL))
+		fmt.Printf("\nView deployment: %s\n", logsURL)
+		return nil
+	case "failed":
+		logger.ErrorContext(ctx, "Deployment failed", slogID, slog.String("logs_url", logsURL))
+		fmt.Printf("\nView deployment logs: %s\n", logsURL)
+		return fmt.Errorf("deployment failed")
+	default:
+		logger.InfoContext(
+			ctx,
+			"Deployment is still in progress",
+			slogID,
+			slog.String("status", result.Status),
+		)
+		fmt.Printf("\nView deployment: %s\n", logsURL)
+	}
+
+	return nil
 }
 
 func processingMessage(elapsed time.Duration) string {

@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 )
 
@@ -28,9 +29,11 @@ import (
 // row with null plugin columns when the caller has no assignment there.
 //
 // Each project's marketplace name is resolved the same way the publish path
-// resolves it: the per-project override (project_marketplace_settings) when set,
-// else the shared `naming` default — the bare org-derived name for the org's
-// default project, project-scoped (`<org>-<project>-speakeasy`) for the rest.
+// resolves it, through naming.ResolveMarketplaceName: the per-project override
+// (project_marketplace_settings) when set, else the name the project last
+// published under (recorded in its published hooks config snapshot), else the
+// computed name: the bare org-derived name for the org's default project,
+// project-scoped (`<org>-<project>-speakeasy`) for the rest.
 // Matching the publish path exactly matters because tools resolve marketplaces
 // by that name — any mismatch silently fails to enable plugins. The
 // observability slug stays org-derived; plugin slugs are scoped within a
@@ -63,13 +66,18 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 			continue
 		}
 
-		// The per-project override, when set, is the name the project actually
-		// published under (UpdateMarketplaceSettings republishes on change), so
-		// prefer it over the org-derived default.
-		name := naming.MarketplaceName(row.OrganizationName, row.ProjectSlug, row.IsDefaultProject)
-		if row.MarketplaceNameOverride.Valid && row.MarketplaceNameOverride.String != "" {
-			name = row.MarketplaceNameOverride.String
-		}
+		// Resolve through the same function the publish path uses: the
+		// per-project override (UpdateMarketplaceSettings republishes on
+		// change), else the name the project last published under, else the
+		// computed name. The published name is frozen, so an org rename, a slug
+		// change, or a new default project never moves it here either.
+		name := naming.ResolveMarketplaceName(
+			conv.FromPGTextOrEmpty[string](row.MarketplaceNameOverride),
+			row.PublishedHooksConfig,
+			row.OrganizationName,
+			row.ProjectSlug,
+			row.IsDefaultProject,
+		)
 		owner, seen := marketplaceOwner[name]
 		if !seen {
 			owner = row.ProjectID
@@ -94,11 +102,16 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 			if row.ObservabilityEnabled {
 				hooksOrgName := conv.Default(naming.PublishedHooksOrgName(row.PublishedHooksConfig), row.OrganizationName)
 				observabilitySlug := naming.ObservabilitySlug(hooksOrgName)
+				// Observability carries the hooks that report usage, so users
+				// can't turn it off.
 				plugins = append(plugins, &gen.AgentPlugin{
 					Slug:            observabilitySlug,
 					MarketplaceName: name,
+					InstallMode:     string(installmode.Required),
+					Name:            nil,
+					Description:     nil,
 				})
-				writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\n", name, observabilitySlug, int64(0))
+				writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\x00%s\n", name, observabilitySlug, int64(0), installmode.Required)
 			}
 		}
 
@@ -107,20 +120,27 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 		// collapsed (losing) project's marketplace isn't served, so its plugins
 		// would reference a repo that doesn't contain them.
 		if row.ProjectID == owner && row.PluginID.Valid && row.PluginSlug.Valid {
+			mode := installmode.FromStored(row.PluginInstallMode)
 			plugins = append(plugins, &gen.AgentPlugin{
 				Slug:            row.PluginSlug.String,
 				MarketplaceName: name,
+				InstallMode:     string(mode),
+				Name:            conv.FromPGText[string](row.PluginName),
+				Description:     conv.FromPGText[string](row.PluginDescription),
 			})
-			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\n", name, row.PluginSlug.String, row.PluginUpdatedAt.Time.UnixNano())
+			// Name and description changes bump plugins.updated_at, so the
+			// timestamp already covers them.
+			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\x00%s\n", name, row.PluginSlug.String, row.PluginUpdatedAt.Time.UnixNano(), mode)
 		}
 	}
 
 	return &gen.GetPluginsResult{
-		Etag:          hex.EncodeToString(etag.Sum(nil)),
-		Marketplaces:  marketplaces,
-		Plugins:       plugins,
-		Configuration: nil,
-		Principal:     nil,
+		Etag:                   hex.EncodeToString(etag.Sum(nil)),
+		Marketplaces:           marketplaces,
+		Plugins:                plugins,
+		Configuration:          nil,
+		OrganizationGatewayURL: nil,
+		Principal:              nil,
 	}
 }
 

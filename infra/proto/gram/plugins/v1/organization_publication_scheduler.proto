@@ -15,6 +15,5 @@ message OrganizationPublicationScheduler {
       minimum_backoff: {seconds: 10}
       maximum_backoff: {seconds: 600}
     }
-    dead_letter: {max_delivery_attempts: 10}
   };
 }

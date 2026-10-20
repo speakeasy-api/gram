@@ -28,7 +28,7 @@ export type AwsIamCredentialProvider = ClosedEnum<
  */
 export type AwsIamCredential = {
   /**
-   * The customer IAM role ARN Gram assumes.
+   * The customer IAM role ARN Speakeasy assumes.
    */
   assumeRoleArn?: string | undefined;
   /**
@@ -36,7 +36,7 @@ export type AwsIamCredential = {
    */
   createdAt: Date;
   /**
-   * The Gram-generated ExternalId the customer must require in their role trust policy. Present when Gram assumes the role with an ExternalId.
+   * The Speakeasy-generated ExternalId the customer must require in their role trust policy. Present when Speakeasy assumes the role with an ExternalId.
    */
   externalId?: string | undefined;
   /**
@@ -48,7 +48,7 @@ export type AwsIamCredential = {
    */
   name: string;
   /**
-   * The OIDC audience. Present when Gram assumes the role with a web identity.
+   * The OIDC audience. Present when Speakeasy assumes the role with a web identity.
    */
   oidcAudience?: string | undefined;
   /**

@@ -55,7 +55,7 @@ export type SubmitIdentityProviderConnectionClientIdMutationError =
  * submitClientId identityProviderConnections
  *
  * @remarks
- * Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
+ * Record the client ID of the Okta API Services application and verify it. Connections installed from the Okta Integration Network also take the client secret. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
  */
 export function useSubmitIdentityProviderConnectionClientIdMutation(
   options?: MutationHookOptions<

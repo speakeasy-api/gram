@@ -101,6 +101,9 @@ type ResetResponseBody struct {
 	// identifies the shared readiness confirmation; independent of the confirmed
 	// identity assertion audience.
 	IssuerID *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
+	// The server's authorization server issuer; the Issuer URL to enter when
+	// enabling Cross App Access on a resource app. Omitted when unknown.
+	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
 	// The resource indicator to enter on the connection: the server's RFC 9728
 	// resource identifier when known, otherwise its URL.
 	ResourceIndicator string `form:"resource_indicator" json:"resource_indicator" xml:"resource_indicator"`
@@ -829,6 +832,9 @@ type OktaResourceConnectionServerResponseBody struct {
 	// identifies the shared readiness confirmation; independent of the confirmed
 	// identity assertion audience.
 	IssuerID *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
+	// The server's authorization server issuer; the Issuer URL to enter when
+	// enabling Cross App Access on a resource app. Omitted when unknown.
+	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
 	// The resource indicator to enter on the connection: the server's RFC 9728
 	// resource identifier when known, otherwise its URL.
 	ResourceIndicator string `form:"resource_indicator" json:"resource_indicator" xml:"resource_indicator"`
@@ -920,26 +926,27 @@ func NewConfirmResponseBody(res *oktaresourceconnections.ConfirmOktaResourceConn
 // "reset" endpoint of the "oktaResourceConnections" service.
 func NewResetResponseBody(res *oktaresourceconnections.OktaResourceConnectionServer) *ResetResponseBody {
 	body := &ResetResponseBody{
-		McpServerID:          res.McpServerID,
-		ProjectID:            res.ProjectID,
-		ProjectSlug:          res.ProjectSlug,
-		ServerName:           res.ServerName,
-		ServerSlug:           res.ServerSlug,
-		State:                res.State,
-		NotApplicableReason:  res.NotApplicableReason,
-		BrokenReason:         res.BrokenReason,
-		ObservedResult:       res.ObservedResult,
-		ObservedAt:           res.ObservedAt,
-		Pending:              res.Pending,
-		IssuerID:             res.IssuerID,
-		ResourceIndicator:    res.ResourceIndicator,
-		ClientID:             res.ClientID,
-		ClientBinding:        res.ClientBinding,
-		DeepLink:             res.DeepLink,
-		Audience:             res.Audience,
-		OktaApplicationID:    res.OktaApplicationID,
-		OktaApplicationLabel: res.OktaApplicationLabel,
-		ConfirmedAt:          res.ConfirmedAt,
+		McpServerID:               res.McpServerID,
+		ProjectID:                 res.ProjectID,
+		ProjectSlug:               res.ProjectSlug,
+		ServerName:                res.ServerName,
+		ServerSlug:                res.ServerSlug,
+		State:                     res.State,
+		NotApplicableReason:       res.NotApplicableReason,
+		BrokenReason:              res.BrokenReason,
+		ObservedResult:            res.ObservedResult,
+		ObservedAt:                res.ObservedAt,
+		Pending:                   res.Pending,
+		IssuerID:                  res.IssuerID,
+		AuthorizationServerIssuer: res.AuthorizationServerIssuer,
+		ResourceIndicator:         res.ResourceIndicator,
+		ClientID:                  res.ClientID,
+		ClientBinding:             res.ClientBinding,
+		DeepLink:                  res.DeepLink,
+		Audience:                  res.Audience,
+		OktaApplicationID:         res.OktaApplicationID,
+		OktaApplicationLabel:      res.OktaApplicationLabel,
+		ConfirmedAt:               res.ConfirmedAt,
 	}
 	if res.Scopes != nil {
 		body.Scopes = make([]string, len(res.Scopes))

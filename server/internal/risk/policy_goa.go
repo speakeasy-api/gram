@@ -71,7 +71,5 @@ func policyToGoa(policy policycore.Policy) *types.RiskPolicy {
 		Version:                policy.Version,
 		CreatedAt:              policy.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:              policy.UpdatedAt.Format(time.RFC3339),
-		PendingMessages:        policy.PendingMessages,
-		TotalMessages:          policy.TotalMessages,
 	}
 }

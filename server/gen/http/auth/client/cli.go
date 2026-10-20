@@ -10,8 +10,10 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	auth "github.com/speakeasy-api/gram/server/gen/auth"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildCallbackPayload builds the payload for the auth callback endpoint from
@@ -36,7 +38,8 @@ func BuildCallbackPayload(authCallbackCode string, authCallbackState string) (*a
 
 // BuildLoginPayload builds the payload for the auth login endpoint from CLI
 // flags.
-func BuildLoginPayload(authLoginRedirect string, authLoginOrgName string, authLoginEmail string, authLoginSupportHandoff string) (*auth.LoginPayload, error) {
+func BuildLoginPayload(authLoginRedirect string, authLoginOrgName string, authLoginPartnerCode string, authLoginEmail string, authLoginSupportHandoff string) (*auth.LoginPayload, error) {
+	var err error
 	var redirect *string
 	{
 		if authLoginRedirect != "" {
@@ -47,6 +50,18 @@ func BuildLoginPayload(authLoginRedirect string, authLoginOrgName string, authLo
 	{
 		if authLoginOrgName != "" {
 			orgName = &authLoginOrgName
+		}
+	}
+	var partnerCode *string
+	{
+		if authLoginPartnerCode != "" {
+			partnerCode = &authLoginPartnerCode
+			if utf8.RuneCountInString(*partnerCode) > 80 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("partner_code", *partnerCode, utf8.RuneCountInString(*partnerCode), 80, false))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var email *string
@@ -64,6 +79,7 @@ func BuildLoginPayload(authLoginRedirect string, authLoginOrgName string, authLo
 	v := &auth.LoginPayload{}
 	v.Redirect = redirect
 	v.OrgName = orgName
+	v.PartnerCode = partnerCode
 	v.Email = email
 	v.SupportHandoff = supportHandoff
 
@@ -129,6 +145,21 @@ func BuildLogoutPayload(authLogoutSessionToken string) (*auth.LogoutPayload, err
 	return v, nil
 }
 
+// BuildLogoutEverywherePayload builds the payload for the auth
+// logoutEverywhere endpoint from CLI flags.
+func BuildLogoutEverywherePayload(authLogoutEverywhereSessionToken string) (*auth.LogoutEverywherePayload, error) {
+	var sessionToken *string
+	{
+		if authLogoutEverywhereSessionToken != "" {
+			sessionToken = &authLogoutEverywhereSessionToken
+		}
+	}
+	v := &auth.LogoutEverywherePayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildRegisterPayload builds the payload for the auth register endpoint from
 // CLI flags.
 func BuildRegisterPayload(authRegisterBody string, authRegisterSessionToken string) (*auth.RegisterPayload, error) {
@@ -137,7 +168,15 @@ func BuildRegisterPayload(authRegisterBody string, authRegisterSessionToken stri
 	{
 		err = json.Unmarshal([]byte(authRegisterBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"org_name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"org_name\": \"abc123\",\n      \"partner_code\": \"aaa\"\n   }'")
+		}
+		if body.PartnerCode != nil {
+			if utf8.RuneCountInString(*body.PartnerCode) > 80 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.partner_code", *body.PartnerCode, utf8.RuneCountInString(*body.PartnerCode), 80, false))
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -147,7 +186,8 @@ func BuildRegisterPayload(authRegisterBody string, authRegisterSessionToken stri
 		}
 	}
 	v := &auth.RegisterPayload{
-		OrgName: body.OrgName,
+		OrgName:     body.OrgName,
+		PartnerCode: body.PartnerCode,
 	}
 	v.SessionToken = sessionToken
 
@@ -165,6 +205,71 @@ func BuildInfoPayload(authInfoSessionToken string) (*auth.InfoPayload, error) {
 	}
 	v := &auth.InfoPayload{}
 	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildTransferOutPayload builds the payload for the auth transferOut endpoint
+// from CLI flags.
+func BuildTransferOutPayload(authTransferOutTargetHost string, authTransferOutNonce string, authTransferOutRedirect string, authTransferOutSessionToken string) (*auth.TransferOutPayload, error) {
+	var targetHost *string
+	{
+		if authTransferOutTargetHost != "" {
+			targetHost = &authTransferOutTargetHost
+		}
+	}
+	var nonce *string
+	{
+		if authTransferOutNonce != "" {
+			nonce = &authTransferOutNonce
+		}
+	}
+	var redirect *string
+	{
+		if authTransferOutRedirect != "" {
+			redirect = &authTransferOutRedirect
+		}
+	}
+	var sessionToken *string
+	{
+		if authTransferOutSessionToken != "" {
+			sessionToken = &authTransferOutSessionToken
+		}
+	}
+	v := &auth.TransferOutPayload{}
+	v.TargetHost = targetHost
+	v.Nonce = nonce
+	v.Redirect = redirect
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildTransferInPayload builds the payload for the auth transferIn endpoint
+// from CLI flags.
+func BuildTransferInPayload(authTransferInSourceHost string, authTransferInCode string, authTransferInRedirect string) (*auth.TransferInPayload, error) {
+	var sourceHost *string
+	{
+		if authTransferInSourceHost != "" {
+			sourceHost = &authTransferInSourceHost
+		}
+	}
+	var code *string
+	{
+		if authTransferInCode != "" {
+			code = &authTransferInCode
+		}
+	}
+	var redirect *string
+	{
+		if authTransferInRedirect != "" {
+			redirect = &authTransferInRedirect
+		}
+	}
+	v := &auth.TransferInPayload{}
+	v.SourceHost = sourceHost
+	v.Code = code
+	v.Redirect = redirect
 
 	return v, nil
 }

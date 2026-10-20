@@ -37,6 +37,7 @@ import {
 } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useProject } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { ChatLogsTable } from "@/pages/chatLogs/ChatLogsTable";
@@ -202,6 +203,8 @@ function OwnSessionsNotice(): JSX.Element | null {
 }
 
 export function LogsAgentsContent(): JSX.Element {
+  const project = useProject();
+  const { hasScope } = useRBAC();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [offset, setOffset] = useState(0);
@@ -301,17 +304,20 @@ export function LogsAgentsContent(): JSX.Element {
 
   const searchQuery = urlSearch ?? "";
   const assistantId = isUuid(urlAssistantId) ? urlAssistantId : "";
+  const canReadAssistant =
+    !!assistantId && hasScope("assistant:read", assistantId, project.id);
 
-  const { data: filteredAssistant } = useAssistantsGet(
-    { id: assistantId },
+  const { data: assistantData } = useAssistantsGet(
+    { id: assistantId, gramProject: project.slug },
     undefined,
     {
-      enabled: !!assistantId,
+      enabled: canReadAssistant,
       retry: false,
       throwOnError: false,
       refetchOnWindowFocus: false,
     },
   );
+  const filteredAssistant = canReadAssistant ? assistantData : undefined;
 
   const timeRange = useMemo(() => {
     if (customRange) {

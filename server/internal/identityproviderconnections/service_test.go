@@ -115,7 +115,7 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 	require.Equal(t, fullOrgURL, created.OrgURL)
 	require.Equal(t, fullOrgURL, created.IssuerURL)
 	require.Equal(t, identityproviderconnections.ListingModeCustomApp, created.ListingMode)
-	require.Contains(t, created.JwksURL, testServerURL)
+	require.Contains(t, conv.PtrValOr(created.JwksURL, ""), testServerURL)
 	require.Nil(t, created.ClientID)
 	require.False(t, created.ClientIDSubmitted)
 	require.Equal(t, allScopes(), created.RequiredScopes)
@@ -129,7 +129,7 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 	keys := checklistKeys(created.Checklist)
 	require.Equal(t, []string{
 		"create_api_services_app", "public_key_auth", "dpop", "grant_scopes", "assign_admin_roles", "submit_client_id",
-		"register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection",
+		"register_ai_agent", "link_agent_app", "record_ai_agent", "add_agent_public_key", "activate_agent_app", "first_resource_connection",
 	}, keys)
 	for _, item := range created.Checklist {
 		switch item.Key {
@@ -145,7 +145,7 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 		case "submit_client_id":
 			require.NotNil(t, item.Completed)
 			require.False(t, *item.Completed)
-		case "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection":
+		case "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "add_agent_public_key", "first_resource_connection":
 			require.Equal(t, "cross_app_access", item.Group)
 		default:
 			require.Equal(t, "connect", item.Group)
@@ -555,7 +555,9 @@ func TestRevoke_IsIdempotentAndFreesTheOrganization(t *testing.T) {
 	// The managed client stays live serving an empty JWKS at the same URL.
 	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, created.ID))
 	require.NoError(t, err)
-	require.Equal(t, created.JwksURL, managed.JSONWebKeySetURL)
+	require.Equal(t, conv.PtrValOr(created.JwksURL, ""), managed.JSONWebKeySetURL)
+	require.NotNil(t, created.RemoteSessionIssuerID)
+	require.Equal(t, managed.IssuerID.String(), *created.RemoteSessionIssuerID)
 	require.False(t, managed.ActiveKeyID.Valid)
 	require.JSONEq(t, `{"keys":[]}`, managedJWKS(t, ctx, si, managed))
 
@@ -843,6 +845,7 @@ func TestRevoke_RetryAfterManagedClientDeleted(t *testing.T) {
 	require.Nil(t, again.ClientID)
 	require.False(t, again.ClientIDSubmitted)
 	require.Empty(t, again.JwksURL)
+	require.Nil(t, again.RemoteSessionIssuerID, "no managed client, no issuer to report")
 }
 
 func TestRevoke_ConcurrentCallsBothSucceedAndAuditOnce(t *testing.T) {
@@ -900,7 +903,22 @@ func TestNormalizeOktaOrgURL(t *testing.T) {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.NoError(t, err, raw)
 	}
-	for _, raw := range []string{"https://okta.com", "https://okta.com.evil.com", "https://example.okta.com/path", "http://localhost", "https://[::1]", "https://example.okta.com.", "https://xn--exmple-cua.okta.com", "https://exämple.okta.com", "https://%zz.okta.com", "https://\u212Aexample.okta.com", "https://example.okta.com?", "https://example.okta.com#", "https://example.okta.com/#"} {
+	for raw, want := range map[string]string{
+		"https://acme-admin.okta.com":                    "https://acme.okta.com",
+		"https://acme-admin.oktapreview.com/":            "https://acme.oktapreview.com",
+		"https://acme-admin.okta-emea.com/admin":         "https://acme.okta-emea.com",
+		"https://acme-admin.okta.mil/admin/home":         "https://acme.okta.mil",
+		"https://Dev-1-Admin.okta.com/admin/apps/active": "https://dev-1.okta.com",
+		"https://myadmin-co.okta.com":                    "https://myadmin-co.okta.com",
+		"https://admin-team.okta.com":                    "https://admin-team.okta.com",
+		"https://acme-admin.sub.okta.com":                "https://acme-admin.sub.okta.com",
+		"https://sub.acme-admin.okta.com/admin/home":     "https://sub.acme.okta.com",
+	} {
+		got, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
+		require.NoError(t, err, raw)
+		require.Equal(t, want, got, raw)
+	}
+	for _, raw := range []string{"https://example.okta.com/admin/home", "https://acme-admin.okta.com/app/UserHome", "https://acme-admin.okta.com/admin/home?x=1", "https://acme-admin.okta.com/administrator", "https://-admin.okta.com", "https://acme-admin-admin.okta.com", "https://acme-admin.okta.com/%61dmin", "https://acme-admin.okta.com/admin%2Fx", "https://acme-admin.okta.com/admin/a b", "https://acme-admin.okta.com//admin", "https://okta.com", "https://okta.com.evil.com", "https://example.okta.com/path", "http://localhost", "https://[::1]", "https://example.okta.com.", "https://xn--exmple-cua.okta.com", "https://exämple.okta.com", "https://%zz.okta.com", "https://\u212Aexample.okta.com", "https://example.okta.com?", "https://example.okta.com#", "https://example.okta.com/#"} {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.Error(t, err, raw)
 	}

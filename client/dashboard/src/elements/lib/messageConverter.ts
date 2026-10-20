@@ -1,11 +1,11 @@
 /**
- * Message format converter for Gram API <-> assistant-ui.
+ * Message format converter for Speakeasy API <-> assistant-ui.
  *
- * The Gram API returns chat messages in its own schema (GramChatMessage),
+ * The Speakeasy API returns chat messages in its own schema (GramChatMessage),
  * while assistant-ui expects messages in its internal ThreadMessage format.
  * This module bridges that gap by converting between the two formats.
  *
- * Main export: `convertGramMessagesToExported` - converts an array of Gram
+ * Main export: `convertGramMessagesToExported` - converts an array of Speakeasy
  * messages into an ExportedMessageRepository with parent-child relationships
  * for conversation threading.
  */
@@ -68,11 +68,11 @@ export type GramChatContentPart =
 export type GramChatContent = string | GramChatContentPart[];
 
 /**
- * Represents a chat message from the Gram API. Only fields actually surfaced
+ * Represents a chat message from the Speakeasy API. Only fields actually surfaced
  * through Elements' public converters are modelled; provider-specific extras
  * remain on the wire shape but are intentionally not part of the contract.
  *
- * `tool_calls` is the JSON-encoded string the Gram chat service stores on
+ * `tool_calls` is the JSON-encoded string the Speakeasy chat service stores on
  * assistant rows; `tool_call_id` is the id the corresponding tool-response row
  * carries when `role === "tool"`.
  */
@@ -91,7 +91,7 @@ export interface GramChatMessage {
 }
 
 /**
- * Represents a chat from the Gram API.
+ * Represents a chat from the Speakeasy API.
  */
 export interface GramChat {
   id: string;
@@ -107,7 +107,7 @@ export interface GramChat {
 }
 
 /**
- * Represents a chat overview from the Gram API (without full messages).
+ * Represents a chat overview from the Speakeasy API (without full messages).
  */
 export interface GramChatOverview {
   id: string;
@@ -277,7 +277,7 @@ function buildSystemContentParts(msg: GramChatMessage): [TextMessagePart] {
 }
 
 /**
- * Converts a single Gram ChatMessage to a ThreadMessage.
+ * Converts a single Speakeasy ChatMessage to a ThreadMessage.
  */
 function convertGramMessageToThreadMessage(
   msg: GramChatMessage,
@@ -347,7 +347,7 @@ function convertGramMessageToThreadMessage(
 }
 
 /**
- * Converts an array of Gram ChatMessages to an ExportedMessageRepository.
+ * Converts an array of Speakeasy ChatMessages to an ExportedMessageRepository.
  * Creates parent-child relationships based on message order.
  *
  * Note: system, developer, and tool messages are filtered out. assistant-ui's

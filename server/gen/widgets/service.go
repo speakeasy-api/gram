@@ -159,8 +159,18 @@ type Widget struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string
-	CreatedAt     string
-	UpdatedAt     string
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
+	Dashboards []*WidgetDashboard
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+// A dashboard a widget is placed on.
+type WidgetDashboard struct {
+	ID   string
+	Name string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,10 +20,37 @@ import (
 const (
 	// mcpFindingEvidenceRetention matches the ClickHouse risk_findings TTL.
 	mcpFindingEvidenceRetention = 90 * 24 * time.Hour
+
+	// MaxMCPExecutionPayloadBytes caps a stored execution payload, matching the
+	// tool IO telemetry body cap.
+	MaxMCPExecutionPayloadBytes = 64 * 1024 // 64 KiB
 )
 
 // ErrMCPFindingEvidenceNotStored means evidence is unavailable or has expired.
 var ErrMCPFindingEvidenceNotStored = errors.New("MCP finding evidence not stored")
+
+// MCPExecutionPayload is the plaintext text one execution phase was scanned
+// over. Finding positions are byte offsets into Payload.
+type MCPExecutionPayload struct {
+	// ExecutionID identifies the mediated execution.
+	ExecutionID string
+
+	// Phase is the inspection phase, request or response.
+	Phase string
+
+	// Payload is the scanned text. Callers must pass an owned copy. Store keeps
+	// at most MaxMCPExecutionPayloadBytes of it.
+	Payload string
+}
+
+// RevealedMCPExecutionPayload is decrypted execution evidence.
+type RevealedMCPExecutionPayload struct {
+	// Payload is the scanned text.
+	Payload string
+
+	// ExpiresAt is when the stored payload is deleted.
+	ExpiresAt time.Time
+}
 
 // MCPFindingEvidence is one plaintext match before encrypted persistence.
 type MCPFindingEvidence struct {
@@ -46,6 +74,10 @@ type MCPFindingEvidenceBatch struct {
 
 	// Findings are encrypted and stored atomically.
 	Findings []MCPFindingEvidence
+
+	// Execution, when set, stores the scanned payload in the same
+	// transaction. An existing payload for the execution phase is kept.
+	Execution *MCPExecutionPayload
 }
 
 // MCPFindingEvidenceStore encrypts MCP matches before writing them to Postgres.
@@ -91,10 +123,40 @@ func (s *MCPFindingEvidenceStore) Store(ctx context.Context, batch MCPFindingEvi
 		}
 	}
 
+	if execution := batch.Execution; execution != nil {
+		ciphertext, err := s.enc.Encrypt([]byte(truncateUTF8(execution.Payload, MaxMCPExecutionPayloadBytes)))
+		if err != nil {
+			return fmt.Errorf("encrypt MCP execution evidence: %w", err)
+		}
+		if err := queries.InsertMCPExecutionEvidence(ctx, repo.InsertMCPExecutionEvidenceParams{
+			OrganizationID:   batch.OrganizationID,
+			ProjectID:        batch.ProjectID,
+			ExecutionID:      execution.ExecutionID,
+			Phase:            execution.Phase,
+			PayloadEncrypted: ciphertext,
+			CreatedAt:        conv.ToPGTimestamptz(batch.CreatedAt),
+			ExpiresAt:        conv.ToPGTimestamptz(expiresAt),
+		}); err != nil {
+			return fmt.Errorf("store MCP execution evidence: %w", err)
+		}
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit MCP finding evidence: %w", err)
 	}
 	return nil
+}
+
+// truncateUTF8 cuts s to at most maxBytes without splitting a rune.
+func truncateUTF8(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > maxBytes-utf8.UTFMax && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 // Reveal returns decrypted evidence only while its retention window is active.
@@ -117,4 +179,29 @@ func (s *MCPFindingEvidenceStore) Reveal(ctx context.Context, organizationID str
 		return "", fmt.Errorf("decrypt MCP finding evidence: %w", err)
 	}
 	return match, nil
+}
+
+// RevealExecutionPayload returns the decrypted scanned payload of one
+// execution phase while its retention window is active.
+func (s *MCPFindingEvidenceStore) RevealExecutionPayload(ctx context.Context, organizationID string, projectID uuid.UUID, executionID, phase string, now time.Time) (RevealedMCPExecutionPayload, error) {
+	var zero RevealedMCPExecutionPayload
+	row, err := repo.New(s.db).GetMCPExecutionEvidence(ctx, repo.GetMCPExecutionEvidenceParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		ExecutionID:    executionID,
+		Phase:          phase,
+		Now:            conv.ToPGTimestamptz(now),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return zero, ErrMCPFindingEvidenceNotStored
+	}
+	if err != nil {
+		return zero, fmt.Errorf("load MCP execution evidence: %w", err)
+	}
+
+	payload, err := s.enc.Decrypt(row.PayloadEncrypted)
+	if err != nil {
+		return zero, fmt.Errorf("decrypt MCP execution evidence: %w", err)
+	}
+	return RevealedMCPExecutionPayload{Payload: payload, ExpiresAt: row.ExpiresAt.Time}, nil
 }

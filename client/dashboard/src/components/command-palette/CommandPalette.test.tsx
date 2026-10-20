@@ -45,6 +45,12 @@ vi.mock("@/contexts/CommandPalette", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => slugs,
 }));
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "project_1" }),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => true }),
+}));
 vi.mock("./recentlyVisited", () => ({
   useRecentsUserId: () => "user_1",
 }));

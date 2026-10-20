@@ -27,16 +27,19 @@ func mcpToolGrant(scope Scope, serverID string, tool string) Grant {
 	return NewGrantWithSelector(scope, selector)
 }
 
-func TestGrantsAuthorizePrincipalPrecedence(t *testing.T) {
-	t.Parallel()
+// principalPrecedenceCase is one precedence scenario and its runtime decision.
+type principalPrecedenceCase struct {
+	name    string
+	grants  []Grant
+	check   Check
+	allowed bool
+}
 
+// principalPrecedenceCases are shared by the runtime and explanation tests, so
+// an explanation is checked against the same fixtures as enforcement.
+func principalPrecedenceCases() []principalPrecedenceCase {
 	serverCheck := MCPCheck(ScopeMCPConnect, "server-1", "project-1")
-	for _, tc := range []struct {
-		name    string
-		grants  []Grant
-		check   Check
-		allowed bool
-	}{
+	return []principalPrecedenceCase{
 		{
 			name: "direct user grant outranks role block",
 			grants: []Grant{
@@ -195,7 +198,13 @@ func TestGrantsAuthorizePrincipalPrecedence(t *testing.T) {
 			check:   RiskPolicyEvaluateCheck("policy-1"),
 			allowed: false,
 		},
-	} {
+	}
+}
+
+func TestGrantsAuthorizePrincipalPrecedence(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range principalPrecedenceCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

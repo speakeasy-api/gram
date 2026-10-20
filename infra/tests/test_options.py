@@ -29,7 +29,7 @@ def test_subscription_options_present_on_marker() -> None:
     assert options.retain_acked_messages is True
     assert options.retry_policy.minimum_backoff.seconds == 10
     assert options.retry_policy.maximum_backoff.seconds == 600
-    assert options.dead_letter.max_delivery_attempts == 5
+    assert not options.HasField("dead_letter")
 
 
 def test_subscription_options_absent_on_topic_message() -> None:

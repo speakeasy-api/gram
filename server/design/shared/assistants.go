@@ -14,9 +14,9 @@ var AssistantToolsetRef = Type("AssistantToolsetRef", func() {
 var AssistantMCPServerRef = Type("AssistantMCPServerRef", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("mcp_server_slug", String, "The MCP server slug exposed to the assistant. Covers remote- and tunnelled-backed MCP servers, which have no toolset to attach.")
+	Attribute("mcp_server_slug", String, "The MCP server slug exposed to the assistant. Covers every backend, including hosted (toolset-backed) servers.")
 	Attribute("environment_slug", String, "Optional environment slug used when connecting to the MCP server.")
-	Attribute("endpoint_slug", String, "The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when the server has no Gram-hosted endpoint.")
+	Attribute("endpoint_slug", String, "The slug of the server's Speakeasy-hosted MCP endpoint (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when the server has no Speakeasy-hosted endpoint.")
 
 	Required("mcp_server_slug")
 })
@@ -41,11 +41,15 @@ var Assistant = Type("Assistant", func() {
 		Format(FormatUUID)
 	})
 	Attribute("created_by_user_id", String, "The ID of the user who created the assistant, if known.")
+	Attribute("identity_state", String, "NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted. This is configuration state, not permission to execute.", func() {
+		Enum("NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE")
+	})
+	Attribute("agent_id", String, "The assistant's dedicated agent ID, when it has one.", func() { Format(FormatUUID) })
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
 	Attribute("instructions", String, "The system instructions for the assistant.")
-	Attribute("toolsets", ArrayOf(AssistantToolsetRef), "Toolsets available to the assistant.")
-	Attribute("mcp_servers", ArrayOf(AssistantMCPServerRef), "MCP servers attached directly to the assistant (remote- or tunnelled-backed).")
+	Attribute("toolsets", ArrayOf(AssistantToolsetRef), "Hosted (toolset-backed) MCP servers attached to the assistant, by toolset slug.")
+	Attribute("mcp_servers", ArrayOf(AssistantMCPServerRef), "MCP servers attached to the assistant that are not hosted (toolset-backed); hosted servers are listed under toolsets.")
 	Attribute("skills", ArrayOf(AssistantSkillRef), "Skills attached to the assistant.")
 	Attribute("warm_ttl_seconds", Int, "Warm runtime TTL in seconds.")
 	Attribute("max_concurrency", Int, "Maximum active warm runtimes for the assistant.")

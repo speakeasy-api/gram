@@ -7,7 +7,6 @@ import { useRiskUnmarkResultsFalsePositiveMutation } from "@gram/client/react-qu
 import { invalidateAllRiskListDismissedResults } from "@gram/client/react-query/riskListDismissedResults.js";
 import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
-import { invalidateAllRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
 import { invalidateAllRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { invalidateAllRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { showUndoToast } from "@/lib/toast-undo";
@@ -97,10 +96,9 @@ export function useDismissFinding(): {
 
   const invalidateLists = useCallback(() => {
     const invalidate = () => {
-      // RiskEvents.tsx and RiskOverviewCategoryDetail.tsx each query results
-      // directly via useInfiniteQuery (not a generated hook), under their own
-      // queryKey under this shared ["risk", "results", ...] prefix (e.g.
-      // ["risk","results","list"]). Invalidate the whole prefix rather than
+      // RiskEvents.tsx queries results directly via useInfiniteQuery (not a
+      // generated hook), under its own queryKey under this shared
+      // ["risk", "results", ...] prefix (e.g. ["risk","results","list"]). Invalidate the whole prefix rather than
       // each exact key — suppressing from one surface (e.g. Risk Events) must
       // be reflected on every other surface, and matching each new custom key
       // one-by-one here is exactly the kind of thing that's easy to add a
@@ -116,7 +114,6 @@ export function useDismissFinding(): {
       // as still flagged until a manual reload.
       void invalidateAllRiskListResults(queryClient);
       void invalidateAllRiskOverview(queryClient);
-      void invalidateAllRiskRuleBreakdown(queryClient);
       void invalidateAllRiskUserBreakdown(queryClient);
       // The Watchdog page clusters the same findings into signals.
       void invalidateAllRiskSignals(queryClient);

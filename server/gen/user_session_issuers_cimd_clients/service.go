@@ -16,14 +16,14 @@ import (
 )
 
 // Manage the CIMD (OAuth Client ID Metadata Document) clients a
-// user_session_issuer admits: the read-only preset catalog Gram curates, plus
-// per-issuer custom document URLs.
+// user_session_issuer admits: the read-only preset catalog Speakeasy curates,
+// plus per-issuer custom document URLs.
 type Service interface {
-	// List Gram's curated CIMD preset catalog. Issuers whose admission mode is
-	// 'presets' admit every enabled entry here automatically, with no per-issuer
-	// configuration. Presets mode is opt-in; an issuer without an explicit mode
-	// uses 'open' and evaluates this catalog only for its shadow measurement. The
-	// catalog is global and contains no tenant data.
+	// List Speakeasy's curated CIMD preset catalog. Issuers whose admission mode
+	// is 'presets' admit every enabled entry here automatically, with no
+	// per-issuer configuration. Presets mode is opt-in; an issuer without an
+	// explicit mode uses 'open' and evaluates this catalog only for its shadow
+	// measurement. The catalog is global and contains no tenant data.
 	ListPresets(context.Context, *ListPresetsPayload) (res *ListCimdClientPresetsResult, err error)
 	// Allow an additional CIMD document URL on a user_session_issuer, beyond the
 	// preset catalog. The URL is validated for
@@ -40,7 +40,7 @@ type Service interface {
 	// URL before adding it. Every probe outcome is a 200 with verified true or
 	// false — errors are reserved for a malformed request, missing authorization,
 	// or an exceeded rate limit. Rate limited per project, since this is the one
-	// endpoint that makes Gram fetch a caller-chosen URL.
+	// endpoint that makes Speakeasy fetch a caller-chosen URL.
 	VerifyURL(context.Context, *VerifyURLPayload) (res *VerifyCimdURLResult, err error)
 	// List the custom CIMD document URLs configured on a user_session_issuer. Does
 	// not include the preset catalog — call listPresets for that.
@@ -176,8 +176,8 @@ type VerifyCimdURLResult struct {
 	// the URL names the client they intended.
 	ClientName *string
 	// The validated document rendered as JSON, set only when verified. Re-encoded
-	// from what Gram parsed rather than echoed from the wire, so it shows what the
-	// authorization server will act on.
+	// from what Speakeasy parsed rather than echoed from the wire, so it shows
+	// what the authorization server will act on.
 	Document *string
 }
 

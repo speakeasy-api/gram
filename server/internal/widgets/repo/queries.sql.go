@@ -98,6 +98,23 @@ func (q *Queries) DeleteWidget(ctx context.Context, arg DeleteWidgetParams) (Wid
 	return i, err
 }
 
+const deleteWidgetPlacements = `-- name: DeleteWidgetPlacements :exec
+DELETE FROM dashboard_widgets
+WHERE project_id = $1
+  AND widget_id = $2
+`
+
+type DeleteWidgetPlacementsParams struct {
+	ProjectID uuid.UUID
+	WidgetID  uuid.UUID
+}
+
+// A deleted widget comes off every dashboard it was on.
+func (q *Queries) DeleteWidgetPlacements(ctx context.Context, arg DeleteWidgetPlacementsParams) error {
+	_, err := q.db.Exec(ctx, deleteWidgetPlacements, arg.ProjectID, arg.WidgetID)
+	return err
+}
+
 const getWidget = `-- name: GetWidget :one
 SELECT id, project_id, organization_id, created_by_user_id, name, description, dataset, query, visualization, created_at, updated_at, deleted_at, deleted
 FROM widgets
@@ -170,16 +187,104 @@ func (q *Queries) GetWidgetForUpdate(ctx context.Context, arg GetWidgetForUpdate
 	return i, err
 }
 
+const listDashboardsForWidget = `-- name: ListDashboardsForWidget :many
+SELECT DISTINCT d.id AS dashboard_id, d.name AS dashboard_name
+FROM dashboard_widgets p
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
+WHERE p.project_id = $1
+  AND p.widget_id = $2
+ORDER BY d.name, d.id
+`
+
+type ListDashboardsForWidgetParams struct {
+	ProjectID uuid.UUID
+	WidgetID  uuid.UUID
+}
+
+type ListDashboardsForWidgetRow struct {
+	DashboardID   uuid.UUID
+	DashboardName string
+}
+
+func (q *Queries) ListDashboardsForWidget(ctx context.Context, arg ListDashboardsForWidgetParams) ([]ListDashboardsForWidgetRow, error) {
+	rows, err := q.db.Query(ctx, listDashboardsForWidget, arg.ProjectID, arg.WidgetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDashboardsForWidgetRow
+	for rows.Next() {
+		var i ListDashboardsForWidgetRow
+		if err := rows.Scan(&i.DashboardID, &i.DashboardName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDashboardsForWidgets = `-- name: ListDashboardsForWidgets :many
+SELECT DISTINCT p.widget_id, d.id AS dashboard_id, d.name AS dashboard_name
+FROM dashboard_widgets p
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
+WHERE p.project_id = $1
+  AND p.widget_id = ANY($2::uuid[])
+ORDER BY p.widget_id, d.name, d.id
+`
+
+type ListDashboardsForWidgetsParams struct {
+	ProjectID uuid.UUID
+	WidgetIds []uuid.UUID
+}
+
+type ListDashboardsForWidgetsRow struct {
+	WidgetID      uuid.UUID
+	DashboardID   uuid.UUID
+	DashboardName string
+}
+
+// Which live dashboards each of the given widgets is on, once each, however
+// many cards show it.
+func (q *Queries) ListDashboardsForWidgets(ctx context.Context, arg ListDashboardsForWidgetsParams) ([]ListDashboardsForWidgetsRow, error) {
+	rows, err := q.db.Query(ctx, listDashboardsForWidgets, arg.ProjectID, arg.WidgetIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDashboardsForWidgetsRow
+	for rows.Next() {
+		var i ListDashboardsForWidgetsRow
+		if err := rows.Scan(&i.WidgetID, &i.DashboardID, &i.DashboardName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWidgets = `-- name: ListWidgets :many
 SELECT id, project_id, organization_id, created_by_user_id, name, description, dataset, query, visualization, created_at, updated_at, deleted_at, deleted
 FROM widgets
 WHERE project_id = $1
   AND deleted IS FALSE
 ORDER BY updated_at DESC, id DESC
+LIMIT $2::int
 `
 
-func (q *Queries) ListWidgets(ctx context.Context, projectID uuid.UUID) ([]Widget, error) {
-	rows, err := q.db.Query(ctx, listWidgets, projectID)
+type ListWidgetsParams struct {
+	ProjectID uuid.UUID
+	RowLimit  pgtype.Int4
+}
+
+// A null row_limit lists every widget.
+func (q *Queries) ListWidgets(ctx context.Context, arg ListWidgetsParams) ([]Widget, error) {
+	rows, err := q.db.Query(ctx, listWidgets, arg.ProjectID, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}

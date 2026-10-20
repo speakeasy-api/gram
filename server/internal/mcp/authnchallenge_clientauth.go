@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -70,7 +71,10 @@ func clientKeySource(row *usersessions_repo.UserSessionClient) (jwks.Source, err
 // credential, a symmetric client presenting an assertion, and an assertion
 // client presenting a secret are all refused: an unrequested credential is
 // not an upgrade, it is a client that does not match its registration.
-func (s *Service) authenticateOAuthClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, at clientAssertionEndpoint, row *usersessions_repo.UserSessionClient, creds presentedClientCredentials, baseURL string) string {
+//
+// urls are the addressed authorization server's URLs, from which an
+// assertion's accepted audiences derive.
+func (s *Service) authenticateOAuthClient(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, urls AuthorizationServerURLs, at clientAssertionEndpoint, row *usersessions_repo.UserSessionClient, creds presentedClientCredentials) string {
 	kind, err := clientcred.KindOf(row.TokenEndpointAuthMethod, row.ClientSecretHash.Valid)
 	if err != nil {
 		logger.ErrorContext(ctx, "user session client row is not authenticatable, failing closed",
@@ -105,7 +109,7 @@ func (s *Service) authenticateOAuthClient(ctx context.Context, logger *slog.Logg
 		if creds.method != oauthwire.AuthMethodPrivateKeyJWT && creds.method != oauthwire.AuthMethodNone {
 			return "assertion_client_presented_secret"
 		}
-		return s.verifyClientAssertion(ctx, logger, endpoint, at, row, creds.assertion, baseURL)
+		return s.verifyClientAssertion(ctx, logger, issuerID, urls, at, row, creds.assertion)
 
 	default:
 		logger.ErrorContext(ctx, "unhandled client credential kind, failing closed",
@@ -119,7 +123,7 @@ func (s *Service) authenticateOAuthClient(ctx context.Context, logger *slog.Logg
 // the expectation this endpoint imposes, returning the failure reason or ""
 // when the assertion verified. Every rejection reason comes from the
 // verifier's vocabulary so the logs read the same at both endpoints.
-func (s *Service) verifyClientAssertion(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, at clientAssertionEndpoint, row *usersessions_repo.UserSessionClient, assertion privatekeyjwt.Assertion, baseURL string) string {
+func (s *Service) verifyClientAssertion(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, urls AuthorizationServerURLs, at clientAssertionEndpoint, row *usersessions_repo.UserSessionClient, assertion privatekeyjwt.Assertion) string {
 	if s.clientAssertionVerifier == nil {
 		// No shared store, no single-use guarantee. Refused, and loudly:
 		// this is a surface that should not be receiving these requests.
@@ -138,22 +142,15 @@ func (s *Service) verifyClientAssertion(ctx context.Context, logger *slog.Logger
 		return "assertion_key_source_missing"
 	}
 
-	urls, err := s.requestAuthorizationServerURLs(ctx, endpoint, baseURL)
-	if err != nil {
-		// Cannot compute what aud may name, so nothing can be accepted.
-		logger.ErrorContext(ctx, "cannot derive assertion audiences for endpoint, failing closed", attr.SlogError(err))
-		return string(privatekeyjwt.ReasonVerifierMisconfigured)
-	}
-
 	result, err := s.clientAssertionVerifier.Verify(ctx, assertion, privatekeyjwt.ClientExpectation(
 		row.ClientID,
 		// Scoped to the issuer, so every key set its clients name draws on
 		// one fetch budget.
-		keySource.WithFetchScope(endpoint.UserSessionIssuerID.String()),
+		keySource.WithFetchScope(issuerID.String()),
 		// The issuer row id, never a URL: an endpoint reachable on a custom
 		// domain and the default host has two issuer URLs, and keying the
 		// replay guard on either would let one assertion be spent per host.
-		endpoint.UserSessionIssuerID.String(),
+		issuerID.String(),
 		urls.clientAssertionAudiences(at),
 	))
 	if err != nil {

@@ -62,14 +62,7 @@ type RiskPolicyVersionGrant struct {
 // PolicyVersion authenticates the complete transport-neutral persisted policy
 // state. Sensitive prompt, URL-derived scope, model configuration, and audience
 // values contribute only inside the HMAC and never appear in the token.
-func (c *riskVersionCodec) PolicyVersion(input RiskPolicyVersionState) (string, error) {
-	state := input
-	// Progress is computed when a policy is read and changes as background
-	// analysis advances; it is not part of the locked policy definition. Keep
-	// persisted score, version, and timestamps, which do represent admin-visible
-	// policy state and must invalidate stale writes.
-	state.Policy.PendingMessages = nil
-	state.Policy.TotalMessages = nil
+func (c *riskVersionCodec) PolicyVersion(state RiskPolicyVersionState) (string, error) {
 	canonicalAnalyzer, err := canonicalJSON(state.AnalyzerConfig)
 	if err != nil {
 		return "", errRiskVersionInvalid
@@ -183,7 +176,7 @@ func riskPolicyVersionState(ctx context.Context, db riskrepo.DBTX, policy policy
 	if err != nil {
 		return RiskPolicyVersionState{}, fmt.Errorf("load risk policy version audience: %w", err)
 	}
-	state.Policy = policycore.Project(row, audience, nil)
+	state.Policy = policycore.Project(row, audience)
 	state.AnalyzerConfig = row.AnalyzerConfig
 	allowedGrants, err := riskPolicyVersionURLGrants(ctx, db, state.Policy, authz.ScopeRiskPolicyBypass)
 	if err != nil {

@@ -183,6 +183,7 @@ func NewProvisioner(t *testing.T, conn *pgxpool.Pool, kmsClients gcpkms.Provisio
 			SigningCredentialID:   credentialID,
 			SigningServiceAccount: signingServiceAccount,
 			ServerURL:             base,
+			AllowLoopbackIssuer:   false,
 		},
 	)
 	require.NoError(t, err)

@@ -114,6 +114,7 @@ func (m *tunnelManager) buildProxy(
 		return nil, oops.E(oops.CodeGatewayError, err, "tunnel route is invalid").LogError(ctx, logger)
 	}
 
+	options = append(options, remotemcp.WithHeaderPolicy(proxy.HeaderPolicyTunneled))
 	p := m.proxyManager.BuildTarget(
 		logger,
 		proxy.ServerIdentity{

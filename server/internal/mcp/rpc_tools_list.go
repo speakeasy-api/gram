@@ -37,11 +37,15 @@ type toolsListResultTools struct {
 }
 
 type toolListEntry struct {
-	Name        string                       `json:"name"`
-	Description string                       `json:"description"`
-	InputSchema json.RawMessage              `json:"inputSchema,omitempty,omitzero"`
-	Annotations *externalmcp.ToolAnnotations `json:"annotations,omitempty"`
-	Meta        map[string]any               `json:"_meta,omitempty"`
+	Title        string                       `json:"title,omitempty"`
+	OutputSchema json.RawMessage              `json:"outputSchema,omitempty"`
+	Icons        json.RawMessage              `json:"icons,omitempty"`
+	Execution    json.RawMessage              `json:"execution,omitempty"`
+	Name         string                       `json:"name"`
+	Description  string                       `json:"description"`
+	InputSchema  json.RawMessage              `json:"inputSchema,omitempty,omitzero"`
+	Annotations  *externalmcp.ToolAnnotations `json:"annotations,omitempty"`
+	Meta         map[string]any               `json:"_meta,omitempty"`
 }
 
 func handleToolsList(
@@ -102,7 +106,7 @@ func handleToolsList(
 			protocolVersion = storedProtocolVersion
 		}
 
-		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.sessionID, map[string]any{
+		props := map[string]any{
 			"project_id":           payload.projectID.String(),
 			"organization_id":      toolset.OrganizationID,
 			"authenticated":        payload.authenticated,
@@ -118,8 +122,14 @@ func handleToolsList(
 			"client_name":          conv.PtrEmpty(identity.Name),
 			"client_version":       conv.PtrEmpty(identity.Version),
 			"capabilities":         reqMeta.CapabilityKeys,
-		}); err != nil {
-			logger.ErrorContext(ctx, "failed to capture mcp_server_count event", attr.SlogError(err))
+		}
+		payload.recordServingAnalytics(props)
+		// Preserve existing analytics consumers while also emitting the shared
+		// hosted/remote event. Consumers should select one event, not sum both.
+		for _, event := range []string{"mcp_server_count", "mcp_server_tools_list"} {
+			if err := productMetrics.CaptureEvent(ctx, event, payload.sessionID, props); err != nil {
+				logger.ErrorContext(ctx, "failed to capture "+event+" event", attr.SlogError(err))
+			}
 		}
 	}
 
@@ -268,6 +278,7 @@ func buildToolListEntries(
 
 		for _, extTool := range proxyTools {
 			tools = append(tools, &toolListEntry{
+				Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
 				Name:        extTool.Name,
 				Description: extTool.Description,
 				InputSchema: extTool.Schema,
@@ -302,6 +313,7 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 	}
 
 	return &toolListEntry{
+		Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
 		Name:        toolEntry.Name,
 		Description: toolEntry.Description,
 		InputSchema: toolEntry.InputSchema,

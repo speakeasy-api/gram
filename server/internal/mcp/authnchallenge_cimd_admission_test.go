@@ -548,7 +548,7 @@ func TestCIMDAdmission_PortlessLoopbackStillBindsPath(t *testing.T) {
 // client_id past admission (unit-tested in the admission package, since the
 // real host cannot be reached from a test). What remains is the document
 // itself: OpenAI's documents OMIT token_endpoint_auth_method entirely.
-// Gram used to reject that on the RFC 7591 client_secret_basic default,
+// Speakeasy used to reject that on the RFC 7591 client_secret_basic default,
 // which -02 §4.1 makes inapplicable for CIMD.
 //
 // Without this fix the ChatGPT presets would admit and then fail validation
@@ -663,7 +663,7 @@ func TestCIMDAdmission_TokenRejectsWhenDisabled(t *testing.T) {
 // like a bug until you know why.
 //
 // `presets` deliberately does NOT enforce at /token. Preset membership is
-// implicit and Gram-mutable — removing a catalog entry de-admits it on every
+// implicit and Speakeasy-mutable — removing a catalog entry de-admits it on every
 // presets-mode issuer at deploy — so enforcing here would let a one-line
 // catalog edit terminate live sessions fleet-wide, surfacing as a
 // mid-session failure no client recovers from.

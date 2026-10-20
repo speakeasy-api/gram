@@ -133,3 +133,17 @@ func TestWakeExtractScheduleReturnsTimestamp(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, fireAt.Format(time.RFC3339Nano), schedule)
 }
+
+func TestWakeScheduledEventPreservesCapturedRequester(t *testing.T) {
+	t.Parallel()
+	definition, ok := GetDefinition(DefinitionSlugWake)
+	require.True(t, ok)
+	cfg, err := definition.DecodeConfig(map[string]any{"fire_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano), "correlation_id": "thread", "requester_user_id": "captured-user", "identity_version": 1})
+	require.NoError(t, err)
+	envelope, err := definition.BuildScheduledEvent(triggerrepo.TriggerInstance{ID: uuid.New(), DefinitionSlug: DefinitionSlugWake}, cfg, time.Now())
+	require.NoError(t, err)
+	var payload wakeTriggerEvent
+	require.NoError(t, json.Unmarshal(envelope.RawPayload, &payload))
+	require.Equal(t, "captured-user", payload.RequesterUserID)
+	require.Equal(t, 1, payload.IdentityVersion)
+}

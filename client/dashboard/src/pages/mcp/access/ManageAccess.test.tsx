@@ -4,14 +4,36 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // What the page sends when a row changes. The rules the surface writes are the
 // whole point, so the tests assert the payload rather than the rendering alone.
-const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
+const { mutate, mutationOptions, invalidate, permission } = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  mutationOptions: vi.fn(),
+  invalidate: vi.fn(),
+  permission: { admin: true },
+}));
 
 vi.mock("@gram/client/react-query/setResourceAudience.js", () => ({
-  useSetResourceAudienceMutation: () => ({ mutate, isPending: false }),
+  useSetResourceAudienceMutation: (options: unknown) => {
+    mutationOptions(options);
+    return { mutate, isPending: false };
+  },
 }));
 
 vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
   invalidateAllResourceAudience: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/explainResourceAccess.js", () => ({
+  invalidateAllExplainResourceAccess: invalidate,
+}));
+
+vi.mock("@gram/client/react-query/roles.js", () => ({
+  invalidateAllRoles: invalidate,
+}));
+vi.mock("@gram/client/react-query/plugin.js", () => ({
+  invalidateAllPlugin: invalidate,
+}));
+vi.mock("@gram/client/react-query/plugins.js", () => ({
+  invalidateAllPlugins: invalidate,
 }));
 
 vi.mock("@gram/client/react-query/members.js", () => ({
@@ -33,6 +55,11 @@ vi.mock("@gram/client/react-query/audienceOptions.js", () => ({
   useAudienceOptions: () => ({
     data: {
       options: [
+        {
+          principalUrn: "role:global:1",
+          kind: "role",
+          displayName: "Engineering",
+        },
         {
           principalUrn: "agent:agent-1",
           kind: "agent",
@@ -59,13 +86,17 @@ vi.mock("react-router", () => ({
 }));
 
 vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    plugins: { detail: { href: (id: string) => `/org/plugins/${id}` } },
+  }),
   useOrgRoutes: () => ({
+    plugins: { detail: { href: (id: string) => `/org/plugins/${id}` } },
     access: { roles: { href: () => "/org/access/roles" } },
   }),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: () => true }),
+  useRBAC: () => ({ hasAnyScope: () => permission.admin }),
 }));
 
 vi.mock("@/components/require-scope", () => ({
@@ -84,7 +115,10 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { ManageAccess } from "./ManageAccess";
 
 afterEach(cleanup);
-beforeEach(() => mutate.mockClear());
+beforeEach(() => {
+  vi.clearAllMocks();
+  permission.admin = true;
+});
 
 function entry(
   overrides: Partial<ResourceAudienceEntry>,
@@ -306,6 +340,37 @@ describe("the access list", () => {
     ).toBeTruthy();
   });
 
+  it("grants a picked role Connect through the existing audience endpoint", async () => {
+    renderList([entry({})]);
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: /Grant access/ }),
+      { button: 0, ctrlKey: false, pointerType: "mouse" },
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Role" }));
+    expect(
+      screen.getByRole("heading", { name: "Grant role access" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("combobox"));
+    expect(screen.queryByText("Release Bot")).toBeNull();
+    fireEvent.click(screen.getByRole("option", { name: /Engineering/ }));
+    fireEvent.keyDown(screen.getByRole("option", { name: /Engineering/ }), {
+      key: "Escape",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(savedEntries()).toEqual({
+      resourceKind: "mcp",
+      resourceId: "server-1",
+      expectedVersion: "v1",
+      entries: [
+        { principalUrn: "user:1", level: "use" },
+        { principalUrn: "role:global:1", level: "use" },
+      ],
+    });
+    await mutationOptions.mock.calls.at(-1)![0].onSuccess();
+    expect(invalidate).toHaveBeenCalledTimes(4);
+  });
+
   it("says when nobody reaches the server", () => {
     renderList([]);
     expect(screen.getByText(/Nobody reaches/)).toBeTruthy();
@@ -401,4 +466,89 @@ it("confirms removing an agent that remains covered by a broader role allow", ()
     ["agent:a1", "blocked_manage"],
     ["agent:a1", "blocked_view"],
   ]);
+});
+
+describe("role plugin distribution", () => {
+  const role = entry({
+    principalUrn: "role:global:1",
+    kind: "role",
+    displayName: "Engineering",
+  });
+  const plugin = {
+    principalUrn: role.principalUrn,
+    pluginId: "plugin-1",
+    name: "Tools",
+    slug: "tools",
+  };
+  const ui = (rolePlugins: (typeof plugin)[], entries = [role]) => (
+    <TooltipProvider>
+      <ManageAccess
+        resourceId="server-1"
+        entries={entries}
+        version="v1"
+        isLoading={false}
+        rolePlugins={rolePlugins}
+      />
+    </TooltipProvider>
+  );
+
+  it("shows an empty distribution without inventing links", () => {
+    render(ui([]));
+    expect(screen.getByText("Distributed via")).toBeDefined();
+    expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
+  });
+
+  it("links one exact role match to its plugin detail", () => {
+    render(
+      ui([
+        plugin,
+        {
+          ...plugin,
+          principalUrn: "role:other:1",
+          pluginId: "wrong",
+          name: "Unrelated",
+        },
+      ]),
+    );
+    expect(
+      screen.getByRole("link", { name: "Tools" }).getAttribute("href"),
+    ).toBe("/org/plugins/plugin-1");
+    expect(screen.queryByText("Unrelated")).toBeNull();
+  });
+
+  it("sorts multiple plugins and disambiguates duplicate names with slugs", () => {
+    render(
+      ui([
+        { ...plugin, pluginId: "z", slug: "z" },
+        { ...plugin, pluginId: "a", slug: "a" },
+        { ...plugin, pluginId: "first", name: "Alpha" },
+      ]),
+    );
+    const links = screen
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("href")?.includes("/plugins/"));
+    expect(links.map((link) => link.textContent)).toEqual([
+      "Alpha",
+      "Tools (a)",
+      "Tools (z)",
+    ]);
+    expect(links[0]?.parentElement?.textContent).toBe(
+      "Alpha, Tools (a), Tools (z)",
+    );
+  });
+
+  it("does not show plugins on non-role rows", () => {
+    render(ui([{ ...plugin, principalUrn: "user:1" }], [entry({})]));
+    expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
+  });
+
+  it("hides cached plugin data immediately after permission downgrade", () => {
+    const { rerender } = render(ui([plugin]));
+    expect(screen.getByRole("link", { name: "Tools" })).toBeDefined();
+    permission.admin = false;
+    rerender(ui([plugin]));
+    expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
+    expect(screen.queryByText("Distributed via")).toBeNull();
+    expect(screen.getByRole("link", { name: "Engineering" })).toBeDefined();
+  });
 });

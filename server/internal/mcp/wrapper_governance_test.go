@@ -8,8 +8,12 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,12 +23,18 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	goahttp "goa.design/goa/v3/http"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -323,4 +333,193 @@ func TestServePublic_WrapperGovernance_FallbackCounterByEntryPoint(t *testing.T)
 		total += v
 	}
 	require.Equal(t, int64(2), total, "wrapper-resolved requests must not increment the fallback counter")
+}
+
+// fallbackLogLines returns the decoded legacy-fallback attribution log lines.
+func fallbackLogLines(t *testing.T, buf *syncBuffer) []map[string]any {
+	t.Helper()
+
+	var lines []map[string]any
+	for line := range strings.SplitSeq(strings.TrimSpace(buf.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var record map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &record))
+		if record["msg"] == "mcp request served via legacy toolset slug fallback" {
+			lines = append(lines, record)
+		}
+	}
+	return lines
+}
+
+// Every fallback hit logs who is still on it: slug, toolset, project, request
+// host, canonical wrapper presence, and the toolset's custom domain state.
+func TestServePublic_WrapperGovernance_FallbackAttributionLog(t *testing.T) {
+	t.Parallel()
+
+	buf := &syncBuffer{}
+	ctx, ti := newTestMCPServiceWithLogger(t, slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	legacy := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "wg-log-legacy-"+uuid.NewString()[:8])
+	wrapped := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "wg-log-wrapped-"+uuid.NewString()[:8])
+	createToolsetMcpEndpointWithID(t, ctx, ti.conn, wrapped.ID, *authCtx.ProjectID, wrapped.ID, "wg-log-canonical-"+uuid.NewString(), "public", uuid.NullUUID{}, uuid.Nil)
+	aliased, domain := createPublicMCPToolsetWithCustomDomain(t, ctx, ti, authCtx, "wg-log-alias-"+uuid.NewString()[:8], "wg-log-"+uuid.NewString()[:8]+".example.com")
+
+	for _, slug := range []string{legacy.McpSlug.String, wrapped.McpSlug.String, aliased.McpSlug.String} {
+		_, _ = servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
+	}
+	domainCtx := customdomains.WithContext(ctx, &customdomains.Context{OrganizationID: domain.OrganizationID, Domain: domain.Domain, DomainID: domain.ID})
+	_, _ = servePublicHTTP(t, domainCtx, ti, aliased.McpSlug.String, makeInitializeBody(), "", nil)
+	domains := customdomains_repo.New(ti.conn)
+	_, err := domains.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{ID: domain.ID, Verified: true, Activated: false, IngressName: domain.IngressName, CertSecretName: domain.CertSecretName, ProvisionerKind: domain.ProvisionerKind})
+	require.NoError(t, err)
+	_, _ = servePublicHTTP(t, ctx, ti, aliased.McpSlug.String, makeInitializeBody(), "", nil)
+	require.NoError(t, domains.DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID))
+	_, _ = servePublicHTTP(t, ctx, ti, aliased.McpSlug.String, makeInitializeBody(), "", nil)
+
+	lines := fallbackLogLines(t, buf)
+	require.Len(t, lines, 6)
+	expect := []struct {
+		toolset      toolsets_repo.Toolset
+		wrapper      bool
+		host         string
+		customDomain string
+	}{
+		{legacy, false, "platform", "none"},
+		{wrapped, true, "platform", "none"},
+		{aliased, false, "platform", "live"},
+		{aliased, false, "custom_domain", "live"},
+		{aliased, false, "platform", "inactive"},
+		{aliased, false, "platform", "deleted"},
+	}
+	for i, want := range expect {
+		got := lines[i]
+		require.Equal(t, string(mcpmetrics.LegacyFallbackServePublic), got[string(attr.McpEntryPointKey)])
+		require.Equal(t, want.toolset.McpSlug.String, got[string(attr.ToolsetMCPSlugKey)])
+		require.Equal(t, want.toolset.ID.String(), got[string(attr.ToolsetIDKey)])
+		require.Equal(t, want.toolset.ProjectID.String(), got[string(attr.ProjectIDKey)])
+		require.Equal(t, want.host, got[string(attr.McpFallbackRequestHostKey)])
+		require.Equal(t, want.wrapper, got[string(attr.McpFallbackCanonicalWrapperKey)])
+		require.Equal(t, want.customDomain, got[string(attr.McpFallbackToolsetCustomDomainKey)])
+	}
+}
+
+func TestWellKnown_FallbackAttributionLogsSlugOnce(t *testing.T) {
+	t.Parallel()
+	buf := &syncBuffer{}
+	ctx, ti := newTestMCPServiceWithLogger(t, slog.New(slog.NewJSONHandler(buf, nil)))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "well-known-log-"+uuid.NewString()[:8])
+	for _, handler := range []func(http.ResponseWriter, *http.Request) error{
+		ti.service.HandleGetProtectedResource,
+		ti.service.HandleGetAuthorizationServer,
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/test/mcp/"+toolset.McpSlug.String, nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+		// This ungated toolset has no OAuth metadata, but its fallback
+		// resolution is still logged before that rejection.
+		_ = handler(httptest.NewRecorder(), req)
+	}
+	require.Len(t, fallbackLogLines(t, buf), 2)
+	for line := range strings.SplitSeq(buf.String(), "\n") {
+		if strings.Contains(line, "mcp request served via legacy toolset slug fallback") {
+			require.Equal(t, 1, strings.Count(line, `"`+string(attr.ToolsetMCPSlugKey)+`":`), line)
+		}
+	}
+}
+
+func TestLegacyFallback_DisabledCanonicalWrapper(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "disabled-legacy-"+uuid.NewString()[:8])
+	createToolsetMcpEndpointWithID(t, ctx, ti.conn, toolset.ID, *authCtx.ProjectID, toolset.ID, "canonical-"+uuid.NewString(), "disabled", uuid.NullUUID{}, uuid.Nil)
+	// Another enabled wrapper must not resurrect the canonical legacy route.
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, "alternate-"+uuid.NewString(), "public", uuid.NullUUID{}, uuid.Nil)
+	_, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeNotFound, shareable.Code)
+	for _, handler := range []func(http.ResponseWriter, *http.Request) error{
+		ti.service.HandleGetProtectedResource,
+		ti.service.HandleGetAuthorizationServer,
+	} {
+		_, err := runMCPWellKnown(t, ctx, handler, toolset.McpSlug.String)
+		require.ErrorAs(t, err, &shareable)
+		require.Equal(t, oops.CodeNotFound, shareable.Code)
+	}
+}
+
+// A shared authorization server resolving a resource through the legacy
+// toolset slug is counted under its own entry point, not the oauth one.
+func TestSharedAuthorizationServer_FallbackCountedAsSharedResource(t *testing.T) {
+	t.Parallel()
+
+	idpURL, err := url.Parse("https://idp.example.com/authorize")
+	require.NoError(t, err)
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)),
+		&mockIdentityResolver{buildAuthURLResult: idpURL, hasAccessOK: true},
+		mcp.TunnelPublicConfig{
+			SessionTTL:         0,
+			LiveSessionCap:     0,
+			InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+			RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+			MaxRequestLifetime: 0,
+		}, nil)
+	authCtx := requireProjectAuthContext(t, ctx)
+
+	slug := "wg-shared-" + uuid.NewString()[:8]
+	_, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
+	clientID := "wg-shared-client-" + uuid.NewString()[:8]
+	insertUserSessionClient(t, ctx, ti.conn, issuer.ID, clientID)
+	setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
+
+	q := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {clientID},
+		"redirect_uri":          {"http://example.com/cb"},
+		"code_challenge":        {pkceChallenge(pkceVerifier(t))},
+		"code_challenge_method": {"S256"},
+		"resource":              {ti.serverURL.JoinPath("mcp", slug).String()},
+	}
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleSharedAuthorize(w, sharedRequest(ctx, http.MethodGet, "/oauth/usi/"+issuer.ID.String()+"/authorize?"+q.Encode(), issuer.ID.String(), nil)))
+	require.Equal(t, http.StatusFound, w.Code, w.Body.String())
+
+	points := collectCounterPoints(t, reader, mcpmetrics.InstrumentToolsetSlugFallback)
+	require.Equal(t, int64(1), points[attribute.NewSet(attr.McpEntryPoint(mcpmetrics.LegacyFallbackSharedResource))])
+	require.Zero(t, points[attribute.NewSet(attr.McpEntryPoint(mcpmetrics.LegacyFallbackOAuth))])
+}
+
+// The organization gateway's shadowed-endpoint probe counts under its own
+// entry point; the endpoint route it then serves still counts as oauth.
+func TestOrganizationGatewayRoutes_ShadowProbeFallbackCountedSeparately(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	authCtx := requireProjectAuthContext(t, ctx)
+	createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, "gateway")
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service, nil)
+
+	w := postRegistration(t, router, "/mcp/gateway/register")
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	points := collectCounterPoints(t, reader, mcpmetrics.InstrumentToolsetSlugFallback)
+	require.Equal(t, int64(1), points[attribute.NewSet(attr.McpEntryPoint(mcpmetrics.LegacyFallbackOrgGatewayProbe))])
+	require.Equal(t, int64(1), points[attribute.NewSet(attr.McpEntryPoint(mcpmetrics.LegacyFallbackOAuth))])
 }

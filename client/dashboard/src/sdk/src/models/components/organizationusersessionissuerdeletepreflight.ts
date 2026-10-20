@@ -40,6 +40,10 @@ export type OrganizationUserSessionIssuerDeletePreflight = {
    * Live toolsets that block deletion.
    */
   toolsets: Array<OrganizationUserSessionIssuerReference>;
+  /**
+   * True when this is the organization's only organization-level issuer, so deleting it stops serving the organization gateway its members sign in to. Does not block deletion.
+   */
+  withdrawsOrganizationGateway: boolean;
 };
 
 /** @internal */
@@ -54,6 +58,7 @@ export const OrganizationUserSessionIssuerDeletePreflight$inboundSchema:
         OrganizationUserSessionIssuerReference$inboundSchema,
       ),
       toolsets: z.array(OrganizationUserSessionIssuerReference$inboundSchema),
+      withdraws_organization_gateway: z.boolean(),
     }),
     z.transform((v) => {
       return remap$(v, {
@@ -62,6 +67,7 @@ export const OrganizationUserSessionIssuerDeletePreflight$inboundSchema:
         "ema_binding_count": "emaBindingCount",
         "live_session_count": "liveSessionCount",
         "mcp_servers": "mcpServers",
+        "withdraws_organization_gateway": "withdrawsOrganizationGateway",
       });
     }),
   );

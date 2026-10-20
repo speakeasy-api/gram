@@ -12,6 +12,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearIssuerDiscoveryFixture = `-- name: ClearIssuerDiscoveryFixture :execrows
+UPDATE remote_session_issuers
+SET metadata_fetched_at = NULL
+WHERE id = $1
+  AND organization_id = $2
+`
+
+type ClearIssuerDiscoveryFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Test fixture: an issuer whose advertised capabilities have no discovery recorded.
+func (q *Queries) ClearIssuerDiscoveryFixture(ctx context.Context, arg ClearIssuerDiscoveryFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearIssuerDiscoveryFixture, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createEligibleMCPServerFixture = `-- name: CreateEligibleMCPServerFixture :one
 INSERT INTO mcp_servers (project_id, name, slug, remote_mcp_server_id, remote_session_issuer_id, user_session_issuer_id, visibility)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -778,6 +799,7 @@ SELECT
   , c.resource_identifier
   , i.scope_override AS issuer_scope_override
   , i.scopes_supported AS issuer_scopes_supported
+  , i.omit_scope_fallback AS issuer_omit_scope_fallback
   , (
       SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
       FROM remote_session_client_user_session_issuers AS link
@@ -811,15 +833,16 @@ type ListIssuerClientsParams struct {
 }
 
 type ListIssuerClientsRow struct {
-	ID                    uuid.UUID
-	RemoteSessionIssuerID uuid.UUID
-	ProjectID             uuid.NullUUID
-	ClientID              string
-	Scope                 []string
-	ResourceIdentifier    pgtype.Text
-	IssuerScopeOverride   []string
-	IssuerScopesSupported []string
-	UserSessionIssuerIds  []uuid.UUID
+	ID                      uuid.UUID
+	RemoteSessionIssuerID   uuid.UUID
+	ProjectID               uuid.NullUUID
+	ClientID                string
+	Scope                   []string
+	ResourceIdentifier      pgtype.Text
+	IssuerScopeOverride     []string
+	IssuerScopesSupported   []string
+	IssuerOmitScopeFallback pgtype.Bool
+	UserSessionIssuerIds    []uuid.UUID
 }
 
 // Clients the organization holds on the given issuers: project-owned ones in
@@ -842,7 +865,73 @@ func (q *Queries) ListIssuerClients(ctx context.Context, arg ListIssuerClientsPa
 			&i.ResourceIdentifier,
 			&i.IssuerScopeOverride,
 			&i.IssuerScopesSupported,
+			&i.IssuerOmitScopeFallback,
 			&i.UserSessionIssuerIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteProtectedResourceScopes = `-- name: ListRemoteProtectedResourceScopes :many
+SELECT
+    rpr.project_id
+  , rpr.resource_identifier
+  , rpr.scope_override
+  , rpr.challenge_scopes
+  , rpr.scopes_supported
+  , rpr.metadata_fetched_at
+  , COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
+FROM remote_protected_resources AS rpr
+JOIN projects AS p
+  ON p.id = rpr.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE rpr.project_id = ANY ($2::uuid[])
+  AND rpr.resource_identifier = ANY ($3::text[])
+  AND rpr.deleted IS FALSE
+`
+
+type ListRemoteProtectedResourceScopesParams struct {
+	OrganizationID      string
+	ProjectIds          []uuid.UUID
+	ResourceIdentifiers []string
+}
+
+type ListRemoteProtectedResourceScopesRow struct {
+	ProjectID          uuid.UUID
+	ResourceIdentifier string
+	ScopeOverride      []string
+	ChallengeScopes    []string
+	ScopesSupported    []string
+	MetadataFetchedAt  pgtype.Timestamptz
+	DocumentResource   string
+}
+
+// What the cached protected resource rows say about scopes, for any of the
+// given projects and upstream URLs; callers match rows back to servers.
+func (q *Queries) ListRemoteProtectedResourceScopes(ctx context.Context, arg ListRemoteProtectedResourceScopesParams) ([]ListRemoteProtectedResourceScopesRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteProtectedResourceScopes, arg.OrganizationID, arg.ProjectIds, arg.ResourceIdentifiers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteProtectedResourceScopesRow
+	for rows.Next() {
+		var i ListRemoteProtectedResourceScopesRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ResourceIdentifier,
+			&i.ScopeOverride,
+			&i.ChallengeScopes,
+			&i.ScopesSupported,
+			&i.MetadataFetchedAt,
+			&i.DocumentResource,
 		); err != nil {
 			return nil, err
 		}

@@ -38,8 +38,8 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/components/side-panel/side-panel-context", () => ({
   useSidePanel: () => ({ openPanel: vi.fn() }),
 }));
-vi.mock("@/components/icon-confetti", () => ({
-  useIconConfetti: () => ({ canvasRef: null, start: vi.fn(), stop: vi.fn() }),
+vi.mock("@/components/icon-dither", () => ({
+  useIconDither: () => ({ canvasRef: null, start: vi.fn(), stop: vi.fn() }),
 }));
 vi.mock("@/components/sources/source-list", () => ({
   useProjectSources: () => ({

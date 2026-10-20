@@ -4,6 +4,9 @@ info:
   title: Dashboard SDK policy
   version: 0.0.0
 actions:
+  # Keep the legacy HTTP route for already-open tabs, not for new SDK callers.
+  - target: $.paths["/rpc/access.setDirectoryRoleMapping"]
+    remove: true
   # Keep established Dashboard model names while sourcing their contracts from Goa.
   - target: $.components.schemas.SetOrganizationFeatureRequestBody
     update:
@@ -89,7 +92,7 @@ actions:
     remove: true
   - target: $.components.securitySchemes["admin_auth_header_Authorization"]
     remove: true
-  # Discovery preview requires ordinary Gram credentials, never anonymous access.
+  # Discovery preview requires ordinary Speakeasy credentials, never anonymous access.
   - target: $.paths["/v0.1/servers"].get.security[?length(@)==0]
     remove: true
   - target: $.paths["/v0.1/servers/{serverName}/versions"].get.security[?length(@)==0]

@@ -27,3 +27,20 @@ describe("LoginPanel", () => {
     expect(screen.getByText(/don't have an account/i)).toBeTruthy();
   });
 });
+
+it("keeps the partner code and redirect when switching to signup after an error", () => {
+  render(
+    <MemoryRouter
+      initialEntries={["/login?signin_error=init_error&partner_code=partner"]}
+    >
+      <LoginPanel redirectTo="/welcome" partnerCode="partner" />
+    </MemoryRouter>,
+  );
+  const link = new URL(
+    screen.getByRole("link", { name: /sign up/i }).getAttribute("href")!,
+    window.location.origin,
+  );
+  expect(link.searchParams.get("partner_code")).toBe("partner");
+  expect(link.searchParams.get("redirect")).toBe("/welcome");
+  expect(screen.getByText(/Failed to initialize/)).toBeTruthy();
+});

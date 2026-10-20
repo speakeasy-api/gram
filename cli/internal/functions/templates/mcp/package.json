@@ -1,0 +1,39 @@
+{
+  "type": "module",
+  "name": "gram-template-mcp",
+  "version": "0.0.0",
+  "author": "",
+  "description": "",
+  "private": true,
+  "keywords": [
+    "mcp",
+    "speakeasy"
+  ],
+  "license": "ISC",
+  "main": "dist/functions.js",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "mcp-inspector --transport stdio nodemon -q --watch src --exec node --experimental-strip-types ./src/server.ts",
+    "_:build": "speakeasy functions build",
+    "push": "speakeasy functions push",
+    "prebuild": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@speakeasy-api/functions": "workspace:",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "^2.1.0",
+    "nodemon": "^3.1.9",
+    "@types/node": "22.x",
+    "typescript": "^5"
+  }
+}

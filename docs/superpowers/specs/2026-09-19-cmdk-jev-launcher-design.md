@@ -13,7 +13,7 @@ sends the typed text and a short list of fuzzy-prefiltered candidates to
 a new `launcher.judge` management method, which forwards typed questions
 to the TypeSafe Jev API via OpenRouter and returns probability distributions. The client
 re-ranks the list from those distributions, shows a green ↵ on the top row
-when the intent is settled, and — new for Gram — lets Jev choose a verb
+when the intent is settled, and — new for Speakeasy — lets Jev choose a verb
 per row. Verbs in this version are `open`, `enable`/`disable` an MCP
 server, and `publish` the project's plugin marketplace. Reversible verbs run
 on the first Enter and offer an Undo; only `publish`, which cannot be taken
@@ -279,7 +279,7 @@ hand-assembled headers.
   calls the TypeSafe client, maps the answer back. Question ids are `c0…cN`
   by index, mapped to the caller's ids in the response.
 - `questions.go`: builds the Jev `state` and `questions`. Wordings are
-  adapted verbatim from the launcher's iterated prompts with Gram nouns:
+  adapted verbatim from the launcher's iterated prompts with Speakeasy nouns:
 
   - `query_note`: "Text the user has typed so far into a ⌘K command palette
     in an admin dashboard. It is often an incomplete prefix or a short

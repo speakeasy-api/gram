@@ -21,10 +21,10 @@ const (
 	// TelemetryEventOriginProviderAPI is telemetry polled from a provider's
 	// compliance/admin API (e.g. the Cursor Admin API usage poller).
 	TelemetryEventOriginProviderAPI TelemetryEventOrigin = "provider_api"
-	// TelemetryEventOriginAgentHook is telemetry translated from Gram plugin
+	// TelemetryEventOriginAgentHook is telemetry translated from Speakeasy plugin
 	// hook events running beside the agent (Claude/Codex/Cursor hooks).
 	TelemetryEventOriginAgentHook TelemetryEventOrigin = "agent_hook"
-	// TelemetryEventOriginGramService is telemetry recorded by Gram itself:
+	// TelemetryEventOriginGramService is telemetry recorded by Speakeasy itself:
 	// the tool proxy / MCP gateway, chat completions, assistants, triggers,
 	// and background workers.
 	TelemetryEventOriginGramService TelemetryEventOrigin = "gram_service"

@@ -1,11 +1,3 @@
--- name: SourceRoleDistributionSetupEnabled :one
--- Shared role-distribution lifecycle fixture: inspect committed or transaction-local source receipts.
-SELECT EXISTS (SELECT 1 FROM organization_features WHERE organization_id = @organization_id AND feature_name = 'automatic-role-distribution' AND deleted IS FALSE);
-
--- name: SourceDisableRoleDistributionSetup :exec
--- Shared role-distribution lifecycle fixture: prepare lifecycle state without running the worker.
-UPDATE organization_features SET deleted_at = clock_timestamp() WHERE organization_id = @organization_id AND feature_name = 'automatic-role-distribution';
-
 -- name: SourceInsertGlobalRoleWithoutDistribution :exec
 -- Simulate a role invisible to a concurrent organization source transaction.
 INSERT INTO global_roles (workos_slug,workos_name,workos_created_at,workos_updated_at) VALUES (@slug,@slug,clock_timestamp(),clock_timestamp());

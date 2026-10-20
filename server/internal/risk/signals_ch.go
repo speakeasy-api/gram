@@ -73,9 +73,9 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		return nil, oops.E(oops.CodeNotImplemented, nil, "risk signals require the ClickHouse findings store").LogError(ctx, s.logger)
 	}
 
-	mcpServerID := ""
-	if payload.McpServerID != nil {
-		mcpServerID = *payload.McpServerID
+	mcpServerID, err := parseOptionalMCPServerID(payload.McpServerID)
+	if err != nil {
+		return nil, err
 	}
 
 	organizationID := authCtx.ActiveOrganizationID

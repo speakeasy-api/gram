@@ -120,7 +120,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// ListRoles reads local role records and enriches them with Gram's local grant state.
+// ListRoles reads local role records and enriches them with Speakeasy's local grant state.
 func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
 	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
 	// roleOrgContext, but the listing itself is pure Postgres — serve it.
@@ -170,7 +170,7 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	return s.roleMgr.ListRoles(ctx, ac.ActiveOrganizationID)
 }
 
-// GetRole returns the role definition enriched with Gram's local grant
+// GetRole returns the role definition enriched with Speakeasy's local grant
 // state so callers see the complete effective role configuration in one place.
 func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*gen.Role, error) {
 	ac, _, err := s.roleOrgContext(ctx)
@@ -307,11 +307,16 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeSkillBlockedWrite, description: "Store exceptions for skill write access.", resourceType: "skill"},
 		{scope: authz.ScopePluginWrite, description: "Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.", resourceType: "project"},
 		{scope: authz.ScopePluginBlockedWrite, description: "Store exceptions for plugin write access.", resourceType: "project"},
+		{scope: authz.ScopeAssistantRead, description: "View and interact with assistants within the project.", resourceType: "assistant"},
+		{scope: authz.ScopeAssistantBlockedRead, description: "Store exceptions for assistant read access.", resourceType: "assistant"},
+		{scope: authz.ScopeAssistantWrite, description: "Create and modify assistants within the project.", resourceType: "assistant"},
+		{scope: authz.ScopeAssistantBlockedWrite, description: "Store exceptions for assistant write access.", resourceType: "assistant"},
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeChatRead, description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.", resourceType: "chat"},
 		{scope: authz.ScopeChatWrite, description: "Rename, delete, and give feedback on other members' agent sessions. Everyone keeps their own.", resourceType: "chat"},
+		{scope: authz.ScopeLogRead, description: "View the project's tool-call logs and traces, including tool arguments, results, and prompt text from every member. Not implied by project or organization admin access.", resourceType: "project"},
 		{scope: authz.ScopeAgentRead, description: "View agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
@@ -499,7 +504,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 
 // UpdateMemberRoles replaces all role assignments for a member. It is
 // intentionally stricter than member listing: it only mutates access for users
-// Gram knows are connected to the local organization.
+// Speakeasy knows are connected to the local organization.
 func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemberRolesPayload) (*gen.AccessMember, error) {
 	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -709,11 +714,14 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeSkillRead), Selectors: nil},
 		{Scope: string(authz.ScopeSkillWrite), Selectors: nil},
 		{Scope: string(authz.ScopePluginWrite), Selectors: nil},
+		{Scope: string(authz.ScopeAssistantRead), Selectors: nil},
+		{Scope: string(authz.ScopeAssistantWrite), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
 		{Scope: string(authz.ScopeChatRead), Selectors: nil},
 		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
+		{Scope: string(authz.ScopeLogRead), Selectors: nil},
 		{Scope: string(authz.ScopeAgentRead), Selectors: nil},
 		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
@@ -793,7 +801,7 @@ type challengeUserInfo struct {
 	photoURL *string
 }
 
-// activeOrgMemberUserIDs returns the Gram user IDs of active members of the
+// activeOrgMemberUserIDs returns the Speakeasy user IDs of active members of the
 // organization. The challenge UI uses it to suppress challenges raised by users
 // outside the organization — e.g. Speakeasy staff impersonating a customer org,
 // whose entries otherwise clutter the list while they switch accounts. Always

@@ -15,8 +15,10 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   // Observability
   costs: "Observability",
   explore: "Observability",
+  dashboards: "Observability",
   insights: "Observability",
   "agent-sessions": "Observability",
+  "signals-intelligence": "Observability",
   "org-memory": "Observability",
   logs: "Observability",
   // Identity
@@ -26,7 +28,6 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "remote-identity-providers": "Identity",
   // Security and Policy
   watchdog: "Security and Policy",
-  "risk-overview": "Security and Policy",
   "risk-policies": "Security and Policy",
   "risk-events": "Security and Policy",
   "shadow-mcp": "Security and Policy",

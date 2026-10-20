@@ -10,6 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
+import { Route as ExternalMcpMigrationRouteImport } from './routes/external-mcp-migration'
+import { Route as HookClientsRouteImport } from './routes/hook-clients'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
 import { Route as McpSetupRouteImport } from './routes/mcp-setup'
 import { Route as OnboardingPlaybooksRouteImport } from './routes/onboarding-playbooks'
@@ -18,6 +21,7 @@ import { Route as OrganizationsRouteImport } from './routes/organizations'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
+import { Route as SignupOffersRouteImport } from './routes/signup-offers'
 import { Route as StokenCalculatorRouteImport } from './routes/stoken-calculator'
 import { Route as UsersRouteImport } from './routes/users'
 import { Route as OrganizationsIndexRouteImport } from './routes/organizations.index'
@@ -45,6 +49,21 @@ import { Route as OrganizationsIdOrSlugProjectsProjectIdOrSlugRouteImport } from
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomerUsageRoute = CustomerUsageRouteImport.update({
+  id: '/customer-usage',
+  path: '/customer-usage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExternalMcpMigrationRoute = ExternalMcpMigrationRouteImport.update({
+  id: '/external-mcp-migration',
+  path: '/external-mcp-migration',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HookClientsRoute = HookClientsRouteImport.update({
+  id: '/hook-clients',
+  path: '/hook-clients',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IntegrationCoverageRoute = IntegrationCoverageRouteImport.update({
@@ -85,6 +104,11 @@ const RegistryRoute = RegistryRouteImport.update({
 const RemoteSessionIssuersRoute = RemoteSessionIssuersRouteImport.update({
   id: '/remote-session-issuers',
   path: '/remote-session-issuers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupOffersRoute = SignupOffersRouteImport.update({
+  id: '/signup-offers',
+  path: '/signup-offers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StokenCalculatorRoute = StokenCalculatorRouteImport.update({
@@ -221,6 +245,9 @@ const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/customer-usage': typeof CustomerUsageRoute
+  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
+  '/hook-clients': typeof HookClientsRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
@@ -229,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/projects': typeof ProjectsRouteWithChildren
   '/registry': typeof RegistryRoute
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
+  '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
@@ -255,11 +283,15 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/customer-usage': typeof CustomerUsageRoute
+  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
+  '/hook-clients': typeof HookClientsRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/registry': typeof RegistryRoute
+  '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations': typeof OrganizationsIndexRoute
@@ -283,6 +315,9 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/customer-usage': typeof CustomerUsageRoute
+  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
+  '/hook-clients': typeof HookClientsRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
@@ -291,6 +326,7 @@ export interface FileRoutesById {
   '/projects': typeof ProjectsRouteWithChildren
   '/registry': typeof RegistryRoute
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
+  '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
@@ -319,6 +355,9 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/customer-usage'
+    | '/external-mcp-migration'
+    | '/hook-clients'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
@@ -327,6 +366,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/registry'
     | '/remote-session-issuers'
+    | '/signup-offers'
     | '/stoken-calculator'
     | '/users'
     | '/organizations/$idOrSlug'
@@ -353,11 +393,15 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/customer-usage'
+    | '/external-mcp-migration'
+    | '/hook-clients'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
     | '/onboarding-steps'
     | '/registry'
+    | '/signup-offers'
     | '/stoken-calculator'
     | '/projects/$idOrSlug'
     | '/organizations'
@@ -380,6 +424,9 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/customer-usage'
+    | '/external-mcp-migration'
+    | '/hook-clients'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
@@ -388,6 +435,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/registry'
     | '/remote-session-issuers'
+    | '/signup-offers'
     | '/stoken-calculator'
     | '/users'
     | '/organizations/$idOrSlug'
@@ -415,6 +463,9 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CustomerUsageRoute: typeof CustomerUsageRoute
+  ExternalMcpMigrationRoute: typeof ExternalMcpMigrationRoute
+  HookClientsRoute: typeof HookClientsRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
   McpSetupRoute: typeof McpSetupRoute
   OnboardingPlaybooksRoute: typeof OnboardingPlaybooksRoute
@@ -423,6 +474,7 @@ export interface RootRouteChildren {
   ProjectsRoute: typeof ProjectsRouteWithChildren
   RegistryRoute: typeof RegistryRoute
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
+  SignupOffersRoute: typeof SignupOffersRoute
   StokenCalculatorRoute: typeof StokenCalculatorRoute
   UsersRoute: typeof UsersRouteWithChildren
 }
@@ -434,6 +486,27 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/customer-usage': {
+      id: '/customer-usage'
+      path: '/customer-usage'
+      fullPath: '/customer-usage'
+      preLoaderRoute: typeof CustomerUsageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/external-mcp-migration': {
+      id: '/external-mcp-migration'
+      path: '/external-mcp-migration'
+      fullPath: '/external-mcp-migration'
+      preLoaderRoute: typeof ExternalMcpMigrationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hook-clients': {
+      id: '/hook-clients'
+      path: '/hook-clients'
+      fullPath: '/hook-clients'
+      preLoaderRoute: typeof HookClientsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/integration-coverage': {
@@ -490,6 +563,13 @@ declare module '@tanstack/react-router' {
       path: '/remote-session-issuers'
       fullPath: '/remote-session-issuers'
       preLoaderRoute: typeof RemoteSessionIssuersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup-offers': {
+      id: '/signup-offers'
+      path: '/signup-offers'
+      fullPath: '/signup-offers'
+      preLoaderRoute: typeof SignupOffersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/stoken-calculator': {
@@ -781,6 +861,9 @@ const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CustomerUsageRoute: CustomerUsageRoute,
+  ExternalMcpMigrationRoute: ExternalMcpMigrationRoute,
+  HookClientsRoute: HookClientsRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
   McpSetupRoute: McpSetupRoute,
   OnboardingPlaybooksRoute: OnboardingPlaybooksRoute,
@@ -789,6 +872,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProjectsRoute: ProjectsRouteWithChildren,
   RegistryRoute: RegistryRoute,
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,
+  SignupOffersRoute: SignupOffersRoute,
   StokenCalculatorRoute: StokenCalculatorRoute,
   UsersRoute: UsersRouteWithChildren,
 }

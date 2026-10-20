@@ -13,3 +13,15 @@ export function defaultCreationUserSessionIssuerValue(
   }
   return "";
 }
+
+/**
+ * Names an issuer by slug and owner, and marks one whose servers share a single
+ * authorization server, since attaching to it changes where clients sign in. A
+ * shared issuer whose authorization server is not served is not marked: its
+ * servers keep their own.
+ */
+export function userSessionIssuerLabel(issuer: UserSessionIssuer): string {
+  const ownership = issuer.projectId === "" ? "Organization" : "Project";
+  const shared = issuer.issuerUrl ? " · Shared authorization server" : "";
+  return `${issuer.slug} — ${ownership}${shared}`;
+}

@@ -1491,6 +1491,51 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 	return items, nil
 }
 
+const getEvaluationBaseDeploymentID = `-- name: GetEvaluationBaseDeploymentID :one
+SELECT base.id
+FROM (
+  SELECT src.id, 0 AS preference
+  FROM deployments cur
+  JOIN deployments src ON src.id = cur.cloned_from AND src.project_id = $1
+  WHERE cur.id = $2 AND cur.project_id = $1
+  UNION ALL
+  (
+    SELECT d.id, 1 AS preference
+    FROM deployments d
+    WHERE d.project_id = $1
+      AND d.seq < (
+        SELECT cur.seq FROM deployments cur
+        WHERE cur.id = $2 AND cur.project_id = $1
+      )
+      AND (
+        SELECT ds.status FROM deployment_statuses ds
+        WHERE ds.deployment_id = d.id
+        ORDER BY ds.seq DESC
+        LIMIT 1
+      ) = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+  )
+) base
+ORDER BY base.preference
+LIMIT 1
+`
+
+type GetEvaluationBaseDeploymentIDParams struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+}
+
+// The deployment a deployment is compared with: the one it was cloned from,
+// or else the latest earlier deployment that completed, so failed attempts
+// in between are skipped.
+func (q *Queries) GetEvaluationBaseDeploymentID(ctx context.Context, arg GetEvaluationBaseDeploymentIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getEvaluationBaseDeploymentID, arg.ProjectID, arg.DeploymentID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getFunctionCredentialsBatch = `-- name: GetFunctionCredentialsBatch :many
 SELECT DISTINCT ON (function_id)
   id,
@@ -1741,6 +1786,117 @@ func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams
 			&i.FunctionsToolCount,
 			&i.ExternalMcpAssetCount,
 			&i.ExternalMcpToolCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectDeploymentOpenAPIv3 = `-- name: ListProjectDeploymentOpenAPIv3 :many
+SELECT a.id, a.deployment_id, a.asset_id, a.name, a.slug
+FROM deployments_openapiv3_assets a
+JOIN deployments d ON d.id = a.deployment_id
+WHERE a.deployment_id = $1
+  AND d.project_id = $2
+`
+
+type ListProjectDeploymentOpenAPIv3Params struct {
+	DeploymentID uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) ListProjectDeploymentOpenAPIv3(ctx context.Context, arg ListProjectDeploymentOpenAPIv3Params) ([]DeploymentsOpenapiv3Asset, error) {
+	rows, err := q.db.Query(ctx, listProjectDeploymentOpenAPIv3, arg.DeploymentID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentsOpenapiv3Asset
+	for rows.Next() {
+		var i DeploymentsOpenapiv3Asset
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentID,
+			&i.AssetID,
+			&i.Name,
+			&i.Slug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolsetsUsingOpenAPIv3Source = `-- name: ListToolsetsUsingOpenAPIv3Source :many
+SELECT
+    t.id
+  , t.name
+  , t.slug
+  , t.mcp_slug
+  , t.mcp_enabled
+  , (t.external_oauth_server_id IS NOT NULL OR t.oauth_proxy_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
+  , ARRAY(
+      SELECT u FROM unnest(tv.tool_urns) AS u
+      WHERE starts_with(u, $1::TEXT)
+    )::TEXT[] AS source_tool_urns
+FROM toolsets t
+JOIN LATERAL (
+  SELECT tool_urns
+  FROM toolset_versions
+  WHERE toolset_id = t.id AND deleted IS FALSE
+  ORDER BY version DESC
+  LIMIT 1
+) tv ON TRUE
+WHERE t.project_id = $2
+  AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM unnest(tv.tool_urns) AS u
+    WHERE starts_with(u, $1::TEXT)
+  )
+ORDER BY t.name
+`
+
+type ListToolsetsUsingOpenAPIv3SourceParams struct {
+	ToolUrnPrefix string
+	ProjectID     uuid.UUID
+}
+
+type ListToolsetsUsingOpenAPIv3SourceRow struct {
+	ID              uuid.UUID
+	Name            string
+	Slug            string
+	McpSlug         pgtype.Text
+	McpEnabled      bool
+	OauthConfigured bool
+	SourceToolUrns  []string
+}
+
+func (q *Queries) ListToolsetsUsingOpenAPIv3Source(ctx context.Context, arg ListToolsetsUsingOpenAPIv3SourceParams) ([]ListToolsetsUsingOpenAPIv3SourceRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetsUsingOpenAPIv3Source, arg.ToolUrnPrefix, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetsUsingOpenAPIv3SourceRow
+	for rows.Next() {
+		var i ListToolsetsUsingOpenAPIv3SourceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.McpSlug,
+			&i.McpEnabled,
+			&i.OauthConfigured,
+			&i.SourceToolUrns,
 		); err != nil {
 			return nil, err
 		}

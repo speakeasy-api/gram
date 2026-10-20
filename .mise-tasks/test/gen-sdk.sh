@@ -36,7 +36,7 @@ printf 'overlay\n' >admin-overlay.yaml
 printf 'internal\n' >internal-output.yaml
 printf 'admin\n' >admin-output.yaml
 
-cat >"$tmpdir/bin/speakeasy" <<'EOF'
+cat >"$tmpdir/bin/speakeasy-sdks" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$SPEAKEASY_LOG"
@@ -58,10 +58,10 @@ if [[ "$1" == "run" ]]; then
   exit
 fi
 
-echo "unexpected speakeasy invocation: $*" >&2
+echo "unexpected speakeasy-sdks invocation: $*" >&2
 exit 1
 EOF
-chmod +x "$tmpdir/bin/speakeasy"
+chmod +x "$tmpdir/bin/speakeasy-sdks"
 
 export SPEAKEASY_LOG="$tmpdir/speakeasy.log"
 PATH="$tmpdir/bin:$PATH" usage_check=true bash ./sdk.sh

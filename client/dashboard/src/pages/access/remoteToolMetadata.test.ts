@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
-import { toolMetadataToServerTools } from "./remoteToolMetadata";
+import {
+  proxiedToolsToServerTools,
+  toolMetadataToServerTools,
+} from "./remoteToolMetadata";
 
 function meta(
   overrides: Partial<ToolMetadata> & { toolName: string },
@@ -69,5 +72,38 @@ describe("toolMetadataToServerTools", () => {
 
   it("returns an empty list for a server with no synced metadata", () => {
     expect(toolMetadataToServerTools("srv", [])).toEqual([]);
+  });
+});
+
+describe("proxiedToolsToServerTools", () => {
+  it("synthesizes ids and carries the advertised hints", () => {
+    const tools = proxiedToolsToServerTools("srv", {
+      search: { annotations: { readOnlyHint: true, openWorldHint: false } },
+      purge: {},
+    });
+    expect(tools).toEqual([
+      {
+        id: "srv:search",
+        name: "search",
+        type: "remotemcp",
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: undefined,
+          idempotentHint: undefined,
+          openWorldHint: false,
+        },
+      },
+      {
+        id: "srv:purge",
+        name: "purge",
+        type: "remotemcp",
+        annotations: {
+          readOnlyHint: undefined,
+          destructiveHint: undefined,
+          idempotentHint: undefined,
+          openWorldHint: undefined,
+        },
+      },
+    ]);
   });
 });

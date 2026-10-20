@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/email"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -132,7 +133,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
+	roleManager := NewRoleManager(logger, conn, roles, auditLogger, plugins.PublicationRequests{}, nil)
 	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil, failSend: false}
 	emailService := email.NewService(logger, emailSender, email.NewTemplateIDs(map[string]string{
 		"access_request": "access-request-test-id",
@@ -291,7 +292,7 @@ func seedRoleAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 
 // seedDisconnectedUser creates a user in the users table with a workos_id but
 // does NOT insert into organization_user_relationships, simulating a WorkOS
-// user who hasn't been connected to the Gram org.
+// user who hasn't been connected to the Speakeasy org.
 func seedDisconnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, userID string, email string, displayName string, workosUserID string) {
 	t.Helper()
 

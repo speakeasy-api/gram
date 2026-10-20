@@ -28,7 +28,7 @@ import (
 //
 // Errors name the issuer by name; a workload issuer has no slug, its URL being
 // its canonical name.
-func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *workloadidentity_repo.WorkloadIssuer) (jwks.Source, error) {
+func workloadIssuerKeySource(tenancy workloadTenancy, issuer *workloadidentity_repo.WorkloadIssuer) (jwks.Source, error) {
 	if issuer.JwksUri == "" {
 		return jwks.Source{}, fmt.Errorf("workload issuer %q records no jwks_uri", issuer.Name)
 	}
@@ -38,27 +38,27 @@ func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *workloadiden
 		return jwks.Source{}, fmt.Errorf("workload issuer %q jwks_uri: %w", issuer.Name, err)
 	}
 
-	return source.WithFetchScope(workloadFetchScope(endpoint)), nil
+	return source.WithFetchScope(workloadFetchScope(tenancy)), nil
 }
 
 // workloadFetchScope names the budget a workload issuer's key fetches are
 // charged to.
 //
 // The authorization server's own identifier is the tenant boundary the fetch
-// limiter documents, and every issuer trusted on that endpoint shares the one
-// budget deliberately. The limiter exists so that no number of registrations
-// buys more fetches; keying per issuer row would hand an operator a fresh
-// budget for each issuer they add, which is the amplification it closes. One
-// tenant's issuers contending for that tenant's own budget is the accepted
-// trade. Never the issuer URL, which two organizations may legitimately
-// share, and never a value derived from the request.
+// limiter documents, and every issuer trusted on that authorization server
+// shares the one budget deliberately. The limiter exists so that no number of
+// registrations buys more fetches; keying per issuer row would hand an
+// operator a fresh budget for each issuer they add, which is the amplification
+// it closes. One tenant's issuers contending for that tenant's own budget is
+// the accepted trade. Never the issuer URL, which two organizations may
+// legitimately share, and never a value derived from the request.
 //
 // The prefix keeps this grant's budget separate from the client
 // authentication running against the same key resolver on the same
-// endpoint. Client assertions only reach the resolver behind a registered
-// client, while this grant is reachable by anyone, so an unauthenticated
-// path must not be able to spend the budget an authenticated one depends
-// on.
-func workloadFetchScope(endpoint *ResolvedMcpEndpoint) string {
-	return "workload:" + endpoint.UserSessionIssuerID.String()
+// authorization server. Client assertions only reach the resolver behind a
+// registered client, while this grant is reachable by anyone, so an
+// unauthenticated path must not be able to spend the budget an authenticated
+// one depends on.
+func workloadFetchScope(tenancy workloadTenancy) string {
+	return "workload:" + tenancy.UserSessionIssuerID.String()
 }

@@ -2,7 +2,7 @@
 // may not reach its MCP servers.
 //
 // The check lives at the OAuth boundary rather than at tools/call because
-// that is the last point where the caller's identity is a credential Gram
+// that is the last point where the caller's identity is a credential Speakeasy
 // verified rather than a name the client reported about itself. A blocked
 // tool is turned away before a token exists, and the token endpoint re-checks
 // so a token minted before the block dies on its next use.

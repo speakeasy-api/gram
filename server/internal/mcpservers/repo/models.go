@@ -10,39 +10,70 @@ import (
 )
 
 type McpServer struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	Name                  pgtype.Text
-	Slug                  pgtype.Text
-	EnvironmentID         uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: restricted
+	Name pgtype.Text
+	// @access: restricted
+	Slug pgtype.Text
+	// @access: confidential
+	EnvironmentID uuid.NullUUID
+	// @access: confidential
+	UserSessionIssuerID uuid.NullUUID
+	// @access: confidential
 	RemoteSessionIssuerID uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
+	// @access: confidential
+	RemoteMcpServerID uuid.NullUUID
 	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.
-	TunneledMcpServerID   uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	UnproxiedMcpServerID  uuid.NullUUID
+	// @access: confidential
+	TunneledMcpServerID uuid.NullUUID
+	// @access: confidential
+	ToolsetID uuid.NullUUID
+	// @access: confidential
+	UnproxiedMcpServerID uuid.NullUUID
+	// @access: confidential
 	ToolVariationsGroupID uuid.NullUUID
-	Visibility            string
-	NetworkAccessMode     pgtype.Text
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
+	// @access: confidential
+	Visibility string
+	// @access: confidential
+	NetworkAccessMode pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type McpServerToolMetadatum struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	McpServerID     uuid.UUID
-	ToolName        string
-	Title           pgtype.Text
-	ReadOnlyHint    pgtype.Bool
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	ToolName string
+	// @access: confidential
+	Title pgtype.Text
+	// @access: confidential
+	ReadOnlyHint pgtype.Bool
+	// @access: confidential
 	DestructiveHint pgtype.Bool
-	IdempotentHint  pgtype.Bool
-	OpenWorldHint   pgtype.Bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	IdempotentHint pgtype.Bool
+	// @access: confidential
+	OpenWorldHint pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -94,6 +95,16 @@ func asMember(t *testing.T, ctx context.Context, ti *testInstance, userID string
 	ctx = contextvalues.SetAuthContext(ctx, &copied)
 	grants := append([]authz.Grant{authz.NewGrant(authz.ScopeProjectRead, ti.projectID.String())}, extra...)
 	return authztest.WithExactGrants(t, ctx, grants...)
+}
+
+// beginTx opens a transaction for a test to hand to a write core, rolled
+// back at cleanup unless the test commits it first.
+func beginTx(t *testing.T, ctx context.Context, ti *testInstance) pgx.Tx {
+	t.Helper()
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary only; the cores under test take the caller's transaction and every write uses generated SQLc methods.
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	return tx
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

@@ -45,3 +45,10 @@ it("creates a wrapper only on the initial attempt", async () => {
     },
   });
 });
+it("never reuses the toolset's hosted server as a gateway member", async () => {
+  const { client, create } = setup([{ id: toolset.id }, { id: "member" }]);
+  await expect(ensureToolsetWrapper(client, toolset, true)).resolves.toBe(
+    "member",
+  );
+  expect(create).not.toHaveBeenCalled();
+});

@@ -45,6 +45,8 @@ hooks:
 
 tsframework:
   - "ts-framework/**"
+  # create-function copies these templates into its package when it builds.
+  - "cli/internal/functions/templates/**"
 
 sdk:
   - "client/admin/src/sdk/**"

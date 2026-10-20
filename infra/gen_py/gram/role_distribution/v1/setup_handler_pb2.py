@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n-gram/role_distribution/v1/setup_handler.proto\x12\x19gram.role_distribution.v1\x1a\x1bgcp/pubsub/v1/options.proto\"y\n\x1cRoleDistributionSetupHandler:Y\x92\xb5\x18U\x12\x04\x08\x80\xf5$\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04J\x02\x10\nR:gram.role_distribution.v1.RoleDistributionSetupRequestedV1BVZTgithub.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1;roledistributionv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n-gram/role_distribution/v1/setup_handler.proto\x12\x19gram.role_distribution.v1\x1a\x1bgcp/pubsub/v1/options.proto\"u\n\x1cRoleDistributionSetupHandler:U\x92\xb5\x18Q\x12\x04\x08\x80\xf5$\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04R:gram.role_distribution.v1.RoleDistributionSetupRequestedV1BVZTgithub.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1;roledistributionv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZTgithub.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1;roledistributionv1'
   _globals['_ROLEDISTRIBUTIONSETUPHANDLER']._loaded_options = None
-  _globals['_ROLEDISTRIBUTIONSETUPHANDLER']._serialized_options = b'\222\265\030U\022\004\010\200\365$\"\002\010<2\t\n\002\010\n\022\003\010\330\004J\002\020\nR:gram.role_distribution.v1.RoleDistributionSetupRequestedV1'
+  _globals['_ROLEDISTRIBUTIONSETUPHANDLER']._serialized_options = b'\222\265\030Q\022\004\010\200\365$\"\002\010<2\t\n\002\010\n\022\003\010\330\004R:gram.role_distribution.v1.RoleDistributionSetupRequestedV1'
   _globals['_ROLEDISTRIBUTIONSETUPHANDLER']._serialized_start=105
-  _globals['_ROLEDISTRIBUTIONSETUPHANDLER']._serialized_end=226
+  _globals['_ROLEDISTRIBUTIONSETUPHANDLER']._serialized_end=222
 # @@protoc_insertion_point(module_scope)

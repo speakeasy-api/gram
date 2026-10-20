@@ -351,6 +351,77 @@ func BuildSetDirectoryRoleMappingPayload(accessSetDirectoryRoleMappingBody strin
 	return v, nil
 }
 
+// BuildSetDirectoryRoleMappingsPayload builds the payload for the access
+// setDirectoryRoleMappings endpoint from CLI flags.
+func BuildSetDirectoryRoleMappingsPayload(accessSetDirectoryRoleMappingsBody string, accessSetDirectoryRoleMappingsApikeyToken string, accessSetDirectoryRoleMappingsSessionToken string) (*access.SetDirectoryRoleMappingsPayload, error) {
+	var err error
+	var body SetDirectoryRoleMappingsRequestBody
+	{
+		err = json.Unmarshal([]byte(accessSetDirectoryRoleMappingsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"attribute_key\": \"aa\",\n      \"attribute_value\": \"aa\",\n      \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_role_urns\": [\n         \"abc123\"\n      ],\n      \"role_urns\": [\n         \"abc123\"\n      ],\n      \"source_kind\": \"attribute\"\n   }'")
+		}
+		if body.RoleUrns == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("role_urns", "body"))
+		}
+		if !(body.SourceKind == "group" || body.SourceKind == "attribute") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_kind", body.SourceKind, []any{"group", "attribute"}))
+		}
+		if body.DirectoryGroupID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.directory_group_id", *body.DirectoryGroupID, goa.FormatUUID))
+		}
+		if body.AttributeKey != nil {
+			if utf8.RuneCountInString(*body.AttributeKey) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute_key", *body.AttributeKey, utf8.RuneCountInString(*body.AttributeKey), 1, true))
+			}
+		}
+		if body.AttributeValue != nil {
+			if utf8.RuneCountInString(*body.AttributeValue) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute_value", *body.AttributeValue, utf8.RuneCountInString(*body.AttributeValue), 1, true))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessSetDirectoryRoleMappingsApikeyToken != "" {
+			apikeyToken = &accessSetDirectoryRoleMappingsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessSetDirectoryRoleMappingsSessionToken != "" {
+			sessionToken = &accessSetDirectoryRoleMappingsSessionToken
+		}
+	}
+	v := &access.SetDirectoryRoleMappingsPayload{
+		SourceKind:       body.SourceKind,
+		DirectoryGroupID: body.DirectoryGroupID,
+		AttributeKey:     body.AttributeKey,
+		AttributeValue:   body.AttributeValue,
+	}
+	if body.ExpectedRoleUrns != nil {
+		v.ExpectedRoleUrns = make([]string, len(body.ExpectedRoleUrns))
+		for i, val := range body.ExpectedRoleUrns {
+			v.ExpectedRoleUrns[i] = val
+		}
+	}
+	if body.RoleUrns != nil {
+		v.RoleUrns = make([]string, len(body.RoleUrns))
+		for i, val := range body.RoleUrns {
+			v.RoleUrns[i] = val
+		}
+	} else {
+		v.RoleUrns = []string{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildDeleteDirectoryRoleMappingPayload builds the payload for the access
 // deleteDirectoryRoleMapping endpoint from CLI flags.
 func BuildDeleteDirectoryRoleMappingPayload(accessDeleteDirectoryRoleMappingID string, accessDeleteDirectoryRoleMappingApikeyToken string, accessDeleteDirectoryRoleMappingSessionToken string) (*access.DeleteDirectoryRoleMappingPayload, error) {
@@ -1071,6 +1142,43 @@ func BuildListAudienceOptionsPayload(accessListAudienceOptionsApikeyToken string
 	return v, nil
 }
 
+// BuildExplainResourceAccessPayload builds the payload for the access
+// explainResourceAccess endpoint from CLI flags.
+func BuildExplainResourceAccessPayload(accessExplainResourceAccessResourceKind string, accessExplainResourceAccessResourceID string, accessExplainResourceAccessUserID string, accessExplainResourceAccessSessionToken string) (*access.ExplainResourceAccessPayload, error) {
+	var err error
+	var resourceKind string
+	{
+		resourceKind = accessExplainResourceAccessResourceKind
+		if !(resourceKind == "mcp") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("resource_kind", resourceKind, []any{"mcp"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var resourceID string
+	{
+		resourceID = accessExplainResourceAccessResourceID
+	}
+	var userID string
+	{
+		userID = accessExplainResourceAccessUserID
+	}
+	var sessionToken *string
+	{
+		if accessExplainResourceAccessSessionToken != "" {
+			sessionToken = &accessExplainResourceAccessSessionToken
+		}
+	}
+	v := &access.ExplainResourceAccessPayload{}
+	v.ResourceKind = resourceKind
+	v.ResourceID = resourceID
+	v.UserID = userID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildRequestAccessPayload builds the payload for the access requestAccess
 // endpoint from CLI flags.
 func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAccessApikeyToken string, accessRequestAccessSessionToken string) (*access.RequestAccessPayload, error) {
@@ -1081,8 +1189,8 @@ func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAcce
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"message\": \"aaa\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }'")
 		}
-		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "plugin:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:write" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "plugin:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "log:read" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:write" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest"}))
 		}
 		if body.Message != nil {
 			if utf8.RuneCountInString(*body.Message) > 1000 {

@@ -288,7 +288,7 @@ function HeaderDraftRow({
         {legacyPassThroughAuthorization ? (
           <Alert variant="warning" dismissible={false}>
             Legacy pass-through Authorization. Remove this row before using
-            Service Account or relying on No Identity.
+            Service Account or relying on Manual.
           </Alert>
         ) : null}
 

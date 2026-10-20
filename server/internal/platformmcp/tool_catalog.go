@@ -45,9 +45,12 @@ type CandidateInspection struct {
 	Trust                  string                      `json:"trust"`
 	Authentication         string                      `json:"authentication,omitempty"`
 	OAuthDiscovery         string                      `json:"oauth_discovery,omitempty"`
-	SetupIntent            string                      `json:"setup_intent,omitempty"`
-	SetupCategory          SetupCategory               `json:"setup_category,omitempty"`
-	Actions                []RepairAction              `json:"actions,omitempty"`
+	// AutomaticClientRegistration is set only for a direct remote URL that
+	// requires sign-in.
+	AutomaticClientRegistration string         `json:"automatic_client_registration,omitempty" jsonschema:"for a remote URL that requires sign-in: how an OAuth client is obtained from its provider without manual setup. dynamic_client_registration or client_id_metadata_document means connecting the provider is automatic and only the user's sign-in remains; none means a client must be configured by hand in the dashboard"`
+	SetupIntent                 string         `json:"setup_intent,omitempty"`
+	SetupCategory               SetupCategory  `json:"setup_category,omitempty"`
+	Actions                     []RepairAction `json:"actions,omitempty"`
 }
 
 func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudget, cursorCodec *catalogCursorCodec, onboarding *OnboardingService) {
@@ -116,7 +119,7 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 	addTool(reg, &mcp.Tool{
 		Name:        "inspect_mcp_candidate",
 		Title:       "Inspect an MCP Server",
-		Description: "Look at one MCP server before adding it — either a reviewed catalogue entry or an HTTPS Streamable HTTP URL the user supplied. Looking changes nothing: the server is not added to a project and nobody receives it.",
+		Description: "Look at one MCP server before adding it — either a reviewed catalogue entry or an HTTPS Streamable HTTP URL the user supplied. Looking changes nothing: the server is not added to a project and nobody receives it. For a URL that requires sign-in, automatic_client_registration says whether its OAuth provider can be connected automatically (dynamic client registration or a client ID metadata document) or needs a client configured by hand.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input InspectCatalogCandidateInput) (*mcp.CallToolResult, CandidateInspection, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -150,7 +153,7 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 				return directRemoteInspectionUnavailableToolResult(setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable))
 			}
 			category := setupCategoryFromInspection(inspection)
-			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: inspection.ToolCount, RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery, SetupCategory: category, Actions: inspectionResultActions(category)}, nil
+			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: inspection.ToolCount, RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection), SetupCategory: category, Actions: inspectionResultActions(category)}, nil
 		}
 		if catalog == nil {
 			return nil, CandidateInspection{}, ErrCatalogUnavailable

@@ -48,7 +48,7 @@ type ProjectOverviewSessionReader interface {
 	GetActiveUserCountByMessages(ctx context.Context, arg chatrepo.GetActiveUserCountByMessagesParams) (int64, error)
 }
 
-// DiagnosticsTelemetryReader is the Gram-owned telemetry this surface reads.
+// DiagnosticsTelemetryReader is the Speakeasy-owned telemetry this surface reads.
 // It is deliberately two bounded aggregate queries: there is no query grammar
 // here and no way to reach a raw row.
 type DiagnosticsTelemetryReader interface {
@@ -72,6 +72,7 @@ type CanonicalIdentityGate interface {
 // without coupling diagnostics to one Reader implementation.
 type DiagnosticsProjectReader interface {
 	ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error)
+	ResolveProjectLogRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error)
 	GetMCPForDiagnostics(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error)
 }
 

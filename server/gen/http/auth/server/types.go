@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	auth "github.com/speakeasy-api/gram/server/gen/auth"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -17,6 +19,17 @@ import (
 type RegisterRequestBody struct {
 	// The name of the org to register
 	OrgName *string `form:"org_name,omitempty" json:"org_name,omitempty" xml:"org_name,omitempty"`
+	// Optional partner signup code.
+	PartnerCode *string `form:"partner_code,omitempty" json:"partner_code,omitempty" xml:"partner_code,omitempty"`
+}
+
+// LogoutEverywhereResponseBody is the type of the "auth" service
+// "logoutEverywhere" endpoint HTTP response body.
+type LogoutEverywhereResponseBody struct {
+	// Number of sign-ins revoked.
+	RevokedSignIns int `form:"revoked_sign_ins" json:"revoked_sign_ins" xml:"revoked_sign_ins"`
+	// Number of MCP grants revoked.
+	RevokedSessions int `form:"revoked_sessions" json:"revoked_sessions" xml:"revoked_sessions"`
 }
 
 // InfoResponseBody is the type of the "auth" service "info" endpoint HTTP
@@ -36,9 +49,16 @@ type InfoResponseBody struct {
 	// Fixed expiration of the organization support session.
 	OrganizationOverrideExpiresAt *string `form:"organization_override_expires_at,omitempty" json:"organization_override_expires_at,omitempty" xml:"organization_override_expires_at,omitempty"`
 	ActiveOrganizationID          string  `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
-	GramAccountType               string  `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
+	// Dashboard base URL of the platform host the active organization lives on.
+	// Set only for an ordinary session whose request arrived on a different
+	// platform host; the dashboard moves there.
+	ActiveOrganizationDashboardURL *string `form:"active_organization_dashboard_url,omitempty" json:"active_organization_dashboard_url,omitempty" xml:"active_organization_dashboard_url,omitempty"`
+	GramAccountType                string  `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription bool `form:"has_active_subscription" json:"has_active_subscription" xml:"has_active_subscription"`
+	// Display-only signup offer variant for an accepted promotion; not billing
+	// eligibility
+	AcceptedSignupOfferFlow *string `form:"accepted_signup_offer_flow,omitempty" json:"accepted_signup_offer_flow,omitempty" xml:"accepted_signup_offer_flow,omitempty"`
 	// Whether the organization is whitelisted to access the platform
 	Whitelisted   bool                             `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	Trial         *TrialResponseBody               `json:"trial"`
@@ -946,6 +966,188 @@ type LogoutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// LogoutEverywhereUnauthorizedResponseBody is the type of the "auth" service
+// "logoutEverywhere" endpoint HTTP response body for the "unauthorized" error.
+type LogoutEverywhereUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutEverywhereForbiddenResponseBody is the type of the "auth" service
+// "logoutEverywhere" endpoint HTTP response body for the "forbidden" error.
+type LogoutEverywhereForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutEverywhereBadRequestResponseBody is the type of the "auth" service
+// "logoutEverywhere" endpoint HTTP response body for the "bad_request" error.
+type LogoutEverywhereBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutEverywhereNotFoundResponseBody is the type of the "auth" service
+// "logoutEverywhere" endpoint HTTP response body for the "not_found" error.
+type LogoutEverywhereNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutEverywhereConflictResponseBody is the type of the "auth" service
+// "logoutEverywhere" endpoint HTTP response body for the "conflict" error.
+type LogoutEverywhereConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutEverywhereUnsupportedMediaResponseBody is the type of the "auth"
+// service "logoutEverywhere" endpoint HTTP response body for the
+// "unsupported_media" error.
+type LogoutEverywhereUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutEverywhereInvalidResponseBody is the type of the "auth" service
+// "logoutEverywhere" endpoint HTTP response body for the "invalid" error.
+type LogoutEverywhereInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutEverywhereInvariantViolationResponseBody is the type of the "auth"
+// service "logoutEverywhere" endpoint HTTP response body for the
+// "invariant_violation" error.
+type LogoutEverywhereInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutEverywhereUnexpectedResponseBody is the type of the "auth" service
+// "logoutEverywhere" endpoint HTTP response body for the "unexpected" error.
+type LogoutEverywhereUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutEverywhereGatewayErrorResponseBody is the type of the "auth" service
+// "logoutEverywhere" endpoint HTTP response body for the "gateway_error" error.
+type LogoutEverywhereGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RegisterUnauthorizedResponseBody is the type of the "auth" service
 // "register" endpoint HTTP response body for the "unauthorized" error.
 type RegisterUnauthorizedResponseBody struct {
@@ -1306,6 +1508,367 @@ type InfoGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// TransferOutUnauthorizedResponseBody is the type of the "auth" service
+// "transferOut" endpoint HTTP response body for the "unauthorized" error.
+type TransferOutUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferOutForbiddenResponseBody is the type of the "auth" service
+// "transferOut" endpoint HTTP response body for the "forbidden" error.
+type TransferOutForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferOutBadRequestResponseBody is the type of the "auth" service
+// "transferOut" endpoint HTTP response body for the "bad_request" error.
+type TransferOutBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferOutNotFoundResponseBody is the type of the "auth" service
+// "transferOut" endpoint HTTP response body for the "not_found" error.
+type TransferOutNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferOutConflictResponseBody is the type of the "auth" service
+// "transferOut" endpoint HTTP response body for the "conflict" error.
+type TransferOutConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferOutUnsupportedMediaResponseBody is the type of the "auth" service
+// "transferOut" endpoint HTTP response body for the "unsupported_media" error.
+type TransferOutUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferOutInvalidResponseBody is the type of the "auth" service
+// "transferOut" endpoint HTTP response body for the "invalid" error.
+type TransferOutInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferOutInvariantViolationResponseBody is the type of the "auth" service
+// "transferOut" endpoint HTTP response body for the "invariant_violation"
+// error.
+type TransferOutInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferOutUnexpectedResponseBody is the type of the "auth" service
+// "transferOut" endpoint HTTP response body for the "unexpected" error.
+type TransferOutUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferOutGatewayErrorResponseBody is the type of the "auth" service
+// "transferOut" endpoint HTTP response body for the "gateway_error" error.
+type TransferOutGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferInUnauthorizedResponseBody is the type of the "auth" service
+// "transferIn" endpoint HTTP response body for the "unauthorized" error.
+type TransferInUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferInForbiddenResponseBody is the type of the "auth" service
+// "transferIn" endpoint HTTP response body for the "forbidden" error.
+type TransferInForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferInBadRequestResponseBody is the type of the "auth" service
+// "transferIn" endpoint HTTP response body for the "bad_request" error.
+type TransferInBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferInNotFoundResponseBody is the type of the "auth" service
+// "transferIn" endpoint HTTP response body for the "not_found" error.
+type TransferInNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferInConflictResponseBody is the type of the "auth" service
+// "transferIn" endpoint HTTP response body for the "conflict" error.
+type TransferInConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferInUnsupportedMediaResponseBody is the type of the "auth" service
+// "transferIn" endpoint HTTP response body for the "unsupported_media" error.
+type TransferInUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferInInvalidResponseBody is the type of the "auth" service "transferIn"
+// endpoint HTTP response body for the "invalid" error.
+type TransferInInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferInInvariantViolationResponseBody is the type of the "auth" service
+// "transferIn" endpoint HTTP response body for the "invariant_violation" error.
+type TransferInInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferInUnexpectedResponseBody is the type of the "auth" service
+// "transferIn" endpoint HTTP response body for the "unexpected" error.
+type TransferInUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TransferInGatewayErrorResponseBody is the type of the "auth" service
+// "transferIn" endpoint HTTP response body for the "gateway_error" error.
+type TransferInGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // TrialResponseBody is used to define fields on response body types.
 type TrialResponseBody struct {
 	StartedAt string `form:"started_at" json:"started_at" xml:"started_at"`
@@ -1337,23 +1900,35 @@ type ProjectEntryResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 }
 
+// NewLogoutEverywhereResponseBody builds the HTTP response body from the
+// result of the "logoutEverywhere" endpoint of the "auth" service.
+func NewLogoutEverywhereResponseBody(res *auth.LogoutEverywhereResult) *LogoutEverywhereResponseBody {
+	body := &LogoutEverywhereResponseBody{
+		RevokedSignIns:  res.RevokedSignIns,
+		RevokedSessions: res.RevokedSessions,
+	}
+	return body
+}
+
 // NewInfoResponseBody builds the HTTP response body from the result of the
 // "info" endpoint of the "auth" service.
 func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 	body := &InfoResponseBody{
-		UserID:                        res.UserID,
-		UserEmail:                     res.UserEmail,
-		UserSignature:                 res.UserSignature,
-		UserDisplayName:               res.UserDisplayName,
-		UserPhotoURL:                  res.UserPhotoURL,
-		IsAdmin:                       res.IsAdmin,
-		ImpersonatorEmail:             res.ImpersonatorEmail,
-		OrganizationOverride:          res.OrganizationOverride,
-		OrganizationOverrideExpiresAt: res.OrganizationOverrideExpiresAt,
-		ActiveOrganizationID:          res.ActiveOrganizationID,
-		GramAccountType:               res.GramAccountType,
-		HasActiveSubscription:         res.HasActiveSubscription,
-		Whitelisted:                   res.Whitelisted,
+		UserID:                         res.UserID,
+		UserEmail:                      res.UserEmail,
+		UserSignature:                  res.UserSignature,
+		UserDisplayName:                res.UserDisplayName,
+		UserPhotoURL:                   res.UserPhotoURL,
+		IsAdmin:                        res.IsAdmin,
+		ImpersonatorEmail:              res.ImpersonatorEmail,
+		OrganizationOverride:           res.OrganizationOverride,
+		OrganizationOverrideExpiresAt:  res.OrganizationOverrideExpiresAt,
+		ActiveOrganizationID:           res.ActiveOrganizationID,
+		ActiveOrganizationDashboardURL: res.ActiveOrganizationDashboardURL,
+		GramAccountType:                res.GramAccountType,
+		HasActiveSubscription:          res.HasActiveSubscription,
+		AcceptedSignupOfferFlow:        res.AcceptedSignupOfferFlow,
+		Whitelisted:                    res.Whitelisted,
 	}
 	if res.Trial != nil {
 		body.Trial = marshalAuthTrialToTrialResponseBody(res.Trial)
@@ -2073,6 +2648,148 @@ func NewLogoutGatewayErrorResponseBody(res *goa.ServiceError) *LogoutGatewayErro
 	return body
 }
 
+// NewLogoutEverywhereUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "logoutEverywhere" endpoint of the "auth" service.
+func NewLogoutEverywhereUnauthorizedResponseBody(res *goa.ServiceError) *LogoutEverywhereUnauthorizedResponseBody {
+	body := &LogoutEverywhereUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutEverywhereForbiddenResponseBody builds the HTTP response body from
+// the result of the "logoutEverywhere" endpoint of the "auth" service.
+func NewLogoutEverywhereForbiddenResponseBody(res *goa.ServiceError) *LogoutEverywhereForbiddenResponseBody {
+	body := &LogoutEverywhereForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutEverywhereBadRequestResponseBody builds the HTTP response body from
+// the result of the "logoutEverywhere" endpoint of the "auth" service.
+func NewLogoutEverywhereBadRequestResponseBody(res *goa.ServiceError) *LogoutEverywhereBadRequestResponseBody {
+	body := &LogoutEverywhereBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutEverywhereNotFoundResponseBody builds the HTTP response body from
+// the result of the "logoutEverywhere" endpoint of the "auth" service.
+func NewLogoutEverywhereNotFoundResponseBody(res *goa.ServiceError) *LogoutEverywhereNotFoundResponseBody {
+	body := &LogoutEverywhereNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutEverywhereConflictResponseBody builds the HTTP response body from
+// the result of the "logoutEverywhere" endpoint of the "auth" service.
+func NewLogoutEverywhereConflictResponseBody(res *goa.ServiceError) *LogoutEverywhereConflictResponseBody {
+	body := &LogoutEverywhereConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutEverywhereUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "logoutEverywhere" endpoint of the "auth"
+// service.
+func NewLogoutEverywhereUnsupportedMediaResponseBody(res *goa.ServiceError) *LogoutEverywhereUnsupportedMediaResponseBody {
+	body := &LogoutEverywhereUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutEverywhereInvalidResponseBody builds the HTTP response body from
+// the result of the "logoutEverywhere" endpoint of the "auth" service.
+func NewLogoutEverywhereInvalidResponseBody(res *goa.ServiceError) *LogoutEverywhereInvalidResponseBody {
+	body := &LogoutEverywhereInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutEverywhereInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "logoutEverywhere" endpoint of the "auth"
+// service.
+func NewLogoutEverywhereInvariantViolationResponseBody(res *goa.ServiceError) *LogoutEverywhereInvariantViolationResponseBody {
+	body := &LogoutEverywhereInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutEverywhereUnexpectedResponseBody builds the HTTP response body from
+// the result of the "logoutEverywhere" endpoint of the "auth" service.
+func NewLogoutEverywhereUnexpectedResponseBody(res *goa.ServiceError) *LogoutEverywhereUnexpectedResponseBody {
+	body := &LogoutEverywhereUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutEverywhereGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "logoutEverywhere" endpoint of the "auth" service.
+func NewLogoutEverywhereGatewayErrorResponseBody(res *goa.ServiceError) *LogoutEverywhereGatewayErrorResponseBody {
+	body := &LogoutEverywhereGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRegisterUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "register" endpoint of the "auth" service.
 func NewRegisterUnauthorizedResponseBody(res *goa.ServiceError) *RegisterUnauthorizedResponseBody {
@@ -2353,6 +3070,286 @@ func NewInfoGatewayErrorResponseBody(res *goa.ServiceError) *InfoGatewayErrorRes
 	return body
 }
 
+// NewTransferOutUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "transferOut" endpoint of the "auth" service.
+func NewTransferOutUnauthorizedResponseBody(res *goa.ServiceError) *TransferOutUnauthorizedResponseBody {
+	body := &TransferOutUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferOutForbiddenResponseBody builds the HTTP response body from the
+// result of the "transferOut" endpoint of the "auth" service.
+func NewTransferOutForbiddenResponseBody(res *goa.ServiceError) *TransferOutForbiddenResponseBody {
+	body := &TransferOutForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferOutBadRequestResponseBody builds the HTTP response body from the
+// result of the "transferOut" endpoint of the "auth" service.
+func NewTransferOutBadRequestResponseBody(res *goa.ServiceError) *TransferOutBadRequestResponseBody {
+	body := &TransferOutBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferOutNotFoundResponseBody builds the HTTP response body from the
+// result of the "transferOut" endpoint of the "auth" service.
+func NewTransferOutNotFoundResponseBody(res *goa.ServiceError) *TransferOutNotFoundResponseBody {
+	body := &TransferOutNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferOutConflictResponseBody builds the HTTP response body from the
+// result of the "transferOut" endpoint of the "auth" service.
+func NewTransferOutConflictResponseBody(res *goa.ServiceError) *TransferOutConflictResponseBody {
+	body := &TransferOutConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferOutUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "transferOut" endpoint of the "auth" service.
+func NewTransferOutUnsupportedMediaResponseBody(res *goa.ServiceError) *TransferOutUnsupportedMediaResponseBody {
+	body := &TransferOutUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferOutInvalidResponseBody builds the HTTP response body from the
+// result of the "transferOut" endpoint of the "auth" service.
+func NewTransferOutInvalidResponseBody(res *goa.ServiceError) *TransferOutInvalidResponseBody {
+	body := &TransferOutInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferOutInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "transferOut" endpoint of the "auth" service.
+func NewTransferOutInvariantViolationResponseBody(res *goa.ServiceError) *TransferOutInvariantViolationResponseBody {
+	body := &TransferOutInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferOutUnexpectedResponseBody builds the HTTP response body from the
+// result of the "transferOut" endpoint of the "auth" service.
+func NewTransferOutUnexpectedResponseBody(res *goa.ServiceError) *TransferOutUnexpectedResponseBody {
+	body := &TransferOutUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferOutGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "transferOut" endpoint of the "auth" service.
+func NewTransferOutGatewayErrorResponseBody(res *goa.ServiceError) *TransferOutGatewayErrorResponseBody {
+	body := &TransferOutGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferInUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "transferIn" endpoint of the "auth" service.
+func NewTransferInUnauthorizedResponseBody(res *goa.ServiceError) *TransferInUnauthorizedResponseBody {
+	body := &TransferInUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferInForbiddenResponseBody builds the HTTP response body from the
+// result of the "transferIn" endpoint of the "auth" service.
+func NewTransferInForbiddenResponseBody(res *goa.ServiceError) *TransferInForbiddenResponseBody {
+	body := &TransferInForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferInBadRequestResponseBody builds the HTTP response body from the
+// result of the "transferIn" endpoint of the "auth" service.
+func NewTransferInBadRequestResponseBody(res *goa.ServiceError) *TransferInBadRequestResponseBody {
+	body := &TransferInBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferInNotFoundResponseBody builds the HTTP response body from the
+// result of the "transferIn" endpoint of the "auth" service.
+func NewTransferInNotFoundResponseBody(res *goa.ServiceError) *TransferInNotFoundResponseBody {
+	body := &TransferInNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferInConflictResponseBody builds the HTTP response body from the
+// result of the "transferIn" endpoint of the "auth" service.
+func NewTransferInConflictResponseBody(res *goa.ServiceError) *TransferInConflictResponseBody {
+	body := &TransferInConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferInUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "transferIn" endpoint of the "auth" service.
+func NewTransferInUnsupportedMediaResponseBody(res *goa.ServiceError) *TransferInUnsupportedMediaResponseBody {
+	body := &TransferInUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferInInvalidResponseBody builds the HTTP response body from the
+// result of the "transferIn" endpoint of the "auth" service.
+func NewTransferInInvalidResponseBody(res *goa.ServiceError) *TransferInInvalidResponseBody {
+	body := &TransferInInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferInInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "transferIn" endpoint of the "auth" service.
+func NewTransferInInvariantViolationResponseBody(res *goa.ServiceError) *TransferInInvariantViolationResponseBody {
+	body := &TransferInInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferInUnexpectedResponseBody builds the HTTP response body from the
+// result of the "transferIn" endpoint of the "auth" service.
+func NewTransferInUnexpectedResponseBody(res *goa.ServiceError) *TransferInUnexpectedResponseBody {
+	body := &TransferInUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTransferInGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "transferIn" endpoint of the "auth" service.
+func NewTransferInGatewayErrorResponseBody(res *goa.ServiceError) *TransferInGatewayErrorResponseBody {
+	body := &TransferInGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCallbackPayload builds a auth service callback endpoint payload.
 func NewCallbackPayload(code string, state *string) *auth.CallbackPayload {
 	v := &auth.CallbackPayload{}
@@ -2363,10 +3360,11 @@ func NewCallbackPayload(code string, state *string) *auth.CallbackPayload {
 }
 
 // NewLoginPayload builds a auth service login endpoint payload.
-func NewLoginPayload(redirect *string, orgName *string, email *string, supportHandoff *string) *auth.LoginPayload {
+func NewLoginPayload(redirect *string, orgName *string, partnerCode *string, email *string, supportHandoff *string) *auth.LoginPayload {
 	v := &auth.LoginPayload{}
 	v.Redirect = redirect
 	v.OrgName = orgName
+	v.PartnerCode = partnerCode
 	v.Email = email
 	v.SupportHandoff = supportHandoff
 
@@ -2399,10 +3397,20 @@ func NewLogoutPayload(sessionToken *string) *auth.LogoutPayload {
 	return v
 }
 
+// NewLogoutEverywherePayload builds a auth service logoutEverywhere endpoint
+// payload.
+func NewLogoutEverywherePayload(sessionToken *string) *auth.LogoutEverywherePayload {
+	v := &auth.LogoutEverywherePayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewRegisterPayload builds a auth service register endpoint payload.
 func NewRegisterPayload(body *RegisterRequestBody, sessionToken *string) *auth.RegisterPayload {
 	v := &auth.RegisterPayload{
-		OrgName: *body.OrgName,
+		OrgName:     *body.OrgName,
+		PartnerCode: body.PartnerCode,
 	}
 	v.SessionToken = sessionToken
 
@@ -2417,11 +3425,37 @@ func NewInfoPayload(sessionToken *string) *auth.InfoPayload {
 	return v
 }
 
+// NewTransferOutPayload builds a auth service transferOut endpoint payload.
+func NewTransferOutPayload(targetHost *string, nonce *string, redirect *string, sessionToken *string) *auth.TransferOutPayload {
+	v := &auth.TransferOutPayload{}
+	v.TargetHost = targetHost
+	v.Nonce = nonce
+	v.Redirect = redirect
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewTransferInPayload builds a auth service transferIn endpoint payload.
+func NewTransferInPayload(sourceHost *string, code *string, redirect *string) *auth.TransferInPayload {
+	v := &auth.TransferInPayload{}
+	v.SourceHost = sourceHost
+	v.Code = code
+	v.Redirect = redirect
+
+	return v
+}
+
 // ValidateRegisterRequestBody runs the validations defined on
 // RegisterRequestBody
 func ValidateRegisterRequestBody(body *RegisterRequestBody) (err error) {
 	if body.OrgName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("org_name", "body"))
+	}
+	if body.PartnerCode != nil {
+		if utf8.RuneCountInString(*body.PartnerCode) > 80 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.partner_code", *body.PartnerCode, utf8.RuneCountInString(*body.PartnerCode), 80, false))
+		}
 	}
 	return
 }

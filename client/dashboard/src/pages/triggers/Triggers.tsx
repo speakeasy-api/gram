@@ -1,4 +1,8 @@
 import { Page } from "@/components/page-layout";
+import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
+import { RequireScope } from "@/components/require-scope";
+import { useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -138,7 +142,13 @@ function WebhookUrlPill({ url }: { url: string }) {
   );
 }
 
-function TriggersEmptyState({ onCreate }: { onCreate: () => void }) {
+function TriggersEmptyState({
+  onCreate,
+  projectId,
+}: {
+  onCreate: () => void;
+  projectId: string;
+}) {
   return (
     <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
@@ -151,12 +161,19 @@ function TriggersEmptyState({ onCreate }: { onCreate: () => void }) {
         Triggers let you connect external events to your assistants. Set up a
         cron schedule or a webhook to get started.
       </Text>
-      <Button onClick={onCreate}>
-        <Button.LeftIcon>
-          <Icon name="plus" className="h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>Create Trigger</Button.Text>
-      </Button>
+      <RequireScope
+        scope="project:write"
+        resourceId={projectId}
+        level="component"
+        reason="You don't have permission to create triggers."
+      >
+        <Button onClick={onCreate}>
+          <Button.LeftIcon>
+            <Icon name="plus" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Create Trigger</Button.Text>
+        </Button>
+      </RequireScope>
     </div>
   );
 }
@@ -172,9 +189,10 @@ function TriggersTable({
 }: {
   triggers: TriggerInstance[];
   definitions: TriggerDefinition[];
-  onEdit: (trigger: TriggerInstance) => void;
+  onEdit?: (trigger: TriggerInstance) => void;
 }) {
   const routes = useRoutes();
+  const canViewToolLogs = useCanViewToolLogs();
   const defMap = new Map(definitions.map((d) => [d.slug, d]));
   const columns: Column<TriggerInstance>[] = [
     {
@@ -227,21 +245,27 @@ function TriggersTable({
         </span>
       ),
     },
-    {
-      key: "logs",
-      header: "",
-      width: "auto",
-      render: (trigger) => (
-        <div onClick={(e) => e.stopPropagation()}>
-          <routes.logs.Link
-            queryParams={{ af: triggerLogsFilterParam(trigger.id) }}
-            className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
-          >
-            <Icon name="file-text" className="h-4 w-4" />
-          </routes.logs.Link>
-        </div>
-      ),
-    },
+    // Tool Logs needs log:read on the project, so the shortcut is only
+    // offered to those who can open it.
+    ...(canViewToolLogs
+      ? ([
+          {
+            key: "logs",
+            header: "",
+            width: "auto",
+            render: (trigger) => (
+              <div onClick={(e) => e.stopPropagation()}>
+                <routes.logs.Link
+                  queryParams={{ af: triggerLogsFilterParam(trigger.id) }}
+                  className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
+                >
+                  <Icon name="file-text" className="h-4 w-4" />
+                </routes.logs.Link>
+              </div>
+            ),
+          },
+        ] satisfies Column<TriggerInstance>[])
+      : []),
   ];
 
   return (
@@ -883,6 +907,9 @@ function TriggerDialog({
  * and embedded as a tab on the Assistants page.
  */
 export function TriggersPanel(): JSX.Element {
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("project:write", project.id);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<TriggerInstance | null>(
     null,
@@ -923,12 +950,19 @@ export function TriggersPanel(): JSX.Element {
         </Page.Section.Description>
         <Page.Section.CTA>
           {triggers.length > 0 && (
-            <Button onClick={openCreate}>
-              <Button.LeftIcon>
-                <Icon name="plus" className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Create Trigger</Button.Text>
-            </Button>
+            <RequireScope
+              scope="project:write"
+              resourceId={project.id}
+              level="component"
+              reason="You don't have permission to create triggers."
+            >
+              <Button onClick={openCreate}>
+                <Button.LeftIcon>
+                  <Icon name="plus" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Create Trigger</Button.Text>
+              </Button>
+            </RequireScope>
           )}
         </Page.Section.CTA>
         <Page.Section.Body>
@@ -940,37 +974,42 @@ export function TriggersPanel(): JSX.Element {
               />
             </Stack>
           ) : triggers.length === 0 ? (
-            <TriggersEmptyState onCreate={openCreate} />
+            <TriggersEmptyState onCreate={openCreate} projectId={project.id} />
           ) : (
             <TriggersTable
               triggers={triggers}
               definitions={definitions}
-              onEdit={openEdit}
+              onEdit={canWrite ? openEdit : undefined}
             />
           )}
         </Page.Section.Body>
       </Page.Section>
 
-      <TriggerDialog
-        open={dialogOpen}
-        onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) setEditingTrigger(null);
-        }}
-        editingTrigger={editingTrigger}
-      />
+      {canWrite && (
+        <TriggerDialog
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) setEditingTrigger(null);
+          }}
+          editingTrigger={editingTrigger}
+        />
+      )}
     </>
   );
 }
 
 export default function TriggersIndex(): JSX.Element {
+  const project = useProject();
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <TriggersPanel />
+        <RequireScope scope="project:read" resourceId={project.id} level="page">
+          <TriggersPanel />
+        </RequireScope>
       </Page.Body>
     </Page>
   );

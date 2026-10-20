@@ -30,7 +30,7 @@ import {
 } from "./PlaygroundElementsOverrides";
 
 interface PlaygroundChatProps {
-  /** Resolved MCP server URL (Gram origin `/mcp/<slug>`). */
+  /** Resolved MCP server URL (Speakeasy origin `/mcp/<slug>`). */
   mcpUrl: string;
   /**
    * User-session JWT forwarded as `Authorization: Bearer` so the runtime
@@ -43,7 +43,7 @@ interface PlaygroundChatProps {
   playgroundEnvironmentSlug?: string;
   /**
    * The backing toolset, used only to register MCP-App tool/resource UIs.
-   * Undefined for remote-MCP-backed servers, which carry no Gram-side apps.
+   * Undefined for remote-MCP-backed servers, which carry no Speakeasy-side apps.
    */
   toolset?: Toolset;
   /** Action buttons rendered in the chat header (share, logs, …). */
@@ -53,7 +53,7 @@ interface PlaygroundChatProps {
 }
 
 /**
- * The shared playground chat surface: the Gram Elements provider, the
+ * The shared playground chat surface: the Speakeasy Elements provider, the
  * MCP-Apps provider, the chat-history popover, and the chat itself. Both the
  * toolset-backed and remote-MCP-backed variants resolve their own MCP URL and
  * gateway token, then render through here so the chat looks and behaves
@@ -171,7 +171,7 @@ export function PlaygroundChat({
           initialThreadId,
         },
         mcp: mcpUrl,
-        gramEnvironment:
+        environmentSlug:
           playgroundEnvironmentSlug ?? environmentSlug ?? undefined,
         variant: "standalone",
         model: {

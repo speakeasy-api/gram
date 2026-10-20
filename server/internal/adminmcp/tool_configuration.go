@@ -13,7 +13,6 @@ import (
 var errConfigurationUnavailable = errors.New("organization configuration is unavailable")
 
 type OrganizationFeatures struct {
-	AutomaticRoleDistribution            bool   `json:"automatic_role_distribution"`
 	OrganizationID                       string `json:"organization_id"`
 	LogsEnabled                          bool   `json:"logs_enabled"`
 	ToolIOLogsEnabled                    bool   `json:"tool_io_logs_enabled"`
@@ -31,9 +30,9 @@ type OrganizationFeatures struct {
 	CustomerManagedEncryptionKeysEnabled bool   `json:"customer_managed_encryption_keys_enabled"`
 	RemoteSessionAutoRefreshEnabled      bool   `json:"remote_session_auto_refresh_enabled"`
 	RemoteSessionAutoRefreshEnforced     bool   `json:"remote_session_auto_refresh_enforced_enabled"`
-	ConsentToolFilteringEnabled          bool   `json:"consent_tool_filtering_enabled"`
 	SessionPortabilityEnabled            bool   `json:"session_portability_enabled"`
 	NetworkIngressEnabled                bool   `json:"network_ingress_enabled"`
+	OrganizationGatewayDisabled          bool   `json:"organization_gateway_disabled"`
 }
 
 type OrganizationChatAnalysisSettings struct {
@@ -64,8 +63,7 @@ func registerConfigurationTools(server *mcp.Server, organizations OrganizationRe
 			return nil, OrganizationFeatures{}, errConfigurationUnavailable
 		}
 		return nil, OrganizationFeatures{
-			AutomaticRoleDistribution: features.AutomaticRoleDistribution,
-			OrganizationID:            org.ID, LogsEnabled: features.LogsEnabled, ToolIOLogsEnabled: features.ToolIoLogsEnabled,
+			OrganizationID: org.ID, LogsEnabled: features.LogsEnabled, ToolIOLogsEnabled: features.ToolIoLogsEnabled,
 			SessionCaptureEnabled: features.SessionCaptureEnabled, AuthzChallengeLoggingEnabled: features.AuthzChallengeLoggingEnabled,
 			SSOEnabled: features.SsoEnabled, SCIMEnabled: features.ScimEnabled, HooksBrowserLoginEnabled: features.HooksBrowserLoginEnabled,
 			HooksFailOpenEnabled: features.HooksFailOpenEnabled, CustomModelKeysEnabled: features.CustomModelKeysEnabled,
@@ -74,8 +72,8 @@ func registerConfigurationTools(server *mcp.Server, organizations OrganizationRe
 			CustomerManagedEncryptionKeysEnabled: features.CustomerManagedEncryptionKeysEnabled,
 			RemoteSessionAutoRefreshEnabled:      features.RemoteSessionAutoRefreshEnabled,
 			RemoteSessionAutoRefreshEnforced:     features.RemoteSessionAutoRefreshEnforcedEnabled,
-			ConsentToolFilteringEnabled:          features.ConsentToolFilteringEnabled, SessionPortabilityEnabled: features.SessionPortabilityEnabled,
-			NetworkIngressEnabled: features.NetworkIngressEnabled,
+			SessionPortabilityEnabled:            features.SessionPortabilityEnabled,
+			NetworkIngressEnabled:                features.NetworkIngressEnabled, OrganizationGatewayDisabled: features.OrganizationGatewayDisabled,
 		}, nil
 	})
 

@@ -26,7 +26,7 @@ Two panes: this chat (left), Draft Assistant panel (right, live state). Sections
 # System prompt sections
 Three top-level H1 sections, each replaced independently:
 - \`# Personality\` — voice, tone, addressing style, formatting habits, uncertainty handling. Written by \`set_personality\` (and by \`propose_personality\` for filled presets / pasted instructions).
-- \`# Behavior\` — operational rules derived from attached tools. Recomputed on \`attach_toolset\`/\`detach_toolset\`/\`add_tools_to_toolset\`. Don't restate behavior-style rules inside Personality or Tasks.
+- \`# Behavior\` — operational rules derived from attached tools. Recomputed on \`attach_mcp_server\`/\`detach_mcp_server\`/\`detach_toolset\`/\`add_tools_to_toolset\`. Don't restate behavior-style rules inside Personality or Tasks.
 - \`# Tasks\` — what the Assistant does on each run: how it interprets incoming events, which tools to use, what output looks like, when to stay silent. Written by \`set_tasks\`. This is where role/goal-specific guidance lives. \`set_tasks\` replaces the whole section — if the current Tasks body has an \`## Owner\` subsection (the owner's Slack identity, written during Slack setup), include it unchanged in every body you pass.
 Pass section bodies WITHOUT a leading heading — the tool adds it. Inside a section body, use H2 (\`##\`) or lower for any sub-structure; never H1 (\`# Foo\`) — H1 inside a body can collide with the section parser. Other sections and any free-form text between them are preserved.
 
@@ -36,8 +36,8 @@ Pass section bodies WITHOUT a leading heading — the tool adds it. Inside a sec
 - Concurrency — max parallel warm runtimes. Default 5. \`update_assistant(max_concurrency)\`.
 - Warm TTL — runtime keep-alive secs after last request. Default 60. 0 disables. \`update_assistant(warm_ttl_seconds)\`.
 - System instructions — runtime prompt. \`# Personality\` (\`set_personality\`), \`# Behavior\` (auto), \`# Tasks\` (\`set_tasks\`). See "System prompt sections".
-- Toolset — bundle of tools. \`list_toolsets\` / \`create_toolset\` / \`attach_toolset\` / \`detach_toolset\` / \`add_tools_to_toolset\`. When attached, toolsets bind to the assistant's shared env by default. Toolset mutations recompute \`# Behavior\`.
-- MCP server — a remote (external-SaaS) MCP server registered in this project, with no backing toolset. \`list_mcp_servers\` / \`attach_mcp_server\` / \`detach_mcp_server\`. This is how you add "an MCP server" the user gives you (e.g. an external SaaS integration) that isn't a toolset — attach it by its slug, not \`attach_toolset\`. Tunnelled or disabled servers can't be attached; the attach call rejects them. Most remote servers carry their own connection auth, so omit \`environment_slug\`.
+- Toolset — bundle of tools, served as an MCP server. \`list_toolsets\` / \`create_toolset\` / \`attach_mcp_server\` with \`toolset_slug\` (\`attach_toolset\` is an alias) / \`detach_toolset\` / \`add_tools_to_toolset\`. When attached, toolsets bind to the assistant's shared env by default. Toolset mutations recompute \`# Behavior\`.
+- MCP server — any MCP server registered in this project, including remote (external-SaaS) servers with no backing toolset. \`list_mcp_servers\` / \`attach_mcp_server\` / \`detach_mcp_server\`. This is how you add "an MCP server" the user gives you (e.g. an external SaaS integration) that isn't a toolset — attach it with \`mcp_server_slug\`. A toolset-backed server is the same attachment as its toolset: once attached it shows under Toolsets, not MCP servers — attach or detach it once. Tunnelled or disabled servers can't be attached; the attach call rejects them. Most remote servers carry their own connection auth, so omit \`environment_slug\`.
 - Tool — URN \`tools:<kind>:<source>:<op>\`, where \`<kind>\` is \`http\`, \`function\`, \`prompt\`, \`platform\`, or \`externalmcp\` (tools proxied from an external MCP server — most third-party SaaS integrations land here). \`<source>\` is project-specific, not the integration brand. Discover via \`list_available_tools\`; never guess.
 - Environment — the single credential bag owned by this assistant. Auto-created the first time \`update_assistant\` sets a name; auto-renamed when the assistant is renamed; auto-recreated if it gets deleted out of band. Every toolset and trigger on this assistant binds to it by default. Extend it with \`add_environment_keys\` (declare required vars, empty allowed). Populate it with \`request_environment_secrets\` (never accept secrets in chat). Tool responses include a \`notes\` field when the env was implicitly created, adopted, or recreated — read those and relay to the user if toolsets/triggers need re-attach. Fallback tools (\`create_environment\`, explicit \`environment_slug\`/\`environment_id\` args) exist for escape hatches only; don't reach for them unless the shared-env path has failed.
 - Trigger — kinds: \`cron\` (schedule), \`slack\` (Slack events, delivered via webhook). \`create_trigger\`; \`update_trigger\` for pause/resume/reconfig. Bound to the assistant's env by default.
@@ -174,7 +174,7 @@ This is a snapshot taken when the user opened this chat — it bootstraps the ed
               )
               .join(", ")
       }
-- MCP servers (directly attached): ${
+- MCP servers (not toolset-backed): ${
         snapshot.mcpServers.length === 0
           ? "none attached"
           : snapshot.mcpServers

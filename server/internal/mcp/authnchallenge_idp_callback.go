@@ -7,7 +7,9 @@
 package mcp
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -20,12 +22,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // HandleIDPCallback is the GET endpoint the IDP redirects back to after the
 // user authenticates on the private-toolset path. Mounted at
-// `GET /mcp/idp_callback`; the legacy `GET /mcp/{mcpSlug}/idp_callback`
+// `GET /mcp/idp_callback` (WorkOS) and `GET /mcp/idp_callback/{clientID}`
+// (federated logins); the legacy `GET /mcp/{mcpSlug}/idp_callback`
 // route is still accepted, but the toolset is resolved from the stored
 // AuthnChallengeState.
 //
@@ -40,6 +45,7 @@ import (
 func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	routeMcpSlug := chi.URLParam(r, "mcpSlug")
+	routeClientID := chi.URLParam(r, "clientID")
 	logger := s.logger
 
 	q := r.URL.Query()
@@ -85,6 +91,18 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// State-confusion guard (state minted for a different route). Attacker-
 		// controllable, so deliberately NOT counted as a flow failure.
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").LogError(ctx, logger)
+	}
+	if routeClientID != "" && (challengeState.Federation == nil || routeClientID != challengeState.Federation.ClientID.String()) {
+		// Per-client callbacks serve only their own federated client, never WorkOS. Attacker-controllable.
+		logger.InfoContext(ctx, "federated callback rejected", attr.SlogOAuthFederatedCallbackRejectReason("client_mismatch"))
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this callback")
+	}
+	if federation := challengeState.Federation; federation != nil {
+		// Validate before GETDEL so a misrouted callback cannot burn the single-use state.
+		if reason := federatedCallbackMisrouted(r, federation, routeClientID, requestorigin.BaseURL(ctx, s.serverURL.String())); reason != "" {
+			logger.InfoContext(ctx, "federated callback rejected", attr.SlogOAuthFederatedCallbackRejectReason(reason))
+			return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this callback")
+		}
 	}
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
 	if err != nil {
@@ -165,8 +183,8 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 				return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Invalid login response", false)
 			}
 		}
-		_, callbackErr := recordedIDPCallbackOrigin(endpoint, federation.CallbackURL)
-		if callbackErr != nil || federation.OrganizationID != endpoint.OrganizationID || federation.IssuerID != trustedIssuerID || federation.ClientID != trustedClientID || federation.Configuration != configuration || challengeState.CreatedAt.IsZero() || time.Since(challengeState.CreatedAt) > challengeState.TTL() {
+		if reason := s.federatedCallbackRejectReason(r, &challengeState, routeClientID, endpoint.OrganizationID, trustedIssuerID, trustedClientID, configuration); reason != "" {
+			logger.InfoContext(ctx, "federated callback rejected", attr.SlogOAuthFederatedCallbackRejectReason(reason))
 			return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed or expired. Restart login", false)
 		}
 		if q.Get("federated_start") == "1" && q.Get("code") == "" && q.Get("error") == "" {
@@ -187,7 +205,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		if err := validateFederatedBrowser(r, challengeState); err != nil || federation.StartPhase != "login" || q.Get("federated_start") != "" {
 			return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login browser binding is invalid. Restart login", false)
 		}
-		if err := provider.ValidateResponseIssuer(q.Get("iss")); err != nil {
+		if err := provider.ValidateAuthorizationResponseIssuer(q); err != nil {
 			return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login provider response is invalid. Restart login", false)
 		}
 		// Provider errors are untrusted input, not safe browser/log messages.
@@ -272,6 +290,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 
 	var federatedIdentity *remotesessions.FederatedIdentity
 	var gramUserID string
+	var exchange *signins.ExchangeParams
 	impersonated := false
 	if federation := challengeState.Federation; federation != nil {
 		verified := federation.ValidatedIdentity
@@ -300,6 +319,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// Hold only in this stack frame until organization authorization below.
 	} else {
 		// Preserve WorkOS bootstrap and membership synchronization unchanged.
+		authenticatedAt := time.Now()
 		idpUser, err := s.identityResolver.ExchangeCodeForTokens(ctx, code)
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
@@ -312,6 +332,22 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		}
 		gramUserID = login.UserID
 		impersonated = idpUser.ImpersonatorEmail() != ""
+		exchange = &signins.ExchangeParams{
+			Flow:                   signins.FlowMCPAuthorize,
+			WorkOSOrganizationID:   idpUser.OrganizationID,
+			ExpectedOrganizationID: endpoint.OrganizationID,
+			UserID:                 gramUserID,
+			WorkOSSessionID:        idpUser.WorkOSSessionID,
+			AuthenticationMethod:   idpUser.AuthenticationMethod,
+			Evidence: signins.Evidence{
+				HostedDomain:       idpUser.Evidence.HostedDomain,
+				TenantID:           idpUser.Evidence.TenantID,
+				VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
+				IDPAuthenticatedAt: idpUser.Evidence.AuthenticatedAt,
+			},
+			Impersonated:    impersonated,
+			AuthenticatedAt: authenticatedAt,
+		}
 	}
 
 	// Validate the user belongs to the endpoint's organization before
@@ -334,6 +370,24 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		}
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").LogError(ctx, logger)
+	}
+	// Recorded only for members, and only in the endpoint's organization.
+	signInID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	enforced := signins.Enforced(ctx, s.features, endpoint.OrganizationID)
+	if exchange != nil {
+		recorded := signins.RecordExchange(ctx, logger, s.db, *exchange)
+		signInID = recorded.ID
+		if recorded.Failed && enforced {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			return oops.E(oops.CodeUnavailable, nil, "sign-in could not be recorded; try again").LogError(ctx, logger)
+		}
+		if recorded.Revoked && enforced {
+			if challengeState.FreshLoginForced {
+				s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+				return oops.E(oops.CodeUnauthorized, nil, "this sign-in was revoked; sign in again from the start").LogError(ctx, logger)
+			}
+			return s.restartRevokedSignIn(w, r, logger, endpoint, challengeState, exchange.WorkOSSessionID)
+		}
 	}
 
 	if federation := challengeState.Federation; federation != nil {
@@ -412,6 +466,10 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.ID = uuid.NewString()
 	challengeState.Subject = &subject
 	challengeState.AuthorizerUserID = gramUserID
+	challengeState.SignInID = nil
+	if signInID.Valid && enforced {
+		challengeState.SignInID = &signInID.UUID
+	}
 	if federation := challengeState.Federation; federation != nil {
 		challengeState.FederatedBinding = &FederatedConsentBinding{IssuerID: federation.IssuerID, ClientID: federation.ClientID, Issuer: federatedIdentity.Issuer, Subject: federatedIdentity.Subject}
 	}
@@ -425,11 +483,73 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// The mint-time origin puts the consent page back on the host the user
 	// started on, without a fresh custom_domains lookup, or on the
 	// authentication host when the endpoint's issuer lives there.
-	consentURL, err := endpoint.ConsentURL(s.authorizationServerBaseURL(endpoint, baseURL), challengeState.ID)
+	consentURL, err := s.challengeConsentURL(endpoint, challengeState)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
 	}
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
+}
+
+// restartRevokedSignIn ends a WorkOS session whose sign-in was revoked, then
+// sends the browser back to authenticate again, once, so the client is not
+// left retrying a grant that can never be vouched for.
+func (s *Service) restartRevokedSignIn(w http.ResponseWriter, r *http.Request, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, workosSessionID string) error {
+	ctx := r.Context()
+	issuerID, mcpSlug := challengeState.UserSessionIssuerID.String(), endpoint.Slug
+	// Ended even when another organization uses it: AuthKit would otherwise
+	// hand it back and the user could never get past this login.
+	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), revokedSignInRevokeTimeout)
+	if err := s.sessions.RevokeSession(revokeCtx, workosSessionID); err != nil {
+		logger.WarnContext(ctx, "end revoked workos session before fresh login", attr.SlogError(err))
+	}
+	cancel()
+	challengeState.ID = uuid.NewString()
+	challengeState.FreshLoginForced = true
+	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").LogError(ctx, logger)
+	}
+	callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
+	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
+	}
+	idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
+		CallbackURL:     callbackURL,
+		Scope:           "",
+		State:           challengeState.ID,
+		ScopesSupported: nil,
+		LoginHint:       "",
+		ScreenHint:      "",
+		Prompt:          "login",
+	})
+	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
+	}
+	logger.InfoContext(ctx, "sign-in was revoked; requiring a fresh login")
+	http.Redirect(w, r, idpURL.String(), http.StatusFound)
+	return nil
+}
+
+// revokedSignInRevokeTimeout bounds ending a revoked WorkOS session inline.
+const revokedSignInRevokeTimeout = 5 * time.Second
+
+// federatedCallbackRejectReason names why a federated callback cannot complete, or "" when it can.
+func (s *Service) federatedCallbackRejectReason(r *http.Request, state *AuthnChallengeState, routeClientID, organizationID string, trustedIssuerID, trustedClientID uuid.UUID, configuration string) string {
+	federation := state.Federation
+	if reason := federatedCallbackMisrouted(r, federation, routeClientID, requestorigin.BaseURL(r.Context(), s.serverURL.String())); reason != "" {
+		return reason
+	}
+	switch {
+	case federation.ClientID != trustedClientID:
+		return "client_mismatch"
+	case federation.OrganizationID != organizationID || federation.IssuerID != trustedIssuerID || federation.Configuration != configuration:
+		return "config_drift"
+	case state.CreatedAt.IsZero() || time.Since(state.CreatedAt) > state.TTL():
+		return "expired"
+	}
+	return ""
 }

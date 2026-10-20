@@ -77,6 +77,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
 	spendrulesch "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
@@ -98,6 +99,8 @@ type Publishers struct {
 	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	LLMAnalysis             gcp.Publisher[*riskv1.LLMAnalysis]
+	ToolCallAnalysis        gcp.Publisher[*riskv1.ToolCallAnalysis]
+	AccountIdentityAnalysis gcp.Publisher[*riskv1.AccountIdentityAnalysis]
 	RiskFindings            gcp.Publisher[*riskv1.Finding]
 	MeterReadings           gcp.Publisher[*meteringv1.MeterReading]
 	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
@@ -256,6 +259,7 @@ func NewActivities(
 	remoteSessionEnricher *remotesessions.SessionEnricher,
 	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
 	startupSeeds []activities.StartupSeed,
+	signInEpochs signins.EpochRaiser,
 ) *Activities {
 	spendRulesCH := spendrulesch.New(chConn)
 	riskFindingsCH := riskchrepo.New(chConn)
@@ -280,13 +284,12 @@ func NewActivities(
 		publishers.PromptPolicyAnalysis,
 		publishers.CustomRulesAnalysis,
 		publishers.LLMAnalysis,
-		publishers.RiskFindings,
+		publishers.ToolCallAnalysis,
+		publishers.AccountIdentityAnalysis,
 		customRuleScanner,
 		celEng,
 		builtinPresets,
-		&shadowMCPPolicyBypassChecker{
-			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
-		},
+		NewShadowMCPPolicyBypassChecker(logger, db),
 		riskRecorder,
 		llmAnalyzerEnabled,
 	)
@@ -391,17 +394,18 @@ func NewActivities(
 
 	processWorkOSOrganizationEvents := activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter, identityMapRefresh)
 	processWorkOSOrganizationEvents.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
+	processWorkOSOrganizationEvents.SetSignInEnforcement(features, meterProvider, signInEpochs)
 
 	// Built here rather than threaded in: this constructor already holds every
 	// dependency the emitter needs, and only the device sync reports growth
 	// activity from the worker.
 	growthEmitter := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)
 
-	// The Okta client needs the assertion signer to mint tokens; workers
-	// without one record every applications sync as failed.
+	// Without an assertion signer, private_key_jwt connections fail to
+	// build their client and their applications sync is recorded as failed.
 	var oktaClients okta.ClientFactory
-	if guardianPolicy != nil && remoteSessionAssertionSigner != nil {
-		oktaClients = okta.NewClientFactory(logger, guardianPolicy, remoteSessionAssertionSigner)
+	if guardianPolicy != nil {
+		oktaClients = okta.NewClientFactory(logger, guardianPolicy, remoteSessionAssertionSigner, encryption)
 	}
 	oktaApplicationSyncer := oktaapplications.NewSyncer(logger, meterProvider, db, oktaClients)
 
@@ -599,6 +603,10 @@ func (a *Activities) SendPaygActivatedEmail(ctx context.Context, input billingno
 		return fmt.Errorf("send PAYG activated notification: %w", err)
 	}
 	return nil
+}
+
+func (a *Activities) SweepSignInRevocations(ctx context.Context) (int, error) {
+	return a.processWorkOSOrganizationEvents.SweepSignInRevocations(ctx) //nolint:wrapcheck // wrapped by the activity
 }
 
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {

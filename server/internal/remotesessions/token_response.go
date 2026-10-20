@@ -195,7 +195,7 @@ func (t tokenResponse) Scopes() []string {
 	return strings.Fields(t.Scope)
 }
 
-// ScopeReported distinguishes omission from Gram's compatibility exception: an explicitly empty token-response scope.
+// ScopeReported distinguishes omission from Speakeasy's compatibility exception: an explicitly empty token-response scope.
 func (t tokenResponse) ScopeReported() bool {
 	return t.scopePresent
 }

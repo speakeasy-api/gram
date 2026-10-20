@@ -24,7 +24,7 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   ListResourceAudienceRequest,
   ListResourceAudienceSecurity,
-  ResourceKind,
+  QueryParamResourceKind,
 } from "../models/operations/listresourceaudience.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -115,7 +115,7 @@ export function setResourceAudienceData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      resourceKind: ResourceKind;
+      resourceKind: QueryParamResourceKind;
       resourceId: string;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
@@ -132,7 +132,7 @@ export function invalidateResourceAudience(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      resourceKind: ResourceKind;
+      resourceKind: QueryParamResourceKind;
       resourceId: string;
       gramKey?: string | undefined;
       gramSession?: string | undefined;

@@ -1,6 +1,7 @@
 package risk_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -10,8 +11,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // chListFinding builds one ClickHouse listing row: an overview-shaped finding
@@ -97,7 +99,6 @@ func TestListRiskResults_MCPServerFilterIncludesUnanchoredAndScopesAllPaths(t *t
 		unanchored, anchored, otherServer, foreignProject, foreignOrg, disabledPolicyRow, dismissedAnchored,
 	}))
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{dismissedCopy}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// The default view includes the disabled policy's row.
 	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{McpServerID: &serverID})
@@ -172,7 +173,6 @@ func TestListRiskResults_DefaultViewKeepsDisabledPolicyHistory(t *testing.T) {
 	deletedRow.RiskPolicyID = deleted.ID
 
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{gatewayOnly, deletedRow}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	require.NoError(t, ti.service.DeleteRiskPolicy(ctx, &gen.DeleteRiskPolicyPayload{ID: deleted.ID}))
 
 	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
@@ -243,8 +243,6 @@ func TestListRiskResults_ClickHousePageOrderingAndRedaction(t *testing.T) {
 		INSERT INTO risk_findings (id, created_at, message_created_at, organization_id, project_id, risk_policy_id, rule_id, source, category, chat_id, false_positive_at)
 		VALUES (?, ?, ?, ?, ?, ?, 'secret.github_pat', 'gitleaks', 'secrets', ?, ?)
 	`, uuid.Must(uuid.NewV7()), base.Add(4*time.Hour), base.Add(110*time.Minute), orgID, projectID.String(), policy.ID, oldChat.String(), base.Add(5*time.Hour)))
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	pageSize := 2
 	page1, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{Limit: &pageSize})
@@ -325,7 +323,6 @@ func TestListRiskResults_ClickHouseLegacyFalsePositiveOnlyRowIsHidden(t *testing
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{legacyFP, converged, open}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
 	require.NoError(t, err)
@@ -379,7 +376,6 @@ func TestListRiskResults_ClickHouseFilters(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{secretAssistant, piiNoAssistant, disabledPolicyRow, dupOld, dupNew, noFp1, noFp2}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	ids := func(result *gen.ListRiskResultsResult) []string {
 		out := make([]string, 0, len(result.Results))
@@ -472,7 +468,6 @@ func TestListRiskResults_ClickHouseUniqueMatchPagination(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{dupNew, other, dupOld}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	pageSize := 1
 	var cursor *string
@@ -531,7 +526,6 @@ func TestListRiskResults_ClickHouseRedeliveryCannotUndoDismissal(t *testing.T) {
 	// The redelivered scanner copy: same id, fresher inserted_at, no
 	// suppression stamps.
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
 	require.NoError(t, err)
@@ -590,7 +584,6 @@ func TestListRiskResults_ClickHouseRetroFlagCopies(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{keep, retroHidden, ingestExcluded, fpLater}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// Retro apply hides retroHidden; retro reversal un-hides ingestExcluded.
 	// Both go through the real append-copy mechanism (synchronous inserts).
@@ -616,7 +609,6 @@ func TestListRiskResults_ClickHouseRetroFlagCopies(t *testing.T) {
 		INSERT INTO risk_findings (id, created_at, message_created_at, organization_id, project_id, risk_policy_id, rule_id, source, category, chat_id, false_positive_at)
 		VALUES (?, ?, ?, ?, ?, ?, 'secret.aws_secret_key', 'gitleaks', 'secrets', ?, ?)
 	`, fpLater.ID, createdAt, fpLater.MessageCreatedAt, orgID, projectID.String(), policy.ID, chatID.String(), createdAt.Add(2*time.Minute)))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
 	require.NoError(t, err)
@@ -633,7 +625,6 @@ func TestListRiskResults_ClickHouseRetroFlagCopies(t *testing.T) {
 	uniqNew := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, createdAt, base.Add(3*time.Hour), "gitleaks", "secret.db_password", "alice@example.com", "<redacted len=8 sha=eeeeeeee>", "fp-uniq", "")
 	uniqOld := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, createdAt, base.Add(1*time.Hour), "gitleaks", "secret.db_password", "alice@example.com", "<redacted len=8 sha=ffffffff>", "fp-uniq", "")
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{uniqNew, uniqOld}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	// Fresh timestamp: the flag copy must sort after the rows inserted above.
 	flagAt := time.Now().UTC()
 	require.NoError(t, chQueries.AppendRetroExclusionApplyByIDs(ctx, scope, exclusionID,
@@ -647,4 +638,87 @@ func TestListRiskResults_ClickHouseRetroFlagCopies(t *testing.T) {
 	}
 	require.Contains(t, uniqueIDs, uniqOld.ID.String())
 	require.NotContains(t, uniqueIDs, uniqNew.ID.String())
+}
+
+func TestListRiskResults_ExecutionAndResultFilters(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("MCP findings")})
+	require.NoError(t, err)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	chatID, messageID := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
+	executionID := uuid.NewString()
+	at := time.Now().UTC().Add(-time.Hour)
+
+	request := chListFinding(t, projectID, orgID, chatID, messageID, policy.ID, at, at, "gitleaks", "secret.github_pat", "", "<redacted len=7 sha=aaaaaaaa>", "", "")
+	request.ExecutionID = executionID
+	request.Phase = "request"
+	request.MediationSurface = "remote_mcp"
+	response := request
+	response.ID = uuid.New()
+	response.Phase = "response"
+	otherExecution := request
+	otherExecution.ID = uuid.New()
+	otherExecution.ExecutionID = uuid.NewString()
+	foreignProject := request
+	foreignProject.ID = uuid.New()
+	foreignProject.ProjectID = uuid.NewString()
+	// A dismissal mirrored from Postgres carries no execution metadata; the
+	// filter must still resolve the finding to its dismissed state.
+	dismissed := request
+	dismissed.ID = uuid.New()
+	dismissedCopy := dismissed
+	dismissedCopy.ExecutionID = ""
+	dismissedCopy.Phase = ""
+	dismissedCopy.MediationSurface = ""
+	dismissedAt := at.Add(time.Minute)
+	dismissedCopy.ExcludedAt = &dismissedAt
+	dismissedCopy.ExcludedReason = chrepo.ExcludedReasonManual
+	dismissedCopy.EventKind = chrepo.EventKindSuppression
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{request, response, otherExecution, foreignProject, dismissed}))
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{dismissedCopy}))
+
+	byExecution, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ExecutionID: &executionID})
+	require.NoError(t, err)
+	ids := make([]string, 0, len(byExecution.Results))
+	for _, result := range byExecution.Results {
+		ids = append(ids, result.ID)
+		require.Equal(t, executionID, *result.ExecutionID)
+	}
+	require.ElementsMatch(t, []string{request.ID.String(), response.ID.String()}, ids)
+	require.Equal(t, int64(2), byExecution.TotalCount)
+
+	// Chat-scoped requests still honor the narrower filters.
+	byExecutionInChat, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ExecutionID: &executionID, ChatID: new(chatID.String())})
+	require.NoError(t, err)
+	require.Len(t, byExecutionInChat.Results, 2)
+
+	byResult, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ResultID: new(response.ID.String())})
+	require.NoError(t, err)
+	require.Len(t, byResult.Results, 1)
+	require.Equal(t, response.ID.String(), byResult.Results[0].ID)
+	require.Equal(t, int64(1), byResult.TotalCount)
+
+	foreign, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ResultID: new(foreignProject.ID.String())})
+	require.NoError(t, err)
+	require.Empty(t, foreign.Results)
+
+	dismissedByID, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ResultID: new(dismissed.ID.String())})
+	require.NoError(t, err)
+	require.Empty(t, dismissedByID.Results)
+
+	_, err = ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ResultID: new("not-a-uuid")})
+	require.Error(t, err)
+
+	_, err = ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ExecutionID: new(strings.Repeat("e", risk.MaxExecutionIDLen+1))})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	_, err = ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ExecutionID: new("   ")})
+	requireOopsCode(t, err, oops.CodeInvalid)
 }

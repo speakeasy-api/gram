@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,9 +15,60 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+type recordingFalsePositiveStore struct {
+	mu         sync.Mutex
+	states     map[uuid.UUID]chrepo.FalsePositiveState
+	suppressed []uuid.UUID
+	reversed   []uuid.UUID
+}
+
+func (s *recordingFalsePositiveStore) add(ids ...uuid.UUID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.states == nil {
+		s.states = make(map[uuid.UUID]chrepo.FalsePositiveState)
+	}
+	for _, id := range ids {
+		s.states[id] = chrepo.FalsePositiveState{ID: id, Dismissed: false, RuleSuppressed: false}
+	}
+}
+
+func (s *recordingFalsePositiveStore) ListFalsePositiveStates(_ context.Context, _, _ string, ids []uuid.UUID) ([]chrepo.FalsePositiveState, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	states := make([]chrepo.FalsePositiveState, 0, len(ids))
+	for _, id := range ids {
+		if state, ok := s.states[id]; ok {
+			states = append(states, state)
+		}
+	}
+	return states, nil
+}
+
+func (s *recordingFalsePositiveStore) AppendFalsePositiveSuppression(_ context.Context, _, _, _, _, _ string, ids []uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.suppressed = append(s.suppressed, ids...)
+	for _, id := range ids {
+		s.states[id] = chrepo.FalsePositiveState{ID: id, Dismissed: true, RuleSuppressed: false}
+	}
+	return nil
+}
+
+func (s *recordingFalsePositiveStore) AppendFalsePositiveReversal(_ context.Context, _, _, _ string, ids []uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reversed = append(s.reversed, ids...)
+	for _, id := range ids {
+		s.states[id] = chrepo.FalsePositiveState{ID: id, Dismissed: false, RuleSuppressed: false}
+	}
+	return nil
+}
 
 func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 	t.Parallel()
@@ -31,16 +83,18 @@ func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
+	findingsStore := &recordingFalsePositiveStore{}
 	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-finding-test-key")
 	require.NoError(t, err)
-	handlers, err := NewRiskMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil), nil, risk.NewFalsePositiveCore(audit.NewLogger()))
+	handlers, err := NewRiskMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil), nil, risk.NewFalsePositiveCore(audit.NewLogger(), findingsStore))
 	require.NoError(t, err)
 	require.NotNil(t, handlers.MarkFindingsFalsePositive)
 	require.NotNil(t, handlers.UnmarkFindingsFalsePositive)
 	require.Nil(t, handlers.CreateExclusion, "a nil exclusion core leaves exclusion writes stubbed")
 
 	first, second, third := seedRiskFinding(t, ctx, conn, principal.OrganizationID, project.ID), seedRiskFinding(t, ctx, conn, principal.OrganizationID, project.ID), seedRiskFinding(t, ctx, conn, principal.OrganizationID, project.ID)
-	unknown := uuid.New()
+	clickHouseOnly, unknown := uuid.New(), uuid.New()
+	findingsStore.add(first, second, third, clickHouseOnly)
 	dismissBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionRiskResultDismiss)
 	require.NoError(t, err)
 	restoreBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionRiskResultRestore)
@@ -54,28 +108,29 @@ func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 	requireFindingDismissed(t, ctx, conn, project.ID, first, false)
 
 	markInput := map[string]any{
-		"project_slug": project.Slug, "finding_ids": []any{first.String(), unknown.String(), second.String(), first.String()},
+		"project_slug": project.Slug, "finding_ids": []any{first.String(), unknown.String(), clickHouseOnly.String(), second.String(), first.String()},
 		"reason": "reviewed with the owning team", "confirmed": true, "idempotency_key": "mark-key",
 	}
 	_, marked, err := handlers.MarkFindingsFalsePositive(ctx, nil, markInput)
 	require.NoError(t, err)
 	require.False(t, marked.Receipt.Replayed)
 	require.Equal(t, riskReceiptProject(project), marked.Project)
-	require.Equal(t, []string{first.String(), second.String()}, marked.ChangedFindingIDs)
+	require.Equal(t, []string{first.String(), clickHouseOnly.String(), second.String()}, marked.ChangedFindingIDs)
 	require.Empty(t, marked.AlreadyInRequestedStateFindingIDs)
 	require.Equal(t, []string{unknown.String()}, marked.NotFoundFindingIDs)
 	require.Equal(t, riskFindingResultCategoryDismissed, marked.ResultCategory)
 	requireFindingDismissed(t, ctx, conn, project.ID, first, true)
 	requireFindingDismissed(t, ctx, conn, project.ID, second, true)
 	requireFindingDismissed(t, ctx, conn, project.ID, third, false)
+	require.ElementsMatch(t, []uuid.UUID{first, clickHouseOnly, second}, findingsStore.suppressed)
 
 	dismissAfter, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionRiskResultDismiss)
 	require.NoError(t, err)
-	require.Equal(t, dismissBefore+2, dismissAfter, "one dismiss audit entry per changed finding")
+	require.Equal(t, dismissBefore+3, dismissAfter, "one dismiss audit entry per changed ClickHouse finding")
 	dismissAudit, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionRiskResultDismiss)
 	require.NoError(t, err)
 	require.Equal(t, principal.UserID, dismissAudit.ActorID)
-	require.Contains(t, []string{first.String(), second.String()}, dismissAudit.SubjectID)
+	require.Contains(t, []string{first.String(), clickHouseOnly.String(), second.String()}, dismissAudit.SubjectID)
 
 	// Replaying the same key returns the stored receipt without re-auditing.
 	_, replayed, err := handlers.MarkFindingsFalsePositive(ctx, nil, markInput)
@@ -103,10 +158,10 @@ func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 	requireRiskMutationRefusal(t, err, "confirmation_required")
 
 	_, restored, err := handlers.UnmarkFindingsFalsePositive(ctx, nil, map[string]any{
-		"project_slug": project.Slug, "finding_ids": []any{unknown.String(), first.String(), second.String()}, "confirmed": true, "idempotency_key": "unmark-key",
+		"project_slug": project.Slug, "finding_ids": []any{unknown.String(), first.String(), clickHouseOnly.String(), second.String()}, "confirmed": true, "idempotency_key": "unmark-key",
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{first.String(), second.String()}, restored.ChangedFindingIDs)
+	require.Equal(t, []string{first.String(), clickHouseOnly.String(), second.String()}, restored.ChangedFindingIDs)
 	require.Equal(t, []string{unknown.String()}, restored.NotFoundFindingIDs)
 	require.Equal(t, riskFindingResultCategoryRestored, restored.ResultCategory)
 	requireFindingDismissed(t, ctx, conn, project.ID, first, false)
@@ -115,7 +170,7 @@ func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 
 	restoreAfter, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionRiskResultRestore)
 	require.NoError(t, err)
-	require.Equal(t, restoreBefore+2, restoreAfter)
+	require.Equal(t, restoreBefore+3, restoreAfter)
 	restoreAudit, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionRiskResultRestore)
 	require.NoError(t, err)
 	require.Equal(t, principal.UserID, restoreAudit.ActorID)

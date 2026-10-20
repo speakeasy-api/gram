@@ -20,7 +20,7 @@ const SERVICE_VERSION_SENTINEL = "__SLOT_serviceVersion__";
 
 type SetupMode = "existing" | "new";
 
-type Platform = "kubernetes" | "docker" | "cli";
+type Platform = "kubernetes" | "docker";
 
 type SnippetTab = {
   value: string;
@@ -71,7 +71,7 @@ export function TunneledMcpSetupTabs({
   };
 
   const handlePlatformChange = (value: string) => {
-    if (value === "kubernetes" || value === "docker" || value === "cli") {
+    if (value === "kubernetes" || value === "docker") {
       setPlatform(value);
     }
   };
@@ -205,12 +205,6 @@ spec:
   -e TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
   ghcr.io/speakeasy-api/gram-tunnel-agent:latest`;
 
-  const cli = `TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
-TUNNEL_KEY=${shellQuote(renderedKey)} \\
-TUNNEL_LOCAL_MCP_URL='${MCP_URL_SENTINEL}' \\
-TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
-gram tunnel run`;
-
   return [
     {
       value: "kubernetes",
@@ -235,17 +229,6 @@ gram tunnel run`;
           serviceVersion,
           "TUNNEL_SERVICE_VERSION=",
         ),
-      },
-    },
-    {
-      value: "cli",
-      label: "CLI",
-      language: "bash",
-      hint: "Run the Gram CLI agent on the same host as your MCP server.",
-      code: cli,
-      slots: {
-        [MCP_URL_SENTINEL]: shellSlot(mcpUrl),
-        [SERVICE_VERSION_SENTINEL]: shellSlot(serviceVersion),
       },
     },
   ];
@@ -280,7 +263,6 @@ function newServerTabs(ctx: SnippetContext): SnippetTab[] {
   const { renderedKey, slug, gateway, serviceVersion } = ctx;
   const clusterUpstream = "http://127.0.0.1:3000/mcp";
   const dockerUpstream = `http://hello-world-mcp-${slug}:3000/mcp`;
-  const cliUpstream = "http://localhost:3000/mcp";
 
   const kubernetes = `apiVersion: v1
 kind: ConfigMap
@@ -378,12 +360,6 @@ docker run --rm --name gram-tunnel-${slug} \\
   -e TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
   ghcr.io/speakeasy-api/gram-tunnel-agent:latest`;
 
-  const cli = `TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
-TUNNEL_KEY=${shellQuote(renderedKey)} \\
-TUNNEL_LOCAL_MCP_URL=${shellQuote(cliUpstream)} \\
-TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
-gram tunnel run`;
-
   return [
     {
       value: "kubernetes",
@@ -406,16 +382,6 @@ gram tunnel run`;
           serviceVersion,
           "TUNNEL_SERVICE_VERSION=",
         ),
-      },
-    },
-    {
-      value: "cli",
-      label: "CLI",
-      language: "bash",
-      hint: "Start the hello-world MCP container from the Docker tab, then run the Gram CLI agent against it on localhost:3000.",
-      code: cli,
-      slots: {
-        [SERVICE_VERSION_SENTINEL]: shellSlot(serviceVersion),
       },
     },
   ];

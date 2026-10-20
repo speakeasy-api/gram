@@ -107,8 +107,8 @@ func (x Metric_DataPointFlags) Number() protoreflect.EnumNumber {
 }
 
 // Metric is one OTLP metric carried with its resource, scope, and authenticated
-// Gram provenance. OTLP fields retain their exact field numbers and wire types;
-// Gram-only fields live at 1000+ and are stripped before relay delivery.
+// Speakeasy provenance. OTLP fields retain their exact field numbers and wire types;
+// Speakeasy-only fields live at 1000+ and are stripped before relay delivery.
 type Metric struct {
 	state                        protoimpl.MessageState       `protogen:"opaque.v1"`
 	xxx_hidden_Name              *string                      `protobuf:"bytes,1,opt,name=name"`

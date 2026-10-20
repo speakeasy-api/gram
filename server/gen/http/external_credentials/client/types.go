@@ -17,7 +17,7 @@ import (
 type CreateAwsIamCredentialRequestBody struct {
 	// A human-readable name for the credential.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The customer IAM role ARN Gram assumes. Omit for a KMS key-policy grant.
+	// The customer IAM role ARN Speakeasy assumes. Omit for a KMS key-policy grant.
 	AssumeRoleArn *string `form:"assume_role_arn,omitempty" json:"assume_role_arn,omitempty" xml:"assume_role_arn,omitempty"`
 	// The OIDC audience. Provide (with assume_role_arn) to assume the role with a
 	// web identity.
@@ -35,7 +35,7 @@ type UpdateAwsIamCredentialRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// A human-readable name for the credential.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The customer IAM role ARN Gram assumes. Omit for a KMS key-policy grant.
+	// The customer IAM role ARN Speakeasy assumes. Omit for a KMS key-policy grant.
 	AssumeRoleArn *string `form:"assume_role_arn,omitempty" json:"assume_role_arn,omitempty" xml:"assume_role_arn,omitempty"`
 	// The OIDC audience. Provide (with assume_role_arn) to assume the role with a
 	// web identity.
@@ -51,9 +51,9 @@ type UpdateAwsIamCredentialRequestBody struct {
 type CreateGcpIamCredentialRequestBody struct {
 	// A human-readable name for the credential.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The service account in your project that Gram impersonates. Grant Gram's own
-	// service account roles/iam.serviceAccountTokenCreator on it — see
-	// externalCredentials.getGcpSetupInfo.
+	// The service account in your project that Speakeasy impersonates. Grant
+	// Speakeasy's own service account roles/iam.serviceAccountTokenCreator on it —
+	// see externalCredentials.getGcpSetupInfo.
 	ImpersonateServiceAccount string `form:"impersonate_service_account" json:"impersonate_service_account" xml:"impersonate_service_account"`
 }
 
@@ -64,21 +64,22 @@ type UpdateGcpIamCredentialRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// A human-readable name for the credential.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The service account in your project that Gram impersonates. Grant Gram's own
-	// service account roles/iam.serviceAccountTokenCreator on it — see
-	// externalCredentials.getGcpSetupInfo.
+	// The service account in your project that Speakeasy impersonates. Grant
+	// Speakeasy's own service account roles/iam.serviceAccountTokenCreator on it —
+	// see externalCredentials.getGcpSetupInfo.
 	ImpersonateServiceAccount string `form:"impersonate_service_account" json:"impersonate_service_account" xml:"impersonate_service_account"`
 }
 
 // CreateAwsIamCredentialResponseBody is the type of the "externalCredentials"
 // service "createAwsIamCredential" endpoint HTTP response body.
 type CreateAwsIamCredentialResponseBody struct {
-	// The customer IAM role ARN Gram assumes.
+	// The customer IAM role ARN Speakeasy assumes.
 	AssumeRoleArn *string `form:"assume_role_arn,omitempty" json:"assume_role_arn,omitempty" xml:"assume_role_arn,omitempty"`
-	// The Gram-generated ExternalId the customer must require in their role trust
-	// policy. Present when Gram assumes the role with an ExternalId.
+	// The Speakeasy-generated ExternalId the customer must require in their role
+	// trust policy. Present when Speakeasy assumes the role with an ExternalId.
 	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
-	// The OIDC audience. Present when Gram assumes the role with a web identity.
+	// The OIDC audience. Present when Speakeasy assumes the role with a web
+	// identity.
 	OidcAudience *string `form:"oidc_audience,omitempty" json:"oidc_audience,omitempty" xml:"oidc_audience,omitempty"`
 	// Optional OIDC subject pin (web-identity approach).
 	OidcSubject *string `form:"oidc_subject,omitempty" json:"oidc_subject,omitempty" xml:"oidc_subject,omitempty"`
@@ -101,12 +102,13 @@ type CreateAwsIamCredentialResponseBody struct {
 // UpdateAwsIamCredentialResponseBody is the type of the "externalCredentials"
 // service "updateAwsIamCredential" endpoint HTTP response body.
 type UpdateAwsIamCredentialResponseBody struct {
-	// The customer IAM role ARN Gram assumes.
+	// The customer IAM role ARN Speakeasy assumes.
 	AssumeRoleArn *string `form:"assume_role_arn,omitempty" json:"assume_role_arn,omitempty" xml:"assume_role_arn,omitempty"`
-	// The Gram-generated ExternalId the customer must require in their role trust
-	// policy. Present when Gram assumes the role with an ExternalId.
+	// The Speakeasy-generated ExternalId the customer must require in their role
+	// trust policy. Present when Speakeasy assumes the role with an ExternalId.
 	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
-	// The OIDC audience. Present when Gram assumes the role with a web identity.
+	// The OIDC audience. Present when Speakeasy assumes the role with a web
+	// identity.
 	OidcAudience *string `form:"oidc_audience,omitempty" json:"oidc_audience,omitempty" xml:"oidc_audience,omitempty"`
 	// Optional OIDC subject pin (web-identity approach).
 	OidcSubject *string `form:"oidc_subject,omitempty" json:"oidc_subject,omitempty" xml:"oidc_subject,omitempty"`
@@ -129,8 +131,8 @@ type UpdateAwsIamCredentialResponseBody struct {
 // CreateGcpIamCredentialResponseBody is the type of the "externalCredentials"
 // service "createGcpIamCredential" endpoint HTTP response body.
 type CreateGcpIamCredentialResponseBody struct {
-	// The service account Gram impersonates (impersonation approach, or the WIF
-	// hop).
+	// The service account Speakeasy impersonates (impersonation approach, or the
+	// WIF hop).
 	ImpersonateServiceAccount *string `form:"impersonate_service_account,omitempty" json:"impersonate_service_account,omitempty" xml:"impersonate_service_account,omitempty"`
 	// Workload Identity Federation pool ID.
 	WifPoolID *string `form:"wif_pool_id,omitempty" json:"wif_pool_id,omitempty" xml:"wif_pool_id,omitempty"`
@@ -155,8 +157,8 @@ type CreateGcpIamCredentialResponseBody struct {
 // UpdateGcpIamCredentialResponseBody is the type of the "externalCredentials"
 // service "updateGcpIamCredential" endpoint HTTP response body.
 type UpdateGcpIamCredentialResponseBody struct {
-	// The service account Gram impersonates (impersonation approach, or the WIF
-	// hop).
+	// The service account Speakeasy impersonates (impersonation approach, or the
+	// WIF hop).
 	ImpersonateServiceAccount *string `form:"impersonate_service_account,omitempty" json:"impersonate_service_account,omitempty" xml:"impersonate_service_account,omitempty"`
 	// Workload Identity Federation pool ID.
 	WifPoolID *string `form:"wif_pool_id,omitempty" json:"wif_pool_id,omitempty" xml:"wif_pool_id,omitempty"`
@@ -202,12 +204,13 @@ type ListGcpIamCredentialsResponseBody struct {
 // GetAwsIamCredentialResponseBody is the type of the "externalCredentials"
 // service "getAwsIamCredential" endpoint HTTP response body.
 type GetAwsIamCredentialResponseBody struct {
-	// The customer IAM role ARN Gram assumes.
+	// The customer IAM role ARN Speakeasy assumes.
 	AssumeRoleArn *string `form:"assume_role_arn,omitempty" json:"assume_role_arn,omitempty" xml:"assume_role_arn,omitempty"`
-	// The Gram-generated ExternalId the customer must require in their role trust
-	// policy. Present when Gram assumes the role with an ExternalId.
+	// The Speakeasy-generated ExternalId the customer must require in their role
+	// trust policy. Present when Speakeasy assumes the role with an ExternalId.
 	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
-	// The OIDC audience. Present when Gram assumes the role with a web identity.
+	// The OIDC audience. Present when Speakeasy assumes the role with a web
+	// identity.
 	OidcAudience *string `form:"oidc_audience,omitempty" json:"oidc_audience,omitempty" xml:"oidc_audience,omitempty"`
 	// Optional OIDC subject pin (web-identity approach).
 	OidcSubject *string `form:"oidc_subject,omitempty" json:"oidc_subject,omitempty" xml:"oidc_subject,omitempty"`
@@ -230,8 +233,8 @@ type GetAwsIamCredentialResponseBody struct {
 // GetGcpIamCredentialResponseBody is the type of the "externalCredentials"
 // service "getGcpIamCredential" endpoint HTTP response body.
 type GetGcpIamCredentialResponseBody struct {
-	// The service account Gram impersonates (impersonation approach, or the WIF
-	// hop).
+	// The service account Speakeasy impersonates (impersonation approach, or the
+	// WIF hop).
 	ImpersonateServiceAccount *string `form:"impersonate_service_account,omitempty" json:"impersonate_service_account,omitempty" xml:"impersonate_service_account,omitempty"`
 	// Workload Identity Federation pool ID.
 	WifPoolID *string `form:"wif_pool_id,omitempty" json:"wif_pool_id,omitempty" xml:"wif_pool_id,omitempty"`
@@ -256,7 +259,7 @@ type GetGcpIamCredentialResponseBody struct {
 // VerifyGcpIamCredentialResponseBody is the type of the "externalCredentials"
 // service "verifyGcpIamCredential" endpoint HTTP response body.
 type VerifyGcpIamCredentialResponseBody struct {
-	// Whether Gram could assume the credential's identity.
+	// Whether Speakeasy could assume the credential's identity.
 	Verified *bool `form:"verified,omitempty" json:"verified,omitempty" xml:"verified,omitempty"`
 	// The principal the credential resolves to — the impersonated service account.
 	Principal *string `form:"principal,omitempty" json:"principal,omitempty" xml:"principal,omitempty"`
@@ -268,12 +271,14 @@ type VerifyGcpIamCredentialResponseBody struct {
 // GetGcpSetupInfoResponseBody is the type of the "externalCredentials" service
 // "getGcpSetupInfo" endpoint HTTP response body.
 type GetGcpSetupInfoResponseBody struct {
-	// Gram's own service account. Grant it roles/iam.serviceAccountTokenCreator on
-	// the service account you want Gram to impersonate. Empty when the running
-	// environment cannot report one (local development backed by a user login
-	// rather than a service-account key).
+	// Speakeasy's own service account. Grant it
+	// roles/iam.serviceAccountTokenCreator on the service account you want
+	// Speakeasy to impersonate. Empty when the running environment cannot report
+	// one (local development backed by a user login rather than a service-account
+	// key).
 	ServiceAccountEmail *string `form:"service_account_email,omitempty" json:"service_account_email,omitempty" xml:"service_account_email,omitempty"`
-	// The IAM role to grant Gram's service account on the target service account.
+	// The IAM role to grant Speakeasy's service account on the target service
+	// account.
 	RequiredRole *string `form:"required_role,omitempty" json:"required_role,omitempty" xml:"required_role,omitempty"`
 }
 

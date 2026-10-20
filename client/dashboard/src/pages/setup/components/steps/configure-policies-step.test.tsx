@@ -44,10 +44,6 @@ vi.mock("@gram/client/react-query/riskCategories.js", () => ({
   useRiskCategories: () => ({ data: undefined }),
 }));
 
-vi.mock("@gram/client/react-query/riskPoliciesStatus.js", () => ({
-  invalidateAllRiskPoliciesStatus: vi.fn(),
-}));
-
 vi.mock("@gram/client/react-query/riskCreatePolicy.js", () => ({
   useRiskCreatePolicyMutation: () => ({
     isPending: false,

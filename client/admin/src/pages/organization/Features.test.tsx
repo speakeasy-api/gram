@@ -32,10 +32,8 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 
 const ORG = anOrganization();
 const FEATURES: ProductFeatures = {
-  automaticRoleDistribution: false,
   aiPlatformPushIntegrationsEnabled: false,
   authzChallengeLoggingEnabled: true,
-  consentToolFilteringEnabled: false,
   customModelKeysEnabled: true,
   customerManagedEncryptionKeysEnabled: false,
   deviceAgent: false,
@@ -43,12 +41,14 @@ const FEATURES: ProductFeatures = {
   hooksFailOpenEnabled: false,
   logsEnabled: true,
   networkIngressEnabled: false,
+  organizationGatewayDisabled: false,
   platformMcpEnabled: true,
   remoteSessionAutoRefreshEnabled: false,
   remoteSessionAutoRefreshEnforcedEnabled: false,
   scimEnabled: false,
   sessionCaptureEnabled: false,
   sessionPortabilityEnabled: false,
+  signalsIntelligenceEnabled: false,
   skillCaptureMetadataOnly: false,
   skillsEnabled: true,
   ssoEnabled: true,
@@ -56,10 +56,8 @@ const FEATURES: ProductFeatures = {
 };
 
 const FEATURES_RESPONSE = {
-  automatic_role_distribution: false,
   ai_platform_push_integrations_enabled: false,
   authz_challenge_logging_enabled: true,
-  consent_tool_filtering_enabled: false,
   custom_model_keys_enabled: true,
   customer_managed_encryption_keys_enabled: false,
   device_agent: false,
@@ -67,12 +65,14 @@ const FEATURES_RESPONSE = {
   hooks_fail_open_enabled: false,
   logs_enabled: true,
   network_ingress_enabled: false,
+  organization_gateway_disabled: false,
   platform_mcp_enabled: true,
   remote_session_auto_refresh_enabled: false,
   remote_session_auto_refresh_enforced_enabled: false,
   scim_enabled: false,
   session_capture_enabled: false,
   session_portability_enabled: false,
+  signals_intelligence_enabled: false,
   skill_capture_metadata_only: false,
   skills_enabled: true,
   sso_enabled: true,
@@ -80,11 +80,6 @@ const FEATURES_RESPONSE = {
 };
 
 const TOGGLE_FEATURES = [
-  {
-    featureName: "automatic-role-distribution",
-    enabledKey: "automaticRoleDistribution",
-    label: "Automatic role distribution",
-  },
   {
     featureName: "ai_platform_push_integrations",
     enabledKey: "aiPlatformPushIntegrationsEnabled",
@@ -125,6 +120,11 @@ const TOGGLE_FEATURES = [
     enabledKey: "sessionPortabilityEnabled",
     label: "Session Portability",
   },
+  {
+    featureName: "signals_intelligence",
+    enabledKey: "signalsIntelligenceEnabled",
+    label: "Signals Intelligence",
+  },
   { featureName: "sso", enabledKey: "ssoEnabled", label: "SSO" },
   { featureName: "scim", enabledKey: "scimEnabled", label: "SCIM" },
 ] as const satisfies readonly {
@@ -144,7 +144,7 @@ const OMITTED_FEATURES = {
   skills: "omitted",
   skill_capture_metadata_only: "omitted",
   remote_session_auto_refresh_enforced: "omitted",
-  consent_tool_filtering: "omitted",
+  organization_gateway_disabled: "omitted",
 } as const satisfies Record<Exclude<FeatureName, ToggleFeatureName>, "omitted">;
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -186,10 +186,7 @@ beforeEach(() => {
       enabled: boolean;
       feature_name: string;
     };
-    const responseKey =
-      body.feature_name === "automatic-role-distribution"
-        ? "automatic_role_distribution"
-        : `${body.feature_name}_enabled`;
+    const responseKey = `${body.feature_name}_enabled`;
     return jsonResponse({
       ...FEATURES_RESPONSE,
       [responseKey]: body.enabled,

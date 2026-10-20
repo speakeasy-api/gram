@@ -30,11 +30,11 @@ func (s *recordingAssertionSigner) SignClientAssertion(_ context.Context, reques
 func TestNewTokenEndpointRequest_BasicAuthEncodesCredentials(t *testing.T) {
 	t.Parallel()
 
-	req, err := newTokenEndpointRequest(
+	req, err := NewTokenEndpointRequest(
 		t.Context(),
 		"https://idp.example.com/token",
 		url.Values{},
-		tokenEndpointClientAuth{
+		TokenEndpointClientAuth{
 			Method:                TokenEndpointAuthMethodBasic,
 			RemoteSessionClientID: uuid.Nil,
 			OrganizationID:        "",
@@ -59,7 +59,7 @@ func TestNewTokenEndpointRequest_PrivateKeyJWT(t *testing.T) {
 	clientRowID := uuid.New()
 	keySetID := uuid.New()
 	signer := &recordingAssertionSigner{requests: nil}
-	auth := tokenEndpointClientAuth{
+	auth := TokenEndpointClientAuth{
 		Method:                TokenEndpointAuthMethodPrivateKeyJWT,
 		RemoteSessionClientID: clientRowID,
 		OrganizationID:        "org_123",
@@ -70,9 +70,9 @@ func TestNewTokenEndpointRequest_PrivateKeyJWT(t *testing.T) {
 		AssertionSigner:       signer,
 	}
 
-	first, err := newTokenEndpointRequest(t.Context(), "https://idp.example.com/token", url.Values{"client_secret": {"caller-seeded"}}, auth)
+	first, err := NewTokenEndpointRequest(t.Context(), "https://idp.example.com/token", url.Values{"client_secret": {"caller-seeded"}}, auth)
 	require.NoError(t, err)
-	second, err := newTokenEndpointRequest(t.Context(), "https://idp.example.com/token", url.Values{}, auth)
+	second, err := NewTokenEndpointRequest(t.Context(), "https://idp.example.com/token", url.Values{}, auth)
 	require.NoError(t, err)
 
 	require.Len(t, signer.requests, 2, "each HTTP attempt must mint its own assertion")
@@ -102,10 +102,10 @@ func TestNewTokenEndpointRequest_RejectsPlaintextRemoteEndpointBeforeSigning(t *
 	t.Parallel()
 
 	signer := &recordingAssertionSigner{requests: nil}
-	_, err := newTokenEndpointRequest(t.Context(), "http://idp.example.com/token", url.Values{
+	_, err := NewTokenEndpointRequest(t.Context(), "http://idp.example.com/token", url.Values{
 		"code":          {"authorization-code"},
 		"code_verifier": {"pkce-verifier"},
-	}, tokenEndpointClientAuth{
+	}, TokenEndpointClientAuth{
 		Method:                TokenEndpointAuthMethodPrivateKeyJWT,
 		RemoteSessionClientID: uuid.New(),
 		OrganizationID:        "org-test",

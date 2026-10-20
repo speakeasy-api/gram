@@ -8,7 +8,10 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -39,6 +43,16 @@ import (
 
 var (
 	infra *testenv.Environment
+)
+
+// The organization host configuration of the main test service: the server
+// URL, a separate dashboard URL, one extra platform host, and a legacy host.
+const testExtraPlatformHost = "ai.example.com"
+
+var (
+	testServerURL     = &url.URL{Scheme: "http", Host: "localhost:8080"}
+	testSiteURL       = &url.URL{Scheme: "http", Host: "localhost:3000"}
+	testLegacyHostURL = &url.URL{Scheme: "https", Host: "app.example.com"}
 )
 
 type noopCancelScheduler struct{}
@@ -105,8 +119,31 @@ type MockUserInfo struct {
 	Email          string
 	ExternalID     string // WorkOS external_id — simulates a backfilled user
 	OrganizationID string // WorkOS org ID returned by AuthenticateWithCode
-	Admin          bool
-	Organizations  []MockOrganizationEntry
+	// WorkOSSessionID, when set, is returned as the access token's sid claim.
+	WorkOSSessionID string
+	// AuthenticationMethod is returned as WorkOS's authentication_method.
+	AuthenticationMethod string
+	Admin                bool
+	Organizations        []MockOrganizationEntry
+	// IDPSessions, when set, backs the WorkOS session list and revoke
+	// endpoints.
+	IDPSessions *MockIDPSessions
+}
+
+// MockIDPSessions is a user's WorkOS sessions. The list endpoint pages two at
+// a time so callers must follow pagination.
+type MockIDPSessions struct {
+	mu      sync.Mutex
+	Listed  []string
+	revoked []string
+	// ListFails makes the list endpoint answer 503.
+	ListFails bool
+}
+
+func (m *MockIDPSessions) Revoked() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.revoked...)
 }
 
 type MockOrganizationEntry struct {
@@ -146,6 +183,13 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 				"external_id":         userInfo.ExternalID,
 			},
 		}
+		if userInfo.WorkOSSessionID != "" {
+			claims, _ := json.Marshal(map[string]string{"sid": userInfo.WorkOSSessionID})
+			resp["access_token"] = "e30." + base64.RawURLEncoding.EncodeToString(claims) + ".sig"
+		}
+		if userInfo.AuthenticationMethod != "" {
+			resp["authentication_method"] = userInfo.AuthenticationMethod
+		}
 		if request.Code == "impersonation_code" {
 			resp["authentication_method"] = "Impersonation"
 			resp["impersonator"] = map[string]string{
@@ -154,6 +198,53 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 			}
 		}
 		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	mux.HandleFunc("GET /user_management/users/{id}/sessions", func(w http.ResponseWriter, r *http.Request) {
+		const pageSize = 2
+		var listed []string
+		if userInfo.IDPSessions != nil && r.PathValue("id") == userInfo.UserID {
+			userInfo.IDPSessions.mu.Lock()
+			fails := userInfo.IDPSessions.ListFails
+			listed = append(listed, userInfo.IDPSessions.Listed...)
+			userInfo.IDPSessions.mu.Unlock()
+			if fails {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+		}
+		start := 0
+		if after := r.URL.Query().Get("after"); after != "" {
+			start = slices.Index(listed, after) + 1
+		}
+		end := min(start+pageSize, len(listed))
+		data := make([]map[string]string, 0, pageSize)
+		for _, id := range listed[start:end] {
+			data = append(data, map[string]string{"object": "session", "id": id, "user_id": userInfo.UserID})
+		}
+		next := ""
+		if end < len(listed) {
+			next = listed[end-1]
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data, "list_metadata": map[string]string{"before": "", "after": next}})
+	})
+
+	mux.HandleFunc("POST /user_management/sessions/revoke", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			SessionID string `json:"session_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if userInfo.IDPSessions != nil {
+			userInfo.IDPSessions.mu.Lock()
+			userInfo.IDPSessions.revoked = append(userInfo.IDPSessions.revoked, request.SessionID)
+			userInfo.IDPSessions.mu.Unlock()
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{}"))
 	})
 
 	return httptest.NewServer(mux)
@@ -165,7 +256,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	return newTestAuthServiceWithWorkOSClient(t, userInfo, nil)
 }
 
-func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, workosClient identity.WorkOSClient) (context.Context, *testInstance) {
+func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, workosClient identity.WorkOSClient, configure ...func(*auth.AuthConfigurations)) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := authztest.WithAdminGrants(t.Context())
@@ -203,11 +294,21 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 		GramServerURL:     "http://localhost:8080",
 		SignInRedirectURL: "http://localhost:3000/dashboard",
 		Environment:       "test",
+		OrgHosts: orghost.New(orghost.Config{
+			ServerURL:                  testServerURL,
+			SiteURL:                    testSiteURL,
+			PlatformHosts:              map[string]string{testExtraPlatformHost: "https://" + testExtraPlatformHost},
+			LegacyDefaultHost:          testLegacyHostURL,
+			NewOrganizationDefaultHost: nil,
+		}),
 	}
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	trialNotifier := &fakeTrialNotifier{}
+	for _, apply := range configure {
+		apply(&authConfigs)
+	}
 	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nil, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
@@ -216,13 +317,13 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 	return ctx, result
 }
 
-func newTestAuthServiceForOrganizationProvisioning(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
+func newTestAuthServiceForOrganizationProvisioning(t *testing.T, userInfo *MockUserInfo, configure ...func(*auth.AuthConfigurations)) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx, result := newTestAuthServiceWithWorkOSClient(t, userInfo, &mockWorkOSFetcher{
 		members: map[string][]workos.Member{},
 		orgs:    map[string]*workos.Organization{},
-	})
+	}, configure...)
 	require.NoError(t, result.createTestUser(ctx, userInfo))
 	require.NoError(t, userRepo.New(result.conn).OverwriteUserWorkosID(ctx, userRepo.OverwriteUserWorkosIDParams{
 		ID:       userInfo.UserID,

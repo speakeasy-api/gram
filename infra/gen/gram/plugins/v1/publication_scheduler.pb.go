@@ -68,11 +68,10 @@ var File_gram_plugins_v1_publication_scheduler_proto protoreflect.FileDescriptor
 
 const file_gram_plugins_v1_publication_scheduler_proto_rawDesc = "" +
 	"\n" +
-	"+gram/plugins/v1/publication_scheduler.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"[\n" +
-	"\x14PublicationScheduler:C\x92\xb5\x18?\x12\x04\b\x80\xf5$\"\x02\b<2\t\n" +
+	"+gram/plugins/v1/publication_scheduler.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"W\n" +
+	"\x14PublicationScheduler:?\x92\xb5\x18;\x12\x04\b\x80\xf5$\"\x02\b<2\t\n" +
 	"\x02\b\n" +
-	"\x12\x03\b\xd8\x04J\x02\x10\n" +
-	"R$gram.plugins.v1.PublicationRequestedBCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\beditionsp\xe9\a"
+	"\x12\x03\b\xd8\x04R$gram.plugins.v1.PublicationRequestedBCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\beditionsp\xe9\a"
 
 var file_gram_plugins_v1_publication_scheduler_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_plugins_v1_publication_scheduler_proto_goTypes = []any{

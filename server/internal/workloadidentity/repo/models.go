@@ -10,18 +10,34 @@ import (
 )
 
 type WorkloadIssuer struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	ProjectID              uuid.NullUUID
-	Name                   string
-	Description            pgtype.Text
-	Tags                   []string
-	Issuer                 string
-	JwksUri                string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: opaque-confidential
+	Tags []string
+	// @access: restricted
+	Issuer string
+	// @access: restricted
+	JwksUri string
+	// @access: confidential
 	AllowWildcardAdmission bool
-	Metadata               []byte
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
+	// @access: confidential
+	KeySource pgtype.Text
+	// @access: opaque-restricted
+	Metadata []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

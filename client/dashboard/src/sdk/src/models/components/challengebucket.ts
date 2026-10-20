@@ -38,7 +38,7 @@ export const PrincipalType = {
  */
 export type PrincipalType = ClosedEnum<typeof PrincipalType>;
 
-export const Reason = {
+export const ChallengeBucketReason = {
   GrantMatched: "grant_matched",
   NoGrants: "no_grants",
   ScopeUnsatisfied: "scope_unsatisfied",
@@ -47,7 +47,7 @@ export const Reason = {
   RbacSkippedApikey: "rbac_skipped_apikey",
   DevOverride: "dev_override",
 } as const;
-export type Reason = ClosedEnum<typeof Reason>;
+export type ChallengeBucketReason = ClosedEnum<typeof ChallengeBucketReason>;
 
 /**
  * How the bucket was resolved.
@@ -115,7 +115,7 @@ export type ChallengeBucket = {
    * Project scope (empty for org-level checks).
    */
   projectId?: string | undefined;
-  reason: Reason;
+  reason: ChallengeBucketReason;
   /**
    * Role slug assigned (when resolution_type=role_assigned).
    */
@@ -169,9 +169,9 @@ export const PrincipalType$inboundSchema: z.ZodMiniEnum<typeof PrincipalType> =
   z.enum(PrincipalType);
 
 /** @internal */
-export const Reason$inboundSchema: z.ZodMiniEnum<typeof Reason> = z.enum(
-  Reason,
-);
+export const ChallengeBucketReason$inboundSchema: z.ZodMiniEnum<
+  typeof ChallengeBucketReason
+> = z.enum(ChallengeBucketReason);
 
 /** @internal */
 export const ResolutionType$inboundSchema: z.ZodMiniEnum<
@@ -204,7 +204,7 @@ export const ChallengeBucket$inboundSchema: z.ZodMiniType<
     principal_type: PrincipalType$inboundSchema,
     principal_urn: z.string(),
     project_id: z.optional(z.string()),
-    reason: Reason$inboundSchema,
+    reason: ChallengeBucketReason$inboundSchema,
     resolution_role_slug: z.optional(z.string()),
     resolution_type: z.optional(ResolutionType$inboundSchema),
     resolved_at: z.optional(

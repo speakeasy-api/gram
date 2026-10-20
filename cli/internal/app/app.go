@@ -3,8 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 
@@ -23,8 +26,8 @@ func newApp() *cli.App {
 	defaultProfilePath, _ := profile.DefaultProfilePath()
 
 	return &cli.App{
-		Name:    "gram",
-		Usage:   "A command line interface for the Gram platform. Get started at https://docs.getgram.ai/",
+		Name:    commandName,
+		Usage:   "A command line interface for the Speakeasy AI Control Plane. Get started at https://ai.speakeasy.com",
 		Version: fmt.Sprintf("%s (%s)", Version, shortSha),
 		Commands: []*cli.Command{
 			newAuthCommand(),
@@ -33,6 +36,7 @@ func newApp() *cli.App {
 			newStatusCommand(),
 			newWhoAmICommand(),
 			newStageCommand(),
+			newFunctionsCommand(),
 			newInstallCommand(),
 			newUpdateCommand(),
 			newRedeployCommand(),
@@ -46,7 +50,7 @@ func newApp() *cli.App {
 				Name:    "log-level",
 				Value:   "info",
 				Usage:   "Set the base log level",
-				EnvVars: []string{"GRAM_LOG_LEVEL"},
+				EnvVars: flags.EnvVars("LOG_LEVEL"),
 				Action: func(c *cli.Context, val string) error {
 					if _, ok := o11y.Levels[val]; !ok {
 						return fmt.Errorf("invalid log level: %s", val)
@@ -58,19 +62,37 @@ func newApp() *cli.App {
 				Name:    "log-pretty",
 				Value:   true,
 				Usage:   "Toggle pretty logging",
-				EnvVars: []string{"GRAM_LOG_PRETTY"},
+				EnvVars: flags.EnvVars("LOG_PRETTY"),
 			},
 			&cli.StringFlag{
 				Name:    "profile",
 				Usage:   "Profile name to use",
-				EnvVars: []string{"GRAM_PROFILE"},
+				EnvVars: flags.EnvVars("PROFILE"),
 			},
 			&cli.StringFlag{
 				Name:    "profile-path",
 				Usage:   fmt.Sprintf("Path to profile JSON file (default: %s)", defaultProfilePath),
-				EnvVars: []string{"GRAM_PROFILE_PATH"},
+				EnvVars: flags.EnvVars("PROFILE_PATH"),
 				Hidden:  true,
 			},
+			&cli.BoolFlag{
+				Name:   controlPlaneMarkerFlag,
+				Usage:  "Print a fixed marker that identifies this CLI and exit",
+				Hidden: true,
+			},
+		},
+		Action: func(c *cli.Context) error {
+			if c.Bool(controlPlaneMarkerFlag) {
+				_, err := fmt.Fprintln(c.App.Writer, controlPlaneMarker)
+				if err != nil {
+					return fmt.Errorf("write control plane marker: %w", err)
+				}
+				return nil
+			}
+			if c.Args().Present() {
+				return cli.ShowCommandHelp(c, c.Args().First())
+			}
+			return cli.ShowAppHelp(c)
 		},
 		Before: func(c *cli.Context) error {
 			logger := slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
@@ -110,7 +132,59 @@ func newApp() *cli.App {
 	}
 }
 
+const (
+	// commandName is the name the CLI is installed and documented under.
+	commandName = "speakeasy"
+
+	// legacyCommandName is the name the CLI shipped under before it became
+	// speakeasy. The gram Homebrew formulas still install the binary under
+	// this name so existing scripts keep working for one release cycle.
+	legacyCommandName = "gram"
+
+	// controlPlaneMarkerFlag is a hidden flag that prints controlPlaneMarker.
+	// Tools such as the Speakeasy Functions SDK run it to tell this CLI apart from
+	// the Speakeasy SDK generator CLI, which installs a binary with the same
+	// name and rejects the flag.
+	controlPlaneMarkerFlag = "control-plane-cli"
+
+	// controlPlaneMarker is the fixed output of --control-plane-cli. Callers
+	// match it exactly, so it must not change.
+	controlPlaneMarker = "speakeasy-ai-control-plane-cli"
+
+	// legacyCommandNotice is printed to stderr when the CLI runs as gram.
+	legacyCommandNotice = "Warning: the gram command is deprecated and will be removed in a future release. " +
+		"Install the speakeasy command with 'brew install speakeasy-api/tap/cli' or 'npm i -g @speakeasy-api/cli', " +
+		"then run 'speakeasy' instead of 'gram'."
+)
+
+// invokedAs returns the command name the CLI was run as, derived from argv[0]
+// without its directory or Windows .exe suffix.
+func invokedAs(arg0 string) string {
+	name := filepath.Base(strings.ReplaceAll(arg0, `\`, "/"))
+	return strings.TrimSuffix(strings.ToLower(name), ".exe")
+}
+
+// writeLegacyCommandNotice writes the deprecation notice to w when the CLI was
+// run as the legacy gram command.
+func writeLegacyCommandNotice(w io.Writer, arg0 string) {
+	if invokedAs(arg0) == legacyCommandName {
+		_, _ = fmt.Fprintln(w, legacyCommandNotice)
+	}
+}
+
 func Execute(ctx context.Context, osArgs []string) {
+	if len(osArgs) > 0 {
+		writeLegacyCommandNotice(os.Stderr, osArgs[0])
+	}
+	notice, err := flags.ApplyLegacyEnv(os.LookupEnv, os.Setenv)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if notice != "" {
+		_, _ = fmt.Fprintln(os.Stderr, notice)
+	}
+
 	if err := newApp().RunContext(ctx, osArgs); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

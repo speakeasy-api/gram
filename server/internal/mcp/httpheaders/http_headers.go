@@ -17,26 +17,40 @@ import (
 // case-insensitive, per RFC 9110 field-name rules.
 //
 // These headers are sent by every conforming client as protocol metadata,
-// as distinct from the user-supplied Mcp-* variable headers Gram's hosted
-// runtime accepts; callers deciding whether an Mcp-* header carries a
-// user value should treat a standard header as protocol machinery. The
-// hosted env-var parser currently reserves only the protocol-version
-// header out of this set — reserving Mcp-Method, Mcp-Name, and Mcp-Param-*
-// there is deferred until Gram's 2026-07-28 support can reject the
-// collision visibly rather than dropping a value silently.
+// as distinct from the user-supplied Mcp-* variable headers Speakeasy's hosted
+// runtime accepts. The hosted runtime never maps a standard header to a
+// tool variable, on any protocol revision, and configuration rejects
+// variable names that would need one ([IsReservedVariableHeaderName]).
 func IsStandardMCPRequestHeader(name string) bool {
-	if strings.EqualFold(name, mcpversions.HTTPHeader) {
+	if strings.EqualFold(name, mcpversions.HTTPHeader) || strings.EqualFold(name, MethodHeader) || strings.EqualFold(name, NameHeader) {
 		return true
 	}
 
-	switch lower := strings.ToLower(name); lower {
-	case "mcp-method", "mcp-name":
-		return true
-	default:
-		// The Mcp-Param-{Name} family requires a non-empty name; a bare
-		// "Mcp-Param-" is not a standard header.
-		return strings.HasPrefix(lower, "mcp-param-") && len(lower) > len("mcp-param-")
-	}
+	// The Mcp-Param-{Name} family requires a non-empty name; a bare
+	// "Mcp-Param-" is not a standard header.
+	return len(name) > len(ParamHeaderPrefix) && strings.EqualFold(name[:len(ParamHeaderPrefix)], ParamHeaderPrefix)
+}
+
+// VariableHeaderName returns the request header the hosted runtime reads a
+// configured tool variable name or header display name from: "MCP-" followed
+// by the name, with every underscore and space written as a dash (a variable
+// PARAM_REGION arrives as MCP-PARAM-REGION, a display name "Param Region" as
+// MCP-Param-Region).
+func VariableHeaderName(name string) string {
+	return "MCP-" + strings.NewReplacer("_", "-", " ", "-").Replace(name)
+}
+
+// IsReservedVariableHeaderName reports whether a configured tool variable
+// name or header display name would be supplied through a standard MCP
+// request header ([IsStandardMCPRequestHeader]), so it could never receive a
+// value: the hosted runtime never reads those headers as variables.
+//
+// Names derived from a slug (OpenAPI security and server URL variables,
+// external MCP header variables) are not checked: they collide only when
+// the slug itself is "param" or starts with "param-", and those variables
+// remain settable through the stored environment.
+func IsReservedVariableHeaderName(name string) bool {
+	return IsStandardMCPRequestHeader(VariableHeaderName(name))
 }
 
 // AuthorizationBearerToken returns the Bearer token from the request's
@@ -48,7 +62,7 @@ func IsStandardMCPRequestHeader(name string) bool {
 // from the result; forwarding a non-Bearer value would produce a malformed
 // "Bearer <other-scheme> ..." upstream.
 //
-// Do NOT loosen this for the Gram API key install-snippet case (raw key
+// Do NOT loosen this for the Speakeasy API key install-snippet case (raw key
 // with no Bearer prefix). The lenient path lives in
 // [AuthorizationOrChatSessionToken], which is the only helper used by the
 // identity-auth path. OAuth-forwarding callers must keep the strict
@@ -71,13 +85,13 @@ func AuthorizationBearerToken(r *http.Request) string {
 // that lacks the prefix is returned verbatim. The hosted MCP install page
 // (server/internal/mcpmetadata/hosted_page.html.tmpl) emits
 // "Authorization:${GRAM_KEY}" with no scheme, so users paste their raw
-// Gram API key directly. PR #2540 briefly required strict Bearer parsing
+// Speakeasy API key directly. PR #2540 briefly required strict Bearer parsing
 // here and broke every existing private MCP install — don't repeat that.
 // If you ever tighten this, update the install-page snippets to emit a
 // Bearer prefix in the same change.
 //
 // Leniency is safe in the identity-auth path because the returned token
-// is only used to look up a Gram API key / chat-session JWT in our own
+// is only used to look up a Speakeasy API key / chat-session JWT in our own
 // data store; a non-Bearer scheme like "Basic ..." just fails that
 // lookup. It is NOT safe for OAuth upstream-forwarding callers, which is
 // why [AuthorizationBearerToken] stays strict.

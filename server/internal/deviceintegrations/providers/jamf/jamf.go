@@ -1,5 +1,5 @@
 // Package jamf implements the Jamf Pro inventory-source provider: it pulls
-// the managed-device fleet from a Jamf Pro (Cloud) tenant so Gram can compute
+// the managed-device fleet from a Jamf Pro (Cloud) tenant so Speakeasy can compute
 // agent coverage.
 //
 // Partner-program notes (Jamf Technology Partner Checklist):

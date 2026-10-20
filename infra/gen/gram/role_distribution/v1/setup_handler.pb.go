@@ -21,7 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Delivery attempts and dead-letter forwarding are best effort, not a strict cap.
+// Failed deliveries retry with backoff until retention expires; there is no dead-letter topic.
 type RoleDistributionSetupHandler struct {
 	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -69,11 +69,10 @@ var File_gram_role_distribution_v1_setup_handler_proto protoreflect.FileDescript
 
 const file_gram_role_distribution_v1_setup_handler_proto_rawDesc = "" +
 	"\n" +
-	"-gram/role_distribution/v1/setup_handler.proto\x12\x19gram.role_distribution.v1\x1a\x1bgcp/pubsub/v1/options.proto\"y\n" +
-	"\x1cRoleDistributionSetupHandler:Y\x92\xb5\x18U\x12\x04\b\x80\xf5$\"\x02\b<2\t\n" +
+	"-gram/role_distribution/v1/setup_handler.proto\x12\x19gram.role_distribution.v1\x1a\x1bgcp/pubsub/v1/options.proto\"u\n" +
+	"\x1cRoleDistributionSetupHandler:U\x92\xb5\x18Q\x12\x04\b\x80\xf5$\"\x02\b<2\t\n" +
 	"\x02\b\n" +
-	"\x12\x03\b\xd8\x04J\x02\x10\n" +
-	"R:gram.role_distribution.v1.RoleDistributionSetupRequestedV1BVZTgithub.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1;roledistributionv1b\beditionsp\xe9\a"
+	"\x12\x03\b\xd8\x04R:gram.role_distribution.v1.RoleDistributionSetupRequestedV1BVZTgithub.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1;roledistributionv1b\beditionsp\xe9\a"
 
 var file_gram_role_distribution_v1_setup_handler_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_role_distribution_v1_setup_handler_proto_goTypes = []any{

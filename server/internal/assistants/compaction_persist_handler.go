@@ -34,7 +34,7 @@ func (s *Service) handleRecordCompactedGeneration(w http.ResponseWriter, r *http
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	authedCtx, claims, err := s.core.assistantTokens.Authorize(ctx, token)
+	authedCtx, claims, err := s.core.assistantTokens.AuthorizeRuntime(ctx, token)
 	if err != nil {
 		return fmt.Errorf("authorize assistant runtime token: %w", err)
 	}

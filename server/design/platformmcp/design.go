@@ -61,7 +61,7 @@ var OnboardingSetupHandoff = Type("PlatformMCPOnboardingSetupHandoff", func() {
 })
 
 var _ = Service("platformMcp", func() {
-	Description("Session-authenticated onboarding and lifecycle projection for the organization-level Gram Platform MCP.")
+	Description("Session-authenticated onboarding and lifecycle projection for the organization-level Speakeasy Platform MCP.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 	Error(string(oops.CodeUnavailable), func() {

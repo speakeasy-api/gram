@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n2gram/telemetry/v1/session_observed_ch_writer.proto\x12\x11gram.telemetry.v1\x1a\x1bgcp/pubsub/v1/options.proto\"]\n\x17SessionObservedCHWriter:B\x92\xb5\x18>\x12\x04\x08\x80\xf5$\x18\x01\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04J\x02\x10\nR!gram.telemetry.v1.SessionObservedBGZEgithub.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1;telemetryv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n2gram/telemetry/v1/session_observed_ch_writer.proto\x12\x11gram.telemetry.v1\x1a\x1bgcp/pubsub/v1/options.proto\"Y\n\x17SessionObservedCHWriter:>\x92\xb5\x18:\x12\x04\x08\x80\xf5$\x18\x01\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04R!gram.telemetry.v1.SessionObservedBGZEgithub.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1;telemetryv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZEgithub.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1;telemetryv1'
   _globals['_SESSIONOBSERVEDCHWRITER']._loaded_options = None
-  _globals['_SESSIONOBSERVEDCHWRITER']._serialized_options = b'\222\265\030>\022\004\010\200\365$\030\001\"\002\010<2\t\n\002\010\n\022\003\010\330\004J\002\020\nR!gram.telemetry.v1.SessionObserved'
+  _globals['_SESSIONOBSERVEDCHWRITER']._serialized_options = b'\222\265\030:\022\004\010\200\365$\030\001\"\002\010<2\t\n\002\010\n\022\003\010\330\004R!gram.telemetry.v1.SessionObserved'
   _globals['_SESSIONOBSERVEDCHWRITER']._serialized_start=102
-  _globals['_SESSIONOBSERVEDCHWRITER']._serialized_end=195
+  _globals['_SESSIONOBSERVEDCHWRITER']._serialized_end=191
 # @@protoc_insertion_point(module_scope)

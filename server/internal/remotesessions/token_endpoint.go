@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -31,7 +32,7 @@ type TokenEndpoint struct {
 	issuer   string
 	issuerID uuid.UUID
 	doer     httpDoer
-	auth     tokenEndpointClientAuth
+	auth     TokenEndpointClientAuth
 }
 
 // Issuer is the authorization server's issuer identifier.
@@ -43,6 +44,9 @@ func (e *TokenEndpoint) IssuerID() uuid.UUID { return e.issuerID }
 // ClientID is the client_id the authorization server knows the client by.
 func (e *TokenEndpoint) ClientID() string { return e.auth.ClientID }
 
+// AuthMethod is how the endpoint authenticates the client.
+func (e *TokenEndpoint) AuthMethod() TokenEndpointAuthMethod { return e.auth.Method }
+
 func (e *TokenEndpoint) String() string               { return "[token endpoint]" }
 func (e *TokenEndpoint) GoString() string             { return e.String() }
 func (e *TokenEndpoint) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
@@ -53,31 +57,32 @@ func (e *TokenEndpoint) LogValue() slog.Value         { return slog.StringValue(
 // failures and signing failures are *TokenEndpointError; it never retries.
 func (e *TokenEndpoint) Post(ctx context.Context, form url.Values) (TokenResponse, error) {
 	var none TokenResponse
-	req, err := newTokenEndpointRequest(ctx, e.endpoint, form, e.auth)
+	req, err := NewTokenEndpointRequest(ctx, e.endpoint, form, e.auth)
 	if err != nil {
 		if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
-			return none, &TokenEndpointError{StatusCode: 0, Code: "", Transport: false, Signing: true}
+			return none, &TokenEndpointError{StatusCode: 0, Code: "", Description: "", Transport: false, Signing: true}
 		}
 		return none, fmt.Errorf("build token request: %w", err)
 	}
+	req.Header.Set("User-Agent", constants.UserAgent)
 	resp, err := e.doer.Do(req)
 	if err != nil {
-		return none, &TokenEndpointError{StatusCode: 0, Code: "", Transport: true, Signing: false}
+		return none, &TokenEndpointError{StatusCode: 0, Code: "", Description: "", Transport: true, Signing: false}
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenEndpointResponseBytes+1))
 	if err != nil {
-		return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: "", Transport: true, Signing: false}
+		return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: "", Description: "", Transport: true, Signing: false}
 	}
 	if len(body) > maxTokenEndpointResponseBytes {
 		return none, fmt.Errorf("token response exceeds %d bytes", maxTokenEndpointResponseBytes)
 	}
 	if resp.StatusCode/100 != 2 {
-		code := ""
+		code, description := "", ""
 		if parsed, ok := oautherr.ParseTokenError(body); ok {
-			code = tokenEndpointErrorCode(parsed.Code)
+			code, description = tokenEndpointErrorCode(parsed.Code), providerErrorDescriptionField(body)
 		}
-		return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: code, Transport: false, Signing: false}
+		return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: code, Description: description, Transport: false, Signing: false}
 	}
 	tok, err := DecodeTokenResponse(body)
 	if err != nil {
@@ -85,7 +90,7 @@ func (e *TokenEndpoint) Post(ctx context.Context, form url.Values) (TokenRespons
 	}
 	if tok.AccessToken() == "" {
 		if parsed, ok := oautherr.ParseTokenError(body); ok {
-			return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: tokenEndpointErrorCode(parsed.Code), Transport: false, Signing: false}
+			return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: tokenEndpointErrorCode(parsed.Code), Description: providerErrorDescriptionField(body), Transport: false, Signing: false}
 		}
 		return none, errors.New("token response has no access_token")
 	}
@@ -104,40 +109,64 @@ func (m *ChallengeManager) LoadClientTokenEndpoint(ctx context.Context, clientID
 }
 
 func (m *ChallengeManager) clientTokenEndpoint(client repo.GetRemoteSessionClientWithIssuerByIDRow) (*TokenEndpoint, error) {
-	if !client.TokenEndpoint.Valid || client.TokenEndpoint.String == "" {
+	return m.BindTokenEndpoint(TokenEndpointRegistration{
+		ClientID:                        client.ClientID,
+		OrganizationID:                  client.ClientOrganizationID.String,
+		ExternalClientID:                client.ExternalClientID,
+		ClientSecretEncrypted:           client.ClientSecretEncrypted.String,
+		TokenEndpointAuthMethod:         client.TokenEndpointAuthMethod.String,
+		TokenEndpointAuthAudienceFormat: client.TokenEndpointAuthAudienceFormat.String,
+		JSONWebKeySetID:                 client.JsonWebKeySetID,
+		IssuerID:                        client.RemoteSessionIssuerID,
+		IssuerURL:                       client.IssuerUrl,
+		IssuerMetadata:                  client.IssuerMetadata,
+		TokenEndpoint:                   client.TokenEndpoint.String,
+		TunneledMcpServerID:             client.TunneledMcpServerID,
+	})
+}
+
+// BindTokenEndpoint binds a stored registration to its issuer's token endpoint.
+// A registration that cannot authenticate is ErrTokenEndpointConfiguration.
+func (m *ChallengeManager) BindTokenEndpoint(reg TokenEndpointRegistration) (*TokenEndpoint, error) {
+	if reg.TokenEndpoint == "" {
 		return nil, ErrTokenEndpointConfiguration
 	}
+
 	secret := ""
-	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
+	if reg.ClientSecretEncrypted != "" && reg.TokenEndpointAuthMethod != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		var err error
-		secret, err = m.enc.Decrypt(client.ClientSecretEncrypted.String)
+		secret, err = m.enc.Decrypt(reg.ClientSecretEncrypted)
 		if err != nil {
 			return nil, ErrTokenEndpointConfiguration
 		}
 	}
-	method, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, secret)
-	if err != nil || (method == TokenEndpointAuthMethodPrivateKeyJWT && !client.JsonWebKeySetID.Valid) {
+
+	method, err := ResolveTokenEndpointAuthMethod(reg.TokenEndpointAuthMethod, secret)
+	if err != nil || (method == TokenEndpointAuthMethodPrivateKeyJWT && !reg.JSONWebKeySetID.Valid) {
 		return nil, ErrTokenEndpointConfiguration
 	}
-	audience, err := ResolveTokenEndpointAuthAudience(client.TokenEndpointAuthAudienceFormat.String, clientAssertionIssuer(client.IssuerMetadata, client.IssuerUrl), client.TokenEndpoint.String)
+
+	audience, err := ResolveTokenEndpointAuthAudience(reg.TokenEndpointAuthAudienceFormat, clientAssertionIssuer(reg.IssuerMetadata, reg.IssuerURL), reg.TokenEndpoint)
 	if err != nil && method == TokenEndpointAuthMethodPrivateKeyJWT {
 		return nil, ErrTokenEndpointConfiguration
 	}
-	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, client.TunneledMcpServerID)
+
+	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, reg.TunneledMcpServerID)
 	if err != nil {
 		return nil, ErrTokenEndpointConfiguration
 	}
+
 	return &TokenEndpoint{
-		endpoint: client.TokenEndpoint.String,
-		issuer:   client.IssuerUrl,
-		issuerID: client.RemoteSessionIssuerID,
+		endpoint: reg.TokenEndpoint,
+		issuer:   reg.IssuerURL,
+		issuerID: reg.IssuerID,
 		doer:     doer,
-		auth: tokenEndpointClientAuth{
+		auth: TokenEndpointClientAuth{
 			Method:                method,
-			RemoteSessionClientID: client.ClientID,
-			OrganizationID:        client.ClientOrganizationID.String,
-			JSONWebKeySetID:       client.JsonWebKeySetID.UUID,
-			ClientID:              client.ExternalClientID,
+			RemoteSessionClientID: reg.ClientID,
+			OrganizationID:        reg.OrganizationID,
+			JSONWebKeySetID:       reg.JSONWebKeySetID.UUID,
+			ClientID:              reg.ExternalClientID,
 			ClientSecret:          secret,
 			AssertionAudience:     audience,
 			AssertionSigner:       m.assertions,

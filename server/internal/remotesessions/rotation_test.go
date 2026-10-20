@@ -280,7 +280,7 @@ func TestBuildAuthorizationUrl_RotatesExpiredSecretWithoutProbe(t *testing.T) {
 	require.Equal(t, "rotated-cid", loadClient(t, env).ClientID)
 }
 
-// An issuer that publishes no registration endpoint gives Gram nowhere to
+// An issuer that publishes no registration endpoint gives Speakeasy nowhere to
 // re-register: a rejected client under it goes to the authorize endpoint
 // unchanged, and the issuer is not contacted.
 func TestBuildAuthorizationUrl_NeverRotatesWithoutIssuerRegistrationEndpoint(t *testing.T) {

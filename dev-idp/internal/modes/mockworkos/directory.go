@@ -4,7 +4,7 @@ package mockworkos
 // GET /directory_users[/{id}]. Each org has one mock directory
 // ("directory_mock_<workos org id>", see handleWorkosListDirectories). The
 // first list call for an org seeds a fixed set of groups and users, including
-// the org's own dev-idp members, so Gram has directory data to map to roles.
+// the org's own dev-idp members, so Speakeasy has directory data to map to roles.
 
 import (
 	"context"
@@ -112,11 +112,6 @@ func (h *Handler) handleWorkosListDirectoryUsers(w http.ResponseWriter, r *http.
 	ctx := r.Context()
 	q := r.URL.Query()
 
-	orgID, err := h.directoryOrgID(ctx, firstQuery(q, "directory"))
-	if err != nil {
-		writeWorkosError(w, http.StatusBadRequest, "directory is required")
-		return
-	}
 	limit, after, err := parseDirectoryPageParams(q, workosDirectoryUserIDPrefix)
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, err.Error())
@@ -125,6 +120,32 @@ func (h *Handler) handleWorkosListDirectoryUsers(w http.ResponseWriter, r *http.
 	groupID, err := optionalPrefixedQueryID(q, "group", workosDirectoryGroupIDPrefix)
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// WorkOS takes either a directory or a group; a group names its
+	// directory's organization.
+	var orgID uuid.UUID
+	switch directoryID := firstQuery(q, "directory"); {
+	case directoryID != "":
+		orgID, err = h.directoryOrgID(ctx, directoryID)
+		if err != nil {
+			writeWorkosError(w, http.StatusBadRequest, "directory is required")
+			return
+		}
+	case groupID.Valid:
+		group, err := repo.New(h.db).GetDirectoryGroup(ctx, groupID.UUID)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			writeWorkosError(w, http.StatusNotFound, "directory group not found")
+			return
+		case err != nil:
+			h.logger.ErrorContext(ctx, "workos list directory users", slog.Any("error", err))
+			writeWorkosError(w, http.StatusInternalServerError, "failed to list directory users")
+			return
+		}
+		orgID = group.OrganizationID
+	default:
+		writeWorkosError(w, http.StatusBadRequest, "directory or group is required")
 		return
 	}
 	if err := h.ensureDirectoryFixtures(ctx, orgID); err != nil {
@@ -393,7 +414,7 @@ func parseDirectoryPageParams(q map[string][]string, prefix string) (limit int, 
 	return limit, after, nil
 }
 
-// orgWorkosID is the WorkOS-style ID Gram knows the org by.
+// orgWorkosID is the WorkOS-style ID Speakeasy knows the org by.
 func (h *Handler) orgWorkosID(ctx context.Context, orgID uuid.UUID) (string, error) {
 	org, err := repo.New(h.db).GetOrganization(ctx, orgID)
 	if err != nil {

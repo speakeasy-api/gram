@@ -66,6 +66,14 @@ func (r *NativeRegistryReader) ListServers(ctx context.Context, registry Registr
 					}
 				}
 			}
+			// Native staff-curated capability metadata controls listing eligibility.
+			// An explicit false overrides legacy discovery; absence keeps the fallback.
+			// Installation still validates OAuth readiness against the live server.
+			if catalog, ok := full.Meta["com.speakeasy.ai/catalog"].(map[string]any); ok {
+				if supportsDCR, ok := catalog["supportsDcr"].(bool); ok {
+					server.SupportsDcr = supportsDCR
+				}
+			}
 			server.Meta = full.Meta
 			result.Servers = append(result.Servers, server)
 		}

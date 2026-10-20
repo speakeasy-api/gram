@@ -4,11 +4,11 @@ cwd: ../..
 
 # Plugins — GitHub Publishing
 
-This doc covers how the publish flow works end-to-end: what Gram generates, how the GitHub repo is managed, and how the marketplace URL is constructed and served.
+This doc covers how the publish flow works end-to-end: what Speakeasy generates, how the GitHub repo is managed, and how the marketplace URL is constructed and served.
 
 ## Overview
 
-"Publishing" is the act of generating all plugin package files and pushing them to a GitHub repo that each AI platform's marketplace can index. The GitHub repo is fully managed by Gram — its contents are overwritten on every publish, so edits made on GitHub do not survive.
+"Publishing" is the act of generating all plugin package files and pushing them to a GitHub repo that each AI platform's marketplace can index. The GitHub repo is fully managed by Speakeasy — its contents are overwritten on every publish, so edits made on GitHub do not survive.
 
 ## Triggering a publish
 
@@ -42,7 +42,7 @@ Or with collaborators:
 
 4. **Push to GitHub.** The server calls `CreateRepo()` (no-op if repo exists) then `PushFiles()` with a single commit. The repo name is `<project-slug>-plugins` under the configured org.
 
-5. **Mint marketplace token.** On first publish, a 256-bit base64url token is generated and stored in `plugin_github_connections.marketplace_token`. This token becomes part of the marketplace proxy URL served by Gram:
+5. **Mint marketplace token.** On first publish, a 256-bit base64url token is generated and stored in `plugin_github_connections.marketplace_token`. This token becomes part of the marketplace proxy URL served by Speakeasy:
 
    ```
    https://app.getgram.ai/m/<token>/marketplace.json
@@ -68,7 +68,7 @@ Dev and test share one GitHub App and one org. This means plugin repos published
 
 The URL `https://app.getgram.ai/m/<token>/marketplace.json` is served by a dedicated marketplace proxy endpoint. The token resolves to a `plugin_github_connections` row, which identifies the project whose latest-published `marketplace.json` to serve.
 
-Gram does **not** proxy raw GitHub traffic — it serves the cached published content (or generates it on demand from DB state). The marketplace URL token is opaque: no org or project identity is embedded.
+Speakeasy does **not** proxy raw GitHub traffic — it serves the cached published content (or generates it on demand from DB state). The marketplace URL token is opaque: no org or project identity is embedded.
 
 ## Re-publishing
 
@@ -110,7 +110,7 @@ If `configured` is false, the Publish button should be hidden (the server isn't 
 
 ## Observability plugin
 
-Every publish includes one observability plugin per supported platform, forwarding hook events to Gram. Those with a marketplace are automatically added at the top so they appear first.
+Every publish includes one observability plugin per supported platform, forwarding hook events to Speakeasy. Those with a marketplace are automatically added at the top so they appear first.
 
 | Platform | Slug                                |
 | -------- | ----------------------------------- |

@@ -4,19 +4,27 @@ on:
     - cron: "30 1 * * *"
   workflow_dispatch: {}
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
 jobs:
   stale:
+    name: stale
     runs-on: ubuntu-latest
     permissions:
-      actions: write
+      actions: write # actions/stale deletes its own state cache between runs
       contents: write # needed for delete-branch option
-      issues: write
-      pull-requests: write
+      issues: write # labels and closes stale issues
+      pull-requests: write # comments on, labels and closes stale pull requests
     steps:
       - uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11.0.0
         with:
           stale-pr-message: "This pull request is stale because it has been open 30 days with no activity. Remove stale label or comment or this will be closed in 5 days."
           delete-branch: true
-          exempt-draft-pr: true
+          exempt-draft-pr: false
+          operations-per-run: 300
           days-before-stale: 30
           days-before-close: 5

@@ -43,7 +43,7 @@ func checkCustomDomainRouting(ctx context.Context, resolver dns.Resolver, domain
 	if domainErr != nil {
 		if cnameMatched {
 			// The routing shape is proven by the CNAME; an address resolution
-			// hiccup here is transient or on Gram's side of the delegation.
+			// hiccup here is transient or on Speakeasy's side of the delegation.
 			return "", nil
 		}
 		var dnsErr *net.DNSError
@@ -57,7 +57,7 @@ func checkCustomDomainRouting(ctx context.Context, resolver dns.Resolver, domain
 	for _, addr := range domainAddrs {
 		addr = addr.Unmap()
 		if !addr.Is4() {
-			// An AAAA record diverts IPv6-preferring clients somewhere Gram
+			// An AAAA record diverts IPv6-preferring clients somewhere Speakeasy
 			// cannot serve, even when every A record is correct.
 			return customdomains.HealthIssueDNSTargetMismatch, nil
 		}
@@ -89,7 +89,7 @@ func checkCustomDomainRouting(ctx context.Context, resolver dns.Resolver, domain
 		allowed[addr.Unmap()] = struct{}{}
 	}
 
-	// Every published A record must point at Gram: a partially wrong RRset
+	// Every published A record must point at Speakeasy: a partially wrong RRset
 	// sends a share of traffic elsewhere and must not read as healthy.
 	for _, addr := range domainV4 {
 		if _, ok := allowed[addr]; !ok {

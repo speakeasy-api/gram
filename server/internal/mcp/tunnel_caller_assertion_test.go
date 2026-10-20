@@ -196,7 +196,7 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 	state.AuthorizerImpersonated = new(false)
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
 	seedMetaMemberConnectGrant(t, ctx, ti.conn, sessionIssuer.OrganizationID.String, serverID)
-	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "x/mcp")
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
 	require.NoError(t, err)
 	gateway := &fakeTunnelGateway{t: t, agentSessionID: "test-agent", backendSessionID: "test-backend-session", mu: sync.Mutex{}}
 	var accepted atomic.Int32
@@ -269,7 +269,7 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 	list := serveConsentMCPRequest(t, ctx, ti, endpoint, stateID, csrf, attempt, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`, headers)
 	require.Contains(t, list.Body.String(), "tools")
 	require.EqualValues(t, 2, accepted.Load())
-	req := httptest.NewRequest(http.MethodPost, "/x/mcp/"+slug+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"forbidden"}}`)).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"forbidden"}}`)).WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Gram-Consent-State", stateID)
 	req.Header.Set("Gram-Consent-Csrf", csrf)
@@ -390,7 +390,7 @@ func TestCallerProfileLookupFailureIsOperational(t *testing.T) {
 	t.Parallel()
 	issuer, _ := callerIssuerForTest(t)
 	reader := sdkmetric.NewManualReader()
-	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer)
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer, "")
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	shared := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
@@ -418,6 +418,7 @@ func TestCallerProfileLookupFailureIsOperational(t *testing.T) {
 	}
 	require.Len(t, points, 1)
 	require.Equal(t, int64(1), points[attribute.NewSet(
+		attr.McpRejectionReason(mcpmetrics.RequestRejectionReasonAuthentication),
 		attr.OAuthFailureReason("caller_profile_unavailable"),
 		attr.McpURL("/mcp/"+slug),
 		attr.McpSurface(string(mcpmetrics.SurfaceMeta)),

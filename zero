@@ -134,6 +134,12 @@ fi
 
 echo -e "\n⏳ Installing tools"
 mise install
+# mise.toml installs the SDK generator as speakeasy-sdks, but mise only renames
+# on install: an install made before the rename still serves the old speakeasy
+# name and shadows the AI Control Plane CLI. Reinstall it once in that case.
+if mise which speakeasy >/dev/null 2>&1; then
+    mise install --force "github:speakeasy-api/speakeasy"
+fi
 
 echo -e "\n⏳ Installing dependencies"
 mise run install
@@ -147,6 +153,7 @@ interactive_only mise run zero:melange
 interactive_only mise run zero:fly
 mise run zero:encryption
 mise run zero:tunnel-identity
+interactive_only mise run zero:tailscale
 mise run zero:tls
 # Env only here: the image build needs Docker, which infra:start confirms.
 mise run zero:assistants --skip-image
@@ -188,10 +195,14 @@ mise clickhouse:migrate
 
 echo -e "\n✅ All set up!"
 
-# Use local:start if it's defined, otherwise fall back to the default start task.
+# Use local:start if configured. Otherwise, paused stacks need wake, not start.
+# When called by wake, use start directly: wake already holds the startup lock.
 start_task="start"
 if mise tasks info local:start &>/dev/null; then
     start_task="local:start"
+elif [ -z "${GRAM_STACK_LOCK_OWNER:-}" ] &&
+    [ -f "$(git rev-parse --absolute-git-dir)/gram-stack-paused" ]; then
+    start_task="wake"
 fi
 
 started=false

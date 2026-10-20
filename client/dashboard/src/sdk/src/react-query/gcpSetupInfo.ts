@@ -59,7 +59,7 @@ export type GcpSetupInfoQueryError =
  * getGcpSetupInfo externalCredentials
  *
  * @remarks
- * Report what the customer must grant in their own GCP project before Gram can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
+ * Report what the customer must grant in their own GCP project before Speakeasy can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
  */
 export function useGcpSetupInfo(
   request?: GetGcpSetupInfoRequest | undefined,
@@ -82,7 +82,7 @@ export function useGcpSetupInfo(
  * getGcpSetupInfo externalCredentials
  *
  * @remarks
- * Report what the customer must grant in their own GCP project before Gram can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
+ * Report what the customer must grant in their own GCP project before Speakeasy can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
  */
 export function useGcpSetupInfoSuspense(
   request?: GetGcpSetupInfoRequest | undefined,

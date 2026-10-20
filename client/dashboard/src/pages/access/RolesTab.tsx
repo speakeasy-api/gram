@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
@@ -245,6 +246,7 @@ export function RolesTab(): JSX.Element {
     onSuccess: async () => {
       await Promise.all([
         invalidateAllRoles(queryClient),
+        invalidateAllResourceAudience(queryClient),
         invalidateAllMembers(queryClient),
       ]);
     },

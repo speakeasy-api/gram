@@ -52,7 +52,7 @@ func RemoteSessionRefreshWorkflow(ctx workflow.Context) error {
 		StartToCloseTimeout: remoteSessionRefreshActivityTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			// A timeout or worker crash can occur after the provider consumed a
-			// rotating refresh token but before Gram persisted it. A later
+			// rotating refresh token but before Speakeasy persisted it. A later
 			// keepalive attempt is the safe retry boundary.
 			MaximumAttempts: 1,
 		},

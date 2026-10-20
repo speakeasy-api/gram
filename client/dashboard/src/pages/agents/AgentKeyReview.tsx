@@ -139,7 +139,7 @@ export function AgentKeyReview({
                 ) : (
                   <Text small muted>
                     {server.kind === "Unproxied"
-                      ? "This server does not use a Gram API key."
+                      ? "This server does not use a Speakeasy API key."
                       : "No access selected for this server."}
                   </Text>
                 )}

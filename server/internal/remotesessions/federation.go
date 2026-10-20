@@ -65,9 +65,7 @@ func (p *FederatedProvider) CallbackBaseURL() pgtype.Text {
 	return p.client.CallbackBaseUrl
 }
 
-// ValidateResponseIssuer implements RFC 9207 before the code leaves Gram.
-// The response issuer is never used to select a provider. The shared callback
-// has no issuer-specific redirect URI fallback, so iss is always required.
+// ValidateResponseIssuer requires exactly this provider's issuer; it never selects a provider.
 func (p *FederatedProvider) ValidateResponseIssuer(issuer string) error {
 	if p == nil || issuer == "" || issuer != p.issuer.Issuer {
 		return ErrFederatedIdentity
@@ -75,9 +73,34 @@ func (p *FederatedProvider) ValidateResponseIssuer(issuer string) error {
 	return nil
 }
 
+// AdvertisesResponseIssuer reports RFC 9207 iss support from discovery or the operator-set issuer column.
+func (p *FederatedProvider) AdvertisesResponseIssuer() bool {
+	return p != nil && (p.metadata.AuthorizationResponseIssParameterSupported || (p.issuer.AuthorizationResponseIssParameterSupported.Valid && p.issuer.AuthorizationResponseIssParameterSupported.Bool))
+}
+
+// ValidateAuthorizationResponseIssuer requires exactly one matching iss, except an omitted one from a provider that does not advertise it; the per-client redirect binds the issuer (RFC 9207 2.4).
+func (p *FederatedProvider) ValidateAuthorizationResponseIssuer(query url.Values) error {
+	if p == nil {
+		return ErrFederatedIdentity
+	}
+	issuers, present := query["iss"]
+	if !present && !p.AdvertisesResponseIssuer() {
+		return nil
+	}
+	if len(issuers) != 1 {
+		return ErrFederatedIdentity
+	}
+	return p.ValidateResponseIssuer(issuers[0])
+}
+
 // LoadFederatedProvider resolves only a trusted organization-owned registration
 // against the endpoint's organization. The IDs must come from the live USI.
 func (m *ChallengeManager) LoadFederatedProvider(ctx context.Context, organizationID string, issuerID, clientID uuid.UUID) (*FederatedProvider, error) {
+	return m.LoadFederatedLoginProvider(ctx, organizationID, issuerID, clientID, nil)
+}
+
+// LoadFederatedLoginProvider runs checkCallbackBase on the client's recorded callback base before discovery.
+func (m *ChallengeManager) LoadFederatedLoginProvider(ctx context.Context, organizationID string, issuerID, clientID uuid.UUID, checkCallbackBase func(pgtype.Text) error) (*FederatedProvider, error) {
 	if organizationID == "" || issuerID == uuid.Nil || clientID == uuid.Nil {
 		return nil, ErrFederatedConfiguration
 	}
@@ -89,6 +112,11 @@ func (m *ChallengeManager) LoadFederatedProvider(ctx context.Context, organizati
 			return nil, ErrFederatedConfiguration
 		}
 		return nil, fmt.Errorf("read federated registration: %w", err)
+	}
+	if checkCallbackBase != nil {
+		if err := checkCallbackBase(row.RemoteSessionClient.CallbackBaseUrl); err != nil {
+			return nil, err
+		}
 	}
 	issuerURL, err := url.Parse(row.RemoteSessionIssuer.Issuer)
 	if err != nil || !validIssuerDiscoveryURL(issuerURL) || issuerURL.RawQuery != "" || issuerURL.Fragment != "" {
@@ -161,7 +189,7 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	if method == TokenEndpointAuthMethodPrivateKeyJWT && !client.JsonWebKeySetID.Valid {
 		return nil, ErrFederatedConfiguration
 	}
-	if len(doc.TokenEndpointAuthMethodsSupported) > 0 && !slices.Contains(doc.TokenEndpointAuthMethodsSupported, string(method)) {
+	if !slices.Contains(advertisedTokenEndpointAuthMethods(doc.TokenEndpointAuthMethodsSupported), string(method)) {
 		return nil, ErrFederatedConfiguration
 	}
 	if client.ClientSecretExpiresAt.Valid && !client.ClientSecretExpiresAt.Time.After(time.Now()) {
@@ -189,23 +217,9 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	return &FederatedProvider{organizationID: organizationID, client: client, issuer: issuer, metadata: doc, fingerprint: hex.EncodeToString(digest[:]), signingKeyRevision: ""}, nil
 }
 
-// RequireLoginRedirect reports whether the provider can serve federated login.
-// A shared callback needs response issuer identification before code exchange
-// (RFC 9700 section 4.4.2); a state-selected provider alone is insufficient.
-// Token exchange and refresh never receive a redirect, so only login requires it.
-func (p *FederatedProvider) RequireLoginRedirect() error {
-	if p == nil || !p.metadata.AuthorizationResponseIssParameterSupported {
-		return ErrFederatedConfiguration
-	}
-	return nil
-}
-
 func (p *FederatedProvider) BuildAuthorizationURL(callbackURL, state, nonce, verifier string) (*url.URL, error) {
 	if p == nil || state == "" || nonce == "" || !validFederatedVerifier(verifier) {
 		return nil, ErrFederatedIdentity
-	}
-	if err := p.RequireLoginRedirect(); err != nil {
-		return nil, err
 	}
 	callback, err := url.Parse(callbackURL)
 	if err != nil || !validIssuerDiscoveryURL(callback) || callback.Fragment != "" {
@@ -505,26 +519,34 @@ func classifyFederatedExchangeError(err error) error {
 	return ErrFederatedIdentity
 }
 
-func (m *ChallengeManager) federatedTokenClient(p *FederatedProvider) (httpDoer, tokenEndpointClientAuth, error) {
+func (m *ChallengeManager) federatedTokenClient(p *FederatedProvider) (httpDoer, TokenEndpointClientAuth, error) {
 	secret := ""
 	if p.client.ClientSecretEncrypted.Valid && p.client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		var err error
 		secret, err = m.enc.Decrypt(p.client.ClientSecretEncrypted.String)
 		if err != nil {
-			return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
+			return nil, TokenEndpointClientAuth{}, ErrFederatedConfiguration
 		}
 	}
 	method, err := ResolveTokenEndpointAuthMethod(p.client.TokenEndpointAuthMethod.String, secret)
 	if err != nil || method == TokenEndpointAuthMethodNone {
-		return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
+		return nil, TokenEndpointClientAuth{}, ErrFederatedConfiguration
 	}
 	audience, err := ResolveTokenEndpointAuthAudience(p.client.TokenEndpointAuthAudienceFormat.String, p.issuer.Issuer, p.metadata.TokenEndpoint)
 	if err != nil {
-		return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
+		return nil, TokenEndpointClientAuth{}, ErrFederatedConfiguration
 	}
 	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, p.issuer.TunneledMcpServerID)
 	if err != nil {
-		return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
+		return nil, TokenEndpointClientAuth{}, ErrFederatedConfiguration
 	}
-	return doer, tokenEndpointClientAuth{Method: method, RemoteSessionClientID: p.client.ID, OrganizationID: p.organizationID, JSONWebKeySetID: p.client.JsonWebKeySetID.UUID, ClientID: p.client.ClientID, ClientSecret: secret, AssertionAudience: audience, AssertionSigner: m.assertions}, nil
+	return doer, TokenEndpointClientAuth{Method: method, RemoteSessionClientID: p.client.ID, OrganizationID: p.organizationID, JSONWebKeySetID: p.client.JsonWebKeySetID.UUID, ClientID: p.client.ClientID, ClientSecret: secret, AssertionAudience: audience, AssertionSigner: m.assertions}, nil
+}
+
+// RFC 8414 section 2: only an omitted token_endpoint_auth_methods_supported means client_secret_basic.
+func advertisedTokenEndpointAuthMethods(methods []string) []string {
+	if methods == nil {
+		return []string{string(TokenEndpointAuthMethodBasic)}
+	}
+	return methods
 }

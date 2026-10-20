@@ -11,7 +11,7 @@ import (
 )
 
 // FindRepoRoot locates the checkout for tests and local development helpers.
-// It walks up from the working directory to the Gram module root and uses
+// It walks up from the working directory to the Speakeasy module root and uses
 // filesystem state rather than compiler source paths so it works with -trimpath
 // and always selects the checkout the process is running in.
 func FindRepoRoot(ctx context.Context) (string, error) {
@@ -34,7 +34,7 @@ func FindRepoRoot(ctx context.Context) (string, error) {
 			return "", fmt.Errorf("read module in %s: %w", dir, err)
 		}
 		if filepath.Dir(dir) == dir {
-			return "", fmt.Errorf("find Gram repository root from %s: no matching go.mod", start)
+			return "", fmt.Errorf("find Speakeasy repository root from %s: no matching go.mod", start)
 		}
 	}
 }

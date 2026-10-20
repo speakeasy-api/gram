@@ -5,12 +5,16 @@ import {
   autoGrain,
   completeFilters,
   completeMeasures,
+  drawnChart,
   fieldsForOp,
   filterableFields,
   formatMeasureValue,
   hasChartShape,
   initialSpec,
+  isChartType,
   isRowsMode,
+  isStacked,
+  longestWindow,
   measureAlias,
   measureLabel,
   measureUnit,
@@ -37,6 +41,7 @@ const sessions: AnalyticsDataset = {
       role: "dimension",
       default: true,
       operators: ["equals", "in"],
+      aggregations: ["count_distinct"],
     },
     {
       name: "surface",
@@ -91,14 +96,23 @@ function spec(overrides: Partial<ExploreSpec> = {}): ExploreSpec {
 }
 
 describe("the describe-to-controls mapping", () => {
-  it("offers count plus every aggregation a measure field declares, in a fixed order", () => {
-    expect(opsForDataset(sessions)).toEqual(["count", "sum", "avg", "p95"]);
+  it("offers count plus every aggregation a field declares, in a fixed order", () => {
+    expect(opsForDataset(sessions)).toEqual([
+      "count",
+      "count_distinct",
+      "sum",
+      "avg",
+      "p95",
+    ]);
     expect(opsForDataset(usage)).toEqual(["count", "sum", "max"]);
     expect(opsForDataset(undefined)).toEqual(["count"]);
   });
 
   it("targets an aggregation at the fields that admit it", () => {
     expect(fieldsForOp(sessions, "count")).toEqual([]);
+    expect(fieldsForOp(sessions, "count_distinct").map((f) => f.name)).toEqual([
+      "user",
+    ]);
     expect(fieldsForOp(sessions, "p95").map((f) => f.name)).toEqual([
       "duration_seconds",
     ]);
@@ -123,7 +137,7 @@ describe("the describe-to-controls mapping", () => {
       measures: [{ op: "count", field: "" }],
       dimensions: ["user"],
       chartType: "line",
-      window: "24h",
+      window: "1d",
       limit: 0,
     });
     expect(specForDataset(usage)).toMatchObject({
@@ -159,6 +173,9 @@ describe("measure and filter drafts", () => {
       "p95_duration_seconds",
     );
     expect(measureLabel({ op: "count", field: "" })).toBe("COUNT");
+    expect(measureLabel({ op: "count_distinct", field: "user" })).toBe(
+      "COUNT_DISTINCT(user)",
+    );
     expect(measureLabel({ op: "avg", field: "turn_count" })).toBe(
       "AVG(turn_count)",
     );
@@ -199,13 +216,29 @@ describe("measure and filter drafts", () => {
     expect(parseLimit("2.5")).toBe(0);
     expect(parseLimit("50")).toBe(50);
     expect(parseLimit("5000")).toBe(1000);
+    expect(parseLimit("5000", true)).toBe(200);
   });
 });
 
 describe("the queries a spec describes", () => {
+  it("ends a window shorter than an hour on the next minute, not the next hour", () => {
+    const now = Date.UTC(2026, 8, 14, 10, 17, 30);
+    const { from, to } = windowRange("15m", now);
+    expect(to.toISOString()).toBe("2026-09-14T10:18:00.000Z");
+    expect(from.toISOString()).toBe("2026-09-14T10:03:00.000Z");
+  });
+
+  it("buckets every dashboard preset: hours up to three days, then days, then weeks", () => {
+    expect(autoGrain("15m")).toBe("hour");
+    expect(autoGrain("4h")).toBe("hour");
+    expect(autoGrain("3d")).toBe("hour");
+    expect(autoGrain("15d")).toBe("day");
+    expect(autoGrain("90d")).toBe("week");
+  });
+
   it("aligns the window to the hour so the key stays stable within it", () => {
     const now = Date.UTC(2026, 8, 14, 10, 17, 0);
-    const { from, to } = windowRange("24h", now);
+    const { from, to } = windowRange("1d", now);
     expect(to.toISOString()).toBe("2026-09-14T11:00:00.000Z");
     expect(from.toISOString()).toBe("2026-09-13T11:00:00.000Z");
   });
@@ -221,9 +254,27 @@ describe("the queries a spec describes", () => {
     );
   });
 
+  it("draws a stack as the plain chart it is when there is nothing to stack by", () => {
+    expect(isChartType("stacked_bar")).toBe(true);
+    expect(isChartType("stacked_area")).toBe(true);
+    expect(isStacked("stacked_area")).toBe(true);
+    expect(isStacked("area")).toBe(false);
+
+    const stacked = spec({ chartType: "stacked_bar", dimensions: ["user"] });
+    expect(drawnChart(stacked)).toBe("stacked_bar");
+    expect(drawnChart({ ...stacked, dimensions: [] })).toBe("bar");
+    expect(
+      drawnChart({ ...stacked, chartType: "stacked_area", dimensions: [] }),
+    ).toBe("area");
+    expect(drawnChart({ ...stacked, measures: [] })).toBe("table");
+    expect(drawnChart(spec({ chartType: "number" }))).toBe("number");
+  });
+
   it("draws a chart only for a timeseries over at least one measure", () => {
     expect(hasChartShape(spec({ chartType: "line" }))).toBe(true);
     expect(hasChartShape(spec({ chartType: "bar" }))).toBe(true);
+    expect(hasChartShape(spec({ chartType: "stacked_bar" }))).toBe(true);
+    expect(hasChartShape(spec({ chartType: "stacked_area" }))).toBe(true);
     expect(hasChartShape(spec({ chartType: "ranked" }))).toBe(false);
     expect(hasChartShape(spec({ chartType: "table" }))).toBe(false);
     expect(hasChartShape(spec({ chartType: "number" }))).toBe(false);
@@ -299,6 +350,10 @@ describe("the queries a spec describes", () => {
     expect(body.measures).toBeUndefined();
     expect(body.grain).toBe("none");
     expect(body.dimensions).toEqual(["user"]);
+    expect(
+      queryBodyFromSpec({ ...rows, limit: 500 }).limit,
+      "a limit carried over from a grouped query is clamped to what rows allow",
+    ).toBe(200);
   });
 });
 
@@ -329,5 +384,17 @@ describe("filterForField", () => {
   it("starts a filter on a field with its first operator and no values", () => {
     const next = filterForField(sessions, "user");
     expect(next).toEqual({ field: "user", operator: "equals", values: [] });
+  });
+});
+
+describe("longestWindow", () => {
+  it("picks the longest window, reading an older spelling as today's", () => {
+    expect(longestWindow(["7d", "90d", "1h"])).toBe("90d");
+    expect(longestWindow(["24h", "4h"])).toBe("1d");
+  });
+
+  it("is undefined when nothing is a window", () => {
+    expect(longestWindow([])).toBeUndefined();
+    expect(longestWindow([undefined, "2h"])).toBeUndefined();
   });
 });

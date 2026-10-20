@@ -14,13 +14,16 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
+	"google.golang.org/protobuf/proto"
 
+	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestStoreDeduplicatesGrowingTranscripts(t *testing.T) {
@@ -318,12 +321,52 @@ func TestStorePreservesNativePolicyScopesAndIncomingMessageCount(t *testing.T) {
 	count, err := queries.CountInferenceMessages(t.Context(), chatrepo.CountInferenceMessagesParams{ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}})
 	require.NoError(t, err)
 	require.EqualValues(t, 2, count)
+	// Every split row publishes its identity only; subscribers can resolve the
+	// stored row and attachments without transporting content in the event.
+	publications, err := testrepo.New(db).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	byID := make(map[string]*conversationv1.MessageEvent)
+	for _, row := range publications {
+		require.NotEqual(t, "gram.conversation.v1.Message", row.Topic)
+		if row.Topic != string(proto.MessageName(&conversationv1.MessageEvent{})) {
+			continue
+		}
+		event := &conversationv1.MessageEvent{}
+		require.NoError(t, proto.Unmarshal(row.Message, event))
+		require.NotContains(t, byID, event.GetMessageId())
+		byID[event.GetMessageId()] = event
+		require.Equal(t, conversationv1.MessageEvent_TYPE_CREATED, event.GetType())
+	}
+	require.Len(t, byID, 4)
+	for i, message := range messages {
+		require.Contains(t, byID, message.ID.String())
+		source := frame.Messages[0].Content
+		if i >= 2 {
+			source = frame.Messages[1].Content
+		}
+		require.JSONEq(t, string(source), string(message.ContentRaw))
+	}
 	frame.Messages = append(frame.Messages, Message{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"summary"}]`)})
 	saveFrame(t, store, config, frame, "")
 	messages, err = queries.ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, messages, 5)
 	require.Equal(t, "summary", messages[4].Content)
+	publications, err = testrepo.New(db).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	var unsplit *conversationv1.MessageEvent
+	for _, row := range publications {
+		if row.Topic != string(proto.MessageName(&conversationv1.MessageEvent{})) {
+			continue
+		}
+		event := &conversationv1.MessageEvent{}
+		require.NoError(t, proto.Unmarshal(row.Message, event))
+		if event.GetMessageId() == messages[4].ID.String() {
+			unsplit = event
+		}
+	}
+	require.NotNil(t, unsplit)
+	require.Equal(t, conversationv1.MessageEvent_TYPE_CREATED, unsplit.GetType())
 }
 
 func TestExternalContentPartsCommitWithParent(t *testing.T) {
@@ -373,7 +416,7 @@ func TestExternalContentPartsCommitWithParent(t *testing.T) {
 // saveFrame stores a frame and returns the index of its first new message.
 func saveFrame(t *testing.T, store *postgresStore, config Config, frame Frame, userID string) int {
 	t.Helper()
-	start, err := store.Save(t.Context(), config, frame, userID)
+	start, err := store.archive(t.Context(), config, frame, userID)
 	require.NoError(t, err)
 	return start
 }
@@ -466,7 +509,7 @@ func archiveFrame(t *testing.T, store *postgresStore, config Config, frame Frame
 	frame.conversation, frame.conversationOutcome = chatID, outcome
 	userID, err := store.ResolveActor(t.Context(), config, frame)
 	require.NoError(t, err)
-	start, err := store.Save(t.Context(), config, frame, userID)
+	start, err := store.archive(t.Context(), config, frame, userID)
 	require.NoError(t, err)
 	return chatID, outcome, start
 }
@@ -605,34 +648,6 @@ func TestStoreContinuesBySessionWhenPresent(t *testing.T) {
 	require.Equal(t, 1, start)
 }
 
-func TestStoreCheckpointFollowsAdoptedConversation(t *testing.T) {
-	t.Parallel()
-	store, _, config := newTestStore(t)
-	u1, a1, u2, a2, u3 := textMessage("user", "turn 1"), textMessage("assistant", "reply 1"), textMessage("user", "turn 2"), textMessage("assistant", "reply 2"), textMessage("user", "turn 3")
-	second := sessionlessFrame("request-2", u1, a1, u2)
-	archiveFrame(t, store, config, sessionlessFrame("request-1", u1))
-	chatID, outcome, _ := archiveFrame(t, store, config, second)
-	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
-	second.conversation, second.conversationOutcome = chatID, outcome
-	session, err := store.Begin(t.Context(), config, second, "")
-	require.NoError(t, err)
-	_, err = session.Load(t.Context())
-	require.NoError(t, err)
-	require.NoError(t, session.Accept(t.Context(), transcriptHashes(conversationMessages(second.Messages))))
-
-	third := sessionlessFrame("request-3", u1, a1, u2, a2, u3)
-	adopted, outcome, _ := archiveFrame(t, store, config, third)
-	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
-	require.Equal(t, chatID, adopted)
-	third.conversation, third.conversationOutcome = adopted, outcome
-	session, err = store.Begin(t.Context(), config, third, "")
-	require.NoError(t, err)
-	accepted, err := session.Load(t.Context())
-	require.NoError(t, err)
-	require.Len(t, accepted, 3)
-	require.Equal(t, 3, acceptedPrefix(accepted, transcriptHashes(conversationMessages(third.Messages))))
-}
-
 func TestStoreStartsNewChatForUnknownSessionID(t *testing.T) {
 	t.Parallel()
 	store, db, config := newTestStore(t)
@@ -686,4 +701,25 @@ func TestStoreStartsNewChatWhenSharedPrefixIsAmbiguous(t *testing.T) {
 	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
 	require.Equal(t, third, fourth)
 	require.Equal(t, 3, start)
+}
+
+func TestStoreRepeatedFrameBeyondAnchorLimit(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	frame.Messages = make([]Message, alignmentAnchors+1)
+	for i := range frame.Messages {
+		frame.Messages[i] = textMessage("user", "continue")
+	}
+	saveFrame(t, store, config, frame, "")
+	saveFrame(t, store, config, frame, "")
+	rows, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, rows, alignmentAnchors+1)
+	frame.Messages = append(frame.Messages, textMessage("user", "continue"))
+	saveFrame(t, store, config, frame, "")
+	saveFrame(t, store, config, frame, "")
+	rows, err = chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, rows, alignmentAnchors+1)
 }

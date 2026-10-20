@@ -15,7 +15,7 @@ type MCPSetupGuide struct {
 	Title string
 	// One-line summary of what the guide covers
 	Summary string
-	// How the server is meant to be added in Gram, when the guide states one
+	// How the server is meant to be added in Speakeasy, when the guide states one
 	// (e.g., 'catalog', 'custom-remote')
 	AddServerFlow *string
 	// Registry identifiers the guide is also published under
@@ -32,6 +32,6 @@ type MCPSetupGuide struct {
 	// Markdown instructions for the setup work that happens in the upstream
 	// provider
 	ExternalMarkdown string
-	// Markdown instructions for the setup work that happens in Gram
+	// Markdown instructions for the setup work that happens in Speakeasy
 	SpeakeasyMarkdown string
 }

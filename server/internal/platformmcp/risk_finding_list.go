@@ -85,6 +85,8 @@ type ListRiskFindingPageInput struct {
 	AssistantID  string `json:"assistant_id,omitempty"`
 	NonAssistant bool   `json:"non_assistant,omitempty"`
 	UniqueMatch  bool   `json:"unique_match,omitempty"`
+	ResultID     string `json:"result_id,omitempty"`
+	ExecutionID  string `json:"execution_id,omitempty"`
 	Cursor       string `json:"cursor,omitempty"`
 	Limit        int    `json:"limit,omitempty"`
 }
@@ -98,12 +100,12 @@ type RiskFinding struct {
 	ID                 string   `json:"id"`
 	PolicyID           string   `json:"policy_id"`
 	PolicyVersion      int64    `json:"policy_version"`
-	ExecutionID        string   `json:"execution_id,omitempty"`
+	ExecutionID        string   `json:"execution_id,omitempty" jsonschema:"the mediated MCP execution (tool call, resource read or prompt get) that raised this finding; pass it as the execution_id filter to list its non-dismissed findings"`
 	MCPServerID        string   `json:"mcp_server_id,omitempty"`
 	MetaMCPServerID    string   `json:"meta_mcp_server_id,omitempty"`
 	ToolsetID          string   `json:"toolset_id,omitempty"`
 	ToolName           string   `json:"tool_name,omitempty"`
-	Phase              string   `json:"phase,omitempty"`
+	Phase              string   `json:"phase,omitempty" jsonschema:"which phase of the mediated MCP execution was scanned: its request or its response"`
 	MediationSurface   string   `json:"mediation_surface,omitempty"`
 	MCPMethod          string   `json:"mcp_method,omitempty"`
 	PrincipalKind      string   `json:"principal_kind,omitempty"`
@@ -200,6 +202,8 @@ type riskFindingFilters struct {
 	AssistantID  string `json:"assistant_id"`
 	NonAssistant bool   `json:"non_assistant"`
 	UniqueMatch  bool   `json:"unique_match"`
+	ResultID     string `json:"result_id,omitempty"`
+	ExecutionID  string `json:"execution_id,omitempty"`
 }
 
 func (f riskFindingFilters) cursorKind() string {
@@ -337,13 +341,25 @@ func (s *RiskFindingListService) List(ctx context.Context, principal Principal, 
 		// parses would otherwise match nothing.
 		input.MCPServerID = mcpServerID.UUID.String()
 	}
+	resultID, err := parseOptionalRiskUUID(input.ResultID)
+	if err != nil {
+		return zero, err
+	}
+	if resultID.Valid {
+		input.ResultID = resultID.UUID.String()
+	}
+	executionID, ok := risk.ParseExecutionIDFilter(input.ExecutionID)
+	if !ok {
+		return zero, ErrRiskReadInvalid
+	}
+	input.ExecutionID = executionID
 	if input.Category != "" && !validRiskCategory(input.Category) {
 		return zero, ErrRiskReadInvalid
 	}
 	if len(input.RuleID) > 128 || len(input.UserID) > 256 || (assistantID.Valid && input.NonAssistant) {
 		return zero, ErrRiskReadInvalid
 	}
-	filters := riskFindingFilters{From: input.From, To: input.To, PolicyID: input.PolicyID, ChatID: input.ChatID, MCPServerID: input.MCPServerID, Category: input.Category, RuleID: input.RuleID, UserID: input.UserID, AssistantID: input.AssistantID, NonAssistant: input.NonAssistant, UniqueMatch: input.UniqueMatch}
+	filters := riskFindingFilters{From: input.From, To: input.To, PolicyID: input.PolicyID, ChatID: input.ChatID, MCPServerID: input.MCPServerID, Category: input.Category, RuleID: input.RuleID, UserID: input.UserID, AssistantID: input.AssistantID, NonAssistant: input.NonAssistant, UniqueMatch: input.UniqueMatch, ResultID: input.ResultID, ExecutionID: input.ExecutionID}
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -363,7 +379,7 @@ func (s *RiskFindingListService) List(ctx context.Context, principal Principal, 
 	if err != nil {
 		return zero, err
 	}
-	findings, err := s.listFindings(ctx, principal, project, policies, filters, policyID, from, to, cursor, limit)
+	findings, err := s.listFindings(ctx, principal, project, policies, filters, policyID, resultID, from, to, cursor, limit)
 	if err != nil {
 		return zero, err
 	}
@@ -385,7 +401,7 @@ func (s *RiskFindingListService) List(ctx context.Context, principal Principal, 
 	return output, nil
 }
 
-func (s *RiskFindingListService) listFindings(ctx context.Context, principal Principal, project ResolvedProject, policies map[string]riskrepo.ListRiskFindingPoliciesRow, filters riskFindingFilters, policyID uuid.NullUUID, from, to *time.Time, cursor *riskCursor, limit int) ([]RiskFinding, error) {
+func (s *RiskFindingListService) listFindings(ctx context.Context, principal Principal, project ResolvedProject, policies map[string]riskrepo.ListRiskFindingPoliciesRow, filters riskFindingFilters, policyID, resultID uuid.NullUUID, from, to *time.Time, cursor *riskCursor, limit int) ([]RiskFinding, error) {
 	policyIDs := pushdownPolicyIDs(policies, policyID)
 	if len(policyIDs) == 0 {
 		return []RiskFinding{}, nil
@@ -396,6 +412,8 @@ func (s *RiskFindingListService) listFindings(ctx context.Context, principal Pri
 		PolicyIDs:       policyIDs,
 		MCPServerID:     filters.MCPServerID,
 		ChatID:          filters.ChatID,
+		ResultID:        resultID,
+		ExecutionID:     filters.ExecutionID,
 		From:            from,
 		To:              to,
 		Category:        filters.Category,

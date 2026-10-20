@@ -25,7 +25,7 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 
-	// New boards show every card except the optional LiteLLM setup. A group
+	// New boards show every card except optional integration setup. A group
 	// precedes its cards.
 	keys := make([]string, 0, len(result.Tasks))
 	for _, task := range result.Tasks {
@@ -38,6 +38,7 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 		"anthropic-admin-controls", "configure-policies",
 	}, keys)
 	require.Nil(t, setupTask(result.Tasks, "litellm"))
+	require.Nil(t, setupTask(result.Tasks, "private-network"))
 	for _, task := range result.Tasks {
 		switch task.Key {
 		case "confirm-traffic":
@@ -67,7 +68,7 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 }
 
 // A platform admin asking for hidden tasks gets the whole catalog, with the
-// default-hidden LiteLLM task flagged so the board can mark it.
+// default-hidden integration tasks flagged so the board can mark them.
 func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T) {
 	t.Parallel()
 
@@ -81,11 +82,11 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	includeHidden := true
 	result, err := ti.service.ListSetupTasks(platformCtx, &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
 	require.NoError(t, err)
-	require.Len(t, result.Tasks, 14)
-	require.Equal(t, "configure-policies", result.Tasks[13].Key)
+	require.Len(t, result.Tasks, 15)
+	require.Equal(t, "configure-policies", result.Tasks[len(result.Tasks)-1].Key)
 	require.True(t, setupTask(result.Tasks, "litellm").Hidden)
 	for _, task := range result.Tasks {
-		if task.Key != "litellm" {
+		if task.Key != "litellm" && task.Key != "private-network" {
 			require.False(t, task.Hidden, task.Key)
 		}
 	}
@@ -97,9 +98,10 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	require.ElementsMatch(t, []string{
 		"identity-provider", "enable-logging",
 		"anthropic-observability", "agent-observability", "instrument-agents", "confirm-traffic", "litellm",
-		"additional-agent-config", "mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp",
+		"additional-agent-config", "mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp", "private-network",
 		"anthropic-admin-controls", "configure-policies",
 	}, keys)
+	require.True(t, setupTask(result.Tasks, "private-network").Hidden)
 	require.Equal(t, []string{"create-marketplace"}, setupTask(result.Tasks, "distribute-servers").BlockedBy)
 }
 
@@ -397,7 +399,7 @@ func TestService_UpdateSetupTaskCompletesMergedCatalog(t *testing.T) {
 		"create-marketplace", "enable-logging",
 		"identity-provider", "anthropic-observability", "anthropic-admin-controls",
 		"instrument-agents", "litellm", "additional-agent-config", "confirm-traffic",
-		"distribute-servers", "configure-policies", "platform-mcp",
+		"distribute-servers", "configure-policies", "platform-mcp", "private-network",
 	} {
 		task, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: key, Status: &done})
 		require.NoError(t, err, key)

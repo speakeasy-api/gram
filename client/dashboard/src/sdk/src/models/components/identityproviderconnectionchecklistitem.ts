@@ -35,6 +35,7 @@ export const IdentityProviderConnectionChecklistItemKey = {
   LinkAgentApp: "link_agent_app",
   ActivateAgentApp: "activate_agent_app",
   RecordAiAgent: "record_ai_agent",
+  AddAgentPublicKey: "add_agent_public_key",
   FirstResourceConnection: "first_resource_connection",
 } as const;
 /**

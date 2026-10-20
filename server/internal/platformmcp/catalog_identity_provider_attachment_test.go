@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,6 +35,141 @@ func TestDiscoverSupportedIssuerMetadataRejectsEmptyCandidates(t *testing.T) {
 	_, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{"", "  "})
 
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+}
+
+// Attachment accepts a provider the dashboard's automatic setup accepts: one
+// with dynamic registration, or one with only a Client ID Metadata Document.
+// A provider offering neither still needs manual setup.
+func TestDiscoverSupportedIssuerMetadataAcceptsAutomaticRegistrationPaths(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name      string
+		extra     map[string]any
+		supported bool
+	}{
+		{name: "dynamic registration", extra: map[string]any{"registration_endpoint": "https://issuer.example.com/register"}, supported: true},
+		{name: "client ID metadata document only", extra: map[string]any{"client_id_metadata_document_supported": true, "token_endpoint_auth_methods_supported": []string{"none"}, "code_challenge_methods_supported": []string{"S256"}}, supported: true},
+		{name: "client ID metadata document refusing public clients", extra: map[string]any{"client_id_metadata_document_supported": true, "token_endpoint_auth_methods_supported": []string{"client_secret_basic"}}, supported: false},
+		{name: "neither", extra: map[string]any{"token_endpoint_auth_methods_supported": []string{"none"}}, supported: false},
+		{name: "dynamic registration refusing client_secret_basic", extra: map[string]any{"registration_endpoint": "https://issuer.example.com/register", "token_endpoint_auth_methods_supported": []string{"none"}}, supported: false},
+		{name: "dynamic registration refusing client_secret_basic with CIMD", extra: map[string]any{"registration_endpoint": "https://issuer.example.com/register", "client_id_metadata_document_supported": true, "token_endpoint_auth_methods_supported": []string{"none"}}, supported: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var server *httptest.Server
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				document := map[string]any{
+					"issuer":                 server.URL,
+					"authorization_endpoint": server.URL + "/authorize",
+					"token_endpoint":         server.URL + "/token",
+				}
+				maps.Copy(document, test.extra)
+				w.Header().Set("Content-Type", "application/json")
+				assert.NoError(t, json.NewEncoder(w).Encode(document))
+			}))
+			defer server.Close()
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			require.NoError(t, err)
+			service := &CatalogIdentityProviderAttachmentService{policy: policy}
+
+			metadata, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{server.URL})
+			if !test.supported {
+				require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, server.URL, metadata.Issuer)
+		})
+	}
+}
+
+// An issuer whose dynamic registration cannot issue the client_secret_basic
+// client attachment requires is skipped, so a later CIMD issuer is chosen
+// instead of registering an upstream client attachment would then refuse.
+func TestDiscoverSupportedIssuerMetadataSkipsUnusableDynamicRegistration(t *testing.T) {
+	t.Parallel()
+
+	issuer := func(extra map[string]any) *httptest.Server {
+		var server *httptest.Server
+		server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			document := map[string]any{
+				"issuer":                 server.URL,
+				"authorization_endpoint": server.URL + "/authorize",
+				"token_endpoint":         server.URL + "/token",
+			}
+			maps.Copy(document, extra)
+			w.Header().Set("Content-Type", "application/json")
+			assert.NoError(t, json.NewEncoder(w).Encode(document))
+		}))
+		t.Cleanup(server.Close)
+		return server
+	}
+	unusable := issuer(map[string]any{"registration_endpoint": "https://issuer.example.com/register", "token_endpoint_auth_methods_supported": []string{"none"}})
+	cimd := issuer(map[string]any{"client_id_metadata_document_supported": true, "token_endpoint_auth_methods_supported": []string{"none"}})
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	service := &CatalogIdentityProviderAttachmentService{policy: policy}
+
+	metadata, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{unusable.URL, cimd.URL})
+	require.NoError(t, err)
+	require.Equal(t, cimd.URL, metadata.Issuer)
+}
+
+// A provider offering only public-client dynamic registration is reported as
+// automatic by the inspector, because the dashboard's automatic setup can
+// register a public client there, but attachment skips it: it requires a
+// client_secret_basic client and must not leave a refused client upstream.
+func TestPublicClientOnlyDynamicRegistrationInspectorVersusAttachment(t *testing.T) {
+	t.Parallel()
+
+	metadata := map[string]any{"registration_endpoint": "https://issuer.example.com/register", "token_endpoint_auth_methods_supported": []any{"none"}}
+	require.Equal(t, oauthDiscoveryAvailableDCR, directRemoteAutomaticRegistration(metadata))
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		document := map[string]any{
+			"issuer":                 server.URL,
+			"authorization_endpoint": server.URL + "/authorize",
+			"token_endpoint":         server.URL + "/token",
+		}
+		maps.Copy(document, metadata)
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode(document))
+	}))
+	defer server.Close()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	service := &CatalogIdentityProviderAttachmentService{policy: policy}
+
+	_, err = service.discoverSupportedIssuerMetadata(t.Context(), []string{server.URL})
+	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+}
+
+func TestSupportsAutomaticClientRegistration(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, supportsAutomaticClientRegistration("https://issuer.example.com/register", false, nil))
+	require.True(t, supportsAutomaticClientRegistration("", true, []string{"none"}))
+	require.True(t, supportsAutomaticClientRegistration("", true, nil))
+	require.False(t, supportsAutomaticClientRegistration("", true, []string{"client_secret_post"}))
+	require.False(t, supportsAutomaticClientRegistration("", false, []string{"none"}))
+	require.False(t, supportsAutomaticClientRegistration("http://issuer.example.com/register", false, nil))
+	require.False(t, supportsAutomaticClientRegistration("https://issuer.example.com/register", false, []string{"none"}))
+}
+
+// Dynamic registration is chosen over a Client ID Metadata Document only when
+// it can produce the client_secret_basic client attachment requires.
+func TestAttachmentCanUseDynamicRegistration(t *testing.T) {
+	t.Parallel()
+
+	const endpoint = "https://issuer.example.com/register"
+	require.True(t, attachmentCanUseDynamicRegistration(endpoint, nil))
+	require.True(t, attachmentCanUseDynamicRegistration(endpoint, []string{"none", "client_secret_basic"}))
+	require.False(t, attachmentCanUseDynamicRegistration(endpoint, []string{"none"}))
+	require.False(t, attachmentCanUseDynamicRegistration(endpoint, []string{"client_secret_post"}))
+	require.False(t, attachmentCanUseDynamicRegistration("", nil))
+	require.False(t, attachmentCanUseDynamicRegistration("http://issuer.example.com/register", nil))
 }
 
 func TestIdentityProviderRegistrationErrorTreatsTimeoutAndRateLimitAsRetryable(t *testing.T) {

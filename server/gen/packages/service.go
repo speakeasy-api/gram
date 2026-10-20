@@ -14,7 +14,7 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manages packages in Gram.
+// Manages packages in Speakeasy.
 type Service interface {
 	// Create a new package for a project.
 	CreatePackage(context.Context, *CreatePackagePayload) (res *CreatePackageResult, err error)

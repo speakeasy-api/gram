@@ -21,6 +21,8 @@ type RequireScopeProps = {
   all?: boolean;
   /** Optional resource ID to check scope against. */
   resourceId?: string;
+  /** Optional project the resource belongs to, for project-wide grants. */
+  projectId?: string;
   /**
    * Either a React node or a render function receiving `{ disabled }`.
    * Use the render function form when children contain portals (e.g. dropdowns,
@@ -53,13 +55,13 @@ type RequireScopeProps = {
 export function RequireScope(
   props: RequireScopeProps,
 ): React.JSX.Element | null {
-  const { scope, all = false, resourceId, children, level } = props;
+  const { scope, all = false, resourceId, projectId, children, level } = props;
   const { hasAllScopes, hasAnyScope, isLoading } = useRBAC();
 
   const scopes = Array.isArray(scope) ? scope : [scope];
   const allowed = all
-    ? hasAllScopes(scopes, resourceId)
-    : hasAnyScope(scopes, resourceId);
+    ? hasAllScopes(scopes, resourceId, projectId)
+    : hasAnyScope(scopes, resourceId, projectId);
 
   const resolveChildren = (disabled: boolean): React.ReactNode =>
     typeof children === "function" ? children({ disabled }) : children;

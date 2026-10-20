@@ -27,19 +27,35 @@ import { ModeSwitcher } from "./mode-switcher.tsx";
 const chromeTopOffset = (isImpersonating: boolean): string =>
   isImpersonating ? "2.25rem" : "0px";
 
+// Lifts signin_error out of the destination so the auth page shows it.
+function authPagePath(
+  page: string,
+  location: { pathname: string; search: string },
+): string {
+  const params = new URLSearchParams(location.search);
+  const signinError = params.get("signin_error");
+  params.delete("signin_error");
+  const rest = params.toString();
+  const redirectTo = encodeURIComponent(
+    location.pathname + (rest ? `?${rest}` : ""),
+  );
+  const error = signinError
+    ? `&signin_error=${encodeURIComponent(signinError)}`
+    : "";
+  return `${page}?redirect=${redirectTo}${error}`;
+}
+
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
 export const LoginCheck = (): JSX.Element => {
   const session = useSession();
   const location = useLocation();
 
   if (session.session === "") {
-    const redirectTo = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/login?redirect=${redirectTo}`} />;
+    return <Navigate to={authPagePath("/login", location)} />;
   }
 
   if (!session.activeOrganizationId) {
-    const redirectTo = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/sign-up?redirect=${redirectTo}`} />;
+    return <Navigate to={authPagePath("/sign-up", location)} />;
   }
 
   return <Outlet />;
@@ -126,6 +142,8 @@ export const ImpersonationBanner = (): JSX.Element => {
 
   return (
     <div
+      // The mode switch measures this to keep its cards out from under it.
+      data-chrome-banner=""
       className={cn(
         "sticky top-0 z-40 flex h-9 items-center justify-center gap-3 border-b px-4",
         toneClasses,

@@ -14,9 +14,9 @@ import (
 type IdentityKind string
 
 const (
-	// IdentityKindUser addresses a Gram user by users.id. Audit actors,
+	// IdentityKindUser addresses a Speakeasy user by users.id. Audit actors,
 	// chats, user sessions, org members and plugin assignments all carry
-	// this id, and it is the canonical kind whenever the subject has a Gram
+	// this id, and it is the canonical kind whenever the subject has a Speakeasy
 	// user row.
 	IdentityKindUser IdentityKind = "user"
 
@@ -49,11 +49,11 @@ var identityKinds = map[IdentityKind]struct{}{
 }
 
 // Identity is the URN that addresses one subject — a person or an agent —
-// across every Gram subsystem. Format: `<kind>:<id>`, e.g. `user:user_01abc`
+// across every Speakeasy subsystem. Format: `<kind>:<id>`, e.g. `user:user_01abc`
 // or `agent:01998c1e-…`.
 //
 // Each subsystem records activity under whichever identifier it has: audit
-// logs hold a Gram user id, telemetry holds an email, risk holds an external
+// logs hold a Speakeasy user id, telemetry holds an email, risk holds an external
 // user id. This URN lets any of them address the same subject, and identity
 // resolution reports which URN is canonical for it.
 //

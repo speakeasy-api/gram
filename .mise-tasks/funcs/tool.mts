@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-//MISE description="Call a tool on a local Gram Functions runner."
+//MISE description="Call a tool on a local Speakeasy Functions runner."
 //MISE quiet=true
 
-//USAGE flag "--url <url>" default="http://localhost:8888" help="The base URL of the local Gram Functions runner."
+//USAGE flag "--url <url>" default="http://localhost:8888" help="The base URL of the local Speakeasy Functions runner."
 //USAGE flag "--name <name>" required=#true help="The name of the tool to call."
 //USAGE flag "--input <json>" help="The JSON input to send to the tool."
 //USAGE flag "--env <json>" help="A JSON object of environment variables to use with the tool call."

@@ -128,7 +128,7 @@ func (c *localSessionCache) enrichLocalSessionMetadata(ctx context.Context, meta
 		metadata.GramOrgID = project.OrganizationID
 	}
 	// ExternalOrgID is the provider's organization id (the personal-vs-team
-	// discriminator) and must never be synthesized from the Gram org id — doing
+	// discriminator) and must never be synthesized from the Speakeasy org id — doing
 	// so would mislabel every local session as having a known provider org.
 
 	userID, userEmail := c.localFallbackUser(ctx, metadata.GramOrgID)

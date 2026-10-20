@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -33,14 +34,15 @@ func TestHostedNetworkAccessMaterializesAndDeletesCanonicalEndpoint(t *testing.T
 	servers := mcpserversrepo.New(ti.conn)
 	endpoints := mcpendpointsrepo.New(ti.conn)
 
-	_, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	server, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
+	require.NoError(t, err, "creation materializes the canonical wrapper")
+	require.False(t, server.NetworkAccessMode.Valid)
 
 	mode := types.NetworkAccessMode("public_only")
 	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, NetworkAccessMode: &mode})
 	require.NoError(t, err)
 	require.Equal(t, &mode, updated.NetworkAccessMode)
-	server, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
+	server, err = servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, serverID, server.ToolsetID.UUID)
 	require.Equal(t, "public", server.Visibility)
@@ -147,6 +149,8 @@ func TestHostedNetworkAccessCanDisableDuringIngressOutage(t *testing.T) {
 func TestHostedNetworkAccessPreservesDomainRootOnSlugRename(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestToolsetsService(t)
+	// Renaming to a slug without the org prefix needs a paid tier.
+	ctx = withAccountType(t, ctx, string(billing.TierEnterprise))
 	created := createMinimalPublicToolset(t, ctx, ti, "Hosted Domain Root")
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -228,6 +232,7 @@ func TestHostedNetworkAccessRejectsPrivateModeWithoutIngress(t *testing.T) {
 	require.Equal(t, types.NetworkAccessMode("public_only"), *stored.NetworkAccessMode)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	_, err = mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.False(t, server.NetworkAccessMode.Valid, "the rejected mode is not stored")
 }

@@ -10,14 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	assistantidentityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -95,6 +100,25 @@ func seedRiskOnChat(t *testing.T, ctx context.Context, ti *chatTestInstance, cha
 	require.NoError(t, err)
 }
 
+func seedClickHouseFinding(t *testing.T, ti *chatTestInstance, findingID, chatID, messageID, policyID uuid.UUID) riskchrepo.RiskFindingRow {
+	t.Helper()
+	now := time.Now().UTC()
+	return riskchrepo.RiskFindingRow{
+		ID:                findingID,
+		CreatedAt:         now,
+		OrganizationID:    ti.orgID,
+		ProjectID:         ti.projectID.String(),
+		ChatMessageID:     messageID.String(),
+		RiskPolicyID:      policyID.String(),
+		RiskPolicyVersion: 1,
+		RuleID:            "secret.test",
+		Source:            "gitleaks",
+		ChatID:            chatID.String(),
+		MessageCreatedAt:  now,
+		EventKind:         riskchrepo.EventKindFinding,
+	}
+}
+
 // seedChatWithSource inserts a chat owned by externalUserID with a single
 // message carrying the given source, so the chat's inferred source (the latest
 // non-null message source) is `source`.
@@ -145,6 +169,9 @@ func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.ProjectID = &ti.projectID
+	authCtx.ActiveOrganizationID = ti.orgID
+	authCtx.OrganizationSlug = ti.orgID
+	authCtx.ProjectSlug = &ti.projectSlug
 	// chat:write satisfies chat:read by expansion, so this is a fully-privileged
 	// session for chat purposes. Tests that need to distinguish the two use
 	// grantOrgAdminWithChatRead / grantOrgAdminWithChatWrite / memberSessionCtx.
@@ -378,6 +405,10 @@ func TestListChats_OneRowPerChat_ReportsOnlyThisProjectsAssistant(t *testing.T) 
 	require.True(t, ok)
 	require.Nil(t, crossAssistant.AssistantID, "a thread here pointing at another project's assistant surfaces neither its id nor its name")
 	require.Nil(t, crossAssistant.AssistantName)
+	loadedCross, err := ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: crossAssistantChat.String()})
+	require.NoError(t, err)
+	require.Nil(t, loadedCross.AssistantID, "loading the chat reports the same attribution as listing it")
+	require.Nil(t, loadedCross.AssistantName)
 
 	// Narrowing to the foreign assistant admits only the chat whose thread is
 	// recorded here (the admission filter is project-scoped), and even that row
@@ -392,6 +423,82 @@ func TestListChats_OneRowPerChat_ReportsOnlyThisProjectsAssistant(t *testing.T) 
 	require.Equal(t, crossAssistantChat.String(), result.Chats[0].ID)
 	require.Nil(t, result.Chats[0].AssistantID)
 	require.Nil(t, result.Chats[0].AssistantName)
+}
+
+// An assistant session reports the agent its assistant acts as, so the
+// session can name that agent; an assistant without one reports none.
+func TestListChats_ReportsAssistantAgentIdentity(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := repo.New(ti.conn)
+
+	agentBacked, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Agent-backed Assistant",
+	})
+	require.NoError(t, err)
+	legacy, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Legacy Assistant",
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: ti.orgID,
+		UserID:         conv.ToPGText(authCtx.UserID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		ProjectID:      uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Name:           "Assistant Agent",
+	})
+	require.NoError(t, err)
+	_, err = assistantidentityrepo.New(ti.conn).CreateAssistantBinding(ctx, assistantidentityrepo.CreateAssistantBindingParams{
+		OrganizationID: ti.orgID,
+		ProjectID:      ti.projectID,
+		AssistantID:    agentBacked,
+		AgentID:        agent.ID,
+	})
+	require.NoError(t, err)
+
+	agentChat := seedChat(t, ctx, ti, authCtx.UserID, "", "agent-backed chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   agentBacked,
+		ProjectID:     ti.projectID,
+		CorrelationID: "agent-backed",
+		ChatID:        agentChat,
+	}))
+	legacyChat := seedChat(t, ctx, ti, authCtx.UserID, "", "legacy chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   legacy,
+		ProjectID:     ti.projectID,
+		CorrelationID: "legacy",
+		ChatID:        legacyChat,
+	}))
+	plainChat := seedChat(t, ctx, ti, authCtx.UserID, "", "plain chat")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	byID := map[string]*gen.ChatOverview{}
+	for _, chat := range result.Chats {
+		byID[chat.ID] = chat
+	}
+	require.Equal(t, agent.ID.String(), conv.PtrValOr(byID[agentChat.String()].AssistantAgentID, ""))
+	require.Nil(t, byID[legacyChat.String()].AssistantAgentID)
+	require.Nil(t, byID[plainChat.String()].AssistantAgentID)
+
+	loaded, err := ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: agentChat.String()})
+	require.NoError(t, err)
+	require.Equal(t, agent.ID.String(), conv.PtrValOr(loaded.AssistantAgentID, ""))
+	loaded, err = ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: legacyChat.String()})
+	require.NoError(t, err)
+	require.Nil(t, loaded.AssistantAgentID)
 }
 
 // TestListChats_ChatRead_SeesAllChats verifies that a caller holding an
@@ -517,7 +624,7 @@ func TestListChats_OrgAdmin_FilterByExternalUserID(t *testing.T) {
 }
 
 // TestListChats_OrgAdmin_FilterByUserID verifies that an org admin can narrow
-// results to a specific Gram user via the payload filter.
+// results to a specific Speakeasy user via the payload filter.
 func TestListChats_OrgAdmin_FilterByUserID(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
@@ -771,6 +878,94 @@ func TestListChats_Filter_MinRiskScore(t *testing.T) {
 	result, err = ti.service.ListChats(ctx, payload)
 	require.NoError(t, err)
 	require.Equal(t, 2, result.Total)
+}
+
+func TestListChats_ClickHouseCutover(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-ch-risk")
+	ti.flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, ti.orgID, true)
+
+	r := repo.New(ti.conn)
+	high := seedChat(t, ctx, ti, "", "ext-ch-risk", "high policy score")
+	low := seedChat(t, ctx, ti, "", "ext-ch-risk", "low policy score")
+	hidden := seedChat(t, ctx, ti, "", "ext-ch-risk", "ineligible findings")
+	safe := seedChat(t, ctx, ti, "", "ext-ch-risk", "safe")
+	highMessage, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{ChatID: high, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}})
+	require.NoError(t, err)
+	lowMessage, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{ChatID: low, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}})
+	require.NoError(t, err)
+	hiddenMessage, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{ChatID: hidden, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}})
+	require.NoError(t, err)
+	highPolicy, err := r.SeedRiskPolicy(ctx, repo.SeedRiskPolicyParams{ProjectID: ti.projectID, OrganizationID: ti.orgID, Score: 8})
+	require.NoError(t, err)
+	lowPolicy, err := r.SeedRiskPolicy(ctx, repo.SeedRiskPolicyParams{ProjectID: ti.projectID, OrganizationID: ti.orgID, Score: 3})
+	require.NoError(t, err)
+	disabledPolicy, err := r.SeedDisabledRiskPolicy(ctx, repo.SeedDisabledRiskPolicyParams{ProjectID: ti.projectID, OrganizationID: ti.orgID})
+	require.NoError(t, err)
+
+	rows := []riskchrepo.RiskFindingRow{
+		seedClickHouseFinding(t, ti, uuid.New(), high, highMessage, highPolicy),
+		seedClickHouseFinding(t, ti, uuid.New(), high, highMessage, highPolicy),
+		seedClickHouseFinding(t, ti, uuid.New(), low, lowMessage, lowPolicy),
+		seedClickHouseFinding(t, ti, uuid.New(), hidden, hiddenMessage, disabledPolicy),
+	}
+	now := time.Now().UTC()
+	excluded := seedClickHouseFinding(t, ti, uuid.New(), hidden, hiddenMessage, highPolicy)
+	excluded.ExcludedAt = &now
+	shadow := seedClickHouseFinding(t, ti, uuid.New(), hidden, hiddenMessage, highPolicy)
+	shadow.Shadow = true
+	deadLetter := seedClickHouseFinding(t, ti, uuid.New(), hidden, hiddenMessage, highPolicy)
+	deadLetter.DeadLetterReason = "fixture"
+	dismissed := seedClickHouseFinding(t, ti, uuid.New(), hidden, hiddenMessage, highPolicy)
+	dismissal := dismissed
+	dismissal.FalsePositiveAt = &now
+	dismissal.EventKind = riskchrepo.EventKindSuppression
+	rows = append(rows, excluded, shadow, deadLetter, dismissed, dismissal)
+	require.NoError(t, riskchrepo.New(ti.chConn).InsertRiskFindings(ctx, rows))
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 4, result.Total)
+	counts := make(map[string]int, len(result.Chats))
+	for _, item := range result.Chats {
+		require.NotNil(t, item.RiskFindingsCount)
+		counts[item.ID] = *item.RiskFindingsCount
+	}
+	require.Equal(t, 2, counts[high.String()])
+	require.Equal(t, 1, counts[low.String()])
+	require.Zero(t, counts[hidden.String()])
+	require.Zero(t, counts[safe.String()])
+
+	hasRisk := "true"
+	withRisk := defaultPayload()
+	withRisk.HasRisk = &hasRisk
+	result, err = ti.service.ListChats(ctx, withRisk)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	require.ElementsMatch(t, []string{high.String(), low.String()}, []string{result.Chats[0].ID, result.Chats[1].ID})
+
+	hasRisk = "false"
+	withoutRisk := defaultPayload()
+	withoutRisk.HasRisk = &hasRisk
+	result, err = ti.service.ListChats(ctx, withoutRisk)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	require.ElementsMatch(t, []string{hidden.String(), safe.String()}, []string{result.Chats[0].ID, result.Chats[1].ID})
+
+	// min_risk_score is a live finding count threshold, independent of policy score.
+	minimumCount := 2
+	scored := defaultPayload()
+	scored.MinRiskScore = &minimumCount
+	result, err = ti.service.ListChats(ctx, scored)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Equal(t, high.String(), result.Chats[0].ID)
+
+	overview, err := ti.service.LoadChatOverview(ctx, &gen.LoadChatOverviewPayload{ID: high.String()})
+	require.NoError(t, err)
+	require.NotNil(t, overview.RiskFindingsCount)
+	require.Equal(t, 2, *overview.RiskFindingsCount)
 }
 
 // TestListChats_Filter_DateRange verifies that from/to filters include only chats created within

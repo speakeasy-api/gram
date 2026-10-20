@@ -35,7 +35,7 @@ import (
 const recheckTestInterval = 24 * time.Hour
 
 // shapeGrantForKeepalive turns one grant into the population the sweep owns: no access expiry, no refresh token (the
-// fixture never stores one), created age ago so it is past the interval, and a live Gram session for the subject.
+// fixture never stores one), created age ago so it is past the interval, and a live Speakeasy session for the subject.
 func shapeGrantForKeepalive(t *testing.T, ctx context.Context, ti *testInstance, projectID, issuerID, clientID uuid.UUID, subject urn.SessionSubject, age time.Duration, jti string) remotesessions_repo.RemoteSession {
 	t.Helper()
 	q := remotesessions_repo.New(ti.conn)
@@ -403,7 +403,7 @@ func seedTunneledRecheckFixture(t *testing.T, prefix, identifier string, callerI
 	if len(callerIssuers) > 0 {
 		callerIssuer = callerIssuers[0]
 	}
-	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), provider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{ValidationTimeout: validationProbeTimeout, RecheckInterval: recheckTestInterval}, testenv.NewTracerProvider(t), nil, callerIssuer)
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), provider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{ValidationTimeout: validationProbeTimeout, RecheckInterval: recheckTestInterval}, testenv.NewTracerProvider(t), nil, callerIssuer, "")
 	projectID, orgID := consentTestTenant(t, ctx)
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	serverID, tunnelID := createPrivateTunneledServer(t, ctx, ti, projectID, shared, prefix+"-server", identifier)

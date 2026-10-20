@@ -2,10 +2,10 @@ import type { UserSession } from "@gram/client/models/components/usersession.js"
 import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
 
 // How a client came to be registered against a user-session issuer. This is
-// INBOUND: Gram is the authorization server and the client is a third-party
-// agent connecting to a Gram MCP server. Do not reuse the outbound
+// INBOUND: Speakeasy is the authorization server and the client is a third-party
+// agent connecting to a Speakeasy MCP server. Do not reuse the outbound
 // CLIENT_TYPE_LABELS from issuerFormUtils — those describe the mirror-image
-// case where Gram is the OAuth client and Gram hosts the metadata document.
+// case where Speakeasy is the OAuth client and Speakeasy hosts the metadata document.
 export type UserSessionClientSource = "cimd" | "dcr";
 
 // Anything carrying the discriminator: both UserSessionClient and UserSession
@@ -37,13 +37,13 @@ export const SOURCE_PRESENTATION: Record<
     label: "CIMD",
     badgeVariant: "success",
     tooltip:
-      "Client ID Metadata Document. The client identified itself with a URL, and Gram fetched its OAuth metadata from that document instead of requiring it to register first. The document's origin is its identity.",
+      "Client ID Metadata Document. The client identified itself with a URL, and Speakeasy fetched its OAuth metadata from that document instead of requiring it to register first. The document's origin is its identity.",
   },
   dcr: {
     label: "DCR",
     badgeVariant: "warning",
     tooltip:
-      "Dynamic Client Registration (RFC 7591). The client registered with Gram up front and was issued a client_id.",
+      "Dynamic Client Registration (RFC 7591). The client registered with Speakeasy up front and was issued a client_id.",
   },
 };
 
@@ -52,7 +52,7 @@ export const SOURCE_PRESENTATION: Record<
 //
 // Prefer this over client_name in any listing: client_name is chosen by the
 // client itself and verified by nobody, so a hostile client can register as
-// "Claude Code". The origin cannot be spoofed — Gram fetched the document
+// "Claude Code". The origin cannot be spoofed — Speakeasy fetched the document
 // from it.
 export function clientDocumentOrigin(client: SourceBearing): string | null {
   if (!client.clientIdMetadataUri) return null;

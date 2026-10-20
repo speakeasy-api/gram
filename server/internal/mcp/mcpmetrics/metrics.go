@@ -14,8 +14,33 @@ import (
 )
 
 // InstrumentMCPRequestRejected is the OTel instrument name for the counter of
-// requests the Session OAuth authentication gate rejected before dispatch.
+// requests rejected before dispatch, by the Session OAuth authentication gate
+// or by request validation.
 const InstrumentMCPRequestRejected = "mcp.request.rejected"
+
+// RequestRejectionReason is the closed set of reasons [Metrics] records on
+// mcp.request.rejected under gram.mcp.rejection_reason. It stays coarse so
+// the counter's per-server URL dimension does not multiply into many series.
+type RequestRejectionReason string
+
+const (
+	// RequestRejectionReasonAuthentication: the Session OAuth gate rejected
+	// the request; gram.oauth.failure_reason carries the detail.
+	RequestRejectionReasonAuthentication RequestRejectionReason = "authentication"
+
+	// RequestRejectionReasonHeaderMismatch: an MCP standard request header
+	// was missing, malformed, or disagreed with the body (-32020).
+	RequestRejectionReasonHeaderMismatch RequestRejectionReason = "header_mismatch"
+
+	// RequestRejectionReasonMetadataInvalid: required per-request `_meta`
+	// was missing or malformed (-32602).
+	RequestRejectionReasonMetadataInvalid RequestRejectionReason = "metadata_invalid"
+
+	// RequestRejectionReasonProtocolVersionUnsupported: the declared protocol
+	// revision is outside the surface's supported set (-32022). These
+	// requests are also counted by mcp.request.protocol_version_rejected.
+	RequestRejectionReasonProtocolVersionUnsupported RequestRejectionReason = "protocol_version_unsupported"
+)
 
 // InstrumentMCPProtocolVersionRejected is the OTel instrument name for the
 // counter of otherwise valid requests rejected before authentication because
@@ -51,9 +76,9 @@ const (
 )
 
 // Metrics is the mcp service's full instrument set. A nil *Metrics is valid —
-// every Record method becomes a no-op — and each method is also
-// nil-instrument-safe, so a partially constructed value still records what
-// it can.
+// metric recording becomes a no-op, but RecordToolsetSlugFallback still emits
+// attribution logs when a logger is supplied. Each method is also
+// nil-instrument-safe, so a partially constructed value still records what it can.
 type Metrics struct {
 	// mcpInitializeCounter is the unsampled census of observed handshakes by
 	// protocol revision. A counter rather than a span attribute because traces
@@ -64,7 +89,7 @@ type Metrics struct {
 
 	// requestCensus is the unsampled per-request census (mcp.request) emitted
 	// at the JSON-RPC dispatch sites for the hosted and platform surfaces. The
-	// remote/tunnel /x/mcp backends publish the same instrument from the
+	// remote/tunnel /mcp backends publish the same instrument from the
 	// proxy's request interceptor, which constructs its own [RequestCounter].
 	requestCensus *RequestCounter
 
@@ -73,12 +98,13 @@ type Metrics struct {
 	// view lives in ClickHouse.
 	metaMemberDispatchCounter metric.Int64Counter
 
-	// mcpRequestRejectedCounter is the unsampled census of requests the issuer
-	// gate turned away before dispatch: the population that never reaches
-	// requestCensus. It carries a per-server URL because "which server is
-	// rejecting" is the operational question; the URL is rebuilt from the
-	// resolved endpoint rather than taken from the request so an
-	// unauthenticated caller cannot mint series through the query string.
+	// mcpRequestRejectedCounter is the unsampled census of requests turned
+	// away before dispatch, by the issuer gate or by request validation: the
+	// population that never reaches requestCensus. It carries a per-server
+	// URL because "which server is rejecting" is the operational question;
+	// the URL is built from the resolved endpoint's path rather than the raw
+	// request URL so an unauthenticated caller cannot mint series through the
+	// query string.
 	mcpRequestRejectedCounter metric.Int64Counter
 
 	// mcpProtocolVersionRejectedCounter partitions terminating-surface traffic
@@ -120,6 +146,10 @@ type Metrics struct {
 	// failures. These remain retryable and are therefore intentionally separate
 	// from the terminal oauth.flow.failed population.
 	oauthAuthorityUnavailableCounter metric.Int64Counter
+
+	// oauthResourceRejectedCounter counts RFC 8707 resource indicators a
+	// shared authorization server refused, by issuer, reason, and stage.
+	oauthResourceRejectedCounter metric.Int64Counter
 
 	// tunnelPublicRejectedCounter counts anonymous public tunnel requests the
 	// admission gate rejected with 429 before they reached the tunnel gateway.
@@ -222,9 +252,18 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth authority unavailable counter", attr.SlogError(err))
 	}
 
+	oauthResourceRejectedCounter, err := meter.Int64Counter(
+		"oauth.resource.rejected",
+		metric.WithDescription("RFC 8707 resource indicators a shared authorization server refused, by issuer, reason, and OAuth flow stage"),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create oauth resource rejected counter", attr.SlogError(err))
+	}
+
 	mcpRequestRejectedCounter, err := meter.Int64Counter(
 		InstrumentMCPRequestRejected,
-		metric.WithDescription("MCP requests rejected by the Session OAuth authentication gate before dispatch, by failure reason, server URL, serving surface, and public/private network surface"),
+		metric.WithDescription("MCP requests rejected before dispatch by the Session OAuth authentication gate or by request validation, by rejection reason, OAuth failure reason, server URL, serving surface, and public/private network surface"),
 		metric.WithUnit("{request}"),
 	)
 	if err != nil {
@@ -265,6 +304,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		oauthFlowDeclinedCounter:             oauthFlowDeclinedCounter,
 		oauthRefreshTokenReplayServedCounter: oauthRefreshTokenReplayServedCounter,
 		oauthAuthorityUnavailableCounter:     oauthAuthorityUnavailableCounter,
+		oauthResourceRejectedCounter:         oauthResourceRejectedCounter,
 		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
 	}
 }
@@ -300,7 +340,8 @@ func (m *Metrics) RecordTunnelPublicRejection(ctx context.Context, mcpSlug strin
 	))
 }
 
-func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, toolName string) {
+// RecordMCPToolCall omits an empty mcpServerID; each URL fronts one server, so series stay bounded.
+func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, mcpServerID string, toolName string) {
 	if m == nil || m.mcpToolCallCounter == nil {
 		return
 	}
@@ -309,6 +350,9 @@ func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL st
 		attr.McpURL(mcpURL),
 		attr.ToolName(toolName),
 		attr.OrganizationID(orgID),
+	}
+	if mcpServerID != "" {
+		kv = append(kv, attr.McpServerID(mcpServerID))
 	}
 	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
@@ -322,24 +366,25 @@ func (m *Metrics) RecordKillswitchIdentityCoverage(ctx context.Context, surface 
 	m.identityCoverage.Record(ctx, surface, identity, resource)
 }
 
-// RecordToolsetSlugFallback counts one request served through the legacy
-// toolsets.mcp_slug lookup after an mcp_endpoints address miss. Semantics on
+// RecordToolsetSlugFallback logs and counts one request served through the
+// legacy toolsets.mcp_slug lookup after an mcp_endpoints address miss. Semantics on
 // [LegacyFallbackCounter.RecordToolsetSlugFallback].
-func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, entryPoint LegacyFallbackEntryPoint) {
-	if m == nil {
-		return
+func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, logger *slog.Logger, hit ToolsetSlugFallback) {
+	var counter *LegacyFallbackCounter
+	if m != nil {
+		counter = m.legacyFallback
 	}
-	m.legacyFallback.RecordToolsetSlugFallback(ctx, entryPoint)
+	counter.RecordToolsetSlugFallback(ctx, logger, hit)
 }
 
-// RecordLegacyAudienceAccepted counts one bearer accepted via the legacy
-// toolset-URN audience. Semantics on
+// RecordLegacyAudienceAccepted logs and counts one bearer accepted via the
+// legacy toolset-URN audience. Semantics on
 // [LegacyFallbackCounter.RecordLegacyAudienceAccepted].
-func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, issuerID string) {
+func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, logger *slog.Logger, hit LegacyAudienceAccepted) {
 	if m == nil {
 		return
 	}
-	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, issuerID)
+	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, logger, hit)
 }
 
 // RecordMCPInitialize counts one observed MCP handshake, dimensioned by the
@@ -374,7 +419,7 @@ func (m *Metrics) RecordMCPInitialize(ctx context.Context, requested, negotiated
 // surface. The census semantics — what counts, what the version dimension
 // means, and how this relates to `mcp.initialize` and `mcp.request.duration` —
 // are documented on [RequestCounter.Record], which the remote proxy's
-// interceptor invokes directly for the /x/mcp traffic that never reaches the
+// interceptor invokes directly for the proxied traffic that never reaches the
 // mcp dispatch.
 func (m *Metrics) RecordMCPRequest(ctx context.Context, protocolVersion, method string, surface Surface) {
 	if m == nil {
@@ -403,7 +448,8 @@ func (m *Metrics) RecordMCPProtocolVersionRejected(ctx context.Context, protocol
 }
 
 // RecordMCPRequestRejected counts one MCP request the Session OAuth
-// authentication gate turned away before dispatch. reason is the closed set
+// authentication gate turned away before dispatch, under the rejection reason
+// [RequestRejectionReasonAuthentication]. reason is the closed set
 // the gate logs under gram.oauth.failure_reason; mcpURL is the same
 // gram.mcp.url key `mcp.request.duration` and `mcp.tool.call` carry, so every
 // per-server MCP metric groups the same way; surface is the same value the
@@ -420,7 +466,26 @@ func (m *Metrics) RecordMCPRequestRejected(ctx context.Context, reason string, m
 	}
 
 	m.mcpRequestRejectedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.McpRejectionReason(RequestRejectionReasonAuthentication),
 		attr.OAuthFailureReason(reason),
+		attr.McpURL(mcpURL),
+		attr.McpSurface(string(surface)),
+		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
+	))
+}
+
+// RecordMCPRequestValidationRejected counts one MCP request rejected before
+// dispatch because it failed request validation. It shares
+// mcp.request.rejected with the authentication gate, so a single query by
+// gram.mcp.rejection_reason answers how often, and why, each server refuses
+// requests; mcpURL and surface follow [Metrics.RecordMCPRequestRejected].
+func (m *Metrics) RecordMCPRequestValidationRejected(ctx context.Context, reason RequestRejectionReason, mcpURL string, surface Surface) {
+	if m == nil || m.mcpRequestRejectedCounter == nil {
+		return
+	}
+
+	m.mcpRequestRejectedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.McpRejectionReason(reason),
 		attr.McpURL(mcpURL),
 		attr.McpSurface(string(surface)),
 		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
@@ -432,8 +497,8 @@ func (m *Metrics) RecordMCPRequestRejected(ctx context.Context, reason string, m
 // JSON-RPC input, and unclamped it would let a client mint unbounded series
 // against a histogram that already carries a per-server URL dimension. The
 // histogram count by URL and network surface shows public/private traffic per
-// endpoint without another per-server counter.
-func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, duration time.Duration) {
+// endpoint without another per-server counter. Empty mcpServerID is omitted.
+func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, mcpServerID string, duration time.Duration) {
 	if m == nil || m.mcpRequestDuration == nil {
 		return
 	}
@@ -442,6 +507,9 @@ func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string
 		attr.McpMethod(mcprequests.ClampMethod(mcpMethod)),
 		attr.McpURL(mcpURL),
 		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
+	}
+	if mcpServerID != "" {
+		kv = append(kv, attr.McpServerID(mcpServerID))
 	}
 
 	m.mcpRequestDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(kv...))
@@ -511,6 +579,21 @@ func (m *Metrics) RecordOAuthAuthorityUnavailable(ctx context.Context, issuerID,
 	}
 	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFlowStage(string(stage)))
 	m.oauthAuthorityUnavailableCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+// RecordOAuthResourceRejected records an RFC 8707 resource indicator a shared
+// authorization server refused. reason is one of a closed set of rejection
+// reasons and issuerID is recorded only once the issuer has been resolved, so
+// both dimensions stay bounded.
+func (m *Metrics) RecordOAuthResourceRejected(ctx context.Context, issuerID, reason string, stage OAuthFlowStage) {
+	if m == nil || m.oauthResourceRejectedCounter == nil {
+		return
+	}
+	m.oauthResourceRejectedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.UserSessionIssuerID(issuerID),
+		attr.OAuthFailureReason(reason),
+		attr.OAuthFlowStage(string(stage)),
+	))
 }
 
 // RecordOAuthRefreshTokenReplayServed records a successful response from the

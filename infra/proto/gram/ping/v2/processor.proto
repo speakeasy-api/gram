@@ -16,7 +16,6 @@ message Processor {
       minimum_backoff: {seconds: 10}
       maximum_backoff: {seconds: 600}
     }
-    dead_letter: {max_delivery_attempts: 5}
   };
 }
 
@@ -30,6 +29,5 @@ message PyProcessor {
       minimum_backoff: {seconds: 10}
       maximum_backoff: {seconds: 600}
     }
-    dead_letter: {max_delivery_attempts: 5}
   };
 }

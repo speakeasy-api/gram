@@ -31,7 +31,7 @@
             },
             "supportsDcr": {
               "type": "boolean",
-              "description": "Staff-curated record of whether the server's authorization server publishes an OAuth dynamic client registration endpoint. Informational for consumers that build an install flow from this record, such as Okta server suggestions, which default to per-user OAuth when true. Catalog listings compute their own value from discovery and do not read this. Absent means false."
+              "description": "Staff-curated record of whether the server's authorization server publishes an OAuth dynamic client registration endpoint. Native catalog listings use an explicit value for automatic-setup eligibility, overriding legacy discovery metadata; when absent, listings fall back to legacy discovery metadata. This is not proof of live OAuth readiness: installation still validates the server. Okta server suggestions default to per-user OAuth when true and treat absence as false."
             }
           }
         },

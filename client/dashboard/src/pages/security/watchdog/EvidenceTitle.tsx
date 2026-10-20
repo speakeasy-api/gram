@@ -9,6 +9,7 @@ import {
   jsonEscaped,
   matchRanges,
   resultsAreSensitive,
+  sensitiveMatchStrings,
   withJsonEscaped,
 } from "@/pages/chatLogs/chatHelpers";
 import { parseToolCalls } from "@/pages/chatLogs/traceEntries";
@@ -303,12 +304,7 @@ function useFlaggedMessage(
       },
     };
   }
-  // The transcript's rule: a message holding a secret or PII has every match
-  // masked; otherwise matches are highlighted but readable.
-  const secretMatches = withJsonEscaped(
-    getMatchStrings(findings.filter((r) => resultsAreSensitive([r]))),
-  );
-  const masked = matchRanges(text, secretMatches).length > 0;
+  const masked = matchRanges(text, sensitiveMatchStrings(findings)).length > 0;
   return {
     content: highlightMatches(
       text,

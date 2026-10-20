@@ -294,3 +294,13 @@ DELETE FROM slack_identity_mappings WHERE organization_id = @organization_id AND
 
 -- name: CountSlackIdentityMappingsForTest :one
 SELECT count(*)::bigint FROM slack_identity_mappings WHERE organization_id = @organization_id;
+
+-- name: ResolveSlackMappingUser :one
+-- Mapping resolution is tenant/workspace scoped. Authorization happens after selection.
+SELECT im.user_id
+FROM slack_identity_mappings im
+JOIN slack_directory_connections c ON c.organization_id = im.organization_id AND c.slack_team_id = im.slack_team_id
+WHERE im.organization_id = @organization_id
+  AND im.slack_team_id = @slack_team_id
+  AND im.slack_user_id = @slack_user_id
+  AND im.revoked_at IS NULL AND c.disconnected_at IS NULL;

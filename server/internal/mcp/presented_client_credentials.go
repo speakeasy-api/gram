@@ -49,6 +49,15 @@ func (c presentedClientCredentials) presented() bool {
 	return c.hasClientAuthParameters || c.clientID != "" || c.secret != "" || c.assertion.Presented()
 }
 
+// clientless reports whether a token request presents no client
+// authentication at all, in its form or an Authorization header. Of the JWT
+// bearer requests, only a clientless one is the workload grant; any other is
+// the ID-JAG exchange. An Authorization header counts by its presence, so an
+// empty or repeated one is never read as no client.
+func (c presentedClientCredentials) clientless(r *http.Request) bool {
+	return !c.presented() && len(r.Header.Values("Authorization")) == 0
+}
+
 // extractClientCredentials reads every client authentication parameter a
 // request can carry. HTTP Basic still wins for the client_id and secret when
 // both it and form parameters are present, so existing clients keep their

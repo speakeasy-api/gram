@@ -45,8 +45,8 @@ export function RemoveSubjectDialog({
         <Dialog.Header>
           <Dialog.Title>Remove this machine's access?</Dialog.Title>
           <Dialog.Description>
-            The machine can no longer exchange its identity token for a Gram
-            session.
+            The machine can no longer exchange its identity token for a
+            Speakeasy session.
           </Dialog.Description>
         </Dialog.Header>
         {admission && (

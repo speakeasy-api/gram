@@ -14,8 +14,9 @@ import (
 )
 
 // marketplaceRenameFixture publishes a project once (non-phased, so it lands on
-// the current hooks version + config) and returns the org id used for key counts.
-func marketplaceRenameFixture(t *testing.T, ctx context.Context, ti *testInstance, name string) string {
+// the current hooks version + config) and returns the org id used for key counts
+// and the id of the plugin it published.
+func marketplaceRenameFixture(t *testing.T, ctx context.Context, ti *testInstance, name string) (orgID, pluginID string) {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -35,7 +36,7 @@ func marketplaceRenameFixture(t *testing.T, ctx context.Context, ti *testInstanc
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	return authCtx.ActiveOrganizationID
+	return authCtx.ActiveOrganizationID, plugin.ID
 }
 
 // A marketplace rename changes the hook-output config (the resolved name), so an
@@ -48,7 +49,7 @@ func TestPluginsService_UpdateMarketplaceSettings_RenameRegeneratesHooksWhenElig
 	features := &feature.InMemory{}
 	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
 
-	orgID := marketplaceRenameFixture(t, ctx, ti, "Rename Eligible")
+	orgID, _ := marketplaceRenameFixture(t, ctx, ti, "Rename Eligible")
 
 	// Clear the org for the current hooks version (pin above any real version).
 	features.SetFlagPayload(feature.FlagHooksRollout, orgID, []byte(`{"version": 9999}`))
@@ -74,7 +75,7 @@ func TestPluginsService_UpdateMarketplaceSettings_RenameDefersHooksWhenNotEligib
 	// Empty provider → no clearance payload, and the test org is not a canary.
 	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, &feature.InMemory{})
 
-	orgID := marketplaceRenameFixture(t, ctx, ti, "Rename Deferred")
+	orgID, _ := marketplaceRenameFixture(t, ctx, ti, "Rename Deferred")
 	hooksKeysBefore := countPluginHooksKeys(t, ctx, ti.conn, orgID)
 
 	// Keep lastPushedFiles so GetRepoFiles returns the baseline (carrying hooks

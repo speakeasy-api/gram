@@ -184,7 +184,7 @@ describe("externalOauthMetadataUpdateIssuer", () => {
   const gramIssuer = "https://mcp.example.com/mcp/my-server";
   const metadataIssuer = "https://auth.example.com";
 
-  it("recommends a stored nonblank issuer for attached Gram-hosted OAuth", () => {
+  it("recommends a stored nonblank issuer for attached Speakeasy-hosted OAuth", () => {
     expect(
       externalOauthMetadataUpdateIssuer(
         {
@@ -198,7 +198,7 @@ describe("externalOauthMetadataUpdateIssuer", () => {
     ).toBe(metadataIssuer);
   });
 
-  it("does not recommend detached, provider-hosted, blank, or Gram-resource issuers", () => {
+  it("does not recommend detached, provider-hosted, blank, or Speakeasy-resource issuers", () => {
     expect(
       externalOauthMetadataUpdateIssuer({} as Toolset, gramIssuer),
     ).toBeUndefined();

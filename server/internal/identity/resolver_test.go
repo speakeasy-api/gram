@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The identifier shapes that reach expansion are a Gram user id or an address,
+// The identifier shapes that reach expansion are a Speakeasy user id or an address,
 // and telling them apart decides which set of rows the fold matches. A bare
 // "@" test would send a malformed value down the email path.
 func TestIsEmailIdentifier(t *testing.T) {

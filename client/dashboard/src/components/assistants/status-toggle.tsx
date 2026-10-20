@@ -1,6 +1,5 @@
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
-import { useRBAC } from "@/hooks/useRBAC";
 import {
   Assistant,
   AssistantStatus,
@@ -25,14 +24,14 @@ function stopPropagation(e: MouseEvent<HTMLDivElement>) {
  */
 export function AssistantStatusToggle({
   assistant,
+  canWrite,
   onUpdated,
 }: {
   assistant: Assistant;
+  canWrite: boolean;
   onUpdated?: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("project:write");
   const isActive = assistant.status === AssistantStatus.Active;
 
   const updateAssistant = useAssistantsUpdateMutation({

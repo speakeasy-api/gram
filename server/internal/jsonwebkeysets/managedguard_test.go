@@ -32,7 +32,7 @@ func TestManagedSet_RefusesOrganizationTierMutations(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	fx := provisionManagedSet(t, ctx, ti)
-	setID := fx.Client.JSONWebKeySetID.String()
+	setID := fx.Client.JSONWebKeySetID.UUID.String()
 	keyID := fx.Client.ActiveKeyID.UUID.String()
 
 	fetched, err := ti.service.GetSet(readCtx(t, ctx), &gen.GetSetPayload{ID: setID, SessionToken: nil})
@@ -82,14 +82,14 @@ func TestCreateSet_RefusesManagedBackingKey(t *testing.T) {
 	_, err := ti.service.CreateSet(adminCtx(t, ctx), &gen.CreateSetPayload{
 		SessionToken:  nil,
 		Name:          "piggyback",
-		ExternalKeyID: fx.Client.ExternalKeyID.String(),
+		ExternalKeyID: fx.Client.ExternalKeyID.UUID.String(),
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 
 	// Re-pointing an ordinary set at the managed key is the same escape.
 	own := createBackedGcpKmsKey(t, ctx, ti, "managed-guard-own")
 	set := createSet(t, ctx, ti, "own-set", own.ID)
-	_, err = ti.service.UpdateSet(adminCtx(t, ctx), &gen.UpdateSetPayload{ID: set.ID, Name: set.Name, ExternalKeyID: fx.Client.ExternalKeyID.String(), SessionToken: nil})
+	_, err = ti.service.UpdateSet(adminCtx(t, ctx), &gen.UpdateSetPayload{ID: set.ID, Name: set.Name, ExternalKeyID: fx.Client.ExternalKeyID.UUID.String(), SessionToken: nil})
 	requireOopsCode(t, err, oops.CodeConflict)
 }
 
@@ -100,7 +100,7 @@ func TestManagedSet_DeletableOnceConnectionTombstoned(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	fx := provisionManagedSet(t, ctx, ti)
-	setID := fx.Client.JSONWebKeySetID.String()
+	setID := fx.Client.JSONWebKeySetID.UUID.String()
 
 	err := ti.service.DeleteSet(adminCtx(t, ctx), &gen.DeleteSetPayload{ID: setID, SessionToken: nil})
 	requireOopsCode(t, err, oops.CodeConflict)

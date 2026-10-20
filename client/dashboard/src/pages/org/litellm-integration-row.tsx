@@ -33,7 +33,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Network, Plus, RefreshCw } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
-import { ConfirmDialog } from "../remote-identity-providers/ConfirmDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useLiteLLMInstanceProjects } from "./use-litellm-instance-projects";
 import {
   buildLiteLLMEnvironment,
@@ -234,8 +234,8 @@ export function LiteLLMIntegrationRow(): JSX.Element {
                 <Badge variant="information">Push</Badge>
               </Stack>
               <Text muted small className="ml-6 truncate">
-                Enforce Gram risk policies and send LiteLLM usage telemetry to
-                Gram.
+                Enforce Speakeasy risk policies and send LiteLLM usage telemetry
+                to Speakeasy.
               </Text>
             </Stack>
             <Stack direction="horizontal" align="center" gap={3}>
@@ -453,7 +453,7 @@ export function CreateInstanceDialog({
               <Dialog.Title>Create LiteLLM integration</Dialog.Title>
               <Dialog.Description>
                 Provision a dedicated ingestion key for one LiteLLM deployment
-                and Gram project.
+                and Speakeasy project.
               </Dialog.Description>
             </Dialog.Header>
             <form className="space-y-5" onSubmit={handleSubmit}>
@@ -499,7 +499,8 @@ export function CreateInstanceDialog({
                         Fail closed (recommended)
                       </Text>
                       <Text muted small>
-                        Block model requests when Gram cannot evaluate them.
+                        Block model requests when Speakeasy cannot evaluate
+                        them.
                       </Text>
                     </Stack>
                   </label>
@@ -508,8 +509,8 @@ export function CreateInstanceDialog({
                     <Stack gap={1}>
                       <Text className="font-medium">Fail open</Text>
                       <Text muted small>
-                        Allow model requests during a Gram outage. This is an
-                        explicit security posture decision.
+                        Allow model requests during a Speakeasy outage. This is
+                        an explicit security posture decision.
                       </Text>
                     </Stack>
                   </label>
@@ -715,14 +716,14 @@ export function SetupContent({
         </Alert>
       ) : (
         <Alert variant="info">
-          Gram no longer has the plaintext key. Replace the placeholder with the
-          key stored by your team.
+          Speakeasy no longer has the plaintext key. Replace the placeholder
+          with the key stored by your team.
         </Alert>
       )}
       {result ? (
         <SetupSection
           title="Integration key"
-          description="Store this dedicated project-bound key securely. Gram cannot show it again."
+          description="Store this dedicated project-bound key securely. Speakeasy cannot show it again."
         >
           <CodeBlock copyLabel="integration key">{result.key}</CodeBlock>
         </SetupSection>
@@ -844,7 +845,7 @@ export function DiagnosticsPanel({
         value={formatPercentage(diagnostics.virtualKeyEmailPct24h)}
       />
       <Diagnostic
-        label="Gram user attribution (24h)"
+        label="Speakeasy user attribution (24h)"
         value={formatPercentage(diagnostics.platformUserPct24h)}
       />
       <Diagnostic label="Created" date={instance.createdAt} />

@@ -22,6 +22,7 @@ import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
+import { Dashboards } from "./dashboards.js";
 import { DataExports } from "./dataexports.js";
 import { Deployments } from "./deployments.js";
 import { DeviceIntegrations } from "./deviceintegrations.js";
@@ -37,6 +38,7 @@ import { Identity } from "./identity.js";
 import { IdentityProviderConnections } from "./identityproviderconnections.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
+import { InternalSessionIssuers } from "./internalsessionissuers.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
 import { Killswitches } from "./killswitches.js";
@@ -71,6 +73,7 @@ import { RemoteSessionIssuers } from "./remotesessionissuers.js";
 import { RemoteSessions } from "./remotesessions.js";
 import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
+import { Sigint } from "./sigint.js";
 import { SkillEfficacy } from "./skillefficacy.js";
 import { Skills } from "./skills.js";
 import { SlackDirectoryConnections } from "./slackdirectoryconnections.js";
@@ -200,6 +203,11 @@ export class Gram extends ClientSDK {
     return (this._cliAuth ??= new CliAuth(this._options));
   }
 
+  private _dashboards?: Dashboards;
+  get dashboards(): Dashboards {
+    return (this._dashboards ??= new Dashboards(this._options));
+  }
+
   private _dataExports?: DataExports;
   get dataExports(): DataExports {
     return (this._dataExports ??= new DataExports(this._options));
@@ -271,6 +279,13 @@ export class Gram extends ClientSDK {
   private _integrations?: Integrations;
   get integrations(): Integrations {
     return (this._integrations ??= new Integrations(this._options));
+  }
+
+  private _internalSessionIssuers?: InternalSessionIssuers;
+  get internalSessionIssuers(): InternalSessionIssuers {
+    return (this._internalSessionIssuers ??= new InternalSessionIssuers(
+      this._options,
+    ));
   }
 
   private _jsonWebKeySets?: JsonWebKeySets;
@@ -451,6 +466,11 @@ export class Gram extends ClientSDK {
   private _risk?: Risk;
   get risk(): Risk {
     return (this._risk ??= new Risk(this._options));
+  }
+
+  private _sigint?: Sigint;
+  get sigint(): Sigint {
+    return (this._sigint ??= new Sigint(this._options));
   }
 
   private _skillEfficacy?: SkillEfficacy;

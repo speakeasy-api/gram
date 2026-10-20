@@ -36,5 +36,11 @@ go run ./infra/main.go gen-cc
 # the emitted switch imports the generated Go package for every topic message.
 go run ./infra/main.go gen-topics
 
+# Commit statically generated analytical schemas and encoders with the topology.
+go run ./infra/main.go gen-storage
+
+# Exercise the full mapping without provisioning test subscriptions in production.
+mise run gen:infra-storage-fixtures
+
 # Regenerate the Pub/Sub topology diagram from the freshly built descriptors.
 mise run gen:infra-diagrams

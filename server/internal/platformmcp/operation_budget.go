@@ -37,6 +37,8 @@ const (
 const (
 	PluginAssignmentMutationConnectionLimitName   = "platform-mcp-plugin-assignment-mutation-connection"
 	PluginAssignmentMutationOrganizationLimitName = "platform-mcp-plugin-assignment-mutation-organization"
+	PluginMetadataMutationConnectionLimitName     = "platform-mcp-plugin-metadata-mutation-connection"
+	PluginMetadataMutationOrganizationLimitName   = "platform-mcp-plugin-metadata-mutation-organization"
 	AccessRoleMutationConnectionLimitName         = "platform-mcp-access-role-mutation-connection"
 	AccessRoleMutationOrganizationLimitName       = "platform-mcp-access-role-mutation-organization"
 	ShadowAccessDecisionConnectionLimitName       = "platform-mcp-shadow-access-decision-connection"
@@ -45,8 +47,14 @@ const (
 	ToolExposureReadOrganizationLimitName         = "platform-mcp-tool-exposure-read-organization"
 	ToolExposureMutationConnectionLimitName       = "platform-mcp-tool-exposure-mutation-connection"
 	ToolExposureMutationOrganizationLimitName     = "platform-mcp-tool-exposure-mutation-organization"
+	DataExportToggleConnectionLimitName           = "platform-mcp-data-export-toggle-connection"
+	DataExportToggleOrganizationLimitName         = "platform-mcp-data-export-toggle-organization"
 	PluginRepublishConnectionLimitName            = "platform-mcp-plugin-republish-connection"
 	PluginRepublishOrganizationLimitName          = "platform-mcp-plugin-republish-organization"
+	ProjectMutationConnectionLimitName            = "platform-mcp-project-mutation-connection"
+	ProjectMutationOrganizationLimitName          = "platform-mcp-project-mutation-organization"
+	GatewayMutationConnectionLimitName            = "platform-mcp-gateway-mutation-connection"
+	GatewayMutationOrganizationLimitName          = "platform-mcp-gateway-mutation-organization"
 )
 
 const (
@@ -115,6 +123,13 @@ const (
 	ReviewRequestsPerConnectionPerMinute          = 5
 	ReviewRequestsPerOrganizationPerMinute        = 50
 
+	// PluginMetadataMutationsPer* bound creating and renaming plugins together
+	// on their own allowance. This is what stops a conversational create loop;
+	// there is no separate cap on how many plugins a project holds, because the
+	// dashboard has none and the two paths must refuse the same requests.
+	PluginMetadataMutationsPerConnectionPerMinute   = 5
+	PluginMetadataMutationsPerOrganizationPerMinute = 50
+
 	// ToolExposureReadsPerConnectionPerMinute allows paging through bounded
 	// project tool definitions without spending the separate mutation allowance.
 	ToolExposureReadsPerConnectionPerMinute = 120
@@ -131,11 +146,34 @@ const (
 	ToolExposureMutationsPerConnectionPerMinute   = 5
 	ToolExposureMutationsPerOrganizationPerMinute = 50
 
+	// GatewayMutationsPer* bound creating gateways and setting their members
+	// on one allowance, so alternating between the two cannot multiply the
+	// write rate. Each allowed call locks the gateway and may republish every
+	// plugin carrying it.
+	GatewayMutationsPerConnectionPerMinute   = 5
+	GatewayMutationsPerOrganizationPerMinute = 50
+
+	// DataExportTogglesPer* bound pausing and resuming data export routes on
+	// their own allowance. Both tools share it, so alternating between them
+	// cannot multiply the permitted write rate. A person handling an incident
+	// pauses a handful of routes, never dozens a minute; each allowed call
+	// takes the route row lock and writes an audit entry.
+	DataExportTogglesPerConnectionPerMinute   = 5
+	DataExportTogglesPerOrganizationPerMinute = 50
+
 	// PluginRepublishesPer* bound republish_plugin on its own allowance. Each
 	// allowed call can regenerate every package in a project, so it is metered
 	// like the other package-affecting writes rather than like a read.
 	PluginRepublishesPerConnectionPerMinute   = 5
 	PluginRepublishesPerOrganizationPerMinute = 50
+
+	// ProjectMutationsPer* bound creating and renaming projects on their own
+	// allowance, shared by both tools so alternating between them cannot
+	// multiply the write rate. A person sets up a handful of projects at a
+	// time; a loop creating them by the dozen is a runaway agent, and every
+	// created project is a row an administrator has to delete by hand.
+	ProjectMutationsPerConnectionPerMinute   = 5
+	ProjectMutationsPerOrganizationPerMinute = 50
 
 	// DrilldownRowsPerConnectionPerWindow and
 	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the
@@ -146,10 +184,9 @@ const (
 	DrilldownRowsPerConnectionPerWindow          = 1000
 	DrilldownMetricQueriesPerConnectionPerWindow = 20
 
-	// SessionRecallsPer* bound continue_session. Metered separately and lower
-	// than every other read: each allowed call serves an entire session
-	// transcript as a digest, so this allowance must not be fundable by
-	// spending any other budget.
+	// SessionRecallsPer* bound session recall and captured chat search and reads.
+	// These reads share a separate, lower allowance because they return
+	// transcript content; metadata and aggregate reads cannot fund them.
 	SessionRecallsPerConnectionPerMinute   = 10
 	SessionRecallsPerOrganizationPerMinute = 100
 )
@@ -162,7 +199,7 @@ var (
 	ErrOperationBudgetUnavailable = errors.New("platform mcp operation budget unavailable")
 )
 
-// Limiter is the narrow Platform MCP boundary around Gram's shared rate limiter.
+// Limiter is the narrow Platform MCP boundary around Speakeasy's shared rate limiter.
 // It lets unit tests deterministically model an allowance, a throttle, or a
 // backing-store failure without depending on Redis.
 type Limiter interface {
@@ -283,15 +320,15 @@ type OperationBudgets struct {
 	// AccessRoleMutations independently meters custom MCP access-role writes.
 	AccessRoleMutations OperationBudget
 	// Diagnostics meters the observability reads. They are bounded aggregate
-	// queries over Gram-owned telemetry, so the cost being metered is the
+	// queries over Speakeasy-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.
 	Diagnostics OperationBudget
 	// SensitiveDiagnostics meters the bounded drill-downs. It is separate from
 	// Diagnostics so exhausting it is not possible by spending the summary
 	// allowance, and so it can be tightened on its own.
 	SensitiveDiagnostics OperationBudget
-	// SensitiveSessionRecall meters continue_session — the only operation that
-	// serves whole-transcript content — on its own low allowance.
+	// SensitiveSessionRecall meters continue_session, search_chats and read_chat
+	// together on a low allowance for transcript content.
 	SensitiveSessionRecall OperationBudget
 	// RiskMutations is shared by policy and exclusion writes. Connection-less
 	// assistant calls consume only its organization bucket.

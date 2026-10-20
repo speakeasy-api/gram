@@ -17,7 +17,7 @@ import { useState, type JSX } from "react";
 import {
   MAX_FILTER_VALUES,
   type FilterOperator,
-  type WindowPreset,
+  type ExploreSpec,
 } from "./exploreModel";
 import {
   DIMENSION_VALUES_LIMIT,
@@ -35,14 +35,15 @@ import {
 export function FilterValuePicker({
   dataset,
   dimension,
-  window,
+  span,
   operator,
   values,
   onChange,
 }: {
   dataset: string;
   dimension: string;
-  window: WindowPreset;
+  /** What the builder asks over: its window, or the range replacing it. */
+  span: Pick<ExploreSpec, "window" | "range">;
   operator: FilterOperator;
   values: string[];
   onChange: (values: string[]) => void;
@@ -50,7 +51,7 @@ export function FilterValuePicker({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const single = operator === "equals";
-  const listed = useDimensionValues(dataset, dimension, window, open);
+  const listed = useDimensionValues(dataset, dimension, span, open);
 
   const all = listed.data?.values ?? [];
   const needle = search.trim().toLowerCase();
@@ -109,7 +110,7 @@ export function FilterValuePicker({
               setOpen(true);
             }
           }}
-          className="border-input bg-surface-primary-default focus-visible:border-focus flex min-h-9 min-w-64 max-w-3xl cursor-pointer flex-wrap items-center gap-1.5 border px-3 py-1.5 text-left text-sm focus-visible:outline-none"
+          className="border-input bg-surface-primary-default focus-visible:border-focus flex min-h-8 min-w-56 max-w-3xl cursor-pointer flex-wrap items-center gap-1.5 border px-2.5 py-1 text-left text-sm focus-visible:outline-none"
         >
           {values.length === 0 ? (
             <span className="text-muted-foreground">

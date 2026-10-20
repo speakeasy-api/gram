@@ -21,11 +21,12 @@ import (
 func newProvisioningCore(t *testing.T, conn *pgxpool.Pool) *ServiceCore {
 	t.Helper()
 	logger := testenv.NewLogger(t)
-	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
+	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 }
 
 func newProvisioningProject(t *testing.T, conn *pgxpool.Pool, slug string) uuid.UUID {
 	t.Helper()
+	seedIdentityMembers(t, conn)
 	proj, err := projectsrepo.New(conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
 		Name:           slug,
 		Slug:           slug,
@@ -45,7 +46,7 @@ func TestEnableManagedAssistantIsIdempotent(t *testing.T) {
 	core := newProvisioningCore(t, conn)
 	projectID := newProvisioningProject(t, conn, "managed-idempotent")
 
-	first, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	first, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)
 	require.NoError(t, err)
 	require.Equal(t, managedAssistantName("managed-idempotent"), first.Name)
 	require.Equal(t, managedAssistantModel, first.Model)
@@ -53,7 +54,7 @@ func TestEnableManagedAssistantIsIdempotent(t *testing.T) {
 	require.NotEmpty(t, first.Instructions, "managed instructions must be embedded, not empty")
 
 	// A second enable (even by a different user) returns the same assistant.
-	second, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-2")
+	second, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-2", true)
 	require.NoError(t, err)
 	require.Equal(t, first.ID, second.ID, "enable must be idempotent")
 
@@ -101,10 +102,13 @@ func TestEnableManagedAssistantAttachesNoToolsets(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	record, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	record, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)
 	require.NoError(t, err)
 
-	require.Empty(t, record.Toolsets, "managed assistant must not attach project toolsets by default")
+	hydrated, err := core.GetManagedAssistant(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, record.ID, hydrated.ID)
+	require.Empty(t, hydrated.MCPServers, "managed assistant must not attach project toolsets by default")
 
 	// Provisioning must not touch the project's toolsets — MCP stays as it was.
 	reloaded, err := toolsetsQ.GetToolset(ctx, toolsetsrepo.GetToolsetParams{
@@ -125,7 +129,7 @@ func TestDisableManagedAssistantTearsDown(t *testing.T) {
 	core := newProvisioningCore(t, conn)
 	projectID := newProvisioningProject(t, conn, "managed-disable")
 
-	enabled, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	enabled, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)
 	require.NoError(t, err)
 
 	require.NoError(t, core.DisableManagedAssistant(ctx, projectID, urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"), nil))
@@ -143,7 +147,7 @@ func TestDisableManagedAssistantTearsDown(t *testing.T) {
 	require.NoError(t, core.DisableManagedAssistant(ctx, projectID, urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"), nil))
 
 	// Re-enabling provisions a fresh managed assistant.
-	reenabled, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	reenabled, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)
 	require.NoError(t, err)
 	require.NotEqual(t, enabled.ID, reenabled.ID, "re-enable creates a new assistant")
 }
@@ -181,10 +185,10 @@ func TestEnableManagedAssistantFailsWhenNameTaken(t *testing.T) {
 	// A user creates an assistant that happens to occupy the managed name.
 	_, err = core.CreateAssistant(ctx, "org-test", projectID, "user-1",
 		managedAssistantName("managed-taken"), managedAssistantModel, "hi", nil, nil,
-		int(managedAssistantWarmTTLSeconds), int(managedAssistantMaxConcurrency), StatusActive)
+		int(managedAssistantWarmTTLSeconds), int(managedAssistantMaxConcurrency), StatusActive, true, nil)
 	require.NoError(t, err)
 
-	_, err = core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	_, err = core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)
 	require.ErrorIs(t, err, ErrManagedAssistantNameTaken)
 
 	// The feature stays off — no mapping was created.

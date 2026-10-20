@@ -80,7 +80,7 @@ describe("AgentSetupForm", () => {
     );
     expect(
       screen.getByText(
-        /drives the Okta deep links in the server readiness table below/,
+        /drives the Okta deep links in the Server connections table below/,
       ),
     ).toBeTruthy();
     expect(

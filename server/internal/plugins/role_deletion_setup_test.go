@@ -42,7 +42,7 @@ func startRoleSetupDeletion(t *testing.T, ctx context.Context, ti *testInstance,
 	const workosOrgID = "org_role_setup_deletion"
 	_, err := provider.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{Name: "Engineering", Slug: "Engineering", Description: ""})
 	require.NoError(t, err)
-	manager := access.NewRoleManager(testenv.NewLogger(t), ti.conn, provider, audit.NewLogger())
+	manager := access.NewRoleManager(testenv.NewLogger(t), ti.conn, provider, audit.NewLogger(), plugins.PublicationRequests{}, nil)
 	result := make(chan error, 1)
 	go func() {
 		_, err := manager.DeleteRole(ctx, setup.organizationID, workosOrgID, strings.TrimPrefix(role, "role:organization:"), access.RoleAuditActor{

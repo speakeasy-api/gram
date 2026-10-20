@@ -66,6 +66,14 @@ WHERE ti.id = @id
   AND ti.project_id = @project_id
   AND ti.deleted IS FALSE;
 
+-- name: GetTriggerInstanceByIDForUpdate :one
+SELECT *
+FROM trigger_instances ti
+WHERE ti.id = @id
+  AND ti.project_id = @project_id
+  AND ti.deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetTriggerInstanceByIDPublic :one
 SELECT *
 FROM trigger_instances ti

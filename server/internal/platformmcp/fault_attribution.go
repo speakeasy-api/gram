@@ -7,10 +7,10 @@ type Fault string
 const (
 	// FaultNone is a server with no evidence of a problem in the window.
 	FaultNone Fault = "none"
-	// FaultGramConfiguration is a problem in how the MCP is configured in Gram:
+	// FaultGramConfiguration is a problem in how the MCP is configured in Speakeasy:
 	// missing or expired authorization, incomplete required configuration.
 	FaultGramConfiguration Fault = "gram_configuration"
-	// FaultProvider is a problem upstream of Gram — the provider the MCP
+	// FaultProvider is a problem upstream of Speakeasy — the provider the MCP
 	// fronts is failing or unreachable.
 	FaultProvider Fault = "provider"
 	// FaultClient is a problem in the calling MCP client: malformed or rejected
@@ -30,7 +30,7 @@ type FaultAttribution struct {
 	// Reason names the single rule that decided this attribution.
 	Reason string `json:"reason"`
 	// ReadinessExonerates records whether a fresh, ready server-side readiness
-	// result was available. When true, Gram-side configuration and the provider
+	// result was available. When true, Speakeasy-side configuration and the provider
 	// are both known good as of that check.
 	ReadinessExonerates bool `json:"readiness_exonerates"`
 	// Scope says whether the failure pattern is confined to this server or
@@ -141,7 +141,7 @@ const organizationWideFailureMargin = 0.2
 // FaultIndeterminate with the reason that left it undecided.
 func attributeFault(readiness Readiness, readinessFound bool, server, organization outcomeTotals) FaultAttribution {
 	scope := compareScope(server, organization)
-	// A fresh ready result is a positive statement made by Gram's own probe:
+	// A fresh ready result is a positive statement made by Speakeasy's own probe:
 	// the configuration resolved and the provider answered. It cannot exonerate
 	// anything if it is stale or missing.
 	exonerates := readinessFound && readiness.Fresh && readiness.State == ReadinessReady
@@ -173,7 +173,7 @@ func attributeFault(readiness Readiness, readinessFound bool, server, organizati
 	}
 
 	// Readiness states other than ready are a direct statement about this
-	// server's Gram-side setup, and outrank inference from call outcomes.
+	// server's Speakeasy-side setup, and outrank inference from call outcomes.
 	if readinessFound && readiness.Fresh && readiness.State != ReadinessReady {
 		attribution.Fault = FaultGramConfiguration
 		attribution.Reason = reasonReadinessNotReady
@@ -188,13 +188,13 @@ func attributeFault(readiness Readiness, readinessFound bool, server, organizati
 
 	switch dominant {
 	case reasonClientErrorDominant:
-		// Requests rejected before they became a provider call. Neither Gram's
+		// Requests rejected before they became a provider call. Neither Speakeasy's
 		// configuration nor the provider produced them.
 		attribution.Fault = FaultClient
 	case reasonUnauthorizedDominant:
 		if exonerates {
 			// A contradiction, not a diagnosis: the status classified here is
-			// the one the provider returned to Gram's own call, so a probe that
+			// the one the provider returned to Speakeasy's own call, so a probe that
 			// authorized successfully and calls the provider rejects cannot
 			// both describe the same credentials. Reporting the caller at fault
 			// would blame the one party this evidence says nothing about.

@@ -42,6 +42,14 @@ const scopeDefinitions = [
     agentEligible: true,
     exclusionScope: "skill:blocked_write",
   },
+  {
+    slug: "assistant:write",
+    description: "Create and modify assistants within the project.",
+    resourceType: "assistant",
+    visibility: "user_visible",
+    agentEligible: true,
+    exclusionScope: "assistant:blocked_write",
+  },
 ] satisfies ScopeDefinition[];
 
 function role(grants: Role["grants"]): Role {
@@ -181,6 +189,44 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
       {
         scope: "skill:blocked_write",
         selectors: [{ resourceKind: "skill", resourceId: "project_456" }],
+      },
+    ]);
+  });
+
+  it("round-trips project-filtered assistant rules and exceptions", () => {
+    const assistantSelectors = [
+      { resourceKind: "assistant", resourceId: "*", projectId: "project_123" },
+    ] as unknown as Role["grants"][number]["selectors"];
+    const assistantExclusions = [
+      { resourceKind: "assistant", resourceId: "assistant_456" },
+    ] as unknown as Role["grants"][number]["selectors"];
+    const r = role([
+      {
+        scope: "assistant:write" as Role["grants"][number]["scope"],
+        selectors: assistantSelectors,
+      },
+      {
+        scope: "assistant:blocked_write" as Role["grants"][number]["scope"],
+        selectors: assistantExclusions,
+      },
+    ]);
+
+    expect(
+      sdkGrantsFromForm(grantsFromRole(r, scopeDefinitions), scopeDefinitions),
+    ).toEqual([
+      {
+        scope: "assistant:write",
+        selectors: [
+          {
+            resourceKind: "assistant",
+            resourceId: "*",
+            projectId: "project_123",
+          },
+        ],
+      },
+      {
+        scope: "assistant:blocked_write",
+        selectors: [{ resourceKind: "assistant", resourceId: "assistant_456" }],
       },
     ]);
   });

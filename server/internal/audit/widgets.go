@@ -44,7 +44,11 @@ type LogWidgetUpdateEvent struct {
 	After  *gen.Widget
 }
 
-type LogWidgetDeleteEvent struct{ WidgetEventBase }
+type LogWidgetDeleteEvent struct {
+	WidgetEventBase
+	// RemovedFrom names the dashboards the widget was taken off as it went.
+	RemovedFrom []urn.Dashboard
+}
 
 func widgetEntry(base WidgetEventBase, action Action, metadata, before, after []byte) repo.InsertAuditLogParams {
 	return repo.InsertAuditLogParams{
@@ -93,5 +97,17 @@ func (l *Logger) LogWidgetUpdate(ctx context.Context, dbtx repo.DBTX, event LogW
 }
 
 func (l *Logger) LogWidgetDelete(ctx context.Context, dbtx repo.DBTX, event LogWidgetDeleteEvent) error {
-	return l.log(ctx, dbtx, auditEntry{Params: widgetEntry(event.WidgetEventBase, ActionWidgetDelete, nil, nil, nil), OutboxEvent: events.WidgetV1})
+	var metadata []byte
+	if len(event.RemovedFrom) > 0 {
+		dashboards := make([]string, 0, len(event.RemovedFrom))
+		for _, dashboard := range event.RemovedFrom {
+			dashboards = append(dashboards, dashboard.String())
+		}
+		var err error
+		metadata, err = marshalAuditPayload(map[string]any{"removed_from": dashboards})
+		if err != nil {
+			return fmt.Errorf("marshal widget delete metadata: %w", err)
+		}
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: widgetEntry(event.WidgetEventBase, ActionWidgetDelete, metadata, nil, nil), OutboxEvent: events.WidgetV1})
 }

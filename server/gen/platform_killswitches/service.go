@@ -16,7 +16,7 @@ import (
 
 // Platform break-glass access to generic killswitch lifecycle operations on
 // the main server. Requires a current users.admin entitlement on an ordinary
-// Gram session.
+// Speakeasy session.
 type Service interface {
 	// ListDefinitions implements listDefinitions.
 	ListDefinitions(context.Context, *ListDefinitionsPayload) (res *ListDefinitionsResult, err error)

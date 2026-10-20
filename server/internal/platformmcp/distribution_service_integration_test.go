@@ -85,7 +85,7 @@ func TestDistributionServiceAttachesAndRemovesOnlyWorkflowSelectedReadyMCP(t *te
 	require.Equal(t, 1, published)
 
 	live, err := pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
-		PluginID:    defaultPlugin.ID,
+		PluginID: defaultPlugin.ID, ProjectID: defaultPlugin.ProjectID, OrganizationID: defaultPlugin.OrganizationID,
 		McpServerID: registration.McpServerID,
 	})
 	require.NoError(t, err)
@@ -129,7 +129,7 @@ func TestDistributionServiceAttachesAndRemovesOnlyWorkflowSelectedReadyMCP(t *te
 	require.Equal(t, 3, published)
 
 	_, err = pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
-		PluginID:    defaultPlugin.ID,
+		PluginID: defaultPlugin.ID, ProjectID: defaultPlugin.ProjectID, OrganizationID: defaultPlugin.OrganizationID,
 		McpServerID: registration.McpServerID,
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -184,7 +184,7 @@ func TestDistributionServiceTargetsTheNamedPluginAndRefusesAnUnmatchedOne(t *tes
 	require.Equal(t, "Marketing Tools", distributed.Plugin)
 
 	live, err := pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
-		PluginID:    marketing.ID,
+		PluginID: marketing.ID, ProjectID: marketing.ProjectID, OrganizationID: marketing.OrganizationID,
 		McpServerID: target.McpServerID,
 	})
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestDistributionServiceTargetsTheNamedPluginAndRefusesAnUnmatchedOne(t *tes
 	// The default plugin is untouched: naming a plugin distributes there and
 	// nowhere else.
 	_, err = pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
-		PluginID:    defaultPlugin.ID,
+		PluginID: defaultPlugin.ID, ProjectID: defaultPlugin.ProjectID, OrganizationID: defaultPlugin.OrganizationID,
 		McpServerID: target.McpServerID,
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -203,7 +203,7 @@ func TestDistributionServiceTargetsTheNamedPluginAndRefusesAnUnmatchedOne(t *tes
 	require.False(t, removed.AttachmentLive)
 
 	_, err = pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
-		PluginID:    marketing.ID,
+		PluginID: marketing.ID, ProjectID: marketing.ProjectID, OrganizationID: marketing.OrganizationID,
 		McpServerID: target.McpServerID,
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -230,7 +230,7 @@ func TestDistributionServicePreservesAdminReplacementOnRemoval(t *testing.T) {
 	distributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
 	require.NoError(t, err)
 
-	created, err := pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{PluginID: plugin.ID, McpServerID: target.McpServerID})
+	created, err := pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{PluginID: plugin.ID, ProjectID: plugin.ProjectID, OrganizationID: plugin.OrganizationID, McpServerID: target.McpServerID})
 	require.NoError(t, err)
 	_, err = pluginsrepo.New(conn).RemovePluginServer(ctx, pluginsrepo.RemovePluginServerParams{ID: created.ID, PluginID: plugin.ID})
 	require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestDistributionServicePreservesAdminReplacementOnRemoval(t *testing.T) {
 	require.Equal(t, distributionStateRemoved, removed.State)
 	require.True(t, removed.AttachmentLive, "removing onboarding state must not delete an administrator replacement")
 
-	live, err := pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{PluginID: plugin.ID, McpServerID: target.McpServerID})
+	live, err := pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{PluginID: plugin.ID, ProjectID: plugin.ProjectID, OrganizationID: plugin.OrganizationID, McpServerID: target.McpServerID})
 	require.NoError(t, err)
 	require.Equal(t, replacement.ID, live.ID)
 }
@@ -293,7 +293,7 @@ func TestDistributionServicePreservesPreexistingAttachmentOnRemoval(t *testing.T
 	require.Equal(t, distributionStateRemoved, removed.State)
 	require.True(t, removed.AttachmentLive, "removing onboarding state must not delete a pre-existing plugin attachment")
 
-	live, err := pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{PluginID: plugin.ID, McpServerID: target.McpServerID})
+	live, err := pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{PluginID: plugin.ID, ProjectID: plugin.ProjectID, OrganizationID: plugin.OrganizationID, McpServerID: target.McpServerID})
 	require.NoError(t, err)
 	require.Equal(t, preexisting.ID, live.ID)
 }

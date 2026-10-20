@@ -3,8 +3,10 @@ package chrepo
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 )
 
@@ -14,6 +16,21 @@ type GetRiskFindingForUnmaskParams struct {
 	OrganizationID string
 	ProjectID      string
 	ID             uuid.UUID
+}
+
+// ListRiskFindingsForUnmaskParams scopes a batch reveal read to one tenant.
+type ListRiskFindingsForUnmaskParams struct {
+	OrganizationID string
+	ProjectID      string
+	IDs            []uuid.UUID
+}
+
+// ListRiskFindingSpansForRecallParams scopes recall masking to one chat.
+type ListRiskFindingSpansForRecallParams struct {
+	OrganizationID string
+	ProjectID      string
+	ChatID         string
+	PolicyIDs      []string
 }
 
 // RiskFindingUnmaskRow is the reveal-relevant state of one finding: the anchor
@@ -39,6 +56,108 @@ type RiskFindingUnmaskRow struct {
 	ToolCallID       string
 	OrganizationID   string
 	RiskPolicyID     string
+	ExecutionID      string
+	Phase            string
+}
+
+var riskFindingRevealColumns = []string{
+	"id",
+	"created_at",
+	"chat_message_id",
+	"content_part_id",
+	"chat_id",
+	"source",
+	"rule_id",
+	"start_pos",
+	"end_pos",
+	"match_len",
+	"match_redacted",
+	"surface",
+	"mediation_surface",
+	"field",
+	"path",
+	"tool_call_id",
+	"organization_id",
+	"risk_policy_id",
+	"execution_id",
+	"phase",
+}
+var riskFindingRevealLatestColumns = append(slices.Clone(riskFindingRevealColumns),
+	"dead_letter_reason",
+	"excluded_at",
+	"false_positive_at",
+	"ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+latestCopyOrderSQL+") AS rn",
+)
+
+// liveRiskFindingRevealQuery ranks each id's newest state before visibility gates.
+func liveRiskFindingRevealQuery(organizationID, projectID, chatID string, ids []uuid.UUID, policyIDs []string) squirrel.SelectBuilder {
+	innerColumns := riskFindingRevealLatestColumns
+	inner := sq.Select(innerColumns...).
+		From("risk_findings").
+		Where("organization_id = ?", organizationID).
+		Where("project_id = ?", projectID).
+		Where(notShadowCond)
+	if chatID != "" {
+		inner = inner.Where("chat_id = ?", chatID)
+	}
+	if len(ids) > 0 {
+		inner = inner.Where(squirrel.Eq{"id": ids})
+	}
+	if len(policyIDs) > 0 {
+		inner = inner.Where(squirrel.Eq{"risk_policy_id": policyIDs})
+	}
+
+	return sq.Select(riskFindingRevealColumns...).
+		FromSelect(inner, "latest").
+		Where("rn = 1").
+		Where("dead_letter_reason = ''").
+		Where("excluded_at IS NULL").
+		// Legacy suppression column, still filtered until the
+		// false_positive_at-only rows written before the suppression
+		// convergence age out under the table's 90-day TTL.
+		Where("false_positive_at IS NULL")
+}
+
+type riskFindingRows interface {
+	Next() bool
+	Scan(dest ...any) error
+	Err() error
+}
+
+func scanRiskFindingUnmaskRows(rows riskFindingRows) ([]RiskFindingUnmaskRow, error) {
+	var out []RiskFindingUnmaskRow
+	for rows.Next() {
+		var row RiskFindingUnmaskRow
+		if err := rows.Scan(
+			&row.ID,
+			&row.CreatedAt,
+			&row.ChatMessageID,
+			&row.ContentPartID,
+			&row.ChatID,
+			&row.Source,
+			&row.RuleID,
+			&row.StartPos,
+			&row.EndPos,
+			&row.MatchLen,
+			&row.MatchRedacted,
+			&row.Surface,
+			&row.MediationSurface,
+			&row.Field,
+			&row.Path,
+			&row.ToolCallID,
+			&row.OrganizationID,
+			&row.RiskPolicyID,
+			&row.ExecutionID,
+			&row.Phase,
+		); err != nil {
+			return nil, fmt.Errorf("scan risk finding reveal row: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read risk finding reveal rows: %w", err)
+	}
+	return out, nil
 }
 
 // GetRiskFindingForUnmask returns the reveal-relevant state for one finding id,
@@ -53,109 +172,57 @@ type RiskFindingUnmaskRow struct {
 // picking would let an older, still-clean row of a since-dismissed finding
 // survive and be revealed.
 func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingForUnmaskParams) (*RiskFindingUnmaskRow, error) {
-	latest := sq.Select(
-		"id",
-		"created_at",
-		"chat_message_id",
-		"content_part_id",
-		"chat_id",
-		"source",
-		"rule_id",
-		"start_pos",
-		"end_pos",
-		"match_len",
-		"match_redacted",
-		"surface",
-		"mediation_surface",
-		"field",
-		"path",
-		"tool_call_id",
-		"organization_id",
-		"risk_policy_id",
-		"dead_letter_reason",
-		"excluded_at",
-		"false_positive_at",
-	).
-		From("risk_findings").
-		Where("organization_id = ?", p.OrganizationID).
-		Where("project_id = ?", p.ProjectID).
-		Where(notShadowCond).
-		Where("id = ?", p.ID).
-		OrderBy(latestCopyOrderSQL).
-		Limit(1)
-
-	sb := sq.Select(
-		"id",
-		"created_at",
-		"chat_message_id",
-		"content_part_id",
-		"chat_id",
-		"source",
-		"rule_id",
-		"start_pos",
-		"end_pos",
-		"match_len",
-		"match_redacted",
-		"surface",
-		"mediation_surface",
-		"field",
-		"path",
-		"tool_call_id",
-		"organization_id",
-		"risk_policy_id",
-	).
-		FromSelect(latest, "latest").
-		Where("dead_letter_reason = ''").
-		Where("excluded_at IS NULL").
-		// Legacy suppression column, still filtered until the
-		// false_positive_at-only rows written before the suppression
-		// convergence age out under the table's 90-day TTL.
-		Where("false_positive_at IS NULL")
-
-	query, args, err := sb.ToSql()
+	rows, err := q.ListRiskFindingsForUnmask(ctx, ListRiskFindingsForUnmaskParams{
+		OrganizationID: p.OrganizationID,
+		ProjectID:      p.ProjectID,
+		IDs:            []uuid.UUID{p.ID},
+	})
 	if err != nil {
-		return nil, fmt.Errorf("build risk finding unmask query: %w", err)
+		return nil, err
 	}
-
-	rows, err := q.conn.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query risk finding for unmask: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
-			return nil, fmt.Errorf("read risk finding unmask rows: %w", err)
-		}
+	if len(rows) == 0 {
 		return nil, nil
 	}
+	return &rows[0], nil
+}
 
-	var row RiskFindingUnmaskRow
-	if err := rows.Scan(
-		&row.ID,
-		&row.CreatedAt,
-		&row.ChatMessageID,
-		&row.ContentPartID,
-		&row.ChatID,
-		&row.Source,
-		&row.RuleID,
-		&row.StartPos,
-		&row.EndPos,
-		&row.MatchLen,
-		&row.MatchRedacted,
-		&row.Surface,
-		&row.MediationSurface,
-		&row.Field,
-		&row.Path,
-		&row.ToolCallID,
-		&row.OrganizationID,
-		&row.RiskPolicyID,
-	); err != nil {
-		return nil, fmt.Errorf("scan risk finding unmask row: %w", err)
+// ListRiskFindingsForUnmask returns live tenant-scoped rows for the ids.
+//
+// Each id's newest state copy is selected first and visibility gates are
+// applied afterward. Gating first would let an older clean copy of a
+// since-dismissed finding survive and be revealed.
+func (q *Queries) ListRiskFindingsForUnmask(ctx context.Context, p ListRiskFindingsForUnmaskParams) ([]RiskFindingUnmaskRow, error) {
+	if len(p.IDs) == 0 {
+		return []RiskFindingUnmaskRow{}, nil
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read risk finding unmask rows: %w", err)
+	query, args, err := liveRiskFindingRevealQuery(p.OrganizationID, p.ProjectID, "", p.IDs, nil).ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build risk findings reveal query: %w", err)
 	}
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query risk findings for reveal: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanRiskFindingUnmaskRows(rows)
+}
 
-	return &row, nil
+// ListRiskFindingSpansForRecall returns live message findings for one chat,
+// selecting each id's newest state before applying visibility gates.
+func (q *Queries) ListRiskFindingSpansForRecall(ctx context.Context, p ListRiskFindingSpansForRecallParams) ([]RiskFindingUnmaskRow, error) {
+	if len(p.PolicyIDs) == 0 {
+		return []RiskFindingUnmaskRow{}, nil
+	}
+	sb := liveRiskFindingRevealQuery(p.OrganizationID, p.ProjectID, p.ChatID, nil, p.PolicyIDs).
+		Where("chat_message_id != ''")
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build risk finding spans for recall query: %w", err)
+	}
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query risk finding spans for recall: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanRiskFindingUnmaskRows(rows)
 }

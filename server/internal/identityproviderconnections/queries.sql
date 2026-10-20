@@ -64,8 +64,21 @@ WHERE ec.id = @id
   AND ec.provider = 'gcp_iam'
   AND ec.deleted IS FALSE;
 
+-- The service account a platform credential impersonates, tombstones
+-- included: the signer grant made with it outlives the credential.
+-- name: GetPlatformGcpIamCredentialServiceAccount :one
+SELECT gic.impersonate_service_account
+FROM external_credentials AS ec
+JOIN gcp_iam_credentials AS gic ON gic.external_credential_id = ec.id
+WHERE ec.id = @id
+  AND ec.organization_id IS NULL
+  AND ec.project_id IS NULL
+  AND ec.provider = 'gcp_iam';
+
 -- The managed client, its set, and the set's active key. The key join is LEFT
 -- so a revoked connection (live client, live set, no live keys) still resolves.
+-- The set join is LEFT for client-secret clients, which have no set; a client
+-- that references a set must still find it live.
 -- Organization-level only: the client, its issuer, and the set all carry the
 -- connection's organization scope, and the set must be marked by the same connection.
 -- name: GetManagedClient :one
@@ -82,7 +95,7 @@ JOIN remote_session_issuers AS i
  AND i.organization_id = c.organization_id
  AND i.project_id IS NULL
  AND i.deleted IS FALSE
-JOIN json_web_key_sets AS s
+LEFT JOIN json_web_key_sets AS s
   ON s.organization_id = c.organization_id
  AND s.id = c.json_web_key_set_id
  AND s.identity_provider_connection_id = c.identity_provider_connection_id
@@ -95,7 +108,8 @@ LEFT JOIN json_web_keys AS k
 WHERE c.organization_id = @organization_id
   AND c.project_id IS NULL
   AND c.identity_provider_connection_id = @identity_provider_connection_id
-  AND c.deleted IS FALSE;
+  AND c.deleted IS FALSE
+  AND (s.id IS NOT NULL OR (c.json_web_key_set_id IS NULL AND c.token_endpoint_auth_method = 'client_secret_basic'));
 
 -- While pending, updated_at records observed publication (there is no published_at column).
 -- A pending key is not timed until its publication commit has been observed.
@@ -117,12 +131,16 @@ SELECT updated_at <= clock_timestamp() - make_interval(secs => @cache_seconds::i
 FROM json_web_keys
 WHERE id = @id AND organization_id = @organization_id AND state = 'pending' AND deleted IS FALSE;
 
--- Include tombstones and every organization: resource names are random and
--- global, so a reference anywhere means the key must never be disabled.
+-- Whether the organization has an external key row for this KMS resource,
+-- tombstones included: a reference the organization still holds means the
+-- key must never be disabled. References from other organizations don't count.
 -- name: ManagedKeyResourceExists :one
 SELECT EXISTS (
- SELECT 1 FROM gcp_kms_keys AS k
+ SELECT 1
+ FROM gcp_kms_keys AS k
+ JOIN external_keys AS ek ON ek.id = k.external_key_id AND ek.provider = k.external_keys_provider
  WHERE k.resource_name = @resource_name
+   AND ek.organization_id = @organization_id::text
 );
 
 -- Test fixture: age a pending publication relative to the database clock.
@@ -131,6 +149,13 @@ UPDATE json_web_keys
 SET updated_at = clock_timestamp() - make_interval(secs => @age_seconds::integer)
 WHERE json_web_key_set_id = @json_web_key_set_id
   AND organization_id = @organization_id AND state = 'pending' AND deleted IS FALSE;
+
+-- Test fixture: age retired keys relative to the database clock.
+-- name: BackdateRetiredJsonWebKeys :exec
+UPDATE json_web_keys
+SET retired_at = clock_timestamp() - make_interval(secs => @age_seconds::integer)
+WHERE json_web_key_set_id = @json_web_key_set_id
+  AND organization_id = @organization_id AND state = 'retired' AND deleted IS FALSE;
 
 -- Connection management API. Every query below is organization-qualified.
 
@@ -256,10 +281,12 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- Secret bindings are sticky, but private-key checklist values describe the
+-- current verification observation.
 -- name: UpdateOktaIdentityProviderConnectionVerification :one
 UPDATE okta_identity_provider_connections
 SET ownership_claimed = ownership_claimed OR @ownership_claimed::boolean,
-    dpop_required = @dpop_required,
+    dpop_required = CASE WHEN @preserve_dpop::boolean THEN dpop_required OR @dpop_required::boolean ELSE @dpop_required::boolean END,
     granted_scopes = @granted_scopes,
     updated_at = clock_timestamp()
 WHERE identity_provider_connection_id = @identity_provider_connection_id
@@ -300,10 +327,12 @@ WHERE identity_provider_connection_id = @identity_provider_connection_id
 RETURNING *;
 
 -- Only the provisioner writes a managed client's client_id, and only while the
--- provisioning placeholder is still in place.
+-- provisioning placeholder is still in place. A client-secret client receives
+-- its secret in the same write.
 -- name: SetManagedClientID :one
 UPDATE remote_session_clients
 SET client_id = @client_id,
+    client_secret_encrypted = sqlc.narg(client_secret_encrypted),
     upstream_rejected_at = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id
@@ -311,6 +340,104 @@ WHERE id = @id
   AND project_id IS NULL
   AND identity_provider_connection_id = @identity_provider_connection_id
   AND client_id = @placeholder_client_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: SetManagedClientSecret :one
+UPDATE remote_session_clients
+SET client_secret_encrypted = @client_secret_encrypted,
+    upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND token_endpoint_auth_method = 'client_secret_basic'
+  AND deleted IS FALSE
+RETURNING *;
+
+-- Revocation withdraws a client-secret client's credential.
+-- name: ClearManagedClientSecret :one
+UPDATE remote_session_clients
+SET client_secret_encrypted = NULL,
+    upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND token_endpoint_auth_method = 'client_secret_basic'
+  AND deleted IS FALSE
+RETURNING *;
+
+-- Switching methods is allowed only while the client id is still the placeholder.
+-- name: SwitchManagedClientToSecret :one
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'client_secret_basic',
+    json_web_key_set_id = NULL,
+    client_secret_encrypted = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND client_id = @placeholder_client_id
+  AND token_endpoint_auth_method = 'private_key_jwt'
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: SwitchManagedClientToKeySet :one
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'private_key_jwt',
+    json_web_key_set_id = @json_web_key_set_id,
+    client_secret_encrypted = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND client_id = @placeholder_client_id
+  AND token_endpoint_auth_method = 'client_secret_basic'
+  AND json_web_key_set_id IS NULL
+  AND deleted IS FALSE
+RETURNING *;
+
+-- A managed key set no live client points at: parked by a switch to the
+-- client-secret method, so a switch back reattaches it instead of minting.
+-- name: ListParkedConnectionKeySets :many
+SELECT s.*
+FROM json_web_key_sets AS s
+WHERE s.organization_id = @organization_id
+  AND s.project_id IS NULL
+  AND s.identity_provider_connection_id = @identity_provider_connection_id
+  AND s.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM remote_session_clients AS c
+    WHERE c.organization_id = s.organization_id
+      AND c.json_web_key_set_id = s.id
+      AND c.deleted IS FALSE
+  )
+ORDER BY s.created_at DESC
+FOR UPDATE OF s;
+
+-- Rechecked after the parked set is locked: reattachment takes the same set
+-- lock first, so a set seen detached here cannot be reattached before commit.
+-- name: KeySetAttached :one
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_clients
+  WHERE organization_id = @organization_id
+    AND json_web_key_set_id = @json_web_key_set_id
+    AND deleted IS FALSE
+);
+
+-- name: SetOktaListingMode :one
+UPDATE okta_identity_provider_connections
+SET listing_mode = @listing_mode,
+    updated_at = clock_timestamp()
+WHERE identity_provider_connection_id = @identity_provider_connection_id
+  AND organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 
@@ -337,3 +464,88 @@ WHERE identity_provider_connection_id = @identity_provider_connection_id
   AND organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- TEST FIXTURE ONLY. Plants an auth method on a managed client without its
+-- matching credential material, which no production path produces.
+-- name: ForceManagedClientAuthMethodFixture :execrows
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = @token_endpoint_auth_method
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL;
+
+-- Token acquisition holds the connection lock before this lock; revoking a
+-- secret updates this same row, so it cannot commit during an exchange.
+-- name: LockOktaTokenCredential :one
+SELECT client_secret_encrypted, client_id
+FROM remote_session_clients
+WHERE id = @id AND organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND project_id IS NULL AND deleted IS FALSE
+FOR UPDATE;
+
+-- Secret binding observations are monotonic, including worker observations.
+-- Match the observed client identity so a rolled-back initial submission cannot
+-- pin the placeholder (or a later submission of a different client).
+-- name: PinOktaDPoP :exec
+UPDATE okta_identity_provider_connections AS o
+SET dpop_required = true
+WHERE o.identity_provider_connection_id = @identity_provider_connection_id
+  AND o.organization_id = @organization_id AND o.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients AS c
+    WHERE c.id = o.remote_session_client_id
+      AND c.identity_provider_connection_id = o.identity_provider_connection_id
+      AND c.organization_id = o.organization_id AND c.project_id IS NULL
+      AND c.deleted IS FALSE AND c.token_endpoint_auth_method = 'client_secret_basic'
+      AND c.client_id = @client_id
+  );
+
+-- Organization-owned, unmanaged sign-in clients registered for the recorded
+-- Okta agent under the connection's issuer, with the active signing key.
+-- name: ListOktaSignInClients :many
+SELECT c.id, c.token_endpoint_auth_method, c.token_endpoint_auth_audience_format,
+  c.json_web_key_set_id, c.scope, c.callback_base_url,
+  k.kid AS active_kid, k.public_jwk AS active_public_jwk
+FROM remote_session_clients AS c
+LEFT JOIN json_web_key_sets AS s
+  ON s.organization_id = c.organization_id
+ AND s.id = c.json_web_key_set_id
+ AND s.deleted IS FALSE
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = s.organization_id
+ AND k.json_web_key_set_id = s.id
+ AND k.state = 'active'
+ AND k.deleted IS FALSE
+WHERE c.organization_id = @organization_id
+  AND c.project_id IS NULL
+  AND c.identity_provider_connection_id IS NULL
+  AND c.remote_session_issuer_id = @remote_session_issuer_id
+  AND c.client_id = @client_id
+  AND c.deleted IS FALSE
+ORDER BY c.id;
+
+-- Organization sign-in issuers that trust an unmanaged client of the connection's issuer.
+-- name: ListOktaSignInIssuerTrusts :many
+SELECT u.id, u.slug, c.id AS trusted_client_row_id, c.client_id AS trusted_client_id,
+  c.deleted AS trusted_client_deleted
+FROM user_session_issuers AS u
+JOIN remote_session_clients AS c
+  ON c.organization_id = u.organization_id
+ AND c.id = u.trusted_remote_session_client_id
+WHERE u.organization_id = @organization_id
+  AND u.project_id IS NULL
+  AND u.trusted_remote_session_issuer_id = @remote_session_issuer_id
+  AND u.deleted IS FALSE
+  AND c.identity_provider_connection_id IS NULL
+ORDER BY u.slug, u.id;
+
+-- KMS resource behind any managed key, including enterprise issuer keys that
+-- customer key APIs never see. Used only to disable revoked key versions.
+-- name: GetManagedKeyResource :one
+SELECT gcp.resource_name, ek.external_credential_id
+FROM external_keys AS ek
+JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
+WHERE ek.id = @id
+  AND ek.organization_id = @organization_id
+  AND ek.deleted IS FALSE;

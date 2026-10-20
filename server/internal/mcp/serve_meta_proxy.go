@@ -45,6 +45,12 @@ import (
 // dials, so a credential that matches is being returned to the audience it
 // names.
 //
+// A self client's credential routes to a remote member by identity too: the
+// issuer it is keyed under must be the member's own derived
+// remote_session_issuer (upstreamTokenRoutes). One whose credential could not
+// be obtained, or was requested for another resource, answers with the
+// member-scoped remedy rather than an anonymous call.
+//
 // A tunneled member is routed by identity alone: only the entry keyed by its
 // own derived remote_session_issuer (mcpserverissuersync.go), accepted when
 // that grant is unqualified or names this member's recorded resource
@@ -52,31 +58,44 @@ import (
 // URL does, because a tunnel's dial target is decoupled from the resource it
 // claims — an operator-supplied identifier that collided with a sibling's
 // upstream would otherwise deliver that sibling's bearer to the tunnel.
-func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, upstreamResource string) (string, error) {
+func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, upstreamResource string) (remotesessions.UpstreamToken, error) {
+	var none remotesessions.UpstreamToken
 	want := strings.TrimRight(upstreamResource, "/")
 	if member.tunneledServerID.Valid {
-		return tunneledIssuerToken(tokens, member.remoteSessionIssuerID, want), nil
+		routed, err := tunneledIssuerToken(tokens, member.remoteSessionIssuerID, want)
+		if err != nil {
+			return none, metaMemberClientCredentialError(member, err)
+		}
+		return routed, nil
 	}
 	if want == "" {
-		return "", nil
+		return none, nil
 	}
-	matched := ""
+	var matched remotesessions.UpstreamToken
 	found := 0
-	for _, entry := range tokens {
-		if grantRoutesToUpstream(entry.Resource, want, false) {
-			matched = entry.Token
+	for issuerID, entry := range tokens {
+		if upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) {
+			matched = entry
 			found++
 		}
 	}
 	switch found {
 	case 0:
-		return "", nil
+		if member.remoteSessionIssuerID.Valid {
+			if entry, ok := tokens[member.remoteSessionIssuerID.UUID]; ok && entry.CredentialOwner == remotesessions.CredentialOwnerSelf {
+				return none, &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential issued for a different resource; contact the MCP server administrator", member.slug)}
+			}
+		}
+		return none, nil
 	case 1:
+		if err := matched.ClientCredentialErr; err != nil {
+			return none, metaMemberClientCredentialError(member, err)
+		}
 		return matched, nil
 	default:
 		// Several credentials claim the same upstream, so forwarding any one
 		// would be a guess. Name the duplication rather than the symptom.
-		return "", fmt.Errorf("%w: %w", errAmbiguousMemberCredential, &metaMemberError{message: fmt.Sprintf("server %q has %d upstream credentials recorded for the same upstream, so none can be chosen; disconnect the duplicates from this gateway's sign-in and reconnect once", member.slug, found)})
+		return none, fmt.Errorf("%w: %w", errAmbiguousMemberCredential, &metaMemberError{message: fmt.Sprintf("server %q has %d upstream credentials recorded for the same upstream, so none can be chosen; disconnect the duplicates from this gateway's sign-in and reconnect once", member.slug, found)})
 	}
 }
 
@@ -88,17 +107,36 @@ var errAmbiguousMemberCredential = errors.New("ambiguous member credential")
 // detached close is not built on an expired call context.
 type memberProxyBuilder func(ctx context.Context) (*proxy.Proxy, error)
 
-// memberDial is a routed member's proxy builder plus whether routing found
-// no credential, so a 401 can name the gateway's gap, not a rejected token.
+// memberDial is a routed member's proxy builder plus what routing found, so a
+// 401 can name the gateway's gap or the credential's owner, not just a
+// rejected token.
 type memberDial struct {
 	build     memberProxyBuilder
 	anonymous bool
+
+	// clientCredential marks a member called with the credential a self
+	// client holds for itself, which nobody reconnects.
+	clientCredential bool
+
+	// connectURL opens the member's connect page on the gateway, where the
+	// caller signs in to its upstream; empty when the gateway has none.
+	connectURL string
 }
 
 // memberAuthFailure names the member-scoped meaning of an upstream 401/403.
-func memberAuthFailure(member metaMember, anonymous bool) error {
-	if anonymous {
+//
+// A person connects the member on its own page, so the message gives them
+// that page's URL to open; an agent shows it to them rather than retrying.
+func memberAuthFailure(member metaMember, dial memberDial) error {
+	switch {
+	case dial.anonymous && dial.connectURL != "":
+		return &metaMemberError{message: fmt.Sprintf("server %q is not connected for this user. Ask the user to open %s to connect it, then retry", member.slug, dial.connectURL)}
+	case dial.anonymous:
 		return &metaMemberError{message: fmt.Sprintf("server %q requires authentication and this gateway holds no credential that routes to it; connect it from this gateway's sign-in page", member.slug)}
+	case dial.clientCredential:
+		return metaMemberClientCredentialError(member, remotesessions.ErrClientCredentialMisconfigured)
+	case dial.connectURL != "":
+		return &metaMemberError{message: fmt.Sprintf("server %q rejected the user's credential. Ask the user to open %s to reconnect it, then retry", member.slug, dial.connectURL)}
 	}
 	return &metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential; reconnect it from this gateway's sign-in page", member.slug)}
 }
@@ -112,6 +150,7 @@ func (s *Service) dialMetaMember(
 	callerIdentity string,
 ) (memberDial, error) {
 	dial, backend, err := s.routeMetaMember(ctx, logger, gate, member, callerIdentity)
+	dial.connectURL = gate.memberConnectURL(member)
 	switch {
 	case errors.Is(err, errAmbiguousMemberCredential):
 		s.metrics.RecordMetaMemberDispatch(ctx, backend, mcpmetrics.MetaDispatchAmbiguous)
@@ -141,6 +180,10 @@ func (s *Service) routeMetaMember(
 	if err != nil {
 		return memberDial{}, "", fmt.Errorf("load meta MCP member server: %w", err)
 	}
+	tokens, err := gate.memberTokens(ctx, member)
+	if err != nil {
+		return memberDial{}, "", err
+	}
 
 	// gate.toolSelection is provably nil today: meta endpoints mint no tool
 	// selections. If they ever do, its names are meta-MCP-qualified and would
@@ -164,24 +207,28 @@ func (s *Service) routeMetaMember(
 		if herr != nil {
 			return memberDial{}, "remote", fmt.Errorf("load meta MCP member upstream headers: %w", herr)
 		}
-		upstreamToken, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(remoteServer.Url, "/"))
+		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(remoteServer.Url, "/"))
+		upstreamToken := routed.Token
 		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil {
 			upstreamToken, terr = gate.chainUpstream(ctx, remoteServer.Url)
 		}
 		if terr != nil {
 			return memberDial{}, "remote", terr
 		}
-		return memberDial{anonymous: upstreamToken == "", build: func(context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
 			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			// Meta-MCP-synthesized initializes are not client sessions.
 			p.InitializeRequestInterceptors = nil
+			renewal := s.renewClientCredentialOnRejection(p, logger, routed)
+			renewal.preserveFailure(p)
 			return p, nil
 		}}, "remote", nil
 
 	case member.tunneledServerID.Valid:
-		upstreamToken, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
+		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
+		upstreamToken := routed.Token
 		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil {
 			upstreamToken, terr = gate.chainUpstream(ctx, member.tunneledResourceIdentifier)
 		}
@@ -191,7 +238,7 @@ func (s *Service) routeMetaMember(
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		return memberDial{anonymous: upstreamToken == "", build: func(ctx context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", build: func(ctx context.Context) (*proxy.Proxy, error) {
 			p, berr := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 				ClientAffinityKey:  affinity,
 				ProjectID:          member.projectID,
@@ -206,6 +253,8 @@ func (s *Service) routeMetaMember(
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 			}
 			p.InitializeRequestInterceptors = nil
+			renewal := s.renewClientCredentialOnRejection(p, logger, routed)
+			renewal.preserveFailure(p)
 			return p, nil
 		}}, "tunneled", nil
 
@@ -323,9 +372,6 @@ func (s *Service) executeProxiedMemberTool(
 	// A proxied member's tool-call log is written by the remotemcp interceptor,
 	// which never sees the gate, so carry the caller's identity down to it.
 	clientIdentity, _ := resolveClientIdentity(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
-		// The member's project, not the gate's: an agent gateway's members can
-		// sit in different projects, and this record belongs with the one the
-		// call actually reached.
 		projectID:       member.projectID,
 		sessionID:       gate.sessionID,
 		clientInfoScope: metaClientInfoScope(gate.metaServerID),
@@ -413,11 +459,14 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 
 	entries := []*toolListEntry{}
 	byName := map[string]*toolListEntry{}
+	incomplete := false
 	dropped := map[string]struct{}{}
 	cursor := ""
+	seenCursors := map[string]bool{}
 	for page := 0; ; page++ {
 		if page >= maxProxiedListPages {
 			logger.WarnContext(ctx, "meta MCP member tool listing truncated at the page cap", attr.SlogMcpServerID(member.serverID.String()))
+			incomplete = true
 			break
 		}
 		pageResult, cerr := session.ListTools(ctx, &mcp.ListToolsParams{Cursor: cursor, Meta: nil})
@@ -438,6 +487,7 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 		}
 		for _, entry := range listing.Tools {
 			if entry == nil || entry.Name == "" {
+				incomplete = true
 				continue
 			}
 			entries = append(entries, entry)
@@ -446,20 +496,25 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 				continue
 			}
 			if _, dup := byName[entry.Name]; dup {
+				incomplete = true
 				delete(byName, entry.Name)
 				dropped[entry.Name] = struct{}{}
 				continue
 			}
 			byName[entry.Name] = entry
 		}
-		if listing.NextCursor == "" || listing.NextCursor == cursor {
+		if listing.NextCursor == "" {
 			break
 		}
+		if listing.NextCursor == cursor || seenCursors[listing.NextCursor] {
+			return nil, &metaMemberError{message: fmt.Sprintf("server %q returned a repeated tool listing cursor", member.slug)}
+		}
+		seenCursors[listing.NextCursor] = true
 		cursor = listing.NextCursor
 	}
 
 	// Rebuild entries from the kept set, matching the hosted path's output.
-	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName}
+	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete}
 	for _, entry := range entries {
 		if kept, ok := byName[entry.Name]; ok && kept == entry {
 			catalog.entries = append(catalog.entries, entry)

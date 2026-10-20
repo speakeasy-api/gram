@@ -378,7 +378,7 @@ func TestDiscoverProtectedResourceMetadata_Timeout(t *testing.T) {
 
 	var probeErr *wellknown.ProtectedResourceDiscoveryError
 	require.ErrorAs(t, err, &probeErr)
-	require.Equal(t, "timeout", probeErr.Code())
+	require.Equal(t, wellknown.DiscoveryCodeTimeout, probeErr.Code())
 	require.Contains(t, probeErr.UserMessage(), "Timed out")
 }
 

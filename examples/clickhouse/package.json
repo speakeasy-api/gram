@@ -7,7 +7,7 @@
   "private": true,
   "keywords": [
     "mcp",
-    "getgram.ai"
+    "speakeasy"
   ],
   "license": "ISC",
   "main": "dist/functions.js",
@@ -21,10 +21,10 @@
   "scripts": {
     "dev": "npm run db:start && mcp-inspector nodemon -q --watch src --exec node ./src/server.ts",
     "lint": "tsc --noEmit",
-    "push": "gf push",
+    "push": "speakeasy functions push",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build",
-    "build": "gf build",
+    "build": "speakeasy functions build",
     "test": "vitest",
     "db:start": "docker compose up -d && npm run db:wait && npm run db:seed",
     "db:stop": "docker compose down",
@@ -33,7 +33,7 @@
     "db:seed": "CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT=8124 CLICKHOUSE_USERNAME=gram_user CLICKHOUSE_PASSWORD=gram_password CLICKHOUSE_DATABASE=gram_example node --import tsx scripts/seed.ts"
   },
   "dependencies": {
-    "@gram-ai/functions": "^0.11.1",
+    "@speakeasy-api/functions": "^0.20.0",
     "@modelcontextprotocol/sdk": "^1.20.1",
     "zod": "^4",
     "@clickhouse/client-web": "^1.6.0"

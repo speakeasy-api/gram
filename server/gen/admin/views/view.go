@@ -48,7 +48,7 @@ type ProductFeaturesView struct {
 	SkillCaptureMetadataOnly *bool
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled *bool
-	// Whether the organization can use the Gram Platform MCP capability
+	// Whether the organization can use the Speakeasy Platform MCP capability
 	PlatformMcpEnabled *bool
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
@@ -60,9 +60,6 @@ type ProductFeaturesView struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled *bool
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled *bool
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -70,8 +67,11 @@ type ProductFeaturesView struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled *bool
-	// Whether the staff rollout for automatic role plugin setup is enabled
-	AutomaticRoleDistribution *bool
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled *bool
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled *bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -99,10 +99,10 @@ var (
 			"customer_managed_encryption_keys_enabled",
 			"remote_session_auto_refresh_enabled",
 			"remote_session_auto_refresh_enforced_enabled",
-			"consent_tool_filtering_enabled",
 			"session_portability_enabled",
 			"network_ingress_enabled",
-			"automatic_role_distribution",
+			"signals_intelligence_enabled",
+			"organization_gateway_disabled",
 			"device_agent",
 		},
 	}
@@ -171,17 +171,17 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	if result.RemoteSessionAutoRefreshEnforcedEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_auto_refresh_enforced_enabled", "result"))
 	}
-	if result.ConsentToolFilteringEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("consent_tool_filtering_enabled", "result"))
-	}
 	if result.SessionPortabilityEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_portability_enabled", "result"))
 	}
 	if result.NetworkIngressEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("network_ingress_enabled", "result"))
 	}
-	if result.AutomaticRoleDistribution == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("automatic_role_distribution", "result"))
+	if result.SignalsIntelligenceEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signals_intelligence_enabled", "result"))
+	}
+	if result.OrganizationGatewayDisabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_gateway_disabled", "result"))
 	}
 	if result.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "result"))

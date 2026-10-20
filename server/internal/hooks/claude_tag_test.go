@@ -83,3 +83,12 @@ func TestClaudeTagTitleUsesChannelAcrossTopics(t *testing.T) {
 		require.Equal(t, "Claude Tag in #dev-demo", title)
 	}
 }
+
+func TestClaudeTagStandingOwnerTitle(t *testing.T) {
+	t.Parallel()
+	prompt := `<standing_owner_message sender="U_DEMO_ONE">Retry the release &amp; check results</standing_owner_message>
+Delivery prose and reference history follow.`
+	payload := canonicalIngestPayload("claude-code", "prompt.submitted", "demo-standing-session")
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	require.Equal(t, "Retry the release & check results", canonicalChatTitle(payload, "", "claude-code"))
+}

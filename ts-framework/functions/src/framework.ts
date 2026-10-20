@@ -289,7 +289,7 @@ export interface TextResponse<T extends string> extends Response {
   text(): Promise<T>;
 }
 
-export class Gram<
+export class Functions<
   TTools extends {
     [k: string]: ToolDefinition<any, any, string, Response>;
   } = {},
@@ -337,8 +337,9 @@ export class Gram<
        */
       oauthVariable: keyof EnvSchema & string;
       /**
-       * When true, the authenticated Gram user's email will be available to
-       * the function as the GRAM_USER_EMAIL environment variable.
+       * When true, the authenticated user's email will be available to the
+       * function as the SPEAKEASY_AI_USER_EMAIL environment variable. The
+       * deprecated GRAM_USER_EMAIL variable carries the same value.
        */
       gramEmail?: boolean;
     };
@@ -378,7 +379,7 @@ export class Gram<
   }
 
   /**
-   * Registers a resource with the Gram instance.
+   * Registers a resource with the Functions instance.
    */
   resource(def: ResourceEntry): this {
     this.#resources.set(def.uri, def);
@@ -465,7 +466,7 @@ export class Gram<
   }
 
   /**
-   * Registers a tool with the Gram instance.
+   * Registers a tool with the Functions instance.
    */
   tool<
     TName extends string,
@@ -473,7 +474,7 @@ export class Gram<
     Res extends Response,
   >(
     definition: ToolDefinition<TName, TInputSchema, InferEnv<EnvSchema>, Res>,
-  ): Gram<
+  ): Functions<
     Prettify<
       TTools & {
         [k in TName]: ToolDefinition<
@@ -496,8 +497,8 @@ export class Gram<
   }
 
   /**
-   * Extends this Gram instance with another Gram instance's tools and environment schema.
-   * Similar to Hono's route groups. Returns a new Gram instance with merged
+   * Extends this Functions instance with another Functions instance's tools and environment schema.
+   * Similar to Hono's route groups. Returns a new Functions instance with merged
    * tools and environment schemas.
    */
   extend<
@@ -506,8 +507,11 @@ export class Gram<
     },
     OtherEnvSchema extends z.core.$ZodShape,
   >(
-    other: Gram<OtherTools, OtherEnvSchema>,
-  ): Gram<Prettify<TTools & OtherTools>, Prettify<EnvSchema & OtherEnvSchema>> {
+    other: Functions<OtherTools, OtherEnvSchema>,
+  ): Functions<
+    Prettify<TTools & OtherTools>,
+    Prettify<EnvSchema & OtherEnvSchema>
+  > {
     for (const [name, tool] of other.tools) {
       this.tools.set(name, tool);
     }
@@ -664,6 +668,23 @@ export class Gram<
     };
   }
 }
+
+/**
+ * @deprecated Use {@link Functions}. `Gram` is the same class under its old
+ * name and keeps working.
+ */
+export const Gram = Functions;
+/** @deprecated Use {@link Functions}. */
+export type Gram<
+  TTools extends {
+    [k: string]: ToolDefinition<any, any, string, Response>;
+  } = {},
+  EnvSchema extends z.core.$ZodShape = {
+    readonly [x: string]:
+      | z.core.$ZodString
+      | z.core.$ZodOptional<z.core.$ZodString>;
+  },
+> = Functions<TTools, EnvSchema>;
 
 const LINE_BREAKS = /[\r\n]+/g;
 const BARE_IDENTIFIER = /^[A-Za-z_$][\w$]*$/;

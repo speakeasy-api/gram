@@ -37,13 +37,13 @@ func registerLifecycleVisibilityTools(reg *Registrar, registrations *Registratio
 		{
 			name:        "disable_mcp",
 			title:       "Turn Off an MCP Server",
-			description: "Turn off one fully set-up MCP server, so people stop being able to use it. It stays in the project and every plugin that carries it keeps carrying it; no plugin is created or removed.",
+			description: "Turn off one fully set-up MCP server, so people stop being able to use it. It stays in the project and every plugin that carries it keeps carrying it; no plugin is created or removed. Turning a server off never consults the project's Shadow MCP policy and does not revoke any approval recorded for it.",
 			call:        registrations.DisableMCP,
 		},
 		{
 			name:        "enable_mcp",
 			title:       "Turn On an MCP Server",
-			description: "Turn one disabled MCP server back on. It is not added to any plugin; the plugins that already carry it are republished, so the people it is shared with get it again. Constraints: connected external callers get a fresh authenticated check, while a managed project assistant returns its own stored evidence instead, because it has no OAuth connection. On an idempotent retry, the result reports current stored visibility while the check and the republish remain best-effort observations.",
+			description: "Turn one disabled MCP server back on. It is not added to any plugin; the plugins that already carry it are republished, so the people it is shared with get it again. When the project has a Shadow MCP policy that blocks unreviewed servers and this server was added by URL, turning it back on exposes it to those plugins' audiences again: an organization administrator's call is recorded as the Shadow MCP approval for any of those audiences not yet covered, and anyone else's is refused with approval_required and no change. Constraints: connected external callers get a fresh authenticated check, while a managed project assistant returns its own stored evidence instead, because it has no OAuth connection. On an idempotent retry, the result reports current stored visibility while the check and the republish remain best-effort observations.",
 			call:        registrations.EnableMCP,
 		},
 	} {

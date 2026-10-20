@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -68,9 +67,6 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-	ti.features.SetFlag(feature.FlagAgentManagement, authCtx.ActiveOrganizationID, true)
-	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, authCtx.ActiveOrganizationID, true)
-
 	// Stored membership exists but must not matter: an agent gateway derives
 	// its members from grants, so the meta server below is a decoy.
 	metaSlug := "meta-" + uuid.NewString()
@@ -193,7 +189,7 @@ func TestServeAgentGateway_ListsOnlyGrantedServers(t *testing.T) {
 	require.Contains(t, w.Body.String(), fx.granted)
 	require.NotContains(t, w.Body.String(), fx.denied)
 	// A public server is anonymously reachable by anyone, so withholding it
-	// here would hide something the agent can already reach without Gram.
+	// here would hide something the agent can already reach without Speakeasy.
 	// Listing it is deliberate, not an admission leak.
 	require.Contains(t, w.Body.String(), fx.open)
 }
@@ -247,7 +243,7 @@ func TestServeAgentGateway_PrivateTunnelReceivesAgentAssertion(t *testing.T) {
 	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeMetaRPCBody(t, "tools/call", map[string]any{
 		"name": "execute_tool",
 		"arguments": map[string]any{
-			"name": fx.grantedProject + "." + fx.granted + "--ping", "arguments": map[string]any{},
+			"name": fx.granted + "--ping", "arguments": map[string]any{},
 		},
 	}))
 	require.NoError(t, err)
@@ -400,7 +396,7 @@ func TestServeAgentGateway_ExcludesPrivateOnlyMembersOnPublicIngress(t *testing.
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	qualified := fx.grantedProject + "." + fx.granted
+	qualified := fx.granted
 
 	setMode := func(mode pgtype.Text) {
 		t.Helper()
@@ -471,7 +467,7 @@ func TestServeAgentGateway_ListsPrivateOnlyMembersOnPrivateIngress(t *testing.T)
 		"arguments": map[string]any{},
 	}))
 	require.NoError(t, err)
-	require.Contains(t, w.Body.String(), fx.grantedProject+"."+fx.granted)
+	require.Contains(t, w.Body.String(), fx.granted)
 	// public_only members are the ones excluded here.
 	require.NotContains(t, w.Body.String(), fx.open)
 }

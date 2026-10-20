@@ -6,9 +6,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"slices"
 	"strings"
@@ -299,15 +299,11 @@ func (s *PluginsService) encodeMembershipCursor(cursor pluginMembershipCursor) (
 	if s == nil || s.cursors == nil || len(s.cursors.key) == 0 || cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.PluginID == "" || cursor.Version == "" || cursor.AfterID == "" {
 		return "", ErrPluginCursorInvalid
 	}
-	payload, err := json.Marshal(cursor)
+	token, err := sealCursor(s.cursors.key, cursor)
 	if err != nil {
 		return "", fmt.Errorf("encode Platform MCP plugin membership cursor: %w", err)
 	}
-	mac := hmac.New(sha256.New, s.cursors.key)
-	_, _ = mac.Write(payload)
-	token := append([]byte{}, payload...)
-	token = append(token, mac.Sum(nil)...)
-	return base64.RawURLEncoding.EncodeToString(token), nil
+	return token, nil
 }
 
 func (s *PluginsService) decodeMembershipCursor(value string, principal Principal, projectID, pluginID uuid.UUID) (pluginMembershipCursor, error) {
@@ -318,18 +314,8 @@ func (s *PluginsService) decodeMembershipCursor(value string, principal Principa
 	if s == nil || s.cursors == nil || len(s.cursors.key) == 0 || principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil || pluginID == uuid.Nil {
 		return pluginMembershipCursor{}, ErrPluginCursorInvalid
 	}
-	token, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil || len(token) <= sha256.Size {
-		return pluginMembershipCursor{}, ErrPluginCursorInvalid
-	}
-	payload, signature := token[:len(token)-sha256.Size], token[len(token)-sha256.Size:]
-	mac := hmac.New(sha256.New, s.cursors.key)
-	_, _ = mac.Write(payload)
-	if !hmac.Equal(signature, mac.Sum(nil)) {
-		return pluginMembershipCursor{}, ErrPluginCursorInvalid
-	}
-	var cursor pluginMembershipCursor
-	if err := json.Unmarshal(payload, &cursor); err != nil || cursor.OrganizationID != principal.OrganizationID || cursor.Binding != binding || cursor.ProjectID != projectID.String() || cursor.PluginID != pluginID.String() || cursor.Version == "" || cursor.AfterID == "" {
+	cursor, ok := openCursor[pluginMembershipCursor](s.cursors.key, value)
+	if !ok || cursor.OrganizationID != principal.OrganizationID || cursor.Binding != binding || cursor.ProjectID != projectID.String() || cursor.PluginID != pluginID.String() || cursor.Version == "" || cursor.AfterID == "" {
 		return pluginMembershipCursor{}, ErrPluginCursorInvalid
 	}
 	if _, err := uuid.Parse(cursor.AfterID); err != nil {
@@ -356,7 +342,7 @@ type PluginPublicationEvidence struct {
 // project reports the same attempt. It never carries raw failure text,
 // repository details, or credentials.
 type PluginLastPublish struct {
-	// LastRecordedPublishAt is the last publish Gram successfully recorded,
+	// LastRecordedPublishAt is the last publish Speakeasy successfully recorded,
 	// as RFC 3339. It is written only after a push succeeds and its keys and
 	// fingerprints are saved, so failed attempts and publishes that find
 	// nothing to change never move it, and a push whose recording failed is
@@ -427,8 +413,10 @@ func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal 
 // PluginsService answers what plugins a project has and what is inside one,
 // and resolves the exact plugin a distribution names.
 type PluginsService struct {
+	serverRemoval        *plugindelivery.Service
 	publicationEvidence  publicationEvidenceReader
 	publishStatus        publishstatus.Describer
+	publicationRequests  plugindelivery.PublicationRequests
 	db                   *pgxpool.Pool
 	authorization        *authz.Engine
 	dashboardURL         *url.URL
@@ -438,6 +426,7 @@ type PluginsService struct {
 	assignmentReferences *subjectReferenceCodec
 	assignmentVersionKey []byte
 	remoteSessions       MemberMCPConnectionReader
+	identityChaining     IdentityChainingGovernor
 	now                  func() time.Time
 	// recordedPublish reads the project's marketplace connection row, whose
 	// updated_at is the last recorded publish. A field so tests can fail the
@@ -452,19 +441,22 @@ type PluginsService struct {
 	distributionAdmission     *admission.Guard
 	distributionAdmissionRead distributionAdmissionReader
 
+	// publication and publisher request a plugin publish. republish_plugin
+	// uses both; create_plugin and rename_plugin signal through publisher
+	// after their own publication request commits.
 	publication     plugindelivery.PublicationRequests
 	publisher       plugindelivery.PluginPublishSignaler
 	republishBudget OperationBudget
+
+	metadataLogger *slog.Logger
+	metadataCore   *plugindelivery.PluginMetadataCore
+	metadataBudget OperationBudget
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
 	cursor, cursorErr := newPluginCursorCodec(cursorKeyMaterial)
 	references, referenceErr := newSubjectReferenceCodec(cursorKeyMaterial)
-	var versionKey []byte
-	if cursorKeyMaterial != "" {
-		digest := sha256.Sum256([]byte("platform-mcp-plugin-assignment-version:" + cursorKeyMaterial))
-		versionKey = digest[:]
-	}
+	versionKey := []byte(newSignedCursorKey("platform-mcp-plugin-assignment-version", cursorKeyMaterial))
 	if cursorErr != nil {
 		cursor = nil
 	}
@@ -481,6 +473,7 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		assignmentReferences:  references,
 		assignmentVersionKey:  versionKey,
 		remoteSessions:        nil,
+		identityChaining:      nil,
 		now:                   time.Now,
 		recordedPublish:       pluginsrepo.New(db).GetGitHubConnection,
 		mutationFlags:         nil,
@@ -488,11 +481,21 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		audit:                 nil,
 		mutationBudget:        OperationBudget{},
 		mutationReceipts:      nil,
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: admission.NewGuard(),
 		publication:           plugindelivery.PublicationRequests{Enabled: false},
 		publisher:             nil,
 		republishBudget:       OperationBudget{},
+		metadataLogger:        nil,
+		metadataCore:          nil,
+		metadataBudget:        OperationBudget{},
 	}
+}
+
+func (s *PluginsService) WithPublicationRequests(requests plugindelivery.PublicationRequests) *PluginsService {
+	if s != nil {
+		s.publicationRequests = requests
+	}
+	return s
 }
 
 func (s *PluginsService) WithPublicationEvidence(reader publicationEvidenceReader) *PluginsService {
@@ -524,6 +527,15 @@ func (s *PluginsService) WithRemoteSessions(remoteSessions *remotesessions.Chall
 		return s
 	}
 	return s.withMemberMCPConnectionReader(remoteSessions)
+}
+
+// WithIdentityChaining reports MCP servers that identity chaining serves as
+// active when the caller has no usable interactive session for them.
+func (s *PluginsService) WithIdentityChaining(governor IdentityChainingGovernor) *PluginsService {
+	if s != nil {
+		s.identityChaining = governor
+	}
+	return s
 }
 
 func (s *PluginsService) withMemberMCPConnectionReader(reader MemberMCPConnectionReader) *PluginsService {

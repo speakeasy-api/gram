@@ -55,6 +55,9 @@ func TestHandlePlatformInitialize_EchoesEverySupportedVersion(t *testing.T) {
 	t.Parallel()
 
 	for _, v := range mcpversions.SupportedPlatformToolset() {
+		if !mcpversions.DefinesMethod(mcpversions.MethodInitialize, v) {
+			continue
+		}
 		answered, resolution := runPlatformInitialize(t, v)
 		require.Equal(t, v, answered, "a supported requested version must be echoed")
 		require.Equal(t, v, resolution.InEffect, "the negotiated answer must be written back into the resolution")
@@ -65,11 +68,14 @@ func TestHandlePlatformInitialize_AnswersUnsupportedVersionWithNewestSupported(t
 	t.Parallel()
 
 	// The expected value is pinned rather than derived from the supported
-	// set, so raising the ceiling breaks this test and forces choosing a new
-	// out-of-set requested version that keeps the fallback arm exercised.
-	answered, resolution := runPlatformInitialize(t, mcpversions.Version20260728)
-	require.Equal(t, mcpversions.Version20251125, answered)
-	require.Equal(t, mcpversions.Version20251125, resolution.InEffect)
+	// set: it is the newest revision defining initialize. Both a supported
+	// revision without initialize and an unrecognized one are outside the
+	// handshake revisions, so both are answered with it.
+	for _, requested := range []string{mcpversions.Version20260728, "2031-01-01"} {
+		answered, resolution := runPlatformInitialize(t, requested)
+		require.Equal(t, mcpversions.Version20251125, answered, "requested %s", requested)
+		require.Equal(t, mcpversions.Version20251125, resolution.InEffect, "requested %s", requested)
+	}
 }
 
 // TestHandlePlatformInitialize_AnswersAbsentVersionWithDefault pins that the

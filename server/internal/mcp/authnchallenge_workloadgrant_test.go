@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -20,7 +21,6 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
@@ -34,16 +34,21 @@ import (
 const workloadGrantJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 
 // workloadGrantFixture is an issuer-gated MCP server whose organization has
-// the grant and the agent authorization rollout on, a dev-idp trusted as a
+// the grant, a dev-idp trusted as a
 // workload issuer at the organization tier, an admitted subject, and an agent
 // assigned to it that may connect to the server.
 type workloadGrantFixture struct {
+	// ctx is authenticated as the organization member who owns the agent.
+	ctx      context.Context //nolint:containedctx // immutable request authentication fixture
 	ti       *testInstance
 	fx       agentConsentFixture
 	issuer   *devidptest.Instance
 	issuerID uuid.UUID
 	agentID  uuid.UUID
 	subject  string
+
+	// assignmentID is the subject's agent assignment.
+	assignmentID uuid.UUID
 
 	// resource is the server's canonical URL on the MCP host.
 	resource string
@@ -62,17 +67,25 @@ func newWorkloadGrantFixture(t *testing.T) workloadGrantFixture {
 func newWorkloadGrantFixtureWithLogger(t *testing.T, logger *slog.Logger) workloadGrantFixture {
 	t.Helper()
 
+	return newWorkloadGrantFixtureOn(t, logger, "")
+}
+
+// newWorkloadGrantFixtureOn builds the fixture on a service whose server URL
+// is serverURL, or the harness default when empty.
+func newWorkloadGrantFixtureOn(t *testing.T, logger *slog.Logger, serverURL string) workloadGrantFixture {
+	t.Helper()
+
 	issuer := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil, TLS: true})
 	jwksURI := oauthtest.DiscoverWorkloadJWKSURI(t, issuer)
 
-	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, logger, testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, logger, testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		MaxRequestLifetime: 0,
-	}, nil, guardian.WithTLSRootCAs(issuer.RootCAs()))
-	fx := newAgentConsentFixture(t, ctx, ti)
+	}, nil, nil, true, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0}, testenv.NewTracerProvider(t), nil, nil, serverURL, guardian.WithTLSRootCAs(issuer.RootCAs()))
+	fx := newWorkloadConsentFixture(t, ctx, ti)
 
 	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
@@ -93,17 +106,19 @@ func newWorkloadGrantFixtureWithLogger(t *testing.T, logger *slog.Logger) worklo
 		WorkloadIssuerID: issuerID,
 		Subject:          subject,
 	}))
-	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, subject, agent.ID)
+	assignmentID := assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, subject, agent.ID)
 
 	slug := fx.toolset.McpSlug.String
 	advertisedIssuer, _ := fetchAdvertisedIssuer(t, ctx, ti, slug)
 
 	return workloadGrantFixture{
+		ctx:              ctx,
 		ti:               ti,
 		fx:               fx,
 		issuer:           issuer,
 		issuerID:         issuerID,
 		agentID:          agent.ID,
+		assignmentID:     assignmentID,
 		subject:          subject,
 		resource:         strings.TrimSuffix(ti.serverURL.String(), "/") + "/mcp/" + slug,
 		advertisedIssuer: advertisedIssuer,
@@ -311,20 +326,6 @@ func TestWorkloadAssertionGrant_ResourceRequiredAndBound(t *testing.T) {
 	require.Contains(t, w.Body.String(), "invalid_target")
 }
 
-// With the agent authorization rollout off, the grant is refused and mints
-// nothing: a workload acts through its assigned agent's policy, which the MCP
-// side honours only under that rollout.
-func TestWorkloadAssertionGrant_AgentRolloutOffRefused(t *testing.T) {
-	t.Parallel()
-
-	f := newWorkloadGrantFixture(t)
-	f.ti.features.SetFlag(feature.FlagAgentIdentityCredentials, f.fx.orgID, false)
-
-	w := f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource)
-	requireWorkloadGrantRefused(t, w)
-	require.Empty(t, f.workloadSessions(t))
-}
-
 // An issuer that opts in to the authentication host mints sessions whose iss
 // is the authentication host issuer its metadata names, and an assertion
 // addressed to that issuer is accepted.
@@ -435,26 +436,14 @@ func TestWorkloadAssertionGrant_ColdExchangeFitsTheClientTimeout(t *testing.T) {
 
 // An endpoint whose deployment serves the grant advertises it. Metadata is
 // decided from the endpoint alone: it is discovery, hit unauthenticated by
-// every MCP client, so it reads no rollout state. The rollout is enforced at
-// the token endpoint, which is what decides whether an exchange succeeds.
+// every MCP client.
 func TestWorkloadAssertionGrant_AdvertisedFromTheEndpointAlone(t *testing.T) {
 	t.Parallel()
 
 	f := newWorkloadGrantFixture(t)
 	slug := f.fx.toolset.McpSlug.String
 
-	advertised := func() []any {
-		grants, ok := fetchASMetadata(t, f.ti, slug)["grant_types_supported"].([]any)
-		require.True(t, ok)
-		return grants
-	}
-
-	require.ElementsMatch(t, []any{"authorization_code", "refresh_token", workloadGrantJWTBearer}, advertised())
-
-	f.ti.features.SetFlag(feature.FlagAgentIdentityCredentials, f.fx.orgID, false)
-	require.ElementsMatch(t, []any{"authorization_code", "refresh_token", workloadGrantJWTBearer}, advertised(), "metadata does not read the rollout")
-
-	w := f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource)
-	requireWorkloadGrantRefused(t, w)
-	require.Empty(t, f.workloadSessions(t), "the token endpoint is what refuses while the rollout is off")
+	grants, ok := fetchASMetadata(t, f.ti, slug)["grant_types_supported"].([]any)
+	require.True(t, ok)
+	require.ElementsMatch(t, []any{"authorization_code", "refresh_token", workloadGrantJWTBearer}, grants)
 }

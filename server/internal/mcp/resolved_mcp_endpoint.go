@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
@@ -43,8 +44,8 @@ import (
 // user_session_issuer_id column is Valid).
 type ResolvedMcpEndpoint struct {
 	// AudienceURN is the JWT audience string used by ValidateBearer and
-	// Mint. /mcp uses urn.NewToolset(toolset.ID).String(); /x/mcp uses
-	// urn.NewUserSessionIssuer(issuerID).String().
+	// Mint. Toolset-keyed endpoints use urn.NewToolset(toolset.ID).String();
+	// mcp_server-keyed endpoints use urn.NewUserSessionIssuer(issuerID).String().
 	AudienceURN string
 
 	// CIMDAdmissionModeRaw is the issuer's stored
@@ -77,6 +78,11 @@ type ResolvedMcpEndpoint struct {
 	// issuer and its JWKS configuration independently.
 	idJAGConfigured bool
 
+	// issuerStamped reports that RequireUserSessionIssuer has copied the
+	// issuer's configuration onto this endpoint. The runtime issuer gate builds
+	// toolset endpoints without it and stamps them only when a token needs it.
+	issuerStamped bool
+
 	// McpServerID is populated when the endpoint resolves through an
 	// mcp_endpoints → mcp_servers pair. Zero (Valid=false) for the
 	// toolset-keyed resolution. Used for telemetry / log attribution.
@@ -94,7 +100,21 @@ type ResolvedMcpEndpoint struct {
 	// ProjectID owns the endpoint and scopes downstream queries.
 	ProjectID uuid.UUID
 
-	// RouteBase is "mcp" or "x/mcp" — drives URL construction in
+	// sharedAuthorizationServer is the issuer's shared authorization server
+	// when the issuer is in shared mode, and nil otherwise. Stamped by
+	// RequireUserSessionIssuer. It is what the endpoint's protected resource
+	// metadata names, but it serves an OAuth request for the endpoint only when
+	// sharedResource is also set.
+	sharedAuthorizationServer *sharedAuthorizationServer
+
+	// sharedResource is set when the issuer's shared authorization server is
+	// serving the current OAuth request for this endpoint, which it then
+	// addressed by an RFC 8707 resource indicator rather than by the request
+	// URL. Nil when the endpoint's own per-endpoint authorization server is
+	// serving it, and on every MCP request.
+	sharedResource *sharedResource
+
+	// RouteBase is the route surface (e.g. "mcp") — drives URL construction in
 	// WriteAuthenticateChallenge, the issuer URL emitted by /token, the
 	// consent form action, and the redirect from idp_callback.
 	RouteBase string
@@ -213,8 +233,29 @@ func (e *ResolvedMcpEndpoint) ConsentURL(baseURL, stateID string) (string, error
 // BaseURLForRequest); it's snapshotted into the ref so handlers that
 // resume the challenge from a global URL (HandleIDPCallback) can
 // rebuild the consent redirect without re-deriving the origin.
+//
+// When the shared authorization server is serving the request, baseURL is
+// ignored: the ref instead records where the MCP resource lives, which is not
+// the host the request arrived on.
 func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool, baseURL string) (EndpointRef, error) {
 	isPublic := e.IsPublic
+	useAuthenticationHost := e.useAuthenticationHost
+	if e.sharedResource != nil {
+		origin := e.sharedResource.origin
+		return EndpointRef{
+			Authority:                 networkingress.FromRequest(requestorigin.WithContext(ctx, origin), origin.BaseURL, e.OrganizationID, e.CustomDomainID),
+			BaseURL:                   origin.BaseURL,
+			RouteBase:                 e.RouteBase,
+			McpSlug:                   e.Slug,
+			CustomDomainID:            e.CustomDomainID,
+			McpServerID:               e.McpServerID,
+			MetaMcpServerID:           e.MetaMcpServerID,
+			ToolsetID:                 e.ToolsetID,
+			IsPublic:                  &isPublic,
+			SharedAuthorizationServer: true,
+			UseAuthenticationHost:     &useAuthenticationHost,
+		}, nil
+	}
 	authority := networkingress.FromRequest(ctx, baseURL, e.OrganizationID, e.CustomDomainID)
 	if authority.IsPrivate() {
 		liveAuthority, err := networkingress.LoadRequestAuthority(ctx, db)
@@ -228,15 +269,17 @@ func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool,
 		baseURL = liveAuthority.BaseURL
 	}
 	return EndpointRef{
-		Authority:       authority,
-		BaseURL:         baseURL,
-		RouteBase:       e.RouteBase,
-		McpSlug:         e.Slug,
-		CustomDomainID:  e.CustomDomainID,
-		McpServerID:     e.McpServerID,
-		MetaMcpServerID: e.MetaMcpServerID,
-		ToolsetID:       e.ToolsetID,
-		IsPublic:        &isPublic,
+		Authority:                 authority,
+		BaseURL:                   baseURL,
+		RouteBase:                 e.RouteBase,
+		McpSlug:                   e.Slug,
+		CustomDomainID:            e.CustomDomainID,
+		McpServerID:               e.McpServerID,
+		MetaMcpServerID:           e.MetaMcpServerID,
+		ToolsetID:                 e.ToolsetID,
+		IsPublic:                  &isPublic,
+		SharedAuthorizationServer: false,
+		UseAuthenticationHost:     &useAuthenticationHost,
 	}, nil
 }
 
@@ -244,9 +287,15 @@ func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool,
 // redirects back to after authenticating a user on the private-endpoint
 // path. Shape: `<baseURL>/<RouteBase>/idp_callback`. The endpoint slug
 // is intentionally absent — the callback dispatches on the `state`
-// query parameter to recover the originating challenge.
+// query parameter to recover the originating challenge. An organization
+// gateway is served on the /mcp surface and uses its callback, which is the
+// one the IDP already redirects to.
 func (e *ResolvedMcpEndpoint) IDPCallbackURL(baseURL string) (string, error) {
-	u, err := url.JoinPath(baseURL, e.RouteBase, "idp_callback")
+	routeBase := e.RouteBase
+	if e.IsOrganizationGateway() {
+		routeBase = "mcp"
+	}
+	u, err := url.JoinPath(baseURL, routeBase, "idp_callback")
 	if err != nil {
 		return "", fmt.Errorf("build IDP callback URL: %w", err)
 	}
@@ -315,9 +364,16 @@ func (e *ResolvedMcpEndpoint) validateChallengeRef(ref EndpointRef, issuerID uui
 // ValidateChallenge validates a continuation that must arrive on its mint-time
 // request surface. Callers that can perform side effects must separately run
 // ValidateLiveChallenge before consuming single-use state.
+//
+// A challenge the shared authorization server minted records the resource's
+// authority, not the request's: it continues on the shared authorization
+// server's own host, which its handlers check before resolving the endpoint.
 func (e *ResolvedMcpEndpoint) ValidateChallenge(ctx context.Context, ref EndpointRef, issuerID uuid.UUID) error {
 	if err := e.validateChallengeRef(ref, issuerID); err != nil {
 		return err
+	}
+	if ref.SharedAuthorizationServer {
+		return nil
 	}
 	if err := ref.Authority.ValidateRequest(ctx); err != nil {
 		return errToolsetEndpointMismatch
@@ -387,14 +443,30 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if ref.ToolsetID.Valid && e.ToolsetID != ref.ToolsetID {
 		return errToolsetEndpointMismatch
 	}
-	// The route surface is part of the endpoint's identity: the same slug can
-	// resolve on both /mcp and /x/mcp, and the RFC 9207 `iss` on every
-	// authorization response is built from the resolved endpoint's RouteBase.
+	// The route surface is part of the endpoint's identity: the RFC 9207
+	// `iss` on every authorization response is built from the resolved
+	// endpoint's RouteBase.
 	// Resuming a challenge on the other surface would emit an issuer that
 	// differs from the one the client recorded at mint time, which an
 	// iss-validating client rejects as a mix-up. Empty ref.RouteBase is
 	// treated as "mcp" for states minted before EndpointRef.RouteBase existed.
 	if e.RouteBase != conv.Default(ref.RouteBase, "mcp") {
+		return errToolsetEndpointMismatch
+	}
+	// The authorization server is part of the flow's identity too: each one
+	// emits its own issuer, so a challenge or code continues only on the
+	// authorization server that minted it, and a shared one only for the
+	// resource origin it recorded.
+	if ref.SharedAuthorizationServer != (e.sharedResource != nil) {
+		return errToolsetEndpointMismatch
+	}
+	if e.sharedResource != nil && ref.BaseURL != e.sharedResource.origin.BaseURL {
+		return errToolsetEndpointMismatch
+	}
+	// An issuer toggling use_authentication_host mid-flow moves its
+	// authorization server, so the flow would resume under an issuer the
+	// client never recorded.
+	if ref.UseAuthenticationHost != nil && e.useAuthenticationHost != *ref.UseAuthenticationHost {
 		return errToolsetEndpointMismatch
 	}
 	return nil
@@ -408,7 +480,7 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 // directly. AudienceURN is bound to the issuer URN rather than a
 // backend-specific id so tokens stay portable between toolset-backed and
 // remote-backed servers under the same issuer. routeBase is the URL surface
-// the request arrived under ("mcp" or "x/mcp") — always taken from the
+// the request arrived under — always taken from the
 // inbound request or the cached ref, never assumed.
 func NewResolvedMcpEndpointFromMcpServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
@@ -419,20 +491,23 @@ func NewResolvedMcpEndpointFromMcpServer(
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
-		CIMDAdmissionModeRaw:  pgtype.Text{String: "", Valid: false},
-		CustomDomainID:        mcpEndpoint.CustomDomainID,
-		IsPublic:              mcpServer.Visibility == mcpservers.VisibilityPublic,
-		idJAGConfigured:       false,
-		useAuthenticationHost: false,
-		McpServerID:           uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
-		MetaMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:        organizationID,
-		ProjectID:             mcpEndpoint.ProjectID,
-		RouteBase:             routeBase,
-		Slug:                  mcpEndpoint.Slug,
-		ToolsetID:             mcpServer.ToolsetID,
-		UpstreamResource:      "",
-		UserSessionIssuerID:   mcpServer.UserSessionIssuerID.UUID,
+		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+		CustomDomainID:            mcpEndpoint.CustomDomainID,
+		IsPublic:                  mcpServer.Visibility == mcpservers.VisibilityPublic,
+		idJAGConfigured:           false,
+		issuerStamped:             false,
+		useAuthenticationHost:     false,
+		McpServerID:               uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
+		MetaMcpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:            organizationID,
+		ProjectID:                 mcpEndpoint.ProjectID,
+		RouteBase:                 routeBase,
+		sharedAuthorizationServer: nil,
+		sharedResource:            nil,
+		Slug:                      mcpEndpoint.Slug,
+		ToolsetID:                 mcpServer.ToolsetID,
+		UpstreamResource:          "",
+		UserSessionIssuerID:       mcpServer.UserSessionIssuerID.UUID,
 	}
 }
 
@@ -475,48 +550,52 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewUserSessionIssuer(metaServer.UserSessionIssuerID.UUID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
-		CIMDAdmissionModeRaw:  pgtype.Text{String: "", Valid: false},
-		CustomDomainID:        mcpEndpoint.CustomDomainID,
-		IsPublic:              false,
-		idJAGConfigured:       false,
-		useAuthenticationHost: false,
-		McpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		MetaMcpServerID:       uuid.NullUUID{UUID: metaServer.ID, Valid: true},
-		OrganizationID:        organizationID,
-		ProjectID:             mcpEndpoint.ProjectID,
-		RouteBase:             routeBase,
-		Slug:                  mcpEndpoint.Slug,
-		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UpstreamResource:      "",
-		UserSessionIssuerID:   metaServer.UserSessionIssuerID.UUID,
+		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+		CustomDomainID:            mcpEndpoint.CustomDomainID,
+		IsPublic:                  false,
+		idJAGConfigured:           false,
+		issuerStamped:             false,
+		useAuthenticationHost:     false,
+		McpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID:           uuid.NullUUID{UUID: metaServer.ID, Valid: true},
+		OrganizationID:            organizationID,
+		ProjectID:                 mcpEndpoint.ProjectID,
+		RouteBase:                 routeBase,
+		sharedAuthorizationServer: nil,
+		sharedResource:            nil,
+		Slug:                      mcpEndpoint.Slug,
+		ToolsetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UpstreamResource:          "",
+		UserSessionIssuerID:       metaServer.UserSessionIssuerID.UUID,
 	}
 }
 
 // newResolvedMcpEndpointFromToolset materialises a ResolvedMcpEndpoint
 // from a resolved toolsets row. Caller is responsible for first checking
 // toolset.UserSessionIssuerID.Valid. routeBase is the URL surface the
-// request arrived under ("mcp" or "x/mcp") — passed explicitly because a
-// toolset-backed endpoint can be addressed from either /mcp/{slug} or
-// /x/mcp/{slug} and the WWW-Authenticate URL, OAuth issuer URL, and
+// request arrived under — the WWW-Authenticate URL, OAuth issuer URL, and
 // consent form action all need to match the caller's surface.
 func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase string) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewToolset(toolset.ID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
-		CIMDAdmissionModeRaw:  pgtype.Text{String: "", Valid: false},
-		CustomDomainID:        toolset.CustomDomainID,
-		IsPublic:              toolset.McpIsPublic,
-		idJAGConfigured:       false,
-		useAuthenticationHost: false,
-		McpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		MetaMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:        toolset.OrganizationID,
-		ProjectID:             toolset.ProjectID,
-		RouteBase:             routeBase,
-		Slug:                  conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
-		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		UpstreamResource:      "",
-		UserSessionIssuerID:   toolset.UserSessionIssuerID.UUID,
+		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+		CustomDomainID:            toolset.CustomDomainID,
+		IsPublic:                  toolset.McpIsPublic,
+		idJAGConfigured:           false,
+		issuerStamped:             false,
+		useAuthenticationHost:     false,
+		McpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:            toolset.OrganizationID,
+		ProjectID:                 toolset.ProjectID,
+		RouteBase:                 routeBase,
+		sharedAuthorizationServer: nil,
+		sharedResource:            nil,
+		Slug:                      conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
+		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		UpstreamResource:          "",
+		UserSessionIssuerID:       toolset.UserSessionIssuerID.UUID,
 	}
 }
 
@@ -524,23 +603,61 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase
 // on an in-flight AuthnChallengeState back to a fresh
 // ResolvedMcpEndpoint and verifies its issuer FK is still live.
 // Dispatches on the ref's McpServerID — when valid, resolves through the
-// /x/mcp mcp_endpoints → mcp_servers path; otherwise resolves through
+// mcp_endpoints → mcp_servers path; otherwise resolves through
 // the legacy /mcp toolsets path. Returns CodeNotFound when the
 // underlying row is missing or no longer issuer-gated. Used by
 // HandleIDPCallback (mounted under both route surfaces) to resume an
 // in-flight challenge against the addressing path it was minted under.
 func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	if ref.SharedAuthorizationServer {
+		// The ref names the resource, which is never on the authentication
+		// host, so it resolves as sharedResourceContext resolves a resource
+		// indicator: whether or not the issuer opts in to
+		// use_authentication_host.
+		ctx = withoutAuthenticationHost(ctx)
+	}
 	endpoint, err := s.buildResolvedMcpEndpointByRef(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
-		return nil, err
+	// A builder that already ran the issuer check, as the organization
+	// gateway's does, leaves nothing for a second one to find.
+	if !endpoint.issuerStamped {
+		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
+			return nil, err
+		}
+	}
+	if ref.SharedAuthorizationServer {
+		// An issuer switched out of shared mode mid-flow closes the flows its
+		// shared authorization server started.
+		if endpoint.sharedAuthorizationServer == nil {
+			return nil, oops.E(oops.CodeNotFound, nil, "shared authorization server not found")
+		}
+		endpoint.sharedResource = &sharedResource{origin: requestorigin.Origin{
+			Surface:          ref.Authority.Surface,
+			BaseURL:          ref.BaseURL,
+			OrganizationID:   ref.Authority.OrganizationID,
+			NetworkIngressID: uuid.Nil,
+			NetworkIdentity:  nil,
+		}}
 	}
 	return endpoint, nil
 }
 
 func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	if ref.RouteBase == organizationGatewayRouteBase {
+		gateway, err := s.loadOrganizationGateway(ctx, ref.McpSlug)
+		if err != nil {
+			return nil, err
+		}
+		// The slug now names a different organization, or the gateway's
+		// identity changed underneath the flow: the challenge belongs to the
+		// gateway it was minted for.
+		if !ref.MetaMcpServerID.Valid || ref.MetaMcpServerID.UUID != gateway.metaServer.ID {
+			return nil, errToolsetEndpointMismatch
+		}
+		return gateway.resolved, nil
+	}
 	if ref.MetaMcpServerID.Valid {
 		return s.buildResolvedMetaMcpEndpointByRef(ctx, ref)
 	}
@@ -600,9 +717,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		if ref.Authority.IsPrivate() && project.OrganizationID != ref.Authority.OrganizationID {
 			return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
 		}
-		// Refs cached before EndpointRef.RouteBase existed were only ever
-		// minted on the /x/mcp surface for server-keyed endpoints.
-		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, conv.Default(ref.RouteBase, "x/mcp"))
+		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, conv.Default(ref.RouteBase, "mcp"))
 		upstreamResource, err := s.resolveUpstreamResource(ctx, s.logger, mcpEndpoint.ProjectID, &mcpServer)
 		if err != nil {
 			return nil, err
@@ -616,14 +731,14 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		// resolver and must never become a private fallback.
 		return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
 	}
-	toolset, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)
+	toolset, wrapperID, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
-	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackChallengeResume)
+	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackChallengeResume, ref.McpSlug, toolset, wrapperID)
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
@@ -641,25 +756,25 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 // loadResolvedMcpEndpointByToolsetSlug resolves an mcp_slug to a
 // ResolvedMcpEndpoint via the legacy toolsets path and verifies its
 // issuer FK is still live. Returns CodeNotFound when either no toolset
-// matches the slug or the toolset is not issuer-gated. routeBase ("mcp"
-// or "x/mcp") is the surface the request arrived under and propagates
+// matches the slug or the toolset is not issuer-gated. routeBase is the
+// surface the request arrived under and propagates
 // into the resolved endpoint's URL building. Used as the fallback leaf
 // of LoadResolvedMcpEndpointBySlug for slugs with no mcp_endpoint →
 // mcp_server row yet (issuer-gated toolset-backed servers predating the
 // toolsets → mcp_servers migration).
-func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug, routeBase string) (*ResolvedMcpEndpoint, error) {
+func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug, routeBase string, entryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
 	var customDomainID uuid.NullUUID
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
-	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackOAuth)
+	s.recordToolsetSlugFallback(ctx, s.logger, entryPoint, mcpSlug, toolset, wrapperID)
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}

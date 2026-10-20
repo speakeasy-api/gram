@@ -584,6 +584,64 @@ webhooks:
                                 - subject_type
                             type: object
                 required: true
+    audit_log.assistant_identity_event_v1:
+        post:
+            description: Emitted when workload identity is configured for an assistant
+            operationId: audit_log.assistant_identity_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
     audit_log.assistant_tool_call_event_v1:
         post:
             description: Emitted when an assistant executes a tool call
@@ -1106,6 +1164,64 @@ webhooks:
                                 - subject_type
                             type: object
                 required: true
+    audit_log.dashboard_event_v1:
+        post:
+            description: Emitted when changes to dashboards are made
+            operationId: audit_log.dashboard_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
     audit_log.data_export_route_event_v1:
         post:
             description: Emitted when changes to data export routes are made
@@ -1574,6 +1690,64 @@ webhooks:
         post:
             description: Emitted when an organization creates, verifies, annotates, or revokes an identity provider connection
             operationId: audit_log.identity_provider_connection_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.internal_session_issuer_event_v1:
+        post:
+            description: Emitted when an organization enables or disables its internal session issuer
+            operationId: audit_log.internal_session_issuer_event_v1
             requestBody:
                 content:
                     application/json:
@@ -2444,6 +2618,64 @@ webhooks:
         post:
             description: Emitted when staff enable or disable organization access, or change its demo-access whitelisting
             operationId: audit_log.organization_access_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.organization_account_type_event_v1:
+        post:
+            description: Emitted when staff apply organization account type policy, including same-tier repair
+            operationId: audit_log.organization_account_type_event_v1
             requestBody:
                 content:
                     application/json:
@@ -3834,7 +4066,7 @@ webhooks:
                 required: true
     audit_log.risk_result_event_v1:
         post:
-            description: Emitted when a risk result's match is unmasked
+            description: Emitted when a risk result's match is unmasked, its scanned payload is revealed, or it is dismissed or restored
             operationId: audit_log.risk_result_event_v1
             requestBody:
                 content:
@@ -3952,6 +4184,122 @@ webhooks:
         post:
             description: 'Deprecated: use audit_log.access_request_event_v1.'
             operationId: audit_log.shadow_mcp_approval_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.sigint_sensor_event_v1:
+        post:
+            description: Emitted when changes to signals intelligence sensors are made
+            operationId: audit_log.sigint_sensor_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.sigint_signal_event_v1:
+        post:
+            description: Emitted when changes to custom signals are made
+            operationId: audit_log.sigint_signal_event_v1
             requestBody:
                 content:
                     application/json:
@@ -4996,6 +5344,64 @@ webhooks:
         post:
             description: Emitted when a workload subject is admitted or withdrawn, which grants or revokes machine access
             operationId: audit_log.workload_admission_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.workload_device_join_token_event_v1:
+        post:
+            description: Emitted when a device join token is created or redeemed to enroll a device as a workload
+            operationId: audit_log.workload_device_join_token_event_v1
             requestBody:
                 content:
                     application/json:

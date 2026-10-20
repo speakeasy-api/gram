@@ -34,14 +34,8 @@ const Source = "gitleaks"
 // prefixSecret is prepended to canonical gitleaks rule ids.
 const prefixSecret = "secret."
 
-// detectorInitMu serializes gitleaks detector creation process-wide. Gitleaks
-// uses viper internally which has global state that races on concurrent
-// initialization.
-var detectorInitMu sync.Mutex
-
-// newDetector creates a gitleaks detector using the default config extended with
-// our AWS credential rules (see awsRules), serialized by detectorInitMu to avoid
-// viper's init-time data race.
+// newDetector creates a gitleaks detector from the effective config: the
+// default config extended with our AWS credential rules (see awsRules).
 //
 // For speed, gitleaks does not run every rule's regex against every input: it
 // first does a single Aho-Corasick pass for all rules' keywords and only
@@ -52,9 +46,6 @@ var detectorInitMu sync.Mutex
 // and then construct the detector, rather than adding rules to an already-built
 // detector (which would leave the trie stale and skip our rules).
 func newDetector() (*detect.Detector, error) {
-	detectorInitMu.Lock()
-	defer detectorInitMu.Unlock()
-
 	cfg, err := effectiveConfig()
 	if err != nil {
 		return nil, err
@@ -63,10 +54,19 @@ func newDetector() (*detect.Detector, error) {
 }
 
 // effectiveConfig returns the exact configuration used by every scanner: the
-// pinned Gitleaks defaults plus Gram's AWS secret and session-token extensions.
-// Callers must hold detectorInitMu because Gitleaks uses process-global Viper
-// state while constructing its default configuration.
-func effectiveConfig() (config.Config, error) {
+// pinned Gitleaks defaults plus Speakeasy's AWS secret and session-token
+// extensions.
+//
+// It is built once per process and shared by every detector. Building it parses
+// the default TOML and compiles every rule's regex, which is far more expensive
+// than the detector itself. Detectors only read their config (rules are copied
+// by value per match, and the compiled regexes and allowlist tries are safe for
+// concurrent use), so sharing it is safe. sync.OnceValues also serializes the
+// build, which matters because Gitleaks constructs its default configuration
+// through process-global Viper state that races on concurrent use.
+var effectiveConfig = sync.OnceValues(buildEffectiveConfig)
+
+func buildEffectiveConfig() (config.Config, error) {
 	base, err := detect.NewDetectorDefaultConfig()
 	if err != nil {
 		return config.Config{}, fmt.Errorf("create gitleaks detector: %w", err)
@@ -102,13 +102,21 @@ func effectiveConfig() (config.Config, error) {
 }
 
 // ReportableRuleIDs returns the canonical rule IDs the effective scanner can
-// emit. It deliberately exposes only stable Gram identifiers, never Gitleaks
+// emit. It deliberately exposes only stable Speakeasy identifiers, never Gitleaks
 // configuration or detector types. Rules retained only as composite anchors are
 // excluded because SkipReport prevents them from producing findings.
 func ReportableRuleIDs() ([]string, error) {
-	detectorInitMu.Lock()
-	defer detectorInitMu.Unlock()
+	ruleIDs, err := reportableRuleIDs()
+	if err != nil {
+		return nil, err
+	}
+	// Callers own the returned slice; the memoized one stays immutable.
+	return slices.Clone(ruleIDs), nil
+}
 
+// reportableRuleIDs computes the sorted reportable rule ids once. Never hand
+// its slice to callers directly.
+var reportableRuleIDs = sync.OnceValues(func() ([]string, error) {
 	cfg, err := effectiveConfig()
 	if err != nil {
 		return nil, err
@@ -139,7 +147,7 @@ func ReportableRuleIDs() ([]string, error) {
 	}
 	slices.Sort(result)
 	return result, nil
-}
+})
 
 // Scanner is the single gitleaks scanner used across the codebase — batch
 // fan-out (the risk-analysis activity), the streams subscriber, and the

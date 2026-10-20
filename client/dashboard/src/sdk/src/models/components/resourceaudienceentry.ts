@@ -12,22 +12,26 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Whether the rule names this resource or every resource of its kind.
  */
-export const AppliesTo = {
+export const ResourceAudienceEntryAppliesTo = {
   Resource: "resource",
   AllResources: "all_resources",
 } as const;
 /**
  * Whether the rule names this resource or every resource of its kind.
  */
-export type AppliesTo = ClosedEnum<typeof AppliesTo>;
+export type ResourceAudienceEntryAppliesTo = ClosedEnum<
+  typeof ResourceAudienceEntryAppliesTo
+>;
 
-export const Dispositions = {
+export const ResourceAudienceEntryDispositions = {
   ReadOnly: "read_only",
   Destructive: "destructive",
   Idempotent: "idempotent",
   OpenWorld: "open_world",
 } as const;
-export type Dispositions = ClosedEnum<typeof Dispositions>;
+export type ResourceAudienceEntryDispositions = ClosedEnum<
+  typeof ResourceAudienceEntryDispositions
+>;
 
 /**
  * What the principal identifies.
@@ -51,7 +55,7 @@ export type ResourceAudienceEntryKind = ClosedEnum<
 /**
  * Access this principal has on the resource, or the access a rule takes away.
  */
-export const Level = {
+export const ResourceAudienceEntryLevel = {
   Use: "use",
   View: "view",
   Manage: "manage",
@@ -62,7 +66,9 @@ export const Level = {
 /**
  * Access this principal has on the resource, or the access a rule takes away.
  */
-export type Level = ClosedEnum<typeof Level>;
+export type ResourceAudienceEntryLevel = ClosedEnum<
+  typeof ResourceAudienceEntryLevel
+>;
 
 export type ResourceAudienceEntry = {
   /**
@@ -72,7 +78,7 @@ export type ResourceAudienceEntry = {
   /**
    * Whether the rule names this resource or every resource of its kind.
    */
-  appliesTo: AppliesTo;
+  appliesTo: ResourceAudienceEntryAppliesTo;
   /**
    * Secondary line: email, member count, or attribute key.
    */
@@ -84,7 +90,7 @@ export type ResourceAudienceEntry = {
   /**
    * Tool annotations the rule is narrowed to, when it is not the whole resource.
    */
-  dispositions?: Array<Dispositions> | undefined;
+  dispositions?: Array<ResourceAudienceEntryDispositions> | undefined;
   /**
    * What the principal identifies.
    */
@@ -92,7 +98,7 @@ export type ResourceAudienceEntry = {
   /**
    * Access this principal has on the resource, or the access a rule takes away.
    */
-  level: Level;
+  level: ResourceAudienceEntryLevel;
   /**
    * How many people the principal reaches, when known.
    */
@@ -112,13 +118,14 @@ export type ResourceAudienceEntry = {
 };
 
 /** @internal */
-export const AppliesTo$inboundSchema: z.ZodMiniEnum<typeof AppliesTo> = z.enum(
-  AppliesTo,
-);
+export const ResourceAudienceEntryAppliesTo$inboundSchema: z.ZodMiniEnum<
+  typeof ResourceAudienceEntryAppliesTo
+> = z.enum(ResourceAudienceEntryAppliesTo);
 
 /** @internal */
-export const Dispositions$inboundSchema: z.ZodMiniEnum<typeof Dispositions> = z
-  .enum(Dispositions);
+export const ResourceAudienceEntryDispositions$inboundSchema: z.ZodMiniEnum<
+  typeof ResourceAudienceEntryDispositions
+> = z.enum(ResourceAudienceEntryDispositions);
 
 /** @internal */
 export const ResourceAudienceEntryKind$inboundSchema: z.ZodMiniEnum<
@@ -126,7 +133,9 @@ export const ResourceAudienceEntryKind$inboundSchema: z.ZodMiniEnum<
 > = z.enum(ResourceAudienceEntryKind);
 
 /** @internal */
-export const Level$inboundSchema: z.ZodMiniEnum<typeof Level> = z.enum(Level);
+export const ResourceAudienceEntryLevel$inboundSchema: z.ZodMiniEnum<
+  typeof ResourceAudienceEntryLevel
+> = z.enum(ResourceAudienceEntryLevel);
 
 /** @internal */
 export const ResourceAudienceEntry$inboundSchema: z.ZodMiniType<
@@ -135,12 +144,14 @@ export const ResourceAudienceEntry$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     agent_ids: z.optional(z.array(z.string())),
-    applies_to: AppliesTo$inboundSchema,
+    applies_to: ResourceAudienceEntryAppliesTo$inboundSchema,
     description: z.optional(z.string()),
     display_name: z.string(),
-    dispositions: z.optional(z.array(Dispositions$inboundSchema)),
+    dispositions: z.optional(
+      z.array(ResourceAudienceEntryDispositions$inboundSchema),
+    ),
     kind: ResourceAudienceEntryKind$inboundSchema,
-    level: Level$inboundSchema,
+    level: ResourceAudienceEntryLevel$inboundSchema,
     member_count: z.optional(z.int()),
     member_ids: z.optional(z.array(z.string())),
     principal_urn: z.string(),

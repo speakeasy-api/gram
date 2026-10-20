@@ -75,6 +75,10 @@ export type CreateIssuerRequestBody = {
    */
   oidc?: boolean | undefined;
   /**
+   * When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Omit to leave it unset: such a login requests the provider's whole scopes_supported.
+   */
+  omitScopeFallback?: boolean | undefined;
+  /**
    * RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
    */
   opPolicyUri?: string | undefined;
@@ -159,6 +163,7 @@ export type CreateIssuerRequestBody$Outbound = {
   logo_asset_id?: string | undefined;
   name?: string | undefined;
   oidc?: boolean | undefined;
+  omit_scope_fallback?: boolean | undefined;
   op_policy_uri?: string | undefined;
   op_tos_uri?: string | undefined;
   passthrough?: boolean | undefined;
@@ -200,6 +205,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
     logoAssetId: z.optional(z.string()),
     name: z.optional(z.string()),
     oidc: z.optional(z.boolean()),
+    omitScopeFallback: z.optional(z.boolean()),
     opPolicyUri: z.optional(z.string()),
     opTosUri: z.optional(z.string()),
     passthrough: z.optional(z.boolean()),
@@ -237,6 +243,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
         "introspection_endpoint_auth_methods_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",
+      omitScopeFallback: "omit_scope_fallback",
       opPolicyUri: "op_policy_uri",
       opTosUri: "op_tos_uri",
       projectId: "project_id",

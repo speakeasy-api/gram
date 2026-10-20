@@ -277,7 +277,7 @@ var MCPSetupGuide = Type("MCPSetupGuide", func() {
 		Example("Box")
 	})
 	Attribute("summary", String, "One-line summary of what the guide covers")
-	Attribute("add_server_flow", String, "How the server is meant to be added in Gram, when the guide states one (e.g., 'catalog', 'custom-remote')")
+	Attribute("add_server_flow", String, "How the server is meant to be added in Speakeasy, when the guide states one (e.g., 'catalog', 'custom-remote')")
 	Attribute("aliases", ArrayOf(String), "Registry identifiers the guide is also published under")
 	Attribute("remotes", ArrayOf(MCPSetupGuideRemote), "Endpoints documented by the guide")
 	Attribute("matched_remote_id", String, "ID of the documented endpoint the lookup matched. Absent when the lookup identified the guide and not a specific endpoint, which is always the case for an 'alias' match.", func() {
@@ -287,7 +287,7 @@ var MCPSetupGuide = Type("MCPSetupGuide", func() {
 		Enum("endpoint", "alias")
 	})
 	Attribute("external_markdown", String, "Markdown instructions for the setup work that happens in the upstream provider")
-	Attribute("speakeasy_markdown", String, "Markdown instructions for the setup work that happens in Gram")
+	Attribute("speakeasy_markdown", String, "Markdown instructions for the setup work that happens in Speakeasy")
 
 	Required("slug", "title", "summary", "aliases", "remotes", "match_kind", "external_markdown", "speakeasy_markdown")
 })
@@ -304,7 +304,7 @@ var MCPSetupGuideRemote = Type("MCPSetupGuideRemote", func() {
 		Format(FormatURI)
 	})
 	// Left an open string rather than an enum: the value is passthrough data from
-	// the guides SDK that Gram does not control, so a closed enum would turn an
+	// the guides SDK that Speakeasy does not control, so a closed enum would turn an
 	// upstream publish into a decode failure in every generated client.
 	Attribute("transport_type", String, "Transport type as published by the guide (e.g., 'streamable-http', 'sse')", func() {
 		Example("streamable-http")

@@ -1,4 +1,4 @@
-import { useIconConfetti } from "@/components/icon-confetti";
+import { useIconDither } from "@/components/icon-dither";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
@@ -20,7 +20,7 @@ import { SourceMcpIcon } from "@/components/sources/SourceCard";
 // on backend kind.
 export function MCPServerCard({ server }: { server: McpServer }): JSX.Element {
   const routes = useRoutes();
-  const { canvasRef, start, stop } = useIconConfetti();
+  const { canvasRef, start, stop } = useIconDither();
 
   // How the server is reached, which is what distinguishes one mcp_servers row
   // from another on a page where they otherwise look identical.

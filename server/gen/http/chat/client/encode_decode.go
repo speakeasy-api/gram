@@ -784,6 +784,251 @@ func DecodeGetWorkUnitsTrendResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// BuildLoadChatOverviewRequest instantiates a HTTP request object with method
+// and path set to call the "chat" service "loadChatOverview" endpoint
+func (c *Client) BuildLoadChatOverviewRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: LoadChatOverviewChatPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("chat", "loadChatOverview", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeLoadChatOverviewRequest returns an encoder for requests sent to the
+// chat loadChatOverview server.
+func EncodeLoadChatOverviewRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*chat.LoadChatOverviewPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("chat", "loadChatOverview", "*chat.LoadChatOverviewPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.ChatSessionsToken != nil {
+			head := *p.ChatSessionsToken
+			req.Header.Set("Gram-Chat-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeLoadChatOverviewResponse returns a decoder for responses returned by
+// the chat loadChatOverview endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeLoadChatOverviewResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeLoadChatOverviewResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body LoadChatOverviewResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "loadChatOverview", err)
+			}
+			err = ValidateLoadChatOverviewResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "loadChatOverview", err)
+			}
+			res := NewLoadChatOverviewChatOverviewOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body LoadChatOverviewUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "loadChatOverview", err)
+			}
+			err = ValidateLoadChatOverviewUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "loadChatOverview", err)
+			}
+			return nil, NewLoadChatOverviewUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body LoadChatOverviewForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "loadChatOverview", err)
+			}
+			err = ValidateLoadChatOverviewForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "loadChatOverview", err)
+			}
+			return nil, NewLoadChatOverviewForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body LoadChatOverviewBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "loadChatOverview", err)
+			}
+			err = ValidateLoadChatOverviewBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "loadChatOverview", err)
+			}
+			return nil, NewLoadChatOverviewBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body LoadChatOverviewNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "loadChatOverview", err)
+			}
+			err = ValidateLoadChatOverviewNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "loadChatOverview", err)
+			}
+			return nil, NewLoadChatOverviewNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body LoadChatOverviewConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "loadChatOverview", err)
+			}
+			err = ValidateLoadChatOverviewConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "loadChatOverview", err)
+			}
+			return nil, NewLoadChatOverviewConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body LoadChatOverviewUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "loadChatOverview", err)
+			}
+			err = ValidateLoadChatOverviewUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "loadChatOverview", err)
+			}
+			return nil, NewLoadChatOverviewUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body LoadChatOverviewInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "loadChatOverview", err)
+			}
+			err = ValidateLoadChatOverviewInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "loadChatOverview", err)
+			}
+			return nil, NewLoadChatOverviewInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body LoadChatOverviewInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "loadChatOverview", err)
+				}
+				err = ValidateLoadChatOverviewInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "loadChatOverview", err)
+				}
+				return nil, NewLoadChatOverviewInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body LoadChatOverviewUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "loadChatOverview", err)
+				}
+				err = ValidateLoadChatOverviewUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "loadChatOverview", err)
+				}
+				return nil, NewLoadChatOverviewUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "loadChatOverview", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body LoadChatOverviewGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "loadChatOverview", err)
+			}
+			err = ValidateLoadChatOverviewGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "loadChatOverview", err)
+			}
+			return nil, NewLoadChatOverviewGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("chat", "loadChatOverview", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildLoadChatRequest instantiates a HTTP request object with method and path
 // set to call the "chat" service "loadChat" endpoint
 func (c *Client) BuildLoadChatRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -3168,12 +3413,16 @@ func DecodeListSessionLinksResponse(decoder func(*http.Response) goahttp.Decoder
 // *chat.ChatOverview from a value of type *ChatOverviewResponseBody.
 func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponseBody) *chat.ChatOverview {
 	res := &chat.ChatOverview{
+		SlackTeamID:          v.SlackTeamID,
+		SlackChannelID:       v.SlackChannelID,
+		SlackChannelName:     v.SlackChannelName,
 		ID:                   *v.ID,
 		Title:                *v.Title,
 		UserID:               v.UserID,
 		ExternalUserID:       v.ExternalUserID,
 		AssistantID:          v.AssistantID,
 		AssistantName:        v.AssistantName,
+		AssistantAgentID:     v.AssistantAgentID,
 		NumMessages:          *v.NumMessages,
 		Source:               v.Source,
 		OriginatingClient:    v.OriginatingClient,
@@ -3192,6 +3441,33 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		Pinned:               v.Pinned,
 		Summary:              v.Summary,
 		SummaryGeneratedAt:   v.SummaryGeneratedAt,
+	}
+	if v.Participants != nil {
+		res.Participants = make([]*chat.ChatParticipant, len(v.Participants))
+		for i, val := range v.Participants {
+			if val == nil {
+				res.Participants[i] = nil
+				continue
+			}
+			res.Participants[i] = unmarshalChatParticipantResponseBodyToChatChatParticipant(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalChatParticipantResponseBodyToChatChatParticipant builds a value of
+// type *chat.ChatParticipant from a value of type *ChatParticipantResponseBody.
+func unmarshalChatParticipantResponseBodyToChatChatParticipant(v *ChatParticipantResponseBody) *chat.ChatParticipant {
+	if v == nil {
+		return nil
+	}
+	res := &chat.ChatParticipant{
+		Provider:       *v.Provider,
+		ProviderUserID: *v.ProviderUserID,
+		ProviderTeamID: v.ProviderTeamID,
+		UserID:         v.UserID,
+		DisplayName:    v.DisplayName,
 	}
 
 	return res
@@ -3232,6 +3508,16 @@ func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBod
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      *v.CreatedAt,
 		Generation:     *v.Generation,
+	}
+	if v.Participants != nil {
+		res.Participants = make([]*chat.ChatParticipant, len(v.Participants))
+		for i, val := range v.Participants {
+			if val == nil {
+				res.Participants[i] = nil
+				continue
+			}
+			res.Participants[i] = unmarshalChatParticipantResponseBodyToChatChatParticipant(val)
+		}
 	}
 
 	return res

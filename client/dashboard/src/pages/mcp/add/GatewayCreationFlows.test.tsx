@@ -351,7 +351,7 @@ it("preselects User Identity only when the challenge advertised OAuth", () => {
   const view = render(<CreateRemoteMcp />);
   expect(
     screen
-      .getByRole("radio", { name: /No Identity/ })
+      .getByRole("radio", { name: "Manual", description: /static headers/ })
       .getAttribute("data-state"),
   ).toBe("checked");
 

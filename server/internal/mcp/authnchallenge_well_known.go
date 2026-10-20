@@ -23,6 +23,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -70,9 +71,9 @@ type oauthProtectedResourceMetadata struct {
 // above.
 type oauthAuthorizationServerMetadata struct {
 	Issuer                              string   `json:"issuer"`
-	AuthorizationEndpoint               string   `json:"authorization_endpoint"`
+	AuthorizationEndpoint               string   `json:"authorization_endpoint,omitempty"`
 	TokenEndpoint                       string   `json:"token_endpoint"`
-	RegistrationEndpoint                string   `json:"registration_endpoint"`
+	RegistrationEndpoint                string   `json:"registration_endpoint,omitempty"`
 	RevocationEndpoint                  string   `json:"revocation_endpoint"`
 	ScopesSupported                     []string `json:"scopes_supported,omitempty"`
 	ResponseTypesSupported              []string `json:"response_types_supported"`
@@ -83,15 +84,18 @@ type oauthAuthorizationServerMetadata struct {
 	// JWS algorithms accepted on a private_key_jwt client assertion. It is the
 	// one part of assertion negotiation a client can discover: which of the
 	// two audience forms the server prefers has no metadata field, but the
-	// algorithm does.
-	TokenEndpointAuthSigningAlgValuesSupported []string `json:"token_endpoint_auth_signing_alg_values_supported"`
-	CodeChallengeMethodsSupported              []string `json:"code_challenge_methods_supported"`
-	RefreshTokenExpirationTypesSupported       []string `json:"refresh_token_expiration_types_supported"`
+	// algorithm does. A document that advertises no assertion-based client
+	// authentication omits it.
+	TokenEndpointAuthSigningAlgValuesSupported []string `json:"token_endpoint_auth_signing_alg_values_supported,omitempty"`
+	CodeChallengeMethodsSupported              []string `json:"code_challenge_methods_supported,omitempty"`
+	RefreshTokenExpirationTypesSupported       []string `json:"refresh_token_expiration_types_supported,omitempty"`
 
-	// AuthorizationResponseIssParameterSupported advertises RFC 9207 §3. Always
-	// true: every authorization response on this surface carries `iss`
-	// (RFC 9207 §2), and an omitted field means false to a client, so the
-	// value tracks a property of the surface rather than any configuration.
+	// AuthorizationResponseIssParameterSupported advertises RFC 9207 §3. True
+	// wherever an authorization endpoint is served: every authorization
+	// response on this surface carries `iss` (RFC 9207 §2), and an omitted
+	// field means false to a client, so the value tracks a property of the
+	// surface rather than any configuration. A document with no authorization
+	// endpoint omits it.
 	//
 	// The coupling with emission is asymmetric. A client seeing `iss` without
 	// the flag compares it anyway, which is what lets this document lag behind
@@ -99,7 +103,7 @@ type oauthAuthorizationServerMetadata struct {
 	// the flag without `iss` rejects the response outright, which is what
 	// makes turning this off — or serving it from a build whose response paths
 	// omit `iss` — a client-visible break.
-	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
+	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported,omitempty"`
 
 	// ClientIDMetadataDocumentSupported advertises inbound CIMD support
 	// (draft-ietf-oauth-client-id-metadata-document-02 §6). Emitted as true
@@ -145,14 +149,14 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
-	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackWellKnownProtectedResource)
+	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackWellKnownProtectedResource, mcpSlug, toolset, wrapperID)
 
 	if toolset.UserSessionIssuerID.Valid {
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
@@ -200,14 +204,14 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
-	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackWellKnownAuthorizationServer)
+	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackWellKnownAuthorizationServer, mcpSlug, toolset, wrapperID)
 
 	if toolset.UserSessionIssuerID.Valid {
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
@@ -230,13 +234,12 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 
 // ServeWellKnownProtectedResourceForServer serves RFC 9728 protected-resource
 // metadata for an already-resolved (mcp_endpoint, mcp_server) pair. It is the
-// single per-backend dispatch shared by the /mcp (routeBase "mcp") and /x/mcp
-// (routeBase "x/mcp") well-known surfaces:
+// single per-backend dispatch for the /mcp well-known surface:
 //
-//   - Issuer-gated (any backend): emit the Gram-hosted metadata shape rooted
+//   - Issuer-gated (any backend): emit the Speakeasy-hosted metadata shape rooted
 //     at the resolved endpoint's URL on routeBase's surface.
 //   - Remote-backed, not issuer-gated: 404 — the upstream remote MCP server
-//     publishes its own .well-known and Gram is not its authorization server.
+//     publishes its own .well-known and Speakeasy is not its authorization server.
 //   - Toolset-backed, not issuer-gated: reuse the legacy wellknown resolver
 //     (oauth_proxy_server_id / external_oauth_server_id).
 func (s *Service) ServeWellKnownProtectedResourceForServer(
@@ -419,9 +422,8 @@ func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w h
 }
 
 // ServeGetProtectedResource is the post-resolution entry point for the
-// RFC 9728 protected-resource metadata response, shared by /mcp's
-// HandleGetProtectedResource (toolset-keyed) and /x/mcp's mcp_endpoint-
-// keyed route registration. Emits the issuer-gated metadata shape; the
+// RFC 9728 protected-resource metadata response, called by
+// HandleGetProtectedResource after slug resolution. Emits the issuer-gated metadata shape; the
 // legacy non-issuer-gated fallback stays in HandleGetProtectedResource
 // because it depends on the toolsets row directly.
 func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
@@ -431,7 +433,7 @@ func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, s.logger)
 	}
-	issuer, err := s.issuerURL(endpoint, baseURL)
+	issuer, err := s.protectedResourceAuthorizationServer(ctx, endpoint, baseURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build authorization server issuer").LogError(ctx, s.logger)
 	}
@@ -444,41 +446,19 @@ func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Reque
 }
 
 // ServeGetAuthorizationServer is the post-resolution entry point for the
-// RFC 8414 authorization-server metadata response, shared by /mcp's
-// HandleGetAuthorizationServer (toolset-keyed) and /x/mcp's
-// mcp_endpoint-keyed route registration. Emits the issuer-gated
+// RFC 8414 authorization-server metadata response, called by
+// HandleGetAuthorizationServer after slug resolution. Emits the issuer-gated
 // metadata shape; the legacy non-issuer-gated fallback stays in
 // HandleGetAuthorizationServer.
 func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	baseURL := s.BaseURLForRequest(r)
-	if !s.servesAuthorizationServerMetadata(ctx, endpoint, baseURL) {
+	if !s.arrivedAtAuthorizationServer(ctx, endpoint, baseURL) {
 		return oops.E(oops.CodeNotFound, nil, "authorization server metadata is served on the issuer's host")
 	}
 	urls, err := endpoint.AuthorizationServerURLs(s.authorizationServerBaseURL(endpoint, baseURL))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, s.logger)
-	}
-	// Advertised only when the issuer admits at least some CIMD client. A
-	// `disabled` issuer omits the field: claiming support while admitting
-	// nothing would steer spec-compliant clients into a guaranteed-failure
-	// flow instead of letting them fall back to dynamic client registration,
-	// which is still open on this issuer.
-	//
-	// This is advisory, not a control. The response carries cache headers
-	// (writeJSONMetadata), and clients typically cache authorization-server
-	// metadata for their whole process lifetime, so a mode flip reaches them
-	// well after the fact — some will keep attempting CIMD regardless.
-	// /authorize enforcement is the actual gate.
-	var cimdSupported *bool
-	mode, recognized := admission.ResolveMode(endpoint.CIMDAdmissionModeRaw.String, endpoint.CIMDAdmissionModeRaw.Valid)
-	if !recognized {
-		s.logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
-			attr.SlogCIMDAdmissionMode(endpoint.CIMDAdmissionModeRaw.String),
-		)
-	}
-	if mode != admission.ModeDisabled {
-		cimdSupported = conv.PtrEmpty(true)
 	}
 	grantTypes := []string{
 		oauthwire.GrantTypeAuthorizationCode,
@@ -492,7 +472,35 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	if !slices.Contains(grantTypes, oauthwire.GrantTypeJWTBearer) && s.workloadAssertionGrantAdvertised(endpoint) {
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
 	}
-	return writeJSONMetadata(ctx, w, r, s.logger, oauthAuthorizationServerMetadata{
+	return writeJSONMetadata(ctx, w, r, s.logger, s.authorizationServerMetadata(ctx, urls, endpoint.CIMDAdmissionModeRaw, grantTypes, grantProfiles))
+}
+
+// authorizationServerMetadata builds an RFC 8414 metadata document for an
+// authorization server at urls, whose issuer has the stored CIMD admission
+// mode cimdAdmissionModeRaw and which supports grantTypes.
+func (s *Service) authorizationServerMetadata(ctx context.Context, urls AuthorizationServerURLs, cimdAdmissionModeRaw pgtype.Text, grantTypes, grantProfiles []string) oauthAuthorizationServerMetadata {
+	// Advertised only when the issuer admits at least some CIMD client. A
+	// `disabled` issuer omits the field: claiming support while admitting
+	// nothing would steer spec-compliant clients into a guaranteed-failure
+	// flow instead of letting them fall back to dynamic client registration,
+	// which is still open on this issuer.
+	//
+	// This is advisory, not a control. The response carries cache headers
+	// (writeJSONMetadata), and clients typically cache authorization-server
+	// metadata for their whole process lifetime, so a mode flip reaches them
+	// well after the fact — some will keep attempting CIMD regardless.
+	// /authorize enforcement is the actual gate.
+	var cimdSupported *bool
+	mode, recognized := admission.ResolveMode(cimdAdmissionModeRaw.String, cimdAdmissionModeRaw.Valid)
+	if !recognized {
+		s.logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
+			attr.SlogCIMDAdmissionMode(cimdAdmissionModeRaw.String),
+		)
+	}
+	if mode != admission.ModeDisabled {
+		cimdSupported = conv.PtrEmpty(true)
+	}
+	return oauthAuthorizationServerMetadata{
 		AuthorizationEndpoint:                      urls.Authorize,
 		AuthorizationGrantProfilesSupported:        grantProfiles,
 		AuthorizationResponseIssParameterSupported: true,
@@ -510,7 +518,7 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		TokenEndpoint:                              urls.Token,
 		TokenEndpointAuthMethodsSupported:          usersessions.SupportedAuthMethods,
 		TokenEndpointAuthSigningAlgValuesSupported: clientAssertionSigningAlgorithms(),
-	})
+	}
 }
 
 // writeJSONMetadata is the shared write path for issuer-gated metadata
@@ -526,7 +534,7 @@ func writeJSONMetadata(ctx context.Context, w http.ResponseWriter, r *http.Reque
 
 // ServeWellKnownProtectedResourceForMetaServer serves RFC 9728
 // protected-resource metadata for a meta-MCP-backed endpoint. Issuer-gated
-// meta servers get Gram-hosted metadata; a meta server without an issuer has
+// meta servers get Speakeasy-hosted metadata; a meta server without an issuer has
 // no OAuth surface, matching the remote/tunneled arms of the generic
 // dispatcher.
 func (s *Service) ServeWellKnownProtectedResourceForMetaServer(

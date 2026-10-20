@@ -172,7 +172,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		to = payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeLogRead, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +258,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 		from, to = payload.Filter.From, payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeLogRead, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +325,7 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		from, to = payload.Filter.From, payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeProjectRead, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -337,18 +337,20 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		userID = conv.PtrValOr(payload.Filter.UserID, "")
 		externalUserID = conv.PtrValOr(payload.Filter.ExternalUserID, "")
 	}
+	cursorChatID, cursorStart := decodeChatSearchCursor(params.cursor)
 
 	items, err := s.chRepo.ListChats(ctx, repo.ListChatsParams{
-		GramProjectID:    params.projectID,
-		TimeStart:        params.timeStart,
-		TimeEnd:          params.timeEnd,
-		GramDeploymentID: deploymentID,
-		GramURN:          gramURN,
-		UserID:           userID,
-		ExternalUserID:   externalUserID,
-		SortOrder:        params.sortOrder,
-		Cursor:           params.cursor,
-		Limit:            params.limit + 1,
+		GramProjectID:           params.projectID,
+		TimeStart:               params.timeStart,
+		TimeEnd:                 params.timeEnd,
+		GramDeploymentID:        deploymentID,
+		GramURN:                 gramURN,
+		UserID:                  userID,
+		ExternalUserID:          externalUserID,
+		SortOrder:               params.sortOrder,
+		Cursor:                  cursorChatID,
+		CursorStartTimeUnixNano: cursorStart,
+		Limit:                   params.limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing chats")
@@ -356,7 +358,8 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 
 	var nextCursor *string
 	if len(items) > params.limit {
-		nextCursor = &items[params.limit-1].GramChatID
+		last := items[params.limit-1]
+		nextCursor = new(encodeChatSearchCursor(last.StartTimeUnixNano, last.GramChatID))
 		items = items[:params.limit]
 	}
 
@@ -383,6 +386,39 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		Chats:      chats,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// chatSearchCursorPrefix marks a chat search cursor that carries the
+// start_time boundary its page was cut at alongside the chat id.
+//
+// The boundary has to travel in the cursor. Re-deriving it from the chat id
+// alone looks the chat's earliest activity up again without this search's
+// time window or row filters (deployment, tool URN, user, external user), so
+// an excluded row earlier than the chat's first qualifying one deflates the
+// boundary and, in ascending order, the chat is returned again on every
+// following page.
+const chatSearchCursorPrefix = "st1:"
+
+// encodeChatSearchCursor seals the last row's start time and chat id.
+func encodeChatSearchCursor(startTimeUnixNano int64, chatID string) string {
+	return chatSearchCursorPrefix + encodeToolUsageTraceCursor(startTimeUnixNano, chatID)
+}
+
+// decodeChatSearchCursor returns the chat id and sealed start time a cursor
+// carries. Anything else is a bare chat id with a zero start time, the shape
+// cursors had before the boundary was sealed: a caller holding one
+// mid-traversal gets its next page on the re-derived boundary rather than an
+// error, and the cursor that page returns is sealed.
+func decodeChatSearchCursor(cursor string) (chatID string, startTimeUnixNano int64) {
+	encoded, ok := strings.CutPrefix(cursor, chatSearchCursorPrefix)
+	if !ok {
+		return cursor, 0
+	}
+	start, id, err := decodeToolUsageTraceCursor(encoded)
+	if err != nil || start <= 0 {
+		return cursor, 0
+	}
+	return id, start
 }
 
 // SearchUsers retrieves user usage summaries grouped by user_id or external_user_id.
@@ -423,7 +459,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		}
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeProjectRead, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
 	if err != nil {
 		return nil, err
 	}
@@ -440,6 +476,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	}
 
 	deploymentID := conv.PtrValOr(filter.DeploymentID, "")
+	cursorKey, cursorLastSeen := decodeEmployeeSearchCursor(params.cursor)
 
 	groupBy := "user_id"
 	if payload.UserType == "external" {
@@ -460,7 +497,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		canonicalOrg = params.organizationID
 	}
 
-	// Gram-hosted inference is excluded only for internal (employee)
+	// Speakeasy-hosted inference is excluded only for internal (employee)
 	// grouping. External users are the opposite case: their hosted-chat
 	// completions ARE their usage — and their only token-bearing rows, so
 	// excluding them would zero the external surfaces entirely.
@@ -491,13 +528,10 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		UserIDs:             userKeys,
 		IdentityContains:    "",
 		SortOrder:           params.sortOrder,
-		Cursor:              params.cursor,
-		// The dashboard's cursor is the group key alone, so the repository
-		// re-derives its boundary timestamp. That lookup ignores this query's
-		// window and its Gram-hosted exclusion, which can repeat a person
-		// across pages — tracked separately rather than changed here, because
-		// sealing the boundary is a cursor format change for a shipped surface.
-		CursorLastSeenUnixNano: 0,
+		Cursor:              cursorKey,
+		// Zero only for a bare group-key cursor, which makes the repository
+		// re-derive the boundary for that one page.
+		CursorLastSeenUnixNano: cursorLastSeen,
 		Limit:                  params.limit + 1,
 		MetricsDetail:          metricsDetailFromPayload(payload.Metrics),
 		CanonicalIdentityOrg:   canonicalOrg,
@@ -517,7 +551,8 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 
 	var nextCursor *string
 	if len(items) > params.limit {
-		nextCursor = &items[params.limit-1].UserID
+		last := items[params.limit-1]
+		nextCursor = new(encodeEmployeeSearchCursor(last.LastSeenUnixNano, last.UserID))
 		items = items[:params.limit]
 	}
 
@@ -528,6 +563,39 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		Roles:      nil,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// employeeSearchCursorPrefix marks a people-directory cursor that carries the
+// last_seen boundary its page was cut at alongside the group key.
+//
+// The boundary has to travel in the cursor. Re-deriving it from the group key
+// alone looks the person's latest activity up again without this search's
+// window or row filters (Speakeasy-hosted hook sources, event source, account type,
+// account, deployment), so an excluded row later than the person's last
+// qualifying one inflates the boundary and the person is returned again on
+// every following page.
+const employeeSearchCursorPrefix = "ls1:"
+
+// encodeEmployeeSearchCursor seals the last row's last_seen and group key.
+func encodeEmployeeSearchCursor(lastSeenUnixNano int64, groupKey string) string {
+	return employeeSearchCursorPrefix + encodeToolUsageTraceCursor(lastSeenUnixNano, groupKey)
+}
+
+// decodeEmployeeSearchCursor returns the group key and sealed last_seen a
+// cursor carries. Anything else is a bare group key with a zero last_seen, the
+// shape cursors had before the boundary was sealed: a dashboard holding one
+// mid-traversal gets its next page on the re-derived boundary rather than an
+// error, and the cursor that page returns is sealed.
+func decodeEmployeeSearchCursor(cursor string) (groupKey string, lastSeenUnixNano int64) {
+	encoded, ok := strings.CutPrefix(cursor, employeeSearchCursorPrefix)
+	if !ok {
+		return cursor, 0
+	}
+	lastSeen, key, err := decodeToolUsageTraceCursor(encoded)
+	if err != nil || lastSeen <= 0 {
+		return cursor, 0
+	}
+	return key, lastSeen
 }
 
 // searchUsersSourceAgentMetrics is the SearchUsersPayload.Source value that
@@ -731,7 +799,7 @@ func (s *Service) assembleUserSummaries(ctx context.Context, userType string, it
 	return users
 }
 
-// resolveSummaryOwnerIDs maps summary group keys to the Gram user id each key
+// resolveSummaryOwnerIDs maps summary group keys to the Speakeasy user id each key
 // authoritatively identifies. SearchUsers keys internal summaries email-first,
 // so an email-shaped key is resolved through the org's user directory; a
 // non-email key is already a raw gram user id and identifies itself. Keys that
@@ -1137,7 +1205,7 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 		}
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeProjectRead, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
 	if err != nil {
 		return nil, err
 	}
@@ -1452,7 +1520,7 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		return nil, err
 	}
 
-	// An employee's page never counts Gram-hosted inference (risk-analysis
+	// An employee's page never counts Speakeasy-hosted inference (risk-analysis
 	// judges and friends) as their usage. An external user is the opposite
 	// case: their hosted-chat completions ARE their usage — and their only
 	// token-bearing rows, so the exclusion would zero their page.
@@ -1762,14 +1830,18 @@ type searchParams struct {
 	timeEnd        int64
 }
 
-// prepareTelemetrySearch validates and prepares common search parameters.
-func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
+// prepareTelemetrySearch authorizes the caller for requiredScope on the active
+// project, then validates and prepares common search parameters. Endpoints that
+// return individual tool calls or raw log records pass authz.ScopeLogRead, since
+// those rows carry every member's tool arguments, results, and prompts;
+// aggregate and per-person summary endpoints pass authz.ScopeProjectRead.
+func (s *Service) prepareTelemetrySearch(ctx context.Context, requiredScope authz.Scope, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: requiredScope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -2078,26 +2150,34 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	projectID := authCtx.ProjectID.String()
 	userID := conv.PtrValOr(payload.UserID, "")
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
+	if userID != "" && externalUserID != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "only one of user_id or external_user_id can be provided")
+	}
 	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
 	toolsetSlug := conv.PtrValOr(payload.ToolsetSlug, "")
 	remoteMCPServerID := conv.PtrValOr(payload.RemoteMcpServerID, "")
 	mcpServerID := conv.PtrValOr(payload.McpServerID, "")
 	metaMCPServerID := conv.PtrValOr(payload.MetaMcpServerID, "")
+	// A slug-only hosted overview belongs to the toolset's canonical server.
+	// Explicit server/gateway scopes still select their own member traffic.
+	toolsetSlugServerID := ""
+	if toolsetSlug != "" && mcpServerID == "" && metaMCPServerID == "" && remoteMCPServerID == "" {
+		toolsetSlugServerID, err = s.overviewCanonicalServerID(ctx, *authCtx.ProjectID, toolsetSlug)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error resolving hosted overview identity")
+		}
+	}
 	eventSource := conv.PtrValOr(payload.EventSource, "")
 	hookSource := conv.PtrValOr(payload.HookSource, "")
 	accountType := conv.PtrValOr(payload.AccountType, "")
 	externalOrgID := conv.PtrValOr(payload.ExternalOrgID, "")
-
-	if userID != "" && externalUserID != "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "only one of user_id or external_user_id can be provided")
-	}
 
 	// Resolved once and shared by every query below so the summary, its
 	// comparison period, the time series and the tool breakdowns all scope to
 	// the same set of identities.
 	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 
-	// Employee-scoped views exclude Gram-hosted inference (risk-analysis
+	// Employee-scoped views exclude Speakeasy-hosted inference (risk-analysis
 	// judges and friends): those completions log under the session owner's
 	// identity but are the platform's spend, not the employee's usage —
 	// counting them made one employee's page show 60M+ judge tokens as their
@@ -2130,6 +2210,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ExternalUserID:      externalUserID,
 		APIKeyID:            apiKeyID,
 		ToolsetSlug:         toolsetSlug,
+		ToolsetSlugServerID: toolsetSlugServerID,
 		RemoteMCPServerID:   remoteMCPServerID,
 		MCPServerID:         mcpServerID,
 		MetaMCPServerID:     metaMCPServerID,
@@ -2152,6 +2233,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ExternalUserID:      externalUserID,
 		APIKeyID:            apiKeyID,
 		ToolsetSlug:         toolsetSlug,
+		ToolsetSlugServerID: toolsetSlugServerID,
 		RemoteMCPServerID:   remoteMCPServerID,
 		MCPServerID:         mcpServerID,
 		MetaMCPServerID:     metaMCPServerID,
@@ -2177,6 +2259,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			ExternalUserID:      externalUserID,
 			APIKeyID:            apiKeyID,
 			ToolsetSlug:         toolsetSlug,
+			ToolsetSlugServerID: toolsetSlugServerID,
 			RemoteMCPServerID:   remoteMCPServerID,
 			MCPServerID:         mcpServerID,
 			MetaMCPServerID:     metaMCPServerID,
@@ -2200,6 +2283,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ExternalUserID:      externalUserID,
 		APIKeyID:            apiKeyID,
 		ToolsetSlug:         toolsetSlug,
+		ToolsetSlugServerID: toolsetSlugServerID,
 		RemoteMCPServerID:   remoteMCPServerID,
 		MCPServerID:         mcpServerID,
 		MetaMCPServerID:     metaMCPServerID,
@@ -2224,6 +2308,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ExternalUserID:      externalUserID,
 		APIKeyID:            apiKeyID,
 		ToolsetSlug:         toolsetSlug,
+		ToolsetSlugServerID: toolsetSlugServerID,
 		RemoteMCPServerID:   remoteMCPServerID,
 		MCPServerID:         mcpServerID,
 		MetaMCPServerID:     metaMCPServerID,
@@ -2252,8 +2337,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 // GetUnproxiedMcpServerUsage returns a best-effort daily tool-call count for
 // an unproxied MCP server, sourced from Shadow MCP's hook-reported traces
 // (trace_summaries) matched by canonicalized URL. Unlike GetObservabilityOverview,
-// this data isn't written by Gram's own proxy — an unproxied server's traffic
-// never passes through Gram — so coverage depends entirely on whether any
+// this data isn't written by Speakeasy's own proxy — an unproxied server's traffic
+// never passes through Speakeasy — so coverage depends entirely on whether any
 // hook-instrumented session in this project has called this exact URL.
 func (s *Service) GetUnproxiedMcpServerUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerUsagePayload) (*telem_gen.GetUnproxiedMcpServerUsageResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -3774,7 +3859,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 
 	logger := s.logger
 
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeLogRead, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
 	if err != nil {
 		return nil, err
 	}
@@ -4546,7 +4631,7 @@ func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetTool
 // ListHooksTraces retrieves hook trace summaries with pagination and filtering.
 // Uses materialized columns for efficient querying while accessing user_email from JSON.
 func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHooksTracesPayload) (res *telem_gen.ListHooksTracesResult, err error) {
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeLogRead, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
 	if err != nil {
 		return nil, err
 	}

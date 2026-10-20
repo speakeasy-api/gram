@@ -17,34 +17,34 @@ given we process events in order from WorkOS.
 
 ## Event Catalog
 
-| Event                             | Handler                      | `ShouldProcessEvent` baseline                                                                                              | Result                                                                                                                                                                                      |
-| --------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `organization.created`            | Organization event processor | Existing org `workos_last_event_id`, else `workos_updated_at`                                                              | Links/upserts the Gram organization by existing `workos_id`, or by WorkOS `external_id` if the org is not linked yet. Skips unlinked orgs with no `external_id`.                            |
-| `organization.updated`            | Organization event processor | Existing org `workos_last_event_id`, else `workos_updated_at`                                                              | Updates local organization name, slug, WorkOS ID, and WorkOS timestamp fields when the event wins.                                                                                          |
-| `organization.deleted`            | Organization event processor | Existing org `workos_last_event_id`, else `workos_updated_at`                                                              | Disables the local organization by WorkOS ID. Unknown org deletes are skipped.                                                                                                              |
-| `organization_role.created`       | Organization event processor | Existing org-role `workos_last_event_id`, else `workos_updated_at`                                                         | Upserts the WorkOS-managed role for the local organization. Unknown orgs are skipped.                                                                                                       |
-| `organization_role.updated`       | Organization event processor | Existing org-role `workos_last_event_id`, else `workos_updated_at`                                                         | Updates WorkOS-managed org role name, description, and WorkOS timestamps.                                                                                                                   |
-| `organization_role.deleted`       | Organization event processor | Existing org-role `workos_last_event_id`, else `workos_updated_at`                                                         | Soft-deletes the org role and deletes grants whose principal is that role. Unknown orgs or missing local roles are skipped.                                                                 |
-| `role.created`                    | Global role processor        | Existing global-role `workos_last_event_id`, else `workos_updated_at`                                                      | Upserts the WorkOS-managed global role.                                                                                                                                                     |
-| `role.updated`                    | Global role processor        | Existing global-role `workos_last_event_id`, else `workos_updated_at`                                                      | Updates WorkOS-managed global role name, description, and WorkOS timestamps.                                                                                                                |
-| `role.deleted`                    | Global role processor        | Existing global-role `workos_last_event_id`, else `workos_updated_at`                                                      | Soft-deletes the global role. Missing local roles are skipped.                                                                                                                              |
-| `organization_membership.created` | Organization event processor | Existing relationship by `workos_membership_id`, else by `(organization_id, user_id)` when user is known, else no baseline | Upserts an active relationship when the user is known; otherwise creates a pending relationship with `user_id = NULL`. Syncs role assignments the same way. Unknown orgs are skipped.       |
-| `organization_membership.updated` | Organization event processor | Existing relationship by `workos_membership_id`, else by `(organization_id, user_id)` when user is known, else no baseline | Refreshes membership metadata and makes local role assignments match the WorkOS role slugs. Pending rows remain pending until the user sync links them.                                     |
-| `organization_membership.deleted` | Organization event processor | Existing relationship by `workos_membership_id`, else by `(organization_id, user_id)` when user is known, else no baseline | Soft-deletes the relationship and role assignments for the WorkOS user. If needed, records a membership tombstone so older create/update replays do not resurrect deleted membership state. |
-| `user.created`                    | User event processor         | Per-user cursor, plus SQL `workos_updated_at` guard on the `users` row                                                     | Resolves a Gram user ID, upserts the user, links pending relationships and role assignments by `workos_user_id`, and attempts to set WorkOS `external_id` after commit if it was missing.   |
-| `user.updated`                    | User event processor         | Per-user cursor, plus SQL `workos_updated_at` guard on the `users` row                                                     | Updates local user profile fields when the WorkOS payload is current enough, then links any pending relationship/assignment rows.                                                           |
-| `user.deleted`                    | User event processor         | Per-user cursor, plus SQL `workos_updated_at` guard on the `users` row                                                     | Soft-deletes/disables the local user by WorkOS ID. Memberships and assignments are not directly changed by the user delete path.                                                            |
+| Event                             | Handler                      | `ShouldProcessEvent` baseline                                                                                              | Result                                                                                                                                                                                         |
+| --------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `organization.created`            | Organization event processor | Existing org `workos_last_event_id`, else `workos_updated_at`                                                              | Links/upserts the Speakeasy organization by existing `workos_id`, or by WorkOS `external_id` if the org is not linked yet. Skips unlinked orgs with no `external_id`.                          |
+| `organization.updated`            | Organization event processor | Existing org `workos_last_event_id`, else `workos_updated_at`                                                              | Updates local organization name, slug, WorkOS ID, and WorkOS timestamp fields when the event wins.                                                                                             |
+| `organization.deleted`            | Organization event processor | Existing org `workos_last_event_id`, else `workos_updated_at`                                                              | Disables the local organization by WorkOS ID. Unknown org deletes are skipped.                                                                                                                 |
+| `organization_role.created`       | Organization event processor | Existing org-role `workos_last_event_id`, else `workos_updated_at`                                                         | Upserts the WorkOS-managed role for the local organization. Unknown orgs are skipped.                                                                                                          |
+| `organization_role.updated`       | Organization event processor | Existing org-role `workos_last_event_id`, else `workos_updated_at`                                                         | Updates WorkOS-managed org role name, description, and WorkOS timestamps.                                                                                                                      |
+| `organization_role.deleted`       | Organization event processor | Existing org-role `workos_last_event_id`, else `workos_updated_at`                                                         | Soft-deletes the org role and deletes grants whose principal is that role. Unknown orgs or missing local roles are skipped.                                                                    |
+| `role.created`                    | Global role processor        | Existing global-role `workos_last_event_id`, else `workos_updated_at`                                                      | Upserts the WorkOS-managed global role.                                                                                                                                                        |
+| `role.updated`                    | Global role processor        | Existing global-role `workos_last_event_id`, else `workos_updated_at`                                                      | Updates WorkOS-managed global role name, description, and WorkOS timestamps.                                                                                                                   |
+| `role.deleted`                    | Global role processor        | Existing global-role `workos_last_event_id`, else `workos_updated_at`                                                      | Soft-deletes the global role. Missing local roles are skipped.                                                                                                                                 |
+| `organization_membership.created` | Organization event processor | Existing relationship by `workos_membership_id`, else by `(organization_id, user_id)` when user is known, else no baseline | Upserts an active relationship when the user is known; otherwise creates a pending relationship with `user_id = NULL`. Syncs role assignments the same way. Unknown orgs are skipped.          |
+| `organization_membership.updated` | Organization event processor | Existing relationship by `workos_membership_id`, else by `(organization_id, user_id)` when user is known, else no baseline | Refreshes membership metadata and makes local role assignments match the WorkOS role slugs. Pending rows remain pending until the user sync links them.                                        |
+| `organization_membership.deleted` | Organization event processor | Existing relationship by `workos_membership_id`, else by `(organization_id, user_id)` when user is known, else no baseline | Soft-deletes the relationship and role assignments for the WorkOS user. If needed, records a membership tombstone so older create/update replays do not resurrect deleted membership state.    |
+| `user.created`                    | User event processor         | Per-user cursor, plus SQL `workos_updated_at` guard on the `users` row                                                     | Resolves a Speakeasy user ID, upserts the user, links pending relationships and role assignments by `workos_user_id`, and attempts to set WorkOS `external_id` after commit if it was missing. |
+| `user.updated`                    | User event processor         | Per-user cursor, plus SQL `workos_updated_at` guard on the `users` row                                                     | Updates local user profile fields when the WorkOS payload is current enough, then links any pending relationship/assignment rows.                                                              |
+| `user.deleted`                    | User event processor         | Per-user cursor, plus SQL `workos_updated_at` guard on the `users` row                                                     | Soft-deletes/disables the local user by WorkOS ID. Memberships and assignments are not directly changed by the user delete path.                                                               |
 
 ## Summary Matrix
 
-| Area                  | Events                                                                                                  | Cursor scope                 | Main local state                                         |
-| --------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------------- |
-| Organization          | `organization.created`, `organization.updated`, `organization.deleted`                                  | One cursor per WorkOS org    | Gram organization metadata and WorkOS linkage            |
-| Organization roles    | `organization_role.created`, `organization_role.updated`, `organization_role.deleted`                   | One cursor per WorkOS org    | WorkOS-managed org roles and grants for deleted roles    |
-| Global roles          | `role.created`, `role.updated`, `role.deleted`                                                          | Singleton global-role cursor | WorkOS-managed global roles                              |
-| Memberships           | `organization_membership.created`, `organization_membership.updated`, `organization_membership.deleted` | One cursor per WorkOS org    | Org relationships and org role assignments               |
-| Users                 | `user.created`, `user.updated`, `user.deleted`                                                          | One cursor per WorkOS user   | Gram users, plus pending relationship/assignment linking |
-| Organization backfill | Snapshot, not event-driven                                                                              | No event cursor              | Org metadata, org roles, users, memberships, assignments |
+| Area                  | Events                                                                                                  | Cursor scope                 | Main local state                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------- |
+| Organization          | `organization.created`, `organization.updated`, `organization.deleted`                                  | One cursor per WorkOS org    | Speakeasy organization metadata and WorkOS linkage            |
+| Organization roles    | `organization_role.created`, `organization_role.updated`, `organization_role.deleted`                   | One cursor per WorkOS org    | WorkOS-managed org roles and grants for deleted roles         |
+| Global roles          | `role.created`, `role.updated`, `role.deleted`                                                          | Singleton global-role cursor | WorkOS-managed global roles                                   |
+| Memberships           | `organization_membership.created`, `organization_membership.updated`, `organization_membership.deleted` | One cursor per WorkOS org    | Org relationships and org role assignments                    |
+| Users                 | `user.created`, `user.updated`, `user.deleted`                                                          | One cursor per WorkOS user   | Speakeasy users, plus pending relationship/assignment linking |
+| Organization backfill | Snapshot, not event-driven                                                                              | No event cursor              | Org metadata, org roles, users, memberships, assignments      |
 
 ## Cursor And Freshness Rules
 
@@ -75,15 +75,15 @@ User upserts and deletes do not call `ShouldProcessEvent` directly. They rely on
 
 ## Membership And User Outcomes
 
-| Path                                     | Gram user known? | Relationship result                     | Role assignment result                        |
-| ---------------------------------------- | ---------------- | --------------------------------------- | --------------------------------------------- |
-| Membership event before user event       | No               | Pending row with `user_id = NULL`       | Pending rows with `user_id = NULL`            |
-| Membership event after user exists       | Yes              | Active row with `user_id`               | Active rows with `user_id`                    |
-| User event after pending membership      | Yes after event  | Pending relationship linked             | Pending assignments linked                    |
-| Backfill membership with resolvable user | Yes              | Active row with `user_id`               | Active rows with `user_id`                    |
-| Backfill membership with no Gram user ID | No               | Skipped                                 | Skipped                                       |
-| Membership deleted                       | Maybe            | Relationship soft-deleted or tombstoned | Assignments soft-deleted                      |
-| User deleted                             | Existing user    | User soft-deleted                       | Membership/assignments unchanged by user path |
+| Path                                          | Speakeasy user known? | Relationship result                     | Role assignment result                        |
+| --------------------------------------------- | --------------------- | --------------------------------------- | --------------------------------------------- |
+| Membership event before user event            | No                    | Pending row with `user_id = NULL`       | Pending rows with `user_id = NULL`            |
+| Membership event after user exists            | Yes                   | Active row with `user_id`               | Active rows with `user_id`                    |
+| User event after pending membership           | Yes after event       | Pending relationship linked             | Pending assignments linked                    |
+| Backfill membership with resolvable user      | Yes                   | Active row with `user_id`               | Active rows with `user_id`                    |
+| Backfill membership with no Speakeasy user ID | No                    | Skipped                                 | Skipped                                       |
+| Membership deleted                            | Maybe                 | Relationship soft-deleted or tombstoned | Assignments soft-deleted                      |
+| User deleted                                  | Existing user         | User soft-deleted                       | Membership/assignments unchanged by user path |
 
 ## Flow Diagrams
 
@@ -134,7 +134,7 @@ flowchart LR
 
 The relevant local state is split across:
 
-- `users`: Gram users linked to WorkOS users by `users.workos_id`.
+- `users`: Speakeasy users linked to WorkOS users by `users.workos_id`.
 - `organization_user_relationships`: organization membership rows, linked to WorkOS by `workos_user_id` and `workos_membership_id`.
 - `organization_role_assignments`: role assignments, linked to WorkOS by `workos_user_id`, `workos_membership_id`, and role URNs.
 - WorkOS sync cursor tables: track the last processed WorkOS event IDs for organization and user event streams.
@@ -169,7 +169,7 @@ Result:
 
 End state:
 
-- The membership and role assignment are represented locally, but are not yet attached to a Gram user.
+- The membership and role assignment are represented locally, but are not yet attached to a Speakeasy user.
 - Later user sync can link both tables by matching `workos_user_id`.
 
 ### Known Organization, Known User
@@ -187,14 +187,14 @@ Result:
 
 End state:
 
-- The Gram user has an active organization relationship.
-- The Gram user has the current role assignments for that WorkOS membership.
+- The Speakeasy user has an active organization relationship.
+- The Speakeasy user has the current role assignments for that WorkOS membership.
 
 ### Unknown Organization
 
 Input:
 
-- WorkOS membership event references an organization that has no local Gram organization metadata.
+- WorkOS membership event references an organization that has no local Speakeasy organization metadata.
 
 Result:
 
@@ -236,15 +236,15 @@ Input:
 
 Result:
 
-- `external_id` is treated as the Gram user ID.
+- `external_id` is treated as the Speakeasy user ID.
 - `users` is upserted with WorkOS profile fields and timestamps.
 - Pending `organization_role_assignments` for the WorkOS user are linked by setting `user_id`.
 - Pending `organization_user_relationships` for the WorkOS user are linked by setting `user_id`.
 
 End state:
 
-- The local Gram user row exists and is linked to the WorkOS user.
-- Any memberships and role assignments that arrived earlier are attached to that Gram user.
+- The local Speakeasy user row exists and is linked to the WorkOS user.
+- Any memberships and role assignments that arrived earlier are attached to that Speakeasy user.
 
 ### User Has No WorkOS `external_id`, Existing Local User Exists
 
@@ -258,7 +258,7 @@ Result:
 - Existing local user ID is reused.
 - `users` is updated from the WorkOS payload.
 - Pending membership and role assignment rows are linked to that user.
-- After the DB transaction commits, the processor attempts to set WorkOS `external_id` to the local Gram user ID.
+- After the DB transaction commits, the processor attempts to set WorkOS `external_id` to the local Speakeasy user ID.
 
 End state:
 
@@ -274,15 +274,15 @@ Input:
 
 Result:
 
-- A deterministic Gram user ID is generated from the WorkOS user ID.
+- A deterministic Speakeasy user ID is generated from the WorkOS user ID.
 - `users` is inserted with that generated ID.
 - Pending relationships and role assignments are linked to that generated user ID.
-- After commit, WorkOS `external_id` is updated to that generated Gram user ID.
+- After commit, WorkOS `external_id` is updated to that generated Speakeasy user ID.
 
 End state:
 
-- The WorkOS user has a local Gram user.
-- Pending membership/role data becomes visible through normal Gram user/org joins.
+- The WorkOS user has a local Speakeasy user.
+- Pending membership/role data becomes visible through normal Speakeasy user/org joins.
 
 ### User Deleted Event
 
@@ -316,10 +316,10 @@ It then applies local state in this order:
 3. For each membership:
    1. Find the matching WorkOS user snapshot.
    2. Backfill that WorkOS user into `users`.
-   3. If a Gram user ID was resolved, upsert the membership relationship.
+   3. If a Speakeasy user ID was resolved, upsert the membership relationship.
 4. Sync role assignments for that membership.
 
-Organization backfill also backfills users for the organization. For each WorkOS membership, it finds the matching WorkOS user snapshot and tries to apply that user locally before applying the membership and role assignments. If the user cannot be resolved to a Gram user ID, the membership and role assignment rows for that membership are skipped.
+Organization backfill also backfills users for the organization. For each WorkOS membership, it finds the matching WorkOS user snapshot and tries to apply that user locally before applying the membership and role assignments. If the user cannot be resolved to a Speakeasy user ID, the membership and role assignment rows for that membership are skipped.
 
 ## Running Backfill From Temporal UI
 
@@ -388,7 +388,7 @@ Global role backfill:
 
 Input:
 
-- WorkOS organization has a local row by `workos_id`, or it has `external_id` pointing at the Gram organization ID.
+- WorkOS organization has a local row by `workos_id`, or it has `external_id` pointing at the Speakeasy organization ID.
 
 Result:
 
@@ -423,7 +423,7 @@ Input:
 
 - WorkOS membership exists in the snapshot.
 - Matching WorkOS user snapshot exists.
-- User backfill resolves a Gram user ID from either:
+- User backfill resolves a Speakeasy user ID from either:
   - existing local `users.workos_id`, or
   - WorkOS `external_id`.
 
@@ -435,10 +435,10 @@ Result:
 
 End state:
 
-- The Gram user has an active organization relationship.
-- The Gram user has active role assignments matching the WorkOS membership snapshot.
+- The Speakeasy user has an active organization relationship.
+- The Speakeasy user has active role assignments matching the WorkOS membership snapshot.
 
-### Membership With User Snapshot But No Resolved Gram User ID
+### Membership With User Snapshot But No Resolved Speakeasy User ID
 
 Input:
 
@@ -458,9 +458,9 @@ Result:
 End state:
 
 - Local DB is unchanged for that user/membership.
-- The missing Gram user ID is treated as an operational warning to handle separately.
+- The missing Speakeasy user ID is treated as an operational warning to handle separately.
 
-This is intentionally different from the user event path. Backfill only changes local database state; it does not create new local user identities when WorkOS has not already been linked to a Gram user.
+This is intentionally different from the user event path. Backfill only changes local database state; it does not create new local user identities when WorkOS has not already been linked to a Speakeasy user.
 
 ### Membership Without Matching User Snapshot
 
@@ -486,7 +486,7 @@ Input:
 Result:
 
 - User row is not overwritten by the older snapshot.
-- The resolved Gram user ID is still returned.
+- The resolved Speakeasy user ID is still returned.
 - Membership and role assignment snapshot can still be applied for that resolved user.
 
 End state:
@@ -520,7 +520,7 @@ Input:
 
 - A membership event created a pending relationship with `user_id = NULL`.
 - A tombstoned relationship also exists for the same `(organization_id, user_id)`.
-- A later user event resolves the WorkOS user to that Gram user ID.
+- A later user event resolves the WorkOS user to that Speakeasy user ID.
 
 Result:
 

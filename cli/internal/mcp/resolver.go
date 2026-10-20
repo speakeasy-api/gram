@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
@@ -62,8 +63,14 @@ func ResolveToolsetInfo(ctx context.Context, opts *ResolverOptions) (*ToolsetInf
 			return nil, fmt.Errorf("failed to fetch toolset: %w", err)
 		}
 
-		// Construct MCP URL from toolset
-		info.URL = constructMCPURL(toolset, opts.APIURL.String())
+		endpointsClient := api.NewMCPEndpointsClient(&api.MCPEndpointsClientOptions{
+			Scheme: opts.APIURL.Scheme,
+			Host:   opts.APIURL.Host,
+		})
+		info.URL, err = resolveHostedMCPURL(ctx, opts, endpointsClient, toolset)
+		if err != nil {
+			return nil, err
+		}
 		opts.Logger.InfoContext(ctx, "derived MCP URL from toolset", slog.String("url", info.URL))
 
 		// Derive auth config from toolset if not explicitly provided
@@ -126,18 +133,56 @@ func ResolveToolsetInfo(ctx context.Context, opts *ResolverOptions) (*ToolsetInf
 	return info, nil
 }
 
-func constructMCPURL(toolset *types.Toolset, baseURL string) string {
-	// If toolset has a custom MCP slug, use it
-	if toolset.McpSlug != nil && *toolset.McpSlug != "" {
-		return fmt.Sprintf("%s/mcp/%s", baseURL, *toolset.McpSlug)
+const endpointLookupTimeout = 15 * time.Second
+
+type mcpEndpointLister interface {
+	ListMcpEndpoints(ctx context.Context, apiKey secret.Secret, projectSlug string, mcpServerID string) ([]*types.McpEndpoint, error)
+}
+
+// resolveHostedMCPURL reads the canonical MCP server's (id == toolset id) platform endpoint.
+func resolveHostedMCPURL(ctx context.Context, opts *ResolverOptions, endpoints mcpEndpointLister, toolset *types.Toolset) (string, error) {
+	baseURL := opts.APIURL.String()
+	toolsetSlug := ""
+	if toolset.McpSlug != nil {
+		toolsetSlug = string(*toolset.McpSlug)
 	}
 
-	// Otherwise construct from org/project/environment
-	return fmt.Sprintf("%s/mcp/%s/%s/%s",
-		baseURL,
-		toolset.OrganizationID,
-		toolset.ProjectID,
-		*toolset.DefaultEnvironmentSlug)
+	listCtx, cancel := context.WithTimeout(ctx, endpointLookupTimeout)
+	defer cancel()
+	list, err := endpoints.ListMcpEndpoints(listCtx, opts.APIKey, opts.ProjectSlug, toolset.ID)
+	if err != nil {
+		opts.Logger.DebugContext(ctx, "could not list MCP endpoints, using toolset MCP URL", slog.String("error", err.Error()))
+	} else if slug, n := platformEndpointSlug(list, toolsetSlug); n > 1 {
+		return "", fmt.Errorf("toolset %q has %d MCP endpoints; pass --mcp-url to choose one", toolset.Slug, n)
+	} else if slug != "" {
+		return fmt.Sprintf("%s/mcp/%s", baseURL, slug), nil
+	}
+
+	if toolsetSlug == "" {
+		return "", fmt.Errorf("toolset %q has no MCP URL; enable its MCP server or pass --mcp-url", toolset.Slug)
+	}
+	return fmt.Sprintf("%s/mcp/%s", baseURL, toolsetSlug), nil
+}
+
+// platformEndpointSlug keeps the toolset's slug if reported, else the sole platform endpoint, plus the candidate count.
+func platformEndpointSlug(endpoints []*types.McpEndpoint, toolsetSlug string) (string, int) {
+	var candidates []string
+	for _, endpoint := range endpoints {
+		if endpoint == nil || endpoint.Slug == "" || (endpoint.CustomDomainID != nil && *endpoint.CustomDomainID != "") {
+			continue
+		}
+		if toolsetSlug != "" {
+			if string(endpoint.Slug) == toolsetSlug {
+				return toolsetSlug, 1
+			}
+			continue
+		}
+		candidates = append(candidates, string(endpoint.Slug))
+	}
+	if len(candidates) != 1 {
+		return "", len(candidates)
+	}
+	return candidates[0], 1
 }
 
 func deriveAuthConfig(toolset *types.Toolset) (headerName string, envVarName string) {
@@ -159,10 +204,36 @@ func deriveAuthConfig(toolset *types.Toolset) (headerName string, envVarName str
 	return headerName, envVarName
 }
 
+const (
+	// DefaultServerName names an installed MCP server when the URL gives no
+	// better name.
+	DefaultServerName = "speakeasy-mcp"
+
+	// legacyServerName is the DefaultServerName of CLI releases before the
+	// speakeasy rename.
+	legacyServerName = "gram-mcp"
+)
+
+// LegacyServerName returns the name earlier CLI releases used for name, so an
+// entry they installed is recognised and replaced rather than duplicated.
+// Only the two default names changed in the rename: DefaultServerName and the
+// Claude Desktop default DefaultServerName + "-server". Names derived from the
+// MCP URL were the same before and after, so they never map.
+func LegacyServerName(name string) (string, bool) {
+	switch name {
+	case DefaultServerName:
+		return legacyServerName, true
+	case DefaultServerName + "-server":
+		return legacyServerName + "-server", true
+	default:
+		return "", false
+	}
+}
+
 func deriveServerNameFromURL(mcpURL string) string {
 	u, err := url.Parse(mcpURL)
 	if err != nil {
-		return "gram-mcp"
+		return DefaultServerName
 	}
 
 	pathParts := strings.Split(strings.Trim(u.Path, "/"), "/")
@@ -170,5 +241,5 @@ func deriveServerNameFromURL(mcpURL string) string {
 		return pathParts[len(pathParts)-1]
 	}
 
-	return "gram-mcp"
+	return DefaultServerName
 }

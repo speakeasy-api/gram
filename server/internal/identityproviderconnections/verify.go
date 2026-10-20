@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 )
 
@@ -27,6 +28,7 @@ const (
 	ReasonMissingRole     = "missing_role"
 	ReasonDPoPNotBound    = "dpop_not_bound"
 	ReasonKeyNotFetched   = "key_not_fetched"
+	ReasonSecretRejected  = "secret_rejected"
 	ReasonReadFailedApps  = "read_failed:okta.apps.read"
 	ReasonReadFailedUsers = "read_failed:okta.users.read"
 	ReasonReadFailedGroup = "read_failed:okta.groups.read"
@@ -38,10 +40,11 @@ const (
 	LastErrorOktaUnreachable    = "okta_unreachable"
 )
 
-var knownReasons = []string{ReasonMissingScope, ReasonMissingRole, ReasonDPoPNotBound, ReasonKeyNotFetched, ReasonReadFailedApps, ReasonReadFailedUsers, ReasonReadFailedGroup}
+var knownReasons = []string{ReasonMissingScope, ReasonMissingRole, ReasonDPoPNotBound, ReasonKeyNotFetched, ReasonSecretRejected, ReasonReadFailedApps, ReasonReadFailedUsers, ReasonReadFailedGroup}
 
-// ErrCredentialRejected means Okta refused the connection's private_key_jwt
-// credential: the client id is wrong or the JWKS is not configured on the app.
+// ErrCredentialRejected means Okta refused the connection's credential: the
+// client id is wrong, or the JWKS is not configured on the app, or the client
+// secret is wrong.
 var ErrCredentialRejected = errors.New("identityproviderconnections: okta rejected the connection credential")
 
 // verificationOutcome is what one verification run learned from Okta.
@@ -64,7 +67,10 @@ func (o *verificationOutcome) lastError() string {
 // verifyConnection mints a token for the required scopes and confirms each
 // granted scope with one cheap read. A credential rejection surfaces
 // as ErrCredentialRejected; any other transport failure is returned as-is.
-func verifyConnection(ctx context.Context, client okta.Client) (*verificationOutcome, error) {
+// DPoP binding is required of private_key_jwt connections, and of
+// client_secret_basic connections only once dpopPinned: an installed Okta
+// Integration Network app does not let the customer turn DPoP on.
+func verifyConnection(ctx context.Context, client okta.Client, method remotesessions.TokenEndpointAuthMethod, dpopPinned bool) (*verificationOutcome, error) {
 	scopes, err := client.VerifyScopes(ctx, RequiredOktaScopes)
 	if err != nil {
 		if isCredentialRejection(err) {
@@ -85,11 +91,13 @@ func verifyConnection(ctx context.Context, client okta.Client) (*verificationOut
 	if len(outcome.Missing) > 0 {
 		outcome.Reasons = append(outcome.Reasons, ReasonMissingScope)
 	}
-	if !scopes.DPoPBound {
+	if !scopes.DPoPBound && (method != remotesessions.TokenEndpointAuthMethodBasic || dpopPinned) {
 		outcome.Reasons = append(outcome.Reasons, ReasonDPoPNotBound)
 	}
 
-	if len(outcome.Granted) > 0 {
+	// A DPoP-pinned client refuses to present an unbound token, so reads would only add read_failed noise.
+	skipReads := dpopPinned && !scopes.DPoPBound
+	if len(outcome.Granted) > 0 && !skipReads {
 		failed, err := confirmReads(ctx, client, outcome.Granted)
 		if err != nil {
 			return nil, err
@@ -182,9 +190,12 @@ func parseLastError(lastError string) (reasons []string, failure string) {
 }
 
 // failureLastError is the last_error a failed verification records: the
-// marker, plus key_not_fetched when Okta refused the credential.
-func failureLastError(cause error) string {
+// marker, plus the method's rejection reason when Okta refused the credential.
+func failureLastError(cause error, method remotesessions.TokenEndpointAuthMethod) string {
 	if errors.Is(cause, ErrCredentialRejected) {
+		if method == remotesessions.TokenEndpointAuthMethodBasic {
+			return LastErrorCredentialRejected + "," + ReasonSecretRejected
+		}
 		return LastErrorCredentialRejected + "," + ReasonKeyNotFetched
 	}
 	return LastErrorOktaUnreachable

@@ -39,7 +39,7 @@ export type VerifyCimdURLResult = {
    */
   detail: string;
   /**
-   * The validated document rendered as JSON, set only when verified. Re-encoded from what Gram parsed rather than echoed from the wire, so it shows what the authorization server will act on.
+   * The validated document rendered as JSON, set only when verified. Re-encoded from what Speakeasy parsed rather than echoed from the wire, so it shows what the authorization server will act on.
    */
   document?: string | undefined;
   /**

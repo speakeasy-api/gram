@@ -26,14 +26,14 @@ func TestDeviceAgentEmail(t *testing.T) {
 	dir := t.TempDir()
 	agent := filepath.Join(dir, "fake-device-agent")
 	require.NoError(t, os.WriteFile(agent, []byte("#!/bin/sh\nprintf '%s' '{\"user_email\":\"device@example.com\"}'\n"), 0o700))
-	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", agent)
-	t.Setenv("GRAM_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", agent)
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
 
 	require.Equal(t, "device@example.com", deviceAgentEmail(t.Context()))
 }
 
 func TestDeviceAgentCommandsEnvOverrideIsExclusive(t *testing.T) {
-	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "one,two")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "one,two")
 	require.Equal(t, []string{"one", "two"}, deviceAgentCommands())
 }
 
@@ -88,6 +88,7 @@ func TestDeviceAgentEmailSocketRescue(t *testing.T) {
 	t.Setenv("SPEAKEASY_SOCKET", socket)
 	t.Setenv("HOME", t.TempDir()) // no well-known installs
 	t.Setenv("PATH", t.TempDir()) // bare "speakeasyd" resolves nowhere
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
 
 	require.Equal(t, "socket@example.com", deviceAgentEmail(t.Context()))
@@ -98,7 +99,7 @@ func TestDeviceAgentEmailEnvOverrideSilencesSocket(t *testing.T) {
 	// socket must not be consulted.
 	socket := startIdentitySocket(t, http.StatusOK, `{"v":1,"enrolled":true,"email":"socket@example.com","source":"managed"}`)
 	t.Setenv("SPEAKEASY_SOCKET", socket)
-	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
 
 	require.Empty(t, deviceAgentEmail(t.Context()))
 }
@@ -155,8 +156,9 @@ func TestDeviceAgentEmailFindsAgentOffPATH(t *testing.T) {
 
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", t.TempDir()) // bare "speakeasyd" resolves nowhere
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
-	t.Setenv("GRAM_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
 
 	require.Contains(t, deviceAgentCommands(), agent)
 	require.Equal(t, "managed@example.com", deviceAgentEmail(t.Context()))
@@ -181,7 +183,7 @@ func TestCodexAppServerEmail(t *testing.T) {
 		"printf '%s\\n' '{\"id\":71002,\"result\":{\"account\":{\"email\":\"codex@example.com\"}}}'\n"
 	require.NoError(t, os.WriteFile(codex, []byte(script), 0o700))
 	t.Setenv("PATH", dir)
-	t.Setenv("GRAM_CODEX_IDENTITY_TIMEOUT_TENTHS", "20")
+	t.Setenv("SPEAKEASY_AI_CODEX_IDENTITY_TIMEOUT_TENTHS", "20")
 
 	require.Equal(t, "codex@example.com", codexAppServerEmail(t.Context()))
 }

@@ -1,9 +1,11 @@
 -- name: ListWidgets :many
+-- A null row_limit lists every widget.
 SELECT *
 FROM widgets
 WHERE project_id = @project_id
   AND deleted IS FALSE
-ORDER BY updated_at DESC, id DESC;
+ORDER BY updated_at DESC, id DESC
+LIMIT sqlc.narg(row_limit)::int;
 
 -- name: GetWidget :one
 SELECT *
@@ -52,3 +54,27 @@ WHERE project_id = @project_id
   AND id = @id
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListDashboardsForWidgets :many
+-- Which live dashboards each of the given widgets is on, once each, however
+-- many cards show it.
+SELECT DISTINCT p.widget_id, d.id AS dashboard_id, d.name AS dashboard_name
+FROM dashboard_widgets p
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
+WHERE p.project_id = @project_id
+  AND p.widget_id = ANY(@widget_ids::uuid[])
+ORDER BY p.widget_id, d.name, d.id;
+
+-- name: ListDashboardsForWidget :many
+SELECT DISTINCT d.id AS dashboard_id, d.name AS dashboard_name
+FROM dashboard_widgets p
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
+WHERE p.project_id = @project_id
+  AND p.widget_id = @widget_id
+ORDER BY d.name, d.id;
+
+-- name: DeleteWidgetPlacements :exec
+-- A deleted widget comes off every dashboard it was on.
+DELETE FROM dashboard_widgets
+WHERE project_id = @project_id
+  AND widget_id = @widget_id;

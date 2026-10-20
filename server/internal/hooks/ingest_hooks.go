@@ -18,11 +18,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/claudetag"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
@@ -41,6 +43,15 @@ type authenticatedIngestOptionsKey struct{}
 
 // AuthenticatedIngestOptions controls trusted in-process ingestion behavior.
 type AuthenticatedIngestOptions struct {
+	// contentBoundary applies the quarantine gate and boundaryScans instead of
+	// the policies for the event type. It applies also when boundaryScans is empty.
+	contentBoundary bool
+	boundaryScans   []ahpBoundaryScan
+	// promptPolicyText overrides prompt evidence without changing transcript capture.
+	promptPolicyText *string
+	// ObserveOnly records the event without evaluating enforcement, for
+	// events the sender cannot block.
+	ObserveOnly                  bool
 	AllowWarnAcknowledgement     bool
 	AllowSessionIdentityFallback bool
 	SourceAttributes             map[attr.Key]any
@@ -63,6 +74,10 @@ type AuthenticatedIngestResult struct {
 
 func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 	return AuthenticatedIngestOptions{
+		contentBoundary:              false,
+		boundaryScans:                nil,
+		promptPolicyText:             nil,
+		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
 		SourceAttributes:             nil,
@@ -127,6 +142,7 @@ func (s *Service) IngestAuthenticatedDetailed(ctx context.Context, authCtx *cont
 	authCopy.ProjectID = &projectID
 	payloadCopy := *payload
 	payloadCopy.ApikeyToken = nil
+	payloadCopy.DeviceAgentToken = nil
 	payloadCopy.ProjectSlugInput = nil
 	options.SourceAttributes = maps.Clone(options.SourceAttributes)
 	options.OutputToolCalls = append([]any(nil), options.OutputToolCalls...)
@@ -137,7 +153,7 @@ func (s *Service) IngestAuthenticatedDetailed(ctx context.Context, authCtx *cont
 }
 
 // Ingest is the feature-first hook endpoint; this path only accepts the
-// canonical Gram contract. Auth is optional so hook senders stay non-blocking
+// canonical Speakeasy contract. Auth is optional so hook senders stay non-blocking
 // for machines that never signed in: a keyless request is acknowledged without
 // processing (there is nothing to attribute it to), while a presented key that
 // fails validation is a hard 401 — the sender explicitly tried to
@@ -179,7 +195,14 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 	source = strings.TrimSpace(payload.Source.Adapter)
 	eventType = strings.TrimSpace(payload.Event.Type)
-	if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
+	if token := pluginDeviceAgentToken(payload.DeviceAgentToken); token != "" {
+		authedCtx, err := s.authorizeWorkloadPluginRequest(ctx, token, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
+		if err != nil {
+			outcome = hookMetricOutcomeUnauthorized
+			return nil, workloadHookAuthError(err)
+		}
+		ctx = authedCtx
+	} else if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
 		authedCtx, err := s.authorizePluginRequest(ctx, apikey, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
 		if err != nil {
 			outcome = hookMetricOutcomeUnauthorized
@@ -272,7 +295,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// skipping retries would leave a session whose first delivery claimed the
 	// idempotency key but failed its cache write with no inventory for its
 	// whole life — under block_all every later meta-tool call would then deny,
-	// including Gram-hosted targets, with no path to recover.
+	// including Speakeasy-hosted targets, with no path to recover.
 	s.cacheCanonicalMCPList(
 		context.WithoutCancel(ctx),
 		canonicalSessionID(payload),
@@ -488,7 +511,7 @@ func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.Ingest
 		Email:  selfReported,
 	}
 	if actor.UserID == "" {
-		// A self-reported email that matches no Gram user cannot key
+		// A self-reported email that matches no Speakeasy user cannot key
 		// user-scoped policies; recover a complete identity instead of
 		// running unattributed. For shared plugin keys the session metadata
 		// cache may already link this session to a user (an earlier canonical
@@ -572,10 +595,14 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalHook")
 	defer span.End()
 
+	opts := authenticatedIngestOptions(ctx)
+	if opts.ObserveOnly {
+		return "", ""
+	}
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
-	if eventType == "prompt.submitted" || eventType == "tool.requested" {
+	if eventType == "prompt.submitted" || eventType == "tool.requested" || opts.contentBoundary {
 		if quarantine := s.checkQuarantineGate(ctx, event); quarantine != nil {
 			reason := sessionquarantine.DenyReason(quarantine)
 			return reason, reason
@@ -610,10 +637,16 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 		}
 	}
 
+	// AHP content boundaries scan their content directly. They do not create
+	// transcript messages from the model context.
+	if opts.contentBoundary {
+		return s.evaluateAHPBoundary(ctx, event, opts.boundaryScans)
+	}
+
 	switch eventType {
 	case "prompt.submitted":
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
-			Prompt: canonicalPromptText(payload),
+			Prompt: conv.PtrValOr(opts.promptPolicyText, canonicalPromptText(payload)),
 		})
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			if scanResult.Action == "quarantine" {
@@ -621,7 +654,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
 				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
 			}
-			if scanResult.IsWarnChallenge() && authenticatedIngestOptions(ctx).AllowWarnAcknowledgement {
+			if scanResult.IsWarnChallenge() && opts.AllowWarnAcknowledgement {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
 				}
@@ -820,8 +853,8 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	evidence := canonicalShadowMCPEvidence(payload, rawToolName)
 	// A Codex meta-tool names its target in tool_input.server, so nothing above
 	// can derive an identity from the tool name. Resolving that name against the
-	// session's inventory is what lets a Gram-hosted target be allowed at all —
-	// without a URL the guard can only reach its generic "not Gram-hosted" deny,
+	// session's inventory is what lets a Speakeasy-hosted target be allowed at all —
+	// without a URL the guard can only reach its generic "not Speakeasy-hosted" deny,
 	// which would block legitimate reads the legacy endpoint permits. A name we
 	// cannot resolve still denies: unproven is not absent.
 	if evidence.ServerIdentity == "" && evidence.FullURL == "" {
@@ -982,7 +1015,7 @@ func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.Inges
 //
 // Absent also covers every relay released before the flag existed. Those send
 // no inventory at all, and enforcing on them would deny every meta-tool call
-// including reads of Gram-hosted servers that work today — so they keep their
+// including reads of Speakeasy-hosted servers that work today — so they keep their
 // current behavior until they upgrade, rather than enforcement depending on a
 // server deploy and a hooks release landing in the right order.
 func (s *Service) canonicalClientReportsMCPInventory(ctx context.Context, payload *gen.IngestPayload) bool {
@@ -1044,7 +1077,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
 	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx, actor)
-	if _, tag := claudeTagTitle(canonicalPromptText(payload)); tag && claudeServiceNameSpecificity(metadata.ServiceName) > 0 {
+	if claudeServiceNameSpecificity(metadata.ServiceName) > 0 && claudetag.Parse(canonicalPromptText(payload)).Detected {
 		metadata.ServiceName = "claude-tag"
 	}
 	// Resolve the product surface once per event: the OTEL-cached service.name
@@ -1072,7 +1105,15 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 			)
 		}
 	}
-	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
+	rows := s.canonicalTelemetryRows(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
+	// The tee gets its own copies before the writer scrubs what it stores.
+	teeRows := cloneHookTelemetryRows(rows)
+	if s.telemetryLogger != nil {
+		for _, row := range rows {
+			s.logHookTelemetry(ctx, authCtx, &metadata, row.timestamp, row.toolName, row.attrs)
+		}
+	}
+	s.teeCanonicalHookToEventFeed(ctx, payload, authCtx, &metadata, hookSource, blockReason, teeRows)
 	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 	if err != nil {
 		event := "hooks_ingest_chat_persist_failed"
@@ -1248,10 +1289,13 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 	return metadata
 }
 
-func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, timestamp time.Time, blockReason string) {
-	if s.telemetryLogger == nil {
-		return
-	}
+// canonicalTelemetryRows builds the rows recorded for one hook event, in the
+// order they are written: the event's own row and, when a skill was
+// inferred on it, the derived activation row. The telemetry writer stores
+// them and the event feed tee republishes them, so both see the same
+// attributes.
+func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, timestamp time.Time, blockReason string) []hookTelemetryRow {
+	rows := make([]hookTelemetryRow, 0, 2)
 
 	hookEventName := telemetryHookEventName(payload)
 	toolName := canonicalTelemetryToolName(payload)
@@ -1325,7 +1369,7 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 	// split by personal vs team account, matching the legacy per-provider paths.
 	stampAccountAttribution(attrs, *metadata)
 
-	s.logHookTelemetry(ctx, authCtx, metadata, timestamp, toolName, attrs)
+	rows = append(rows, hookTelemetryRow{timestamp: timestamp, toolName: toolName, attrs: attrs})
 
 	// A skill name on an ordinary tool/prompt event is an inferred activation
 	// (Codex has no dedicated Skill tool): the underlying event was recorded
@@ -1346,8 +1390,9 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})
 		mergeSourceAttributes(attrs, authenticatedIngestOptions(ctx).SourceAttributes)
 		stampAccountAttribution(attrs, *metadata)
-		s.logHookTelemetry(ctx, authCtx, metadata, timestamp, "Skill", attrs)
+		rows = append(rows, hookTelemetryRow{timestamp: timestamp, toolName: "Skill", attrs: attrs})
 	}
+	return rows
 }
 
 func mergeSourceAttributes(base, source map[attr.Key]any) {
@@ -1400,6 +1445,15 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 }
 
 func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
+	// Device details the speakeasy-hooks binary reported, so rows can be
+	// counted per client version. A spool replay's headers describe the binary
+	// draining the spool, which after an upgrade is not the one that captured
+	// the event, so replayed rows stay unstamped rather than miscounted.
+	if replayed, _ := attrs[attr.HookReplayedKey].(bool); !replayed {
+		for key, value := range middleware.HookDeviceAttributes(ctx) {
+			attrs[key] = value
+		}
+	}
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: timestamp,
 		ToolInfo: telemetry.ToolInfo{
@@ -1425,7 +1479,7 @@ func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.A
 // a fixed canonical fallback for senders that omit one, so unified-ingest rows
 // keep counting without a ClickHouse migration.
 func telemetryHookEventName(payload *gen.IngestPayload) string {
-	// Skill activations are a Gram-specific classification layered onto an
+	// Skill activations are a Speakeasy-specific classification layered onto an
 	// ordinary provider tool event; resolving via the raw name would erase it.
 	if isExplicitSkillActivation(payload) {
 		return eventTypeSkillActivated
@@ -1852,7 +1906,12 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		if err != nil {
 			return fmt.Errorf("marshal prompt attachment metadata: %w", err)
 		}
-		parentID := parentResolver.resolve(promptSHA256)
+		parentID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		// AHP attachment-only messages have no prompt parent. The latest user
+		// row belongs to an earlier event, unlike transcript attachment fallback.
+		if promptSHA256 != "" || !strings.HasPrefix(attachment.EntryUUID, "ahp-attachment:") {
+			parentID = parentResolver.resolve(promptSHA256)
+		}
 		pending = append(pending, pendingPromptAttachment{
 			attachment: attachment,
 			content:    []byte(attachment.Content),
@@ -2227,6 +2286,12 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) str
 	if claudeServiceNameSpecificity(source) > 0 {
 		if tagTitle, ok := claudeTagTitle(title); ok {
 			title = tagTitle
+		} else if delivery := claudetag.Parse(title); delivery.Detected {
+			if delivery.Sender != "" {
+				title = delivery.Text
+			} else {
+				title = "Claude Tag coordination"
+			}
 		}
 	}
 	return chat.DerivedTitle(title)
@@ -2281,7 +2346,7 @@ func canonicalMCPInventoryEntries(payload *gen.IngestPayload) []MCPServerEntry {
 		// configured name, and the prefix is the only thing the cached-entry
 		// fallback matches on. Leaving it empty makes a hyphenated server
 		// ("platform-logs", addressed as "platform_logs") unresolvable here
-		// while the legacy endpoint resolves it — a Gram-hosted target would
+		// while the legacy endpoint resolves it — a Speakeasy-hosted target would
 		// be denied. Mirrors ParseCodexMCPList.
 		toolPrefix := ""
 		if isCodex {

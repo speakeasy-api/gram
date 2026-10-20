@@ -412,7 +412,7 @@ func newMSTeamsDefinition() Definition {
 	vendor := WebhookVendor{
 		Slug:        DefinitionSlugMSTeams,
 		Title:       "Microsoft Teams",
-		Description: "Receive Bot Framework activities from Microsoft Teams and map them to Gram trigger events.",
+		Description: "Receive Bot Framework activities from Microsoft Teams and map them to Speakeasy trigger events.",
 		EventType:   reflect.TypeFor[msteamsTriggerEvent](),
 		EnvRequirements: []EnvRequirement{{
 			Name:        msteamsAppIDEnv,

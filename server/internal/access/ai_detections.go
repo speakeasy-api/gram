@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/directory"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
@@ -251,7 +252,7 @@ func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrep
 			Versions:    row.Versions,
 			FirstSeen:   formatTimeValue(row.FirstSeen),
 			LastSeen:    formatTimeValue(row.LastSeen),
-			Access:      aiToolAccessView(aitargets.SummarizeAccess(target, decision)),
+			Access:      mv.BuildAIToolAccessSummaryView(aitargets.SummarizeAccess(target, decision)),
 		})
 	}
 

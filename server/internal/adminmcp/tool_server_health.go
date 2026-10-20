@@ -33,6 +33,7 @@ var (
 	healthAuthnChallengeModes = []string{"chain", "interactive"}
 	healthAttachmentScopes    = []string{"project", "organization", "global"}
 	healthAdmissionModes      = []string{"disabled", "presets", "reporting", "open"}
+	healthAuthorizationModes  = []string{"endpoint", "shared"}
 	healthRegistrations       = []string{"cimd", "dcr", "static"}
 	healthTokenAuthMethods    = []string{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}
 	healthNetworking          = []string{"public", "tunneled"}
@@ -85,6 +86,8 @@ type MCPServerHealthUserIssuer struct {
 	AttachmentScope               string                               `json:"attachment_scope"`
 	ClientIDMetadataAdmissionMode *string                              `json:"client_id_metadata_admission_mode,omitempty"`
 	UseAuthenticationHost         bool                                 `json:"use_authentication_host"`
+	AuthorizationServerMode       string                               `json:"authorization_server_mode"`
+	IssuerURLPinned               bool                                 `json:"issuer_url_pinned"`
 	TrustedRemoteSession          *MCPServerHealthTrustedSession       `json:"trusted_remote_session,omitempty"`
 	OtherServersUsingIssuer       []MCPServerHealthServerRef           `json:"other_servers_using_issuer"`
 	CreatedAt                     string                               `json:"created_at"`
@@ -135,6 +138,7 @@ type MCPServerHealthRemoteIssuer struct {
 	PKCE                string   `json:"pkce"`
 	CIMDSupported       bool     `json:"cimd_supported"`
 	ScopeOverride       []string `json:"scope_override,omitempty"`
+	OmitScopeFallback   *bool    `json:"omit_scope_fallback,omitempty"`
 	MetadataFetchedAt   *string  `json:"metadata_fetched_at,omitempty"`
 	MetadataLastErrorAt *string  `json:"metadata_last_error_at,omitempty"`
 	JWKSLastErrorAt     *string  `json:"jwks_last_error_at,omitempty"`
@@ -306,6 +310,7 @@ func projectHealthUserIssuer(i *gen.AdminMcpServerHealthUserSessionIssuer) (MCPS
 		!slices.Contains(healthAuthnChallengeModes, i.AuthnChallengeMode) || i.SessionDurationHours < 0 ||
 		!slices.Contains(healthAttachmentScopes, i.AttachmentScope) || !validHealthTime(i.CreatedAt) ||
 		(i.ClientIDMetadataAdmissionMode != nil && !slices.Contains(healthAdmissionModes, *i.ClientIDMetadataAdmissionMode)) ||
+		!slices.Contains(healthAuthorizationModes, i.AuthorizationServerMode) ||
 		i.Sessions == nil || len(i.OtherServersUsingIssuer) > maxHealthOtherServers || len(i.RemoteSessionClients) > maxHealthClients {
 		return MCPServerHealthUserIssuer{}, false
 	}
@@ -318,6 +323,7 @@ func projectHealthUserIssuer(i *gen.AdminMcpServerHealthUserSessionIssuer) (MCPS
 		ID: i.ID, Slug: i.Slug, Classification: i.Classification, AuthnChallengeMode: i.AuthnChallengeMode,
 		SessionDurationHours: i.SessionDurationHours, AttachmentScope: i.AttachmentScope,
 		ClientIDMetadataAdmissionMode: i.ClientIDMetadataAdmissionMode, UseAuthenticationHost: i.UseAuthenticationHost,
+		AuthorizationServerMode: i.AuthorizationServerMode, IssuerURLPinned: i.IssuerURLPinned,
 		OtherServersUsingIssuer: []MCPServerHealthServerRef{}, CreatedAt: i.CreatedAt,
 		Sessions: MCPServerHealthUserSessions{
 			DistinctSubjectsEver: sessions.DistinctSubjectsEver, DistinctSubjectsInWindow: sessions.DistinctSubjectsInWindow,
@@ -393,7 +399,7 @@ func projectHealthRemoteClient(c *gen.AdminMcpServerHealthRemoteSessionClient) (
 		Issuer: MCPServerHealthRemoteIssuer{
 			ID: i.ID, Slug: i.Slug, Name: i.Name, Issuer: i.Issuer, AttachmentScope: i.AttachmentScope,
 			Networking: i.Networking, OIDC: i.Oidc, Passthrough: i.Passthrough, PKCE: i.Pkce, CIMDSupported: i.CimdSupported,
-			ScopeOverride: slices.Clone(i.ScopeOverride), MetadataFetchedAt: i.MetadataFetchedAt,
+			ScopeOverride: slices.Clone(i.ScopeOverride), OmitScopeFallback: i.OmitScopeFallback, MetadataFetchedAt: i.MetadataFetchedAt,
 			MetadataLastErrorAt: i.MetadataLastErrorAt, JWKSLastErrorAt: i.JwksLastErrorAt,
 		},
 		Sessions: MCPServerHealthRemoteSessions{

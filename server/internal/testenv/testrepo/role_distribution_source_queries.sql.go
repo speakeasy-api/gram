@@ -45,16 +45,6 @@ func (q *Queries) BootstrapSetOrganizationRoleInactive(ctx context.Context, arg 
 	return err
 }
 
-const sourceDisableRoleDistributionSetup = `-- name: SourceDisableRoleDistributionSetup :exec
-UPDATE organization_features SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution'
-`
-
-// Shared role-distribution lifecycle fixture: prepare lifecycle state without running the worker.
-func (q *Queries) SourceDisableRoleDistributionSetup(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, sourceDisableRoleDistributionSetup, organizationID)
-	return err
-}
-
 const sourceInsertGlobalRoleWithoutDistribution = `-- name: SourceInsertGlobalRoleWithoutDistribution :exec
 INSERT INTO global_roles (workos_slug,workos_name,workos_created_at,workos_updated_at) VALUES ($1,$1,clock_timestamp(),clock_timestamp())
 `
@@ -88,16 +78,4 @@ type SourceMoveOrganizationRoleParams struct {
 func (q *Queries) SourceMoveOrganizationRole(ctx context.Context, arg SourceMoveOrganizationRoleParams) error {
 	_, err := q.db.Exec(ctx, sourceMoveOrganizationRole, arg.OrganizationID, arg.RoleUrn)
 	return err
-}
-
-const sourceRoleDistributionSetupEnabled = `-- name: SourceRoleDistributionSetupEnabled :one
-SELECT EXISTS (SELECT 1 FROM organization_features WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution' AND deleted IS FALSE)
-`
-
-// Shared role-distribution lifecycle fixture: inspect committed or transaction-local source receipts.
-func (q *Queries) SourceRoleDistributionSetupEnabled(ctx context.Context, organizationID string) (bool, error) {
-	row := q.db.QueryRow(ctx, sourceRoleDistributionSetupEnabled, organizationID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }

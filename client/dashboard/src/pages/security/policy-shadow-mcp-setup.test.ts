@@ -4,6 +4,7 @@ import type { ShadowMCPInventoryServer } from "@gram/client/models/components/sh
 import {
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
+  shadowMCPAllowAllPostureLocked,
   shadowMCPAllowedURLsForMutation,
   shadowMCPBlockedURLsForMutation,
   shadowMCPDecisionConflicts,
@@ -40,6 +41,39 @@ describe("isBlockingShadowMCPPolicy", () => {
 describe("isShadowMCPBlockConfiguration", () => {
   it("recognizes a disabled blocking Shadow MCP policy configuration", () => {
     expect(isShadowMCPBlockConfiguration(["shadow_mcp"], "block")).toBe(true);
+  });
+});
+
+describe("shadowMCPAllowAllPostureLocked", () => {
+  it("locks a saved allow_all policy that is still blocking", () => {
+    expect(
+      shadowMCPAllowAllPostureLocked({
+        ...blockingShadowMCPPolicy,
+        shadowMcpDisposition: "allow_all",
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["a new policy", null],
+    [
+      "a block_all policy",
+      { ...blockingShadowMCPPolicy, shadowMcpDisposition: "block_all" },
+    ],
+    [
+      "a legacy policy with no stored disposition",
+      { ...blockingShadowMCPPolicy },
+    ],
+    [
+      "an allow_all policy that already stopped blocking",
+      {
+        ...blockingShadowMCPPolicy,
+        action: "flag",
+        shadowMcpDisposition: "allow_all",
+      },
+    ],
+  ] as const)("leaves %s editable", (_label, policy) => {
+    expect(shadowMCPAllowAllPostureLocked(policy)).toBe(false);
   });
 });
 

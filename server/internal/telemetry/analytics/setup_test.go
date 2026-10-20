@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -48,6 +49,7 @@ func newTestClickhouse(t *testing.T) clickhouse.Conn {
 type testInstance struct {
 	service        *Service
 	ch             clickhouse.Conn
+	db             *pgxpool.Pool
 	organizationID string
 	projectID      string
 }
@@ -80,6 +82,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	return ctx, &testInstance{
 		service:        NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine),
 		ch:             chConn,
+		db:             conn,
 		organizationID: authCtx.ActiveOrganizationID,
 		projectID:      authCtx.ProjectID.String(),
 	}

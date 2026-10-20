@@ -36,7 +36,7 @@ func TestCreateAwsIamCredential_AssumeRoleWithExternalID(t *testing.T) {
 	require.Equal(t, "aws_iam", cred.Provider)
 	require.Equal(t, "arn:aws:iam::123456789012:role/gram", *cred.AssumeRoleArn)
 	require.NotNil(t, cred.ExternalID)
-	require.NotEmpty(t, *cred.ExternalID, "assume_role_arn without oidc_audience gets a Gram-generated external_id")
+	require.NotEmpty(t, *cred.ExternalID, "assume_role_arn without oidc_audience gets a Speakeasy-generated external_id")
 	require.Nil(t, cred.OidcAudience)
 	require.Equal(t, "us-east-1", *cred.StsRegion)
 

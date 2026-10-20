@@ -60,10 +60,10 @@ type RiskPolicy struct {
 	// MCP server. When set, the action must be flag or block.
 	McpScope *RiskMCPScope
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
-	// non-Gram-hosted server unless allowed, allow_all permits every server unless
-	// blocked. Blocked URLs are stored as risk_policy:block grants, not on the
-	// policy. Immutable after create. Only present on policies with the shadow_mcp
-	// source and block action.
+	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
+	// unless blocked. Blocked URLs are stored as risk_policy:block grants, not on
+	// the policy. Immutable after create. Only present on policies with the
+	// shadow_mcp source and block action.
 	ShadowMcpDisposition *string
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
@@ -87,11 +87,4 @@ type RiskPolicy struct {
 	CreatedAt string
 	// When the policy was last updated.
 	UpdatedAt string
-	// Number of messages not yet analyzed at the current policy version. Populated
-	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
-	// for progress).
-	PendingMessages *int64
-	// Total number of messages in the project. Populated on single-policy reads;
-	// omitted from list responses.
-	TotalMessages *int64
 }

@@ -59,7 +59,7 @@ export type ServeChatAttachmentQueryError =
  * serveChatAttachment assets
  *
  * @remarks
- * Serve a chat attachment from Gram.
+ * Serve a chat attachment from Speakeasy.
  */
 export function useServeChatAttachment(
   request: ServeChatAttachmentRequest,
@@ -85,7 +85,7 @@ export function useServeChatAttachment(
  * serveChatAttachment assets
  *
  * @remarks
- * Serve a chat attachment from Gram.
+ * Serve a chat attachment from Speakeasy.
  */
 export function useServeChatAttachmentSuspense(
   request: ServeChatAttachmentRequest,

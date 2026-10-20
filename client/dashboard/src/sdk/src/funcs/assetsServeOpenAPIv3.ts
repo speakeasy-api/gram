@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * serveOpenAPIv3 assets
  *
  * @remarks
- * Serve an OpenAPIv3 asset from Gram.
+ * Serve an OpenAPIv3 asset from Speakeasy.
  */
 export function assetsServeOpenAPIv3(
   client: GramCore,

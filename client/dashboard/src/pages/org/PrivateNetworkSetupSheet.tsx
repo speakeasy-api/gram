@@ -114,8 +114,8 @@ export function PrivateNetworkSetupSheet({
               <code>{TAILSCALE_POLICY_SNIPPET}</code>
             </pre>
             <Text small muted>
-              Keep these tags dedicated to Gram. Your tailnet policy must also
-              allow the intended users to reach the generated service tag.
+              Keep these tags dedicated to Speakeasy. Your tailnet policy must
+              also allow the intended users to reach the generated service tag.
             </Text>
           </div>
 
@@ -143,7 +143,7 @@ export function PrivateNetworkSetupSheet({
               id="private-hostname"
               value={hostname}
               onChange={(value) => setHostname(value.toLowerCase())}
-              placeholder="acme-gram"
+              placeholder="acme-speakeasy"
               validate={(value) =>
                 HOSTNAME_PATTERN.test(value.toLowerCase()) ||
                 "Use a lowercase DNS label containing letters, numbers, or hyphens."

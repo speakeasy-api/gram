@@ -841,6 +841,7 @@ func TestPrepareContext_adminImpersonationGrantsAllScopes(t *testing.T) {
 		ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect,
 		ScopeEnvironmentRead, ScopeEnvironmentWrite,
 		ScopeSkillRead, ScopeSkillWrite,
+		ScopeAssistantRead, ScopeAssistantWrite,
 	} {
 		err := engine.Require(ctx, Check{Scope: scope, ResourceID: "org_customer"})
 		require.NoError(t, err, "admin impersonation should satisfy scope %s", scope)
@@ -911,6 +912,73 @@ func TestEngineRequire_skillBlocklistExpansion(t *testing.T) {
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	}
+}
+
+func projectAssistantGrant(scope Scope, projectID string) Grant {
+	return NewGrantWithSelector(scope, Selector{
+		SelectorKeyResourceKind: ResourceKindAssistant,
+		SelectorKeyResourceID:   WildcardResource,
+		SelectorKeyProjectID:    projectID,
+	})
+}
+
+func requireForbidden(t *testing.T, err error) {
+	t.Helper()
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEngineRequire_assistantProjectGrantCoversProjectAssistants(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{projectAssistantGrant(ScopeAssistantWrite, "project_a")})
+
+	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
+	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantRead, "assistant_2", "project_a")))
+	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "project_a", "project_a")))
+	requireForbidden(t, engine.Require(ctx, AssistantCheck(ScopeAssistantRead, "assistant_3", "project_b")))
+}
+
+func TestEngineRequire_assistantGrantNarrowedToOneAssistant(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeAssistantWrite, "assistant_1")})
+
+	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
+	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
+	requireForbidden(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "assistant_2", "project_a")))
+	// Project-level operations such as creating an assistant need a project-wide grant.
+	requireForbidden(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "project_a", "project_a")))
+
+	allowed, err := engine.Filter(ctx, []Check{
+		AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a"),
+		AssistantCheck(ScopeAssistantRead, "assistant_2", "project_a"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"assistant_1"}, allowed)
+}
+
+func TestEngineRequire_assistantBlocklistExpansion(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	blockedWriteCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeAssistantWrite, WildcardResource),
+		NewGrant(ScopeAssistantBlockedWrite, "assistant_1"),
+	})
+
+	require.NoError(t, engine.Require(blockedWriteCtx, AssistantCheck(ScopeAssistantWrite, "assistant_2", "project_a")))
+	require.NoError(t, engine.Require(blockedWriteCtx, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
+	requireForbidden(t, engine.Require(blockedWriteCtx, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
+
+	blockedProjectCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeAssistantWrite, WildcardResource),
+		projectAssistantGrant(ScopeAssistantBlockedRead, "project_a"),
+	})
+	for _, scope := range []Scope{ScopeAssistantRead, ScopeAssistantWrite} {
+		requireForbidden(t, engine.Require(blockedProjectCtx, AssistantCheck(scope, "assistant_1", "project_a")))
+	}
+	require.NoError(t, engine.Require(blockedProjectCtx, AssistantCheck(ScopeAssistantRead, "assistant_9", "project_b")))
 }
 
 func TestCanUseOverride_devPlusAdmin(t *testing.T) {

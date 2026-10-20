@@ -1,3 +1,4 @@
+import { ClaudeCodeSettingsInstall } from "@/components/claude-code-settings-install";
 import { CodeBlock } from "@/components/code";
 import { InstallSteps } from "@/components/install-steps";
 import { Button } from "@/components/ui/Button";
@@ -99,16 +100,12 @@ function RelatedLinks({ links }: { links: { href: string; label: string }[] }) {
 }
 
 /**
- * Claude Code (individual CLI) install. Two paths covered here:
- *  - per-user registration via the slash command, served by the marketplace
- *    proxy
- *  - org-wide enforcement via Claude.ai's Managed Settings, which pushes an
- *    extraKnownMarketplaces entry — and, when a specific plugin is being
- *    installed, an enabledPlugins entry — into every org member's Claude
- *    Code install.
- *
- * Both go through Claude Code itself; neither involves Cowork's plugin
- * distribution (that's its own tab).
+ * Claude Code install: one settings snippet that registers the marketplace
+ * with autoUpdate on and enables the plugin, for the reader's own
+ * ~/.claude/settings.json or for managed settings. The marketplace.json
+ * "name" (not the GitHub repo name) keys extraKnownMarketplaces and suffixes
+ * the enabledPlugins entry; see server/internal/plugins/naming/naming.go.
+ * Cowork's plugin distribution is its own tab.
  */
 function ClaudeCodeInstallContent({
   marketplaceUrl,
@@ -117,192 +114,37 @@ function ClaudeCodeInstallContent({
 }: Pick<ContentProps, "marketplaceUrl" | "pluginSlug"> & {
   marketplaceName: string | undefined;
 }) {
-  const installCommand = marketplaceUrl
-    ? `/plugin marketplace add ${marketplaceUrl}`
-    : null;
-  const resolvedPluginSlug = pluginSlug ?? "<plugin-slug>";
-  const pluginInstallCommand = marketplaceName
-    ? `/plugin install ${resolvedPluginSlug}@${marketplaceName}`
-    : null;
-
-  // Schema reference: https://code.claude.com/docs/en/settings — under
-  // extraKnownMarketplaces (additive; works for managed settings too) and
-  // strictKnownMarketplaces (managed-only, allowlist semantics). The
-  // marketplace.json "name" (not the GitHub repo name, which can be
-  // anything) is what both extraKnownMarketplaces' key and enabledPlugins'
-  // `<plugin>@<marketplace>` suffix reference — see
-  // server/internal/plugins/naming/naming.go. Always paired in one snippet
-  // (mirrors the onboarding wizard's Claude Code step) — registering the
-  // marketplace without also enabling a plugin leaves the org with nothing
-  // to actually use.
-  const managedSettingsJson =
-    marketplaceUrl && marketplaceName
-      ? JSON.stringify(
-          {
-            env: {
-              FORCE_AUTOUPDATE_PLUGINS: "1",
-            },
-            extraKnownMarketplaces: {
-              [marketplaceName]: {
-                autoUpdate: true,
-                source: {
-                  source: "git",
-                  url: marketplaceUrl,
-                },
-              },
-            },
-            enabledPlugins: {
-              [`${resolvedPluginSlug}@${marketplaceName}`]: true,
-            },
-          },
-          null,
-          2,
-        )
-      : null;
+  if (!marketplaceUrl) {
+    return (
+      <p className="text-muted-foreground text-sm italic">
+        Re-publish to mint a marketplace install URL.
+      </p>
+    );
+  }
 
   return (
     <div className="min-w-0 space-y-6">
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">
-          Install in your Claude Code instance
-        </h3>
-        <p className="text-muted-foreground mb-3 text-sm">
-          Run this command from inside Claude Code to register the marketplace
-          for your user account:
+      <ClaudeCodeSettingsInstall
+        marketplaceName={marketplaceName}
+        marketplaceUrl={marketplaceUrl}
+        plugins={[pluginSlug ?? "<plugin-slug>"]}
+        secretUrl
+      />
+      {!pluginSlug && (
+        <p className="text-muted-foreground text-xs">
+          Replace{" "}
+          <code className="bg-muted px-1 py-0.5">&lt;plugin-slug&gt;</code> with
+          the plugin to enable.
         </p>
-        {installCommand ? (
-          <CodeBlock language="bash" className="bg-background">
-            {installCommand}
-          </CodeBlock>
-        ) : (
-          <p className="text-muted-foreground text-sm italic">
-            Re-publish to mint a marketplace install URL.
-          </p>
-        )}
-        {pluginInstallCommand && (
-          <div className="mt-3">
-            <CodeBlock language="bash" className="bg-background">
-              {pluginInstallCommand}
-            </CodeBlock>
-            <p className="text-muted-foreground mt-2 text-xs">
-              Review the /plugin panel and confirm the installation scope when
-              prompted. Start a new session and verify the plugin is active.
-            </p>
-            {!pluginSlug && (
-              <p className="text-muted-foreground mt-2 text-xs">
-                Replace{" "}
-                <code className="bg-muted px-1 py-0.5">
-                  &lt;plugin-slug&gt;
-                </code>{" "}
-                with the slug of the plugin you want to install.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">
-          Roll out to your team via Managed Settings
-        </h3>
-        <p className="text-muted-foreground mb-4 text-sm">
-          On Claude Team or Enterprise, an Owner or Primary Owner can use
-          Claude.ai server-managed settings for eligible signed-in sessions.
-          Endpoint-managed policy files and MDM are a separate mechanism, not
-          restricted to this server-managed plan requirement. Server-managed
-          delivery requires a direct connection to api.anthropic.com;
-          third-party providers and a non-default ANTHROPIC_BASE_URL skip the
-          settings fetch.
-        </p>
-
-        <InstallSteps
-          steps={[
-            {
-              title: "Open Managed Settings on Claude.ai",
-              description: (
-                <>
-                  Sign in to{" "}
-                  <ExternalTextLink href="https://claude.ai/">
-                    claude.ai
-                  </ExternalTextLink>{" "}
-                  as an Owner or Primary Owner, navigate to{" "}
-                  <code className="bg-muted px-1 py-0.5 text-xs">
-                    Admin settings → Claude Code → Managed settings
-                  </code>
-                  .
-                </>
-              ),
-            },
-            {
-              title: "Register the marketplace and enable the plugin",
-              description: (
-                <>
-                  Merge this entry into the org's managed{" "}
-                  <code className="bg-muted px-1 py-0.5 text-xs">
-                    settings.json
-                  </code>{" "}
-                  — this registers the marketplace and enables{" "}
-                  {pluginSlug ? "this specific plugin" : "a plugin"} for
-                  eligible signed-in sessions:
-                </>
-              ),
-              code: managedSettingsJson ?? undefined,
-              language: "json",
-              children: managedSettingsJson ? (
-                <p className="text-muted-foreground mt-3 flex items-start gap-1.5 text-xs leading-relaxed">
-                  <Info className="mt-0.5 size-3.5 shrink-0" />
-                  <span>
-                    {!pluginSlug && (
-                      <>
-                        Replace{" "}
-                        <code className="bg-muted px-1 py-0.5 text-xs">
-                          &lt;plugin-slug&gt;
-                        </code>{" "}
-                        with the slug of the plugin you want to enable. Use{" "}
-                      </>
-                    )}
-                    {pluginSlug && "Use "}
-                    <code className="bg-muted px-1 py-0.5 text-xs">
-                      strictKnownMarketplaces
-                    </code>{" "}
-                    alongside{" "}
-                    <code className="bg-muted px-1 py-0.5 text-xs">
-                      extraKnownMarketplaces
-                    </code>{" "}
-                    to restrict allowed marketplaces. Keep the registration
-                    entry; an allowlist does not register a marketplace.
-                  </span>
-                </p>
-              ) : (
-                <p className="text-muted-foreground text-sm italic">
-                  Re-publish to mint a marketplace install URL.
-                </p>
-              ),
-            },
-          ]}
-        />
-
-        <p className="text-muted-foreground mt-3 text-sm">
-          Settings are fetched at startup or the hourly polling cycle. Start a
-          new session to activate and verify the plugin; running sessions retain
-          loaded versions until /reload-plugins or the next launch. Treat the
-          token-bearing marketplace URL as a secret. Higher-precedence policy
-          can override user settings; a user install is not enforced governance.
-        </p>
-
-        <RelatedLinks
-          links={[
-            {
-              href: "https://code.claude.com/docs/en/server-managed-settings",
-              label: "Server-managed settings requirements",
-            },
-            {
-              href: CLAUDE_CODE_SETTINGS_DOCS_URL,
-              label: "Claude Code settings and precedence",
-            },
-          ]}
-        />
-      </div>
+      )}
+      <RelatedLinks
+        links={[
+          {
+            href: CLAUDE_CODE_SETTINGS_DOCS_URL,
+            label: "Claude Code settings and precedence",
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -689,10 +531,10 @@ function CodexInstallContent({
           <code className="bg-muted px-1 py-0.5 text-xs">
             ~/.codex/config.toml
           </code>
-          . Existing exporters are preserved and may require manual Gram setup.
-          The script also pre-approves all hook events, so no manual Settings →
-          Hooks step is required. Suitable for MDM deployment. This script sets
-          up Speakeasy's observability plugin specifically.
+          . Existing exporters are preserved and may require manual Speakeasy
+          setup. The script also pre-approves all hook events, so no manual
+          Settings → Hooks step is required. Suitable for MDM deployment. This
+          script sets up Speakeasy's observability plugin specifically.
         </p>
         <Button
           variant="secondary"
@@ -818,7 +660,7 @@ function OpencodeInstallContent(): JSX.Element {
 
   const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
 
-  const installCommand = `GRAM_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
+  const installCommand = `SPEAKEASY_AI_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
 speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`;
 
   const mcpConfig = `{
@@ -841,7 +683,8 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
       <div>
         <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          Download the Gram observability plugin as a ZIP — a self-contained{" "}
+          Download the Speakeasy observability plugin as a ZIP — a
+          self-contained{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">.opencode</code> plugin
           with a hooks-scoped API key already embedded (no CLI, no key to
           export). Extract it into your repo's{" "}
@@ -905,8 +748,8 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
           your project's{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">opencode.json</code>.
           Replace the placeholders with the name, URL, and auth token from that
-          server's own install page — that token is separate from the Gram hooks
-          credential.
+          server's own install page — that token is separate from the Speakeasy
+          hooks credential.
         </p>
         <CodeBlock language="json" className="bg-background">
           {mcpConfig}
@@ -933,9 +776,9 @@ export function CopilotInstallContent(): JSX.Element {
       <div>
         <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          Download the Gram observability plugin as a ZIP — a self-contained
-          Copilot plugin with a hooks-scoped API key already embedded (no CLI,
-          no key to export).
+          Download the Speakeasy observability plugin as a ZIP — a
+          self-contained Copilot plugin with a hooks-scoped API key already
+          embedded (no CLI, no key to export).
         </p>
         <Button
           variant="secondary"
@@ -966,14 +809,14 @@ export function CopilotInstallContent(): JSX.Element {
         <p className="text-muted-foreground text-sm">
           Hooks run in{" "}
           <span className="text-foreground font-medium">Copilot CLI</span> only.
-          MCP servers and skills from your Gram plugin also load in VS Code and
-          the Copilot app, but those surfaces never fire hooks — so no
+          MCP servers and skills from your Speakeasy plugin also load in VS Code
+          and the Copilot app, but those surfaces never fire hooks — so no
           telemetry, spend gating, or policy enforcement there.
         </p>
         <p className="text-muted-foreground text-sm">
           Copilot stops running a tool's hook chain at the first deny. If
-          another plugin denies a tool call before Gram's entry runs, that call
-          is never reported.
+          another plugin denies a tool call before Speakeasy's entry runs, that
+          call is never reported.
         </p>
       </div>
 
@@ -1010,7 +853,7 @@ function PiInstallContent(): JSX.Element {
 
   const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
 
-  const installCommand = `GRAM_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
+  const installCommand = `SPEAKEASY_AI_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
 speakeasy-hooks install --provider=pi --dir=. --project=your-project-slug`;
 
   const mcpConfig = `{
@@ -1028,9 +871,9 @@ speakeasy-hooks install --provider=pi --dir=. --project=your-project-slug`;
       <div>
         <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          Download the Gram observability plugin as a ZIP — a self-contained Pi
-          extension with a hooks-scoped API key already embedded (no CLI, no key
-          to export). Extract it into your repo&apos;s{" "}
+          Download the Speakeasy observability plugin as a ZIP — a
+          self-contained Pi extension with a hooks-scoped API key already
+          embedded (no CLI, no key to export). Extract it into your repo&apos;s{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">.pi/</code> (or{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">~/.pi/agent/</code> for
           every repo) and Pi loads it on next start.

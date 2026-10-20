@@ -1,10 +1,11 @@
 import { useMemo } from "react";
-import { useProject } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { AppRoute, useRoutes } from "@/routes";
 import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
 /** A project nav page plus the scopes that grant access to it. */
 export interface ProjectNavRoute {
@@ -19,6 +20,8 @@ export interface ProjectNavRoute {
   scope: Scope[];
   /** Resource selected for this route's scope check, when applicable. */
   resourceId?: string;
+  /** Project the route's resources belong to, for project-wide grants. */
+  projectId?: string;
 }
 
 /**
@@ -37,7 +40,15 @@ export interface ProjectNavRoute {
 export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
   const { id: projectId } = useProject();
-  const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
+  const organization = useOrganization();
+  const productFeatures = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  const isSignalsIntelligenceEnabled =
+    productFeatures.isSuccess &&
+    productFeatures.data.signalsIntelligenceEnabled === true;
   const userSessionsFlag = useFeatureFlag(FEATURE_FLAGS.userSessionsDashboard);
   const assistantsFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
   const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
@@ -62,14 +73,18 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     // Observe navigation stays visible to project readers. The Identities
     // roster uses that scope; identity detail resolution separately requires
     // org:read, and the remaining Observe pages render an org-admin notice.
+    // Tool Logs is the exception: it needs log:read on this project, which no
+    // role holds by default, so it only appears to those granted it.
     const observe: Scope[] = ["project:read"];
     return [
       { route: routes.home, scope: read },
-      { route: routes.chat, scope: read },
+      {
+        route: routes.chat,
+        scope: ["assistant:read"],
+        projectId,
+      },
       { route: routes.identities, scope: observe },
-      ...(agentManagementFlag.status === "enabled"
-        ? [{ route: routes.agents, scope: [] }]
-        : []),
+      { route: routes.agents, scope: [] },
       ...(userSessionsFlag.status === "enabled"
         ? [
             {
@@ -92,7 +107,13 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         : []),
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
       ...(isAssistantsEnabled
-        ? [{ route: routes.assistants, scope: read }]
+        ? [
+            {
+              route: routes.assistants,
+              scope: ["assistant:read"] as Scope[],
+              projectId,
+            },
+          ]
         : []),
       {
         route: routes.skills,
@@ -101,29 +122,37 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
-      // Watchdog supersedes the Risk Overview page: with the flag on, it is
-      // the Secure section's landing surface and the legacy overview nav item
-      // hides (its route stays reachable by direct URL). Risk Events shows in
-      // both modes, directly below the landing surface.
       ...(isRiskWatchdogEnabled
         ? [{ route: routes.watchdog, scope: read }]
-        : [{ route: routes.riskOverview, scope: read }]),
+        : []),
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
-      { route: routes.shadowAI, scope: readWrite },
       { route: routes.costs, scope: observe },
-      ...(isExploreEnabled ? [{ route: routes.explore, scope: observe }] : []),
+      ...(isExploreEnabled
+        ? [
+            { route: routes.explore, scope: observe },
+            { route: routes.dashboards, scope: observe },
+          ]
+        : []),
       { route: routes.insights, scope: observe },
       { route: routes.agentSessions, scope: observe },
+      ...(isSignalsIntelligenceEnabled
+        ? [
+            {
+              route: routes.signalsIntelligence,
+              scope: read,
+              resourceId: projectId,
+            },
+          ]
+        : []),
       ...(isOrgMemoryEnabled
         ? [{ route: routes.orgMemory, scope: observe }]
         : []),
-      { route: routes.logs, scope: observe },
+      { route: routes.logs, scope: ["log:read"], resourceId: projectId },
       { route: routes.settings, scope: ["project:write"] },
     ];
   }, [
     routes,
-    agentManagementFlag.status,
     userSessionsFlag.status,
     projectId,
     isAssistantsEnabled,
@@ -131,5 +160,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     isExploreEnabled,
     isOrgMemoryEnabled,
     isRiskWatchdogEnabled,
+    isSignalsIntelligenceEnabled,
   ]);
 }

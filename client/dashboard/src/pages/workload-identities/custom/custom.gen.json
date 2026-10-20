@@ -1,0 +1,298 @@
+{
+  "register_platform": {
+    "title": "Register new access",
+    "description": "Both values come from the platform issuing your machines' tokens. Speakeasy trims surrounding spaces and otherwise stores them exactly as entered, because an assertion is matched against the spelling you register.",
+    "submit_label": "Register",
+    "pending_label": "Registering…",
+    "steps": [
+      {
+        "id": "platform",
+        "title": "Platform",
+        "blocks": [
+          {
+            "type": "input",
+            "markdown": "",
+            "href": "",
+            "label": "Name",
+            "field": "name",
+            "placeholder": "New platform",
+            "help": "How this issuer is labeled here. Not used for matching.",
+            "multiline": false,
+            "read_only": false,
+            "format": "platform_name"
+          },
+          {
+            "type": "input",
+            "markdown": "",
+            "href": "",
+            "label": "Description",
+            "field": "description",
+            "placeholder": "Claude agents in our Slack workspace",
+            "help": "Optional. What this platform is and what runs on it, shown in place of the issuer URL in the Access Hub.",
+            "multiline": true,
+            "read_only": false,
+            "format": "platform_description"
+          },
+          {
+            "type": "input",
+            "markdown": "",
+            "href": "",
+            "label": "Issuer",
+            "field": "issuer",
+            "placeholder": "https://identity.example.com",
+            "help": "The value an assertion's `iss` claim must carry. An https URL on a fully qualified domain, with no query or fragment.",
+            "multiline": false,
+            "read_only": false,
+            "format": "issuer_url"
+          },
+          {
+            "type": "input",
+            "markdown": "",
+            "href": "",
+            "label": "JWKS URI",
+            "field": "jwks_uri",
+            "placeholder": "https://identity.example.com/.well-known/jwks.json",
+            "help": "Where the issuer publishes its signing keys. This is the only field Speakeasy reads when verifying an assertion.",
+            "multiline": false,
+            "read_only": false,
+            "format": "jwks_uri"
+          },
+          {
+            "type": "tags",
+            "markdown": "",
+            "href": "",
+            "label": "Tags",
+            "field": "",
+            "placeholder": "production, ci",
+            "help": "Optional labels for grouping platforms here. Not used for matching.",
+            "multiline": false,
+            "read_only": false,
+            "format": ""
+          }
+        ]
+      }
+    ]
+  },
+  "edit_platform": {
+    "title": "Edit platform",
+    "description": "The issuer URL is fixed once a platform is registered. Changing the JWKS URI changes which keys Speakeasy accepts assertions from.",
+    "submit_label": "Save changes",
+    "pending_label": "Saving…",
+    "steps": [
+      {
+        "id": "platform",
+        "title": "Platform",
+        "blocks": [
+          {
+            "type": "input",
+            "markdown": "",
+            "href": "",
+            "label": "Name",
+            "field": "name",
+            "placeholder": "New platform",
+            "help": "How this issuer is labeled here. Not used for matching.",
+            "multiline": false,
+            "read_only": false,
+            "format": "platform_name"
+          },
+          {
+            "type": "input",
+            "markdown": "",
+            "href": "",
+            "label": "Description",
+            "field": "description",
+            "placeholder": "Claude agents in our Slack workspace",
+            "help": "Optional. What this platform is and what runs on it, shown in place of the issuer URL in the Access Hub.",
+            "multiline": true,
+            "read_only": false,
+            "format": "platform_description"
+          },
+          {
+            "type": "input",
+            "markdown": "",
+            "href": "",
+            "label": "Issuer",
+            "field": "issuer",
+            "placeholder": "https://identity.example.com",
+            "help": "Fixed at registration. To trust a different issuer, register it as a new platform.",
+            "multiline": false,
+            "read_only": true,
+            "format": "issuer_url"
+          },
+          {
+            "type": "input",
+            "markdown": "",
+            "href": "",
+            "label": "JWKS URI",
+            "field": "jwks_uri",
+            "placeholder": "https://identity.example.com/.well-known/jwks.json",
+            "help": "Where the issuer publishes its signing keys. This is the only field Speakeasy reads when verifying an assertion.",
+            "multiline": false,
+            "read_only": false,
+            "format": "jwks_uri"
+          },
+          {
+            "type": "tags",
+            "markdown": "",
+            "href": "",
+            "label": "Tags",
+            "field": "",
+            "placeholder": "production, ci",
+            "help": "Optional labels for grouping platforms here. Not used for matching.",
+            "multiline": false,
+            "read_only": false,
+            "format": ""
+          }
+        ]
+      }
+    ]
+  },
+  "allow_access": {
+    "title": "Allow access",
+    "description": "Allowing access lets a machine sign in to Speakeasy. The agent you choose supplies the whole policy that the machine acts under, so it is chosen at the same time.",
+    "submit_label": "Allow access",
+    "pending_label": "Allowing…",
+    "steps": [
+      {
+        "id": "access",
+        "title": "Access",
+        "blocks": [
+          {
+            "type": "input",
+            "markdown": "",
+            "href": "",
+            "label": "Subject",
+            "field": "subject",
+            "placeholder": "wimse://identity.example.com/org/acme/agent/a-1",
+            "help": "Surrounding spaces are trimmed; otherwise stored and compared exactly as entered. End it with `*` to admit every subject beginning with the part before the `*`.",
+            "multiline": false,
+            "read_only": false,
+            "format": "subject_rule"
+          },
+          {
+            "type": "agent_picker",
+            "markdown": "",
+            "href": "",
+            "label": "Agent",
+            "field": "",
+            "placeholder": "Select an agent",
+            "help": "Choose the most narrowly scoped agent that can do the job. The machine inherits its policy in full.",
+            "multiline": false,
+            "read_only": false,
+            "format": ""
+          },
+          {
+            "type": "wildcard_caution",
+            "markdown": "",
+            "href": "",
+            "label": "",
+            "field": "",
+            "placeholder": "",
+            "help": "",
+            "multiline": false,
+            "read_only": false,
+            "format": ""
+          },
+          {
+            "type": "input",
+            "markdown": "",
+            "href": "",
+            "label": "Label (optional)",
+            "field": "label",
+            "placeholder": "Deploy bot",
+            "help": "Useful where a subject is opaque, such as a numeric service account id.",
+            "multiline": false,
+            "read_only": false,
+            "format": "none"
+          },
+          {
+            "type": "tags",
+            "markdown": "",
+            "href": "",
+            "label": "Tags",
+            "field": "",
+            "placeholder": "support, production",
+            "help": "Optional labels for finding this machine later. Not used for matching.",
+            "multiline": false,
+            "read_only": false,
+            "format": ""
+          }
+        ]
+      }
+    ]
+  },
+  "edit_access": {
+    "title": "Edit access",
+    "description": "The subject is fixed once access is allowed. Changing the agent changes the whole policy this machine acts under.",
+    "submit_label": "Save changes",
+    "pending_label": "Saving…",
+    "steps": [
+      {
+        "id": "access",
+        "title": "Access",
+        "blocks": [
+          {
+            "type": "input",
+            "markdown": "",
+            "href": "",
+            "label": "Subject",
+            "field": "subject",
+            "placeholder": "wimse://identity.example.com/org/acme/agent/a-1",
+            "help": "Fixed once access is allowed. To allow a different subject, allow access for it separately.",
+            "multiline": false,
+            "read_only": true,
+            "format": "subject_rule"
+          },
+          {
+            "type": "agent_picker",
+            "markdown": "",
+            "href": "",
+            "label": "Agent",
+            "field": "",
+            "placeholder": "Select an agent",
+            "help": "The machine inherits this agent's policy in full. Where the same subject is also allowed at the other tier, that access uses the same agent and changes with it.",
+            "multiline": false,
+            "read_only": false,
+            "format": ""
+          },
+          {
+            "type": "wildcard_caution",
+            "markdown": "",
+            "href": "",
+            "label": "",
+            "field": "",
+            "placeholder": "",
+            "help": "",
+            "multiline": false,
+            "read_only": false,
+            "format": ""
+          },
+          {
+            "type": "input",
+            "markdown": "",
+            "href": "",
+            "label": "Label (optional)",
+            "field": "label",
+            "placeholder": "Deploy bot",
+            "help": "Useful where a subject is opaque, such as a numeric service account id.",
+            "multiline": false,
+            "read_only": false,
+            "format": "none"
+          },
+          {
+            "type": "tags",
+            "markdown": "",
+            "href": "",
+            "label": "Tags",
+            "field": "",
+            "placeholder": "support, production",
+            "help": "Optional labels for finding this machine later. Not used for matching.",
+            "multiline": false,
+            "read_only": false,
+            "format": ""
+          }
+        ]
+      }
+    ]
+  }
+}

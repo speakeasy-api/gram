@@ -8,7 +8,7 @@ import { specFromWidget, widgetFromSpec } from "./widgetSpec";
 // back exactly as it is stored, or it would open marked unsaved.
 const SEED = resolve(
   import.meta.dirname,
-  "../../../../../server/internal/demoseed/postgres.sql",
+  "../../../../../server/internal/demoseed/queries/07_activity.sql",
 );
 
 interface SeededWidget {
@@ -36,7 +36,7 @@ describe("the demo seed's widgets", () => {
   const widgets = seededWidgets();
 
   it("are all found", () => {
-    expect(widgets).toHaveLength(5);
+    expect(widgets).toHaveLength(6);
   });
 
   it.each(widgets.map((widget, i) => [i + 1, widget] as const))(

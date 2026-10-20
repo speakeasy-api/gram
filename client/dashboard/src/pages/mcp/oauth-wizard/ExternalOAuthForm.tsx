@@ -68,8 +68,8 @@ export function ExternalOAuthForm({
               recommended
             />
             <SourceCard
-              title="Gram-hosted metadata"
-              description="Gram hosts metadata you provide for compatibility with existing deployments."
+              title="Speakeasy-hosted metadata"
+              description="Speakeasy hosts metadata you provide for compatibility with existing deployments."
               onClick={() => actorRef.send({ type: "SELECT_GRAM_HOSTED" })}
               icon={WaypointsIcon}
             />
@@ -133,9 +133,9 @@ export function ExternalOAuthForm({
             <Alert variant="warning">
               <AlertTitle>Compatibility mode</AlertTitle>
               <AlertDescription>
-                Gram hosts authorization-server metadata in this mode. Modern
-                clients may reject multi-origin OAuth configurations without
-                issuer-bound responses.
+                Speakeasy hosts authorization-server metadata in this mode.
+                Modern clients may reject multi-origin OAuth configurations
+                without issuer-bound responses.
               </AlertDescription>
             </Alert>
             <Stack gap={2}>

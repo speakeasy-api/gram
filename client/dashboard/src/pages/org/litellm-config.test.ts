@@ -15,19 +15,26 @@ describe("LiteLLM configuration", () => {
     expect(config).toContain(
       "api_base: https://api.getgram.ai/rpc/litellm.ingest",
     );
-    expect(config).toContain("Gram-Key: os.environ/GRAM_LITELLM_INGEST_KEY");
+    expect(config).toContain(
+      "Speakeasy-AI-Key: os.environ/SPEAKEASY_AI_LITELLM_INGEST_KEY",
+    );
     expect(config).toContain(`      extra_headers:
-        - x-gram-session-id
+        - speakeasy-ai-session-id
         - x-claude-code-session-id
         - session-id
         - thread-id
         - x-session-id
-        - x-gram-agent-provider
-        - x-gram-agent-session-id
-        - x-gram-agent-turn-id
+        - speakeasy-ai-agent-provider
+        - speakeasy-ai-agent-session-id
+        - speakeasy-ai-agent-turn-id
         - x-codex-turn-metadata
         - x-opencode-session
-        - x-opencode-request`);
+        - x-opencode-request
+        # Deprecated names that clients set up before the rename still send.
+        - x-gram-session-id
+        - x-gram-agent-provider
+        - x-gram-agent-session-id
+        - x-gram-agent-turn-id`);
     expect(config).toContain("streaming_end_of_stream_only: true");
     expect(config).toContain("unreachable_fallback: fail_closed");
   });
@@ -45,14 +52,14 @@ describe("LiteLLM configuration", () => {
     );
 
     expect(environment).toContain(
-      'export GRAM_LITELLM_INGEST_KEY="<PASTE_KEY_SHOWN_ABOVE>"',
+      'export SPEAKEASY_AI_LITELLM_INGEST_KEY="<PASTE_KEY_SHOWN_ABOVE>"',
     );
-    expect(environment).toContain('export GRAM_PROJECT_SLUG="my-project"');
+    expect(environment).toContain('export SPEAKEASY_AI_PROJECT="my-project"');
     expect(environment).toContain(
       'export OTEL_ENDPOINT="https://api.getgram.ai/rpc/hooks.otel"',
     );
     expect(environment).toContain(
-      'export OTEL_HEADERS="Gram-Key=${GRAM_LITELLM_INGEST_KEY},Gram-Project=${GRAM_PROJECT_SLUG}"',
+      'export OTEL_HEADERS="Speakeasy-AI-Key=${SPEAKEASY_AI_LITELLM_INGEST_KEY},Speakeasy-AI-Project=${SPEAKEASY_AI_PROJECT}"',
     );
   });
 

@@ -52,6 +52,9 @@ type unmaskFinding struct {
 	exclusionID *uuid.UUID
 	// riskPolicyID defaults to a fresh live policy in the fixture's project.
 	riskPolicyID string
+	// executionID and phase locate an MCP finding's stored payload.
+	executionID string
+	phase       string
 }
 
 // insertUnmaskFinding writes the fixture straight into risk_findings. Raw SQL
@@ -97,8 +100,9 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 			start_pos, end_pos, dead_letter_reason,
 			match_len, match_redacted,
 			excluded_at, false_positive_at, message_created_at,
-			surface, mediation_surface, field, path, tool_call_id, shadow, exclusion_id
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			surface, mediation_surface, field, path, tool_call_id, shadow, exclusion_id,
+			execution_id, phase
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		f.id, createdAt, f.orgID, f.projectID,
 		f.chatMessageID, f.contentPartID, f.chatID,
@@ -107,6 +111,7 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 		f.matchLen, f.matchRedacted,
 		nullableTime(f.excludedAt), nullableTime(f.falsePositiveAt), createdAt,
 		f.surface, f.mediationSurface, f.field, f.path, f.toolCallID, f.shadow, nullableUUID(f.exclusionID),
+		f.executionID, f.phase,
 	))
 	return f.id
 }

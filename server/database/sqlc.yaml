@@ -106,6 +106,7 @@ sql:
       - ../internal/testenv/role_distribution_source_queries.sql
       - ../internal/testenv/role_distribution_pipeline_queries.sql
       - ../internal/testenv/role_deletion_queries.sql
+      - ../internal/testenv/directory_source_queries.sql
     engine: postgresql
     gen:
       go:
@@ -155,6 +156,15 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/assistantidentity/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/assistantidentity/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+  - schema: schema.sql
     queries: ../internal/assistants/queries.sql
     engine: postgresql
     gen:
@@ -170,6 +180,26 @@ sql:
       go:
         package: "repo"
         out: "../internal/widgets/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/dashboards/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/dashboards/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/demoseed/queries
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/demoseed/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -240,6 +270,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/skills/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/sigint/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/sigint/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -400,6 +440,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/thirdparty/openrouter/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../cmd/tools/migrations/hostedmcpbackfill/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "hostedmcpbackfill"
+        out: "../cmd/tools/migrations/hostedmcpbackfill"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -584,6 +634,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/oauth/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/signins/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/signins/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -899,6 +959,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/admin/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/externalmcp/migration/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/externalmcp/migration/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

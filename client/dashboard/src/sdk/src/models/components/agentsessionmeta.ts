@@ -10,7 +10,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AgentSessionMeta = {
   /**
-   * Gram chat id for the captured session.
+   * Speakeasy chat id for the captured session.
    */
   chatId: string;
   /**

@@ -56,7 +56,7 @@ type TelemetryLog struct {
 	// OTel Resource Attributes (WHO/WHERE generated this log)
 	ResourceAttributes string `ch:"resource_attributes"` // JSON (stringified)
 
-	// Denormalized Gram Fields (for fast filtering)
+	// Denormalized Speakeasy Fields (for fast filtering)
 	GramProjectID    string  `ch:"gram_project_id"`    // UUID
 	GramDeploymentID *string `ch:"gram_deployment_id"` // Nullable(UUID)
 	GramFunctionID   *string `ch:"gram_function_id"`   // Nullable(UUID)

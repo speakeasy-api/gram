@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
-	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -129,22 +128,8 @@ func (m *Mutator) SetFeature(ctx context.Context, organizationID string, feature
 }
 
 func (m *Mutator) applyFeatureTx(ctx context.Context, dbtx pgx.Tx, organizationID string, feature Feature, enabled bool, actor MutationActor) (bool, error) {
-	if feature == FeatureAutomaticRoleDistribution {
-		if err := requests.LockOrganization(ctx, dbtx, organizationID); err != nil {
-			return false, oops.E(oops.CodeUnexpected, err, "lock role distribution rollout").LogError(ctx, m.client.logger, attr.SlogOrganizationID(organizationID))
-		}
-		if enabled {
-			if _, err := repo.New(dbtx).LockOrganizationMetadata(ctx, organizationID); err != nil {
-				return false, oops.E(oops.CodeUnexpected, err, "lock organization for role distribution rollout").LogError(ctx, m.client.logger, attr.SlogOrganizationID(organizationID))
-			}
-			org, err := orgrepo.New(dbtx).GetOrganizationMetadata(ctx, organizationID)
-			if err != nil {
-				return false, oops.E(oops.CodeUnexpected, err, "read organization for role distribution rollout").LogError(ctx, m.client.logger, attr.SlogOrganizationID(organizationID))
-			}
-			if org.DisabledAt.Valid {
-				return false, oops.E(oops.CodeInvalid, nil, "automatic role distribution cannot be enabled for a disabled organization")
-			}
-		}
+	if feature == Feature("automatic-role-distribution") {
+		return false, oops.E(oops.CodeInvalid, nil, "unknown product feature")
 	}
 	if feature == FeatureRemoteSessionAutoRefreshEnforced {
 		return false, oops.E(oops.CodeInvalid, nil, "remote session auto-refresh enforcement must be changed through the policy setter")
@@ -177,12 +162,6 @@ func (m *Mutator) applyFeatureTx(ctx context.Context, dbtx pgx.Tx, organizationI
 			return false, oops.E(oops.CodeUnexpected, err, "disable organization feature flag %q", feature).LogError(ctx, m.client.logger, attr.SlogOrganizationID(organizationID))
 		default:
 			changed = true
-		}
-	}
-
-	if changed && enabled && feature == FeatureAutomaticRoleDistribution {
-		if err := requests.ResumeOrganization(ctx, dbtx, organizationID); err != nil {
-			return false, oops.E(oops.CodeUnexpected, err, "enqueue role distribution rollout").LogError(ctx, m.client.logger, attr.SlogOrganizationID(organizationID))
 		}
 	}
 

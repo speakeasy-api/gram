@@ -615,3 +615,66 @@ func TestService_SetMcpMetadata_RejectsForeignProjectMcpServer(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
+
+func TestService_SetMcpMetadata_RejectsReservedUserVariableName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolset := createTestToolset(t, ctx, ti, "test-mcp-reserved-variable")
+
+	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug: conv.PtrEmpty(types.Slug(toolset.Slug)),
+		EnvironmentConfigs: []*types.McpEnvironmentConfigInput{
+			{VariableName: "NAME", HeaderDisplayName: nil, ProvidedBy: "user"},
+		},
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.Nil(t, result)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), `variable name "NAME" is reserved`)
+}
+
+func TestService_SetMcpMetadata_RejectsReservedHeaderDisplayName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolset := createTestToolset(t, ctx, ti, "test-mcp-reserved-display-name")
+
+	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug: conv.PtrEmpty(types.Slug(toolset.Slug)),
+		EnvironmentConfigs: []*types.McpEnvironmentConfigInput{
+			{VariableName: "ACCOUNT_ID", HeaderDisplayName: new("Param Region"), ProvidedBy: "user"},
+		},
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.Nil(t, result)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), `header display name "Param Region"`)
+}
+
+func TestService_SetMcpMetadata_AllowsReservedNameNotProvidedByUser(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolset := createTestToolset(t, ctx, ti, "test-mcp-reserved-system-variable")
+
+	// System-provided variables are never read from request headers.
+	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug: conv.PtrEmpty(types.Slug(toolset.Slug)),
+		EnvironmentConfigs: []*types.McpEnvironmentConfigInput{
+			{VariableName: "NAME", HeaderDisplayName: nil, ProvidedBy: "system"},
+		},
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+}

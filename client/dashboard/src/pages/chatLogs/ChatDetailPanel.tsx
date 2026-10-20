@@ -1,5 +1,7 @@
+import { SlackChannelLink } from "@/components/slack-channel-link";
 import { claudeTagMetadata, projectClaudeTagRows } from "./claudeTag";
 import { IdentityLink } from "@/components/identity-link";
+import { AssistantActorLink } from "@/components/assistant-actor-link";
 import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
@@ -65,6 +67,7 @@ import { personalAccountEmail } from "@/components/observe/account-display-utils
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
+import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { useSdkClient } from "@/contexts/Sdk";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
@@ -275,10 +278,16 @@ function SessionSummary({
 }: {
   chat: {
     externalUserId?: string;
+    assistantId?: string;
+    assistantName?: string;
+    assistantAgentId?: string;
     accountType?: string;
     accountEmail?: string;
     source?: string;
     channelNames?: string[];
+    slackChannelId?: string;
+    slackChannelName?: string;
+    slackTeamId?: string;
     originatingClient?: string;
     litellmProxied?: boolean;
     createdAt: Date;
@@ -293,7 +302,8 @@ function SessionSummary({
   };
   userLabel: ReactNode;
   messageCount: number;
-  toolCount: number;
+  /** Undefined when the caller cannot read this project's tool logs. */
+  toolCount: number | undefined;
   compact?: boolean;
 }) {
   const tokens = totalTokensFor(chat);
@@ -350,7 +360,16 @@ function SessionSummary({
         <div className="space-y-1">
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
-            <MetaRow label="User">{userLabel}</MetaRow>
+            {chat.assistantName ? (
+              <>
+                <MetaRow label="Agent">
+                  <AssistantActorLink chat={chat} className="[&_a]:pb-0.5" />
+                </MetaRow>
+                <MetaRow label="On behalf of">{userLabel}</MetaRow>
+              </>
+            ) : (
+              <MetaRow label="User">{userLabel}</MetaRow>
+            )}
             {accountEmail && (
               <MetaRow label="Account">
                 <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
@@ -372,12 +391,23 @@ function SessionSummary({
                 </span>
               </MetaRow>
             )}
+            {chat.slackChannelId && (
+              <MetaRow label="Channel">
+                <SlackChannelLink
+                  channelId={chat.slackChannelId}
+                  channelName={chat.slackChannelName}
+                  teamId={chat.slackTeamId}
+                />
+              </MetaRow>
+            )}
             {chat.channelNames && chat.channelNames.length > 0 && (
               <MetaRow label="Channel">{chat.channelNames.join(", ")}</MetaRow>
             )}
             <MetaRow label="Duration">{duration}s</MetaRow>
             <MetaRow label="Messages">{messageCount}</MetaRow>
-            <MetaRow label="Tool calls">{toolCount}</MetaRow>
+            {toolCount !== undefined && (
+              <MetaRow label="Tool calls">{toolCount}</MetaRow>
+            )}
             <MetaRow label="Total cost">
               {hasCost ? formatUsageCost(chat.totalCost!) : "unknown"}
             </MetaRow>
@@ -433,7 +463,8 @@ function ChatDetailMetadataBadges({
   chatId: string;
   chat: Parameters<typeof SessionSummary>[0]["chat"];
   messageCount: number;
-  toolCount: number;
+  /** Undefined when the caller cannot read this project's tool logs. */
+  toolCount: number | undefined;
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
@@ -444,7 +475,7 @@ function ChatDetailMetadataBadges({
       <HeaderMetadataBadge>
         {messageCount.toLocaleString()} messages
       </HeaderMetadataBadge>
-      {toolCount > 0 && (
+      {toolCount !== undefined && toolCount > 0 && (
         <HeaderMetadataBadge>
           {toolCount.toLocaleString()} tool calls
         </HeaderMetadataBadge>
@@ -458,6 +489,15 @@ function ChatDetailMetadataBadges({
             </span>
           </Badge.Text>
         </Badge>
+      )}
+      {chat.slackChannelId && (
+        <HeaderMetadataBadge>
+          <SlackChannelLink
+            channelId={chat.slackChannelId}
+            channelName={chat.slackChannelName}
+            teamId={chat.slackTeamId}
+          />
+        </HeaderMetadataBadge>
       )}
       {chat.channelNames?.map((channel) => (
         <HeaderMetadataBadge key={channel}>
@@ -692,7 +732,8 @@ function ChatDetailHeader({
   chat: Parameters<typeof SessionSummary>[0]["chat"] & { title?: string };
   userLabel: ReactNode;
   messageCount: number;
-  toolCount: number;
+  /** Undefined when the caller cannot read this project's tool logs. */
+  toolCount: number | undefined;
   canManageChat: boolean;
   compactMetadata: boolean;
   showFilter: boolean;
@@ -732,6 +773,24 @@ function ChatDetailHeader({
                   ({format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm")})
                 </span>
               </span>
+              <span className="text-muted-foreground inline-flex max-w-full flex-wrap items-center gap-1.5 text-sm">
+                {chat.assistantName ? (
+                  <>
+                    <AssistantActorLink
+                      chat={chat}
+                      className="text-foreground [&_a]:pb-0.5"
+                    />
+                    <span>on behalf of</span>
+                    <span className="text-foreground min-w-0 break-words">
+                      {userLabel}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-foreground min-w-0 break-words">
+                    {userLabel}
+                  </span>
+                )}
+              </span>
               {compactMetadata ? (
                 <ChatDetailMetadataBadges
                   chatId={chatId}
@@ -740,7 +799,20 @@ function ChatDetailHeader({
                   toolCount={toolCount}
                 />
               ) : (
-                <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
+                <div className="flex flex-wrap items-center gap-2">
+                  <HeaderMetadataBadge>
+                    {getTraceId(chatId)}
+                  </HeaderMetadataBadge>
+                  {chat.slackChannelId && (
+                    <HeaderMetadataBadge>
+                      <SlackChannelLink
+                        channelId={chat.slackChannelId}
+                        channelName={chat.slackChannelName}
+                        teamId={chat.slackTeamId}
+                      />
+                    </HeaderMetadataBadge>
+                  )}
+                </div>
               )}
               <WorkUnitsHeaderMetrics chat={chat} />
             </div>
@@ -766,12 +838,14 @@ function ChatDetailHeader({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onSelect={() => onSetView("tools")}
-              >
-                Tool calls{toolCount > 0 ? ` (${toolCount})` : ""}
-              </DropdownMenuItem>
+              {toolCount !== undefined && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={() => onSetView("tools")}
+                >
+                  Tool calls{toolCount > 0 ? ` (${toolCount})` : ""}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 className="cursor-pointer gap-2"
                 disabled={pinPending}
@@ -918,7 +992,10 @@ function SessionLinksSection({
         {inbound.map((link, i) =>
           row(
             `in-${i}-${link.createdAt.toISOString()}`,
-            <>Derived from {link.parentTitle ?? "an earlier session"}</>,
+            <>
+              {link.kind === "subagent" ? "Subagent of" : "Derived from"}{" "}
+              {link.parentTitle ?? "an earlier session"}
+            </>,
             link.createdAt,
             hop(link.parentChatId, link.parentCaptured),
             link.parentCaptured ? (
@@ -945,11 +1022,18 @@ function SessionLinksSection({
               )
             : row(
                 `out-${i}-${link.createdAt.toISOString()}`,
-                <>Moved to {formatPlatform(link.targetHarness)}</>,
+                <>
+                  {link.kind === "subagent" ? "Subagent" : "Moved to"}{" "}
+                  {link.kind === "subagent"
+                    ? (link.childTitle ?? "Claude Tag")
+                    : formatPlatform(link.targetHarness)}
+                </>,
                 link.createdAt,
                 hop(link.childChatId, link.childCaptured),
                 link.childCaptured
-                  ? (link.childTitle ?? undefined)
+                  ? link.kind === "subagent"
+                    ? undefined
+                    : (link.childTitle ?? undefined)
                   : "not yet captured",
               ),
         )}
@@ -1097,8 +1181,15 @@ function ChatDetailPanel({
   // Risk findings are an org-admin resource (risk.results.list is org-admin
   // gated). Only admins get the risk-windowed "Risky only" view + its data.
   const canViewRisk = isPlatformAdmin || hasScope("org:admin");
+  // A session's tool calls come from the project's raw tool logs, which need
+  // log:read on the project on top of access to the transcript.
+  const canViewToolLogs = useCanViewToolLogs();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [view, setView] = useState<ViewMode>("chat");
+  const [selectedView, setView] = useState<ViewMode>("chat");
+  // The Tool calls view reads the project's raw tool logs, so without log:read
+  // (including after a grants refetch takes it away) the transcript shows.
+  const view: ViewMode =
+    selectedView === "tools" && !canViewToolLogs ? "chat" : selectedView;
   const [rawView, setRawView] = useState(false);
   useEffect(() => setRawView(false), [chatId]);
   const [riskyOnly, setRiskyOnly] = useState(false);
@@ -1180,20 +1271,31 @@ function ChatDetailPanel({
     () => claudeTagMetadata(transcript.messages),
     [transcript.messages],
   );
+  const capturedSource = capturedChat?.source?.trim().toLowerCase() ?? "";
+  const claudeSource =
+    capturedSource.startsWith("claude") ||
+    capturedSource === "cowork" ||
+    (capturedSource === "litellm" &&
+      !!capturedChat?.originatingClient?.startsWith("claude-code"));
   const isClaudeTag =
-    capturedChat?.source === "claude-tag" ||
-    ((capturedChat?.source === "claude-code" ||
-      capturedChat?.source === "claude") &&
-      tagMetadata.detected);
+    capturedSource === "claude-tag" || (claudeSource && tagMetadata.detected);
   const chat = useMemo(() => {
     if (!capturedChat || !isClaudeTag) return capturedChat;
-    const title = capturedChat.title?.startsWith("<wake")
-      ? tagMetadata.title
-      : capturedChat.title;
+    const title =
+      /^<(wake|standing_owner_message|session-context)\b/.test(
+        capturedChat.title ?? "",
+      ) && tagMetadata.title
+        ? tagMetadata.title
+        : capturedChat.title;
     return {
       ...capturedChat,
       source: "claude-tag",
-      channelNames: tagMetadata.channels,
+      channelNames: tagMetadata.channels.filter(
+        (channel) =>
+          channel !== capturedChat.slackChannelId &&
+          channel.replace(/^#/, "") !==
+            capturedChat.slackChannelName?.replace(/^#/, ""),
+      ),
       title: title || "Claude Tag session",
     };
   }, [capturedChat, isClaudeTag, tagMetadata.title, tagMetadata.channels]);
@@ -1273,6 +1375,7 @@ function ChatDetailPanel({
   } = useSearchLogsMutation();
 
   useEffect(() => {
+    if (!canViewToolLogs) return;
     searchLogs({
       request: {
         searchLogsPayload: {
@@ -1281,7 +1384,7 @@ function ChatDetailPanel({
         },
       },
     });
-  }, [chatId, searchLogs]);
+  }, [chatId, searchLogs, canViewToolLogs]);
 
   // Reset transient UI state when the panel is pointed at a new session.
   useEffect(() => {
@@ -1295,9 +1398,12 @@ function ChatDetailPanel({
     setActiveOccurrenceKey(null);
   }, [chatId]);
 
+  // Logs fetched before log:read went away are ignored everywhere: the Tool
+  // calls view, its count, and the session export.
   const logs = useMemo(
-    () => filterPanelTelemetryLogs(logsData?.logs ?? []),
-    [logsData?.logs],
+    () =>
+      canViewToolLogs ? filterPanelTelemetryLogs(logsData?.logs ?? []) : [],
+    [canViewToolLogs, logsData?.logs],
   );
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
@@ -1536,7 +1642,7 @@ function ChatDetailPanel({
   }, [view, fullyLoaded, loadingAllMessages, loadAllMessages]);
 
   const userLabelOverride = chat && !readableTag ? userLabel : undefined;
-  // The same key ChatOwnerLabel uses: a chat carries the Gram user when the
+  // The same key ChatOwnerLabel uses: a chat carries the Speakeasy user when the
   // owner is a member and the reported agent id otherwise. Memoized because a
   // fresh object each render would invalidate the row context below on every
   // pass, re-rendering the whole transcript.
@@ -1674,7 +1780,7 @@ function ChatDetailPanel({
         chat={chat}
         userLabel={userLabelNode}
         messageCount={chat.numMessages}
-        toolCount={toolLogs.length}
+        toolCount={canViewToolLogs ? toolLogs.length : undefined}
         canManageChat={canManageChat}
         compactMetadata={riskFocus}
         showFilter={view === "chat" || view === "effects"}

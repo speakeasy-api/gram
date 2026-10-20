@@ -1,4 +1,4 @@
-h1:rw8f4wAthGTMyH9RE0riqaEK3MPkEtrnB1Zew3sYhu8=
+h1:US22nbVkUOppNEtGKtafNC368vAijGa12zBuH3dQJVs=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -121,3 +121,10 @@ h1:rw8f4wAthGTMyH9RE0riqaEK3MPkEtrnB1Zew3sYhu8=
 20260922181035_mark-shadow-risk-findings.sql h1:0uU+lU08qaR/UmkS/duPtaa0qUcb9QF1fINygPEUz+0=
 20260925223526_mcp-network-traffic.sql h1:PKEjHX3J1bkCaXIGYnUsh1zknyQ83wggXK/2ncqebSQ=
 20260928161103_imported_session_observations.sql h1:I0PjLiAvZqQB7fz4nyCXFO23oduQrDwVJdWE/SuNfZo=
+20261001214632_risk-findings-execution-id-index.sql h1:qzkcPvH1Hv8n3cl5Mf1m3ALuiDzpFeljonlCe+lF/R8=
+20261007123453_agent-events-name-column-and-family-comments.sql h1:cbOeAG+geU2Nj6V6evtGqYswHGzlxvsYoPNY67oLg98=
+20261013101428_classify-columns.sql h1:qH9BDL/V1mFQNSNVAzZf4upHqy7iB/weXSrPThYkUkw=
+20261013123147_arbitrary_harness_analytics.sql h1:iMmB6cpVj4l1bH/9HDOyLFiFMbUyLrrqbMZjmAp0bTU=
+20261016113811_sigint-readings.sql h1:oVBNYmx66FfmHRbQcyvVUYfDKv83+WRY2lGFz/NKD4s=
+20261016122954_add_tool_calls.sql h1:CFXObECcSlrsbCWfavza1zn6qlGz16SWLwGUHcv21fw=
+20261017144327_sigint-readings-v2.sql h1:74xcYNZ0/4F7uGTsYkcbTi+MI0H2uulNZWoql2Expgc=

@@ -23,8 +23,6 @@ import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useReadableAgents } from "@/hooks/useReadableAgents";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
@@ -51,33 +49,6 @@ import { AgentPolicySection } from "./AgentPolicySection";
 import { ManagedAgentSessions } from "./ManagedAgentSessions";
 
 export default function AgentsPage(): JSX.Element {
-  const flag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
-  if (flag.status !== "enabled") {
-    return (
-      <FormPage
-        title={
-          flag.status === "loading"
-            ? "Loading agent management"
-            : "Agent management unavailable"
-        }
-        description={
-          flag.status === "loading"
-            ? "Checking feature availability."
-            : flag.status === "disabled"
-              ? "Agent management is not enabled for this organization."
-              : "Unable to determine agent management availability. Try again later."
-        }
-      >
-        {null}
-      </FormPage>
-    );
-  }
-
-  // Do not mount inventory, detail, or policy discovery until rollout is enabled.
-  return <AgentManagementPage />;
-}
-
-function AgentManagementPage(): JSX.Element {
   const organization = useOrganization();
   const session = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
@@ -95,7 +66,7 @@ function AgentManagementPage(): JSX.Element {
         title="Agent management unavailable"
         description={
           hasUnsupportedSession
-            ? "Support and impersonated sessions cannot manage agents. Switch to an ordinary Gram session."
+            ? "Support and impersonated sessions cannot manage agents. Switch to an ordinary Speakeasy session."
             : "Agent management is disabled while an RBAC scope override is active."
         }
       >

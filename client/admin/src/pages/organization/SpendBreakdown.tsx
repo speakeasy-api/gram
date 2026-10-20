@@ -8,24 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { errorMessage } from "@/lib/gramAdminApi";
 import { organizationSpendBreakdownQuery } from "@/lib/gramAdminClient";
 import { exclusiveEnd, type BillingUsageSearch } from "./billingUsageSearch";
 import { MeterUsagePeriod } from "./MeterUsagePeriod";
 import { type MeterGranularity } from "./meterUsageUtils";
 import { SpendBreakdownChart } from "./SpendBreakdownChart";
+import { SpendProductsTable } from "./SpendProductsTable";
 import {
   SPEND_PRODUCT_COLOR,
-  formatSpendRate,
-  formatSpendUsage,
   formatSpendUsd,
   spendCostIsZero,
   sumSpendCosts,
@@ -373,57 +364,6 @@ function SpendBreakdownContent({
           pricing are excluded. Today’s usage is still in progress.
         </p>
       </details>
-    </div>
-  );
-}
-
-function SpendProductsTable({
-  products,
-}: {
-  products: SpendProduct[];
-}): JSX.Element {
-  return (
-    <div className="bg-card overflow-hidden rounded-md border">
-      <Table>
-        <TableHeader className="bg-muted">
-          <TableRow>
-            <TableHead>Product</TableHead>
-            <TableHead className="text-right">Usage</TableHead>
-            <TableHead className="text-right">Current list rate</TableHead>
-            <TableHead className="text-right">Estimated cost</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {products.length === 0 ? (
-            <TableRow>
-              <TableCell
-                colSpan={4}
-                className="text-muted-foreground h-20 text-center"
-              >
-                Select at least one product to see its estimate.
-              </TableCell>
-            </TableRow>
-          ) : (
-            products.map((product) => (
-              <TableRow key={product.id}>
-                <TableCell className="font-medium">{product.label}</TableCell>
-                <TableCell
-                  className="text-right tabular-nums"
-                  title={`${BigInt(product.quantity).toLocaleString("en-US")} ${product.unit === "bytes" ? "bytes" : "tokens"}`}
-                >
-                  {formatSpendUsage(product)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatSpendRate(product)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatSpendUsd(product.costUsd)}
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
     </div>
   );
 }

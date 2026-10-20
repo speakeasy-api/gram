@@ -6,14 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -27,34 +23,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const projectNameMaxLength = 40
-
 type Service struct {
-	tracer               trace.Tracer
-	logger               *slog.Logger
-	db                   *pgxpool.Pool
-	repo                 *repo.Queries
-	envRepo              *envrepo.Queries
-	sessions             *sessions.Manager
-	auth                 *auth.Auth
-	authz                *authz.Engine
-	audit                *audit.Logger
-	temporalEnv          *tenv.Environment
-	pluginsGitHubEnabled bool
+	tracer   trace.Tracer
+	logger   *slog.Logger
+	db       *pgxpool.Pool
+	repo     *repo.Queries
+	core     *Core
+	sessions *sessions.Manager
+	auth     *auth.Auth
+	authz    *authz.Engine
+	audit    *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -72,17 +61,15 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
-		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
-		logger:               logger,
-		db:                   db,
-		repo:                 repo.New(db),
-		envRepo:              envrepo.New(db),
-		sessions:             sessions,
-		auth:                 auth.New(logger, db, sessions, authzEngine),
-		authz:                authzEngine,
-		audit:                auditLogger,
-		temporalEnv:          temporalEnv,
-		pluginsGitHubEnabled: pluginsGitHubEnabled,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
+		logger:   logger,
+		db:       db,
+		repo:     repo.New(db),
+		core:     NewCore(logger, auditLogger, temporalEnv, pluginsGitHubEnabled),
+		sessions: sessions,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
+		audit:    auditLogger,
 	}
 }
 
@@ -164,92 +151,34 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.C(oops.CodeForbidden)
 	}
 
+	actor := ProjectActor{UserID: authCtx.UserID, DisplayName: authCtx.Email}
+	if _, err := ProjectSlug(payload.Name); err != nil {
+		return nil, projectNameError(err)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing projects").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	pr := s.repo.WithTx(dbtx)
-	er := s.envRepo.WithTx(dbtx)
-
-	prj, err := pr.CreateProject(ctx, repo.CreateProjectParams{
+	prj, err := s.core.CreateInTransaction(ctx, dbtx, CreateProjectMutation{
 		OrganizationID: payload.OrganizationID,
 		Name:           payload.Name,
-		Slug:           conv.ToSlug(payload.Name),
+		Actor:          actor,
 	})
-	var pgErr *pgconn.PgError
 	switch {
-	case errors.As(err, &pgErr):
-		if pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, err, "project slug already exists")
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "database error creating project").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID), attr.SlogProjectName(payload.Name))
+	case errors.Is(err, ErrProjectSlugTaken):
+		return nil, oops.E(oops.CodeConflict, err, "project slug already exists")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "unexpected error creating project").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID), attr.SlogProjectName(payload.Name))
-	}
-
-	_, err = er.CreateEnvironment(ctx, envrepo.CreateEnvironmentParams{
-		OrganizationID: payload.OrganizationID,
-		ProjectID:      prj.ID,
-		Name:           "Default",
-		Slug:           "default",
-		Description:    conv.ToPGText("Default project for organization"),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating default environment").LogError(ctx, s.logger)
-	}
-
-	// Provision the project's Default plugin through the shared helper so it
-	// takes the same create-and-seed path (including the org-wildcard audience
-	// default) as the lazy-heal callers — no separate seeding to drift.
-	ensured, err := plugins.EnsureDefaultPlugin(ctx, dbtx, payload.OrganizationID, prj.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating default plugin").LogError(ctx, s.logger)
-	}
-
-	if ensured.Created {
-		if err := s.audit.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
-			OrganizationID:   payload.OrganizationID,
-			ProjectID:        prj.ID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			PluginID:         ensured.Plugin.ID,
-			PluginName:       ensured.Plugin.Name,
-			PluginSlug:       ensured.Plugin.Slug,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error creating default plugin audit log").LogError(ctx, s.logger)
-		}
-	}
-
-	if err := s.audit.LogProjectCreate(ctx, dbtx, audit.LogProjectCreateEvent{
-		OrganizationID: payload.OrganizationID,
-		ProjectID:      prj.ID,
-
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-
-		ProjectName: prj.Name,
-		ProjectSlug: prj.Slug,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating project creation audit log").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating project").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID), attr.SlogProjectName(payload.Name))
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving project creation").LogError(ctx, s.logger)
 	}
 
-	// Best-effort: the marketplace repo isn't required for the project to
-	// exist. No GitHub collaborators are added here — we don't have a
-	// customer GitHub username yet; that's supplied later via the dashboard
-	// publish/marketplace-settings flow. Uses a non-cancelable derived ctx so
-	// the request returning (or its caller disconnecting) right after commit
-	// can't drop the enqueue.
-	if s.pluginsGitHubEnabled {
-		background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, prj.ID, authCtx.UserID, true)
-	}
+	s.core.AfterCreateCommitted(ctx, prj.ID, actor)
 
 	project := &gen.CreateProjectResult{
 		Project: &gen.Project{
@@ -276,56 +205,32 @@ func (s *Service) UpdateProject(ctx context.Context, payload *gen.UpdateProjectP
 		return nil, err
 	}
 
-	name := strings.TrimSpace(payload.Name)
-	if name == "" || strings.ContainsRune(name, '\x00') || utf8.RuneCountInString(name) > projectNameMaxLength {
-		return nil, oops.C(oops.CodeInvalid)
-	}
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing projects").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	pr := s.repo.WithTx(dbtx)
-	existingRow, err := pr.GetProjectByIDForUpdate(ctx, *authCtx.ProjectID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.C(oops.CodeNotFound)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting project").LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
-	}
-	updatedRow, err := pr.UpdateProject(ctx, repo.UpdateProjectParams{
-		ProjectID: *authCtx.ProjectID,
-		Name:      name,
+	renamed, err := s.core.RenameInTransaction(ctx, dbtx, RenameProjectMutation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Name:           payload.Name,
+		Actor:          ProjectActor{UserID: authCtx.UserID, DisplayName: authCtx.Email},
 	})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, ErrProjectNameInvalid):
+		return nil, oops.C(oops.CodeInvalid)
+	case errors.Is(err, ErrProjectNotFound):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating project").LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
-	}
-
-	existing := toProject(existingRow)
-	updated := toProject(updatedRow)
-	if err := s.audit.LogProjectUpdate(ctx, dbtx, audit.LogProjectUpdateEvent{
-		OrganizationID:        updatedRow.OrganizationID,
-		ProjectID:             updatedRow.ID,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:      authCtx.Email,
-		ActorSlug:             nil,
-		ProjectName:           updatedRow.Name,
-		ProjectSlug:           updatedRow.Slug,
-		ProjectSnapshotBefore: existing,
-		ProjectSnapshotAfter:  updated,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating project update audit log").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving project").LogError(ctx, s.logger)
 	}
 
-	return &gen.UpdateProjectResult{Project: updated}, nil
+	return &gen.UpdateProjectResult{Project: toProject(renamed.After)}, nil
 }
 
 func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPayload) (res *gen.ListProjectsResult, err error) {
@@ -588,9 +493,6 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	if err := pr.DeleteProjectEMATombstones(ctx, repo.DeleteProjectEMATombstonesParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove project identity-chaining tombstones")
 	}
-	if _, err := pr.DeleteProjectRiskFindingEvidence(ctx, repo.DeleteProjectRiskFindingEvidenceParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "remove project risk finding evidence")
-	}
 
 	_, err = pr.DeleteProject(ctx, projectID)
 	switch {
@@ -645,6 +547,15 @@ func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.Set
 		return oops.E(oops.CodeUnexpected, err, "error setting organization whitelist status").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
 	}
 	return nil
+}
+
+// projectNameError maps a name the core refuses to the management API's
+// invalid-request error, naming why so the dashboard can show it.
+func projectNameError(err error) error {
+	if errors.Is(err, ErrProjectSlugEmpty) {
+		return oops.E(oops.CodeInvalid, err, "project name must contain at least one letter or number")
+	}
+	return oops.E(oops.CodeInvalid, err, "project name must be 1 to %d characters", projectNameMaxLength)
 }
 
 func toProject(p repo.Project) *gen.Project {

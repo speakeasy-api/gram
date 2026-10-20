@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -233,7 +234,7 @@ func ManualClient(credentials ClientCredentials) ClientChoice {
 	return ClientChoice{kind: clientManual, linkID: uuid.Nil, credentials: credentials, policy: RegistrationPolicy{}} //nolint:exhaustruct // Unused for a manual client.
 }
 
-// RegisterClient obtains a client from the provider: a Gram-hosted Client ID
+// RegisterClient obtains a client from the provider: a Speakeasy-hosted Client ID
 // Metadata Document when the policy allows one and the provider supports it,
 // otherwise dynamic client registration.
 func RegisterClient(policy RegistrationPolicy) ClientChoice {
@@ -249,6 +250,12 @@ func (c ClientChoice) keep() uuid.UUID {
 type RegistrationPolicy struct {
 	// Scope is requested at registration and authorization time.
 	Scope []string
+
+	// RegistrationResource is the protected resource a client without Scope
+	// will discover at login. Registration names what that login would request
+	// from it, so a provider that limits a client to its registered scopes
+	// allows them; nil names what the provider alone decides. Never stored.
+	RegistrationResource *ResourceScopes
 
 	// Audience is sent as the resource/audience parameter, if set.
 	Audience *string
@@ -399,6 +406,8 @@ type IdentityCommit struct {
 	locked             bool
 	userIssuerOrgLevel bool
 	result             IdentityResult
+	// createCapabilities pins registration to the submitted form, before create-time discovery fills it in.
+	createCapabilities providerCapabilities
 }
 
 // IdentityTx is the transaction a commit writes in.
@@ -414,6 +423,13 @@ func (c *IdentityCommitter) Prepare(plan IdentityPlan) *IdentityCommit {
 	var commit IdentityCommit
 	commit.committer = c
 	commit.plan = plan
+	if create := plan.Provider.create; create != nil {
+		commit.createCapabilities = providerCapabilities{
+			registrationEndpoint:              create.RegistrationEndpoint,
+			tokenEndpointAuthMethodsSupported: slices.Clone(create.TokenEndpointAuthMethodsSupported),
+			clientIDMetadataDocumentSupported: create.ClientIDMetadataDocumentSupported,
+		}
+	}
 	return &commit
 }
 
@@ -592,7 +608,7 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.origins.ForClient(c.newClientBaseURL()), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
 		TunneledMcpServerID:     conv.PtrEmpty(tunnelBindingID(c.provider.TunneledMcpServerID)),
-		Scope:                   conv.PtrEmpty(strings.Join(policy.Scope, " ")),
+		Scope:                   conv.PtrEmpty(strings.Join(c.registrationScope(policy), " ")),
 		TokenEndpointAuthMethod: policy.TokenEndpointAuthMethod,
 	}, c.committer.telemetry)
 	if err != nil {
@@ -659,22 +675,37 @@ type providerCapabilities struct {
 }
 
 func (p providerCapabilities) supportsCIMD() bool {
-	if !p.clientIDMetadataDocumentSupported {
-		return false
-	}
-	methods := p.tokenEndpointAuthMethodsSupported
-	return len(methods) == 0 || slices.Contains(methods, string(TokenEndpointAuthMethodNone))
+	return SupportsClientIDMetadataDocument(p.clientIDMetadataDocumentSupported, p.tokenEndpointAuthMethodsSupported)
 }
 
-// capabilities is what registration is chosen from: the new provider's
+// capabilities is what registration is chosen from: the new provider's submitted
 // parameters or the stored provider's row.
-func (c *IdentityCommit) capabilities() providerCapabilities {
+// registrationScope is the scope a dynamic registration names: the client's
+// own, else what its first login would request through RequestedScopes.
+func (c *IdentityCommit) registrationScope(policy RegistrationPolicy) []string {
+	if len(policy.Scope) > 0 {
+		return policy.Scope
+	}
+	resource := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: true}
+	if policy.RegistrationResource != nil {
+		resource = *policy.RegistrationResource
+	}
+	login := Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
+		IssuerScopesSupported:   c.provider.ScopesSupported,
+		IssuerScopeOverride:     c.provider.ScopeOverride,
+		IssuerOmitScopeFallback: c.provider.OmitScopeFallback.Valid && c.provider.OmitScopeFallback.Bool,
+	}
 	if create := c.plan.Provider.create; create != nil {
-		return providerCapabilities{
-			registrationEndpoint:              create.RegistrationEndpoint,
-			tokenEndpointAuthMethodsSupported: create.TokenEndpointAuthMethodsSupported,
-			clientIDMetadataDocumentSupported: create.ClientIDMetadataDocumentSupported,
-		}
+		login.IssuerScopesSupported = create.ScopesSupported
+		login.IssuerScopeOverride = create.ScopeOverride
+		login.IssuerOmitScopeFallback = create.OmitScopeFallback.Valid && create.OmitScopeFallback.Bool
+	}
+	return login.RequestedScopes(resource).Scopes
+}
+
+func (c *IdentityCommit) capabilities() providerCapabilities {
+	if c.plan.Provider.create != nil {
+		return c.createCapabilities
 	}
 	return providerCapabilities{
 		registrationEndpoint:              c.provider.RegistrationEndpoint,
@@ -982,7 +1013,11 @@ func listUserSessionIssuerClients(ctx context.Context, q *repo.Queries, projectI
 // shared across projects. A project-owned client is invisible to other
 // projects, so its binding only ever changes the scope's own project.
 func (c *IdentityCommit) refuseOrgWideBinding(client repo.RemoteSessionClient) error {
-	if c.userIssuerOrgLevel && !client.ProjectID.Valid {
+	return refuseOrgWideBinding(c.userIssuerOrgLevel, client.ProjectID)
+}
+
+func refuseOrgWideBinding(userIssuerOrgLevel bool, clientProjectID uuid.NullUUID) error {
+	if userIssuerOrgLevel && !clientProjectID.Valid {
 		return identityRefusal(ErrIdentityOrgWideBinding, nil, OrgWideBindingMessage)
 	}
 	return nil
@@ -1156,7 +1191,7 @@ func (c *IdentityCommit) linkClient(ctx context.Context, tx *IdentityTx) (repo.R
 	return existing.RemoteSessionClient, existing.UserSessionIssuerIds, nil
 }
 
-// createCIMDClient creates a client identified by a Gram-hosted Client ID
+// createCIMDClient creates a client identified by a Speakeasy-hosted Client ID
 // Metadata Document.
 func (c *IdentityCommit) createCIMDClient(ctx context.Context, tx *IdentityTx) (repo.RemoteSessionClient, error) {
 	// Generated here so the document URL, which embeds the id, can be the
@@ -1219,6 +1254,8 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		Audience:                     conv.PtrToPGText(credentials.Audience),
 		LegacyCallbackUrl:            false,
 		CallbackBaseUrl:              c.newClientBaseURL(),
+		GrantTypes:                   nil,
+		CredentialOwner:              pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return repo.RemoteSessionClient{}, fmt.Errorf("create client: %w", err)
@@ -1276,6 +1313,13 @@ func (c *IdentityCommit) attach(ctx context.Context, tx *IdentityTx, client repo
 }
 
 func (c *IdentityCommit) auditClientCreate(ctx context.Context, tx *IdentityTx, client repo.RemoteSessionClient) error {
+	// The client is audited before attach binds it, and the binding records
+	// its own event, so the snapshot carries no user session issuers.
+	snapshot, err := mv.BuildRemoteSessionClientView(client, nil)
+	if err != nil {
+		return fmt.Errorf("build created client view: %w", err)
+	}
+
 	if err := c.committer.audit.LogRemoteSessionClientCreate(ctx, tx.tx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         c.plan.Scope.OrganizationID,
 		ProjectID:              c.plan.Scope.ProjectID,
@@ -1284,6 +1328,7 @@ func (c *IdentityCommit) auditClientCreate(ctx context.Context, tx *IdentityTx, 
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
 		ClientID:               client.ClientID,
+		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return fmt.Errorf("audit client creation: %w", err)
 	}

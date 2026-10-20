@@ -101,6 +101,9 @@ type ResetResponseBody struct {
 	// identifies the shared readiness confirmation; independent of the confirmed
 	// identity assertion audience.
 	IssuerID *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
+	// The server's authorization server issuer; the Issuer URL to enter when
+	// enabling Cross App Access on a resource app. Omitted when unknown.
+	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
 	// The resource indicator to enter on the connection: the server's RFC 9728
 	// resource identifier when known, otherwise its URL.
 	ResourceIndicator *string `form:"resource_indicator,omitempty" json:"resource_indicator,omitempty" xml:"resource_indicator,omitempty"`
@@ -829,6 +832,9 @@ type OktaResourceConnectionServerResponseBody struct {
 	// identifies the shared readiness confirmation; independent of the confirmed
 	// identity assertion audience.
 	IssuerID *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
+	// The server's authorization server issuer; the Issuer URL to enter when
+	// enabling Cross App Access on a resource app. Omitted when unknown.
+	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
 	// The resource indicator to enter on the connection: the server's RFC 9728
 	// resource identifier when known, otherwise its URL.
 	ResourceIndicator *string `form:"resource_indicator,omitempty" json:"resource_indicator,omitempty" xml:"resource_indicator,omitempty"`
@@ -1302,26 +1308,27 @@ func NewConfirmFailedPrecondition(body *ConfirmFailedPreconditionResponseBody) *
 // service "reset" endpoint result from a HTTP "OK" response.
 func NewResetOktaResourceConnectionServerOK(body *ResetResponseBody) *oktaresourceconnections.OktaResourceConnectionServer {
 	v := &oktaresourceconnections.OktaResourceConnectionServer{
-		McpServerID:          *body.McpServerID,
-		ProjectID:            *body.ProjectID,
-		ProjectSlug:          *body.ProjectSlug,
-		ServerName:           *body.ServerName,
-		ServerSlug:           *body.ServerSlug,
-		State:                *body.State,
-		NotApplicableReason:  body.NotApplicableReason,
-		BrokenReason:         body.BrokenReason,
-		ObservedResult:       body.ObservedResult,
-		ObservedAt:           body.ObservedAt,
-		Pending:              *body.Pending,
-		IssuerID:             body.IssuerID,
-		ResourceIndicator:    *body.ResourceIndicator,
-		ClientID:             body.ClientID,
-		ClientBinding:        *body.ClientBinding,
-		DeepLink:             body.DeepLink,
-		Audience:             body.Audience,
-		OktaApplicationID:    body.OktaApplicationID,
-		OktaApplicationLabel: body.OktaApplicationLabel,
-		ConfirmedAt:          body.ConfirmedAt,
+		McpServerID:               *body.McpServerID,
+		ProjectID:                 *body.ProjectID,
+		ProjectSlug:               *body.ProjectSlug,
+		ServerName:                *body.ServerName,
+		ServerSlug:                *body.ServerSlug,
+		State:                     *body.State,
+		NotApplicableReason:       body.NotApplicableReason,
+		BrokenReason:              body.BrokenReason,
+		ObservedResult:            body.ObservedResult,
+		ObservedAt:                body.ObservedAt,
+		Pending:                   *body.Pending,
+		IssuerID:                  body.IssuerID,
+		AuthorizationServerIssuer: body.AuthorizationServerIssuer,
+		ResourceIndicator:         *body.ResourceIndicator,
+		ClientID:                  body.ClientID,
+		ClientBinding:             *body.ClientBinding,
+		DeepLink:                  body.DeepLink,
+		Audience:                  body.Audience,
+		OktaApplicationID:         body.OktaApplicationID,
+		OktaApplicationLabel:      body.OktaApplicationLabel,
+		ConfirmedAt:               body.ConfirmedAt,
 	}
 	v.Scopes = make([]string, len(body.Scopes))
 	for i, val := range body.Scopes {

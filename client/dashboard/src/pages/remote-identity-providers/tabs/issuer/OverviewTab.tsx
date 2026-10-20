@@ -4,7 +4,15 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { InfoField, InfoSection, InfoText } from "../../detailFields";
+import { ScopeList } from "@/lib/remote-identity";
+import {
+  InfoField,
+  InfoList,
+  InfoSection,
+  InfoSupported,
+  InfoText,
+  InfoUrl,
+} from "../../detailFields";
 import { isAbsoluteHttpUrl } from "../../issuerDocumentationLinks";
 
 // ProjectValue renders the owning project for an issuer: "—" for an
@@ -69,22 +77,19 @@ function DocumentationUrlValue({ value }: { value: string | undefined }) {
   );
 }
 
+// NULL and false both read as the default: the issuer's supported scopes are
+// requested when a sign-in has no other scope source.
+function scopeFallbackLabel(omitScopeFallback: boolean | undefined): string {
+  return omitScopeFallback
+    ? "Authorization server defaults"
+    : "Every advertised scope";
+}
+
 export function OverviewTab({
   issuer,
 }: {
   issuer: RemoteSessionIssuer;
 }): JSX.Element {
-  const endpoint = (value: string | undefined): ReactNode => (
-    <InfoText mono>{value || "—"}</InfoText>
-  );
-  const list = (values: string[] | undefined): ReactNode => (
-    <InfoText mono>
-      {values && values.length > 0 ? values.join(", ") : "—"}
-    </InfoText>
-  );
-  const supported = (value: boolean): ReactNode => (
-    <InfoText>{value ? "Supported" : "Not supported"}</InfoText>
-  );
   // Unlike the other metadata arrays, absent and empty mean different things
   // here (mirroring the nullable column): absent is "discovery has not
   // captured this yet", empty is "the issuer advertises no methods".
@@ -118,40 +123,49 @@ export function OverviewTab({
 
         <InfoSection title="Endpoints">
           <InfoField label="Authorization">
-            {endpoint(issuer.authorizationEndpoint)}
+            <InfoUrl value={issuer.authorizationEndpoint} />
           </InfoField>
-          <InfoField label="Token">{endpoint(issuer.tokenEndpoint)}</InfoField>
+          <InfoField label="Token">
+            <InfoUrl value={issuer.tokenEndpoint} />
+          </InfoField>
           <InfoField label="Registration">
-            {endpoint(issuer.registrationEndpoint)}
+            <InfoUrl value={issuer.registrationEndpoint} />
           </InfoField>
-          <InfoField label="JWKS">{endpoint(issuer.jwksUri)}</InfoField>
+          <InfoField label="JWKS">
+            <InfoUrl value={issuer.jwksUri} />
+          </InfoField>
         </InfoSection>
       </div>
 
-      <InfoSection title="Identity Provider Details">
-        <InfoField label="Scopes">{list(issuer.scopesSupported)}</InfoField>
-        <InfoField label="Scope Override">
-          {list(issuer.scopeOverride ?? undefined)}
+      <InfoSection title="Authorization server details">
+        <InfoField label="Scopes">
+          <ScopeList scopes={issuer.scopesSupported} />
         </InfoField>
-        <InfoField label="Grant Types">
-          {list(issuer.grantTypesSupported)}
+        <InfoField label="Scope override">
+          <ScopeList scopes={issuer.scopeOverride} />
         </InfoField>
-        <InfoField label="Response Types">
-          {list(issuer.responseTypesSupported)}
+        <InfoField label="Scope fallback">
+          <InfoText>{scopeFallbackLabel(issuer.omitScopeFallback)}</InfoText>
         </InfoField>
-        <InfoField label="Token Endpoint Authentication Methods">
-          {list(issuer.tokenEndpointAuthMethodsSupported)}
+        <InfoField label="Grant types">
+          <InfoList values={issuer.grantTypesSupported} />
         </InfoField>
-        <InfoField label="PKCE Code Challenge Methods">
+        <InfoField label="Response types">
+          <InfoList values={issuer.responseTypesSupported} />
+        </InfoField>
+        <InfoField label="Token endpoint authentication methods">
+          <InfoList values={issuer.tokenEndpointAuthMethodsSupported} />
+        </InfoField>
+        <InfoField label="PKCE code challenge methods">
           {pkceMethods(issuer.codeChallengeMethodsSupported)}
         </InfoField>
-        <InfoField label="Client ID Metadata Document">
-          {supported(issuer.clientIdMetadataDocumentSupported)}
+        <InfoField label="Client ID metadata document">
+          <InfoSupported value={issuer.clientIdMetadataDocumentSupported} />
         </InfoField>
-        <InfoField label="Client Setup Documentation">
+        <InfoField label="Client setup documentation">
           <DocumentationUrlValue value={issuer.clientSetupDocumentationUrl} />
         </InfoField>
-        <InfoField label="Service Documentation">
+        <InfoField label="Service documentation">
           <DocumentationUrlValue value={issuer.serviceDocumentation} />
         </InfoField>
       </InfoSection>

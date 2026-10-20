@@ -289,7 +289,7 @@ func TestLogs_AttributesCodexOTELRecordsToResolvedUser(t *testing.T) {
 	require.NoError(t, ti.service.Logs(ctx, codexLogsPayload(rec)))
 
 	// User identity is carried in the attributes JSON (UserInfo.AsAttributes),
-	// so assert the resolved Gram user id landed on the row.
+	// so assert the resolved Speakeasy user id landed on the row.
 	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELLogsURN, timestamp, 1)
 	require.Contains(t, logs[0].Attributes, userID)
 	require.Contains(t, logs[0].Attributes, "codex-otel@example.com")

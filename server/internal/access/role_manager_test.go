@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -185,7 +186,7 @@ func TestRoleManager_MemberRoleSyncSerializesManagersAndLocksMember(t *testing.T
 			seedRoleAssignment(t, ctx, ti.conn, orgID, "", mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom"))
 			target := MemberRoleReconciliation{organizationID: orgID, workosUserID: "user_1", membershipID: "membership_1"}
 			manager := ti.service.roleMgr
-			other := NewRoleManager(manager.logger, ti.conn, ti.roles, manager.audit)
+			other := NewRoleManager(manager.logger, ti.conn, ti.roles, manager.audit, plugins.PublicationRequests{}, nil)
 			entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
 			t.Cleanup(func() {
 				close(release)

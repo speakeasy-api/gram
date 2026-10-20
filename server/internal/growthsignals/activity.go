@@ -1,4 +1,4 @@
-// Package growthsignals turns notable moments in Gram — projects created, MCP
+// Package growthsignals turns notable moments in Speakeasy — projects created, MCP
 // servers deployed, members joining, security policies written — into a single
 // PostHog event that internal Slack destinations render as ops signal.
 //
@@ -27,7 +27,7 @@ const (
 	// ActivityOrganizationCreated is a new Gram organization being provisioned.
 	ActivityOrganizationCreated Activity = "organization_created"
 
-	// ActivityUserSignedUp is a person's first Gram user record being created.
+	// ActivityUserSignedUp is a person's first Speakeasy user record being created.
 	// It carries a signup_source distinguishing an invited arrival from an
 	// organic one.
 	ActivityUserSignedUp Activity = "user_signed_up"

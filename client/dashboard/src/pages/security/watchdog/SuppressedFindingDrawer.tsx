@@ -260,7 +260,11 @@ function SessionSection({
       <>
         <Separator />
         <DetailRow label="MCP context">
-          <MCPFindingContext finding={finding} names={mcpFindingNames} />
+          <MCPFindingContext
+            showOutcome
+            finding={finding}
+            names={mcpFindingNames}
+          />
         </DetailRow>
       </>
     );

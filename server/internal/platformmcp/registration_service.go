@@ -203,8 +203,8 @@ func (s *RegistrationService) SetClientAdmission(ctx context.Context, principal 
 }
 
 // clientAdmissionTarget applies the shared preconditions of both admission
-// paths: an available deployment, the caller's operation budget, the rollout
-// gate, and an eligible project.
+// paths: an available deployment, the caller's operation budget, the
+// registration gate, and an eligible project.
 func (s *RegistrationService) clientAdmissionTarget(ctx context.Context, principal Principal, projectSlug, registrationID string) (ResolvedProject, uuid.UUID, error) {
 	if s == nil || s.gate == nil || s.store == nil || !s.clientAdmission.valid() || !s.budgets.LifecycleMetadata.valid() || projectSlug == "" || registrationID == "" {
 		return ResolvedProject{}, uuid.Nil, ErrClientAdmissionUnavailable

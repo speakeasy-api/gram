@@ -24,7 +24,7 @@ const ProbePayload = "gram-key-verification-probe"
 // VerifyReason is the machine-readable outcome of a verification probe. It
 // exists so callers can tell the three cases apart that Detail alone conflates:
 // something the key's owner must fix, something that will pass on retry, and
-// something that is Gram's fault.
+// something that is Speakeasy's fault.
 type VerifyReason string
 
 const (
@@ -32,7 +32,7 @@ const (
 	ReasonVerified VerifyReason = "verified"
 
 	// ReasonInvalidResourceName means the stored resource name is not a
-	// fully-qualified key version. Gram's own record is wrong; no call was made.
+	// fully-qualified key version. Speakeasy's own record is wrong; no call was made.
 	ReasonInvalidResourceName VerifyReason = "invalid_resource_name"
 
 	// ReasonKeyNotFound means the key version does not exist.
@@ -46,7 +46,7 @@ const (
 	// DISABLED, DESTROYED, or still PENDING_GENERATION.
 	ReasonKeyUnusable VerifyReason = "key_unusable"
 
-	// ReasonUnsupportedAlgorithm means the key signs with an algorithm Gram does
+	// ReasonUnsupportedAlgorithm means the key signs with an algorithm Speakeasy does
 	// not publish, such as RSA-PSS.
 	ReasonUnsupportedAlgorithm VerifyReason = "unsupported_algorithm"
 
@@ -107,7 +107,7 @@ func VerifySigningKey(ctx context.Context, client SigningClient, resourceName st
 		return failedVerify(ReasonForError(err), "", err)
 	}
 
-	// The stored algorithm drives how Gram advertises and signs with this key, so
+	// The stored algorithm drives how Speakeasy advertises and signs with this key, so
 	// a mismatch is fatal even though the key itself is perfectly healthy: signing
 	// RS256 with an RSA-PSS key mints tokens no verifier accepts.
 	if public.Algorithm != want {

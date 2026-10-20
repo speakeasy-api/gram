@@ -10,41 +10,75 @@ import (
 )
 
 type AssistantRuntime struct {
-	ID                  uuid.UUID
-	AssistantThreadID   uuid.UUID
-	AssistantID         uuid.UUID
-	ProjectID           uuid.UUID
-	Backend             string
-	State               string
-	WarmUntil           pgtype.Timestamptz
-	LeaseOwner          pgtype.Text
-	LastHeartbeatAt     pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	AssistantThreadID uuid.UUID
+	// @access: confidential
+	AssistantID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Backend string
+	// @access: confidential
+	State string
+	// @access: confidential
+	WarmUntil pgtype.Timestamptz
+	// @access: confidential
+	LeaseOwner pgtype.Text
+	// @access: confidential
+	LastHeartbeatAt pgtype.Timestamptz
+	// @access: restricted
 	BackendMetadataJson []byte
-	EndedAt             pgtype.Timestamptz
-	RuntimeVersion      int16
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	Deleted             bool
-	Ended               bool
+	// @access: confidential
+	EndedAt pgtype.Timestamptz
+	// @access: confidential
+	RuntimeVersion int16
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+	// @access: confidential
+	Ended bool
 }
 
 type AssistantThreadEvent struct {
-	ID                    uuid.UUID
-	AssistantThreadID     uuid.UUID
-	AssistantID           uuid.UUID
-	ProjectID             uuid.UUID
-	TriggerInstanceID     uuid.NullUUID
-	EventID               string
-	CorrelationID         string
-	Status                string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	AssistantThreadID uuid.UUID
+	// @access: confidential
+	AssistantID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	TriggerInstanceID uuid.NullUUID
+	// @access: confidential
+	EventID string
+	// @access: restricted
+	CorrelationID string
+	// @access: confidential
+	Status string
+	// @access: opaque-restricted
 	NormalizedPayloadJson []byte
-	SourcePayloadJson     []byte
-	Attempts              int64
-	LastError             pgtype.Text
-	ProcessedAt           pgtype.Timestamptz
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
+	// @access: opaque-restricted
+	SourcePayloadJson []byte
+	// @access: confidential
+	Attempts int64
+	// @access: opaque-restricted
+	LastError pgtype.Text
+	// @access: confidential
+	ProcessedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getGcpSetupInfo externalCredentials
  *
  * @remarks
- * Report what the customer must grant in their own GCP project before Gram can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
+ * Report what the customer must grant in their own GCP project before Speakeasy can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
  */
 export function externalCredentialsGetGcpSetupInfo(
   client: GramCore,

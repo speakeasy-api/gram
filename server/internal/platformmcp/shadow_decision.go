@@ -130,7 +130,7 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 		return DecideShadowMCPAccessOutput{}, err
 	}
 	normalized := normalizedShadowDecision{ProjectID: project.ID.String(), TargetReference: input.TargetReference, Decision: input.Decision, Rationale: input.Rationale, AudienceReferences: references, ExpectedVersion: input.ExpectedVersion}
-	receipt, err := s.receipts.Execute(ctx, principal, project, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (ShadowDecisionReceiptResult, error) {
+	receipt, err := s.receipts.Execute(ctx, principal, project, input.IdempotencyKey, normalized, s.charge(principal), func(ctx context.Context, tx pgx.Tx) (ShadowDecisionReceiptResult, error) {
 		targetKind, targetKey, err := s.shadow.ResolveTargetReference(principal, project.ID.String(), input.TargetReference)
 		if err != nil {
 			return ShadowDecisionReceiptResult{}, shadowDecisionNotFound()
@@ -200,13 +200,22 @@ func (s *ShadowDecisionService) admit(ctx context.Context, principal Principal, 
 	if err != nil || evaluation != feature.EvaluationEnabled {
 		return shadowDecisionUnavailable(err)
 	}
-	if err := s.budget.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		if errors.Is(err, ErrOperationRateLimited) {
-			return shadowDecisionError("rate_limited", "The Shadow MCP decision rate limit was reached.", err)
-		}
-		return shadowDecisionUnavailable(err)
-	}
 	return nil
+}
+
+// charge returns the budget charge for one decision. The receipt store runs
+// it only when no completed receipt answers the request, and outside any
+// transaction; see executeChargedMutationReceipt.
+func (s *ShadowDecisionService) charge(principal Principal) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := s.budget.AllowConnectionOrOrganization(ctx, principal); err != nil {
+			if errors.Is(err, ErrOperationRateLimited) {
+				return shadowDecisionError("rate_limited", "The Shadow MCP decision rate limit was reached.", err)
+			}
+			return shadowDecisionUnavailable(err)
+		}
+		return nil
+	}
 }
 
 func shadowDecisionAudiences(input []PluginAssignmentSummaryResult) []ShadowDecisionAudience {
@@ -310,13 +319,13 @@ func NewShadowDecisionReceiptStore(db *pgxpool.Pool) *ShadowDecisionReceiptStore
 	return &ShadowDecisionReceiptStore{db: db, now: time.Now}
 }
 
-func (s *ShadowDecisionReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, key string, normalized normalizedShadowDecision, mutate func(context.Context, pgx.Tx) (ShadowDecisionReceiptResult, error)) (OperationReceipt, error) {
+func (s *ShadowDecisionReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, key string, normalized normalizedShadowDecision, charge func(context.Context) error, mutate func(context.Context, pgx.Tx) (ShadowDecisionReceiptResult, error)) (OperationReceipt, error) {
 	payload, err := json.Marshal(normalized)
 	if err != nil {
 		return OperationReceipt{}, shadowDecisionInvalid("The decision input could not be normalized.")
 	}
 	digest := uuid.NewSHA1(uuid.NameSpaceOID, append([]byte(operationDecideShadowMCPAccess), payload...)).String()
-	return executeMutationReceipt(ctx, mutationReceiptExecution[ShadowDecisionReceiptResult]{
+	return executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[ShadowDecisionReceiptResult]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operationDecideShadowMCPAccess,
 		IdempotencyKey: key, InputHash: digest, Label: "shadow access decision",
 		Invalid:     func(error) error { return shadowDecisionInvalid("The decision caller identity is invalid.") },

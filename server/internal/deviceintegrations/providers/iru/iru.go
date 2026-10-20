@@ -1,5 +1,5 @@
 // Package iru implements the Iru (formerly Kandji) inventory-source
-// provider: it pulls the managed-device fleet from an Iru tenant so Gram can
+// provider: it pulls the managed-device fleet from an Iru tenant so Speakeasy can
 // compute agent coverage.
 //
 // Endpoint → permission mapping, for customer docs:

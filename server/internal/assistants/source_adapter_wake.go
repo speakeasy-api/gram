@@ -12,6 +12,8 @@ type wakeSourceRef struct {
 }
 
 type wakeEventPayload struct {
+	IdentityVersion   int    `json:"identity_version,omitempty"`
+	RequesterUserID   string `json:"requester_user_id,omitempty"`
 	FiredAt           string `json:"fired_at"`
 	ScheduledAt       string `json:"scheduled_at,omitempty"`
 	TriggerInstanceID string `json:"trigger_instance_id"`

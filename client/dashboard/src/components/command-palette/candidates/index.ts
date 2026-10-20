@@ -73,6 +73,7 @@ export function useLauncherCandidates({
   // mcp:write-only reader would pass that one and then have the request
   // refused. Named on the project, as the server checks it.
   const canBrowseCatalog = hasScope("project:read", project.id);
+  const canReadAssistants = hasScope("assistant:read", undefined, project.id);
 
   const projectEnabled = enabled && inProject;
 
@@ -93,7 +94,9 @@ export function useLauncherCandidates({
   const plugins = usePluginCandidates({
     enabled: projectEnabled && canListPlugins,
   });
-  const assistants = useAssistantCandidates({ enabled: projectEnabled });
+  const assistants = useAssistantCandidates({
+    enabled: projectEnabled && canReadAssistants,
+  });
   const environments = useEnvironmentCandidates({ enabled: projectEnabled });
   const sources = useSourceCandidates({
     enabled: projectEnabled && canListMcp,
@@ -124,7 +127,7 @@ export function useLauncherCandidates({
       // what you already run should read first and the catalog offer second.
       ...(inProject && canBrowseCatalog ? catalog : []),
       ...(inProject && canListPlugins ? plugins : []),
-      ...projectOnly(assistants),
+      ...(inProject && canReadAssistants ? assistants : []),
       ...projectOnly(environments),
       ...(inProject && canListMcp ? sources : []),
       ...projectOnly(deployments),
@@ -142,6 +145,7 @@ export function useLauncherCandidates({
     canListMcp,
     canListPlugins,
     canBrowseCatalog,
+    canReadAssistants,
     actions,
     recents,
     marketplace,

@@ -126,15 +126,7 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		return nil, err
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	txRepo := repo.New(dbtx)
-
-	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+	params := repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                           projectID,
 		OrganizationID:                      conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:                                payload.Slug,
@@ -170,12 +162,27 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
 		Metadata:                                   nil,
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		MetadataLastError:                          "",
 		MetadataLastErrorUrl:                       "",
-	})
+	}
+	if err := s.preflightCreateDiscoverySlug(ctx, logger, &params); err != nil {
+		return nil, err
+	}
+	s.recordCreateDiscovery(ctx, logger, tunnelID, &params, time.Now())
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, params)
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) || isGlobalRemoteSessionIssuerSlugConflict(err) {
 			return nil, oops.E(oops.CodeConflict, err, "an issuer with this slug already exists").LogError(ctx, logger)
@@ -291,7 +298,14 @@ func (s *Service) GetIssuer(ctx context.Context, payload *orgissuersgen.GetIssue
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
 	}
 
-	return mv.BuildRemoteSessionIssuerView(issuer), nil
+	view := mv.BuildRemoteSessionIssuerView(issuer)
+	if vendor, err := NormalizeVendorIssuer(issuer.Issuer); err == nil {
+		view.EmaProviders, err = s.emaProvidersView(ctx, logger, repo.New(s.db), authCtx.ActiveOrganizationID, vendor)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return view, nil
 }
 
 // GetIssuerDeletePreflight returns the authoritative impact of deleting an
@@ -586,6 +600,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              payload.ScopeOverride,
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
 		Oidc:                                       conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                                conv.PtrToPGBool(payload.Passthrough),
@@ -602,6 +617,10 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ProjectID.UUID, issuerID); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := requireIssuerTokenEndpointForSelfClients(ctx, logger, txRepo, updated); err != nil {
+		return nil, err
 	}
 
 	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {

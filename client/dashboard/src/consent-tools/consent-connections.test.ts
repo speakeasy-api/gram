@@ -26,7 +26,7 @@ function page(withProvider = true, initialize = true) {
     <form id="approve" data-approve-form><input name="state" value="state-a"><input name="csrf_token" value="csrf-a">
       <button type="submit" data-self-label="Give access" data-agent-label="Authorize agent" data-consent-self-ready="true">Give access</button>
     </form>
-    <div data-service-connections data-action-url="/x/mcp/example/connect/remote-session">
+    <div data-service-connections data-action-url="/mcp/example/connect/remote-session">
       <li data-remote-client="client-a" data-remote-display="Example provider">
         <span>Example provider</span><span data-account-identity>Connected</span>
         <div data-agent-access hidden></div>
@@ -308,7 +308,7 @@ describe("consent agent connections", () => {
     expect(document.body.textContent).toContain(
       "not available for authorization",
     );
-    expect(document.body.textContent).not.toContain("Sign in to Gram");
+    expect(document.body.textContent).not.toContain("Sign in to Speakeasy");
   });
 });
 
@@ -545,5 +545,83 @@ describe("consent actor picker", () => {
     page(false);
     expect(element("[data-agent-picker]").hidden).toBe(false);
     expect(formData().getAll("agent_id")).toEqual(["agent-b"]);
+  });
+});
+
+describe("identity chaining checks", () => {
+  function chainedPage() {
+    document.body.innerHTML = `
+      <div data-service-connections data-action-url="/mcp/example/connect/remote-session">
+        ${["client-a", "client-b"]
+          .map(
+            (id) => `
+          <li data-remote-client="${id}">
+            <input name="state" value="state-a"><input name="csrf_token" value="csrf-a">
+            <span data-card-status data-identity-chained data-chain-check="pending">Managed by your identity provider</span>
+            <button type="button" data-connect-fallback>Use a separate sign-in instead</button>
+          </li>`,
+          )
+          .join("")}
+      </div>`;
+    const rejected = vi.fn<() => void>();
+    document.addEventListener("gram:consent-chain-rejected", () => {
+      rejected();
+    });
+    runInNewContext(script, {
+      window,
+      document,
+      sessionStorage,
+      URLSearchParams,
+      CustomEvent,
+      fetch: fetchMock,
+    });
+    return rejected;
+  }
+  function chainCheck(id: string) {
+    return document.querySelector(
+      `[data-remote-client="${id}"] [data-chain-check]`,
+    )!;
+  }
+
+  afterEach(() => {
+    document.documentElement.removeAttribute("data-consent-chain-rejected");
+  });
+
+  it("signals the island when one chained service is refused", async () => {
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      const clientID = (init.body as URLSearchParams).get("client_id");
+      return clientID === "client-a"
+        ? reply({ status: "rejected", message: "Refused." })
+        : reply({ status: "connected", message: "Connected" });
+    });
+    const rejected = chainedPage();
+    await waitFor(() => {
+      expect(chainCheck("client-a").getAttribute("data-chain-check")).toBe(
+        "rejected",
+      );
+      expect(chainCheck("client-b").getAttribute("data-chain-check")).toBe(
+        "connected",
+      );
+    });
+    expect(
+      document.documentElement.getAttribute("data-consent-chain-rejected"),
+    ).toBe("true");
+    expect(rejected).toHaveBeenCalled();
+  });
+
+  it("does not signal when chained services connect", async () => {
+    fetchMock.mockResolvedValue(
+      reply({ status: "connected", message: "Connected" }),
+    );
+    const rejected = chainedPage();
+    await waitFor(() =>
+      expect(chainCheck("client-b").getAttribute("data-chain-check")).toBe(
+        "connected",
+      ),
+    );
+    expect(
+      document.documentElement.hasAttribute("data-consent-chain-rejected"),
+    ).toBe(false);
+    expect(rejected).not.toHaveBeenCalled();
   });
 });

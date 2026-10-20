@@ -10,33 +10,56 @@ import (
 )
 
 type AwsKmsKey struct {
-	ExternalKeyID        uuid.UUID
+	// @access: confidential
+	ExternalKeyID uuid.UUID
+	// @access: confidential
 	ExternalKeysProvider string
-	KeyArn               string
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	// @access: restricted
+	KeyArn string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type ExternalKey struct {
-	ID                           uuid.UUID
-	OrganizationID               pgtype.Text
-	ProjectID                    uuid.NullUUID
-	ExternalCredentialID         uuid.UUID
-	Provider                     string
-	Algorithm                    string
-	Name                         string
-	CustomerGrantReference       pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	ExternalCredentialID uuid.UUID
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	Algorithm string
+	// @access: confidential
+	Name string
+	// @access: restricted
+	CustomerGrantReference pgtype.Text
+	// @access: confidential
 	IdentityProviderConnectionID uuid.NullUUID
-	CreatedAt                    pgtype.Timestamptz
-	UpdatedAt                    pgtype.Timestamptz
-	DeletedAt                    pgtype.Timestamptz
-	Deleted                      bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type GcpKmsKey struct {
-	ExternalKeyID        uuid.UUID
+	// @access: confidential
+	ExternalKeyID uuid.UUID
+	// @access: confidential
 	ExternalKeysProvider string
-	ResourceName         string
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	// @access: restricted
+	ResourceName string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

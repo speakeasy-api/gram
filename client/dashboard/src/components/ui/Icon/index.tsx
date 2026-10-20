@@ -10,8 +10,9 @@ import { resolveSizeForBreakpoint } from "@/components/ui/lib/responsiveUtils";
 import { IconName } from "./names";
 
 // TODO: Use skeleton
+// A span, not a div: icons render inside inline parents such as Link's span.
 function Skeleton() {
-  return <div />;
+  return <span />;
 }
 
 // Skeleton fallback

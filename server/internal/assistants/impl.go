@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -17,6 +20,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/assistants"
 	srv "github.com/speakeasy-api/gram/server/gen/http/assistants/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -32,13 +36,14 @@ import (
 )
 
 type Service struct {
-	tracer           trace.Tracer
-	logger           *slog.Logger
-	auth             *auth.Auth
-	authz            *authz.Engine
-	core             *ServiceCore
-	signaler         WorkflowSignaler
-	bootstrapLimiter *ratelimit.Limiter
+	tracer                    trace.Tracer
+	logger                    *slog.Logger
+	auth                      *auth.Auth
+	authz                     *authz.Engine
+	core                      *ServiceCore
+	signaler                  WorkflowSignaler
+	bootstrapLimiter          *ratelimit.Limiter
+	bootstrapAggregateLimiter *ratelimit.Limiter
 }
 
 var (
@@ -66,6 +71,9 @@ func NewService(
 		authz:    authzEngine,
 		core:     core,
 		signaler: signaler,
+		bootstrapAggregateLimiter: ratelimit.New(bootstrapStore, "assistant-bootstrap-aggregate",
+			ratelimit.PerMinute(bootstrapAggregateRatePerMin).WithBurst(bootstrapAggregateBurst),
+			ratelimit.WithMetrics(meterProvider)),
 		bootstrapLimiter: ratelimit.New(bootstrapStore, "assistant-bootstrap",
 			ratelimit.PerMinute(bootstrapRatePerMin).WithBurst(bootstrapRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
@@ -99,16 +107,29 @@ func (s *Service) ListAssistants(ctx context.Context, _ *gen.ListAssistantsPaylo
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
 	items, err := s.core.ListAssistants(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list assistants").LogError(ctx, s.logger)
 	}
 
-	result := &gen.ListAssistantsResult{Assistants: make([]*types.Assistant, 0, len(items))}
+	checks := make([]authz.Check, len(items))
+	for i, item := range items {
+		checks[i] = authz.AssistantCheck(authz.ScopeAssistantRead, item.ID.String(), authCtx.ProjectID.String())
+	}
+	allowedIDs, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[string]struct{}, len(allowedIDs))
+	for _, id := range allowedIDs {
+		allowed[id] = struct{}{}
+	}
+
+	result := &gen.ListAssistantsResult{Assistants: make([]*types.Assistant, 0, len(allowedIDs))}
 	for _, item := range items {
+		if _, ok := allowed[item.ID.String()]; !ok {
+			continue
+		}
 		view, err := toHTTPAssistant(item)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
@@ -123,12 +144,12 @@ func (s *Service) GetAssistant(ctx context.Context, payload *gen.GetAssistantPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
 	assistantID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantRead, assistantID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
 	}
 
 	record, err := s.core.GetAssistant(ctx, *authCtx.ProjectID, assistantID)
@@ -147,11 +168,15 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "create assistant requires a user identity").LogError(ctx, s.logger)
+	}
+	canEnableMCP, err := s.requireAttachmentAccess(ctx, *authCtx.ProjectID, payload.Toolsets, payload.McpServers)
+	if err != nil {
+		return nil, err
 	}
 	record, err := s.core.CreateAssistant(
 		ctx,
@@ -166,6 +191,8 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 		normalizeWarmTTLSeconds(payload.WarmTTLSeconds),
 		normalizeMaxConcurrency(payload.MaxConcurrency),
 		conv.PtrValOrEmpty(payload.Status, StatusActive),
+		true,
+		canEnableMCP,
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "create assistant")
@@ -183,14 +210,18 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
 	assistantID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
+	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, assistantID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
 
+	canEnableMCP, err := s.requireAttachmentAccess(ctx, *authCtx.ProjectID, payload.Toolsets, payload.McpServers)
+	if err != nil {
+		return nil, err
+	}
 	record, err := s.core.UpdateAssistant(
 		ctx,
 		*authCtx.ProjectID,
@@ -203,6 +234,7 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 		payload.WarmTTLSeconds,
 		payload.MaxConcurrency,
 		payload.Status,
+		canEnableMCP,
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "update assistant")
@@ -219,12 +251,12 @@ func (s *Service) DeleteAssistant(ctx context.Context, payload *gen.DeleteAssist
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return err
-	}
 	assistantID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, assistantID.String(), authCtx.ProjectID.String())); err != nil {
+		return err
 	}
 	if authCtx.UserID == "" {
 		return oops.E(oops.CodeUnauthorized, nil, "deleting an assistant requires a user identity")
@@ -240,9 +272,11 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	// Sending a message is gated on project:read: it does not mutate project
-	// configuration, and viewers must be able to talk to a project's assistants.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	assistantID, err := uuid.Parse(payload.AssistantID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantRead, assistantID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 	if len(payload.SkillIds) > 0 {
@@ -253,11 +287,6 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	// Messages are sent as the calling user, so a user identity is required.
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "sending a message requires a user identity").LogError(ctx, s.logger)
-	}
-
-	assistantID, err := uuid.Parse(payload.AssistantID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
 
 	// chat_id names the conversation to continue; omit it to start a new one (the
@@ -357,21 +386,19 @@ func (s *Service) InterruptTurn(ctx context.Context, payload *gen.InterruptTurnP
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+	assistantID, err := uuid.Parse(payload.AssistantID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
+	}
 	// Gated exactly like sendMessage: stopping a reply you started is part of
-	// talking to an assistant, not a configuration change, so a viewer who can
-	// send must be able to stop.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	// talking to an assistant, so a caller who can send must be able to stop.
+	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantRead, assistantID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 	// Chat ownership is per user, so a stop needs the same user identity the
 	// send carried.
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "stopping a turn requires a user identity").LogError(ctx, s.logger)
-	}
-
-	assistantID, err := uuid.Parse(payload.AssistantID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
 	chatID, err := uuid.Parse(payload.ChatID)
 	if err != nil {
@@ -401,16 +428,15 @@ func (s *Service) GetManagedAssistant(ctx context.Context, _ *gen.GetManagedAssi
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
 	record, err := s.core.GetManagedAssistant(ctx, *authCtx.ProjectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "project assistant not provisioned")
 		}
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "get project assistant")
+	}
+	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantRead, record.ID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
 	}
 	view, err := toHTTPAssistant(record)
 	if err != nil {
@@ -424,7 +450,7 @@ func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManag
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 	// Provisioning records the creating user, so a user identity is required.
@@ -432,7 +458,7 @@ func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManag
 		return nil, oops.E(oops.CodeUnauthorized, nil, "the project assistant requires a user identity").LogError(ctx, s.logger)
 	}
 
-	record, err := s.core.EnableManagedAssistant(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)
+	record, err := s.core.EnableManagedAssistant(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, true)
 	if err != nil {
 		if errors.Is(err, ErrManagedAssistantNameTaken) {
 			return nil, oops.E(oops.CodeConflict, err, "an assistant with the project assistant's name already exists — rename it to enable the built-in assistant").LogError(ctx, s.logger)
@@ -445,6 +471,44 @@ func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManag
 		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
 	}
 	return view, nil
+}
+
+// requireAttachmentAccess requires mcp:connect on every toolset and MCP server
+// a write attaches, so an assistant grant cannot widen the MCP servers an
+// assistant reaches beyond what the caller could connect to. It returns which
+// of them the caller may turn MCP on for (mcp:write); the write decides under
+// its row locks whether that is needed.
+func (s *Service) requireAttachmentAccess(ctx context.Context, projectID uuid.UUID, toolsets []*types.AssistantToolsetRef, mcpServers []*types.AssistantMCPServerRef) (func(uuid.UUID) bool, error) {
+	ids, err := s.core.AttachmentTargetIDs(ctx, projectID, toolsets, mcpServers)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve assistant attachments").LogError(ctx, s.logger)
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	connectChecks := make([]authz.Check, len(ids))
+	writeChecks := make([]authz.Check, len(ids))
+	for i, id := range ids {
+		connectChecks[i] = authz.MCPCheck(authz.ScopeMCPConnect, id.String(), projectID.String())
+		writeChecks[i] = authz.MCPCheck(authz.ScopeMCPWrite, id.String(), projectID.String())
+	}
+	if err := s.authz.Require(ctx, connectChecks...); err != nil {
+		return nil, err
+	}
+	writable, err := s.authz.Filter(ctx, writeChecks)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[uuid.UUID]struct{}, len(writable))
+	for _, id := range writable {
+		if parsed, parseErr := uuid.Parse(id); parseErr == nil {
+			allowed[parsed] = struct{}{}
+		}
+	}
+	return func(id uuid.UUID) bool {
+		_, ok := allowed[id]
+		return ok
+	}, nil
 }
 
 func (s *Service) Kind() string {
@@ -466,7 +530,7 @@ func (s *Service) Dispatch(ctx context.Context, task bgtriggers.Task) error {
 }
 
 // startRuntimeWarmup eagerly boots the assistant's runtime so the first turn
-// doesn't pay the Fly cold-start cost. It rides the standard turn machinery:
+// doesn't pay the runtime cold-start cost. It rides the standard turn machinery:
 // an event-less warmup thread reserves the runtime row, and its thread
 // workflow runs Ensure, coordinator kicks and the warm window exactly as a
 // turn would. Best-effort: a failure here never fails the request — the
@@ -499,12 +563,62 @@ func (s *Service) startRuntimeWarmup(ctx context.Context, record assistantRecord
 }
 
 func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error, message string) error {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == pgerrcode.UniqueViolation {
+		switch pgErr.ConstraintName {
+		case "agents_organization_name_key":
+			return oops.E(oops.CodeConflict, err, "an agent already uses this name").LogWarn(ctx, logger)
+		case "assistant_agent_bindings_live_agent_key":
+			return oops.E(oops.CodeConflict, err, "this agent already backs another assistant").LogWarn(ctx, logger)
+		}
+	}
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, assistantidentity.ErrNotFound):
 		return oops.E(oops.CodeNotFound, err, "%s", message).LogError(ctx, logger)
+	case errors.Is(err, assistantidentity.ErrInvalidIdentity):
+		return oops.E(oops.CodeConflict, err, "%s", message).LogWarn(ctx, logger)
+	case errors.Is(err, assistantidentity.ErrAgentUnauthorized):
+		return oops.E(oops.CodeForbidden, err, "%s", message).LogWarn(ctx, logger)
+	case errors.Is(err, assistantidentity.ErrActorIneligible):
+		return oops.E(oops.CodeUnauthorized, err, "%s", message).LogWarn(ctx, logger)
+	case errors.Is(err, errMCPEnableForbidden):
+		return oops.E(oops.CodeForbidden, err, "%s", errMCPEnableForbidden.Error()).LogWarn(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
 		return oops.E(oops.CodeBadRequest, err, "%s", message).LogError(ctx, logger)
 	default:
 		return oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, logger)
 	}
+}
+
+func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.UpgradeAssistantIdentityPayload) (*types.Assistant, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "upgrade assistant identity requires a user identity").LogWarn(ctx, s.logger)
+	}
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id")
+	}
+	params := assistantidentity.ProvisionParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, AssistantID: id, ActorUserID: authCtx.UserID, AgentID: uuid.Nil, AgentName: strings.TrimSpace(conv.PtrValOr(payload.AgentName, ""))}
+	if payload.AgentID != nil {
+		if params.AgentName != "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "agent_id and agent_name cannot be combined")
+		}
+		params.AgentID, err = uuid.Parse(*payload.AgentID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid agent id")
+		}
+	} else if payload.AgentName != nil && params.AgentName == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "agent_name cannot be blank")
+	}
+	record, err := s.core.UpgradeAssistantIdentity(ctx, params)
+	if err != nil {
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "upgrade assistant identity")
+	}
+	return toHTTPAssistant(record)
 }

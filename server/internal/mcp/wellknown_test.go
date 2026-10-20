@@ -3,8 +3,7 @@
 // end-to-end. Resolution tries mcp_endpoints → mcp_servers first and falls
 // back to the legacy toolsets.mcp_slug lookup, so these tests exercise the
 // full per-backend dispatch matrix on the resolved path (remote / toolset /
-// issuer-gated) plus the legacy slug fallback — mirroring the /x/mcp
-// coverage in xmcp/wellknown_test.go, but with metadata URLs rooted at
+// issuer-gated) plus the legacy slug fallback, with metadata URLs rooted at
 // /mcp/{slug}.
 //
 // The low-level response writers these handlers share
@@ -181,7 +180,7 @@ func TestHandleGetAuthorizationServer_ToolsetBackendWithExternalOAuth(t *testing
 	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
 
 	// External OAuth toolsets re-serve the upstream provider's captured
-	// metadata, but the issuer is rewritten to the Gram resource URL so the
+	// metadata, but the issuer is rewritten to the Speakeasy resource URL so the
 	// document satisfies RFC 8414 §3.3 (served issuer must equal the URL the
 	// client fetched it under, i.e. the /mcp/{slug} surface). The upstream's
 	// own authorization/token endpoints are preserved verbatim.
@@ -194,7 +193,7 @@ func TestHandleGetAuthorizationServer_ToolsetBackendWithExternalOAuth(t *testing
 
 // TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend is the primary
 // regression for AGE-2624: an issuer-gated remote-backed mcp_server
-// addressed at /mcp/{slug} now serves Gram-hosted RFC 8414 metadata
+// addressed at /mcp/{slug} now serves Speakeasy-hosted RFC 8414 metadata
 // (previously 404). The advertised issuer + endpoint URLs are rooted at
 // /mcp/{slug}, matching the resource_metadata URL ServePublic advertises.
 func TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend(t *testing.T) {

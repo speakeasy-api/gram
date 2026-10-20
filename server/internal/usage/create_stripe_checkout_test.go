@@ -62,6 +62,7 @@ type checkoutStripeClient struct {
 	expiredCheckoutIDs       []string
 	checkoutState            *stripeclient.CheckoutSessionState
 	checkoutGetErr           error
+	beforeCheckoutRead       func() error
 	subscriptionState        *stripeclient.SubscriptionState
 	subscriptionReadError    error
 	subscriptionUpdateError  error
@@ -162,11 +163,23 @@ func (c *checkoutStripeClient) ExpireCheckoutSession(_ context.Context, id strin
 }
 
 func (c *checkoutStripeClient) GetCheckoutSession(_ context.Context, id string) (*stripeclient.CheckoutSessionState, error) {
+	if c.beforeCheckoutRead != nil {
+		if err := c.beforeCheckoutRead(); err != nil {
+			return nil, err
+		}
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.checkoutGetErr != nil {
 		return nil, c.checkoutGetErr
+	}
+	if c.checkoutState == nil {
+		for _, result := range c.checkoutResults {
+			if result.id == id {
+				return &stripeclient.CheckoutSessionState{Partner: nil, ID: id, Status: "open", CustomerID: result.input.CustomerID, SubscriptionID: "", SubscriptionCustomerID: "", SubscriptionStatus: "", BillingCycleAnchor: time.Time{}}, nil
+			}
+		}
 	}
 	if c.checkoutState == nil || c.checkoutState.ID != id {
 		return nil, errors.New("checkout session not found")
@@ -245,6 +258,10 @@ func (c *checkoutStripeClient) FindCreditNote(context.Context, stripeclient.Find
 
 func (c *checkoutStripeClient) VerifyWebhook([]byte, string) (*stripeclient.WebhookEvent, error) {
 	return nil, errors.New("not implemented")
+}
+
+func (c *checkoutStripeClient) ResolveGatewayPromotionCode(context.Context, string) (string, error) {
+	return "", errors.New("promotion resolution is not used by billing")
 }
 
 func (c *checkoutStripeClient) Catalog() stripeclient.Catalog {
@@ -840,7 +857,8 @@ func TestExpireLifecycleStaleCheckoutSessionAcceptsConcurrentExpiration(t *testi
 	}
 	ti.stripe.expireCheckoutError = errors.New("already expired")
 	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
-		ID: "cs_stale", Status: "expired", CustomerID: "cus_test",
+		Partner: nil,
+		ID:      "cs_stale", Status: "expired", CustomerID: "cus_test",
 	}
 
 	replaceKey, err := ti.service.expireLifecycleStaleCheckoutSession(
@@ -1216,6 +1234,7 @@ func TestCreateStripeCheckoutRotatesExpiredLegacyConvertedTrialReceipt(t *testin
 	now := originalIntent.expiresAt.Add(time.Second)
 	ti.service.now = func() time.Time { return now }
 	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
+		Partner:    nil,
 		ID:         "cs_1",
 		Status:     "expired",
 		CustomerID: "cus_test",
@@ -1256,22 +1275,23 @@ func TestCreateStripeCheckoutStartsImmediatelyWhenTrialDemoted(t *testing.T) {
 	require.Nil(t, checkouts[0].TrialEnd)
 }
 
-func TestCreateStripeCheckoutRejectsTrialUnderStripeMinimum(t *testing.T) {
+func TestCreateStripeCheckoutStartsPaygWhenTrialAtStripeMinimum(t *testing.T) {
 	t.Parallel()
 
 	ti := newStripeCheckoutTestInstance(t)
+	now := time.Date(2026, time.October, 5, 0, 0, 0, 0, time.UTC)
+	ti.service.now = func() time.Time { return now }
 	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
 		OrganizationID: ti.orgID,
 		Tier:           "enterprise",
-		EndsAt:         pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		EndsAt:         pgtype.Timestamptz{Time: now.Add(48 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 	}))
 
 	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeConflict)
-	uniqueCustomers, _, checkouts := ti.stripe.snapshot()
-	require.Zero(t, uniqueCustomers)
-	require.Empty(t, checkouts)
+	require.NoError(t, err)
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 1)
+	require.Nil(t, checkouts[0].TrialEnd)
 }
 
 func TestCreateStripeCheckoutReusesStoredCustomer(t *testing.T) {
@@ -1468,6 +1488,7 @@ func TestCreateStripeCheckoutDoesNotRotateCompletedExpiredSession(t *testing.T) 
 	ti := newStripeCheckoutTestInstance(t)
 	oldIntent := seedExpiredCheckoutSession(t, ti, "cs_completed")
 	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
+		Partner:        nil,
 		ID:             "cs_completed",
 		Status:         "complete",
 		CustomerID:     "cus_test",
@@ -1492,6 +1513,7 @@ func TestCreateStripeCheckoutRotatesStripeConfirmedExpiredSession(t *testing.T) 
 	ti := newStripeCheckoutTestInstance(t)
 	oldIntent := seedExpiredCheckoutSession(t, ti, "cs_expired")
 	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
+		Partner:    nil,
 		ID:         "cs_expired",
 		Status:     "expired",
 		CustomerID: "cus_test",

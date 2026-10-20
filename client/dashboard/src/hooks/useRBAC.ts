@@ -8,12 +8,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * Mirrors the server-side ResourceKindForScope in authz/selector.go.
  */
 export function resourceKindForScope(scope: string): string {
-  if (scope.startsWith("project:") || scope.startsWith("plugin:"))
+  if (
+    scope.startsWith("project:") ||
+    scope.startsWith("plugin:") ||
+    scope.startsWith("log:")
+  )
     return "project";
   if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
   if (scope.startsWith("org:")) return "org";
   if (scope.startsWith("environment:")) return "environment";
   if (scope.startsWith("skill:")) return "skill";
+  if (scope.startsWith("assistant:")) return "assistant";
   if (scope.startsWith("risk_policy:")) return "risk_policy";
   if (scope.startsWith("chat:")) return "chat";
   if (scope.startsWith("agent:")) return "agent";
@@ -76,6 +81,8 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   "plugin:write": ["plugin:blocked_write"],
   "skill:read": ["skill:blocked_read"],
   "skill:write": ["skill:blocked_write", "skill:blocked_read"],
+  "assistant:read": ["assistant:blocked_read"],
+  "assistant:write": ["assistant:blocked_write", "assistant:blocked_read"],
   "risk_policy:evaluate": ["risk_policy:bypass"],
 };
 
@@ -262,7 +269,10 @@ function useRBACImpl() {
   }, [data?.grants]);
 
   /**
-   * Check if the user has a given scope, optionally scoped to a resource ID.
+   * Check if the user has a given scope, optionally scoped to a resource ID
+   * and the project that resource belongs to. Passing `projectId` lets
+   * project-wide grants (`{ resourceId: "*", projectId }`) cover the resource
+   * and keeps grants for other projects from matching.
    *
    * Uses exclusion-wins semantics: matching internal exclusion grants (and
    * legacy deny-effect grants) override matching allow grants.
@@ -272,10 +282,10 @@ function useRBACImpl() {
    * - A grant with `selectors: [...]` means the scope is constrained by selectors.
    */
   const hasScope = useCallback(
-    (scope: Scope, resourceId?: string): boolean => {
+    (scope: Scope, resourceId?: string, projectId?: string): boolean => {
       if (!grants) return false;
 
-      return hasScopeInGrants(grants, scope, resourceId);
+      return hasScopeInGrants(grants, scope, resourceId, projectId);
     },
     [grants],
   );
@@ -284,8 +294,8 @@ function useRBACImpl() {
    * Check multiple scopes at once. Returns true if the user has ALL of them.
    */
   const hasAllScopes = useCallback(
-    (scopes: Scope[], resourceId?: string): boolean => {
-      return scopes.every((scope) => hasScope(scope, resourceId));
+    (scopes: Scope[], resourceId?: string, projectId?: string): boolean => {
+      return scopes.every((scope) => hasScope(scope, resourceId, projectId));
     },
     [hasScope],
   );
@@ -294,8 +304,8 @@ function useRBACImpl() {
    * Check multiple scopes at once. Returns true if the user has ANY of them.
    */
   const hasAnyScope = useCallback(
-    (scopes: Scope[], resourceId?: string): boolean => {
-      return scopes.some((scope) => hasScope(scope, resourceId));
+    (scopes: Scope[], resourceId?: string, projectId?: string): boolean => {
+      return scopes.some((scope) => hasScope(scope, resourceId, projectId));
     },
     [hasScope],
   );

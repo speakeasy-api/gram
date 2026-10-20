@@ -16,7 +16,7 @@ import (
 // TestLogin_AuthorizeCodeIsRedeemableAtAuthenticate covers the handoff that
 // makes non-interactive login work, and that no single package owns: the
 // OAuth 2.1 /authorize leg mints a code, and the WorkOS-shaped
-// /user_management/authenticate leg redeems it. The Gram server drives login
+// /user_management/authenticate leg redeems it. The Speakeasy server drives login
 // through the WorkOS user-management SDK, so it never touches the OAuth token
 // endpoint — if these two legs disagree about which codes they speak,
 // dashboard login breaks with everything still passing its own unit tests.

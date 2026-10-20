@@ -1,8 +1,11 @@
 package remotemcp
 
 import (
+	"context"
 	"log/slog"
+	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -16,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -37,6 +41,7 @@ import (
 type proxyBuildOptions struct {
 	recordIdentityCoverage bool
 	metaMCPServerID        string
+	headerPolicy           proxy.HeaderPolicy
 }
 
 // BuildOption customizes one proxy without changing the defaults used by
@@ -61,9 +66,18 @@ func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 	}}
 }
 
+// WithHeaderPolicy selects how configured and copied client headers are
+// filtered. Without it the proxy uses [proxy.HeaderPolicyRemote].
+func WithHeaderPolicy(policy proxy.HeaderPolicy) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.headerPolicy = policy
+	}}
+}
+
 type ProxyManager struct {
 	logger         *slog.Logger
 	tracer         trace.Tracer
+	db             *pgxpool.Pool
 	guardianPolicy *guardian.Policy
 	authz          *authz.Engine
 	posthog        *posthog.Posthog
@@ -76,7 +90,7 @@ type ProxyManager struct {
 	killswitchCheckpoint *mcptoolexecution.Checkpoint
 
 	// requestOTELCounterInterceptor emits the shared per-request census
-	// counter (mcp.request) for the remote- and tunnel-backed /x/mcp traffic,
+	// counter (mcp.request) for the remote- and tunnel-backed /mcp traffic,
 	// which never reaches the mcp package's dispatch where the hosted and
 	// platform surfaces emit it.
 	requestOTELCounterInterceptor *RequestOTELCounterInterceptor
@@ -93,6 +107,14 @@ type ProxyManager struct {
 	// annotation grants: the list interceptor records the rows each session
 	// was shown, the call interceptor matches against them.
 	witnessStore *toolfilter.SessionToolWitnessStore
+
+	challengeScopes *challengeScopesState
+	// afterChallengeScopes runs when a challenge-scope observation is handled; tests only.
+	afterChallengeScopes func()
+
+	// protectedResources keeps each proxied server's protected resource row
+	// fresh; shared with the login path so one replica has one writer.
+	protectedResources *protectedresource.Prober
 }
 
 // NewProxyManager wires the MCP-aware proxy stack with its dependencies.
@@ -115,14 +137,19 @@ func NewProxyManager(
 	witnessStore *toolfilter.SessionToolWitnessStore,
 	killswitchCheckpoint *mcptoolexecution.Checkpoint,
 	scanEvaluator *mcpriskscan.Evaluator,
+	protectedResources *protectedresource.Prober,
 ) *ProxyManager {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotemcp")
 	mcpMetrics := NewProxyMetrics(meter, logger)
+	if protectedResources == nil {
+		protectedResources = protectedresource.NewProber(db, guardianPolicy)
+	}
 
 	return &ProxyManager{
 		logger:                                logger,
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
+		db:                                    db,
 		guardianPolicy:                        guardianPolicy,
 		authz:                                 authzEngine,
 		posthog:                               posthogClient,
@@ -140,6 +167,9 @@ func NewProxyManager(
 		resourcesReadUsageTrackingInterceptor: NewResourcesReadUsageTrackingInterceptor(billingTracker, logger),
 		platformMCPSelectedUseRecorder:        platformMCPSelectedUseRecorder,
 		witnessStore:                          witnessStore,
+		challengeScopes:                       newChallengeScopesState(),
+		afterChallengeScopes:                  nil,
+		protectedResources:                    protectedResources,
 	}
 }
 
@@ -193,12 +223,22 @@ func (f *ProxyManager) Build(
 		})
 	}
 
-	return f.BuildTarget(logger, proxy.ServerIdentity{
+	p := f.BuildTarget(logger, proxy.ServerIdentity{
 		RemoteMCPServerID:   server.ID.String(),
 		TunneledMCPServerID: "",
 		McpServerID:         mcpServerID,
 		MetaMCPServerID:     "",
 	}, server.Url, configured, visibility, organizationID, projectID, upstreamAuth, wwwAuthenticate, selection, options...)
+
+	// The server's URL is the resource identifier its protected resource row is keyed by.
+	if parsedProjectID, err := uuid.Parse(projectID); err == nil && f.db != nil {
+		p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
+			f.protectedResources.ProbeOnUse(ctx, logger, parsedProjectID, organizationID, server.Url)
+			f.observeChallengeScopes(ctx, logger, parsedProjectID, server.Url, resp.StatusCode, resp.Header.Values("WWW-Authenticate"))
+			return nil
+		}
+	}
+	return p
 }
 
 func (f *ProxyManager) BuildTarget(
@@ -214,7 +254,7 @@ func (f *ProxyManager) BuildTarget(
 	selection *toolfilter.SessionSelection,
 	buildOptions ...BuildOption,
 ) *proxy.Proxy {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: ""}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -245,7 +285,7 @@ func (f *ProxyManager) BuildTarget(
 	// have no grants to consult.
 	//
 	// The x-gram-toolset-id strip is attached unconditionally — public AND
-	// private — because the property is Gram's own envelope rather than
+	// private — because the property is Speakeasy's own envelope rather than
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
 	toolsCallPreForwardInterceptors := []proxy.ToolsCallRequestInterceptor(nil)
@@ -323,7 +363,7 @@ func (f *ProxyManager) BuildTarget(
 		interceptors.NewFigma(upstreamURL, logger),
 	}
 
-	usageTracking := f.toolsCallUsageTrackingInterceptor
+	usageTracking := f.toolsCallUsageTrackingInterceptor.WithMCPServerID(identity.McpServerID)
 	if identity.MetaMCPServerID != "" {
 		usageTracking = usageTracking.WithMetaMCPServerID(identity.MetaMCPServerID)
 	}
@@ -348,6 +388,7 @@ func (f *ProxyManager) BuildTarget(
 		Identity:                    identity,
 		RemoteURL:                   upstreamURL,
 		Headers:                     headers,
+		HeaderPolicy:                options.headerPolicy,
 		AuthorizationOverride:       upstreamAuth,
 		CallerAssertion:             nil,
 		UpstreamResponseRetryer:     nil,
@@ -375,7 +416,7 @@ func (f *ProxyManager) BuildTarget(
 			f.resourcesReadUsageLimitsInterceptor,
 		},
 		ResourcesReadResponseInterceptors: []proxy.ResourcesReadResponseInterceptor{
-			f.resourcesReadUsageTrackingInterceptor,
+			f.resourcesReadUsageTrackingInterceptor.WithMCPServerID(identity.McpServerID),
 		},
 		ResourcesListRequestInterceptors:  nil,
 		ResourcesListResponseInterceptors: nil,

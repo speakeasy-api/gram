@@ -106,30 +106,6 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		return oops.E(oops.CodeUnexpected, err, "load assistant chat").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	// Concurrent compaction posts for the same chat must serialize so they
-	// don't both land at the same max+1 generation. A row-level lock on
-	// chats.id is the cheapest fence available here: it blocks racing
-	// compactions for this chat without affecting any other chat or any
-	// non-locking reader, and the lock releases on COMMIT/ROLLBACK.
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").LogError(ctx, s.logger, logAttrs...)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	if _, err := tx.Exec(ctx, "SELECT 1 FROM chats WHERE id = $1 FOR UPDATE", threadRow.ChatID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock chat for compaction").LogError(ctx, s.logger, logAttrs...)
-	}
-
-	currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{
-		ChatID:    threadRow.ChatID,
-		ProjectID: projectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load chat generation").LogError(ctx, s.logger, logAttrs...)
-	}
-	nextGen := currentGen + 1
-
 	writes := make([]chat.MessageWrite, 0, len(messages))
 	for _, m := range messages {
 		toolCallsJSON, err := encodeRuntimeToolCalls(m.ToolCalls)
@@ -164,7 +140,7 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 				IpAddress:        empty,
 				Source:           conv.ToPGText(compactionMessageSource),
 				ContentHash:      nil,
-				Generation:       nextGen,
+				Generation:       0,
 			},
 			BillingUserID:  conv.FromPGTextOrEmpty[string](chatRow.UserID),
 			AssistantID:    principalAssistantID,
@@ -177,6 +153,21 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		})
 	}
 
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").LogError(ctx, s.logger, logAttrs...)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	if _, err := tx.Exec(ctx, "SELECT 1 FROM chats WHERE id = $1 FOR UPDATE", threadRow.ChatID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock chat for compaction").LogError(ctx, s.logger, logAttrs...)
+	}
+	currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{ChatID: threadRow.ChatID, ProjectID: projectID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load chat generation").LogError(ctx, s.logger, logAttrs...)
+	}
+	for i := range writes {
+		writes[i].Params.Generation = currentGen + 1
+	}
 	n, err := s.chatWriter.WriteInTx(ctx, tx, writes)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "write compacted chat messages").LogError(ctx, s.logger, logAttrs...)

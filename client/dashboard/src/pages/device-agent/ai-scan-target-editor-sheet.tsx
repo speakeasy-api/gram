@@ -154,7 +154,7 @@ function SignatureField({
  * CimdDocumentsField collects the documents a target publishes — the only
  * thing a block can be enforced on.
  *
- * Two ways into the same box: paste the JSON, which works for a vendor Gram
+ * Two ways into the same box: paste the JSON, which works for a vendor Speakeasy
  * cannot reach, or fetch it from its URL through the endpoint that owns the
  * SSRF policy and rate limit. Only the client_id is stored; a document's
  * client_id equals the URL it is served from, so the two are one fact.
@@ -286,7 +286,7 @@ function CimdDocumentsField({
             <Text small className="font-medium">
               {probed.verified
                 ? `Fetched${probed.clientName ? `: ${probed.clientName}` : ""}`
-                : "Gram could not use this document"}
+                : "Speakeasy could not use this document"}
             </Text>
             <Text muted small className="text-xs">
               {probed.detail}
@@ -316,10 +316,10 @@ function CimdDocumentsField({
         </div>
       </div>
       <FieldDescription>
-        Paste the document, or fetch it from its URL. Gram stores its client_id,
-        which a document must set to the URL it is served from. A tool that
-        publishes no document cannot be blocked at the gateway, and the
-        inventory leaves it unreviewed.
+        Paste the document, or fetch it from its URL. Speakeasy stores its
+        client_id, which a document must set to the URL it is served from. A
+        tool that publishes no document cannot be blocked at the gateway, and
+        the inventory leaves it unreviewed.
       </FieldDescription>
       <FieldError>{problem ?? error}</FieldError>
     </Field>
@@ -544,7 +544,7 @@ function EditorForm({
                 onChange={(value) => update("processNames", value)}
               />
 
-              {/* A harness and an assistant both reach Gram's MCP gateway.
+              {/* A harness and an assistant both reach Speakeasy's MCP gateway.
                   An open model runtime is software on a laptop and nothing
                   else, so there is no caller to recognise and the whole block
                   is hidden. */}

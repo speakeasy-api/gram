@@ -117,3 +117,50 @@ func TestNewOrganizationDefaultHost(t *testing.T) {
 	})
 	require.Equal(t, stored("https://ai.example.com"), resolver.NewOrganizationDefaultHost())
 }
+
+func TestStoredPlatformHost(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		defaultHost pgtype.Text
+		wantServer  string
+		wantSite    string
+		wantOK      bool
+	}{
+		{name: "null", defaultHost: pgtype.Text{String: "", Valid: false}},
+		{name: "extra platform host", defaultHost: stored("https://APP.example.com"), wantServer: "https://app.example.com", wantSite: "https://app.example.com", wantOK: true},
+		{name: "server host", defaultHost: stored("https://ai.example.com"), wantServer: "https://ai.example.com", wantSite: "https://dashboard.ai.example.com", wantOK: true},
+		{name: "host no longer a platform host", defaultHost: stored("https://retired.example.com")},
+		{name: "malformed", defaultHost: stored("https://app.example.com/path")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			serverURL, siteURL, ok := newResolver(t, "https://app.example.com").StoredPlatformHost(tt.defaultHost)
+			require.Equal(t, tt.wantOK, ok)
+			if !tt.wantOK {
+				require.Nil(t, serverURL)
+				require.Nil(t, siteURL)
+				return
+			}
+			require.Equal(t, tt.wantServer, serverURL.String())
+			require.Equal(t, tt.wantSite, siteURL.String())
+		})
+	}
+}
+
+func TestStoredPlatformHostServerHostWithoutSiteURL(t *testing.T) {
+	t.Parallel()
+
+	resolver := orghost.New(orghost.Config{
+		ServerURL:                  mustParse(t, "https://ai.example.com"),
+		SiteURL:                    nil,
+		PlatformHosts:              nil,
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	})
+	_, _, ok := resolver.StoredPlatformHost(stored("https://ai.example.com"))
+	require.False(t, ok)
+}

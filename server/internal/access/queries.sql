@@ -6,7 +6,6 @@
 SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND COALESCE(effect, 'allow') = 'allow'
   AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
 ORDER BY principal_urn, scope;
 
@@ -16,7 +15,6 @@ ORDER BY principal_urn, scope;
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND COALESCE(effect, 'allow') = 'allow'
   AND principal_urn = ANY(@principal_urns::text[]);
 
 -- name: ListPrincipalGrantsByResource :many
@@ -24,7 +22,6 @@ WHERE organization_id = @organization_id
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = @scope
   AND selectors @> jsonb_build_object(
     'resource_kind', sqlc.arg(resource_kind)::text,
@@ -40,7 +37,6 @@ ORDER BY principal_urn;
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = @scope
   AND selectors @> jsonb_build_object(
     'resource_kind', sqlc.arg(resource_kind)::text
@@ -50,25 +46,20 @@ ORDER BY principal_urn;
 
 -- name: UpsertPrincipalGrant :one
 -- Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
--- any legacy effect is normalized to the allow-only NULL representation.
+-- the existing row is kept and its updated_at is bumped.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
 DO UPDATE SET
-  effect = NULL,
   updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at;
 
 -- name: InsertPrincipalGrantIfAbsent :execrows
--- Creates a single grant row, leaves existing allow rows untouched, and converts
--- a conflicting legacy effect row to the allow-only NULL representation.
+-- Creates a single grant row and leaves an existing identical row untouched.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
-DO UPDATE SET
-  effect = NULL,
-  updated_at = clock_timestamp()
-WHERE principal_grants.effect IS NOT NULL;
+DO NOTHING;
 
 -- name: DeletePrincipalGrant :execrows
 -- Removes a specific grant row by ID, scoped to the organization for safety.
@@ -1033,6 +1024,52 @@ SELECT project_id FROM (
 ) AS owning
 LIMIT 1;
 
+-- name: FindMCPResourceVisibility :one
+-- Resolves who may connect to one MCP resource without an access rule, as the
+-- same three-valued visibility mcp_servers stores: 'public' endpoints skip the
+-- connect check, 'private' ones enforce it, and 'disabled' ones serve nobody.
+-- A gateway toolset is public when its MCP endpoint is, and serves nobody
+-- while its MCP endpoint is switched off. A hosted wrapper can share its
+-- toolset's id; when either row serves nobody, nobody can connect, so
+-- 'disabled' wins, and otherwise the wrapper's own visibility does. A gateway
+-- (meta server) is reported as such: it has no connect check of its own, each
+-- member server is checked instead. Resources are found by the same
+-- identifiers and tenancy rules as FindMCPResourceProject.
+SELECT resource_type, visibility FROM (
+  SELECT
+    'toolset'::text AS resource_type,
+    (CASE
+      WHEN NOT toolsets.mcp_enabled THEN 'disabled'
+      WHEN toolsets.mcp_is_public THEN 'public'
+      ELSE 'private'
+    END)::text AS visibility,
+    2 AS source_rank
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = @organization_id
+    AND toolsets.id = sqlc.arg(resource_id)::uuid
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT 'mcp_server'::text AS resource_type, mcp_servers.visibility::text AS visibility, 1 AS source_rank
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND mcp_servers.id = sqlc.arg(resource_id)::uuid
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT 'gateway'::text AS resource_type, meta_mcp_servers.visibility::text AS visibility, 0 AS source_rank
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND meta_mcp_servers.id = sqlc.arg(resource_id)::uuid
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+ORDER BY (visibility = 'disabled') DESC, source_rank
+LIMIT 1;
+
 -- name: LockResourceAudience :exec
 -- Serializes audience saves for one resource, so the version check and the
 -- replacement that follows it cannot interleave with another administrator's.
@@ -1061,7 +1098,6 @@ WITH user_grants AS (
     (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = @organization_id
-    AND COALESCE(pg.effect, 'allow') = 'allow'
     AND pg.principal_urn = ANY(@principal_urns::text[])
     AND pg.scope IN (
       'mcp:connect', 'mcp:read', 'mcp:write',
@@ -1140,7 +1176,6 @@ WITH user_grants AS (
     (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = @organization_id
-    AND COALESCE(pg.effect, 'allow') = 'allow'
     AND pg.principal_urn = ANY(@principal_urns::text[])
     AND pg.scope IN (
       'skill:read', 'skill:write',
@@ -1405,6 +1440,62 @@ FROM (
 ) AS roles
 ORDER BY source_rank, sort_key;
 
+-- name: ListUserDirectoryRoleMappingSources :many
+-- The directory role mappings that currently give a member each of their
+-- mapped roles: one row per matching mapping, so a role reached through two
+-- groups is listed twice. The profile and matching rules are the same as the
+-- mapped half of ListUserRolePrincipals, which decides the roles themselves;
+-- this read only says where they came from.
+WITH member AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  WHERE u.id = sqlc.arg(user_id)::text
+),
+profile AS (
+  SELECT d.id, d.attributes
+  FROM directory_users AS d
+  CROSS JOIN member
+  WHERE d.organization_id = @organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = member.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(member.email)))
+  ORDER BY (d.user_id = member.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+)
+SELECT
+  drm.role_urn::text AS role_urn,
+  drm.source_kind,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value
+FROM directory_role_mappings AS drm
+CROSS JOIN profile
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE drm.organization_id = @organization_id
+  AND drm.deleted IS FALSE
+  AND (
+    (
+      drm.source_kind = 'group'
+      AND dg.id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM directory_user_group_memberships AS m
+        WHERE m.directory_user_id = profile.id
+          AND m.directory_group_id = drm.directory_group_id
+          AND m.deleted IS FALSE
+      )
+    )
+    OR (
+      drm.source_kind = 'attribute'
+      AND profile.attributes ->> drm.attribute_key = drm.attribute_value
+    )
+  )
+ORDER BY drm.role_urn, drm.source_kind, dg.name, drm.attribute_key, drm.attribute_value, drm.id;
+
 -- name: ListDirectoryMappedRoleMemberCounts :many
 -- Per role, the active members who hold it only through a directory role
 -- mapping. Members with a live direct assignment of the same role are left
@@ -1490,7 +1581,7 @@ WHERE drm.organization_id = @organization_id
   AND drm.deleted IS FALSE
 ORDER BY drm.source_kind, dg.name, drm.attribute_key, drm.attribute_value, drm.id;
 
--- name: UpsertDirectoryGroupRoleMapping :one
+-- name: InsertDirectoryGroupRoleMapping :one
 INSERT INTO directory_role_mappings (
   organization_id,
   source_kind,
@@ -1503,14 +1594,9 @@ VALUES (
   @directory_group_id,
   @role_urn
 )
-ON CONFLICT (organization_id, directory_group_id)
-  WHERE deleted IS FALSE AND directory_group_id IS NOT NULL
-DO UPDATE SET
-  role_urn = EXCLUDED.role_urn,
-  updated_at = clock_timestamp()
 RETURNING id, role_urn, created_at, updated_at;
 
--- name: UpsertDirectoryAttributeRoleMapping :one
+-- name: InsertDirectoryAttributeRoleMapping :one
 INSERT INTO directory_role_mappings (
   organization_id,
   source_kind,
@@ -1525,17 +1611,10 @@ VALUES (
   @attribute_value,
   @role_urn
 )
-ON CONFLICT (organization_id, attribute_key, attribute_value)
-  WHERE deleted IS FALSE AND attribute_key IS NOT NULL
-DO UPDATE SET
-  role_urn = EXCLUDED.role_urn,
-  updated_at = clock_timestamp()
 RETURNING id, role_urn, created_at, updated_at;
 
--- name: GetLiveDirectoryRoleMappingRoleForSource :one
--- The role a group or attribute value is mapped to now, locked so a
--- concurrent set cannot slip between this read and the upsert.
-SELECT role_urn
+-- name: ListLiveDirectoryRoleMappingsForSource :many
+SELECT id, role_urn, created_at, updated_at
 FROM directory_role_mappings
 WHERE organization_id = @organization_id
   AND deleted IS FALSE
@@ -1547,7 +1626,38 @@ WHERE organization_id = @organization_id
       AND attribute_value = sqlc.narg('attribute_value')::text
     )
   )
+ORDER BY role_urn
 FOR UPDATE;
+
+-- name: ListLiveDirectoryMappingRoles :many
+WITH live_global_roles AS (
+  SELECT ('role:global:' || id::text)::text AS role_urn
+  FROM global_roles
+  WHERE ('role:global:' || id::text) = ANY(@role_urns::text[])
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  ORDER BY id
+  FOR SHARE
+), live_organization_roles AS (
+  SELECT ('role:organization:' || id::text)::text AS role_urn
+  FROM organization_roles
+  WHERE organization_id = @organization_id
+    AND ('role:organization:' || id::text) = ANY(@role_urns::text[])
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  ORDER BY id
+  FOR SHARE
+)
+SELECT role_urn FROM live_global_roles
+UNION ALL
+SELECT role_urn FROM live_organization_roles;
+
+-- name: GetDirectoryRoleMappingGroupSource :one
+SELECT name, deleted, workos_deleted
+FROM directory_groups
+WHERE id = @id
+  AND organization_id = @organization_id
+FOR SHARE;
 
 -- name: GetActiveDirectoryGroupName :one
 SELECT name
@@ -1563,6 +1673,42 @@ FROM directory_role_mappings
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: CheckDirectoryRoleInventoryOperator :one
+SELECT id FROM users
+WHERE id = @id AND admin IS TRUE AND deleted_at IS NULL
+FOR SHARE;
+
+-- name: GetDirectoryRoleInventoryOrganization :one
+SELECT workos_id FROM organization_metadata
+WHERE id = @id AND disabled_at IS NULL
+FOR SHARE;
+
+-- name: ListDirectoryRoleInventoryRoles :many
+SELECT workos_slug::text AS role_slug, ('role:organization:' || id::text)::text AS role_urn
+FROM organization_roles
+WHERE organization_id = @organization_id AND deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_slug = ANY(@role_slugs::text[])
+UNION ALL
+SELECT workos_slug::text AS role_slug, ('role:global:' || id::text)::text AS role_urn
+FROM global_roles
+WHERE deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_slug = ANY(@role_slugs::text[])
+ORDER BY role_slug, role_urn;
+
+-- name: ListDirectoryRoleInventoryGroups :many
+SELECT id, workos_directory_group_id
+FROM directory_groups
+WHERE organization_id = @organization_id AND deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_directory_group_id = ANY(@workos_group_ids::text[])
+ORDER BY id;
+
+-- name: ListDirectoryRoleInventoryMembers :many
+SELECT u.id
+FROM organization_user_relationships AS m
+JOIN users AS u ON u.id = m.user_id AND u.deleted_at IS NULL
+WHERE m.organization_id = @organization_id AND m.deleted IS FALSE
+ORDER BY u.id;
 
 -- name: DeleteDirectoryRoleMapping :execrows
 UPDATE directory_role_mappings

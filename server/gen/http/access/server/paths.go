@@ -47,6 +47,11 @@ func SetDirectoryRoleMappingAccessPath() string {
 	return "/rpc/access.setDirectoryRoleMapping"
 }
 
+// SetDirectoryRoleMappingsAccessPath returns the URL path to the access service setDirectoryRoleMappings HTTP endpoint.
+func SetDirectoryRoleMappingsAccessPath() string {
+	return "/rpc/access.setDirectoryRoleMappings"
+}
+
 // DeleteDirectoryRoleMappingAccessPath returns the URL path to the access service deleteDirectoryRoleMapping HTTP endpoint.
 func DeleteDirectoryRoleMappingAccessPath() string {
 	return "/rpc/access.deleteDirectoryRoleMapping"
@@ -135,6 +140,11 @@ func SetResourceAudienceAccessPath() string {
 // ListAudienceOptionsAccessPath returns the URL path to the access service listAudienceOptions HTTP endpoint.
 func ListAudienceOptionsAccessPath() string {
 	return "/rpc/access.listAudienceOptions"
+}
+
+// ExplainResourceAccessAccessPath returns the URL path to the access service explainResourceAccess HTTP endpoint.
+func ExplainResourceAccessAccessPath() string {
+	return "/rpc/access.explainResourceAccess"
 }
 
 // RequestAccessAccessPath returns the URL path to the access service requestAccess HTTP endpoint.

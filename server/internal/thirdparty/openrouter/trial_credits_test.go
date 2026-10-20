@@ -309,3 +309,46 @@ func TestGetCreditsUsed_ZeroKeyLimitReportsUncapped(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, reported, "a key with no provider ceiling must report no cap")
 }
+
+// TestGetCreditsUsed_DisabledKeyReadsThroughProvisioningKey covers a key that
+// was turned off upstream. OpenRouter refuses that key's own credentials, so
+// its usage must come from the management endpoint or the billing page fails.
+func TestGetCreditsUsed_DisabledKeyReadsThroughProvisioningKey(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	fixture := newTrialCapFixture(t)
+
+	ciphertext, err := fixture.provisioner.enc.Encrypt([]byte("sk-or-disabled"))
+	require.NoError(t, err)
+	_, err = repo.New(fixture.conn).CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: fixture.orgID,
+		KeyType:        string(KeyTypeChat),
+		KeyEncrypted:   conv.ToPGText(ciphertext),
+		KeyHash:        "hash-disabled",
+		MonthlyCredits: 100,
+	})
+	require.NoError(t, err)
+	require.NoError(t, repo.New(fixture.conn).DisableOpenRouterAPIKey(ctx, repo.DisableOpenRouterAPIKeyParams{
+		OrganizationID: fixture.orgID,
+		KeyType:        string(KeyTypeChat),
+	}))
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodGet || req.URL.Path != "/v1/keys/hash-disabled" || req.Header.Get("Authorization") != "Bearer provisioning-key" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"limit": 100.0, "usage_monthly": 100.004},
+		})
+	}))
+	t.Cleanup(upstream.Close)
+	fixture.provisioner.baseURL = upstream.URL
+
+	used, limit, err := fixture.provisioner.GetCreditsUsed(ctx, fixture.orgID, KeyTypeChat)
+	require.NoError(t, err)
+	require.InDelta(t, 100.0, used, 0.001)
+	require.Equal(t, 100, limit)
+}

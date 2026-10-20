@@ -2,13 +2,14 @@
 // inline scripts. Loaded by consent_template.html via a content-hashed
 // <script src>.
 //
-// Two jobs:
+// Main jobs:
 //
 //   1. Neutralise double-clicks on the consent controls. A second activation
 //      while the first request is still pending sends the user to an authn
 //      challenge that has already been consumed, producing "authn challenge
 //      state not found or expired" (AIS-103).
 //   2. Fan the page-level auto-refresh choice out to every card.
+//   3. Check identity-chained cards' exchanges in the background.
 //
 // Connect deliberately stays a full-page form POST. Running it in a popup kept
 // the page's state through the provider round trip, but handed the provider a
@@ -39,6 +40,35 @@
     window.setTimeout(function () {
       window.location.reload();
     }, 2000);
+  }
+
+  // A gateway's server list keeps the open state the person left it in, so
+  // a Connect from the list, which leaves for the provider and comes back,
+  // returns to the list rather than to its collapsed summary.
+  var gatewayList = document.querySelector("details[data-gateway-list]");
+  if (gatewayList) {
+    var listKey =
+      "consent-gateway-list:" + gatewayList.getAttribute("data-state");
+    try {
+      var remembered = window.sessionStorage.getItem(listKey);
+      if (remembered === "open") {
+        gatewayList.open = true;
+      } else if (remembered === "closed") {
+        gatewayList.open = false;
+      }
+    } catch (_) {
+      // Storage can be unavailable; the server's default stands.
+    }
+    gatewayList.addEventListener("toggle", function () {
+      try {
+        window.sessionStorage.setItem(
+          listKey,
+          gatewayList.open ? "open" : "closed",
+        );
+      } catch (_) {
+        // Storage can be unavailable; nothing to remember then.
+      }
+    });
   }
 
   // Replace an element's contents with a spinner + label.
@@ -82,6 +112,31 @@
     var connectionRevision = 0;
     var activeConnectionAgent = "";
     var savedAgentKey = "gram-consent-agent-v1:" + form.elements.state.value;
+    var discoverySelect = document.querySelector(
+      'select[name="discovery_mode"]',
+    );
+    var discoveryKey = "gram-consent-discovery-v1:" + form.elements.state.value;
+    if (discoverySelect) {
+      try {
+        var savedMode = sessionStorage.getItem(discoveryKey);
+        if (
+          savedMode === "" ||
+          savedMode === "direct" ||
+          savedMode === "progressive"
+        ) {
+          discoverySelect.value = savedMode;
+        }
+      } catch (_) {
+        /* Storage can be unavailable. */
+      }
+      discoverySelect.addEventListener("change", function () {
+        try {
+          sessionStorage.setItem(discoveryKey, discoverySelect.value);
+        } catch (_) {
+          /* The current form still submits the selected mode. */
+        }
+      });
+    }
     // This is UI state only. The server reauthorizes every selection and write.
     // sessionStorage survives a full-page upstream OAuth round trip in this tab.
     try {
@@ -364,6 +419,12 @@
         Array.prototype.forEach.call(selfOnlySections, function (section) {
           section.hidden = authorizingAgent;
         });
+        var discoveryMode = document.querySelector(
+          'select[name="discovery_mode"]',
+        );
+        if (discoveryMode) {
+          discoveryMode.disabled = authorizingAgent;
+        }
         if (subjectDisplay) {
           subjectDisplay.textContent = selectedDisplay || "Choose an agent";
         }
@@ -468,6 +529,102 @@
   guardActionButtons("button[data-connect-link]", "Connecting…");
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
   guardActionButtons("button[data-validate-link]", "Checking…");
+
+  // Identity-chained cards render neutral, so they read right without script.
+  // Check each exchange in the background and settle the card in place; any
+  // failure keeps the neutral copy and the separate sign-in fallback.
+  var connectedSummary = document.querySelector("[data-connected-summary]");
+  var chainActionURL = (function () {
+    var services = document.querySelector("[data-service-connections]");
+    return services ? services.getAttribute("data-action-url") : "";
+  })();
+
+  function settleChainCheck(status, card, result) {
+    var state = result ? result.status : "";
+    if (state !== "connected" && state !== "rejected") {
+      state = "unknown";
+    }
+    status.setAttribute("data-chain-check", state);
+    if (state === "connected") {
+      status.className = "text-xs text-default-success";
+      status.textContent = "Service connected through your identity provider";
+      if (connectedSummary) {
+        var count =
+          Number(connectedSummary.getAttribute("data-connected-count")) + 1;
+        connectedSummary.setAttribute("data-connected-count", String(count));
+        connectedSummary.textContent =
+          count +
+          " of " +
+          connectedSummary.getAttribute("data-connected-total") +
+          " connected";
+      }
+      return;
+    }
+    if (state === "rejected") {
+      status.className = "text-xs text-default-warning";
+      status.textContent =
+        result.message ||
+        "Your identity provider sign-in wasn't accepted. Use a separate sign-in.";
+      var fallback = card.querySelector("button[data-connect-fallback]");
+      if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
+        fallback.className =
+          "bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm";
+        fallback.removeAttribute("data-connect-fallback");
+        fallback.textContent = "Connect";
+      }
+      signalChainRejected();
+      return;
+    }
+    status.className = "text-xs text-muted-foreground";
+    status.textContent = "Managed by your identity provider";
+  }
+
+  // Tells the tool access island that a chained service was refused. The
+  // island defers its inventory only when every service is chain-only, and
+  // on such a page each chained card serves the upstream the inventory
+  // needs, so one refusal means the tools can't load after approval either.
+  // Signing in separately reloads the page with that service connected,
+  // which the server no longer renders as deferred.
+  function signalChainRejected() {
+    document.documentElement.setAttribute(
+      "data-consent-chain-rejected",
+      "true",
+    );
+    document.dispatchEvent(new CustomEvent("gram:consent-chain-rejected"));
+  }
+
+  var chainChecks = document.querySelectorAll('[data-chain-check="pending"]');
+  Array.prototype.forEach.call(chainChecks, function (status) {
+    var card = status.closest("[data-remote-client]");
+    var state = card && card.querySelector('input[name="state"]');
+    var csrf = card && card.querySelector('input[name="csrf_token"]');
+    if (!chainActionURL || !state || !csrf) {
+      return;
+    }
+    showPending(status, "Connecting through your identity provider…");
+    fetch(chainActionURL, {
+      method: "POST",
+      credentials: "same-origin",
+      body: new URLSearchParams({
+        state: state.value,
+        csrf_token: csrf.value,
+        action: "identity_chaining_check",
+        client_id: card.getAttribute("data-remote-client"),
+      }),
+      headers: { Accept: "application/json" },
+    })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(
+        function (result) {
+          settleChainCheck(status, card, result);
+        },
+        function () {
+          settleChainCheck(status, card, null);
+        },
+      );
+  });
 
   // Session length is stated on the summary line so it is visible without
   // opening the configuration disclosure; keep the two in step when the

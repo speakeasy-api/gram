@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package fixture.open;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/internal/storagefixture/pb/fixture/open;fixtureopen";
+
+message Archive {
+  option (gcp.pubsub.v1.storage_subscription) = {
+    topic: "fixture.open.Event"
+    bucket: "fixture-archive"
+  };
+}

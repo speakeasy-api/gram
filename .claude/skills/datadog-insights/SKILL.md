@@ -1,13 +1,13 @@
 ---
 name: datadog-insights
-description: Investigate Gram production health and post a digest to Slack
+description: Investigate Speakeasy production health and post a digest to Slack
 ---
 
-# Gram Production Health Digest
+# Speakeasy Production Health Digest
 
-You are producing a health report for Gram's production services. The report must be **actionable** and **visually structured** — critical issues must stand out immediately, tabular data must use code blocks, and every section must be separated by a divider.
+You are producing a health report for Speakeasy's production services. The report must be **actionable** and **visually structured** — critical issues must stand out immediately, tabular data must use code blocks, and every section must be separated by a divider.
 
-**Before starting**: activate the `datadog` skill for Gram service names, MCP tools, and query guidelines.
+**Before starting**: activate the `datadog` skill for Speakeasy service names, MCP tools, and query guidelines.
 
 > ⚠️ **MANDATORY FORMAT RULES — READ BEFORE COMPOSING THE MESSAGE:**
 >
@@ -117,7 +117,7 @@ Report:
 
 ## Step 5: Create a Datadog Notebook
 
-Call `create_datadog_notebook` with name `"Gram Health Digest — <DAY> <DATE>"` (e.g. `"Gram Health Digest — Fri 2026-03-27"`). Use `absolute_time: true` with `start_time` = 24h ago and `end_time` = now. One notebook is created per run — old ones accumulate and can be manually deleted periodically.
+Call `create_datadog_notebook` with name `"Speakeasy Health Digest — <DAY> <DATE>"` (e.g. `"Speakeasy Health Digest — Fri 2026-03-27"`). Use `absolute_time: true` with `start_time` = 24h ago and `end_time` = now. One notebook is created per run — old ones accumulate and can be manually deleted periodically.
 
 The notebook `cells` must be wrapped in `{"cells": [...]}`. Include:
 
@@ -271,7 +271,7 @@ The notebook `cells` must be wrapped in `{"cells": [...]}`. Include:
    }
    ```
 8. **Slow endpoints + top errors markdown table cell** with the real data from Steps 1–4.
-9. **All Gram services error log stream cell** — includes `source:fly` for Gram Functions logs:
+9. **All Speakeasy services error log stream cell** — includes `source:fly` for Speakeasy Functions logs:
    ```json
    {
      "type": "notebook_cells",
@@ -331,7 +331,10 @@ Build a list of Block Kit blocks. The message is structured around the **4 Golde
 ```json
 {
   "type": "header",
-  "text": { "type": "plain_text", "text": "Gram Health Digest — <DAY> <DATE>" }
+  "text": {
+    "type": "plain_text",
+    "text": "Speakeasy Health Digest — <DAY> <DATE>"
+  }
 }
 ```
 
@@ -482,7 +485,7 @@ if not token:
 
 channel = "C0AKLE930BX"  # #gram-datadog-insights — override with channel name if specified in prompt
 
-blocks = []  # replace with actual Block Kit blocks from Step 7 — use f"Gram Health Digest — {digest_date}" in the header block
+blocks = []  # replace with actual Block Kit blocks from Step 7 — use f"Speakeasy Health Digest — {digest_date}" in the header block
 
 def slack_post(payload):
     data = json.dumps(payload).encode()
@@ -497,7 +500,7 @@ def slack_post(payload):
 
 result = slack_post({
     "channel": channel,
-    "text": "Gram Health Digest",
+    "text": "Speakeasy Health Digest",
     "blocks": blocks,
 })
 if not result.get("ok"):

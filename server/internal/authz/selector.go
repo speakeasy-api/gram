@@ -64,7 +64,7 @@ func (s Selector) StrictMatches(check Selector) bool {
 // ResourceKindForScope derives the selector resource kind from a scope.
 func ResourceKindForScope(scope Scope) string {
 	switch scope.Parts().Resource {
-	case "project", "plugin":
+	case "project", "plugin", "log":
 		return ResourceKindProject
 	case "remote-mcp":
 		return ResourceKindMCP
@@ -76,6 +76,8 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindEnvironment
 	case "skill":
 		return ResourceKindSkill
+	case "assistant":
+		return ResourceKindAssistant
 	case "risk_policy":
 		return ResourceKindRiskPolicy
 	case "chat":
@@ -107,7 +109,8 @@ var validDispositions = map[string]bool{
 
 // allowedSelectorKeys defines which extra keys (beyond resource_kind and
 // resource_id) are valid for each scope family. Scope families not listed here
-// allow no extra keys.
+// allow no extra keys, except where scopeAllowsSelectorKey admits one for a
+// single scope.
 var allowedSelectorKeys = map[string]map[string]bool{
 	ResourceKindMCP: {
 		SelectorKeyTool:        true,
@@ -117,17 +120,27 @@ var allowedSelectorKeys = map[string]map[string]bool{
 	ResourceKindEnvironment: {
 		SelectorKeyProjectID: true,
 	},
+	ResourceKindAssistant: {
+		SelectorKeyProjectID: true,
+	},
 	ResourceKindRiskPolicy: {
 		SelectorKeyServerURL:      true,
 		SelectorKeyServerIdentity: true,
 	},
 }
 
+// scopeAllowsSelectorKey allows project_id on org:hooks_ingest only: it is the
+// one org scope checked per project, and elsewhere the key would restrict nothing.
+func scopeAllowsSelectorKey(scope Scope, key string) bool {
+	return scope == ScopeOrgHooksIngest && key == SelectorKeyProjectID
+}
+
 // ValidateSelector checks that a selector is well-formed for the given scope.
 // Rules:
 //   - resource_kind and resource_id must both be present
 //   - resource_kind must match the scope family (or be "*" for root)
-//   - extra keys must be in the allowed set for the scope family
+//   - extra keys must be in the allowed set for the scope family, or one
+//     scopeAllowsSelectorKey admits for the scope itself
 //   - unknown keys are rejected
 func ValidateSelector(scope Scope, sel Selector) error {
 	kind, hasKind := sel[SelectorKeyResourceKind]
@@ -159,7 +172,7 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		if k == SelectorKeyResourceKind || k == SelectorKeyResourceID {
 			continue
 		}
-		if !allowed[k] {
+		if !allowed[k] && !scopeAllowsSelectorKey(scope, k) {
 			return fmt.Errorf("selector key %q is not allowed for scope %q", k, scope)
 		}
 		if k == SelectorKeyDisposition && !validDispositions[v] {

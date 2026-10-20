@@ -103,6 +103,19 @@ type RearmTrialRequestBody struct {
 	Days *int `form:"days,omitempty" json:"days,omitempty" xml:"days,omitempty"`
 }
 
+// RepairInferenceKeyRequestBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP request body.
+type RepairInferenceKeyRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	KeyType        *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
+	// Unique known disable causes to remove.
+	RemoveCauses []string `form:"remove_causes,omitempty" json:"remove_causes,omitempty" xml:"remove_causes,omitempty"`
+	// Exact staff confirmation: I know what I'm doing
+	Confirmation *string `form:"confirmation,omitempty" json:"confirmation,omitempty" xml:"confirmation,omitempty"`
+	// Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
 // SetInferenceKeyMonthlyLimitRequestBody is the type of the "admin" service
 // "setInferenceKeyMonthlyLimit" endpoint HTTP request body.
 type SetInferenceKeyMonthlyLimitRequestBody struct {
@@ -229,6 +242,11 @@ type CreateGlobalIssuerRequestBody struct {
 	// authorize redirect in place of the resolved scope set. Omit or send an empty
 	// array to leave it unset.
 	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit to leave it unset: such a login requests the provider's whole
+	// scopes_supported.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
 	// unset: the parameter is then sent, and a login or refresh the issuer answers
 	// with invalid_target is retried once without it. Set false to never send it.
@@ -321,6 +339,11 @@ type UpdateGlobalIssuerRequestBody struct {
 	// Set or clear the operator-pinned scope request. Omitting the field (or
 	// sending null) leaves the stored value unchanged; an empty array clears it.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit or send null to keep the stored value; false restores the
+	// default.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
 	// field leaves the stored value unchanged.
 	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
@@ -374,6 +397,20 @@ type ChangeTrialEndDateRequestBody struct {
 type UpdateSupportMatrixRequestBody struct {
 	Revision *string                  `form:"revision,omitempty" json:"revision,omitempty" xml:"revision,omitempty"`
 	Draft    *SupportDraftRequestBody `form:"draft,omitempty" json:"draft,omitempty" xml:"draft,omitempty"`
+}
+
+// PreviewExternalMcpMigrationRequestBody is the type of the "admin" service
+// "previewExternalMcpMigration" endpoint HTTP request body.
+type PreviewExternalMcpMigrationRequestBody struct {
+	// Servers to migrate or delete, in order.
+	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+}
+
+// MigrateExternalMcpServersRequestBody is the type of the "admin" service
+// "migrateExternalMcpServers" endpoint HTTP request body.
+type MigrateExternalMcpServersRequestBody struct {
+	// Servers to migrate or delete, in order.
+	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 }
 
 // CreateRegistryEntryRequestBody is the type of the "admin" service
@@ -484,6 +521,24 @@ type AssignOrganizationOnboardingPlaybookRequestBody struct {
 	PlaybookID *string `form:"playbook_id,omitempty" json:"playbook_id,omitempty" xml:"playbook_id,omitempty"`
 }
 
+// CreateSignupOfferRequestBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP request body.
+type CreateSignupOfferRequestBody struct {
+	Name                  *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	StripePromotionCodeID *string `form:"stripe_promotion_code_id,omitempty" json:"stripe_promotion_code_id,omitempty" xml:"stripe_promotion_code_id,omitempty"`
+	SignupFlow            *string `form:"signup_flow,omitempty" json:"signup_flow,omitempty" xml:"signup_flow,omitempty"`
+}
+
+// UpdateSignupOfferRequestBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP request body.
+type UpdateSignupOfferRequestBody struct {
+	Name                  *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	StripePromotionCodeID *string `form:"stripe_promotion_code_id,omitempty" json:"stripe_promotion_code_id,omitempty" xml:"stripe_promotion_code_id,omitempty"`
+	SignupFlow            *string `form:"signup_flow,omitempty" json:"signup_flow,omitempty" xml:"signup_flow,omitempty"`
+	ID                    *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Enabled               *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
 // SetStripeSubscriptionRequestBody is the type of the "admin" service
 // "setStripeSubscription" endpoint HTTP request body.
 type SetStripeSubscriptionRequestBody struct {
@@ -528,7 +583,7 @@ type GetOrganizationFeaturesResponseBody struct {
 	SkillCaptureMetadataOnly bool `form:"skill_capture_metadata_only" json:"skill_capture_metadata_only" xml:"skill_capture_metadata_only"`
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled bool `form:"ai_platform_push_integrations_enabled" json:"ai_platform_push_integrations_enabled" xml:"ai_platform_push_integrations_enabled"`
-	// Whether the organization can use the Gram Platform MCP capability
+	// Whether the organization can use the Speakeasy Platform MCP capability
 	PlatformMcpEnabled bool `form:"platform_mcp_enabled" json:"platform_mcp_enabled" xml:"platform_mcp_enabled"`
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
@@ -540,9 +595,6 @@ type GetOrganizationFeaturesResponseBody struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled bool `form:"remote_session_auto_refresh_enforced_enabled" json:"remote_session_auto_refresh_enforced_enabled" xml:"remote_session_auto_refresh_enforced_enabled"`
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled bool `form:"consent_tool_filtering_enabled" json:"consent_tool_filtering_enabled" xml:"consent_tool_filtering_enabled"`
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -550,8 +602,11 @@ type GetOrganizationFeaturesResponseBody struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled bool `form:"network_ingress_enabled" json:"network_ingress_enabled" xml:"network_ingress_enabled"`
-	// Whether the staff rollout for automatic role plugin setup is enabled
-	AutomaticRoleDistribution bool `form:"automatic_role_distribution" json:"automatic_role_distribution" xml:"automatic_role_distribution"`
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled bool `form:"signals_intelligence_enabled" json:"signals_intelligence_enabled" xml:"signals_intelligence_enabled"`
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled bool `form:"organization_gateway_disabled" json:"organization_gateway_disabled" xml:"organization_gateway_disabled"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -588,7 +643,7 @@ type SetOrganizationFeatureResponseBody struct {
 	SkillCaptureMetadataOnly bool `form:"skill_capture_metadata_only" json:"skill_capture_metadata_only" xml:"skill_capture_metadata_only"`
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled bool `form:"ai_platform_push_integrations_enabled" json:"ai_platform_push_integrations_enabled" xml:"ai_platform_push_integrations_enabled"`
-	// Whether the organization can use the Gram Platform MCP capability
+	// Whether the organization can use the Speakeasy Platform MCP capability
 	PlatformMcpEnabled bool `form:"platform_mcp_enabled" json:"platform_mcp_enabled" xml:"platform_mcp_enabled"`
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
@@ -600,9 +655,6 @@ type SetOrganizationFeatureResponseBody struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled bool `form:"remote_session_auto_refresh_enforced_enabled" json:"remote_session_auto_refresh_enforced_enabled" xml:"remote_session_auto_refresh_enforced_enabled"`
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled bool `form:"consent_tool_filtering_enabled" json:"consent_tool_filtering_enabled" xml:"consent_tool_filtering_enabled"`
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -610,8 +662,11 @@ type SetOrganizationFeatureResponseBody struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled bool `form:"network_ingress_enabled" json:"network_ingress_enabled" xml:"network_ingress_enabled"`
-	// Whether the staff rollout for automatic role plugin setup is enabled
-	AutomaticRoleDistribution bool `form:"automatic_role_distribution" json:"automatic_role_distribution" xml:"automatic_role_distribution"`
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled bool `form:"signals_intelligence_enabled" json:"signals_intelligence_enabled" xml:"signals_intelligence_enabled"`
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled bool `form:"organization_gateway_disabled" json:"organization_gateway_disabled" xml:"organization_gateway_disabled"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -686,7 +741,7 @@ type UpdateOrganizationResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -698,6 +753,14 @@ type UpdateOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -744,7 +807,7 @@ type DisableOrganizationResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -756,6 +819,14 @@ type DisableOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -791,7 +862,7 @@ type EnableOrganizationResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -803,6 +874,14 @@ type EnableOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -838,7 +917,7 @@ type GetOrganizationResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -850,6 +929,14 @@ type GetOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -944,7 +1031,7 @@ type ExtendTrialResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -956,6 +1043,14 @@ type ExtendTrialResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -991,7 +1086,7 @@ type CreateOrganizationResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -1003,6 +1098,14 @@ type CreateOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -1038,7 +1141,7 @@ type RearmTrialResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -1050,6 +1153,14 @@ type RearmTrialResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -1094,6 +1205,13 @@ type GetOrganizationStatsResponseBody struct {
 	Disabled int64 `form:"disabled" json:"disabled" xml:"disabled"`
 	// Organizations disabled in the last 7 days.
 	DisabledLast7Days int64 `form:"disabled_last_7_days" json:"disabled_last_7_days" xml:"disabled_last_7_days"`
+}
+
+// RepairInferenceKeyResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body.
+type RepairInferenceKeyResponseBody struct {
+	Key                   *AdminInferenceKeyRepairStateResponseBody `form:"key" json:"key" xml:"key"`
+	ReconciliationPending bool                                      `form:"reconciliation_pending" json:"reconciliation_pending" xml:"reconciliation_pending"`
 }
 
 // GetInferenceKeysResponseBody is the type of the "admin" service
@@ -1143,7 +1261,7 @@ type SetStripeCustomerResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -1155,6 +1273,14 @@ type SetStripeCustomerResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -1262,8 +1388,8 @@ type CreateGlobalIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	// When Gram last successfully fetched or revalidated the JWK Set. Null until
-	// the first successful refresh.
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
 	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
 	// When the persisted JWK Set becomes stale under the upstream cache policy.
 	// Null until the first successful refresh.
@@ -1325,11 +1451,18 @@ type CreateGlobalIssuerResponseBody struct {
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
 	// redirect in place of the resolved scope set. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetGlobalIssuerDuplicatePreflightResponseBody is the type of the "admin"
@@ -1404,8 +1537,8 @@ type UpdateGlobalIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	// When Gram last successfully fetched or revalidated the JWK Set. Null until
-	// the first successful refresh.
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
 	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
 	// When the persisted JWK Set becomes stale under the upstream cache policy.
 	// Null until the first successful refresh.
@@ -1467,11 +1600,18 @@ type UpdateGlobalIssuerResponseBody struct {
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
 	// redirect in place of the resolved scope set. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // FetchGlobalIssuerMetadataResponseBody is the type of the "admin" service
@@ -1620,7 +1760,7 @@ type MigrateToGlobalIssuerResponseBody struct {
 // UploadPlatformImageResponseBody is the type of the "admin" service
 // "uploadPlatformImage" endpoint HTTP response body.
 type UploadPlatformImageResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset" json:"asset" xml:"asset"`
 }
 
@@ -1633,7 +1773,7 @@ type StartTrialResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -1645,6 +1785,14 @@ type StartTrialResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -1680,7 +1828,7 @@ type ChangeTrialEndDateResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -1692,6 +1840,14 @@ type ChangeTrialEndDateResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -1810,6 +1966,47 @@ type GetMcpServerToolCallsResponseBody struct {
 	BucketSeconds *int64 `form:"bucket_seconds,omitempty" json:"bucket_seconds,omitempty" xml:"bucket_seconds,omitempty"`
 	// Tool calls per bucket, oldest first.
 	Daily []*AdminMcpServerToolCallBucketResponseBody `form:"daily,omitempty" json:"daily,omitempty" xml:"daily,omitempty"`
+}
+
+// GetHookClientsResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body.
+type GetHookClientsResponseBody struct {
+	// Length of the window in days.
+	WindowDays int `form:"window_days" json:"window_days" xml:"window_days"`
+	// When the grids were read from ClickHouse.
+	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
+	// True when the grids came from the one-hour cache rather than a fresh
+	// ClickHouse read.
+	FromCache bool `form:"from_cache" json:"from_cache" xml:"from_cache"`
+	// Every organization that appears in either grid.
+	Organizations []*AdminHookClientOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+	// The hook client grid, new sessions only.
+	Sessions []*AdminHookClientSessionCellResponseBody `form:"sessions" json:"sessions" xml:"sessions"`
+	// The inference hook traffic grid.
+	Inference []*AdminInferenceHookCellResponseBody `form:"inference" json:"inference" xml:"inference"`
+}
+
+// ListExternalMcpMigrationCandidatesResponseBody is the type of the "admin"
+// service "listExternalMcpMigrationCandidates" endpoint HTTP response body.
+type ListExternalMcpMigrationCandidatesResponseBody struct {
+	// Every candidate across all organizations.
+	Candidates []*AdminExternalMcpMigrationCandidateResponseBody `form:"candidates" json:"candidates" xml:"candidates"`
+	// Days of tool calls each candidate's tool_calls covers.
+	ToolCallWindowDays int `form:"tool_call_window_days" json:"tool_call_window_days" xml:"tool_call_window_days"`
+}
+
+// PreviewExternalMcpMigrationResponseBody is the type of the "admin" service
+// "previewExternalMcpMigration" endpoint HTTP response body.
+type PreviewExternalMcpMigrationResponseBody struct {
+	// One outcome per requested server, in request order.
+	Outcomes []*AdminExternalMcpMigrationOutcomeResponseBody `form:"outcomes" json:"outcomes" xml:"outcomes"`
+}
+
+// MigrateExternalMcpServersResponseBody is the type of the "admin" service
+// "migrateExternalMcpServers" endpoint HTTP response body.
+type MigrateExternalMcpServersResponseBody struct {
+	// One outcome per requested server, in request order.
+	Outcomes []*AdminExternalMcpMigrationOutcomeResponseBody `form:"outcomes" json:"outcomes" xml:"outcomes"`
 }
 
 // GetRegistryOktaCandidatesResponseBody is the type of the "admin" service
@@ -2056,6 +2253,36 @@ type AssignOrganizationOnboardingPlaybookResponseBody struct {
 	Applicability []*AdminOnboardingStepApplicabilityResponseBody `form:"applicability" json:"applicability" xml:"applicability"`
 }
 
+// ListSignupOffersResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body.
+type ListSignupOffersResponseBody struct {
+	Offers []*AdminSignupOfferResponseBody `form:"offers" json:"offers" xml:"offers"`
+}
+
+// CreateSignupOfferResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body.
+type CreateSignupOfferResponseBody struct {
+	ID                    string `form:"id" json:"id" xml:"id"`
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
+	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt             string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateSignupOfferResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body.
+type UpdateSignupOfferResponseBody struct {
+	ID                    string `form:"id" json:"id" xml:"id"`
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
+	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt             string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // GetStripeSubscriptionCandidateResponseBody is the type of the "admin"
 // service "getStripeSubscriptionCandidate" endpoint HTTP response body.
 type GetStripeSubscriptionCandidateResponseBody struct {
@@ -2076,7 +2303,7 @@ type SetStripeSubscriptionResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -2088,6 +2315,14 @@ type SetStripeSubscriptionResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -2112,6 +2347,18 @@ type SetStripeSubscriptionResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the organization.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListCustomerUsageResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body.
+type ListCustomerUsageResponseBody struct {
+	Interval     string `form:"interval" json:"interval" xml:"interval"`
+	Currency     string `form:"currency" json:"currency" xml:"currency"`
+	PricingBasis string `form:"pricing_basis" json:"pricing_basis" xml:"pricing_basis"`
+	// Retrieval timestamp used to distinguish current and future buckets
+	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
+	// Every qualifying organization, ordered by name
+	Customers []*AdminCustomerUsageResponseBody `form:"customers" json:"customers" xml:"customers"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -7101,6 +7348,190 @@ type GetOrganizationStatsUnexpectedResponseBody struct {
 // service "getOrganizationStats" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetOrganizationStatsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyUnauthorizedResponseBody is the type of the "admin"
+// service "repairInferenceKey" endpoint HTTP response body for the
+// "unauthorized" error.
+type RepairInferenceKeyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyForbiddenResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "forbidden" error.
+type RepairInferenceKeyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyBadRequestResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "bad_request" error.
+type RepairInferenceKeyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyNotFoundResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "not_found" error.
+type RepairInferenceKeyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyConflictResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "conflict" error.
+type RepairInferenceKeyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyUnsupportedMediaResponseBody is the type of the "admin"
+// service "repairInferenceKey" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RepairInferenceKeyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyInvalidResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "invalid" error.
+type RepairInferenceKeyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyInvariantViolationResponseBody is the type of the "admin"
+// service "repairInferenceKey" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RepairInferenceKeyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyUnexpectedResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "unexpected" error.
+type RepairInferenceKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyGatewayErrorResponseBody is the type of the "admin"
+// service "repairInferenceKey" endpoint HTTP response body for the
+// "gateway_error" error.
+type RepairInferenceKeyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -13457,6 +13888,815 @@ type GetMcpServerToolCallsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetHookClientsUnauthorizedResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "unauthorized" error.
+type GetHookClientsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsForbiddenResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "forbidden" error.
+type GetHookClientsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsBadRequestResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "bad_request" error.
+type GetHookClientsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsNotFoundResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "not_found" error.
+type GetHookClientsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsConflictResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "conflict" error.
+type GetHookClientsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsUnsupportedMediaResponseBody is the type of the "admin"
+// service "getHookClients" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetHookClientsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsInvalidResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "invalid" error.
+type GetHookClientsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsInvariantViolationResponseBody is the type of the "admin"
+// service "getHookClients" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetHookClientsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsUnexpectedResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "unexpected" error.
+type GetHookClientsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHookClientsGatewayErrorResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "gateway_error" error.
+type GetHookClientsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExternalMcpMigrationCandidatesUnavailableResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "unavailable" error.
+type ListExternalMcpMigrationCandidatesUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExternalMcpMigrationCandidatesUnauthorizedResponseBody is the type of
+// the "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListExternalMcpMigrationCandidatesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExternalMcpMigrationCandidatesForbiddenResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "forbidden" error.
+type ListExternalMcpMigrationCandidatesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExternalMcpMigrationCandidatesBadRequestResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "bad_request" error.
+type ListExternalMcpMigrationCandidatesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExternalMcpMigrationCandidatesNotFoundResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "not_found" error.
+type ListExternalMcpMigrationCandidatesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExternalMcpMigrationCandidatesConflictResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "conflict" error.
+type ListExternalMcpMigrationCandidatesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody is the type
+// of the "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExternalMcpMigrationCandidatesInvalidResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "invalid" error.
+type ListExternalMcpMigrationCandidatesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExternalMcpMigrationCandidatesInvariantViolationResponseBody is the type
+// of the "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListExternalMcpMigrationCandidatesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExternalMcpMigrationCandidatesUnexpectedResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "unexpected" error.
+type ListExternalMcpMigrationCandidatesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExternalMcpMigrationCandidatesGatewayErrorResponseBody is the type of
+// the "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListExternalMcpMigrationCandidatesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewExternalMcpMigrationUnavailableResponseBody is the type of the
+// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
+// for the "unavailable" error.
+type PreviewExternalMcpMigrationUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewExternalMcpMigrationUnauthorizedResponseBody is the type of the
+// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
+// for the "unauthorized" error.
+type PreviewExternalMcpMigrationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewExternalMcpMigrationForbiddenResponseBody is the type of the "admin"
+// service "previewExternalMcpMigration" endpoint HTTP response body for the
+// "forbidden" error.
+type PreviewExternalMcpMigrationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewExternalMcpMigrationBadRequestResponseBody is the type of the "admin"
+// service "previewExternalMcpMigration" endpoint HTTP response body for the
+// "bad_request" error.
+type PreviewExternalMcpMigrationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewExternalMcpMigrationNotFoundResponseBody is the type of the "admin"
+// service "previewExternalMcpMigration" endpoint HTTP response body for the
+// "not_found" error.
+type PreviewExternalMcpMigrationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewExternalMcpMigrationConflictResponseBody is the type of the "admin"
+// service "previewExternalMcpMigration" endpoint HTTP response body for the
+// "conflict" error.
+type PreviewExternalMcpMigrationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewExternalMcpMigrationUnsupportedMediaResponseBody is the type of the
+// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
+// for the "unsupported_media" error.
+type PreviewExternalMcpMigrationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewExternalMcpMigrationInvalidResponseBody is the type of the "admin"
+// service "previewExternalMcpMigration" endpoint HTTP response body for the
+// "invalid" error.
+type PreviewExternalMcpMigrationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewExternalMcpMigrationInvariantViolationResponseBody is the type of the
+// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
+// for the "invariant_violation" error.
+type PreviewExternalMcpMigrationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewExternalMcpMigrationUnexpectedResponseBody is the type of the "admin"
+// service "previewExternalMcpMigration" endpoint HTTP response body for the
+// "unexpected" error.
+type PreviewExternalMcpMigrationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewExternalMcpMigrationGatewayErrorResponseBody is the type of the
+// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
+// for the "gateway_error" error.
+type PreviewExternalMcpMigrationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateExternalMcpServersUnavailableResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "unavailable" error.
+type MigrateExternalMcpServersUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateExternalMcpServersUnauthorizedResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "unauthorized" error.
+type MigrateExternalMcpServersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateExternalMcpServersForbiddenResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "forbidden" error.
+type MigrateExternalMcpServersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateExternalMcpServersBadRequestResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "bad_request" error.
+type MigrateExternalMcpServersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateExternalMcpServersNotFoundResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "not_found" error.
+type MigrateExternalMcpServersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateExternalMcpServersConflictResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "conflict" error.
+type MigrateExternalMcpServersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateExternalMcpServersUnsupportedMediaResponseBody is the type of the
+// "admin" service "migrateExternalMcpServers" endpoint HTTP response body for
+// the "unsupported_media" error.
+type MigrateExternalMcpServersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateExternalMcpServersInvalidResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "invalid" error.
+type MigrateExternalMcpServersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateExternalMcpServersInvariantViolationResponseBody is the type of the
+// "admin" service "migrateExternalMcpServers" endpoint HTTP response body for
+// the "invariant_violation" error.
+type MigrateExternalMcpServersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateExternalMcpServersUnexpectedResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "unexpected" error.
+type MigrateExternalMcpServersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateExternalMcpServersGatewayErrorResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "gateway_error" error.
+type MigrateExternalMcpServersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetRegistryOktaCandidatesUnauthorizedResponseBody is the type of the "admin"
 // service "getRegistryOktaCandidates" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -17606,6 +18846,554 @@ type AssignOrganizationOnboardingPlaybookGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListSignupOffersUnauthorizedResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "unauthorized" error.
+type ListSignupOffersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersForbiddenResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "forbidden" error.
+type ListSignupOffersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersBadRequestResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "bad_request" error.
+type ListSignupOffersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersNotFoundResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "not_found" error.
+type ListSignupOffersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersConflictResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "conflict" error.
+type ListSignupOffersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersUnsupportedMediaResponseBody is the type of the "admin"
+// service "listSignupOffers" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSignupOffersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersInvalidResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "invalid" error.
+type ListSignupOffersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersInvariantViolationResponseBody is the type of the "admin"
+// service "listSignupOffers" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSignupOffersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersUnexpectedResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "unexpected" error.
+type ListSignupOffersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersGatewayErrorResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "gateway_error" error.
+type ListSignupOffersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferUnauthorizedResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "unauthorized" error.
+type CreateSignupOfferUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferForbiddenResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "forbidden" error.
+type CreateSignupOfferForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferBadRequestResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "bad_request" error.
+type CreateSignupOfferBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferNotFoundResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "not_found" error.
+type CreateSignupOfferNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferConflictResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "conflict" error.
+type CreateSignupOfferConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferUnsupportedMediaResponseBody is the type of the "admin"
+// service "createSignupOffer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateSignupOfferUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferInvalidResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "invalid" error.
+type CreateSignupOfferInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferInvariantViolationResponseBody is the type of the "admin"
+// service "createSignupOffer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateSignupOfferInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferUnexpectedResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "unexpected" error.
+type CreateSignupOfferUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferGatewayErrorResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "gateway_error"
+// error.
+type CreateSignupOfferGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferUnauthorizedResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "unauthorized" error.
+type UpdateSignupOfferUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferForbiddenResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "forbidden" error.
+type UpdateSignupOfferForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferBadRequestResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "bad_request" error.
+type UpdateSignupOfferBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferNotFoundResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "not_found" error.
+type UpdateSignupOfferNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferConflictResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "conflict" error.
+type UpdateSignupOfferConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferUnsupportedMediaResponseBody is the type of the "admin"
+// service "updateSignupOffer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateSignupOfferUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferInvalidResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "invalid" error.
+type UpdateSignupOfferInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferInvariantViolationResponseBody is the type of the "admin"
+// service "updateSignupOffer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateSignupOfferInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferUnexpectedResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "unexpected" error.
+type UpdateSignupOfferUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferGatewayErrorResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "gateway_error"
+// error.
+type UpdateSignupOfferGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetStripeSubscriptionCandidateUnavailableResponseBody is the type of the
 // "admin" service "getStripeSubscriptionCandidate" endpoint HTTP response body
 // for the "unavailable" error.
@@ -18022,6 +19810,207 @@ type SetStripeSubscriptionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListCustomerUsageUnavailableResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "unavailable" error.
+type ListCustomerUsageUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageUnauthorizedResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "unauthorized" error.
+type ListCustomerUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageForbiddenResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "forbidden" error.
+type ListCustomerUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageBadRequestResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "bad_request" error.
+type ListCustomerUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageNotFoundResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "not_found" error.
+type ListCustomerUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageConflictResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "conflict" error.
+type ListCustomerUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageUnsupportedMediaResponseBody is the type of the "admin"
+// service "listCustomerUsage" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListCustomerUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageInvalidResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "invalid" error.
+type ListCustomerUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageInvariantViolationResponseBody is the type of the "admin"
+// service "listCustomerUsage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListCustomerUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageUnexpectedResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "unexpected" error.
+type ListCustomerUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageGatewayErrorResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListCustomerUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -18125,7 +20114,7 @@ type AdminOrganizationResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -18137,6 +20126,14 @@ type AdminOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -18163,6 +20160,26 @@ type AdminOrganizationResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// AdminInferenceKeyRepairStateResponseBody is used to define fields on
+// response body types.
+type AdminInferenceKeyRepairStateResponseBody struct {
+	KeyType                 string                                `form:"key_type" json:"key_type" xml:"key_type"`
+	MonthlyCredits          int64                                 `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
+	Disabled                bool                                  `form:"disabled" json:"disabled" xml:"disabled"`
+	DisableCauses           []string                              `form:"disable_causes" json:"disable_causes" xml:"disable_causes"`
+	DisableCausesClassified bool                                  `form:"disable_causes_classified" json:"disable_causes_classified" xml:"disable_causes_classified"`
+	CauseDiagnostics        []*AdminInferenceKeyCauseResponseBody `form:"cause_diagnostics" json:"cause_diagnostics" xml:"cause_diagnostics"`
+}
+
+// AdminInferenceKeyCauseResponseBody is used to define fields on response body
+// types.
+type AdminInferenceKeyCauseResponseBody struct {
+	Cause         string  `form:"cause" json:"cause" xml:"cause"`
+	Description   string  `form:"description" json:"description" xml:"description"`
+	Removable     bool    `form:"removable" json:"removable" xml:"removable"`
+	BlockedReason *string `form:"blocked_reason,omitempty" json:"blocked_reason,omitempty" xml:"blocked_reason,omitempty"`
+}
+
 // AdminInferenceKeyResponse is used to define fields on response body types.
 type AdminInferenceKeyResponse struct {
 	KeyType string `form:"key_type" json:"key_type" xml:"key_type"`
@@ -18171,10 +20188,20 @@ type AdminInferenceKeyResponse struct {
 	MonthlyCredits int64   `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
 	Disabled       bool    `form:"disabled" json:"disabled" xml:"disabled"`
 	// Active internal disable causes. Omitted for legacy unclassified rows.
-	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
+	DisableCauses    []string                          `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
+	CauseDiagnostics []*AdminInferenceKeyCauseResponse `form:"cause_diagnostics,omitempty" json:"cause_diagnostics,omitempty" xml:"cause_diagnostics,omitempty"`
 	// Whether disable_causes is classified, including an explicitly empty cause
 	// set.
 	DisableCausesClassified bool `form:"disable_causes_classified" json:"disable_causes_classified" xml:"disable_causes_classified"`
+}
+
+// AdminInferenceKeyCauseResponse is used to define fields on response body
+// types.
+type AdminInferenceKeyCauseResponse struct {
+	Cause         string  `form:"cause" json:"cause" xml:"cause"`
+	Description   string  `form:"description" json:"description" xml:"description"`
+	Removable     bool    `form:"removable" json:"removable" xml:"removable"`
+	BlockedReason *string `form:"blocked_reason,omitempty" json:"blocked_reason,omitempty" xml:"blocked_reason,omitempty"`
 }
 
 // AdminInferenceSpendMonthResponse is used to define fields on response body
@@ -18184,6 +20211,47 @@ type AdminInferenceSpendMonthResponse struct {
 	// Exclusive end of the UTC calendar month.
 	PeriodEnd string `form:"period_end" json:"period_end" xml:"period_end"`
 	SpendUsd  string `form:"spend_usd" json:"spend_usd" xml:"spend_usd"`
+}
+
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
+	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
+	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
+}
+
+// EMAProviderResponseBody is used to define fields on response body types.
+type EMAProviderResponseBody struct {
+	// external or speakeasy.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The external provider's remote session issuer. Omitted for speakeasy, and in
+	// the organization-wide default order, where an external entry stands for each
+	// endpoint's own trusted issuer.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization's internal session issuer, for speakeasy.
+	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's sign-in doesn't go through this provider, so it can't vouch for
+	// people there: an external issuer other than the sign-in's trusted issuer, or
+	// Speakeasy on a sign-in federated through an external issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// When the vendor last accepted an assertion from this provider anywhere in
+	// the organization, so the vendor already trusts it, from cached credentials
+	// that still hold an access token. Attributed to the exact issuer that
+	// vouched; the organization-wide default's external entry takes the newest
+	// acceptance of any external issuer. Set on every response that returns an
+	// order; omitted when the vendor has never accepted it, when acceptance could
+	// not be read, or on readEMA when the caller lacks org:read.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
@@ -18262,8 +20330,8 @@ type RemoteSessionIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	// When Gram last successfully fetched or revalidated the JWK Set. Null until
-	// the first successful refresh.
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
 	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
 	// When the persisted JWK Set becomes stale under the upstream cache policy.
 	// Null until the first successful refresh.
@@ -18325,11 +20393,18 @@ type RemoteSessionIssuerResponseBody struct {
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
 	// redirect in place of the resolved scope set. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // IssuerConvergenceCandidateResponseBody is used to define fields on response
@@ -18564,6 +20639,13 @@ type AdminMcpServerHealthUserSessionIssuerResponseBody struct {
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 	// Whether the issuer announces the authentication host as its origin.
 	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to:
+	// one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id}
+	// (shared).
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether a shared authorization server's issuer URL is pinned, so it stays
+	// the same if the deployment's hosts change.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
 	// Set when the issuer trusts an external authorization server's assertions.
 	TrustedRemoteSession *AdminMcpServerHealthTrustedRemoteSessionResponseBody `form:"trusted_remote_session,omitempty" json:"trusted_remote_session,omitempty" xml:"trusted_remote_session,omitempty"`
 	// Other live servers in the project that share this issuer.
@@ -18579,7 +20661,7 @@ type AdminMcpServerHealthUserSessionIssuerResponseBody struct {
 type AdminMcpServerHealthTrustedRemoteSessionResponseBody struct {
 	// The trusted remote session issuer ID.
 	IssuerID string `form:"issuer_id" json:"issuer_id" xml:"issuer_id"`
-	// The remote session client ID Gram uses with the trusted issuer.
+	// The remote session client ID Speakeasy uses with the trusted issuer.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
 }
 
@@ -18643,7 +20725,7 @@ type AdminMcpServerHealthRemoteSessionIssuerResponseBody struct {
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
 	// Where the row is attached. global is platform-wide.
 	AttachmentScope string `form:"attachment_scope" json:"attachment_scope" xml:"attachment_scope"`
-	// Whether Gram reaches the issuer over the public internet or a tunnel.
+	// Whether Speakeasy reaches the issuer over the public internet or a tunnel.
 	Networking string `form:"networking" json:"networking" xml:"networking"`
 	// Whether the issuer is treated as an OpenID Connect provider.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
@@ -18656,6 +20738,9 @@ type AdminMcpServerHealthRemoteSessionIssuerResponseBody struct {
 	// Operator-pinned scopes sent in place of the discovered set. Absent when
 	// unset.
 	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
+	// Whether a login with no other scope source sends no scope instead of the
+	// issuer's whole scopes_supported. Absent when unset, which behaves as false.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Last successful metadata discovery.
 	MetadataFetchedAt *string `form:"metadata_fetched_at,omitempty" json:"metadata_fetched_at,omitempty" xml:"metadata_fetched_at,omitempty"`
 	// Last failed metadata discovery.
@@ -18698,6 +20783,133 @@ type AdminMcpServerToolCallBucketResponseBody struct {
 	Total int64 `form:"total" json:"total" xml:"total"`
 	// Failed tool calls in the bucket.
 	Failed int64 `form:"failed" json:"failed" xml:"failed"`
+}
+
+// AdminHookClientOrganizationResponseBody is used to define fields on response
+// body types.
+type AdminHookClientOrganizationResponseBody struct {
+	// The organization ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The organization name. Absent when the organization no longer exists.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The organization slug. Absent when the organization no longer exists.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
+// AdminHookClientSessionCellResponseBody is used to define fields on response
+// body types.
+type AdminHookClientSessionCellResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The UTC day, as YYYY-MM-DD.
+	Day string `form:"day" json:"day" xml:"day"`
+	// curl for the legacy curl hooks, a hooks binary version, binary for binary
+	// rows that record no version, or empty for the organization-day total.
+	Client string `form:"client" json:"client" xml:"client"`
+	// Machines that started a session on this day.
+	Machines int64 `form:"machines" json:"machines" xml:"machines"`
+	// Sessions started on this day.
+	Sessions int64 `form:"sessions" json:"sessions" xml:"sessions"`
+	// Machines that sent any hook on this day, including sessions started earlier.
+	MachinesAll int64 `form:"machines_all" json:"machines_all" xml:"machines_all"`
+}
+
+// AdminInferenceHookCellResponseBody is used to define fields on response body
+// types.
+type AdminInferenceHookCellResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The UTC day, as YYYY-MM-DD.
+	Day string `form:"day" json:"day" xml:"day"`
+	// The Claude app that sent the transcript, or empty for the organization-day
+	// total.
+	Surface string `form:"surface" json:"surface" xml:"surface"`
+	// Distinct users.
+	Users int64 `form:"users" json:"users" xml:"users"`
+	// Stored transcript messages.
+	Events int64 `form:"events" json:"events" xml:"events"`
+	// Distinct sessions.
+	Sessions int64 `form:"sessions" json:"sessions" xml:"sessions"`
+}
+
+// AdminExternalMcpMigrationCandidateResponseBody is used to define fields on
+// response body types.
+type AdminExternalMcpMigrationCandidateResponseBody struct {
+	// The toolset behind the server.
+	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
+	// Organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Organization name.
+	OrganizationName string `form:"organization_name" json:"organization_name" xml:"organization_name"`
+	// Organization slug.
+	OrganizationSlug string `form:"organization_slug" json:"organization_slug" xml:"organization_slug"`
+	// Project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Project name.
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+	// Project slug.
+	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
+	// The server's display name.
+	ServerName string `form:"server_name" json:"server_name" xml:"server_name"`
+	// The slug in the server's /mcp/<slug> address. Absent when the server has
+	// none.
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// The attachment's upstream URL. Absent when the server proxies several.
+	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
+	// The upstream URL the server will dial as a remote MCP server: the one
+	// resource its signed-in sessions recorded, otherwise the attachment's URL
+	// without unfilled template query parameters.
+	ReplacementURL *string `form:"replacement_url,omitempty" json:"replacement_url,omitempty" xml:"replacement_url,omitempty"`
+	// The server's user session issuer and the upstream authorization servers
+	// behind it. Absent when the server has none.
+	SignInProvider *string `form:"sign_in_provider,omitempty" json:"sign_in_provider,omitempty" xml:"sign_in_provider,omitempty"`
+	// Tool calls over the last tool_call_window_days. Absent when telemetry is
+	// unavailable.
+	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// What running the candidate does: migrate switches its server in place to a
+	// remote MCP server; delete removes the toolset because nothing is left to
+	// migrate, along with any server, addresses and plugin entries it still owns.
+	// A server already migrated in place is kept and keeps working.
+	Action string `form:"action" json:"action" xml:"action"`
+	// Why the candidate is deleted rather than migrated. Empty when it migrates.
+	DeleteReasons []string `form:"delete_reasons" json:"delete_reasons" xml:"delete_reasons"`
+	// Why the server cannot be migrated. Empty when it can.
+	Blockers []string `form:"blockers" json:"blockers" xml:"blockers"`
+	// What migrating the server drops or cannot carry over. Warnings do not stop
+	// it.
+	Warnings []string `form:"warnings" json:"warnings" xml:"warnings"`
+}
+
+// AdminExternalMcpMigrationOutcomeResponseBody is used to define fields on
+// response body types.
+type AdminExternalMcpMigrationOutcomeResponseBody struct {
+	// The candidate's toolset.
+	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
+	// What the run did, or would do, with the candidate. Absent when it was not
+	// attempted.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// migrated, deleted and previewed completed every step; deleted removed the
+	// toolset and any server it still owned, so mcp_server_id,
+	// remote_mcp_server_id and remote_url are absent; failed left the server
+	// unchanged; not_attempted follows an earlier failure.
+	MigrationStatus string `form:"migration_status" json:"migration_status" xml:"migration_status"`
+	// Why the server failed or was not attempted.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// The server's /mcp/<slug> address. Migrating keeps it; deleting a server the
+	// toolset still owns removes it.
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// The server, which keeps its ID.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The remote MCP source the server proxies once migrated. Absent when the
+	// server failed; a preview's source is rolled back.
+	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// The upstream URL the server dials once migrated. Absent when the server
+	// failed.
+	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
+	// Each change, in order.
+	Actions []string `form:"actions" json:"actions" xml:"actions"`
+	// What the migration could not carry over.
+	Warnings []string `form:"warnings" json:"warnings" xml:"warnings"`
 }
 
 // AdminRegistryOktaCandidateResponseBody is used to define fields on response
@@ -18865,6 +21077,52 @@ type AdminOnboardingStepApplicabilityResponseBody struct {
 	Reason string `form:"reason" json:"reason" xml:"reason"`
 }
 
+// AdminSignupOfferResponseBody is used to define fields on response body types.
+type AdminSignupOfferResponseBody struct {
+	ID                    string `form:"id" json:"id" xml:"id"`
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
+	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt             string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// AdminCustomerUsageResponseBody is used to define fields on response body
+// types.
+type AdminCustomerUsageResponseBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	Name           string `form:"name" json:"name" xml:"name"`
+	Slug           string `form:"slug" json:"slug" xml:"slug"`
+	AccountType    string `form:"account_type" json:"account_type" xml:"account_type"`
+	TrialState     string `form:"trial_state" json:"trial_state" xml:"trial_state"`
+	// The billing cycle containing queried_at
+	CurrentCycle *MeterUsageWindowResponseBody `form:"current_cycle" json:"current_cycle" xml:"current_cycle"`
+	// From the first chart bucket's start to the last bucket's end
+	Window *MeterUsageWindowResponseBody `form:"window" json:"window" xml:"window"`
+	// The three metered products in stable display order. quantity and cost_usd
+	// cover the current cycle to date. buckets are the chart buckets for the
+	// requested interval: billing cycles for monthly, days or Monday-start weeks
+	// of the current cycle otherwise.
+	Products []*SpendProductResponseBody `form:"products" json:"products" xml:"products"`
+	// The start of the previous billing cycle, cut to the same number of elapsed
+	// days as the current one. Absent when the organization did not exist before
+	// the current cycle.
+	PreviousPeriod *MeterUsageWindowResponseBody `form:"previous_period,omitempty" json:"previous_period,omitempty" xml:"previous_period,omitempty"`
+	// Per-product costs over previous_period. Empty when previous_period is absent.
+	PreviousPeriodCosts []*AdminCustomerUsageProductCostResponseBody `form:"previous_period_costs" json:"previous_period_costs" xml:"previous_period_costs"`
+	// Why this organization's usage could not be read. products is empty when set.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+}
+
+// AdminCustomerUsageProductCostResponseBody is used to define fields on
+// response body types.
+type AdminCustomerUsageProductCostResponseBody struct {
+	ProductID string `form:"product_id" json:"product_id" xml:"product_id"`
+	// Exact estimated cost at current PAYG list prices
+	CostUsd string `form:"cost_usd" json:"cost_usd" xml:"cost_usd"`
+}
+
 // SupportDraftRequestBody is used to define fields on request body types.
 type SupportDraftRequestBody struct {
 	Mappings   map[string]*SupportMappingRequestBody         `json:"mappings"`
@@ -18883,6 +21141,13 @@ type SupportFactRequestBody struct {
 	Status *string `json:"status"`
 	Note   *string `json:"note"`
 	Verify *bool   `json:"verify"`
+}
+
+// AdminExternalMcpMigrationRequestRequestBody is used to define fields on
+// request body types.
+type AdminExternalMcpMigrationRequestRequestBody struct {
+	// The candidate's toolset.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 }
 
 // AdminOnboardingStackVendorRequestBody is used to define fields on request
@@ -18924,10 +21189,10 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 		CustomerManagedEncryptionKeysEnabled:    *res.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         *res.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: *res.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             *res.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               *res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
-		AutomaticRoleDistribution:               *res.AutomaticRoleDistribution,
+		SignalsIntelligenceEnabled:              *res.SignalsIntelligenceEnabled,
+		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		DeviceAgent:                             *res.DeviceAgent,
 	}
 	return body
@@ -18953,10 +21218,10 @@ func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) 
 		CustomerManagedEncryptionKeysEnabled:    *res.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         *res.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: *res.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             *res.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               *res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
-		AutomaticRoleDistribution:               *res.AutomaticRoleDistribution,
+		SignalsIntelligenceEnabled:              *res.SignalsIntelligenceEnabled,
+		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		DeviceAgent:                             *res.DeviceAgent,
 	}
 	return body
@@ -19028,25 +21293,27 @@ func NewGetProjectResponseBody(res *admin.AdminProjectDetail) *GetProjectRespons
 // result of the "updateOrganization" endpoint of the "admin" service.
 func NewUpdateOrganizationResponseBody(res *admin.AdminOrganization) *UpdateOrganizationResponseBody {
 	body := &UpdateOrganizationResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19078,25 +21345,27 @@ func NewBulkUpdateAccountTypeResponseBody(res *admin.AdminBulkUpdateAccountTypeR
 // result of the "disableOrganization" endpoint of the "admin" service.
 func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOrganizationResponseBody {
 	body := &DisableOrganizationResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19105,25 +21374,27 @@ func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOr
 // result of the "enableOrganization" endpoint of the "admin" service.
 func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrganizationResponseBody {
 	body := &EnableOrganizationResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19132,25 +21403,27 @@ func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrga
 // of the "getOrganization" endpoint of the "admin" service.
 func NewGetOrganizationResponseBody(res *admin.AdminOrganization) *GetOrganizationResponseBody {
 	body := &GetOrganizationResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19305,25 +21578,27 @@ func NewListOrganizationsResponseBody(res *admin.AdminListOrganizationsResult) *
 // the "extendTrial" endpoint of the "admin" service.
 func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialResponseBody {
 	body := &ExtendTrialResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19332,25 +21607,27 @@ func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialRespon
 // result of the "createOrganization" endpoint of the "admin" service.
 func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrganizationResponseBody {
 	body := &CreateOrganizationResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19359,25 +21636,27 @@ func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrga
 // the "rearmTrial" endpoint of the "admin" service.
 func NewRearmTrialResponseBody(res *admin.AdminOrganization) *RearmTrialResponseBody {
 	body := &RearmTrialResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19393,6 +21672,18 @@ func NewGetOrganizationStatsResponseBody(res *admin.AdminOrganizationStats) *Get
 		TrialsEndingSoon:          res.TrialsEndingSoon,
 		Disabled:                  res.Disabled,
 		DisabledLast7Days:         res.DisabledLast7Days,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyResponseBody builds the HTTP response body from the
+// result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyResponseBody(res *admin.AdminInferenceKeyRepairResult) *RepairInferenceKeyResponseBody {
+	body := &RepairInferenceKeyResponseBody{
+		ReconciliationPending: res.ReconciliationPending,
+	}
+	if res.Key != nil {
+		body.Key = marshalAdminAdminInferenceKeyRepairStateToAdminInferenceKeyRepairStateResponseBody(res.Key)
 	}
 	return body
 }
@@ -19469,25 +21760,27 @@ func NewGetStripeCustomerResponseBody(res *admin.AdminStripeCustomer) *GetStripe
 // result of the "setStripeCustomer" endpoint of the "admin" service.
 func NewSetStripeCustomerResponseBody(res *admin.AdminOrganization) *SetStripeCustomerResponseBody {
 	body := &SetStripeCustomerResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19584,6 +21877,7 @@ func NewCreateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateGl
 		IntrospectionEndpoint:             res.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          res.OmitScopeFallback,
 		ResourceIndicatorSupported:                 res.ResourceIndicatorSupported,
 		CreatedAt:                                  res.CreatedAt,
 		UpdatedAt:                                  res.UpdatedAt,
@@ -19647,6 +21941,9 @@ func NewCreateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateGl
 		for i, val := range res.ScopeOverride {
 			body.ScopeOverride[i] = val
 		}
+	}
+	if res.EmaProviders != nil {
+		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
 	}
 	return body
 }
@@ -19737,6 +22034,7 @@ func NewUpdateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateGl
 		IntrospectionEndpoint:             res.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          res.OmitScopeFallback,
 		ResourceIndicatorSupported:                 res.ResourceIndicatorSupported,
 		CreatedAt:                                  res.CreatedAt,
 		UpdatedAt:                                  res.UpdatedAt,
@@ -19800,6 +22098,9 @@ func NewUpdateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateGl
 		for i, val := range res.ScopeOverride {
 			body.ScopeOverride[i] = val
 		}
+	}
+	if res.EmaProviders != nil {
+		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
 	}
 	return body
 }
@@ -20020,25 +22321,27 @@ func NewUploadPlatformImageResponseBody(res *admin.UploadImageResult) *UploadPla
 // the "startTrial" endpoint of the "admin" service.
 func NewStartTrialResponseBody(res *admin.AdminOrganization) *StartTrialResponseBody {
 	body := &StartTrialResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -20047,25 +22350,27 @@ func NewStartTrialResponseBody(res *admin.AdminOrganization) *StartTrialResponse
 // result of the "changeTrialEndDate" endpoint of the "admin" service.
 func NewChangeTrialEndDateResponseBody(res *admin.AdminOrganization) *ChangeTrialEndDateResponseBody {
 	body := &ChangeTrialEndDateResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -20319,6 +22624,115 @@ func NewGetMcpServerToolCallsResponseBody(res *admin.AdminMcpServerToolCalls) *G
 			}
 			body.Daily[i] = marshalAdminAdminMcpServerToolCallBucketToAdminMcpServerToolCallBucketResponseBody(val)
 		}
+	}
+	return body
+}
+
+// NewGetHookClientsResponseBody builds the HTTP response body from the result
+// of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsResponseBody(res *admin.AdminHookClientsResult) *GetHookClientsResponseBody {
+	body := &GetHookClientsResponseBody{
+		WindowDays: res.WindowDays,
+		QueriedAt:  res.QueriedAt,
+		FromCache:  res.FromCache,
+	}
+	if res.Organizations != nil {
+		body.Organizations = make([]*AdminHookClientOrganizationResponseBody, len(res.Organizations))
+		for i, val := range res.Organizations {
+			if val == nil {
+				body.Organizations[i] = nil
+				continue
+			}
+			body.Organizations[i] = marshalAdminAdminHookClientOrganizationToAdminHookClientOrganizationResponseBody(val)
+		}
+	} else {
+		body.Organizations = []*AdminHookClientOrganizationResponseBody{}
+	}
+	if res.Sessions != nil {
+		body.Sessions = make([]*AdminHookClientSessionCellResponseBody, len(res.Sessions))
+		for i, val := range res.Sessions {
+			if val == nil {
+				body.Sessions[i] = nil
+				continue
+			}
+			body.Sessions[i] = marshalAdminAdminHookClientSessionCellToAdminHookClientSessionCellResponseBody(val)
+		}
+	} else {
+		body.Sessions = []*AdminHookClientSessionCellResponseBody{}
+	}
+	if res.Inference != nil {
+		body.Inference = make([]*AdminInferenceHookCellResponseBody, len(res.Inference))
+		for i, val := range res.Inference {
+			if val == nil {
+				body.Inference[i] = nil
+				continue
+			}
+			body.Inference[i] = marshalAdminAdminInferenceHookCellToAdminInferenceHookCellResponseBody(val)
+		}
+	} else {
+		body.Inference = []*AdminInferenceHookCellResponseBody{}
+	}
+	return body
+}
+
+// NewListExternalMcpMigrationCandidatesResponseBody builds the HTTP response
+// body from the result of the "listExternalMcpMigrationCandidates" endpoint of
+// the "admin" service.
+func NewListExternalMcpMigrationCandidatesResponseBody(res *admin.AdminListExternalMcpMigrationCandidatesResult) *ListExternalMcpMigrationCandidatesResponseBody {
+	body := &ListExternalMcpMigrationCandidatesResponseBody{
+		ToolCallWindowDays: res.ToolCallWindowDays,
+	}
+	if res.Candidates != nil {
+		body.Candidates = make([]*AdminExternalMcpMigrationCandidateResponseBody, len(res.Candidates))
+		for i, val := range res.Candidates {
+			if val == nil {
+				body.Candidates[i] = nil
+				continue
+			}
+			body.Candidates[i] = marshalAdminAdminExternalMcpMigrationCandidateToAdminExternalMcpMigrationCandidateResponseBody(val)
+		}
+	} else {
+		body.Candidates = []*AdminExternalMcpMigrationCandidateResponseBody{}
+	}
+	return body
+}
+
+// NewPreviewExternalMcpMigrationResponseBody builds the HTTP response body
+// from the result of the "previewExternalMcpMigration" endpoint of the "admin"
+// service.
+func NewPreviewExternalMcpMigrationResponseBody(res *admin.AdminExternalMcpMigrationResult) *PreviewExternalMcpMigrationResponseBody {
+	body := &PreviewExternalMcpMigrationResponseBody{}
+	if res.Outcomes != nil {
+		body.Outcomes = make([]*AdminExternalMcpMigrationOutcomeResponseBody, len(res.Outcomes))
+		for i, val := range res.Outcomes {
+			if val == nil {
+				body.Outcomes[i] = nil
+				continue
+			}
+			body.Outcomes[i] = marshalAdminAdminExternalMcpMigrationOutcomeToAdminExternalMcpMigrationOutcomeResponseBody(val)
+		}
+	} else {
+		body.Outcomes = []*AdminExternalMcpMigrationOutcomeResponseBody{}
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersResponseBody builds the HTTP response body from
+// the result of the "migrateExternalMcpServers" endpoint of the "admin"
+// service.
+func NewMigrateExternalMcpServersResponseBody(res *admin.AdminExternalMcpMigrationResult) *MigrateExternalMcpServersResponseBody {
+	body := &MigrateExternalMcpServersResponseBody{}
+	if res.Outcomes != nil {
+		body.Outcomes = make([]*AdminExternalMcpMigrationOutcomeResponseBody, len(res.Outcomes))
+		for i, val := range res.Outcomes {
+			if val == nil {
+				body.Outcomes[i] = nil
+				continue
+			}
+			body.Outcomes[i] = marshalAdminAdminExternalMcpMigrationOutcomeToAdminExternalMcpMigrationOutcomeResponseBody(val)
+		}
+	} else {
+		body.Outcomes = []*AdminExternalMcpMigrationOutcomeResponseBody{}
 	}
 	return body
 }
@@ -20822,6 +23236,55 @@ func NewAssignOrganizationOnboardingPlaybookResponseBody(res *admin.AdminOrganiz
 	return body
 }
 
+// NewListSignupOffersResponseBody builds the HTTP response body from the
+// result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersResponseBody(res *admin.ListSignupOffersResult) *ListSignupOffersResponseBody {
+	body := &ListSignupOffersResponseBody{}
+	if res.Offers != nil {
+		body.Offers = make([]*AdminSignupOfferResponseBody, len(res.Offers))
+		for i, val := range res.Offers {
+			if val == nil {
+				body.Offers[i] = nil
+				continue
+			}
+			body.Offers[i] = marshalAdminAdminSignupOfferToAdminSignupOfferResponseBody(val)
+		}
+	} else {
+		body.Offers = []*AdminSignupOfferResponseBody{}
+	}
+	return body
+}
+
+// NewCreateSignupOfferResponseBody builds the HTTP response body from the
+// result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferResponseBody(res *admin.AdminSignupOffer) *CreateSignupOfferResponseBody {
+	body := &CreateSignupOfferResponseBody{
+		ID:                    res.ID,
+		Name:                  res.Name,
+		StripePromotionCodeID: res.StripePromotionCodeID,
+		SignupFlow:            res.SignupFlow,
+		Enabled:               res.Enabled,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferResponseBody builds the HTTP response body from the
+// result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferResponseBody(res *admin.AdminSignupOffer) *UpdateSignupOfferResponseBody {
+	body := &UpdateSignupOfferResponseBody{
+		ID:                    res.ID,
+		Name:                  res.Name,
+		StripePromotionCodeID: res.StripePromotionCodeID,
+		SignupFlow:            res.SignupFlow,
+		Enabled:               res.Enabled,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	return body
+}
+
 // NewGetStripeSubscriptionCandidateResponseBody builds the HTTP response body
 // from the result of the "getStripeSubscriptionCandidate" endpoint of the
 // "admin" service.
@@ -20838,25 +23301,51 @@ func NewGetStripeSubscriptionCandidateResponseBody(res *admin.AdminStripeSubscri
 // result of the "setStripeSubscription" endpoint of the "admin" service.
 func NewSetStripeSubscriptionResponseBody(res *admin.AdminOrganization) *SetStripeSubscriptionResponseBody {
 	body := &SetStripeSubscriptionResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
+	}
+	return body
+}
+
+// NewListCustomerUsageResponseBody builds the HTTP response body from the
+// result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageResponseBody(res *admin.AdminCustomerUsageResponse) *ListCustomerUsageResponseBody {
+	body := &ListCustomerUsageResponseBody{
+		Interval:     res.Interval,
+		Currency:     res.Currency,
+		PricingBasis: res.PricingBasis,
+		QueriedAt:    res.QueriedAt,
+	}
+	if res.Customers != nil {
+		body.Customers = make([]*AdminCustomerUsageResponseBody, len(res.Customers))
+		for i, val := range res.Customers {
+			if val == nil {
+				body.Customers[i] = nil
+				continue
+			}
+			body.Customers[i] = marshalAdminAdminCustomerUsageToAdminCustomerUsageResponseBody(val)
+		}
+	} else {
+		body.Customers = []*AdminCustomerUsageResponseBody{}
 	}
 	return body
 }
@@ -24772,6 +27261,148 @@ func NewGetOrganizationStatsUnexpectedResponseBody(res *goa.ServiceError) *GetOr
 // service.
 func NewGetOrganizationStatsGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationStatsGatewayErrorResponseBody {
 	body := &GetOrganizationStatsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyUnauthorizedResponseBody(res *goa.ServiceError) *RepairInferenceKeyUnauthorizedResponseBody {
+	body := &RepairInferenceKeyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyForbiddenResponseBody builds the HTTP response body
+// from the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyForbiddenResponseBody(res *goa.ServiceError) *RepairInferenceKeyForbiddenResponseBody {
+	body := &RepairInferenceKeyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyBadRequestResponseBody builds the HTTP response body
+// from the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyBadRequestResponseBody(res *goa.ServiceError) *RepairInferenceKeyBadRequestResponseBody {
+	body := &RepairInferenceKeyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyNotFoundResponseBody builds the HTTP response body from
+// the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyNotFoundResponseBody(res *goa.ServiceError) *RepairInferenceKeyNotFoundResponseBody {
+	body := &RepairInferenceKeyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyConflictResponseBody builds the HTTP response body from
+// the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyConflictResponseBody(res *goa.ServiceError) *RepairInferenceKeyConflictResponseBody {
+	body := &RepairInferenceKeyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "repairInferenceKey" endpoint of the "admin"
+// service.
+func NewRepairInferenceKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *RepairInferenceKeyUnsupportedMediaResponseBody {
+	body := &RepairInferenceKeyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyInvalidResponseBody builds the HTTP response body from
+// the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyInvalidResponseBody(res *goa.ServiceError) *RepairInferenceKeyInvalidResponseBody {
+	body := &RepairInferenceKeyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "repairInferenceKey" endpoint of the "admin"
+// service.
+func NewRepairInferenceKeyInvariantViolationResponseBody(res *goa.ServiceError) *RepairInferenceKeyInvariantViolationResponseBody {
+	body := &RepairInferenceKeyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyUnexpectedResponseBody builds the HTTP response body
+// from the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyUnexpectedResponseBody(res *goa.ServiceError) *RepairInferenceKeyUnexpectedResponseBody {
+	body := &RepairInferenceKeyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyGatewayErrorResponseBody(res *goa.ServiceError) *RepairInferenceKeyGatewayErrorResponseBody {
+	body := &RepairInferenceKeyGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -29743,6 +32374,641 @@ func NewGetMcpServerToolCallsGatewayErrorResponseBody(res *goa.ServiceError) *Ge
 	return body
 }
 
+// NewGetHookClientsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsUnauthorizedResponseBody(res *goa.ServiceError) *GetHookClientsUnauthorizedResponseBody {
+	body := &GetHookClientsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsForbiddenResponseBody builds the HTTP response body from
+// the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsForbiddenResponseBody(res *goa.ServiceError) *GetHookClientsForbiddenResponseBody {
+	body := &GetHookClientsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsBadRequestResponseBody builds the HTTP response body from
+// the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsBadRequestResponseBody(res *goa.ServiceError) *GetHookClientsBadRequestResponseBody {
+	body := &GetHookClientsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsNotFoundResponseBody builds the HTTP response body from the
+// result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsNotFoundResponseBody(res *goa.ServiceError) *GetHookClientsNotFoundResponseBody {
+	body := &GetHookClientsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsConflictResponseBody builds the HTTP response body from the
+// result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsConflictResponseBody(res *goa.ServiceError) *GetHookClientsConflictResponseBody {
+	body := &GetHookClientsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetHookClientsUnsupportedMediaResponseBody {
+	body := &GetHookClientsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsInvalidResponseBody builds the HTTP response body from the
+// result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsInvalidResponseBody(res *goa.ServiceError) *GetHookClientsInvalidResponseBody {
+	body := &GetHookClientsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsInvariantViolationResponseBody(res *goa.ServiceError) *GetHookClientsInvariantViolationResponseBody {
+	body := &GetHookClientsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsUnexpectedResponseBody(res *goa.ServiceError) *GetHookClientsUnexpectedResponseBody {
+	body := &GetHookClientsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHookClientsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getHookClients" endpoint of the "admin" service.
+func NewGetHookClientsGatewayErrorResponseBody(res *goa.ServiceError) *GetHookClientsGatewayErrorResponseBody {
+	body := &GetHookClientsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExternalMcpMigrationCandidatesUnavailableResponseBody builds the HTTP
+// response body from the result of the "listExternalMcpMigrationCandidates"
+// endpoint of the "admin" service.
+func NewListExternalMcpMigrationCandidatesUnavailableResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesUnavailableResponseBody {
+	body := &ListExternalMcpMigrationCandidatesUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExternalMcpMigrationCandidatesUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "listExternalMcpMigrationCandidates" endpoint of the "admin" service.
+func NewListExternalMcpMigrationCandidatesUnauthorizedResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesUnauthorizedResponseBody {
+	body := &ListExternalMcpMigrationCandidatesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExternalMcpMigrationCandidatesForbiddenResponseBody builds the HTTP
+// response body from the result of the "listExternalMcpMigrationCandidates"
+// endpoint of the "admin" service.
+func NewListExternalMcpMigrationCandidatesForbiddenResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesForbiddenResponseBody {
+	body := &ListExternalMcpMigrationCandidatesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExternalMcpMigrationCandidatesBadRequestResponseBody builds the HTTP
+// response body from the result of the "listExternalMcpMigrationCandidates"
+// endpoint of the "admin" service.
+func NewListExternalMcpMigrationCandidatesBadRequestResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesBadRequestResponseBody {
+	body := &ListExternalMcpMigrationCandidatesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExternalMcpMigrationCandidatesNotFoundResponseBody builds the HTTP
+// response body from the result of the "listExternalMcpMigrationCandidates"
+// endpoint of the "admin" service.
+func NewListExternalMcpMigrationCandidatesNotFoundResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesNotFoundResponseBody {
+	body := &ListExternalMcpMigrationCandidatesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExternalMcpMigrationCandidatesConflictResponseBody builds the HTTP
+// response body from the result of the "listExternalMcpMigrationCandidates"
+// endpoint of the "admin" service.
+func NewListExternalMcpMigrationCandidatesConflictResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesConflictResponseBody {
+	body := &ListExternalMcpMigrationCandidatesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the
+// "listExternalMcpMigrationCandidates" endpoint of the "admin" service.
+func NewListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody {
+	body := &ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExternalMcpMigrationCandidatesInvalidResponseBody builds the HTTP
+// response body from the result of the "listExternalMcpMigrationCandidates"
+// endpoint of the "admin" service.
+func NewListExternalMcpMigrationCandidatesInvalidResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesInvalidResponseBody {
+	body := &ListExternalMcpMigrationCandidatesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExternalMcpMigrationCandidatesInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "listExternalMcpMigrationCandidates" endpoint of the "admin" service.
+func NewListExternalMcpMigrationCandidatesInvariantViolationResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesInvariantViolationResponseBody {
+	body := &ListExternalMcpMigrationCandidatesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExternalMcpMigrationCandidatesUnexpectedResponseBody builds the HTTP
+// response body from the result of the "listExternalMcpMigrationCandidates"
+// endpoint of the "admin" service.
+func NewListExternalMcpMigrationCandidatesUnexpectedResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesUnexpectedResponseBody {
+	body := &ListExternalMcpMigrationCandidatesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExternalMcpMigrationCandidatesGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "listExternalMcpMigrationCandidates" endpoint of the "admin" service.
+func NewListExternalMcpMigrationCandidatesGatewayErrorResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesGatewayErrorResponseBody {
+	body := &ListExternalMcpMigrationCandidatesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewExternalMcpMigrationUnavailableResponseBody builds the HTTP
+// response body from the result of the "previewExternalMcpMigration" endpoint
+// of the "admin" service.
+func NewPreviewExternalMcpMigrationUnavailableResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationUnavailableResponseBody {
+	body := &PreviewExternalMcpMigrationUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewExternalMcpMigrationUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "previewExternalMcpMigration" endpoint
+// of the "admin" service.
+func NewPreviewExternalMcpMigrationUnauthorizedResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationUnauthorizedResponseBody {
+	body := &PreviewExternalMcpMigrationUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewExternalMcpMigrationForbiddenResponseBody builds the HTTP response
+// body from the result of the "previewExternalMcpMigration" endpoint of the
+// "admin" service.
+func NewPreviewExternalMcpMigrationForbiddenResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationForbiddenResponseBody {
+	body := &PreviewExternalMcpMigrationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewExternalMcpMigrationBadRequestResponseBody builds the HTTP
+// response body from the result of the "previewExternalMcpMigration" endpoint
+// of the "admin" service.
+func NewPreviewExternalMcpMigrationBadRequestResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationBadRequestResponseBody {
+	body := &PreviewExternalMcpMigrationBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewExternalMcpMigrationNotFoundResponseBody builds the HTTP response
+// body from the result of the "previewExternalMcpMigration" endpoint of the
+// "admin" service.
+func NewPreviewExternalMcpMigrationNotFoundResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationNotFoundResponseBody {
+	body := &PreviewExternalMcpMigrationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewExternalMcpMigrationConflictResponseBody builds the HTTP response
+// body from the result of the "previewExternalMcpMigration" endpoint of the
+// "admin" service.
+func NewPreviewExternalMcpMigrationConflictResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationConflictResponseBody {
+	body := &PreviewExternalMcpMigrationConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewExternalMcpMigrationUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "previewExternalMcpMigration" endpoint
+// of the "admin" service.
+func NewPreviewExternalMcpMigrationUnsupportedMediaResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationUnsupportedMediaResponseBody {
+	body := &PreviewExternalMcpMigrationUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewExternalMcpMigrationInvalidResponseBody builds the HTTP response
+// body from the result of the "previewExternalMcpMigration" endpoint of the
+// "admin" service.
+func NewPreviewExternalMcpMigrationInvalidResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationInvalidResponseBody {
+	body := &PreviewExternalMcpMigrationInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewExternalMcpMigrationInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "previewExternalMcpMigration" endpoint
+// of the "admin" service.
+func NewPreviewExternalMcpMigrationInvariantViolationResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationInvariantViolationResponseBody {
+	body := &PreviewExternalMcpMigrationInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewExternalMcpMigrationUnexpectedResponseBody builds the HTTP
+// response body from the result of the "previewExternalMcpMigration" endpoint
+// of the "admin" service.
+func NewPreviewExternalMcpMigrationUnexpectedResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationUnexpectedResponseBody {
+	body := &PreviewExternalMcpMigrationUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewExternalMcpMigrationGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "previewExternalMcpMigration" endpoint
+// of the "admin" service.
+func NewPreviewExternalMcpMigrationGatewayErrorResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationGatewayErrorResponseBody {
+	body := &PreviewExternalMcpMigrationGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersUnavailableResponseBody builds the HTTP response
+// body from the result of the "migrateExternalMcpServers" endpoint of the
+// "admin" service.
+func NewMigrateExternalMcpServersUnavailableResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersUnavailableResponseBody {
+	body := &MigrateExternalMcpServersUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "migrateExternalMcpServers" endpoint of
+// the "admin" service.
+func NewMigrateExternalMcpServersUnauthorizedResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersUnauthorizedResponseBody {
+	body := &MigrateExternalMcpServersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersForbiddenResponseBody builds the HTTP response
+// body from the result of the "migrateExternalMcpServers" endpoint of the
+// "admin" service.
+func NewMigrateExternalMcpServersForbiddenResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersForbiddenResponseBody {
+	body := &MigrateExternalMcpServersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersBadRequestResponseBody builds the HTTP response
+// body from the result of the "migrateExternalMcpServers" endpoint of the
+// "admin" service.
+func NewMigrateExternalMcpServersBadRequestResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersBadRequestResponseBody {
+	body := &MigrateExternalMcpServersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersNotFoundResponseBody builds the HTTP response
+// body from the result of the "migrateExternalMcpServers" endpoint of the
+// "admin" service.
+func NewMigrateExternalMcpServersNotFoundResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersNotFoundResponseBody {
+	body := &MigrateExternalMcpServersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersConflictResponseBody builds the HTTP response
+// body from the result of the "migrateExternalMcpServers" endpoint of the
+// "admin" service.
+func NewMigrateExternalMcpServersConflictResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersConflictResponseBody {
+	body := &MigrateExternalMcpServersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "migrateExternalMcpServers" endpoint of
+// the "admin" service.
+func NewMigrateExternalMcpServersUnsupportedMediaResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersUnsupportedMediaResponseBody {
+	body := &MigrateExternalMcpServersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersInvalidResponseBody builds the HTTP response
+// body from the result of the "migrateExternalMcpServers" endpoint of the
+// "admin" service.
+func NewMigrateExternalMcpServersInvalidResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersInvalidResponseBody {
+	body := &MigrateExternalMcpServersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "migrateExternalMcpServers" endpoint of
+// the "admin" service.
+func NewMigrateExternalMcpServersInvariantViolationResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersInvariantViolationResponseBody {
+	body := &MigrateExternalMcpServersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersUnexpectedResponseBody builds the HTTP response
+// body from the result of the "migrateExternalMcpServers" endpoint of the
+// "admin" service.
+func NewMigrateExternalMcpServersUnexpectedResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersUnexpectedResponseBody {
+	body := &MigrateExternalMcpServersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "migrateExternalMcpServers" endpoint of
+// the "admin" service.
+func NewMigrateExternalMcpServersGatewayErrorResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersGatewayErrorResponseBody {
+	body := &MigrateExternalMcpServersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetRegistryOktaCandidatesUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "getRegistryOktaCandidates" endpoint of
 // the "admin" service.
@@ -33003,6 +36269,432 @@ func NewAssignOrganizationOnboardingPlaybookGatewayErrorResponseBody(res *goa.Se
 	return body
 }
 
+// NewListSignupOffersUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersUnauthorizedResponseBody(res *goa.ServiceError) *ListSignupOffersUnauthorizedResponseBody {
+	body := &ListSignupOffersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersForbiddenResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersForbiddenResponseBody(res *goa.ServiceError) *ListSignupOffersForbiddenResponseBody {
+	body := &ListSignupOffersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersBadRequestResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersBadRequestResponseBody(res *goa.ServiceError) *ListSignupOffersBadRequestResponseBody {
+	body := &ListSignupOffersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersNotFoundResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersNotFoundResponseBody(res *goa.ServiceError) *ListSignupOffersNotFoundResponseBody {
+	body := &ListSignupOffersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersConflictResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersConflictResponseBody(res *goa.ServiceError) *ListSignupOffersConflictResponseBody {
+	body := &ListSignupOffersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listSignupOffers" endpoint of the "admin"
+// service.
+func NewListSignupOffersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListSignupOffersUnsupportedMediaResponseBody {
+	body := &ListSignupOffersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersInvalidResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersInvalidResponseBody(res *goa.ServiceError) *ListSignupOffersInvalidResponseBody {
+	body := &ListSignupOffersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listSignupOffers" endpoint of the "admin"
+// service.
+func NewListSignupOffersInvariantViolationResponseBody(res *goa.ServiceError) *ListSignupOffersInvariantViolationResponseBody {
+	body := &ListSignupOffersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersUnexpectedResponseBody(res *goa.ServiceError) *ListSignupOffersUnexpectedResponseBody {
+	body := &ListSignupOffersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersGatewayErrorResponseBody(res *goa.ServiceError) *ListSignupOffersGatewayErrorResponseBody {
+	body := &ListSignupOffersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferUnauthorizedResponseBody(res *goa.ServiceError) *CreateSignupOfferUnauthorizedResponseBody {
+	body := &CreateSignupOfferUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferForbiddenResponseBody builds the HTTP response body from
+// the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferForbiddenResponseBody(res *goa.ServiceError) *CreateSignupOfferForbiddenResponseBody {
+	body := &CreateSignupOfferForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferBadRequestResponseBody builds the HTTP response body
+// from the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferBadRequestResponseBody(res *goa.ServiceError) *CreateSignupOfferBadRequestResponseBody {
+	body := &CreateSignupOfferBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferNotFoundResponseBody builds the HTTP response body from
+// the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferNotFoundResponseBody(res *goa.ServiceError) *CreateSignupOfferNotFoundResponseBody {
+	body := &CreateSignupOfferNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferConflictResponseBody builds the HTTP response body from
+// the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferConflictResponseBody(res *goa.ServiceError) *CreateSignupOfferConflictResponseBody {
+	body := &CreateSignupOfferConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createSignupOffer" endpoint of the "admin"
+// service.
+func NewCreateSignupOfferUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateSignupOfferUnsupportedMediaResponseBody {
+	body := &CreateSignupOfferUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferInvalidResponseBody builds the HTTP response body from
+// the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferInvalidResponseBody(res *goa.ServiceError) *CreateSignupOfferInvalidResponseBody {
+	body := &CreateSignupOfferInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createSignupOffer" endpoint of the "admin"
+// service.
+func NewCreateSignupOfferInvariantViolationResponseBody(res *goa.ServiceError) *CreateSignupOfferInvariantViolationResponseBody {
+	body := &CreateSignupOfferInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferUnexpectedResponseBody(res *goa.ServiceError) *CreateSignupOfferUnexpectedResponseBody {
+	body := &CreateSignupOfferUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferGatewayErrorResponseBody(res *goa.ServiceError) *CreateSignupOfferGatewayErrorResponseBody {
+	body := &CreateSignupOfferGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferUnauthorizedResponseBody(res *goa.ServiceError) *UpdateSignupOfferUnauthorizedResponseBody {
+	body := &UpdateSignupOfferUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferForbiddenResponseBody builds the HTTP response body from
+// the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferForbiddenResponseBody(res *goa.ServiceError) *UpdateSignupOfferForbiddenResponseBody {
+	body := &UpdateSignupOfferForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferBadRequestResponseBody builds the HTTP response body
+// from the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferBadRequestResponseBody(res *goa.ServiceError) *UpdateSignupOfferBadRequestResponseBody {
+	body := &UpdateSignupOfferBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferNotFoundResponseBody builds the HTTP response body from
+// the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferNotFoundResponseBody(res *goa.ServiceError) *UpdateSignupOfferNotFoundResponseBody {
+	body := &UpdateSignupOfferNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferConflictResponseBody builds the HTTP response body from
+// the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferConflictResponseBody(res *goa.ServiceError) *UpdateSignupOfferConflictResponseBody {
+	body := &UpdateSignupOfferConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "updateSignupOffer" endpoint of the "admin"
+// service.
+func NewUpdateSignupOfferUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateSignupOfferUnsupportedMediaResponseBody {
+	body := &UpdateSignupOfferUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferInvalidResponseBody builds the HTTP response body from
+// the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferInvalidResponseBody(res *goa.ServiceError) *UpdateSignupOfferInvalidResponseBody {
+	body := &UpdateSignupOfferInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "updateSignupOffer" endpoint of the "admin"
+// service.
+func NewUpdateSignupOfferInvariantViolationResponseBody(res *goa.ServiceError) *UpdateSignupOfferInvariantViolationResponseBody {
+	body := &UpdateSignupOfferInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferUnexpectedResponseBody builds the HTTP response body
+// from the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferUnexpectedResponseBody(res *goa.ServiceError) *UpdateSignupOfferUnexpectedResponseBody {
+	body := &UpdateSignupOfferUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferGatewayErrorResponseBody(res *goa.ServiceError) *UpdateSignupOfferGatewayErrorResponseBody {
+	body := &UpdateSignupOfferGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetStripeSubscriptionCandidateUnavailableResponseBody builds the HTTP
 // response body from the result of the "getStripeSubscriptionCandidate"
 // endpoint of the "admin" service.
@@ -33333,6 +37025,162 @@ func NewSetStripeSubscriptionGatewayErrorResponseBody(res *goa.ServiceError) *Se
 	return body
 }
 
+// NewListCustomerUsageUnavailableResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageUnavailableResponseBody(res *goa.ServiceError) *ListCustomerUsageUnavailableResponseBody {
+	body := &ListCustomerUsageUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageUnauthorizedResponseBody(res *goa.ServiceError) *ListCustomerUsageUnauthorizedResponseBody {
+	body := &ListCustomerUsageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageForbiddenResponseBody builds the HTTP response body from
+// the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageForbiddenResponseBody(res *goa.ServiceError) *ListCustomerUsageForbiddenResponseBody {
+	body := &ListCustomerUsageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageBadRequestResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageBadRequestResponseBody(res *goa.ServiceError) *ListCustomerUsageBadRequestResponseBody {
+	body := &ListCustomerUsageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageNotFoundResponseBody builds the HTTP response body from
+// the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageNotFoundResponseBody(res *goa.ServiceError) *ListCustomerUsageNotFoundResponseBody {
+	body := &ListCustomerUsageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageConflictResponseBody builds the HTTP response body from
+// the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageConflictResponseBody(res *goa.ServiceError) *ListCustomerUsageConflictResponseBody {
+	body := &ListCustomerUsageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listCustomerUsage" endpoint of the "admin"
+// service.
+func NewListCustomerUsageUnsupportedMediaResponseBody(res *goa.ServiceError) *ListCustomerUsageUnsupportedMediaResponseBody {
+	body := &ListCustomerUsageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageInvalidResponseBody builds the HTTP response body from
+// the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageInvalidResponseBody(res *goa.ServiceError) *ListCustomerUsageInvalidResponseBody {
+	body := &ListCustomerUsageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listCustomerUsage" endpoint of the "admin"
+// service.
+func NewListCustomerUsageInvariantViolationResponseBody(res *goa.ServiceError) *ListCustomerUsageInvariantViolationResponseBody {
+	body := &ListCustomerUsageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageUnexpectedResponseBody(res *goa.ServiceError) *ListCustomerUsageUnexpectedResponseBody {
+	body := &ListCustomerUsageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageGatewayErrorResponseBody(res *goa.ServiceError) *ListCustomerUsageGatewayErrorResponseBody {
+	body := &ListCustomerUsageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -33639,6 +37487,24 @@ func NewGetOrganizationStatsPayload(adminSessionToken *string) *admin.GetOrganiz
 	return v
 }
 
+// NewRepairInferenceKeyPayload builds a admin service repairInferenceKey
+// endpoint payload.
+func NewRepairInferenceKeyPayload(body *RepairInferenceKeyRequestBody, adminSessionToken *string) *admin.RepairInferenceKeyPayload {
+	v := &admin.RepairInferenceKeyPayload{
+		OrganizationID: *body.OrganizationID,
+		KeyType:        *body.KeyType,
+		Confirmation:   *body.Confirmation,
+		Reason:         *body.Reason,
+	}
+	v.RemoveCauses = make([]string, len(body.RemoveCauses))
+	for i, val := range body.RemoveCauses {
+		v.RemoveCauses[i] = val
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewGetInferenceKeysPayload builds a admin service getInferenceKeys endpoint
 // payload.
 func NewGetInferenceKeysPayload(organizationID string, adminSessionToken *string) *admin.GetInferenceKeysPayload {
@@ -33773,6 +37639,7 @@ func NewCreateGlobalIssuerPayload(body *CreateGlobalIssuerRequestBody, adminSess
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          body.OmitScopeFallback,
 		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 	}
 	if body.ScopesSupported != nil {
@@ -33897,6 +37764,7 @@ func NewUpdateGlobalIssuerPayload(body *UpdateGlobalIssuerRequestBody, adminSess
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          body.OmitScopeFallback,
 		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 	}
 	if body.ScopesSupported != nil {
@@ -34150,6 +38018,60 @@ func NewGetMcpServerToolCallsPayload(organizationID string, projectID string, mc
 	v.ProjectID = projectID
 	v.McpServerID = mcpServerID
 	v.WindowDays = windowDays
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetHookClientsPayload builds a admin service getHookClients endpoint
+// payload.
+func NewGetHookClientsPayload(windowDays int, refresh bool, adminSessionToken *string) *admin.GetHookClientsPayload {
+	v := &admin.GetHookClientsPayload{}
+	v.WindowDays = windowDays
+	v.Refresh = refresh
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesPayload builds a admin service
+// listExternalMcpMigrationCandidates endpoint payload.
+func NewListExternalMcpMigrationCandidatesPayload(adminSessionToken *string) *admin.ListExternalMcpMigrationCandidatesPayload {
+	v := &admin.ListExternalMcpMigrationCandidatesPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationPayload builds a admin service
+// previewExternalMcpMigration endpoint payload.
+func NewPreviewExternalMcpMigrationPayload(body *PreviewExternalMcpMigrationRequestBody, adminSessionToken *string) *admin.PreviewExternalMcpMigrationPayload {
+	v := &admin.PreviewExternalMcpMigrationPayload{}
+	v.Servers = make([]*admin.AdminExternalMcpMigrationRequest, len(body.Servers))
+	for i, val := range body.Servers {
+		if val == nil {
+			v.Servers[i] = nil
+			continue
+		}
+		v.Servers[i] = unmarshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest(val)
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewMigrateExternalMcpServersPayload builds a admin service
+// migrateExternalMcpServers endpoint payload.
+func NewMigrateExternalMcpServersPayload(body *MigrateExternalMcpServersRequestBody, adminSessionToken *string) *admin.MigrateExternalMcpServersPayload {
+	v := &admin.MigrateExternalMcpServersPayload{}
+	v.Servers = make([]*admin.AdminExternalMcpMigrationRequest, len(body.Servers))
+	for i, val := range body.Servers {
+		if val == nil {
+			v.Servers[i] = nil
+			continue
+		}
+		v.Servers[i] = unmarshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest(val)
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v
@@ -34422,6 +38344,43 @@ func NewAssignOrganizationOnboardingPlaybookPayload(body *AssignOrganizationOnbo
 	return v
 }
 
+// NewListSignupOffersPayload builds a admin service listSignupOffers endpoint
+// payload.
+func NewListSignupOffersPayload(adminSessionToken *string) *admin.ListSignupOffersPayload {
+	v := &admin.ListSignupOffersPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewCreateSignupOfferPayload builds a admin service createSignupOffer
+// endpoint payload.
+func NewCreateSignupOfferPayload(body *CreateSignupOfferRequestBody, adminSessionToken *string) *admin.CreateSignupOfferPayload {
+	v := &admin.CreateSignupOfferPayload{
+		Name:                  *body.Name,
+		StripePromotionCodeID: *body.StripePromotionCodeID,
+		SignupFlow:            *body.SignupFlow,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewUpdateSignupOfferPayload builds a admin service updateSignupOffer
+// endpoint payload.
+func NewUpdateSignupOfferPayload(body *UpdateSignupOfferRequestBody, adminSessionToken *string) *admin.UpdateSignupOfferPayload {
+	v := &admin.UpdateSignupOfferPayload{
+		Name:                  *body.Name,
+		StripePromotionCodeID: *body.StripePromotionCodeID,
+		SignupFlow:            *body.SignupFlow,
+		ID:                    *body.ID,
+		Enabled:               *body.Enabled,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewGetStripeSubscriptionCandidatePayload builds a admin service
 // getStripeSubscriptionCandidate endpoint payload.
 func NewGetStripeSubscriptionCandidatePayload(organizationID string, stripeSubscriptionID string, adminSessionToken *string) *admin.GetStripeSubscriptionCandidatePayload {
@@ -34445,6 +38404,16 @@ func NewSetStripeSubscriptionPayload(body *SetStripeSubscriptionRequestBody, adm
 	return v
 }
 
+// NewListCustomerUsagePayload builds a admin service listCustomerUsage
+// endpoint payload.
+func NewListCustomerUsagePayload(interval string, adminSessionToken *string) *admin.ListCustomerUsagePayload {
+	v := &admin.ListCustomerUsagePayload{}
+	v.Interval = interval
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -34458,8 +38427,8 @@ func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureReque
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys" || *body.FeatureName == "remote_session_auto_refresh" || *body.FeatureName == "remote_session_auto_refresh_enforced" || *body.FeatureName == "consent_tool_filtering" || *body.FeatureName == "session_portability" || *body.FeatureName == "network_ingress" || *body.FeatureName == "automatic-role-distribution") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability", "network_ingress", "automatic-role-distribution"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys" || *body.FeatureName == "remote_session_auto_refresh" || *body.FeatureName == "remote_session_auto_refresh_enforced" || *body.FeatureName == "session_portability" || *body.FeatureName == "network_ingress" || *body.FeatureName == "signals_intelligence" || *body.FeatureName == "organization_gateway_disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "session_portability", "network_ingress", "signals_intelligence", "organization_gateway_disabled"}))
 		}
 	}
 	if body.FeatureName != nil {
@@ -34648,6 +38617,53 @@ func ValidateRearmTrialRequestBody(body *RearmTrialRequestBody) (err error) {
 	if body.Days != nil {
 		if *body.Days > 365 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", *body.Days, 365, false))
+		}
+	}
+	return
+}
+
+// ValidateRepairInferenceKeyRequestBody runs the validations defined on
+// RepairInferenceKeyRequestBody
+func ValidateRepairInferenceKeyRequestBody(body *RepairInferenceKeyRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.KeyType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_type", "body"))
+	}
+	if body.RemoveCauses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remove_causes", "body"))
+	}
+	if body.Confirmation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("confirmation", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.KeyType != nil {
+		if !(*body.KeyType == "chat" || *body.KeyType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", *body.KeyType, []any{"chat", "internal"}))
+		}
+	}
+	if len(body.RemoveCauses) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 1, true))
+	}
+	if len(body.RemoveCauses) > 3 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 3, false))
+	}
+	for _, e := range body.RemoveCauses {
+		if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.remove_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive"}))
+		}
+	}
+	if body.Confirmation != nil {
+		if !(*body.Confirmation == "I know what I'm doing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.confirmation", *body.Confirmation, []any{"I know what I'm doing"}))
+		}
+	}
+	if body.Reason != nil {
+		if utf8.RuneCountInString(*body.Reason) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 1, true))
 		}
 	}
 	return
@@ -34878,6 +38894,50 @@ func ValidateUpdateSupportMatrixRequestBody(body *UpdateSupportMatrixRequestBody
 	return
 }
 
+// ValidatePreviewExternalMcpMigrationRequestBody runs the validations defined
+// on PreviewExternalMcpMigrationRequestBody
+func ValidatePreviewExternalMcpMigrationRequestBody(body *PreviewExternalMcpMigrationRequestBody) (err error) {
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	if len(body.Servers) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 1, true))
+	}
+	if len(body.Servers) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 100, false))
+	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateAdminExternalMcpMigrationRequestRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersRequestBody runs the validations defined on
+// MigrateExternalMcpServersRequestBody
+func ValidateMigrateExternalMcpServersRequestBody(body *MigrateExternalMcpServersRequestBody) (err error) {
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	if len(body.Servers) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 1, true))
+	}
+	if len(body.Servers) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 100, false))
+	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateAdminExternalMcpMigrationRequestRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateCreateRegistryEntryRequestBody runs the validations defined on
 // CreateRegistryEntryRequestBody
 func ValidateCreateRegistryEntryRequestBody(body *CreateRegistryEntryRequestBody) (err error) {
@@ -35035,6 +39095,91 @@ func ValidateAssignOrganizationOnboardingPlaybookRequestBody(body *AssignOrganiz
 	return
 }
 
+// ValidateCreateSignupOfferRequestBody runs the validations defined on
+// CreateSignupOfferRequestBody
+func ValidateCreateSignupOfferRequestBody(body *CreateSignupOfferRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.StripePromotionCodeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_promotion_code_id", "body"))
+	}
+	if body.SignupFlow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signup_flow", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 200, false))
+		}
+	}
+	if body.StripePromotionCodeID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.stripe_promotion_code_id", *body.StripePromotionCodeID, "^promo_[A-Za-z0-9_]+$"))
+	}
+	if body.StripePromotionCodeID != nil {
+		if utf8.RuneCountInString(*body.StripePromotionCodeID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_promotion_code_id", *body.StripePromotionCodeID, utf8.RuneCountInString(*body.StripePromotionCodeID), 255, false))
+		}
+	}
+	if body.SignupFlow != nil {
+		if !(*body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", *body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferRequestBody runs the validations defined on
+// UpdateSignupOfferRequestBody
+func ValidateUpdateSignupOfferRequestBody(body *UpdateSignupOfferRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.StripePromotionCodeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_promotion_code_id", "body"))
+	}
+	if body.SignupFlow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signup_flow", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 200, false))
+		}
+	}
+	if body.StripePromotionCodeID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.stripe_promotion_code_id", *body.StripePromotionCodeID, "^promo_[A-Za-z0-9_]+$"))
+	}
+	if body.StripePromotionCodeID != nil {
+		if utf8.RuneCountInString(*body.StripePromotionCodeID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_promotion_code_id", *body.StripePromotionCodeID, utf8.RuneCountInString(*body.StripePromotionCodeID), 255, false))
+		}
+	}
+	if body.SignupFlow != nil {
+		if !(*body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", *body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateSetStripeSubscriptionRequestBody runs the validations defined on
 // SetStripeSubscriptionRequestBody
 func ValidateSetStripeSubscriptionRequestBody(body *SetStripeSubscriptionRequestBody) (err error) {
@@ -35136,6 +39281,18 @@ func ValidateSupportFactRequestBody(body *SupportFactRequestBody) (err error) {
 		if utf8.RuneCountInString(*body.Note) > 10000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", *body.Note, utf8.RuneCountInString(*body.Note), 10000, false))
 		}
+	}
+	return
+}
+
+// ValidateAdminExternalMcpMigrationRequestRequestBody runs the validations
+// defined on AdminExternalMcpMigrationRequestRequestBody
+func ValidateAdminExternalMcpMigrationRequestRequestBody(body *AdminExternalMcpMigrationRequestRequestBody) (err error) {
+	if body.ToolsetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
+	}
+	if body.ToolsetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
 	}
 	return
 }

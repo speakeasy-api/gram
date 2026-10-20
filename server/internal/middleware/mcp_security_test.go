@@ -105,7 +105,7 @@ func TestMCPSecurity_RejectsSameSiteFromUntrustedOrigin(t *testing.T) {
 }
 
 // The dashboard's MCP inspection tabs connect to a customer's custom domain,
-// which is cross-site from the Gram origin and cannot be rebased onto the
+// which is cross-site from the Speakeasy origin and cannot be rebased onto the
 // platform host because mcp_endpoint rows resolve by (slug, custom_domain_id).
 func TestMCPSecurity_AllowsTrustedGramOriginCrossSite(t *testing.T) {
 	t.Parallel()
@@ -117,7 +117,7 @@ func TestMCPSecurity_AllowsTrustedGramOriginCrossSite(t *testing.T) {
 
 	_, reached := serveMCPSecurity(t, req)
 
-	require.True(t, reached, "the Gram first-party origin must reach a custom domain")
+	require.True(t, reached, "the Speakeasy first-party origin must reach a custom domain")
 }
 
 // Elements is embedded on customer domains and is genuinely cross-site. Its
@@ -197,9 +197,8 @@ func TestMCPSecurity_CoversEveryMCPJSONRPCRoute(t *testing.T) {
 
 	for _, path := range []string{
 		"/mcp/petstore",              // toolset-backed and meta-MCP-backed
-		"/x/mcp/petstore",            // experimental runtime
 		"/platform/mcp/gram-billing", // platform toolsets
-		"/platform-mcp",              // Gram's own platform MCP server
+		"/platform-mcp",              // Speakeasy's own platform MCP server
 		// The per-agent gateway, addressed by agent id rather than slug.
 		"/agent-mcp/0e3b6b1a-0000-4000-8000-000000000001",
 	} {
@@ -219,7 +218,7 @@ func TestMCPSecurity_CoversEveryMCPJSONRPCRoute(t *testing.T) {
 }
 
 // The OAuth callbacks and hashed browser assets registered directly under
-// /mcp/ and /x/mcp/ sit in the same one-segment shape as a slug, so the
+// /mcp/ sit in the same one-segment shape as a slug, so the
 // original predicate read them as MCP endpoints and origin-checked them.
 //
 // A callback is reached by the browser following the upstream IdP's redirect,
@@ -235,8 +234,8 @@ func TestMCPSecurity_AllowsOAuthCallbackNavigation(t *testing.T) {
 		"/mcp/idp_callback",
 		"/mcp/remote_login_callback",
 		"/mcp/remote_login_bind",
-		"/x/mcp/idp_callback",
-		"/x/mcp/remote_login_callback",
+		// Exempt by shape: a two-segment tail is never an endpoint slug.
+		"/mcp/idp_callback/0190a6f8-5b2c-7d3e-8f41-2a6b9c0d1e2f",
 	} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()

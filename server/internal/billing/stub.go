@@ -50,7 +50,8 @@ func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (*Tier, 
 		}
 		return tier, active, nil
 	}
-	return new(TierPro), true, nil
+	// Report no tier so reconciliation keeps the persisted tier.
+	return nil, false, nil
 }
 
 func (s *StubClient) ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, webhookHeader http.Header) (*PolarWebhookPayload, error) {
@@ -248,7 +249,7 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"Oauth 2.1 proxy support",
 				"SSO",
 				"Audit logs",
-				"Self-hosting Gram dataplane",
+				"Self-hosting Speakeasy dataplane",
 			},
 			IncludedBullets: []string{
 				"Dedicated slack channel",

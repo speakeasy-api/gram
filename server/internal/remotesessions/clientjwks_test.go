@@ -392,10 +392,10 @@ func TestPrivateKeyJWTRequiresKeySet_UpdatePaths(t *testing.T) {
 }
 
 // TestPrivateKeyJWTRequiresKeySet_CreatePaths covers the rule on every create
-// surface. A client is born without a set — the link is attached afterwards —
-// so declaring private_key_jwt at creation is always a refusal, and on the
-// global surface permanently so: those rows carry a NULL organization_id by
-// construction and the CHECK constraint forbids a set without one.
+// surface. Declaring private_key_jwt at creation without naming a set is a
+// refusal, and on the global surface permanently so: those rows carry a NULL
+// organization_id by construction and the CHECK constraint forbids a set
+// without one.
 func TestPrivateKeyJWTRequiresKeySet_CreatePaths(t *testing.T) {
 	t.Parallel()
 

@@ -211,7 +211,7 @@ SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
 WHERE id = $1
 `
 
-// Operator-initiated disable. Keyed on the Gram organization id rather than
+// Operator-initiated disable. Keyed on the Speakeasy organization id rather than
 // workos_id so an organization that was never linked to WorkOS can still be
 // disabled. Deliberately leaves workos_last_event_id alone: that column is the
 // WorkOS webhook cursor and this is not a WorkOS event, so stamping it would
@@ -249,7 +249,10 @@ WITH latest_arm AS (
     FROM audit_logs AS armed
     WHERE armed.organization_id = $1
       AND armed.project_id IS NULL
-      AND armed.action = 'organization:enterprise_trial_armed'
+      AND armed.action IN (
+          'organization:enterprise_trial_armed',
+          'organization:enterprise_trial_started'
+      )
       AND armed.subject_id = $1
       AND armed.subject_type = 'organization'
     ORDER BY armed.seq DESC, armed.id DESC
@@ -291,9 +294,10 @@ type AdminGetEnterpriseTrialRetryOperationIDsRow struct {
 	MatchingRearmCount  int64
 }
 
-// The arm audit id is the immutable generation token. Every production trial
-// creation writes exactly one arm audit in the creation transaction; extension
-// writes neither. seq orders generations; id breaks any equal-seq tie.
+// The creation audit id is the immutable generation token. Self-service trial
+// creation records an armed action, while an admin grant records a started
+// action. Extension writes neither. seq orders generations; id breaks any
+// equal-seq tie.
 func (q *Queries) AdminGetEnterpriseTrialRetryOperationIDs(ctx context.Context, targetOrganizationID string) (AdminGetEnterpriseTrialRetryOperationIDsRow, error) {
 	row := q.db.QueryRow(ctx, adminGetEnterpriseTrialRetryOperationIDs, targetOrganizationID)
 	var i AdminGetEnterpriseTrialRetryOperationIDsRow
@@ -344,8 +348,17 @@ SELECT
 FROM mcp_servers m
 LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
 CROSS JOIN LATERAL (
-    SELECT count(*)::bigint AS wrapper_count FROM mcp_servers o
-    WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+    SELECT CASE
+        WHEN m.id = m.toolset_id THEN 1
+        WHEN EXISTS (
+            SELECT 1 FROM mcp_servers c
+            WHERE c.id = m.toolset_id AND c.project_id = m.project_id AND c.deleted IS FALSE
+        ) THEN 2
+        ELSE (
+            SELECT count(*) FROM mcp_servers o
+            WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+        )
+    END::bigint AS wrapper_count
 ) w
 WHERE m.id = $1
   AND m.project_id = $2
@@ -401,10 +414,12 @@ type AdminGetMcpServerAuthRow struct {
 // for a toolset-only server, the toolset id. A toolset-backed wrapper takes its
 // issuer from its own row, not its toolset's, matching how the MCP endpoint
 // resolves it; the legacy OAuth columns live on the toolset only.
-// toolset_wrapper_count counts live wrappers of the toolset, so the caller can
-// drop a toolset slug that would also select another wrapper's calls.
+// toolset_wrapper_count counts the live wrappers competing for the toolset's
+// slug, so the caller can drop a toolset slug that would also select another
+// wrapper's calls. A live canonical wrapper (id = toolset id) owns the slug
+// outright: it counts as one, and any other wrapper of that toolset as two.
 // url_slug is the slug in the /mcp/<slug> path clients call: the primary live
-// endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
+// endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
 // a domain root has no such path), else the server's own slug, else the
 // toolset's mcp_slug when no other wrapper shares that toolset.
 func (q *Queries) AdminGetMcpServerAuth(ctx context.Context, arg AdminGetMcpServerAuthParams) (AdminGetMcpServerAuthRow, error) {
@@ -690,6 +705,9 @@ SELECT
     i.attachment_scope,
     i.client_id_metadata_admission_mode,
     i.use_authentication_host,
+    i.authorization_server_mode,
+    -- Matches authserver.IssuerURLPinned: a pin only counts in shared mode.
+    (i.authorization_server_mode = 'shared' AND i.pinned_issuer_url IS NOT NULL AND i.pinned_issuer_url <> '')::boolean AS issuer_url_pinned,
     i.trusted_remote_session_issuer_id,
     i.trusted_remote_session_client_id,
     i.created_at
@@ -715,6 +733,8 @@ type AdminGetUserSessionIssuerRow struct {
 	AttachmentScope               pgtype.Text
 	ClientIDMetadataAdmissionMode pgtype.Text
 	UseAuthenticationHost         bool
+	AuthorizationServerMode       string
+	IssuerUrlPinned               bool
 	TrustedRemoteSessionIssuerID  uuid.NullUUID
 	TrustedRemoteSessionClientID  uuid.NullUUID
 	CreatedAt                     pgtype.Timestamptz
@@ -735,11 +755,86 @@ func (q *Queries) AdminGetUserSessionIssuer(ctx context.Context, arg AdminGetUse
 		&i.AttachmentScope,
 		&i.ClientIDMetadataAdmissionMode,
 		&i.UseAuthenticationHost,
+		&i.AuthorizationServerMode,
+		&i.IssuerUrlPinned,
 		&i.TrustedRemoteSessionIssuerID,
 		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const adminListCustomerUsageOrganizations = `-- name: AdminListCustomerUsageOrganizations :many
+WITH organizations AS (
+    SELECT
+        om.id,
+        om.name,
+        om.slug,
+        om.gram_account_type AS account_type,
+        -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
+        CASE
+            WHEN t.organization_id IS NULL THEN 'none'
+            WHEN t.converted_at IS NOT NULL THEN 'converted'
+            WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+            WHEN t.ends_at <= now() THEN 'expired'
+            WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+            ELSE 'running'
+        END::text AS trial_state,
+        coalesce(bm.billing_cycle_anchor_day, 1)::int AS billing_cycle_anchor_day,
+        om.created_at
+    FROM organization_metadata om
+    LEFT JOIN trials t ON t.organization_id = om.id
+    LEFT JOIN billing_metadata bm ON bm.organization_id = om.id
+    WHERE om.disabled_at IS NULL
+      AND om.gram_account_type IN ('enterprise', 'pro', 'payg')
+)
+SELECT id, name, slug, account_type, trial_state, billing_cycle_anchor_day, created_at
+FROM organizations
+WHERE (account_type = 'enterprise' AND trial_state NOT IN ('running', 'ending_soon'))
+   OR (account_type IN ('pro', 'payg') AND trial_state = 'none')
+ORDER BY lower(name) ASC, id ASC
+`
+
+type AdminListCustomerUsageOrganizationsRow struct {
+	ID                    string
+	Name                  string
+	Slug                  string
+	AccountType           string
+	TrialState            string
+	BillingCycleAnchorDay int32
+	CreatedAt             pgtype.Timestamptz
+}
+
+// The paying organizations the customer usage page reports on: active
+// enterprise organizations not on a running or ending trial, and active pro or
+// payg organizations that never trialled. A missing billing_metadata row means
+// calendar-month cycles, the same fallback the per-organization page applies.
+func (q *Queries) AdminListCustomerUsageOrganizations(ctx context.Context) ([]AdminListCustomerUsageOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListCustomerUsageOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListCustomerUsageOrganizationsRow
+	for rows.Next() {
+		var i AdminListCustomerUsageOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.AccountType,
+			&i.TrialState,
+			&i.BillingCycleAnchorDay,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const adminListIssuerRemoteSessionClients = `-- name: AdminListIssuerRemoteSessionClients :many
@@ -764,6 +859,7 @@ SELECT
     r.code_challenge_methods_supported AS issuer_code_challenge_methods_supported,
     r.client_id_metadata_document_supported AS issuer_cimd_supported,
     r.scope_override AS issuer_scope_override,
+    r.omit_scope_fallback AS issuer_omit_scope_fallback,
     r.metadata_fetched_at AS issuer_metadata_fetched_at,
     r.metadata_last_error_at AS issuer_metadata_last_error_at,
     r.jwks_last_error_at AS issuer_jwks_last_error_at
@@ -795,6 +891,7 @@ type AdminListIssuerRemoteSessionClientsRow struct {
 	IssuerCodeChallengeMethodsSupported []string
 	IssuerCimdSupported                 bool
 	IssuerScopeOverride                 []string
+	IssuerOmitScopeFallback             pgtype.Bool
 	IssuerMetadataFetchedAt             pgtype.Timestamptz
 	IssuerMetadataLastErrorAt           pgtype.Timestamptz
 	IssuerJwksLastErrorAt               pgtype.Timestamptz
@@ -833,6 +930,7 @@ func (q *Queries) AdminListIssuerRemoteSessionClients(ctx context.Context, userS
 			&i.IssuerCodeChallengeMethodsSupported,
 			&i.IssuerCimdSupported,
 			&i.IssuerScopeOverride,
+			&i.IssuerOmitScopeFallback,
 			&i.IssuerMetadataFetchedAt,
 			&i.IssuerMetadataLastErrorAt,
 			&i.IssuerJwksLastErrorAt,
@@ -1030,6 +1128,39 @@ func (q *Queries) AdminListOrganizationMembersPage(ctx context.Context, arg Admi
 	return items, nil
 }
 
+const adminListOrganizationNamesByIDs = `-- name: AdminListOrganizationNamesByIDs :many
+SELECT id, name, slug
+FROM organization_metadata
+WHERE id = ANY($1::text[])
+`
+
+type AdminListOrganizationNamesByIDsRow struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// Labels the hook client grids, whose rows carry only organization ids.
+func (q *Queries) AdminListOrganizationNamesByIDs(ctx context.Context, ids []string) ([]AdminListOrganizationNamesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationNamesByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationNamesByIDsRow
+	for rows.Next() {
+		var i AdminListOrganizationNamesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListOrganizations = `-- name: AdminListOrganizations :many
 WITH search AS (
     -- Escaped once here rather than per arm so the name and the slug arm cannot
@@ -1047,6 +1178,9 @@ filtered AS (
         om.name,
         om.slug,
         om.gram_account_type AS account_type,
+        -- Ranks by what the account pays rather than by how its type is spelled:
+        -- enterprise, then pro and payg, then free, then any type off the list.
+        CASE om.gram_account_type WHEN 'enterprise' THEN 0 WHEN 'pro' THEN 1 WHEN 'payg' THEN 1 WHEN 'free' THEN 2 ELSE 3 END AS account_tier,
         om.workos_id,
         bm.stripe_customer_id,
         bm.stripe_subscription_id,
@@ -1120,7 +1254,7 @@ filtered AS (
         )
 ),
 paged AS MATERIALIZED (
-SELECT id, name, slug, account_type, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
+SELECT id, name, slug, account_type, account_tier, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
 WHERE coalesce(cardinality($11::text[]), 0) = 0 OR trial_state = ANY($11::text[])
 ORDER BY
     CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
@@ -1129,6 +1263,8 @@ ORDER BY
     CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'asc' THEN account_tier END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'desc' THEN account_tier END DESC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
@@ -1160,6 +1296,8 @@ ORDER BY
     CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'asc' THEN account_tier END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'desc' THEN account_tier END DESC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
@@ -1368,7 +1506,7 @@ type AdminListProjectMcpServerRowsRow struct {
 
 // One row per live endpoint, and one with no endpoint columns for a server that
 // has none. custom_domain is null for an endpoint whose domain cannot serve it;
-// the caller skips those and picks the address with mcpendpoints.PrimaryEndpoint.
+// the caller skips those and picks the address with endpointaddr.PrimaryEndpoint.
 func (q *Queries) AdminListProjectMcpServerRows(ctx context.Context, projectID uuid.UUID) ([]AdminListProjectMcpServerRowsRow, error) {
 	rows, err := q.db.Query(ctx, adminListProjectMcpServerRows, projectID)
 	if err != nil {
@@ -1987,6 +2125,12 @@ WHERE billing_metadata.organization_id = organization_metadata.id
   AND billing_metadata.stripe_customer_id = $5::text
   AND billing_metadata.stripe_subscription_id IS NULL
   AND organization_metadata.gram_account_type = 'payg'
+  -- A redeemed partner's retained anchor is immutable accounting provenance.
+  AND NOT EXISTS (
+    SELECT 1 FROM organization_promotion_applications application
+    WHERE application.organization_id = billing_metadata.organization_id
+      AND application.redeemed_at IS NOT NULL
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM billing_metadata AS other
@@ -2078,6 +2222,33 @@ func (q *Queries) AdminUserSessionStats(ctx context.Context, arg AdminUserSessio
 	return i, err
 }
 
+const createSignupOffer = `-- name: CreateSignupOffer :one
+INSERT INTO signup_offers (name, stripe_promotion_code_id, signup_flow)
+VALUES ($1, $2, $3)
+RETURNING created_at, updated_at, name, stripe_promotion_code_id, signup_flow, id, enabled
+`
+
+type CreateSignupOfferParams struct {
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
+}
+
+func (q *Queries) CreateSignupOffer(ctx context.Context, arg CreateSignupOfferParams) (SignupOffer, error) {
+	row := q.db.QueryRow(ctx, createSignupOffer, arg.Name, arg.StripePromotionCodeID, arg.SignupFlow)
+	var i SignupOffer
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.StripePromotionCodeID,
+		&i.SignupFlow,
+		&i.ID,
+		&i.Enabled,
+	)
+	return i, err
+}
+
 const getProjectByID = `-- name: GetProjectByID :one
 SELECT id, slug
 FROM projects
@@ -2114,6 +2285,38 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (GetProject
 	var i GetProjectBySlugRow
 	err := row.Scan(&i.ID, &i.Slug)
 	return i, err
+}
+
+const listSignupOffers = `-- name: ListSignupOffers :many
+SELECT created_at, updated_at, name, stripe_promotion_code_id, signup_flow, id, enabled FROM signup_offers ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListSignupOffers(ctx context.Context) ([]SignupOffer, error) {
+	rows, err := q.db.Query(ctx, listSignupOffers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SignupOffer
+	for rows.Next() {
+		var i SignupOffer
+		if err := rows.Scan(
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Name,
+			&i.StripePromotionCodeID,
+			&i.SignupFlow,
+			&i.ID,
+			&i.Enabled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockEnterpriseTrialInOrganizations = `-- name: LockEnterpriseTrialInOrganizations :one
@@ -2255,7 +2458,7 @@ func (q *Queries) ReadSupportMatrix(ctx context.Context) ([]byte, error) {
 }
 
 const rejectOrganizationEntitlementsFixture = `-- name: RejectOrganizationEntitlementsFixture :exec
-ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK (feature_name = 'automatic-role-distribution') NOT VALID
+ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK (false) NOT VALID
 `
 
 func (q *Queries) RejectOrganizationEntitlementsFixture(ctx context.Context) error {
@@ -2428,6 +2631,41 @@ func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizat
 	var whitelisted bool
 	err := row.Scan(&whitelisted)
 	return whitelisted, err
+}
+
+const updateSignupOffer = `-- name: UpdateSignupOffer :one
+UPDATE signup_offers SET name = $1, stripe_promotion_code_id = $2,
+ signup_flow = $3, enabled = $4, updated_at = clock_timestamp()
+WHERE id = $5 RETURNING created_at, updated_at, name, stripe_promotion_code_id, signup_flow, id, enabled
+`
+
+type UpdateSignupOfferParams struct {
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
+	Enabled               bool
+	ID                    uuid.UUID
+}
+
+func (q *Queries) UpdateSignupOffer(ctx context.Context, arg UpdateSignupOfferParams) (SignupOffer, error) {
+	row := q.db.QueryRow(ctx, updateSignupOffer,
+		arg.Name,
+		arg.StripePromotionCodeID,
+		arg.SignupFlow,
+		arg.Enabled,
+		arg.ID,
+	)
+	var i SignupOffer
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.StripePromotionCodeID,
+		&i.SignupFlow,
+		&i.ID,
+		&i.Enabled,
+	)
+	return i, err
 }
 
 const upsertSupportCoverage = `-- name: UpsertSupportCoverage :exec

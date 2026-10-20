@@ -39,7 +39,6 @@ func (s *Service) SetConsentBindingService(bindings ConsentBindingService) {
 // already resolved by OAuth, without pretending it is a dashboard session.
 func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) error {
 	ctx := r.Context()
-	logger := endpoint.LogWith(s.logger)
 	target := state.AgentAuthorizationTarget
 	if target == nil || !target.matches(endpoint) {
 		return oops.E(oops.CodeForbidden, nil, "agent authorization target does not match endpoint")
@@ -47,9 +46,6 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 	human, err := s.loadConsentHuman(ctx, state, *target)
 	if err != nil {
 		return consentAgentAuthorizationError(err, "consent authorizer is not eligible")
-	}
-	if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
-		return oops.C(oops.CodeNotFound)
 	}
 	action := r.PostForm.Get("action")
 	var result any

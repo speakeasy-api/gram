@@ -9,15 +9,15 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * What the customer must grant in their own GCP project before Gram can impersonate a service account there.
+ * What the customer must grant in their own GCP project before Speakeasy can impersonate a service account there.
  */
 export type GcpSetupInfo = {
   /**
-   * The IAM role to grant Gram's service account on the target service account.
+   * The IAM role to grant Speakeasy's service account on the target service account.
    */
   requiredRole: string;
   /**
-   * Gram's own service account. Grant it roles/iam.serviceAccountTokenCreator on the service account you want Gram to impersonate. Empty when the running environment cannot report one (local development backed by a user login rather than a service-account key).
+   * Speakeasy's own service account. Grant it roles/iam.serviceAccountTokenCreator on the service account you want Speakeasy to impersonate. Empty when the running environment cannot report one (local development backed by a user login rather than a service-account key).
    */
   serviceAccountEmail?: string | undefined;
 };

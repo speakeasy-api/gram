@@ -100,11 +100,11 @@ func PlatformToolsetID(slug string) uuid.UUID {
 func PlatformToolsetName(slug string) string {
 	switch slug {
 	case AssistantsPlatformToolsetSlug:
-		return "Gram assistant tools"
+		return "Speakeasy assistant tools"
 	case ManagedAssistantPlatformToolsetSlug:
-		return "Gram managed assistant tools"
+		return "Speakeasy managed assistant tools"
 	case PlatformMCPReadToolsetSlug:
-		return "Gram Platform MCP"
+		return "Speakeasy Platform MCP"
 	default:
 		return slug
 	}

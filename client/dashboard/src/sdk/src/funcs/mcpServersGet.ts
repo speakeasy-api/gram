@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getMcpServer mcpServers
  *
  * @remarks
- * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
+ * Get an MCP server by ID, slug, or backing toolset ID. Exactly one selector must be provided. Toolset lookup prefers enabled servers, then the canonical wrapper, then the oldest server.
  */
 export function mcpServersGet(
   client: GramCore,
@@ -109,6 +109,7 @@ async function $do(
   const query = encodeFormQuery({
     "id": payload?.id,
     "slug": payload?.slug,
+    "toolset_id": payload?.toolset_id,
   });
 
   const headers = new Headers(compactMap({

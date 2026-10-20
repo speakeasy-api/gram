@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -38,8 +39,7 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 }
 
 // ServeRevoke implements RFC 7009 token revocation. Post-resolution entry
-// point shared by /mcp's HandleRevoke (toolset-keyed) and /x/mcp's
-// mcp_endpoint-keyed route registration.
+// point called by HandleRevoke after slug resolution.
 //
 // Per RFC 7009 §2.2: the response is HTTP 200 unconditionally on success or
 // when the token is unknown / already revoked / was never valid -- the spec
@@ -60,14 +60,24 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 //     client_secret, so holding a validly-signed token is what proves the
 //     caller may revoke it.
 func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	urls, err := s.requestAuthorizationServerURLs(r.Context(), endpoint, s.BaseURLForRequest(r))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build authorization server URLs").LogError(r.Context(), s.logger)
+	}
+	return s.serveRevoke(w, r, endpoint.LogWith(s.logger), endpoint.UserSessionIssuerID, urls)
+}
+
+// serveRevoke revokes a token of the issuer's clients. Revocation is scoped to
+// the issuer, not to an MCP server, so per-endpoint and shared authorization
+// servers share it; urls are the addressed authorization server's, against
+// which client assertions are checked.
+func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID, urls AuthorizationServerURLs) error {
 	ctx := r.Context()
 
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
-		return writeTokenError(ctx, w, s.logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
 	}
-
-	logger := endpoint.LogWith(s.logger)
 
 	creds := extractClientCredentials(r)
 	presentedAuthMethod := creds.method
@@ -77,7 +87,7 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
 	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		UserSessionIssuerID: issuerID,
 		ClientID:            clientID,
 	})
 	if err != nil {
@@ -93,25 +103,24 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 	// deliberately NOT applied here is the CIMD admission `disabled` check:
 	// revocation is a de-escalation, and a client an operator has just
 	// de-admitted should still be able to kill its own outstanding tokens.
-	if reason := s.authenticateOAuthClient(ctx, logger, endpoint, clientAssertionAtRevoke, &clientRow, creds, s.BaseURLForRequest(r)); reason != "" {
+	if reason := s.authenticateOAuthClient(ctx, logger, issuerID, urls, clientAssertionAtRevoke, &clientRow, creds); reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", reason)
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authenticated", clientID, presentedAuthMethod, "", "")
 
-	token := r.PostForm.Get("token")
+	token := r.PostForm.Get(oauthwire.ParamToken)
 	if token == "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke request rejected", clientID, presentedAuthMethod, "", "missing_token")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "token is required")
 	}
-	hint := r.PostForm.Get("token_type_hint")
+	hint := r.PostForm.Get(oauthwire.ParamTokenTypeHint)
 
 	// Try the hinted type first; on miss, fall through to the other. Per
 	// RFC 7009 §2.1 each path verifies the token belongs to the
 	// authenticated client before revoking; ownership mismatches look like
 	// the "unknown token" success path to the caller (§2.2 — don't leak
 	// ownership).
-	issuerID := endpoint.UserSessionIssuerID
 	clientUUID := clientRow.ID
 	switch hint {
 	case "refresh_token":

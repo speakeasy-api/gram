@@ -40,11 +40,16 @@ const (
 	ScopeSkillBlockedWrite       Scope = "skill:blocked_write"
 	ScopePluginWrite             Scope = "plugin:write"
 	ScopePluginBlockedWrite      Scope = "plugin:blocked_write"
+	ScopeAssistantRead           Scope = "assistant:read"
+	ScopeAssistantBlockedRead    Scope = "assistant:blocked_read"
+	ScopeAssistantWrite          Scope = "assistant:write"
+	ScopeAssistantBlockedWrite   Scope = "assistant:blocked_write"
 	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
 	ScopeChatRead                Scope = "chat:read"
 	ScopeChatWrite               Scope = "chat:write"
+	ScopeLogRead                 Scope = "log:read"
 	ScopeAgentRead               Scope = "agent:read"
 	ScopeAgentWrite              Scope = "agent:write"
 	ScopeAgentAuthorize          Scope = "agent:authorize"
@@ -93,6 +98,8 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
 	ScopeSkillWrite,
+	ScopeAssistantRead,
+	ScopeAssistantWrite,
 	ScopePluginWrite,
 	ScopeAgentRead,
 	ScopeAgentWrite,
@@ -115,6 +122,11 @@ var adminScopes = []Scope{
 	// handlers regardless. chat:write satisfies chat:read via scopeExpansions,
 	// so a session reviewer who should not be able to delete gets chat:read
 	// alone.
+	//
+	// log:read is likewise NOT a default for any system role: raw tool-call
+	// logs carry tool arguments, results, prompt text, and hook payloads from
+	// every member of a project, so viewing them must be granted explicitly per
+	// project. Neither project:* nor org:admin implies it.
 }
 
 // scopeVisibilityByScope is the source of truth for whether a scope is exposed
@@ -146,11 +158,16 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeSkillBlockedWrite:       scopeVisibilityInternal,
 	ScopePluginWrite:             scopeVisibilityUserVisible,
 	ScopePluginBlockedWrite:      scopeVisibilityInternal,
+	ScopeAssistantRead:           scopeVisibilityUserVisible,
+	ScopeAssistantBlockedRead:    scopeVisibilityInternal,
+	ScopeAssistantWrite:          scopeVisibilityUserVisible,
+	ScopeAssistantBlockedWrite:   scopeVisibilityInternal,
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
 	ScopeChatWrite:               scopeVisibilityUserVisible,
+	ScopeLogRead:                 scopeVisibilityUserVisible,
 	ScopeAgentRead:               scopeVisibilityUserVisible,
 	ScopeAgentWrite:              scopeVisibilityUserVisible,
 	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
@@ -169,6 +186,7 @@ var memberScopes = []Scope{
 	ScopeMCPRead,
 	ScopeMCPConnect,
 	ScopeSkillRead,
+	ScopeAssistantRead,
 	// environment:read is intentionally NOT a default for members: environment
 	// values include secrets, so viewing them must be granted explicitly via a
 	// custom role. Admins retain environment:read/write via adminScopes.
@@ -262,11 +280,16 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeSkillBlockedWrite:       {ScopeSkillBlockedRead},
 	ScopePluginWrite:             nil,
 	ScopePluginBlockedWrite:      nil,
+	ScopeAssistantRead:           {ScopeAssistantWrite},
+	ScopeAssistantBlockedRead:    nil,
+	ScopeAssistantWrite:          nil,
+	ScopeAssistantBlockedWrite:   {ScopeAssistantBlockedRead},
 	ScopeRiskPolicyEvaluate:      nil,
 	ScopeRiskPolicyBypass:        nil,
 	ScopeRiskPolicyBlock:         nil,
 	ScopeChatRead:                {ScopeChatWrite},
 	ScopeChatWrite:               nil,
+	ScopeLogRead:                 nil,
 	ScopeAgentRead:               nil,
 	ScopeAgentWrite:              nil,
 	ScopeAgentAuthorize:          nil,
@@ -308,11 +331,16 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeSkillBlockedWrite:       "",
 	ScopePluginWrite:             ScopePluginBlockedWrite,
 	ScopePluginBlockedWrite:      "",
+	ScopeAssistantRead:           ScopeAssistantBlockedRead,
+	ScopeAssistantBlockedRead:    "",
+	ScopeAssistantWrite:          ScopeAssistantBlockedWrite,
+	ScopeAssistantBlockedWrite:   "",
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeRiskPolicyBlock:         "",
 	ScopeChatRead:                "",
 	ScopeChatWrite:               "",
+	ScopeLogRead:                 "",
 	ScopeAgentRead:               "",
 	ScopeAgentWrite:              "",
 	ScopeAgentAuthorize:          "",

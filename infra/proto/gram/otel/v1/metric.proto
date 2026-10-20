@@ -7,8 +7,8 @@ import "gcp/pubsub/v1/options.proto";
 option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1";
 
 // Metric is one OTLP metric carried with its resource, scope, and authenticated
-// Gram provenance. OTLP fields retain their exact field numbers and wire types;
-// Gram-only fields live at 1000+ and are stripped before relay delivery.
+// Speakeasy provenance. OTLP fields retain their exact field numbers and wire types;
+// Speakeasy-only fields live at 1000+ and are stripped before relay delivery.
 message Metric {
   reserved 4, 6, 8;
 

@@ -107,7 +107,7 @@ func TestProxy_Post_ForwardsRequestAndResponse(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
@@ -148,7 +148,7 @@ func TestProxy_Post_DisableRedirectsRelaysRedirectWithoutFollowing(t *testing.T)
 		IsRequired:             true,
 	}}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
@@ -176,7 +176,7 @@ func TestProxy_Post_RejectsCredentialBearingLegacyHostedHTTP(t *testing.T) {
 		Name: "X-Agent-Credential", StaticValue: "", ValueFromRequestHeader: "X-Caller-Credential", IsRequired: true,
 	}}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	err := p.Post(httptest.NewRecorder(), req)
 	require.ErrorIs(t, err, proxy.ErrInsecureRemoteMCPTransport)
@@ -205,7 +205,7 @@ func TestProxy_Post_RejectsRedirectToHostedHTTP(t *testing.T) {
 		Name: "X-Agent-Credential", StaticValue: "agent-token", ValueFromRequestHeader: "", IsRequired: true,
 	}}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	err = p.Post(httptest.NewRecorder(), req)
 	require.ErrorIs(t, err, proxy.ErrInsecureRemoteMCPTransport)
@@ -244,7 +244,7 @@ func TestProxy_Post_StripsCredentialsOnCrossOriginRedirect(t *testing.T) {
 		Name: "X-Passed-Credential", StaticValue: "", ValueFromRequestHeader: "X-Caller-Credential", IsRequired: true,
 	}}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Caller-Credential", "caller-token")
 
@@ -279,7 +279,7 @@ func TestProxy_Post_StopsSameOriginRedirectLoop(t *testing.T) {
 	p := newProxyForTest(t, upstream.URL)
 	p.Identity.RemoteMCPServerID = "legacy-remote"
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	err := p.Post(httptest.NewRecorder(), req)
@@ -311,7 +311,7 @@ func TestProxy_Post_RejectsCrossOriginBodyReplayingRedirect(t *testing.T) {
 		p.Identity.RemoteMCPServerID = "legacy-remote"
 		p.AuthorizationOverride = "user-token"
 
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 		req.Header.Set("Content-Type", "application/json")
 
 		err := p.Post(httptest.NewRecorder(), req)
@@ -351,7 +351,7 @@ func TestProxy_Post_FollowsSameOriginBodyReplayingRedirect(t *testing.T) {
 		Name: "X-Agent-Credential", StaticValue: "agent-token", ValueFromRequestHeader: "", IsRequired: true,
 	}}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -387,7 +387,7 @@ func TestProxy_Post_KeepsCredentialsOnSameOriginRedirect(t *testing.T) {
 		Name: "X-Agent-Credential", StaticValue: "agent-token", ValueFromRequestHeader: "", IsRequired: true,
 	}}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -458,13 +458,13 @@ func TestProxy_Post_StripsAuthorizationHeader(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer gram-api-key-should-not-leak")
 
 	rr := httptest.NewRecorder()
 	require.NoError(t, p.Post(rr, req))
-	require.Empty(t, gotAuth, "Gram API key must never be forwarded to the remote MCP server")
+	require.Empty(t, gotAuth, "Speakeasy API key must never be forwarded to the remote MCP server")
 }
 
 func TestProxy_Post_StripsBrowserHeaders(t *testing.T) {
@@ -483,7 +483,7 @@ func TestProxy_Post_StripsBrowserHeaders(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	// Headers a browser attaches when the dashboard drives the proxy. Origin
 	// trips upstream DNS-rebinding checks and Cookie would leak the dashboard
@@ -519,7 +519,7 @@ func TestProxy_Post_AppliesStaticHeader(t *testing.T) {
 		{Name: "X-Remote-Api-Key", StaticValue: "upstream-secret", IsRequired: true},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -543,7 +543,7 @@ func TestProxy_Post_PassThroughHeader(t *testing.T) {
 		{Name: "X-Upstream-Owner", ValueFromRequestHeader: "X-Gram-Owner"},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Gram-Owner", "team-42")
 
@@ -565,7 +565,7 @@ func TestProxy_Post_MissingRequiredPassThroughHeaderReturns400(t *testing.T) {
 		{Name: "X-Upstream-Owner", ValueFromRequestHeader: "X-Gram-Owner", IsRequired: true},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -586,7 +586,7 @@ func TestProxy_Post_InvalidJSONRPCReturns400(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader("{not json"))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader("{not json"))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -617,7 +617,7 @@ func TestProxy_Post_InterceptorsRunInOrder(t *testing.T) {
 		&mockRemoteMessageInterceptor{name: "resp-b", order: &order},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -638,7 +638,7 @@ func TestProxy_Post_UserRequestInterceptorRejectionWritesJSONRPCError(t *testing
 		&mockUserRequestInterceptor{name: "reject", err: errors.New("policy violation")},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -674,7 +674,7 @@ func TestProxy_Post_TypedRejectErrorSurfacesThroughInterceptorWrap(t *testing.T)
 		&mockUserRequestInterceptor{name: "schema-check", err: typedReject},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -710,7 +710,7 @@ func TestProxy_Post_OopsShareableErrorSurfacesThroughInterceptorWrap(t *testing.
 		&mockUserRequestInterceptor{name: "policy-gate", err: innerOops},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -797,7 +797,7 @@ func TestProxy_Get_StreamsEventsIncrementally(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x/mcp/id", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/mcp/id", http.NoBody)
 	req.Header.Set("Accept", "text/event-stream")
 
 	rec := newFlushRecorder()
@@ -823,7 +823,7 @@ func TestProxy_Get_ForwardsRequest(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x/mcp/id", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/mcp/id", http.NoBody)
 	req.Header.Set("Accept", "text/event-stream")
 
 	rr := httptest.NewRecorder()
@@ -852,7 +852,7 @@ func TestProxy_Get_NonSSEResponseRelaysVerbatim(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x/mcp/id", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/mcp/id", http.NoBody)
 	req.Header.Set("Accept", "text/event-stream")
 
 	rr := httptest.NewRecorder()
@@ -876,7 +876,7 @@ func TestProxy_Delete_ForwardsRequestWithSessionHeader(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/x/mcp/id", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/mcp/id", http.NoBody)
 	req.Header.Set(proxy.McpSessionIDHeader, "session-123")
 
 	rr := httptest.NewRecorder()
@@ -891,7 +891,10 @@ func TestProxy_Post_HeadersPhaseTimeoutReturnsGatewayError(t *testing.T) {
 
 	// Upstream never writes headers, blocks until canceled. Phase 1 timer
 	// fires and surfaces a CodeGatewayError "remote mcp server timed out".
+	// Draining the body first lets the server notice the proxy disconnect and
+	// cancel r.Context().
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
 		select {
 		case <-time.After(2 * time.Second):
 			w.WriteHeader(http.StatusOK)
@@ -903,7 +906,7 @@ func TestProxy_Post_HeadersPhaseTimeoutReturnsGatewayError(t *testing.T) {
 	p := newProxyForTest(t, upstream.URL)
 	p.NonStreamingTimeout = 50 * time.Millisecond
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -943,7 +946,7 @@ func TestProxy_Post_NonStreamingBodyPhaseTimeoutReturnsGatewayError(t *testing.T
 	p := newProxyForTest(t, upstream.URL)
 	p.NonStreamingTimeout = 100 * time.Millisecond
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -996,7 +999,7 @@ func TestProxy_Get_LongStreamStaysAliveOnActivity(t *testing.T) {
 		&mockRemoteMessageInterceptor{name: "audit", observed: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x/mcp/id", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/mcp/id", http.NoBody)
 	req.Header.Set("Accept", "text/event-stream")
 
 	rr := httptest.NewRecorder()
@@ -1051,7 +1054,7 @@ func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
 	p.NonStreamingTimeout = 5 * time.Second // deliberately too long to be load-bearing
 	p.StreamingTimeout = idleTimeout
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x/mcp/id", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/mcp/id", http.NoBody)
 	req.Header.Set("Accept", "text/event-stream")
 
 	rr := httptest.NewRecorder()
@@ -1079,7 +1082,7 @@ func TestProxy_Post_StreamIdleTimeoutReturnsGatewayError(t *testing.T) {
 	p.NonStreamingTimeout = 5 * time.Second
 	p.StreamingTimeout = idleTimeout
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
@@ -1102,7 +1105,7 @@ func TestProxy_Post_UpstreamUnreachableReturnsGatewayError(t *testing.T) {
 	p := newProxyForTest(t, unreachableURL)
 	p.NonStreamingTimeout = 500 * time.Millisecond
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1129,7 +1132,7 @@ func TestProxy_Post_OversizedUpstreamBodyReturnsError(t *testing.T) {
 	p := newProxyForTest(t, upstream.URL)
 	p.MaxBufferedBodyBytes = 512
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1156,7 +1159,7 @@ func TestProxy_Post_NonJSONRPC2xxBodyForRequestSynthesizesJSONRPCError(t *testin
 
 	p := newProxyForTest(t, upstream.URL)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1197,7 +1200,7 @@ func TestProxy_Post_UndecodableUpstreamBodyForNotificationRelaysVerbatim(t *test
 	p := newProxyForTest(t, upstream.URL)
 
 	const notificationBody = `{"jsonrpc":"2.0","method":"notifications/initialized"}`
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(notificationBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(notificationBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1223,7 +1226,7 @@ func TestProxy_Post_NonJSONRPCNon2xxBodyForRequestRelaysVerbatim(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1260,7 +1263,7 @@ func TestProxy_Post_GzipEncodedUpstreamBodyIsDecodedAndIntercepted(t *testing.T)
 		&mockRemoteMessageInterceptor{name: "audit", observed: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept-Encoding", "gzip")
 
@@ -1302,7 +1305,7 @@ func TestProxy_Post_ConfiguredAcceptEncodingHeaderIsStripped(t *testing.T) {
 		&mockRemoteMessageInterceptor{name: "audit", observed: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1330,7 +1333,7 @@ func TestProxy_Post_OversizedUserBodyReturnsError(t *testing.T) {
 	padding := strings.Repeat("x", 512)
 	oversizedBody := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"padding":"%s"}}`, padding)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(oversizedBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(oversizedBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1362,7 +1365,7 @@ func TestProxy_Post_BatchRequestBodyReturnsJSONRPCError(t *testing.T) {
 	p := newProxyForTest(t, upstream.URL)
 
 	batchBody := `[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}]`
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(batchBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(batchBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1389,7 +1392,7 @@ func TestProxy_Post_BatchRequestBodyWithLeadingWhitespaceReturnsJSONRPCError(t *
 	p := newProxyForTest(t, upstream.URL)
 
 	batchBody := "  \n\t\r [{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}]"
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(batchBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(batchBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1418,7 +1421,7 @@ func TestProxy_Post_SingleMessageBodyWithLeadingWhitespaceStillParses(t *testing
 	p := newProxyForTest(t, upstream.URL)
 
 	paddedBody := "  \n  " + initializeRequest
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(paddedBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(paddedBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1461,7 +1464,7 @@ func TestProxy_Get_LongStreamsAreNotSubjectToCumulativeCap(t *testing.T) {
 		&mockRemoteMessageInterceptor{name: "audit", observed: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x/mcp/id", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/mcp/id", http.NoBody)
 	req.Header.Set("Accept", "text/event-stream")
 
 	rr := httptest.NewRecorder()
@@ -1492,7 +1495,7 @@ func TestProxy_Post_RecordsMetrics(t *testing.T) {
 		McpServerID:         "mcp-abc",
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1547,7 +1550,7 @@ func TestProxy_Post_RecordsErrorStatusClassOnUpstreamFailure(t *testing.T) {
 	p.Metrics = metrics
 	p.NonStreamingTimeout = 500 * time.Millisecond
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1572,7 +1575,10 @@ func TestProxy_Post_RecordsErrorStatusClassOnUpstreamFailure(t *testing.T) {
 func TestProxy_Post_ClientCancellationReturnsBadRequest(t *testing.T) {
 	t.Parallel()
 
+	// Draining the body first lets the server notice the proxy disconnect and
+	// cancel r.Context().
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
 		select {
 		case <-r.Context().Done():
 		case <-time.After(3 * time.Second):
@@ -1585,7 +1591,7 @@ func TestProxy_Post_ClientCancellationReturnsBadRequest(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	go func() {
@@ -1618,7 +1624,7 @@ func TestProxy_Post_InitializeRequestInterceptor_RunsForInitialize(t *testing.T)
 		&mockInitializeRequestInterceptor{name: "typed", lastCall: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequestWithParams))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequestWithParams))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1645,7 +1651,7 @@ func TestProxy_Post_InitializeRequestInterceptor_SkipsForNonInitialize(t *testin
 		&mockInitializeRequestInterceptor{name: "typed", called: &called},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1666,7 +1672,7 @@ func TestProxy_Post_InitializeRequestInterceptor_RejectionWritesJSONRPCError(t *
 		&mockInitializeRequestInterceptor{name: "typed", err: &proxy.RejectError{Code: proxy.RejectCodeServerError, Message: "session blocked", Data: nil}},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequestWithParams))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequestWithParams))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1695,7 +1701,7 @@ func TestProxy_Post_InitializeRequestInterceptor_RunsAfterGeneric(t *testing.T) 
 		&mockInitializeRequestInterceptor{name: "typed-req", order: &order},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequestWithParams))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequestWithParams))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1724,7 +1730,7 @@ func TestProxy_Post_ToolsCallRequestInterceptor_RunsForToolsCall(t *testing.T) {
 		&mockToolsCallRequestInterceptor{name: "typed", lastCall: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1750,7 +1756,7 @@ func TestProxy_Post_ToolsCallRequestInterceptor_SkipsForNonToolsCall(t *testing.
 		&mockToolsCallRequestInterceptor{name: "typed", called: &called},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1771,7 +1777,7 @@ func TestProxy_Post_ToolsCallRequestInterceptor_RejectionWritesJSONRPCError(t *t
 		&mockToolsCallRequestInterceptor{name: "typed", err: &proxy.RejectError{Code: proxy.RejectCodeServerError, Message: "policy violation", Data: nil}},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1800,7 +1806,7 @@ func TestProxy_Post_ToolsCallRequestInterceptor_RunsAfterGeneric(t *testing.T) {
 		&mockToolsCallRequestInterceptor{name: "typed-req", order: &order},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1830,7 +1836,7 @@ func TestProxy_Post_ToolsCallRequest_SetArguments_RewritesForwardedBody(t *testi
 		},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1875,7 +1881,7 @@ func TestProxy_Post_ToolsCallRequest_SetArguments_EmptyRemovesArgumentsMember(t 
 		},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1910,7 +1916,7 @@ func TestProxy_Post_ToolsCallRequest_SetArguments_MarshalFailureSurfacesAs5xx(t 
 		},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1935,7 +1941,7 @@ func TestProxy_Post_ToolsCallResponseInterceptor_RunsForSuccessResult(t *testing
 		&mockToolsCallResponseInterceptor{name: "typed", lastCall: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1963,7 +1969,7 @@ func TestProxy_Post_ToolsCallResponseInterceptor_RunsForJSONRPCError(t *testing.
 		&mockToolsCallResponseInterceptor{name: "typed", lastCall: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1993,7 +1999,7 @@ func TestProxy_Post_ToolsCallResponseInterceptor_RunsAfterGeneric(t *testing.T) 
 		&mockToolsCallResponseInterceptor{name: "typed-resp", order: &order},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2015,7 +2021,7 @@ func TestProxy_Post_ToolsCallResponseInterceptor_RejectionWritesJSONRPCError(t *
 		&mockToolsCallResponseInterceptor{name: "typed", err: &proxy.RejectError{Code: proxy.RejectCodeServerError, Message: "response blocked", Data: nil}},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2065,7 +2071,7 @@ func TestProxy_Post_SSEResponse_FiresRemoteMessageInterceptorPerEvent(t *testing
 		&mockRemoteMessageInterceptor{name: "audit", observed: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2100,7 +2106,7 @@ func TestProxy_Post_SSEResponse_TerminalEventDispatchesTypedInterceptor(t *testi
 		&mockToolsCallResponseInterceptor{name: "typed", lastCall: &observedTerminal},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2134,7 +2140,7 @@ func TestProxy_Post_SSEResponse_NonTerminalEventsDoNotDispatchTypedInterceptor(t
 		&mockToolsCallResponseInterceptor{name: "typed", called: &called},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2170,7 +2176,7 @@ func TestProxy_Post_SSEResponse_RemoteMessageInterceptorRejectionSubstitutesEven
 		&mockRemoteMessageInterceptor{name: "blocker", called: &called, err: errors.New("policy rejection")},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2211,7 +2217,7 @@ func TestProxy_Get_SSE_FiresRemoteMessageInterceptors(t *testing.T) {
 		&mockRemoteMessageInterceptor{name: "audit", observed: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x/mcp/id", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/mcp/id", http.NoBody)
 	req.Header.Set("Accept", "text/event-stream")
 
 	rr := httptest.NewRecorder()
@@ -2244,7 +2250,7 @@ func TestProxy_Post_SSEResponse_TypedRejectionSubstitutesTerminalEvent(t *testin
 		&mockToolsCallResponseInterceptor{name: "pii-blocker", err: &proxy.RejectError{Code: proxy.RejectCodeServerError, Message: "policy: contains sensitive content", Data: nil}},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2275,7 +2281,7 @@ func TestProxy_Post_JSONResponse_RemoteMessageInterceptorRejectionWritesJSONRPCE
 		&mockRemoteMessageInterceptor{name: "blocker", err: errors.New("policy rejection")},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2305,7 +2311,7 @@ func TestProxy_Post_NotificationRejectionWritesHTTP400IDLessEnvelope(t *testing.
 	}
 
 	const notificationBody = `{"jsonrpc":"2.0","method":"notifications/initialized"}`
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(notificationBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(notificationBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2335,7 +2341,7 @@ func TestProxy_Post_ToolsListRequestInterceptor_RunsForToolsList(t *testing.T) {
 		&mockToolsListRequestInterceptor{name: "typed", lastCall: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2365,7 +2371,7 @@ func TestProxy_Post_ToolsListRequestInterceptor_DecodesMissingParams(t *testing.
 		&mockToolsListRequestInterceptor{name: "typed", lastCall: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2390,7 +2396,7 @@ func TestProxy_Post_ToolsListRequestInterceptor_SkipsForNonToolsList(t *testing.
 		&mockToolsListRequestInterceptor{name: "typed", called: &called},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2411,7 +2417,7 @@ func TestProxy_Post_ToolsListRequestInterceptor_RejectionWritesJSONRPCError(t *t
 		&mockToolsListRequestInterceptor{name: "typed", err: &proxy.RejectError{Code: proxy.RejectCodeServerError, Message: "discovery blocked", Data: nil}},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2440,7 +2446,7 @@ func TestProxy_Post_ToolsListRequestInterceptor_RunsAfterGeneric(t *testing.T) {
 		&mockToolsListRequestInterceptor{name: "typed-req", order: &order},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2463,7 +2469,7 @@ func TestProxy_Post_ToolsListResponseInterceptor_RunsForSuccessResult(t *testing
 		&mockToolsListResponseInterceptor{name: "typed", lastCall: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2491,7 +2497,7 @@ func TestProxy_Post_ToolsListResponseInterceptor_RunsForJSONRPCError(t *testing.
 		&mockToolsListResponseInterceptor{name: "typed", lastCall: &observed},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2521,7 +2527,7 @@ func TestProxy_Post_ToolsListResponseInterceptor_RunsAfterGeneric(t *testing.T) 
 		&mockToolsListResponseInterceptor{name: "typed-resp", order: &order},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2543,7 +2549,7 @@ func TestProxy_Post_ToolsListResponseInterceptor_RejectionWritesJSONRPCError(t *
 		&mockToolsListResponseInterceptor{name: "typed", err: &proxy.RejectError{Code: proxy.RejectCodeServerError, Message: "listing blocked", Data: nil}},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2601,7 +2607,7 @@ func TestProxy_Post_ToolsListResponse_LaterInterceptorObservesEarlierMutation(t 
 		},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2636,7 +2642,7 @@ func TestProxy_Post_ToolsListResponse_MutationThenRejection_DiscardsMutation(t *
 		},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2664,7 +2670,7 @@ func TestProxy_Post_ToolsListResponse_SetTools_EmptyArrayWhenAllFiltered(t *test
 		},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2699,7 +2705,7 @@ func TestProxy_Post_ToolsListResponse_SetTools_OnErrorResponse_SurfacesAs5xx(t *
 		},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2733,7 +2739,7 @@ func TestProxy_Post_ToolsListResponse_SetTools_MarshalFailureSurfacesAs5xx(t *te
 		},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2763,7 +2769,7 @@ func TestProxy_Post_ToolsListResponse_SetTools_NilToolsNormalizesToEmptyArray(t 
 		},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2797,7 +2803,7 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedBody_JSONPath(t *t
 		},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2845,7 +2851,7 @@ func TestProxy_Post_SSEResponse_TerminalEventDispatchesTypedToolsListInterceptor
 		&mockToolsListResponseInterceptor{name: "typed", lastCall: &observedTerminal},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2881,7 +2887,7 @@ func TestProxy_Post_SSEResponse_TypedToolsListRejectionSubstitutesTerminalEvent(
 		&mockToolsListResponseInterceptor{name: "policy-blocker", err: &proxy.RejectError{Code: proxy.RejectCodeServerError, Message: "policy: tool not allowed", Data: nil}},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2925,7 +2931,7 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedEvent_SSEPath(t *t
 		},
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsListRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -2967,7 +2973,7 @@ func TestProxy_Post_UpstreamResponseInterceptorRuns(t *testing.T) {
 		return nil
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
@@ -3000,7 +3006,7 @@ func TestProxy_Post_UpstreamResponseInterceptorRejectionWritesJSONRPCError(t *te
 		}
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -3039,7 +3045,7 @@ func TestProxy_Post_UpstreamResponseInterceptorErrorAbortsBeforeFlush(t *testing
 		return oops.E(oops.CodeGatewayError, nil, "record session failed")
 	}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 

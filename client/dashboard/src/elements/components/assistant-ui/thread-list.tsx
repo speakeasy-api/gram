@@ -191,7 +191,7 @@ const ThreadListItemTitle: FC = () => {
 };
 
 const ThreadListItemDate: FC = () => {
-  // Both remoteId and externalId equal the chat id in the Gram adapter; the
+  // Both remoteId and externalId equal the chat id in the Speakeasy adapter; the
   // side-channel map is keyed by that id. New local threads have neither yet,
   // so they simply render no date.
   const id = useAuiState(

@@ -67,7 +67,7 @@ func RiskPolicyAudienceTypeEnum() {
 }
 
 // RiskPolicyShadowMCPDispositionEnum constrains the default disposition of a
-// shadow MCP blocking policy. `block_all` blocks every non-Gram-hosted server
+// shadow MCP blocking policy. `block_all` blocks every non-Speakeasy-hosted server
 // unless explicitly allowed (the original behavior); `allow_all` permits every
 // server unless it appears on the policy's blocked-URL list. The disposition is
 // immutable after create — switching posture requires deleting and recreating
@@ -191,7 +191,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	})
 	Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs the policy applies to. Contains user:all when audience_type is everyone.")
 	Attribute("mcp_scope", RiskMCPScope, "Optional MCP server and tool restriction. Null applies the policy to every MCP server. When set, the action must be flag or block.")
-	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
+	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
 		RiskPolicyShadowMCPDispositionEnum()
 	})
 	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
@@ -211,8 +211,6 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("updated_at", String, "When the policy was last updated.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version. Populated on single-policy reads; omitted from list responses (use riskPoliciesStatus for progress).")
-	Attribute("total_messages", Int64, "Total number of messages in the project. Populated on single-policy reads; omitted from list responses.")
 
 	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "score", "version", "created_at", "updated_at")
 })
@@ -279,12 +277,12 @@ var RiskExclusion = Type("RiskExclusion", func() {
 // riskExecutionAttributes describes mediated execution metadata without
 // implying that a finding has a durable chat anchor or revealable payload.
 func riskExecutionAttributes() {
-	Attribute("execution_id", String, "Identity of the concrete mediated execution.")
+	Attribute("execution_id", String, "The mediated MCP execution (tool call, resource read or prompt get) that raised this finding. Filter listResults by it to list that execution's non-dismissed findings.")
 	Attribute("mcp_server_id", String, "Concrete MCP server that executed the operation.")
 	Attribute("meta_mcp_server_id", String, "Outer gateway that routed the execution, when present.")
 	Attribute("toolset_id", String, "Toolset serving the execution, when present.")
 	Attribute("tool_name", String, "Name of the concrete tool, when applicable.")
-	Attribute("phase", String, "Execution phase inspected by risk.")
+	Attribute("phase", String, "Which phase of the mediated MCP execution was scanned: its request or its response.")
 	Attribute("mediation_surface", String, "Concrete mediation surface where the execution was observed.")
 	Attribute("mcp_method", String, "MCP method or equivalent mediated operation.")
 	Attribute("principal_kind", String, "Credential provenance class resolved by MCP identity.")
@@ -436,22 +434,4 @@ var RiskChatSummary = Type("RiskChatSummary", func() {
 	})
 
 	Required("chat_id", "findings_count", "latest_detected")
-})
-
-var RiskPolicyStatus = Type("RiskPolicyStatus", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("policy_id", String, "The risk policy ID.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("policy_version", Int64, "Current policy version.")
-	Attribute("total_messages", Int64, "Total messages in the project.")
-	Attribute("analyzed_messages", Int64, "Messages analyzed at the current policy version.")
-	Attribute("pending_messages", Int64, "Messages not yet analyzed.")
-	Attribute("findings_count", Int64, "Number of findings at the current policy version.")
-	Attribute("workflow_status", String, "Workflow state: running, sleeping, or not_started.", func() {
-		Enum("running", "sleeping", "not_started")
-	})
-
-	Required("policy_id", "policy_version", "total_messages", "analyzed_messages", "pending_messages", "findings_count", "workflow_status")
 })

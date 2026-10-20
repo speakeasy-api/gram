@@ -86,6 +86,7 @@ export default function GatewayDetails(): JSX.Element {
               <MCPTeamAccessTab
                 resourceId={metaMcpServer.id}
                 serverName={metaMcpServer.name}
+                checkAccess={false}
               />
             </RequireScope>
           </RequireScope>

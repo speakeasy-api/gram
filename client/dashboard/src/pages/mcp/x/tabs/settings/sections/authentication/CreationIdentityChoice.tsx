@@ -105,15 +105,16 @@ export function CreationIdentityChoice({
 
       {value === "none" && authenticationRequired ? (
         <Alert variant="warning" dismissible={false}>
-          This server requires authentication. No Identity may leave it unable
-          to serve requests.
+          This server requires authentication. Manual may leave it unable to
+          serve requests.
         </Alert>
       ) : null}
 
       {value === "user" && !rbacLoading && !canCreateIdentity ? (
         <Alert variant="warning" dismissible={false}>
-          User Identity creates an identity provider and requires project:write.
-          Choose another identity mode or ask a project administrator.
+          User Identity creates an authorization server and requires
+          project:write. Choose another identity mode or ask a project
+          administrator.
         </Alert>
       ) : null}
     </div>

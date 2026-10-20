@@ -35,7 +35,7 @@ func TestManagedKey_RefusesOrganizationTierMutations(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	fx := provisionManagedKey(t, ctx, ti)
-	keyID := fx.Client.ExternalKeyID.String()
+	keyID := fx.Client.ExternalKeyID.UUID.String()
 
 	got, err := ti.service.GetGcpKmsKey(adminCtx(t, ctx), &gen.GetGcpKmsKeyPayload{ID: keyID, SessionToken: nil})
 	require.NoError(t, err)
@@ -114,7 +114,7 @@ func TestManagedKey_DeletableOnceConnectionTombstoned(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	fx := provisionManagedKey(t, ctx, ti)
-	keyID := fx.Client.ExternalKeyID.String()
+	keyID := fx.Client.ExternalKeyID.UUID.String()
 
 	err := ti.service.DeleteGcpKmsKey(adminCtx(t, ctx), &gen.DeleteGcpKmsKeyPayload{ID: keyID, SessionToken: nil})
 	requireOopsCode(t, err, oops.CodeConflict)
@@ -146,7 +146,7 @@ func TestManagedKey_DeletableOnceConnectionTombstoned(t *testing.T) {
 	require.ErrorContains(t, err, "still in use")
 	_, err = fx.Provisioner.RevokeClient(ctx, ti.orgID, fx.ConnectionID)
 	require.NoError(t, err)
-	_, err = jwksrepo.New(ti.conn).SoftDeleteJsonWebKeySet(ctx, jwksrepo.SoftDeleteJsonWebKeySetParams{ID: fx.Client.JSONWebKeySetID, OrganizationID: ti.orgID})
+	_, err = jwksrepo.New(ti.conn).SoftDeleteJsonWebKeySet(ctx, jwksrepo.SoftDeleteJsonWebKeySetParams{ID: fx.Client.JSONWebKeySetID.UUID, OrganizationID: ti.orgID})
 	require.NoError(t, err)
 
 	require.NoError(t, ti.service.DeleteGcpKmsKey(adminCtx(t, ctx), &gen.DeleteGcpKmsKeyPayload{ID: keyID, SessionToken: nil}))

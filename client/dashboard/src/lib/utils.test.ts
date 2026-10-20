@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agentEgressHosts,
+  buildLoginRedirectURL,
   chunk,
   firstPartyHosts,
   getCustomDomainCNAME,
@@ -15,7 +16,7 @@ describe("supportsFirstPartyConnect", () => {
     visibility: "private",
   };
 
-  it("allows an issuer-gated server with a Gram-hosted slug", () => {
+  it("allows an issuer-gated server with a Speakeasy-hosted slug", () => {
     expect(supportsFirstPartyConnect(eligible)).toBe(true);
   });
 
@@ -124,5 +125,21 @@ describe("firstPartyHosts", () => {
     ["https://pr-12.dev.getgram.ai", ["pr-12.dev.getgram.ai"]],
   ])("lists %s as %j", (serverURL, expected) => {
     expect(firstPartyHosts(serverURL)).toEqual(expected);
+  });
+});
+
+describe("partner signup redirect", () => {
+  it("encodes the public code alongside signup details", () => {
+    const url = new URL(
+      buildLoginRedirectURL(
+        "/welcome",
+        "Acme",
+        "user@example.com",
+        "partner & friends",
+      ),
+    );
+    expect(url.searchParams.get("partner_code")).toBe("partner & friends");
+    expect(url.searchParams.get("org_name")).toBe("Acme");
+    expect(url.searchParams.get("redirect")).toBe("/welcome");
   });
 });

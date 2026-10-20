@@ -10,60 +10,109 @@ import (
 )
 
 type CustomDomain struct {
-	ID                       uuid.UUID
-	OrganizationID           string
-	Domain                   string
-	Verified                 bool
-	Activated                bool
-	IngressName              pgtype.Text
-	CertSecretName           pgtype.Text
-	ProvisionerKind          string
-	IpAllowlist              []string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: restricted
+	Domain string
+	// @access: confidential
+	Verified bool
+	// @access: confidential
+	Activated bool
+	// @access: restricted
+	IngressName pgtype.Text
+	// @access: restricted
+	CertSecretName pgtype.Text
+	// @access: confidential
+	ProvisionerKind string
+	// @access: opaque-restricted
+	IpAllowlist []string
+	// @access: secret-restricted
 	OpenaiAppsChallengeToken pgtype.Text
-	HealthStatus             pgtype.Text
-	HealthIssue              pgtype.Text
-	HealthCheckedAt          pgtype.Timestamptz
-	UnhealthySince           pgtype.Timestamptz
-	CertificateExpiresAt     pgtype.Timestamptz
-	ConsecutiveFailures      pgtype.Int4
-	CreatedAt                pgtype.Timestamptz
-	UpdatedAt                pgtype.Timestamptz
-	DeletedAt                pgtype.Timestamptz
-	Deleted                  bool
+	// @access: confidential
+	HealthStatus pgtype.Text
+	// @access: confidential
+	HealthIssue pgtype.Text
+	// @access: confidential
+	HealthCheckedAt pgtype.Timestamptz
+	// @access: confidential
+	UnhealthySince pgtype.Timestamptz
+	// @access: confidential
+	CertificateExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	ConsecutiveFailures pgtype.Int4
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type McpEndpoint struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	CustomDomainID  uuid.NullUUID
-	McpServerID     uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	CustomDomainID uuid.NullUUID
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
 	MetaMcpServerID uuid.NullUUID
-	Slug            string
-	IsDomainRoot    pgtype.Bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	Slug string
+	// @access: confidential
+	IsDomainRoot pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type McpServer struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	Name                  pgtype.Text
-	Slug                  pgtype.Text
-	EnvironmentID         uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: restricted
+	Name pgtype.Text
+	// @access: restricted
+	Slug pgtype.Text
+	// @access: confidential
+	EnvironmentID uuid.NullUUID
+	// @access: confidential
+	UserSessionIssuerID uuid.NullUUID
+	// @access: confidential
 	RemoteSessionIssuerID uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
+	// @access: confidential
+	RemoteMcpServerID uuid.NullUUID
 	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.
-	TunneledMcpServerID   uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	UnproxiedMcpServerID  uuid.NullUUID
+	// @access: confidential
+	TunneledMcpServerID uuid.NullUUID
+	// @access: confidential
+	ToolsetID uuid.NullUUID
+	// @access: confidential
+	UnproxiedMcpServerID uuid.NullUUID
+	// @access: confidential
 	ToolVariationsGroupID uuid.NullUUID
-	Visibility            string
-	NetworkAccessMode     pgtype.Text
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
+	// @access: confidential
+	Visibility string
+	// @access: confidential
+	NetworkAccessMode pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

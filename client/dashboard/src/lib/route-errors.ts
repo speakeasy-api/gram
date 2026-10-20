@@ -34,12 +34,12 @@ export function isUnauthorizedError(error: unknown): boolean {
 }
 
 /**
- * A 401 from the Gram API itself, meaning the dashboard session is dead.
+ * A 401 from the Speakeasy API itself, meaning the dashboard session is dead.
  *
- * This is deliberately narrower than {@link isUnauthorizedError}: non-Gram
+ * This is deliberately narrower than {@link isUnauthorizedError}: non-Speakeasy
  * clients also surface errors with a 401 status — e.g. the AI SDK's
  * MCPClientError when a proxied MCP upstream rejects its credentials — and
- * those say nothing about the Gram session. Treating them as session expiry
+ * those say nothing about the Speakeasy session. Treating them as session expiry
  * causes a redirect loop: /login sees a valid session and bounces straight
  * back to the page whose query 401s again.
  */

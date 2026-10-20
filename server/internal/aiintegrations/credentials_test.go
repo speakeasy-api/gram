@@ -196,6 +196,34 @@ func TestVerifyCredentialsReportsOnlyTheRefusedAnthropicFeed(t *testing.T) {
 	}, stub.requested())
 }
 
+func TestVerifyCredentialsReportsAnthropicKeyWithoutChatListScope(t *testing.T) {
+	t.Parallel()
+
+	// An Admin API key reads the activity feed but not chat content. The
+	// compliance schedule cannot import anything with it, so the save must
+	// surface Anthropic's refusal instead of failing on the first poll.
+	stub := newProviderStub(t, map[string]stubRoute{
+		"/v1/compliance/apps/chats": {status: http.StatusForbidden, body: `{"error":{"message":"Missing required scopes"}}`},
+	})
+	verifier := newTestCredentialVerifier(t, stub.server.URL)
+
+	rejections := verifier.Verify(t.Context(), Credentials{
+		Provider:               ProviderAnthropicCompliance,
+		APIKey:                 "anthropic-key",
+		ExternalOrganizationID: conv.PtrEmpty(testExternalOrgID),
+	})
+
+	require.Len(t, rejections, 1)
+	require.Equal(t, ScheduleAnthropicCompliance, rejections[0].Schedule)
+	require.Contains(t, rejections[0].Err.Error(), "Missing required scopes")
+	require.ElementsMatch(t, []string{
+		"/v1/compliance/activities",
+		"/v1/compliance/apps/chats",
+		"/v1/organizations/analytics/user_usage_report",
+		"/v1/organizations/analytics/user_cost_report",
+	}, stub.requested())
+}
+
 func TestVerifyCredentialsReportsRefusedCursorKey(t *testing.T) {
 	t.Parallel()
 
@@ -297,7 +325,15 @@ func TestCredentialProbesAskForASingleRecord(t *testing.T) {
 		details := stub.requestDetails()
 		requireProbeShape(t, details, "/v1/compliance/activities",
 			"limit=1",
+			"activity_types%5B%5D=claude_chat_created",
 			"created_at.gte="+url.QueryEscape(since.Format(time.RFC3339)),
+		)
+		// The chat list is the feed that reports new messages and sits
+		// behind its own scope, so the key is probed against it too.
+		requireProbeShape(t, details, "/v1/compliance/apps/chats",
+			"limit=1",
+			"order_by=updated_at",
+			"updated_at.gte="+url.QueryEscape(since.Format(time.RFC3339)),
 		)
 		// One bucket, one minute wide.
 		for _, report := range []string{"user_usage_report", "user_cost_report"} {

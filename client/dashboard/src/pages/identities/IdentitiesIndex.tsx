@@ -33,8 +33,6 @@ import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Badge } from "@/components/ui/Badge";
 import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
@@ -365,12 +363,10 @@ function IdentitiesIndexContent(): JSX.Element {
   const sdk = useSdkClient();
   const session = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
-  const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
   const { hasScope } = useRBAC();
   const canReadOrganization = hasScope("org:read", organization.id);
   // Match the existing agent screen's supported sessions, without changing scope.
   const agentsEnabled =
-    agentManagementFlag.status === "enabled" &&
     organization.slug !== DEMO_ORG_SLUG &&
     !session.organizationOverride &&
     !session.impersonatorEmail &&

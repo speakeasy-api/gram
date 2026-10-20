@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Service("projects", func() {
-	Description("Manages projects in Gram.")
+	Description("Manages projects in Speakeasy.")
 
 	Security(security.ByKey, func() {
 		Scope("producer")

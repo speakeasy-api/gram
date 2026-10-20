@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\'gram/networkingress/v1/reconciler.proto\x12\x16gram.networkingress.v1\x1a\x1bgcp/pubsub/v1/options.proto\"V\n\nReconciler:H\x92\xb5\x18\x44\x12\x04\x08\x80\xf5$\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04J\x02\x10\nR)gram.networkingress.v1.ReconcileRequestedBQZOgithub.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1;networkingressv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\'gram/networkingress/v1/reconciler.proto\x12\x16gram.networkingress.v1\x1a\x1bgcp/pubsub/v1/options.proto\"R\n\nReconciler:D\x92\xb5\x18@\x12\x04\x08\x80\xf5$\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04R)gram.networkingress.v1.ReconcileRequestedBQZOgithub.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1;networkingressv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZOgithub.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1;networkingressv1'
   _globals['_RECONCILER']._loaded_options = None
-  _globals['_RECONCILER']._serialized_options = b'\222\265\030D\022\004\010\200\365$\"\002\010<2\t\n\002\010\n\022\003\010\330\004J\002\020\nR)gram.networkingress.v1.ReconcileRequested'
+  _globals['_RECONCILER']._serialized_options = b'\222\265\030@\022\004\010\200\365$\"\002\010<2\t\n\002\010\n\022\003\010\330\004R)gram.networkingress.v1.ReconcileRequested'
   _globals['_RECONCILER']._serialized_start=96
-  _globals['_RECONCILER']._serialized_end=182
+  _globals['_RECONCILER']._serialized_end=178
 # @@protoc_insertion_point(module_scope)

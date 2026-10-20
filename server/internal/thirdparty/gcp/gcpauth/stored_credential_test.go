@@ -10,7 +10,7 @@ import (
 )
 
 // gramProjectTarget is a user-managed service account inside the same project as
-// StubResolverPrincipal, so the screening places it in Gram's own project.
+// StubResolverPrincipal, so the screening places it in Speakeasy's own project.
 const gramProjectTarget = "internal@gram-stub.iam.gserviceaccount.com"
 
 func TestScreenStoredCredential_AcceptsCustomerTarget(t *testing.T) {
@@ -67,7 +67,7 @@ func TestScreenStoredCredential_RefusesGramProjectTargetWithoutExemption(t *test
 }
 
 // The exemption covers the own-project refusal and nothing else. A target that
-// cannot be placed in a project at all was never compared against Gram's, so
+// cannot be placed in a project at all was never compared against Speakeasy's, so
 // forgiving it would widen the grant to addresses no administrator approved.
 func TestScreenStoredCredential_ExemptionDoesNotForgiveMalformedTarget(t *testing.T) {
 	t.Parallel()

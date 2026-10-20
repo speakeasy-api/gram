@@ -32,7 +32,7 @@ var GuardrailAction = Type("LiteLLMGuardrailAction", String, func() {
 })
 
 var FailurePosture = Type("LiteLLMFailurePosture", String, func() {
-	Description("How LiteLLM behaves when Gram cannot evaluate a request.")
+	Description("How LiteLLM behaves when Speakeasy cannot evaluate a request.")
 	Enum("fail_closed", "fail_open")
 })
 
@@ -58,7 +58,7 @@ var InstanceDiagnostics = Type("LiteLLMInstanceDiagnostics", func() {
 		Minimum(0)
 		Maximum(100)
 	})
-	Attribute("platform_user_pct_24h", Float64, "Percentage of model requests in the last 24 hours that resolved to a Gram user.", func() {
+	Attribute("platform_user_pct_24h", Float64, "Percentage of model requests in the last 24 hours that resolved to a Speakeasy user.", func() {
 		Minimum(0)
 		Maximum(100)
 	})

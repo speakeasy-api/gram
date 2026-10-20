@@ -195,7 +195,7 @@ func TestASMetadataAdvertisesPrivateKeyJWT(t *testing.T) {
 	require.Contains(t, doc.TokenEndpointAuthMethodsSupported, "private_key_jwt")
 }
 
-// The Gram server reads token_endpoint_auth_methods_supported and, for a
+// The Speakeasy server reads token_endpoint_auth_methods_supported and, for a
 // client registered with a secret, picks client_secret_basic -- which puts
 // the client_id in the Authorization header and deliberately strips it from
 // the body. A token endpoint that reads only the form 400s that exchange.

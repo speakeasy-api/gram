@@ -178,7 +178,7 @@ func (s *DiagnosticsService) SearchUsers(ctx context.Context, principal Principa
 		Cursor:              position.key,
 		// The boundary the previous page actually showed. Without it the
 		// repository re-derives this person's last_seen from a lookup that
-		// applies neither the window nor the Gram-hosted exclusion above, and a
+		// applies neither the window nor the Speakeasy-hosted exclusion above, and a
 		// person whose excluded rows run later than their qualifying ones is
 		// handed back on every following page.
 		CursorLastSeenUnixNano: position.lastSeen,
@@ -307,7 +307,7 @@ func userSearchGroupBy(userType string) string {
 	return "user_id"
 }
 
-// excludedHookSources drops Gram-hosted inference from an organization's own
+// excludedHookSources drops Speakeasy-hosted inference from an organization's own
 // people, whose sessions it is logged under but whose usage it is not. External
 // users are the opposite case: their hosted-chat completions are their usage.
 func excludedHookSources(userType string) []string {
@@ -371,7 +371,7 @@ type userSearchPosition struct {
 // rather than merely signed.
 //
 // The timestamp is sealed in rather than looked up again because this search
-// excludes Gram-hosted hook sources and applies a window, while the
+// excludes Speakeasy-hosted hook sources and applies a window, while the
 // repository's cursor-lookup subquery applies neither: a person whose excluded
 // rows run later than their qualifying ones would be re-derived at that later
 // timestamp and returned again on every following page. search_tool_calls

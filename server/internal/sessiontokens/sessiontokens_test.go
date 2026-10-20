@@ -146,7 +146,7 @@ func TestSigner_VerifiedJTI(t *testing.T) {
 }
 
 // VerifiedSubject reads the subject of a token that no longer validates, but
-// only when Gram signed it.
+// only when Speakeasy signed it.
 func TestSigner_VerifiedSubjectToleratesExpiryButNotForgery(t *testing.T) {
 	t.Parallel()
 

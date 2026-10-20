@@ -41,9 +41,8 @@ func TestHandleToken_ClientBoundGrantsWithoutClientAreInvalidClient(t *testing.T
 }
 
 // A JWT bearer request carrying no client authentication reaches the
-// clientless workload grant rather than the ID-JAG exchange. This endpoint's
-// organization is outside the agent authorization rollout, so the grant
-// refuses it.
+// clientless workload grant rather than the ID-JAG exchange: it is the grant's
+// own request validation that refuses it, not client authentication.
 func TestHandleToken_JWTBearerWithoutClientIsRefused(t *testing.T) {
 	t.Parallel()
 
@@ -55,7 +54,8 @@ func TestHandleToken_JWTBearerWithoutClientIsRefused(t *testing.T) {
 		"assertion":  {"header.payload.signature"},
 	})
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Contains(t, w.Body.String(), "invalid_grant")
+	require.Contains(t, w.Body.String(), "invalid_request")
+	require.Contains(t, w.Body.String(), "resource is required")
 }
 
 // A JWT bearer request that presents a client_id is an ID-JAG exchange and

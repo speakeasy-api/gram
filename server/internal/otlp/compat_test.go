@@ -3,7 +3,7 @@
 //
 // The gram.otel.v1 protos deliberately reuse OTLP's exact field numbers and
 // scalar types so bytes produced by one unmarshal cleanly into the other, and
-// Gram-only fields live at 1000+ where an OTLP parser skips them as unknown
+// Speakeasy-only fields live at 1000+ where an OTLP parser skips them as unknown
 // fields. Nothing in the proto files enforces that; these tests do. If someone
 // renumbers a field or swaps fixed64 for int64, this is what fails.
 package otlp
@@ -85,7 +85,7 @@ func TestLogRecordUnmarshalsAsOTLP(t *testing.T) {
 		TraceId:                []byte("0123456789abcdef"),
 		SpanId:                 []byte("01234567"),
 		EventName:              new("some.event"),
-		// Gram-only fields at 1000+. An OTLP parser must ignore these rather
+		// Speakeasy-only fields at 1000+. An OTLP parser must ignore these rather
 		// than mistake them for one of its own.
 		RecordId: new("dedupe-key"),
 		Provenance: (&otelv1.LogRecord_Provenance_builder{
@@ -209,7 +209,7 @@ func TestGramSpansUnmarshalAsOTLP(t *testing.T) {
 				Flags:      new(uint32(1)),
 			}).Build(),
 		},
-		// Gram-only fields at 1000+.
+		// Speakeasy-only fields at 1000+.
 		Scope: (&otelv1.Span_InstrumentationScope_builder{Name: new("scope")}).Build(),
 		Provenance: (&otelv1.Span_Provenance_builder{
 			Source:         new("risk"),
@@ -263,7 +263,7 @@ func TestGramSpansUnmarshalAsOTLP(t *testing.T) {
 }
 
 // TestOTLPSpanUnmarshalsAsGramCopies covers the reverse direction: bytes from
-// an upstream OTLP producer parse into both Gram span messages.
+// an upstream OTLP producer parse into both Speakeasy span messages.
 func TestOTLPSpanUnmarshalsAsGramCopies(t *testing.T) {
 	t.Parallel()
 
@@ -354,8 +354,8 @@ func TestOTLPLogRecordUnmarshalsAsGram(t *testing.T) {
 	}
 }
 
-// TestGramSpanFieldsSurviveOTLPRoundTrip confirms Gram-only fields at 1000+ are
-// preserved for both Gram span messages when a message passes through an OTLP
+// TestGramSpanFieldsSurviveOTLPRoundTrip confirms Speakeasy-only fields at 1000+ are
+// preserved for both Speakeasy span messages when a message passes through an OTLP
 // parser, so a relay that decodes and re-encodes does not silently drop
 // tenancy.
 func TestGramSpanFieldsSurviveOTLPRoundTrip(t *testing.T) {

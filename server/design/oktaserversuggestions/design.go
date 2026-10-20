@@ -40,7 +40,7 @@ var Application = Type("OktaServerSuggestionApplication", func() {
 })
 
 var Suggestion = Type("OktaServerSuggestion", func() {
-	Description("A Gram-owned catalog entry whose Okta mapping matches at least one active, assigned application in the organization's Okta snapshot. Suggest only; nothing is created until the administrator accepts through the remote MCP install flow.")
+	Description("A Speakeasy-owned catalog entry whose Okta mapping matches at least one active, assigned application in the organization's Okta snapshot. Suggest only; nothing is created until the administrator accepts through the remote MCP install flow.")
 	Required("registry_entry_id", "server_name", "description", "remotes", "okta_applications", "state", "installed_urls", "supports_dcr")
 	Attribute("registry_entry_id", String, "Catalog entry id; the key for dismiss and restore.", func() {
 		Format(FormatUUID)

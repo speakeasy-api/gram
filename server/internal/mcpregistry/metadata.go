@@ -8,6 +8,14 @@ import (
 
 const publicationNamespace = "com.speakeasy.ai/registry"
 
+// CheckCreateMetadata reports a new record's metadata that creation would
+// refuse regardless of registry state, such as supplied backend-owned
+// publication metadata, so callers can reject it before storing a change.
+func CheckCreateMetadata(data json.RawMessage) error {
+	_, err := canonicalMetadata(data, time.Time{}, time.Time{})
+	return err
+}
+
 // canonicalMetadata keeps the column authoritative while retaining unknown JSON
 // as raw values, never rounding publisher numbers through float64. Missing owned
 // metadata is accepted on save, but an explicitly supplied value must round-trip.

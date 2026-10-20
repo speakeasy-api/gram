@@ -1,5 +1,5 @@
 // Command speakeasy-hooks is the single Speakeasy hooks binary. It receives
-// coding-agent hook events, relays them to the Gram server, honors the server's
+// coding-agent hook events, relays them to the Speakeasy server, honors the server's
 // blocking decisions, and can perform an interactive browser sign-in on its
 // own so it doubles as the mid-session auth fallback.
 //
@@ -9,7 +9,7 @@
 //	speakeasy-hooks pi serve [--config=<path>]               # Pi extension NDJSON stdio
 //	speakeasy-hooks login [--force] [--config=<path>]        # interactive sign-in
 //
-// The server URL, project slug, and org id come from the GRAM_HOOKS_* env vars
+// The server URL, project slug, and org id come from the SPEAKEASY_AI_HOOKS_* env vars
 // injected by the generated config, falling back to the production defaults.
 package main
 
@@ -73,7 +73,7 @@ func runInstall(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex, opencode, openclaw, pi")
 	dir := fs.String("dir", "", "output directory for the plugin package")
-	serverURL := fs.String("server-url", relay.DefaultServerURL, "Gram server URL to bake into the plugin")
+	serverURL := fs.String("server-url", relay.DefaultServerURL, "Speakeasy server URL to bake into the plugin")
 	siteURL := fs.String("site-url", "", "dashboard origin for browser sign-in when it differs from the server URL (local dev)")
 	project := fs.String("project", "default", "project slug")
 	org := fs.String("org", "", "organization id hint")
@@ -99,7 +99,7 @@ func runInstall(args []string) int {
 		SiteURL:      *siteURL,
 		ProjectSlug:  *project,
 		OrgID:        *org,
-		HooksAPIKey:  os.Getenv("GRAM_HOOKS_ORG_KEY"),
+		HooksAPIKey:  relay.Env("HOOKS_ORG_KEY"),
 		BrowserLogin: *browserLogin,
 		BinaryPath:   binaryPath,
 	}); err != nil {

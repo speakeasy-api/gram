@@ -15,6 +15,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -54,7 +55,7 @@ func testOrgHosts(t *testing.T) *orghost.Resolver {
 	})
 }
 
-// seedLocalRole inserts an organization_roles row and returns its Gram local
+// seedLocalRole inserts an organization_roles row and returns its Speakeasy local
 // UUID — the same identifier the dashboard receives from access.listRoles and
 // sends back in invite payloads.
 func seedLocalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug, name string) string {
@@ -166,6 +167,8 @@ type testInstance struct {
 	posthog  *fakeOnboardingTelemetry
 	features *productfeatures.Client
 	svixSrv  *svixtest.MockServer
+	// sessionManager is the service's session manager.
+	sessionManager *sessions.Manager
 }
 
 type fakeTrialNotifier struct {
@@ -318,13 +321,14 @@ func newTestOrganizationsServiceWithOptions(t *testing.T, featureStub orgFeature
 	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, featureChecker, nil, authzEngine, nil, trialNotifier, trialBundleSeeder, posthog, nil, "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient)
 
 	return ctx, &testInstance{
-		service:  svc,
-		conn:     conn,
-		orgs:     orgs,
-		trial:    trialNotifier,
-		posthog:  posthog,
-		features: features,
-		svixSrv:  svixSrv,
+		service:        svc,
+		conn:           conn,
+		orgs:           orgs,
+		trial:          trialNotifier,
+		posthog:        posthog,
+		features:       features,
+		svixSrv:        svixSrv,
+		sessionManager: sessionManager,
 	}
 }
 
@@ -382,11 +386,12 @@ func newTestOrganizationsServiceWithEmailEnabled(t *testing.T, emailEnabled bool
 	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, nil, nil, "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient)
 
 	return ctx, &testInstance{
-		service: svc,
-		conn:    conn,
-		orgs:    orgs,
-		loops:   loopsMock,
-		trial:   trialNotifier,
-		svixSrv: svixSrv,
+		service:        svc,
+		conn:           conn,
+		orgs:           orgs,
+		loops:          loopsMock,
+		trial:          trialNotifier,
+		svixSrv:        svixSrv,
+		sessionManager: sessionManager,
 	}
 }

@@ -11,6 +11,7 @@ const {
   useRemoteSessionIssuersByIds,
   useUserSessionIssuer,
   useEffectiveUserSessionIssuers,
+  useGetRemoteMcpServerScopes,
 } = vi.hoisted(() => ({
   attachSheet: vi.fn(),
   remoteIdentitySection: vi.fn(),
@@ -18,6 +19,13 @@ const {
   useRemoteSessionIssuersByIds: vi.fn(),
   useUserSessionIssuer: vi.fn(),
   useEffectiveUserSessionIssuers: vi.fn(),
+  useGetRemoteMcpServerScopes: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/getRemoteMcpServerScopes.js", () => ({
+  useGetRemoteMcpServerScopes: (...args: unknown[]) =>
+    useGetRemoteMcpServerScopes(...args),
+  invalidateAllGetRemoteMcpServerScopes: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
@@ -83,7 +91,7 @@ vi.mock("./RemoteIdentityProvidersField", () => ({
     readOnly?: boolean;
   }) => (
     <>
-      <button onClick={onAdd}>Add provider</button>
+      <button onClick={onAdd}>Add authorization server</button>
       <output>providers-{readOnly ? "read-only" : "editable"}</output>
       <output>
         attached-{associatedIssuers.map(({ id }) => id).join(",")}
@@ -216,6 +224,9 @@ describe("AuthenticationSectionBody", () => {
       { enabled: true },
     );
     expect(screen.getByText("attached-issuer-far")).toBeDefined();
+    // The scope pin is a Remote MCP control only.
+    expect(useGetRemoteMcpServerScopes).not.toHaveBeenCalled();
+    expect(screen.queryByText("Pinned scopes")).toBeNull();
   });
 
   it("reports a failed provider lookup instead of an empty provider list", () => {
@@ -331,6 +342,7 @@ const standardTargetWithSessionIssuer: AuthTarget = {
   slug: "standard-server",
   projectId: "project-1",
   permissionResourceId: "mcp-server-1",
+  attachImpactTarget: { mcpServerId: "mcp-server-1" },
   supportsOrganizationIssuers: true,
   userSessionIssuerId: "user-session-issuer",
   invalidate: vi.fn(),

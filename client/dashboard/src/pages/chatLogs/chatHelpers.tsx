@@ -194,6 +194,14 @@ export function withJsonEscaped(matches: string[]): string[] {
   return [...all].sort((a, b) => b.length - a.length);
 }
 
+/** Secret and PII matches, JSON-escaped too. A message holding any of them has
+ * every match masked; otherwise matches are highlighted but readable. */
+export function sensitiveMatchStrings(
+  results: RiskResult[] | undefined,
+): string[] {
+  return withJsonEscaped(getMatchStrings(results?.filter(resultIsSensitive)));
+}
+
 export function maskValue(value: string): string {
   // Mask character-for-character so revealing/hiding doesn't change the text
   // length (and thus doesn't shift surrounding layout).

@@ -54,7 +54,7 @@ export type UpdateExternalOAuthServerMutationError =
  * updateExternalOAuthServer toolsets
  *
  * @remarks
- * Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association
+ * Change an attached external OAuth server between provider-hosted and Speakeasy-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association
  */
 export function useUpdateExternalOAuthServerMutation(
   options?: MutationHookOptions<

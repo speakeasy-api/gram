@@ -83,14 +83,14 @@ copy:
 - **Reveal metadata.** `surface` records which text `start_pos`/`end_pos`
   index. Spans with field attribution map `path != '' → json_path`,
   `tool.args → tool_args`, `content`/`prompt`/`assistant`/`tool_result →
-content`, `tool.server`/`tool.function → derived`; `field` and `path` copy
+  content`, `tool.server`/`tool.function → derived`; `field` and `path` copy
   over verbatim. Span-less rows (and single spans without field attribution)
   map by source: `gitleaks → scan_surface` (offsets index the composed
   content+args scan surface), `presidio → legacy_presidio` (offsets index a
   YAML-reformatted transform; reveal refuses these fast),
   `prompt_injection`/`llm_judge → none` (matches are rendered JSON artifacts),
   `shadow_mcp`/`account_identity`/`destructive_tool`/`cli_destructive →
-derived`, anything else `''`. `tool_call_id` is always left empty: Postgres
+  derived`, anything else `''`. `tool_call_id` is always left empty: Postgres
   spans only carried the tool NAME, not a recorded call id, and faking one
   would poison reveal lookups.
 - **Derived / dropped columns.** `request_id` is not recorded in `risk_results`
@@ -132,23 +132,25 @@ environment only (the pepper may also come from a file):
 
 Non-secret flags:
 
-| Flag                   | Env fallback             | Default                | Meaning                                                                                                                                                                            |
-| ---------------------- | ------------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-pepper-keyring-file` | —                        | —                      | Path to a file holding the pepper keyring (alternative to the env var)                                                                                                             |
-| `-ch-host`             | `CLICKHOUSE_HOST`        | `localhost`            | ClickHouse host (IPv4, IPv6, or DNS)                                                                                                                                               |
-| `-ch-database`         | `CLICKHOUSE_DATABASE`    | `default`              | ClickHouse database                                                                                                                                                                |
-| `-ch-username`         | `CLICKHOUSE_USERNAME`    | `gram`                 | ClickHouse username                                                                                                                                                                |
-| `-ch-native-port`      | `CLICKHOUSE_NATIVE_PORT` | `9440`                 | ClickHouse native protocol port                                                                                                                                                    |
-| `-ch-insecure`         | `CLICKHOUSE_INSECURE`    | `false`                | Skip ClickHouse TLS verification                                                                                                                                                   |
-| `-org`                 | —                        | (all)                  | Scope to one `organization_id`                                                                                                                                                     |
-| `-project`             | —                        | (all)                  | Scope to one `project_id` (uuid)                                                                                                                                                   |
-| `-policy`              | —                        | (all)                  | Scope to one `risk_policy_id` (uuid)                                                                                                                                               |
-| `-from`                | —                        | `2026-05-01T00:00:00Z` | Lower time bound, RFC3339 (`created_at >= from`); applies with or without `-cursor`. Defaults to the reveal-metadata re-backfill start; pass `-from ""` to scan from the beginning |
-| `-to`                  | —                        | (end)                  | Upper time bound, RFC3339 (`created_at < to`)                                                                                                                                      |
-| `-cursor`              | —                        | —                      | Resume after this `risk_results` id (exclusive); keyset resume position only                                                                                                       |
-| `-batch-size`          | —                        | `5000`                 | Rows per source page and sink batch                                                                                                                                                |
-| `-buffer`              | —                        | `5000`                 | Channel buffer between pipeline stages                                                                                                                                             |
-| `-dry-run`             | —                        | `true`                 | When true, read + transform but do not write (and do not connect to ClickHouse)                                                                                                    |
+| Flag                   | Env fallback             | Default        | Meaning                                                                                                                                                                |
+| ---------------------- | ------------------------ | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-pepper-keyring-file` | —                        | —              | Path to a file holding the pepper keyring (alternative to the env var)                                                                                                 |
+| `-ch-host`             | `CLICKHOUSE_HOST`        | `localhost`    | ClickHouse host (IPv4, IPv6, or DNS)                                                                                                                                   |
+| `-ch-database`         | `CLICKHOUSE_DATABASE`    | `default`      | ClickHouse database                                                                                                                                                    |
+| `-ch-username`         | `CLICKHOUSE_USERNAME`    | `gram`         | ClickHouse username                                                                                                                                                    |
+| `-ch-native-port`      | `CLICKHOUSE_NATIVE_PORT` | `9440`         | ClickHouse native protocol port                                                                                                                                        |
+| `-ch-insecure`         | `CLICKHOUSE_INSECURE`    | `false`        | Skip ClickHouse TLS verification                                                                                                                                       |
+| `-gap-fill`            | -                        | `false`        | Check ClickHouse before writing, skip existing findings, and append missing suppression state copies                                                                   |
+| `-org`                 | -                        | (all)          | Scope to one `organization_id`; required with `-gap-fill`                                                                                                              |
+| `-project`             | -                        | (all)          | Scope to one `project_id` (uuid)                                                                                                                                       |
+| `-policy`              | -                        | (all)          | Scope to one `risk_policy_id` (uuid)                                                                                                                                   |
+| `-sources`             | -                        | (all)          | Comma-separated finding sources                                                                                                                                        |
+| `-from`                | -                        | mode-dependent | Lower bound, RFC3339 (`created_at >= from`); gap-fill defaults to the last 90 days, full backfill defaults to `2026-05-01T00:00:00Z`, and `-from ""` removes the bound |
+| `-to`                  | -                        | (end)          | Upper time bound, RFC3339 (`created_at < to`)                                                                                                                          |
+| `-cursor`              | -                        | -              | Resume after this `risk_results` id (exclusive); keyset resume position only                                                                                           |
+| `-batch-size`          | -                        | `5000`         | Rows per source page and sink batch                                                                                                                                    |
+| `-buffer`              | -                        | `5000`         | Channel buffer between pipeline stages                                                                                                                                 |
+| `-dry-run`             | -                        | `true`         | Read and report without writing; gap-fill dry runs connect to ClickHouse for existence checks                                                                          |
 
 An interrupted run (Ctrl-C / SIGTERM) exits with a **nonzero** status and logs
 the `-cursor` to resume from, so shell automation never mistakes a partial
@@ -205,6 +207,48 @@ CLICKHOUSE_PASSWORD="$CH_PASS" \
 Use the **same pepper keyring as production** so back-filled fingerprints match
 the ones the live writer produces; a different keyring yields fingerprints that
 will not join.
+
+## Gap-fill before an organization cutover
+
+Run gap-fill for each organization before enabling
+`risk-findings-clickhouse-cutover`. The lookup checks ClickHouse in batches
+bounded by organization, project, the batch's UTC partition days, and source.
+It first matches the deterministic migration id, then matches a different live
+id by anchor, policy id and version, source, rule id, and span offsets.
+
+1. Run a dry run first:
+
+   ```bash
+   mise exec -- go run ./server/cmd/tools/migrations riskfindings \
+     -gap-fill -org <ORG_ID> \
+     -sources prompt_injection,llm_judge,shadow_mcp,destructive_tool,cli_destructive,account_identity,presidio,gitleaks,custom \
+     -dry-run=true
+   ```
+
+2. Review every per-source line. `postgres` is the Postgres finding count,
+   `present_by_id` and `matched_by_key` are skipped ClickHouse rows,
+   `state_copies` is the number of suppression copies that would be appended,
+   `skipped_ch_newer` counts Postgres marks ignored because ClickHouse has an
+   explicit reversal or a newer state event, and `inserts` is the number of
+   missing ClickHouse rows.
+3. Repeat the same command with `-dry-run=false`. Preserve `-org`, `-project`,
+   `-policy`, `-sources`, `-from`, and `-to` when resuming with `-cursor`.
+   Pass `-from` explicitly on resume (the failure log prints the effective
+   value), since the gap-fill default is relative to run time.
+4. Run the dry run again. Every source should report zero `state_copies` and
+   zero `inserts`.
+5. Validate per-source counts over the same half-open time window. Expand
+   Postgres spans with
+   `SUM(GREATEST(COALESCE(jsonb_array_length(spans), 1), 1))`. In ClickHouse,
+   resolve the latest copy per id and compare `uniqExact(id)` grouped by
+   `source`. State copies do not change `uniqExact(id)`.
+
+Rows matched under a live ClickHouse id keep that id. Missing Postgres
+exclusion or dismissal state is appended as a suppression copy of the latest
+ClickHouse row, using the same copy projection and read-time precedence as the
+live suppression paths. An explicit ClickHouse unsuppression always wins.
+Other ClickHouse state events win when their `inserted_at` is newer than the
+Postgres mark timestamp.
 
 ## Re-backfill runbook (reveal metadata)
 

@@ -11,48 +11,89 @@ import (
 )
 
 type ChatMessage struct {
-	ID                uuid.UUID
-	Seq               int64
-	ChatID            uuid.UUID
-	ProjectID         uuid.NullUUID
-	Role              string
-	Content           string
-	ContentRaw        []byte
-	ContentAssetUrl   pgtype.Text
-	Model             pgtype.Text
-	MessageID         pgtype.Text
-	FinishReason      pgtype.Text
-	ToolCalls         []byte
-	PromptTokens      int64
-	CompletionTokens  int64
-	TotalTokens       int64
-	StorageError      pgtype.Text
-	UserID            pgtype.Text
-	ExternalUserID    pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Seq int64
+	// @access: confidential
+	ChatID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	Role string
+	// @access: opaque-restricted
+	Content string
+	// @access: opaque-restricted
+	ContentRaw []byte
+	// @access: confidential
+	ContentAssetUrl pgtype.Text
+	// @access: confidential
+	Model pgtype.Text
+	// @access: confidential
+	MessageID pgtype.Text
+	// @access: confidential
+	FinishReason pgtype.Text
+	// @access: opaque-restricted
+	ToolCalls []byte
+	// @access: confidential
+	PromptTokens int64
+	// @access: confidential
+	CompletionTokens int64
+	// @access: confidential
+	TotalTokens int64
+	// @access: opaque-restricted
+	StorageError pgtype.Text
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential-pii
+	ExternalUserID pgtype.Text
+	// @access: confidential
 	ExternalMessageID pgtype.Text
-	Origin            pgtype.Text
-	UserAgent         pgtype.Text
-	IpAddress         pgtype.Text
-	Source            pgtype.Text
-	ToolCallID        pgtype.Text
-	ToolUrn           urn.Tool
-	ToolOutcome       pgtype.Text
-	ToolOutcomeNotes  pgtype.Text
+	// @access: opaque-restricted
+	Origin pgtype.Text
+	// @access: confidential-pii
+	UserAgent pgtype.Text
+	// @access: confidential-pii
+	IpAddress pgtype.Text
+	// @access: confidential
+	Source pgtype.Text
+	// @access: confidential
+	ToolCallID pgtype.Text
+	// @access: confidential
+	ToolUrn urn.Tool
+	// @access: confidential
+	ToolOutcome pgtype.Text
+	// @access: opaque-restricted
+	ToolOutcomeNotes pgtype.Text
+	// @access: opaque-restricted
 	ToolCallSummaries []byte
-	ContentHash       []byte
-	Generation        int32
-	Replayed          bool
-	CreatedAt         pgtype.Timestamptz
-	RiskAnalyzedAt    pgtype.Timestamptz
+	// @access: confidential
+	ContentHash []byte
+	// @access: confidential
+	Generation int32
+	// @access: confidential
+	Replayed bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	RiskAnalyzedAt pgtype.Timestamptz
 }
 
 type ChatUserFeedback struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	ChatID              uuid.UUID
-	MessageID           uuid.UUID
-	UserResolution      string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	ChatID uuid.UUID
+	// @access: confidential
+	MessageID uuid.UUID
+	// @access: confidential
+	UserResolution string
+	// @access: opaque-restricted
 	UserResolutionNotes pgtype.Text
-	ChatResolutionID    uuid.NullUUID
-	CreatedAt           pgtype.Timestamptz
+	// @access: confidential
+	ChatResolutionID uuid.NullUUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
 }

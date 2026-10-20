@@ -128,9 +128,9 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 
 	// Staff-managed entitlements (SSO, SCIM, ...) must not be self-granted by
 	// organization admins; org-settable operational toggles need org:admin only.
-	// The temporary rollout is available only through the audited staff surface.
-	if feature == FeatureAutomaticRoleDistribution {
-		return oops.E(oops.CodeForbidden, nil, "automatic role distribution must be changed through staff administration")
+	// Retired rollout flags cannot be changed, including by staff.
+	if feature == Feature("automatic-role-distribution") {
+		return oops.E(oops.CodeInvalid, nil, "unknown product feature")
 	}
 	if feature.RequiresPlatformAdmin() {
 		if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
@@ -250,10 +250,10 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		CustomerManagedEncryptionKeysEnabled:    snapshot.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         snapshot.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             snapshot.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               snapshot.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled,
-		AutomaticRoleDistribution:               snapshot.AutomaticRoleDistribution,
+		SignalsIntelligenceEnabled:              snapshot.SignalsIntelligenceEnabled,
+		OrganizationGatewayDisabled:             snapshot.OrganizationGatewayDisabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
 	}, nil
 }

@@ -1,5 +1,5 @@
 {
-  "exclude": ["node_modules", "**/gram-template-*"],
+  "exclude": ["node_modules", "cli/internal/functions/templates"],
   "include": [".mise-tasks/**/*", "client/dashboard/src/sdk/src/**/*"],
   "extends": "./tsconfig.strict.json",
   "compilerOptions": {

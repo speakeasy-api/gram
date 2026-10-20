@@ -28,12 +28,12 @@ func (s *Service) enforceShadowMCPToolAccess(
 		if s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, evidence.FullURL, organizationID) {
 			return "", false
 		}
-		detail = fmt.Sprintf("MCP server is not Gram-hosted (URL: %s)", evidence.FullURL)
+		detail = fmt.Sprintf("MCP server is not Speakeasy-hosted (URL: %s)", evidence.FullURL)
 	default:
-		detail = "MCP server is not Gram-hosted"
+		detail = "MCP server is not Speakeasy-hosted"
 	}
 
-	// Allow-all policies invert the default: every non-Gram-hosted server is
+	// Allow-all policies invert the default: every non-Speakeasy-hosted server is
 	// permitted unless its URL is on the policy's blocked list. Bypass grants
 	// are a block_all concept and are never consulted here — the blocked-list
 	// membership is the whole check. Evidence without a resolvable URL (e.g. a
@@ -190,9 +190,9 @@ func codexMetaToolServer(toolName string, toolInput any) (string, bool) {
 
 // codexInventoryProvenanceDetail reports why a Codex MCP call should be
 // denied based on where the SessionStart inventory says the matched server
-// actually routes: an external (non-Gram) URL or a local stdio server. An
+// actually routes: an external (non-Speakeasy) URL or a local stdio server. An
 // empty string means the inventory raises no objection — either the entry is
-// Gram-hosted or there is nothing to cross-check (nil entry). Mirrors the
+// Speakeasy-hosted or there is nothing to cross-check (nil entry). Mirrors the
 // target checks of the Claude PreToolUse guard.
 func (s *Service) codexInventoryProvenanceDetail(ctx context.Context, matched *MCPServerEntry, orgID string) string {
 	if matched == nil {
@@ -200,7 +200,7 @@ func (s *Service) codexInventoryProvenanceDetail(ctx context.Context, matched *M
 	}
 	switch {
 	case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, orgID):
-		return fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", matched.Name, matched.URL)
+		return fmt.Sprintf("MCP server %q is not Speakeasy-hosted (URL: %s)", matched.Name, matched.URL)
 	case matched.URL == "" && matched.Command != "":
 		return fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", matched.Name, matched.Command)
 	default:

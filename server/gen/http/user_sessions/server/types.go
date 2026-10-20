@@ -30,6 +30,9 @@ type MintUserSessionRequestBody struct {
 	// Mutually exclusive with the other targets; exactly one must be set. Must be
 	// issuer-gated and live in the caller's project.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// An explicit discovery mode for a gateway Inspect connection. Valid only with
+	// meta_mcp_server_id. Omit to follow the gateway default.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
 }
 
 // ListUserSessionsResponseBody is the type of the "userSessions" service
@@ -55,7 +58,7 @@ type ListFacetsResponseBody struct {
 // "mintUserSession" endpoint HTTP response body.
 type MintUserSessionResponseBody struct {
 	// The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests
-	// to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.
+	// to the bound /mcp/{slug} surface.
 	AccessToken string `form:"access_token" json:"access_token" xml:"access_token"`
 	// Lifetime of the access token in seconds.
 	ExpiresIn int `form:"expires_in" json:"expires_in" xml:"expires_in"`
@@ -858,8 +861,8 @@ type UserSessionResponseBody struct {
 	SubjectType string `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
-	// Avatar URL for the subject when it resolves to a Gram user with one. Null
-	// for API key and anonymous subjects, and for users who have no photo.
+	// Avatar URL for the subject when it resolves to a Speakeasy user with one.
+	// Null for API key and anonymous subjects, and for users who have no photo.
 	SubjectPhotoURL *string `form:"subject_photo_url,omitempty" json:"subject_photo_url,omitempty" xml:"subject_photo_url,omitempty"`
 	// When the session was revoked, if it has been.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
@@ -868,10 +871,10 @@ type UserSessionResponseBody struct {
 	// that. Null means the session has not been used since the column was
 	// introduced — unknown, not never.
 	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
-	// The upstream providers Gram holds tokens for on this session's subject,
-	// through the same issuer. Empty when the session reaches only Gram-native
-	// tools. A session can have several: an issuer may have more than one
-	// remote_session_client attached.
+	// The upstream providers Speakeasy holds tokens for on this session's subject,
+	// through the same issuer. Empty when the session reaches only
+	// Speakeasy-native tools. A session can have several: an issuer may have more
+	// than one remote_session_client attached.
 	Upstreams []*UserSessionUpstreamResponseBody `form:"upstreams" json:"upstreams" xml:"upstreams"`
 	// Set only when subject_type is 'workload': the external issuer that vouched
 	// for the machine, the subject it asserted, and the agent the workload
@@ -1643,6 +1646,7 @@ func NewMintUserSessionPayload(body *MintUserSessionRequestBody, sessionToken *s
 		ToolsetID:       body.ToolsetID,
 		McpServerID:     body.McpServerID,
 		MetaMcpServerID: body.MetaMcpServerID,
+		DiscoveryMode:   body.DiscoveryMode,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1673,6 +1677,11 @@ func ValidateMintUserSessionRequestBody(body *MintUserSessionRequestBody) (err e
 	}
 	if body.MetaMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	if body.DiscoveryMode != nil {
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
+		}
 	}
 	return
 }

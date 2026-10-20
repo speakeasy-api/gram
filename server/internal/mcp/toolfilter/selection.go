@@ -83,8 +83,9 @@ type AllowEntry struct {
 }
 
 // SessionSelection is the consent-screen tool policy persisted on
-// user_sessions.tool_selection. A NULL column (no document) is the only
-// all-tools representation. Any document is restrictive: a tool is in scope
+// the legacy user_sessions.tool_selection document. A nil selection is unrestricted;
+// versioned policies may carry connection options without a selection. Any
+// SessionSelection document is restrictive: a tool is in scope
 // iff some allow entry includes it — by exact name for tool entries and
 // snapshot expansions, or by serve-time hint matching for live annotation
 // entries. An empty allow list authorizes zero tools.
@@ -169,7 +170,7 @@ func NewSessionSelection(resource string, grantID uuid.UUID, entries []AllowEntr
 }
 
 // ParseSessionSelection decodes and validates a stored tool_selection
-// document. Gram is the document's only writer, so any malformation is
+// document. Speakeasy is the document's only writer, so any malformation is
 // corruption and rejects the whole document — callers fail closed into
 // reauthorization, never into a wider session.
 func ParseSessionSelection(raw []byte) (*SessionSelection, error) {

@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  WidgetDashboard,
+  WidgetDashboard$inboundSchema,
+} from "./widgetdashboard.js";
 
 /**
  * A named question against a catalog dataset together with how it is drawn. Belongs to a project and is visible to everyone in the organization. Widgets are the building block dashboards will place.
@@ -17,6 +21,10 @@ export type Widget = {
    * Who saved it, when known
    */
   createdByUserId?: string | undefined;
+  /**
+   * The dashboards this widget is placed on, each once, by name. Widgets are linked, not copied: an edit reaches all of them, and a delete removes it from all of them.
+   */
+  dashboards: Array<WidgetDashboard>;
   /**
    * The catalog dataset the widget asks
    */
@@ -55,6 +63,7 @@ export const Widget$inboundSchema: z.ZodMiniType<Widget, unknown> = z.pipe(
       z.transform(v => new Date(v)),
     ),
     created_by_user_id: z.optional(z.string()),
+    dashboards: z.array(WidgetDashboard$inboundSchema),
     dataset: z.string(),
     description: z.optional(z.string()),
     id: z.string(),

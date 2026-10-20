@@ -34,15 +34,22 @@ type Service interface {
 	// Records agent-volunteered feedback about a distributed skill.
 	SkillFeedback(context.Context, *SkillFeedbackPayload) (err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
-	// authentication.
+	// authentication, or a device-agent token from a headless device enrolled as a
+	// workload.
 	Logs(context.Context, *LogsPayload) (err error)
 	// Endpoint to receive OTEL metrics data from Claude Code. Requires API key
-	// authentication.
+	// authentication, or a device-agent token from a headless device enrolled as a
+	// workload.
 	Metrics(context.Context, *MetricsPayload) (err error)
+	// Report whether the organization has any hook telemetry source configured.
+	// Reads configuration only; it does not query hook traffic.
+	GetStatus(context.Context, *GetStatusPayload) (res *HooksStatus, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
 type Auther interface {
+	// JWTAuth implements the authorization logic for the JWT security scheme.
+	JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error)
 	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
 	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
 }
@@ -61,7 +68,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"claude", "cursor", "codex", "ingest", "uploadSkillContent", "skillFeedback", "logs", "metrics"}
+var MethodNames = [9]string{"claude", "cursor", "codex", "ingest", "uploadSkillContent", "skillFeedback", "logs", "metrics", "getStatus"}
 
 // ClaudeHookResult is the result type of the hooks service claude method.
 type ClaudeHookResult struct {
@@ -89,7 +96,10 @@ type ClaudePayload struct {
 	ApikeyToken *string
 	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
-	// Optional endpoint hostname supplied by the Gram hook plugin.
+	// Optional `Bearer` device-agent token a headless device presents in place of
+	// an API key.
+	DeviceAgentToken *string
+	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
 	HookHostname *string
 	// Optional per-invocation token reused across retries so the server stores a
 	// redelivered event exactly once.
@@ -149,9 +159,10 @@ type CodexHookResult struct {
 
 // CodexPayload is the payload type of the hooks service codex method.
 type CodexPayload struct {
+	DeviceAgentToken *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// Optional endpoint hostname supplied by the Gram hook plugin.
+	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
 	HookHostname *string
 	// Optional per-invocation token reused across retries so the server stores a
 	// redelivered event exactly once.
@@ -198,9 +209,10 @@ type CursorHookResult struct {
 
 // CursorPayload is the payload type of the hooks service cursor method.
 type CursorPayload struct {
+	DeviceAgentToken *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// Optional endpoint hostname supplied by the Gram hook plugin.
+	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
 	HookHostname *string
 	// Optional per-invocation token reused across retries so the server stores a
 	// redelivered event exactly once.
@@ -271,6 +283,13 @@ type CursorPayload struct {
 	Duration *float64
 }
 
+// GetStatusPayload is the payload type of the hooks service getStatus method.
+type GetStatusPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // Feature-specific payloads. Hooks populate only the blocks needed for the
 // event.
 type HookIngestData struct {
@@ -298,9 +317,9 @@ type HookIngestData struct {
 	PromptAttachments []*HookPromptAttachmentEntry
 }
 
-// Canonical Gram feature event.
+// Canonical Speakeasy feature event.
 type HookIngestEvent struct {
-	// Canonical Gram hook event type.
+	// Canonical Speakeasy hook event type.
 	Type string
 	// RFC3339 timestamp from the local agent. Defaults to receive time when absent.
 	OccurredAt *string
@@ -319,7 +338,7 @@ type HookIngestSession struct {
 }
 
 // Metadata about the local hook adapter that translated a provider event into
-// the Gram hook contract.
+// the Speakeasy hook contract.
 type HookIngestSource struct {
 	// Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name.
 	Adapter string
@@ -472,6 +491,17 @@ type HookUsageData struct {
 	Status *string
 }
 
+// HooksStatus is the result type of the hooks service getStatus method.
+type HooksStatus struct {
+	// True when at least one hook source is configured for the organization.
+	Configured bool
+	// An active hooks-scoped API key exists, as minted by the hooks setup dialog,
+	// the plugin download or the setup wizard.
+	AgentHooksKey bool
+	// An enabled Anthropic inference hooks integration is connected.
+	AnthropicInferenceHooks bool
+}
+
 // IngestHookResult is the result type of the hooks service ingest method.
 type IngestHookResult struct {
 	// Whether the local hook should allow or deny the action.
@@ -490,6 +520,9 @@ type IngestPayload struct {
 	ApikeyToken *string
 	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
+	// Optional `Bearer` device-agent token a headless device presents in place of
+	// an API key.
+	DeviceAgentToken *string
 	// Set when the event is redelivered from a device's offline spool after
 	// control-plane downtime, under its original Idempotency-Key and occurred_at.
 	Replayed *bool
@@ -509,6 +542,7 @@ type IngestPayload struct {
 
 // LogsPayload is the payload type of the hooks service logs method.
 type LogsPayload struct {
+	DeviceAgentToken *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Array of resource logs
@@ -517,6 +551,7 @@ type LogsPayload struct {
 
 // MetricsPayload is the payload type of the hooks service metrics method.
 type MetricsPayload struct {
+	DeviceAgentToken *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Array of resource metrics

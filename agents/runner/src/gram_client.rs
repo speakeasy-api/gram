@@ -16,8 +16,8 @@ const BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
 // server walks all rows in a single transaction.
 const RECORD_COMPACTION_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Lightweight client used by the runner to pull a per-thread bootstrap
-/// from the management API. The underlying client carries
+/// Lightweight client used by the runner to authenticate every invocation
+/// through per-thread bootstrap from the management API. The underlying client carries
 /// `RetryTransientMiddleware` so transient 5xx / network errors are
 /// retried with exponential backoff before the first turn for an
 /// assistant fails.

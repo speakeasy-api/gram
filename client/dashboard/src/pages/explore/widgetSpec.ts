@@ -2,19 +2,19 @@ import {
   autoGrain,
   completeFilters,
   completeMeasures,
+  drawnChart,
   hasChartShape,
   isChartType,
   isFilterOperator,
   isMeasureOp,
-  isRowsMode,
-  isWindowPreset,
   MAX_LIMIT,
+  MAX_ROWS_LIMIT,
   measureAlias,
   queryDimensions,
-  type ChartType,
   type ExploreSpec,
   type FilterDraft,
   type MeasureDraft,
+  windowPreset,
 } from "./exploreModel";
 
 // A widget keeps the builder state split the way the widgets service reads
@@ -27,15 +27,6 @@ import {
 export interface WidgetState {
   query: Record<string, unknown>;
   visualization: Record<string, unknown>;
-}
-
-/**
- * The chart a spec is drawn with, as the server will check it. Rows draw only
- * as a table and a number tile is never broken down, whatever the builder's
- * controls were last left on, so that is what is saved.
- */
-function drawnChart(spec: ExploreSpec): ChartType {
-  return isRowsMode(spec) ? "table" : spec.chartType;
 }
 
 /** The query and visualization a widget stores for the builder's state. */
@@ -67,7 +58,11 @@ export function widgetFromSpec(spec: ExploreSpec): WidgetState {
         !rows && !timeseries && aliases.includes(spec.orderBy)
           ? [{ measure: spec.orderBy, direction: "desc" }]
           : [],
-      limit: timeseries ? MAX_LIMIT : spec.limit,
+      limit: timeseries
+        ? MAX_LIMIT
+        : rows
+          ? Math.min(spec.limit, MAX_ROWS_LIMIT)
+          : spec.limit,
     },
     visualization: { type: chart, options: {} },
   };
@@ -84,15 +79,10 @@ export function specFromWidget(
   visualization: Record<string, unknown>,
 ): ExploreSpec | null {
   const chartType = visualization.type;
-  const {
-    window,
-    dimensions,
-    measures,
-    filters,
-    order_by: orderBy,
-    limit,
-  } = query;
-  if (!isChartType(chartType) || !isWindowPreset(window)) return null;
+  const { dimensions, measures, filters, order_by: orderBy, limit } = query;
+  // An older spelling of a window opens as today's, and saves back as it.
+  const window = windowPreset(query.window);
+  if (!isChartType(chartType) || window === null) return null;
   if (!isStringArray(dimensions ?? [])) return null;
   const limitValue = limit ?? 0;
   if (
@@ -171,13 +161,20 @@ export function widgetKey(spec: ExploreSpec): string {
   return JSON.stringify([spec.dataset, widgetFromSpec(spec)]);
 }
 
-/** Whether the builder holds anything the widget does not. */
+/**
+ * Whether the builder holds anything the widget does not. An absolute range
+ * is always a difference: a widget keeps a relative window.
+ */
 export function differsFromWidget(
   spec: ExploreSpec,
   widget: StoredWidget,
 ): boolean {
   const saved = specFromStoredWidget(widget);
-  return saved === null || widgetKey(saved) !== widgetKey(spec);
+  return (
+    saved === null ||
+    spec.range !== undefined ||
+    widgetKey(saved) !== widgetKey(spec)
+  );
 }
 
 function listOf(value: unknown): unknown[] {

@@ -23,7 +23,7 @@ import (
 const eventMCPServerToolsList = "mcp_server_tools_list"
 
 // ToolsListPostHogEventInterceptor emits the [eventMCPServerToolsList] PostHog
-// event for every JSON-RPC `tools/list` request observed by `/x/mcp`. It is a
+// event for every JSON-RPC `tools/list` request observed by the remote MCP proxy. It is a
 // [proxy.ToolsListRequestInterceptor]: emitting on the request side mirrors
 // `/mcp`'s placement of the equivalent event before any per-tool filtering or
 // upstream call, so the event records "tools/list was attempted on this
@@ -31,8 +31,8 @@ const eventMCPServerToolsList = "mcp_server_tools_list"
 //
 // The event is renamed from `/mcp`'s `mcp_server_count` because the property
 // schema differs — the toolset-shaped fields (`toolset_id`, `toolset_slug`,
-// etc.) are replaced with `remote_mcp_server_id` since `/x/mcp` proxies a
-// Remote MCP Server rather than wrapping a Gram-managed toolset. AGE-1902
+// etc.) are replaced with `remote_mcp_server_id` since the proxy fronts a
+// Remote MCP Server rather than wrapping a Speakeasy-managed toolset. AGE-1902
 // tracks unifying the two runtimes onto this single event name.
 type ToolsListPostHogEventInterceptor struct {
 	posthog  *posthog.Posthog

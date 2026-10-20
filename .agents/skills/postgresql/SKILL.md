@@ -1,11 +1,11 @@
 ---
 name: postgresql
-description: Rules when working with PostgreSQL database in Gram
+description: Use when working with the Speakeasy PostgreSQL database: schema design, server/database/schema.sql, migrations, atlas.sum, sqlc queries, indexes, foreign keys, CHECK constraints, or reviewer suggestions to add constraints
 ---
 
 # PostgreSQL Best Practices
 
-Comprehensive guidelines when working with PostgreSQL database to build Gram which include rules for schema design, database migration and application logic. All rules are kept in a rules folder with names of each rule outlined below (e.g. `rules/<rule-name>.md`).
+Comprehensive guidelines when working with PostgreSQL database to build Speakeasy which include rules for schema design, database migration and application logic. All rules are kept in a rules folder with names of each rule outlined below (e.g. `rules/<rule-name>.md`).
 
 ## When to Apply
 
@@ -35,7 +35,7 @@ Reference these guidelines when:
 - **Data Integrity and Data Types:**
   - Use appropriate data types for columns to ensure data integrity (e.g., `INTEGER`, `VARCHAR`, `TIMESTAMP`).
   - Use constraints (e.g., `NOT NULL`, `FOREIGN KEY`) to enforce data integrity but not for UNIQUE-ness — that is enforced with unique indexes.
-  - Do not use `CHECK` constraints for pure enumeration / value validation (e.g. `CHECK (status IN ('active', 'inactive'))`). Validate allowed values in application code, where they can evolve without a migration. **Exception:** keep `CHECK`s that are structural to the Class Table Inheritance (CTI) pattern, e.g. pinning a subtype's discriminator (`CHECK (provider = 'aws_kms')`) so the composite foreign key back to the supertype enforces 1:1 semantics.
+  - Keep `CHECK` constraints to simple single-column shape checks: a non-empty string (`CHECK (name <> '')`) or a length bound (`CHECK (char_length(slug) <= 64)`). Do not encode enums (`CHECK (status IN ('active', 'inactive'))`), numeric ranges, or rules that relate columns. Features are still being shaped, and every rule held in the schema turns each change into a migration that locks the table while it validates. Validate those rules in application code, where rows are built or parsed, and test them there. Decline review suggestions, including from review bots, to add or rely on such constraints, and do not describe their absence as a gap. **Exception:** keep `CHECK`s that are structural to the Class Table Inheritance (CTI) pattern, e.g. pinning a subtype's discriminator (`CHECK (provider = 'aws_kms')`) so the composite foreign key back to the supertype enforces 1:1 semantics.
   - Define primary keys for all tables.
   - Use foreign keys to establish relationships between tables.
   - Utilize domains to enforce data type constraints reusable across multiple columns.
@@ -68,6 +68,17 @@ Reference these guidelines when:
 ### Multi-tenancy by project
 
 When creating any tables, add a non-nullable column named `project_id` of type `uuid` with a foreign key constraint to the `projects` table. If appropriate to the nature and usage patterns of the table also include `organization_id TEXT NOT NULL` column.
+
+### Data classification
+
+Every column must document what it holds with a comment whose last non-empty line is `@access: <class>`, where the class is one of `confidential` (internal IDs, timestamps, Speakeasy-controlled enums, counts, short labels), `confidential-pii` (emails, personal names, IPs, person IDs in external IdPs), `opaque-confidential` (short customer- or producer-chosen identifiers and labels support needs: tool, skill, agent, MCP server and client names, span and event names, producer session IDs, attribute keys), `secret-restricted` (credentials, tokens and their hashes, encrypted auth material), `restricted` (billing-system IDs, customer-configured endpoints, other known-sensitive or uncertain data) or `opaque-restricted` (arbitrary customer, user or model content: messages, prompts, tool payloads, customer JSON, free-form descriptions). The names follow the policy levels (confidential, restricted); `-pii`, `secret-` and `opaque-` narrow them. Descriptive prose may precede the marker:
+
+```sql
+COMMENT ON COLUMN chat_messages.content IS 'Raw message text.
+@access: opaque-restricted';
+```
+
+Classify by reading the code that writes the column, because column names are often misleading, and choose the stricter class when unsure. The class records what the data is; consumers such as read-only SQL agents decide which classes they read. The server test suite in CI fails when a column lacks a valid marker (run `go test ./internal/dataclassification/...` from `server/` locally; needs Docker). Classes and parsing live in `server/internal/dataclassification`.
 
 ### Change tracking
 
@@ -148,7 +159,7 @@ Instead, strongly consider these better alternatives:
 
 These rules apply any time you touch `server/migrations/`, `atlas.sum`, or `server/database/schema.sql`. They are non-negotiable.
 
-Gram uses [Atlas](https://atlasgo.io) in versioned mode. Two file kinds are involved, and they are not the same thing:
+Speakeasy uses [Atlas](https://atlasgo.io) in versioned mode. Two file kinds are involved, and they are not the same thing:
 
 - `server/database/schema.sql` is the **SDL** — the declarative, desired-state schema. This is the file you edit.
 - `server/migrations/*.sql` are the **DDL** diff Atlas generates from that schema. Running `mise db:diff <name>` computes the delta (e.g. `ALTER TABLE ... ADD COLUMN ...`), writes a new timestamped migration file, and updates `atlas.sum`.

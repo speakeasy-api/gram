@@ -25,7 +25,8 @@ export function XaaBulkConfirmBar({
       <Text muted small>
         Only confirm servers together if they use the same Okta app and Issuer
         URL. Otherwise, confirm them separately. This saves your confirmation in
-        Speakeasy; it does not change or verify Okta.
+        Speakeasy; it does not change or verify Okta. Servers that use the same
+        Okta connection share a confirmation and update together.
       </Text>
       <XaaConfirmFields
         applications={applications}
