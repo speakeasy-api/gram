@@ -58,6 +58,7 @@ export function useToolUpdate({
           updatePromptTemplateForm: {
             ...tool,
             ...updates,
+            kind: "prompt",
           },
         });
         void invalidateTemplate(queryClient, [{ name: tool.name }]);

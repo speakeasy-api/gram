@@ -718,6 +718,11 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// The gateway's members left with it, so resync and prune exactly as
+	// removing each member would.
+	if existing.UserSessionIssuerID.Valid {
+		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{existing.UserSessionIssuerID.UUID})
+	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, len(detached) > 0)
 	resultsCleaner := background.TemporalRiskPolicyResultsCleaner{TemporalEnv: s.temporalEnv, Logger: logger}
 	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, deletedPolicies)
@@ -821,7 +826,7 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	AfterMembershipCommit(ctx, logger, s.db, s.publisher, actor, meta, added.IssuerWired)
+	AfterMembershipCommit(ctx, logger, s.db, s.publisher, actor, meta)
 
 	return mv.BuildMetaMcpMemberViewFromParts(added.Member, added.Server), nil
 }
@@ -941,7 +946,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	}
 
 	actor := actorFromAuthContext(authCtx)
-	_, issuerWired, err := s.writer().RemoveMember(ctx, dbtx, actor, meta, memberID)
+	_, err = s.writer().RemoveMember(ctx, dbtx, actor, meta, memberID)
 	if err != nil {
 		return gatewayWriteError(ctx, logger, err, "remove meta mcp member")
 	}
@@ -952,7 +957,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	AfterMembershipCommit(ctx, logger, s.db, s.publisher, actor, meta, issuerWired)
+	AfterMembershipCommit(ctx, logger, s.db, s.publisher, actor, meta)
 
 	return nil
 }

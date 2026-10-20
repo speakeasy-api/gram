@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   clients: vi.fn(),
   siblings: vi.fn(),
   impact: vi.fn(),
+  associations: vi.fn(),
   issuers: vi.fn(),
   issuersByIds: vi.fn(),
   hostIssuers: vi.fn(),
@@ -124,6 +125,11 @@ vi.mock("@gram/client/react-query/serverIdentityImpact.js", () => ({
     _security: unknown,
     options: { enabled?: boolean },
   ) => mocks.impact(request, options),
+}));
+
+vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
+  invalidateAllServerClientAssociations: () => Promise.resolve(),
+  useServerClientAssociations: () => mocks.associations(),
 }));
 
 vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
@@ -500,6 +506,7 @@ const target: AuthTarget = {
 };
 
 beforeEach(() => {
+  mocks.associations.mockReturnValue({ data: { associations: [] } });
   mocks.impact.mockReturnValue({
     data: { servers: [], hiddenServerCount: 0 },
     isLoading: false,
@@ -1344,6 +1351,52 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBe("/providers/provider-1/clients/client-1");
     // A raw client ID tells an operator nothing.
     expect(screen.queryByText("dashboard-client")).toBeNull();
+  });
+
+  it("names the other servers a shared client signs in", () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          scope: [],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Example provider",
+              issuer: "https://id.example",
+              slug: "example",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://id.example/authorize",
+              tokenEndpoint: "https://id.example/token",
+            },
+          ],
+        },
+      },
+    });
+    mocks.associations.mockReturnValue({
+      data: {
+        associations: [{ remoteSessionClientId: "client-1", serverCount: 3 }],
+      },
+    });
+
+    renderIdentity();
+
+    expect(
+      screen.getByText(/This client also signs in 2 other MCP servers/),
+    ).toBeDefined();
   });
 
   it("replaces a cleared client only after confirming the sign-out", async () => {
