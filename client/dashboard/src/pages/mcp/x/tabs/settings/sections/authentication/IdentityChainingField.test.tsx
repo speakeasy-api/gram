@@ -495,7 +495,14 @@ describe("identity chaining bound client", () => {
   it("makes replacing the bound client explicit", () => {
     read.data = bound("elsewhere");
     render(field());
-    expect(screen.getByText("Use this client instead")).toBeTruthy();
+    expect(screen.getByText("Off")).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Use this client instead",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
   });
 
   it("requires the scope the API enforces", () => {
@@ -566,29 +573,36 @@ describe("identity chaining vouched for by Speakeasy", () => {
     ).toBeNull();
   });
 
-  it("explains an unknown preparation state without a success or failure label", () => {
-    read.data = {
-      ...bound("first"),
-      state: "future_state",
-      emaProviders: providersOf(speakeasy),
-    };
-    render(speakeasyField());
-    expect(screen.getByText("Unknown")).toBeTruthy();
-    expect(
-      screen.getByText(
-        /Refresh the page to check for an update before changing this setup/,
-      ),
-    ).toBeTruthy();
-    expect(enableButton().disabled).toBe(true);
-    const disable = screen.getByRole("button", {
-      name: "Turn off",
-    }) as HTMLButtonElement;
-    expect(disable.disabled).toBe(true);
-    fireEvent.click(enableButton());
-    fireEvent.click(disable);
-    expect(state.prepare).not.toHaveBeenCalled();
-    expect(state.unlink).not.toHaveBeenCalled();
-  });
+  it.each(["first", "elsewhere"])(
+    "explains an unknown preparation state bound to %s without claiming it is off",
+    (clientId) => {
+      read.data = {
+        ...bound(clientId),
+        state: "future_state",
+        emaProviders: providersOf(speakeasy),
+      };
+      render(speakeasyField());
+      expect(screen.getByText("Unknown")).toBeTruthy();
+      expect(screen.queryByText("Off")).toBeNull();
+      expect(
+        screen.getByText(
+          /Refresh the page to check for an update before changing this setup/,
+        ),
+      ).toBeTruthy();
+      const enable = screen.getByRole("button", {
+        name: clientId === "first" ? "Turn on" : "Use this client instead",
+      }) as HTMLButtonElement;
+      expect(enable.disabled).toBe(true);
+      const disable = screen.getByRole("button", {
+        name: "Turn off",
+      }) as HTMLButtonElement;
+      expect(disable.disabled).toBe(true);
+      fireEvent.click(enable);
+      fireEvent.click(disable);
+      expect(state.prepare).not.toHaveBeenCalled();
+      expect(state.unlink).not.toHaveBeenCalled();
+    },
+  );
   it("blocks an unknown state with no binding from turning on", () => {
     read.data = {
       ...unlinked,

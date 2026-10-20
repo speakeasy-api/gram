@@ -639,7 +639,9 @@ export function IdentityChainingField({
     // A refused Turn on reports why, even while the binding still reads off.
     off:
       !prepareOutcome &&
-      (!read.data || shownState === "unlinked" || switchingClient),
+      (!read.data ||
+        shownState === "unlinked" ||
+        (knownState && switchingClient)),
     stalled: ready && noneUsable,
     // This server's own binding, not the organization's.
     lastAccepted: read.data?.lastAcceptedAt ?? undefined,
