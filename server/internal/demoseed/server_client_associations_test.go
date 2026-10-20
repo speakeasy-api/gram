@@ -24,8 +24,8 @@ func TestLocalServerClientAssociations(t *testing.T) {
 
 // Every seeded proxied server whose issuer binds an upstream client carries
 // the association it is meant to use, so the backfill has nothing to decide.
-// GitHub shares the workforce issuer with the EMA services but uses neither
-// of their clients.
+// GitHub shares the workforce issuer with the EMA services but has no
+// evidence for either client, so it uses none.
 func testServerClientAssociations(t *testing.T, spec Spec) {
 	t.Helper()
 	ctx := t.Context()
@@ -67,9 +67,10 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 		report, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0})
 		require.NoError(t, err)
 		require.Zero(t, report.Decided, "the seed must write every association the backfill would decide")
+		require.Zero(t, report.Gaps)
 		for _, result := range report.Results {
-			if !result.Outcome.Covered() {
-				require.Equal(t, github, result.MCPServerID, "unexpected uncovered server")
+			if result.MCPServerID == github {
+				require.Equal(t, associationbackfill.OutcomeNoClient, result.Outcome)
 			}
 		}
 		for _, result := range report.GatewayResults {
