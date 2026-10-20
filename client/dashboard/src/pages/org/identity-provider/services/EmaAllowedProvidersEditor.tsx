@@ -388,7 +388,7 @@ export function EmaAllowedProvidersEditor({
                       >
                         {accepted && (
                           <EntryNote
-                            available={available(row)}
+                            available={!supportsEditing || available(row)}
                             readiness={readiness(row.key)}
                           />
                         )}

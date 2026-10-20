@@ -1045,7 +1045,10 @@ describe("one service", () => {
 
 describe("unsupported enabled identity providers", () => {
   it.each([
-    { kind: "future_provider" as ProviderView["kind"] },
+    {
+      key: "unknown-future-provider",
+      kind: "future_provider" as ProviderView["kind"],
+    },
     { unavailableReason: "future_reason" as ProviderView["unavailableReason"] },
   ])(
     "blocks edits and restoring defaults for unsupported settings: %j",
@@ -1065,6 +1068,7 @@ describe("unsupported enabled identity providers", () => {
       expect(
         screen.getByText(/unsupported identity provider configuration/),
       ).toBeTruthy();
+      expect(screen.queryByText(/Uncheck it to save/)).toBeNull();
       expect(mocks.save).not.toHaveBeenCalled();
     },
   );
