@@ -5,7 +5,6 @@ import { Check } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { SettingsSection } from "@/components/page-templates";
 import { Button } from "@/components/ui/Button";
 import {
   Select,
@@ -24,7 +23,11 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { agentIssuanceBlocked } from "./agent-issuance";
-import { Table, type Column } from "@/components/ui/Table";
+import {
+  IdentityPanel,
+  IdentityPanelEmpty,
+  IdentityPanelRow,
+} from "@/pages/identities/IdentityPanel";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { Key } from "@gram/client/models/components/key.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
@@ -50,7 +53,6 @@ const security = { sessionHeaderGramSession: "" };
 export function AgentAPIKeys({
   agent,
   creation = false,
-  variant = "section",
   federated = false,
   onCreate,
   onDone,
@@ -65,8 +67,6 @@ export function AgentAPIKeys({
    * authenticate.
    */
   federated?: boolean | "unknown";
-  /** "bare" drops the section chrome for a caller that supplies its own. */
-  variant?: "section" | "bare";
   onCreate?: () => void;
   onDone?: () => void;
   onBusy?: (busy: boolean) => void;
@@ -75,10 +75,13 @@ export function AgentAPIKeys({
   // Delegable candidates are specific to the authorizer, and the signed-in
   // user can change without the organization changing.
   const { user } = useSession();
+  // The mode is part of the key: both branches render the same component in
+  // the same position now, so without it React keeps the listing's state when
+  // the caller switches to issuance, and the wizard opens closed.
   if (creation)
     return (
       <AgentAPIKeysContent
-        key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
+        key={`creation:${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
         agent={agent}
         organizationId={organization.id}
         userId={user.id}
@@ -87,7 +90,9 @@ export function AgentAPIKeys({
         onBusy={onBusy}
       />
     );
-  const content = (
+  // The listing brings its own panel, the same one the federated platforms
+  // beside it use, so the caller supplies only the section around them.
+  return (
     <AgentAPIKeysContent
       key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
       agent={agent}
@@ -96,34 +101,6 @@ export function AgentAPIKeys({
       federated={federated}
       onCreate={onCreate}
     />
-  );
-  if (variant === "bare") return content;
-  // The identity kept here is a stand-in for an agent that runs somewhere
-  // else, so the page's subject is provisioning: the endpoint to point that
-  // runtime at, the keys handed out to do it, and nothing in between.
-  return (
-    <SettingsSection>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Provision</SettingsSection.Title>
-        <SettingsSection.Description>
-          Point the agent's runtime here, then issue it a key to authenticate
-          with.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body className="space-y-6">
-          <AgentGatewayInstall agentID={agent.id} secret={null} />
-          <AgentAPIKeysContent
-            key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
-            agent={agent}
-            organizationId={organization.id}
-            userId={user.id}
-            federated={federated}
-            onCreate={onCreate}
-          />
-        </SettingsSection.Body>
-      </SettingsSection.Panel>
-    </SettingsSection>
   );
 }
 
@@ -545,49 +522,6 @@ function AgentAPIKeysContent({
       },
     );
   };
-  const columns: Column<Key>[] = [
-    { key: "name", header: "Name", render: (key) => key.name },
-    { key: "keyPrefix", header: "Prefix", render: (key) => key.keyPrefix },
-    {
-      key: "createdAt",
-      header: "Created",
-      width: "160px",
-      // Which key a machine is holding is usually remembered as when it was
-      // issued, so the age is part of telling two keys apart.
-      render: (key) =>
-        // The field is typed as always present, but an older row read back
-        // without it must not take the whole table down with it.
-        key.createdAt ? <KeyDate date={key.createdAt} /> : "—",
-    },
-    {
-      key: "expiresAt",
-      header: "Expires",
-      width: "160px",
-      // Absolute, like agent session expiry: a relative label reads a future
-      // expiry as elapsed time, so a fresh 90-day key showed "3 months ago".
-      render: (key) => (key.expiresAt ? <KeyDate date={key.expiresAt} /> : "—"),
-    },
-    {
-      key: "id",
-      header: "",
-      // A fixed action column, so the control never lands half-clipped at the
-      // table's edge the way an auto-sized one did.
-      width: "120px",
-      render: (key) => (
-        <Button
-          size="sm"
-          variant="destructive-secondary"
-          onClick={() => {
-            setError(null);
-            setRevoke(key);
-          }}
-          aria-label={`Revoke API key ${key.name}`}
-        >
-          Revoke
-        </Button>
-      ),
-    },
-  ];
   if (!canManage)
     return (
       <Text muted>
@@ -597,21 +531,18 @@ function AgentAPIKeysContent({
   return (
     <>
       {!creation && (
-        <>
-          {keys.isLoading ? (
-            <Text muted>Loading API keys…</Text>
-          ) : keys.isError ? (
-            <div role="alert">
-              <Text>Could not load API keys.</Text>
-              <Button variant="secondary" onClick={() => void keys.refetch()}>
-                Retry API keys
-              </Button>
-            </div>
-          ) : null}
-          <div className="flex items-center justify-between gap-4">
-            <Text small className="font-medium">
-              Keys
-            </Text>
+        <IdentityPanel
+          title="API keys"
+          loading={keys.isLoading}
+          error={keys.isError}
+          onRetry={() => void keys.refetch()}
+          loadingRows={1}
+          footer={
+            issuanceBlocked
+              ? `${issuanceBlocked} Existing keys can still be revoked.`
+              : "API keys are long-lived. Anyone holding one acts as this agent, so store them in a secret manager and revoke any that leak."
+          }
+          action={
             <Button
               size="sm"
               variant={knownKeys?.length ? "secondary" : "primary"}
@@ -622,17 +553,50 @@ function AgentAPIKeysContent({
             >
               Issue a key
             </Button>
-          </div>
+          }
+        >
           {knownKeys?.length ? (
-            <Table
-              data={knownKeys}
-              columns={columns}
-              rowKey={(key) => key.id}
-            />
-          ) : keys.data ? (
+            knownKeys.map((key) => (
+              <IdentityPanelRow
+                key={key.id}
+                title={key.name}
+                // Prefix, issue date and expiry together: which key a machine
+                // holds is remembered as the one issued then, and the expiry
+                // is the next thing anyone asks of it.
+                detail={
+                  <span className="flex flex-wrap items-center gap-x-2">
+                    <span className="font-mono">{key.keyPrefix}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      Issued{" "}
+                      {key.createdAt ? <KeyDate date={key.createdAt} /> : "—"}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      Expires{" "}
+                      {key.expiresAt ? <KeyDate date={key.expiresAt} /> : "—"}
+                    </span>
+                  </span>
+                }
+                trailing={
+                  <Button
+                    size="sm"
+                    variant="destructive-secondary"
+                    onClick={() => {
+                      setError(null);
+                      setRevoke(key);
+                    }}
+                    aria-label={`Revoke API key ${key.name}`}
+                  >
+                    Revoke
+                  </Button>
+                }
+              />
+            ))
+          ) : (
             // The state that matters most on this page: an identity nothing
             // is holding yet, and the one step that changes that.
-            <Text muted small>
+            <IdentityPanelEmpty>
               {federated === "unknown"
                 ? // Whether a key is this agent's only way in is not settled
                   // yet, and the guess that it is tells a federated agent it
@@ -641,14 +605,9 @@ function AgentAPIKeysContent({
                 : federated
                   ? "No key issued. This agent signs in with its platform's own tokens, so it only needs a key for a runtime that cannot do that."
                   : "No key issued yet. The agent cannot authenticate until you issue one and install it where it runs."}
-            </Text>
-          ) : null}
-          {issuanceBlocked && (
-            <Text muted small>
-              {issuanceBlocked} Existing keys can still be revoked.
-            </Text>
+            </IdentityPanelEmpty>
           )}
-        </>
+        </IdentityPanel>
       )}
       {creation && open && (
         <div className="space-y-6">

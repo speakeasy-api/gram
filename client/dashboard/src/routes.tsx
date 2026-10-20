@@ -839,9 +839,9 @@ const ROUTE_STRUCTURE = {
             url: "permissions",
             component: IdentityAgentSection,
           },
-          provisioning: {
-            title: "Agent Provisioning",
-            url: "provisioning",
+          credentials: {
+            title: "Agent Credentials",
+            url: "credentials",
             component: IdentityAgentSection,
           },
           sessions: {

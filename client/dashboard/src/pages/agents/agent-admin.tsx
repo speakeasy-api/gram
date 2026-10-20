@@ -115,7 +115,7 @@ export function AgentIdentityPanel({
       </dl>
       {/* An agent waiting on a new owner cannot be issued keys. That is a
           fact about the identity, so it belongs here rather than only on the
-          provisioning section where the blocked button explains itself. */}
+          credentials section where the blocked button explains itself. */}
       {agent.ownerReassignmentRequiredAt && (
         <Text role="alert" small>
           This agent needs a new owner before it can be issued keys

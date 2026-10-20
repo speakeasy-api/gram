@@ -38,7 +38,7 @@ vi.mock("@/routes", () => ({
         devices: page("devices"),
         activity: page("activity"),
         permissions: page("permissions"),
-        provisioning: page("provisioning"),
+        credentials: page("credentials"),
         sessions: page("sessions"),
       },
     },

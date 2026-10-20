@@ -23,11 +23,11 @@ export default function AgentManagementRedirect(): JSX.Element {
 
   if (agentID) {
     const urn = encodeIdentityUrn(`agent:${agentID}`);
-    // Issuing a key is a step on the agent's provisioning section, so a link
+    // Issuing a key is a state of the agent's credentials section, so a link
     // that asked for it lands there rather than on the overview.
     const to =
       params.get("credential") === "new"
-        ? `${routes.identities.detail.provisioning.href(urn)}?credential=new`
+        ? `${routes.identities.detail.credentials.href(urn)}?credential=new`
         : routes.identities.detail.overview.href(urn);
     return <Navigate to={to} replace />;
   }
