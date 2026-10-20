@@ -110,7 +110,7 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 	}
 	reconnect := map[uuid.UUID]bool{}
 	for _, gap := range selections.Gaps {
-		if gap.Outcome == selectionbackfill.OutcomeAmbiguous || gap.Outcome == selectionbackfill.OutcomeUnreachableClient {
+		if gap.Outcome == selectionbackfill.OutcomeAmbiguous || gap.Outcome == selectionbackfill.OutcomeUnreachableClient || gap.Outcome == selectionbackfill.OutcomeUnusableClient {
 			reconnect[gap.CredentialID] = true
 		}
 	}

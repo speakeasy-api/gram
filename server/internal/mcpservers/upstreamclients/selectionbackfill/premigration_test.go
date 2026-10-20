@@ -89,3 +89,26 @@ func TestMigrationKeepsUsableChoices(t *testing.T) {
 	f.migrate()
 	require.Equal(t, map[uuid.UUID]uuid.UUID{chosen: first, anonymous: uuid.Nil}, f.selections(credential))
 }
+
+// A client choice whose client is detached from the server is unusable and is
+// never switched to the server's other client, so coverage reports it as a
+// reconnection rather than selected.
+func TestCoverageReportsAnUnusableClientChoice(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	first, second := f.client(issuer), f.client(issuer)
+	server := f.server(issuer, first)
+	credential := f.session(issuer)
+
+	f.record(issuer, credential)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{server: first}, f.selections(credential))
+
+	require.NoError(t, f.q.RemoveAssociationFixture(t.Context(), RemoveAssociationFixtureParams{McpServerID: server, RemoteSessionClientID: first}))
+	f.associate(server, second)
+
+	report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: server, Outcome: OutcomeUnusableClient}}, report.Gaps)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{server: first}, f.selections(credential), "a client choice is never switched")
+}

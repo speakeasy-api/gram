@@ -60,6 +60,8 @@ reachable AS (
       )
 )
 SELECT r.id AS mcp_server_id,
+       -- A recorded choice counts only while it is usable, by the predicate
+       -- GetUpstreamClientSelection serves with; the two must stay identical.
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel
@@ -67,18 +69,41 @@ SELECT r.id AS mcp_server_id,
            AND sel.credential_id = @credential_id::uuid
            AND sel.mcp_server_id = r.id
            AND sel.deleted IS FALSE
-           -- A no-auth choice for a server that has since been given a client
-           -- is unusable; RecordUpstreamClientSelections replaces it.
-           AND NOT (
-             sel.no_auth
-             AND EXISTS (
+           AND CASE
+             WHEN sel.no_auth THEN NOT EXISTS (
                SELECT 1
                FROM mcp_server_remote_session_clients AS a
                WHERE a.mcp_server_id = r.id
                  AND a.deleted IS FALSE
              )
-           )
+             ELSE EXISTS (
+               SELECT 1
+               FROM mcp_server_remote_session_clients AS a
+               JOIN remote_session_clients AS c
+                 ON c.id = a.remote_session_client_id
+                AND c.deleted IS FALSE
+               JOIN remote_session_client_user_session_issuers AS link
+                 ON link.remote_session_client_id = a.remote_session_client_id
+                AND link.user_session_issuer_id = @user_session_issuer_id
+               WHERE a.mcp_server_id = r.id
+                 AND a.remote_session_client_id = sel.remote_session_client_id
+                 AND a.deleted IS FALSE
+             )
+           END
        )::boolean AS selected,
+       -- A client choice that is no longer usable. It is never replaced by
+       -- another client, so only a reconnection resolves it. An unusable
+       -- no-auth choice is not one: RecordUpstreamClientSelections replaces it
+       -- once a client is decided, so it is classified like a missing choice.
+       EXISTS (
+         SELECT 1
+         FROM upstream_client_selections AS sel
+         WHERE sel.credential_kind = @credential_kind::text
+           AND sel.credential_id = @credential_id::uuid
+           AND sel.mcp_server_id = r.id
+           AND sel.deleted IS FALSE
+           AND NOT sel.no_auth
+       )::boolean AS chose_client,
        (
          SELECT count(*)
          FROM mcp_server_remote_session_clients AS a
