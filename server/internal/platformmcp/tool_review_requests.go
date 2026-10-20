@@ -60,6 +60,7 @@ func registerReviewRequestTools(reg *Registrar, service MCPReviewRequestService,
 		Name:        "request_mcp_review",
 		Title:       "Request Review of an MCP Server",
 		Description: "Ask an organization administrator to review an MCP server for one project. This records a request only: it does not grant access, change roles, or approve the server. Credential-shaped values in URLs and commands are redacted before storage.",
+		Annotations: requestMCPReviewAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input RequestMCPReviewInput) (*mcp.CallToolResult, RequestMCPReviewOutput, error) {
 		return principalToolCall(ctx, reviewRequestToolResult, func(principal Principal) (RequestMCPReviewOutput, error) {
 			project, err := reviewRequestProject(ctx, service, projects, principal, input.ProjectID)
@@ -163,6 +164,11 @@ func reviewRequestToolResult(err error) (*mcp.CallToolResult, bool) {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}, IsError: true}, true
 }
 
+// Every call records a new review request.
+func requestMCPReviewAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(false, false, false)
+}
+
 func registerUnavailableReviewRequestTools(reg *Registrar) {
 	for _, tool := range []struct {
 		name, title, description string
@@ -172,6 +178,7 @@ func registerUnavailableReviewRequestTools(reg *Registrar) {
 		{"get_my_mcp_review_request", "Get My MCP Review Request", "Check one MCP review request you submitted. This is not switched on for your organization yet.", true},
 	} {
 		manifest := &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}
+		manifest.Annotations = requestMCPReviewAnnotations()
 		if tool.readOnly {
 			manifest.Annotations = readOnlyAnnotations()
 		}

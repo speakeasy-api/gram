@@ -503,6 +503,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			Name:        "send_platform_mcp_feedback",
 			Title:       "Send Feedback About This Platform",
 			Description: "Send feedback about this platform. This is not switched on for your organization yet.",
+			Annotations: feedbackAnnotations(),
 		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
 	} else {
 		registerFeedbackTool(reg, feedback)
@@ -532,7 +533,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
-			Annotations: readOnlyAnnotations(),
+			Annotations: readOnlyOpenWorldAnnotations(),
 		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
 	}
 }
@@ -542,7 +543,7 @@ func registerUnavailableCandidateInspectionTool(reg *Registrar) {
 		Name:        "inspect_mcp_candidate",
 		Title:       "Inspect an MCP Server",
 		Description: "Look at one MCP server before adding it. This is not switched on for your organization yet.",
-		Annotations: readOnlyAnnotations(),
+		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("candidate_inspection"))
 }
 
@@ -551,6 +552,7 @@ func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
 		Name:        "register_catalog_mcp",
 		Title:       "Add a Reviewed MCP Server to a Project",
 		Description: "Add a reviewed MCP server to a project. This is not switched on for your organization yet.",
+		Annotations: registrationAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog_registration"))
 }
 
@@ -559,6 +561,7 @@ func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
 		Name:        "register_remote_mcp",
 		Title:       "Add Your Own MCP Server to a Project",
 		Description: "Add an MCP server of your own to a project. This is not switched on for your organization yet.",
+		Annotations: registrationAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("direct_remote_registration"))
 }
 
@@ -567,6 +570,7 @@ func registerUnavailableLifecycleMetadataTool(reg *Registrar) {
 		Name:        "update_mcp_metadata",
 		Title:       "Rename an MCP Server",
 		Description: "Rename one MCP server. This is not switched on for your organization yet.",
+		Annotations: writeAnnotations(false, true, false),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_metadata"))
 }
 
@@ -575,6 +579,7 @@ func registerUnavailableSetupHandoffTool(reg *Registrar) {
 		Name:        "get_setup_handoff",
 		Title:       "Open Setup in the Dashboard",
 		Description: "Open the dashboard to finish setting up an MCP server. This is not switched on for your organization yet.",
+		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
 }
 
@@ -584,15 +589,17 @@ func registerUnavailableTools(reg *Registrar) {
 		title       string
 		description string
 		feature     string
+		annotations *mcp.ToolAnnotations
 	}{
 
-		{"distribute_mcp_to_plugin", "Add an MCP Server to a Plugin", "Give an MCP server to one plugin, so the people it reaches get it. This is not switched on for your organization yet.", "plugin_distribution"},
-		{"remove_mcp_from_plugin", "Remove an MCP Server from a Plugin", "Take an MCP server back out of one plugin. This is not switched on for your organization yet.", "plugin_distribution"},
+		{"distribute_mcp_to_plugin", "Add an MCP Server to a Plugin", "Give an MCP server to one plugin, so the people it reaches get it. This is not switched on for your organization yet.", "plugin_distribution", distributeMCPToPluginAnnotations()},
+		{"remove_mcp_from_plugin", "Remove an MCP Server from a Plugin", "Take an MCP server back out of one plugin. This is not switched on for your organization yet.", "plugin_distribution", removeMCPFromPluginAnnotations()},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
+			Annotations: tool.annotations,
 		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
 	}
 }
@@ -602,15 +609,16 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 		name        string
 		title       string
 		description string
+		annotations *mcp.ToolAnnotations
 	}{
-		{"get_mcp_readiness", "Check If an MCP Server Is Working", "Check whether an MCP server is working. This is not switched on for your organization yet."},
-		{"get_mcp_repair_plan", "What to Fix on an MCP Server", "See what to fix on an MCP server that is not working. This is not switched on for your organization yet."},
+		{"get_mcp_readiness", "Check If an MCP Server Is Working", "Check whether an MCP server is working. This is not switched on for your organization yet.", readOnlyOpenWorldAnnotations()},
+		{"get_mcp_repair_plan", "What to Fix on an MCP Server", "See what to fix on an MCP server that is not working. This is not switched on for your organization yet.", readOnlyAnnotations()},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
-			Annotations: readOnlyAnnotations(),
+			Annotations: tool.annotations,
 		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
 	}
 }
@@ -679,8 +687,42 @@ func principalFromToolContext(ctx context.Context) (Principal, error) {
 	return principal, nil
 }
 
+// Every tool states readOnlyHint, destructiveHint, and openWorldHint from its
+// real behaviour. Speakeasy reads an unset hint as undeclared, so a tool must
+// not leave one to the MCP defaults. A tool is open world only when its
+// handler reaches a host outside Speakeasy.
 func readOnlyAnnotations() *mcp.ToolAnnotations {
-	return &mcp.ToolAnnotations{ReadOnlyHint: true}
+	return &mcp.ToolAnnotations{Title: "", ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: false, OpenWorldHint: new(false)}
+}
+
+// readOnlyOpenWorldAnnotations is for a read-only tool whose handler reaches a
+// host outside Speakeasy, such as a registry or the user's own MCP server.
+func readOnlyOpenWorldAnnotations() *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{Title: "", ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: false, OpenWorldHint: new(true)}
+}
+
+// writeAnnotations is for a tool that changes state.
+func writeAnnotations(destructive, idempotent, openWorld bool) *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{Title: "", ReadOnlyHint: false, DestructiveHint: new(destructive), IdempotentHint: idempotent, OpenWorldHint: new(openWorld)}
+}
+
+func feedbackAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(false, true, false)
+}
+
+// registrationAnnotations is for register_catalog_mcp and register_remote_mcp,
+// which reach the registry or the user's MCP server.
+func registrationAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(false, true, true)
+}
+
+// The plugin distribution tools publish to GitHub before they return.
+func distributeMCPToPluginAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(false, true, true)
+}
+
+func removeMCPFromPluginAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, true, true)
 }
 
 func boundedLimit(limit int) int {

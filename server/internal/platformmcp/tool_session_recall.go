@@ -47,6 +47,7 @@ func registerSessionRecallTools(reg *Registrar, svc SessionRecaller) {
 		Name:        "continue_session",
 		Title:       "Continue Session",
 		Description: "Render a redacted handoff digest of one of your own previous sessions so its work can continue here. Sensitive values found by risk scanning appear masked, and tool inputs/outputs are omitted (tool names are retained). Every call records a lineage edge and an entry in the organization's audit log. This is not a transcript or log reader, and it cannot access other users' sessions.",
+		Annotations: continueSessionAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ContinueSessionInput) (*mcp.CallToolResult, ContinueSessionOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
@@ -94,6 +95,11 @@ func sessionRecallToolResult(err error) (*mcp.CallToolResult, bool) {
 
 // Each stub declares the audiences its live counterpart declares, so the tools
 // do not appear on and disappear from a surface as the rollout flips.
+// continue_session writes a lineage edge and an audit event on every call.
+func continueSessionAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(false, false, false)
+}
+
 func registerUnavailableSessionRecallTools(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_my_sessions",
@@ -105,5 +111,6 @@ func registerUnavailableSessionRecallTools(reg *Registrar) {
 		Name:        "continue_session",
 		Title:       "Continue Session",
 		Description: "Recall one of your own previous sessions as a redacted handoff digest. Session recall is not available in the current rollout.",
+		Annotations: continueSessionAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool("session_recall"))
 }

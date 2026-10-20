@@ -78,7 +78,8 @@ func TestMCPReviewRequestToolsAreExternalMemberTools(t *testing.T) {
 		require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
 		require.Empty(t, descriptor.Meta.DiscoveryScopes)
 	}
-	require.Nil(t, request.Annotations)
+	require.NotNil(t, request.Annotations)
+	require.False(t, request.Annotations.ReadOnlyHint)
 	require.NotNil(t, status.Annotations)
 	require.True(t, status.Annotations.ReadOnlyHint)
 }
