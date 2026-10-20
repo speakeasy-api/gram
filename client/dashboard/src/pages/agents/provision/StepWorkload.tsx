@@ -125,8 +125,7 @@ function PlatformTile({
 
 /**
  * The platforms this flow can federate a token from: the catalog entries the
- * server ships a guided setup for. An entry without one is left out rather
- * than listed and refused — there is nothing this wizard could do with it.
+ * server ships a supported guided setup for. Unavailable entries stay visible.
  */
 export function WorkloadPlatformPicker({
   entries,
@@ -149,14 +148,12 @@ export function WorkloadPlatformPicker({
   // The catalog's policy is necessary but not sufficient: a platform is
   // offered only where this wizard also ships instructions for it.
   const available: PickerEntry[] = [
-    ...entries
-      .filter((entry) => entry.enabled && hasPlatformSetup(entry.key))
-      .map((entry) => ({
-        key: entry.key,
-        displayName: entry.displayName,
-        description: entry.description,
-        icon: entry.icon,
-      })),
+    ...entries.filter(hasPlatformSetup).map((entry) => ({
+      key: entry.key,
+      displayName: entry.displayName,
+      description: entry.description,
+      icon: entry.icon,
+    })),
     CUSTOM_ENTRY,
   ];
 
@@ -190,21 +187,22 @@ export function WorkloadPlatformPicker({
   // The catalog ships one platform at a time, and the credential card names
   // four. Without these the reader is left to guess whether the rest are
   // unsupported or merely absent today.
-  const soon: PickerEntry[] = [
+  const unavailable: (PickerEntry & { planned: boolean })[] = [
     ...entries
-      .filter((entry) => !hasPlatformSetup(entry.key))
+      .filter((entry) => !hasPlatformSetup(entry))
       .map((entry) => ({
         key: entry.key,
         displayName: entry.displayName,
         description: entry.description,
         icon: entry.icon,
+        planned: false,
       })),
     ...PLANNED.filter(
       (planned) => !entries.some((entry) => entry.key === planned.key),
-    ),
+    ).map((entry) => ({ ...entry, planned: true })),
   ];
 
-  if (available.length === 0 && soon.length === 0) {
+  if (available.length === 0 && unavailable.length === 0) {
     return (
       <Text muted small>
         No platform with a guided setup is available yet. Issue an API key
@@ -226,7 +224,7 @@ export function WorkloadPlatformPicker({
             onSelect={onSelect}
           />
         ))}
-        {soon.map((entry) => (
+        {unavailable.map((entry) => (
           <li key={entry.key}>
             <div
               aria-disabled="true"
@@ -237,12 +235,17 @@ export function WorkloadPlatformPicker({
                 <span className="flex items-center gap-2">
                   <span className="truncate">{entry.displayName}</span>
                   <Badge variant="neutral" size="sm">
-                    Coming soon
+                    {entry.planned ? "Coming soon" : "Unavailable"}
                   </Badge>
                 </span>
                 <Text muted small className="block">
                   {entry.description}
                 </Text>
+                {!entry.planned && (
+                  <Text muted small className="block">
+                    Setup is unavailable. Refresh or choose another platform.
+                  </Text>
+                )}
               </span>
             </div>
           </li>

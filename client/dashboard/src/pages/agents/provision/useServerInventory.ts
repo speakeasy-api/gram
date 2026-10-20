@@ -1,5 +1,7 @@
 import { useOrganization } from "@/contexts/Auth";
 import { mcpUrlSuffix } from "@/hooks/useToolsetUrl";
+import { isKnownEnumValue } from "@/lib/enum";
+import { McpServerVisibility } from "@gram/client/models/components/mcpserver.js";
 import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 
@@ -48,6 +50,7 @@ export function useServerInventory(): ServerInventory {
   const servableServers = (servers.data?.mcpServers ?? []).filter(
     (server) =>
       !server.unproxiedMcpServerId &&
+      isKnownEnumValue(McpServerVisibility, server.visibility) &&
       server.visibility !== "disabled" &&
       Boolean(projects.get(server.projectId)?.slug),
   );

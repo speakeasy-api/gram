@@ -1075,16 +1075,17 @@ export function ProvisionWizard({
     switch (step) {
       case 2:
         if (credential === "workload") {
+          let note =
+            "Choose the platform whose tokens this agent will present.";
+          if (platformKey !== null) {
+            note =
+              workload.steps.length === 0
+                ? "Setup is unavailable. Refresh or choose another platform."
+                : `${platform?.displayName ?? "Your platform"} issues the tokens; the next step sets it up.`;
+          }
           return (
             <WizardFooter
-              note={
-                // The custom flow has no catalog entry, so a chosen platform
-                // can still leave `platform` undefined. Asking the key keeps
-                // the note from telling the reader to choose again.
-                platformKey === null
-                  ? "Choose the platform whose tokens this agent will present."
-                  : `${platform?.displayName ?? "Your platform"} issues the tokens; the next step sets it up.`
-              }
+              note={note}
               onBack={() => setStep(1)}
               primary={
                 <Button
