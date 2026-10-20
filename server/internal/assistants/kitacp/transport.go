@@ -168,8 +168,11 @@ func (c *Client) request(ctx context.Context, method, session string, body []byt
 	return res, nil
 }
 
-// Notifications must be drained; buffer exhaustion fails the transport rather
-// than silently dropping updates. The channel is not closed; select on Done too.
+// Notifications must be drained concurrently with Call, including during replay.
+// A full buffer backpressures its SSE reader without dropping updates. Consumers
+// must not wait for a Call response before continuing to drain: the response can
+// follow notifications on the same stream. The channel is not closed; select on
+// Done too.
 func (c *Client) Notifications() <-chan Notification { return c.notifications }
 func (c *Client) Done() <-chan struct{}              { return c.done }
 func (c *Client) Err() error                         { c.mu.Lock(); defer c.mu.Unlock(); return c.terminal }
@@ -406,8 +409,8 @@ func (c *Client) dispatch(data []byte, session string) error {
 		select {
 		case c.notifications <- Notification{session, m.Method, m.Params}:
 			return nil
-		default:
-			return errors.New("ACP notification buffer exhausted")
+		case <-c.done:
+			return ErrClosed
 		}
 	}
 	if len(m.ID) == 0 || (m.Error == nil && len(m.Result) == 0) {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 )
@@ -109,6 +110,7 @@ func DefaultKitLocalRuntimeConfig(origin *url.URL) KitLocalRuntimeConfig {
 }
 
 type KitStartupBootstrapInput struct {
+	LifecycleTx                     pgx.Tx
 	Model                           string
 	Identity                        assistantidentity.Identity
 	RuntimeID                       uuid.UUID
@@ -132,10 +134,22 @@ func PrepareKitStartupBootstrap(ctx context.Context, manager *assistanttokens.Ma
 	if manager == nil || in.Lifetime <= 0 || in.Lifetime > assistanttokens.MaxInferenceLifetime || in.RuntimeID == uuid.Nil {
 		return KitLocalBootstrap{}, uuid.Nil, fmt.Errorf("invalid Kit startup credential issuer, runtime or lifetime")
 	}
-	if err := manager.RevokeRuntimeInferenceCredentials(ctx, in.Identity.ProjectID, in.RuntimeID); err != nil {
+	var err error
+	if in.LifecycleTx != nil {
+		err = manager.RevokeRuntimeInferenceCredentialsInTx(ctx, in.LifecycleTx, in.Identity.ProjectID, in.RuntimeID)
+	} else {
+		err = manager.RevokeRuntimeInferenceCredentials(ctx, in.Identity.ProjectID, in.RuntimeID)
+	}
+	if err != nil {
 		return KitLocalBootstrap{}, uuid.Nil, fmt.Errorf("revoke previous kit inference credentials: %w", err)
 	}
-	credential, err := manager.IssueKitAPIKey(ctx, assistanttokens.InferenceIssueInput{Identity: in.Identity, RuntimeID: in.RuntimeID, Lifetime: in.Lifetime}, in.Environment)
+	issue := assistanttokens.InferenceIssueInput{Identity: in.Identity, RuntimeID: in.RuntimeID, Lifetime: in.Lifetime}
+	var credential assistanttokens.KitAPIKey
+	if in.LifecycleTx != nil {
+		credential, err = manager.IssueKitAPIKeyInTx(ctx, in.LifecycleTx, issue, in.Environment)
+	} else {
+		credential, err = manager.IssueKitAPIKey(ctx, issue, in.Environment)
+	}
 	if err != nil {
 		return KitLocalBootstrap{}, uuid.Nil, fmt.Errorf("issue kit inference credential: %w", err)
 	}

@@ -9,6 +9,43 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiKey struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	CreatedByUserID string
+	// @access: confidential
+	Name string
+	// @access: secret-restricted
+	KeyPrefix string
+	// @access: secret-restricted
+	KeyHash string
+	// @access: confidential
+	Scopes []string
+	// @access: confidential
+	SubjectUrn pgtype.Text
+	// @access: opaque-restricted
+	DelegatedGrants []byte
+	// @access: confidential
+	DelegatedGrantsVersion pgtype.Int4
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+	// @access: confidential
+	LastAccessedAt pgtype.Timestamptz
+}
+
 type AssistantInferenceCredential struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -18,18 +55,12 @@ type AssistantInferenceCredential struct {
 	AssistantID uuid.UUID
 	// @access: confidential
 	RuntimeID uuid.UUID
-	// @access: opaque-restricted
-	TokenHash []byte
+	// @access: confidential
+	ApiKeyID uuid.UUID
 	// @access: opaque-restricted
 	IdentityJson []byte
-	// @access: opaque-restricted
-	PolicyJson []byte
-	// @access: confidential
-	PolicyVersion int32
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	ExpiresAt pgtype.Timestamptz
 	// @access: confidential
 	RevokedAt pgtype.Timestamptz
 }

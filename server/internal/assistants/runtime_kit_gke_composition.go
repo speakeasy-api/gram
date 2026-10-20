@@ -4,10 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
+	"net/url"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -62,7 +67,9 @@ func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
 	c.Provision.GuestPort = int32(c.GKE.GuestPort)
 	backend, err := NewKitGKERuntimeBackend(KitGKERuntimeConfig{
 		GKE: c.GKE, Provision: c.Provision, Snapshots: c.Snapshots,
-		Fence: s.fenceKitRuntimeAlreadyLocked,
+		AuthorityStore: NewKitGKEPostgresAuthorityStore(s.db),
+		Fence:          s.fenceKitRuntimeAlreadyLocked,
+		Lifecycle:      s.kitGKELifecycle,
 		Bootstrap: func(ctx context.Context, r assistantRuntimeRecord) (KitLocalBootstrap, error) {
 			return s.kitCompositionBootstrap(ctx, r, c.KitLocalCompositionConfig)
 		},
@@ -74,7 +81,11 @@ func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
 	if err := s.installKitRuntime(backend); err != nil {
 		return err
 	}
-	s.newAssistantRuntimeVersion = 3
+	// The deployment opts in only assistants whose persisted attachment can use
+	// this machine-auth composition. Other assistants keep the legacy default.
+	s.newAssistantRuntimeEligible = func(ctx context.Context, tx pgx.Tx, assistant assistantRecord) (bool, error) {
+		return s.kitGKEAssistantEligible(ctx, tx, assistant, c.KitLocalCompositionConfig)
+	}
 	return nil
 }
 
@@ -85,7 +96,11 @@ func (s *ServiceCore) fenceKitRuntimeAlreadyLocked(ctx context.Context, r assist
 	if r.RuntimeVersion != 3 {
 		return ErrKitRuntimeBinding
 	}
-	q := assistantrepo.New(s.db)
+	var db assistantrepo.DBTX = s.db
+	if r.LifecycleTx != nil {
+		db = r.LifecycleTx
+	}
+	q := assistantrepo.New(db)
 	row, err := q.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ProjectID: r.ProjectID, ID: r.ID})
 	if err != nil {
 		return fmt.Errorf("read kit runtime before credential fence: %w", err)
@@ -93,7 +108,7 @@ func (s *ServiceCore) fenceKitRuntimeAlreadyLocked(ctx context.Context, r assist
 	if row.AssistantID != r.AssistantID || row.RuntimeVersion != 3 {
 		return ErrKitRuntimeBinding
 	}
-	if err := s.assistantTokens.RevokeRuntimeInferenceCredentials(ctx, r.ProjectID, r.ID); err != nil {
+	if err := tokenrepo.New(db).RevokeRuntimeInferenceCredentials(ctx, tokenrepo.RevokeRuntimeInferenceCredentialsParams{ProjectID: r.ProjectID, RuntimeID: r.ID}); err != nil {
 		return fmt.Errorf("revoke kit runtime inference authority: %w", err)
 	}
 	// Retirement is already a durable admission fence for workload OAuth and
@@ -106,7 +121,7 @@ func (s *ServiceCore) fenceKitRuntimeAlreadyLocked(ctx context.Context, r assist
 	if err != nil {
 		return fmt.Errorf("read kit assistant before workload fence: %w", err)
 	}
-	_, err = usersessionsrepo.New(s.db).RevokeAssistantRuntimeWorkloadClients(ctx, usersessionsrepo.RevokeAssistantRuntimeWorkloadClientsParams{
+	_, err = usersessionsrepo.New(db).RevokeAssistantRuntimeWorkloadClients(ctx, usersessionsrepo.RevokeAssistantRuntimeWorkloadClientsParams{
 		RuntimeID: uuid.NullUUID{UUID: r.ID, Valid: true}, OrganizationID: conv.ToPGText(a.OrganizationID), ProjectID: r.ProjectID,
 	})
 	if err != nil {
@@ -114,4 +129,100 @@ func (s *ServiceCore) fenceKitRuntimeAlreadyLocked(ctx context.Context, r assist
 	}
 	_, err = s.rotateKitGatewayTokenAlreadyLocked(ctx, r)
 	return err
+}
+
+// kitGKELifecycle serializes Kubernetes effects and durable recovery evidence
+// under the same assistant fence as admission, retirement and selection.
+func (s *ServiceCore) kitGKELifecycle(ctx context.Context, r assistantRuntimeRecord, operation func(context.Context, assistantRuntimeRecord) error) error {
+	tx, release, err := beginKitLifecycleTransaction(ctx, s.db, r.AssistantID.String())
+	if err != nil {
+		return fmt.Errorf("begin Kit GKE lifecycle: %w", err)
+	}
+	defer release()
+	q := assistantrepo.New(tx)
+	row, err := q.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ProjectID: r.ProjectID, ID: r.ID})
+	if err != nil {
+		return fmt.Errorf("reload Kit GKE lifecycle: %w", err)
+	}
+	if row.AssistantID != r.AssistantID || row.RuntimeVersion != 3 || row.Backend != runtimeBackendGKE {
+		return ErrKitRuntimeBinding
+	}
+	r.RuntimeVersion, r.Backend, r.State = row.RuntimeVersion, row.Backend, row.State
+	r.BackendMetadataJSON, r.WarmUntil, r.LifecycleTx = row.BackendMetadataJson, row.WarmUntil, tx
+	assistant, err := q.GetAssistantIgnoringDeleted(ctx, assistantrepo.GetAssistantIgnoringDeletedParams{AssistantID: r.AssistantID, ProjectID: r.ProjectID})
+	if err != nil {
+		return fmt.Errorf("read Kit lifecycle assistant: %w", err)
+	}
+	r.Retired = row.Ended || row.Deleted || assistant.DeletedAt.Valid
+	ctx = context.WithValue(ctx, runtimeSwitchQueriesKey{}, q)
+	ctx = context.WithValue(ctx, kitAdmissionProgressKey{}, kitAdmissionProgressWriter(func(progressCtx context.Context, raw []byte) error {
+		if err := q.UpdateAssistantRuntimeMetadata(progressCtx, assistantrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: r.ProjectID, RuntimeID: r.ID, BackendMetadataJson: raw}); err != nil {
+			return err
+		}
+		return tx.Publish(progressCtx)
+	}))
+	operationErr := operation(ctx, r)
+	// Failed effects can still leave durable cleanup work. Preserve its evidence,
+	// even if the initiating request timed out after creating a Kubernetes object.
+	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	if err := tx.Commit(commitCtx); err != nil {
+		return errors.Join(operationErr, fmt.Errorf("commit Kit GKE lifecycle: %w", err))
+	}
+	return operationErr
+}
+
+// kitGKEAssistantEligible reads the attachment written by creation, rather than
+// trusting request flags or selecting Kit globally before attachments exist.
+func (s *ServiceCore) kitGKEAssistantEligible(ctx context.Context, tx pgx.Tx, assistant assistantRecord, c KitLocalCompositionConfig) (bool, error) {
+	resource, issuerID, err := s.kitPersistedMCP(ctx, tx, assistant)
+	if errors.Is(err, errKitMCPIneligible) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !c.PersistedMCP && (c.MCPResource == nil || c.MCPResource.String() != resource.String() || c.MCPUserSessionIssuerID != issuerID) {
+		return false, nil
+	}
+	return true, nil
+}
+
+var errKitMCPIneligible = errors.New("assistant has no supported persisted machine MCP attachment")
+
+func (s *ServiceCore) kitPersistedMCP(ctx context.Context, db assistantrepo.DBTX, assistant assistantRecord) (*url.URL, uuid.UUID, error) {
+	rows, err := assistantrepo.New(db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: assistant.ProjectID, AssistantIds: []uuid.UUID{assistant.ID}})
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	seen := map[uuid.UUID]bool{}
+	var selected assistantMCPServerRow
+	for _, row := range rows {
+		if row.Visibility == "disabled" || seen[row.McpServerID] {
+			continue
+		}
+		seen[row.McpServerID] = true
+		selected = assistantMCPServerRow{MCPServerID: row.McpServerID, EndpointSlug: row.EndpointSlug, Visibility: row.Visibility}
+	}
+	if len(seen) != 1 || selected.EndpointSlug == "" || s.serverURL == nil || s.serverURL.Scheme != "https" {
+		return nil, uuid.Nil, errKitMCPIneligible
+	}
+	server, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: selected.MCPServerID, ProjectID: assistant.ProjectID})
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	if !server.UserSessionIssuerID.Valid {
+		return nil, uuid.Nil, errKitMCPIneligible
+	}
+	issuer, err := usersessionsrepo.New(db).GetSharedUserSessionIssuerByID(ctx, server.UserSessionIssuerID.UUID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, uuid.Nil, errKitMCPIneligible
+	}
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	if issuer.ResolvedOrganizationID != assistant.OrganizationID || (issuer.UserSessionIssuer.ProjectID.Valid && issuer.UserSessionIssuer.ProjectID.UUID != assistant.ProjectID) {
+		return nil, uuid.Nil, errKitMCPIneligible
+	}
+	return s.serverURL.JoinPath("mcp", selected.EndpointSlug), server.UserSessionIssuerID.UUID, nil
 }

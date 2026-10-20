@@ -182,7 +182,8 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	}
 	binding.UserEchoes = echoes
 	var echoMu sync.RWMutex
-	ackReady := make(chan struct{})
+	awaitingEcho := false
+	var pendingEcho *kitacp.Notification
 	work, cancel := context.WithCancel(ctx)
 	defer cancel()
 	projection := make(chan error, 1)
@@ -202,20 +203,19 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 				} `json:"update"`
 			}
 			_ = json.Unmarshal(n.Params, &envelope)
-			if envelope.Update.Kind == "user_message" && req.CanonicalUserMessageID != uuid.Nil {
-				echoMu.RLock()
-				_, known := binding.UserEchoes[envelope.Update.ID]
-				echoMu.RUnlock()
-				if !known {
-					select {
-					case <-ackReady:
-					case <-work.Done():
-						return fmt.Errorf("kit protocol canceled: %w", work.Err())
+			echoMu.Lock()
+			defer echoMu.Unlock()
+			if envelope.Update.Kind == "user_message" && awaitingEcho {
+				if _, known := binding.UserEchoes[envelope.Update.ID]; !known {
+					// One prompt produces one complete user echo. Retain only that
+					// frame, not the following agent updates or the replay journal.
+					if pendingEcho != nil {
+						return errors.New("multiple unacknowledged Kit prompt echoes")
 					}
+					pendingEcho = &n
+					return nil
 				}
 			}
-			echoMu.RLock()
-			defer echoMu.RUnlock()
 			canonical, err := reducer.Apply(n)
 			if err != nil {
 				return err
@@ -262,6 +262,15 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if current != selection {
 		return errors.New("kit did not apply the persisted assistant model")
 	}
+	// The same-stream configuration response follows startup replay. Drain all
+	// queued history before reserving the single live prompt echo slot. Unknown
+	// historical users must never wait for this turn's prompt acknowledgement.
+	if err := flushKitNotifications(work, flush); err != nil {
+		return err
+	}
+	echoMu.Lock()
+	awaitingEcho = req.CanonicalUserMessageID != uuid.Nil
+	echoMu.Unlock()
 	raw, err := c.Call(work, "session/prompt", map[string]any{"sessionId": session.SessionID, "prompt": prompt}, session.SessionID)
 	if err != nil {
 		return fmt.Errorf("kit session/prompt: %w", err)
@@ -290,22 +299,24 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		binding.UserEchoes[ack.MessageID] = req.CanonicalUserMessageID
 		echoMu.Unlock()
 	}
-	close(ackReady)
-	// Echo correlation must be ready before draining replayed user messages.
-	// No cancellation is sent until this flush completes.
-	startupAck := make(chan error, 1)
-	select {
-	case flush <- startupAck:
-	case <-work.Done():
-		return fmt.Errorf("drain Kit startup: %w", work.Err())
-	}
-	select {
-	case err := <-startupAck:
-		if err != nil {
-			return err
+	echoMu.Lock()
+	awaitingEcho = false
+	if pendingEcho != nil {
+		canonical, applyErr := reducer.Apply(*pendingEcho)
+		if applyErr == nil {
+			_, applyErr = p.config.Projector.Handle(work, binding, canonical)
 		}
-	case <-work.Done():
-		return fmt.Errorf("drain Kit startup: %w", work.Err())
+		pendingEcho = nil
+		if applyErr != nil {
+			echoMu.Unlock()
+			return applyErr
+		}
+	}
+	echoMu.Unlock()
+	// Echo correlation must be ready before completing startup.
+	// No cancellation is sent until this flush completes.
+	if err := flushKitNotifications(work, flush); err != nil {
+		return err
 	}
 	interrupt.arm()
 	ticker := time.NewTicker(250 * time.Millisecond)
@@ -450,6 +461,21 @@ func (p *KitRuntimeProtocol) PrepareRuntimeSwitch(ctx context.Context, assistant
 	}
 	result.Settled = true
 	return result, nil
+}
+
+func flushKitNotifications(ctx context.Context, flush chan<- chan error) error {
+	ack := make(chan error, 1)
+	select {
+	case flush <- ack:
+	case <-ctx.Done():
+		return fmt.Errorf("drain Kit startup: %w", ctx.Err())
+	}
+	select {
+	case err := <-ack:
+		return err
+	case <-ctx.Done():
+		return fmt.Errorf("drain Kit startup: %w", ctx.Err())
+	}
 }
 
 // kitConsumeNotifications serializes projection and acknowledges a flush only

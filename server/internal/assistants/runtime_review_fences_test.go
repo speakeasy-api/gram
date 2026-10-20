@@ -119,7 +119,7 @@ func TestReviewRuntimeSwitchRetirementSurvivesTransactionOutcome(t *testing.T) {
 			tx := testenv.BeginTx(t, t.Context(), db)
 			qt := assistantrepo.New(tx)
 			require.NoError(t, qt.AcquireAssistantAdvisoryLock(t.Context(), key.AssistantID.String()))
-			release, err := core.prepareRuntimeSelection(t.Context(), qt, key.ProjectID, key.AssistantID, runtimeSelectionChange{Version: new(2), ExpectedVersion: new(3)})
+			release, err := core.prepareRuntimeSelection(t.Context(), qt, tx, key.ProjectID, key.AssistantID, runtimeSelectionChange{Version: new(2), ExpectedVersion: new(3)})
 			require.NoError(t, err)
 			require.Zero(t, backend.stopCount, "must not stop before commit")
 			if outcome == "rollback" {
@@ -176,7 +176,7 @@ func TestReviewRuntimeSwitchFailedStopRetriesDurably(t *testing.T) {
 	tx := testenv.BeginTx(t, t.Context(), db)
 	qt := assistantrepo.New(tx)
 	require.NoError(t, qt.AcquireAssistantAdvisoryLock(t.Context(), key.AssistantID.String()))
-	release, err := core.prepareRuntimeSelection(t.Context(), qt, key.ProjectID, key.AssistantID, runtimeSelectionChange{Version: new(2), ExpectedVersion: new(3)})
+	release, err := core.prepareRuntimeSelection(t.Context(), qt, tx, key.ProjectID, key.AssistantID, runtimeSelectionChange{Version: new(2), ExpectedVersion: new(3)})
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 	release()
@@ -186,7 +186,7 @@ func TestReviewRuntimeSwitchFailedStopRetriesDurably(t *testing.T) {
 	tx = testenv.BeginTx(t, t.Context(), db)
 	qt = assistantrepo.New(tx)
 	require.NoError(t, qt.AcquireAssistantAdvisoryLock(t.Context(), key.AssistantID.String()))
-	_, err = core.prepareRuntimeSelection(t.Context(), qt, key.ProjectID, key.AssistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
+	_, err = core.prepareRuntimeSelection(t.Context(), qt, tx, key.ProjectID, key.AssistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
 	require.ErrorIs(t, err, errRuntimeSwitchBusy, "cannot reuse a resource with a pending stop")
 	require.NoError(t, tx.Rollback(t.Context()))
 	backend.stopErr = nil

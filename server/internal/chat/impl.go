@@ -207,9 +207,6 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 }
 
 func (s *Service) directAuthorizeWithKitAdmission(ctx context.Context, r *http.Request, allowKit bool) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
-	if assistanttokens.IsInferenceCredential(r.Header.Get("Authorization")) {
-		return ctx, nil, "", oops.C(oops.CodeUnauthorized)
-	}
 	if token := r.Header.Get("Authorization"); token != "" {
 		authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
 		if err == nil {
@@ -295,7 +292,7 @@ func (s *Service) directAuthorizeWithKitAdmission(ctx context.Context, r *http.R
 
 	if allowKit {
 		var managed bool
-		authorizedCtx, managed, err = s.assistantTokens.AuthorizeKitAPIKey(authorizedCtx, r.Header.Get(constants.APIKeyHeader))
+		authorizedCtx, managed, err = s.assistantTokens.AuthorizeKitAPIKey(authorizedCtx)
 		if err != nil {
 			return authorizedCtx, nil, "", fmt.Errorf("authorize Kit API key: %w", err)
 		}
@@ -1974,11 +1971,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		if err != nil {
 			return oops.C(oops.CodeForbidden)
 		}
-		if assistanttokens.IsKitAPIKey(ctx) {
-			ctx, err = s.assistantTokens.BindKitSession(ctx, id)
-		} else {
-			ctx, err = s.assistantTokens.BindInferenceChat(ctx, id)
-		}
+		ctx, err = s.assistantTokens.BindKitSession(ctx, id)
 		if err != nil {
 			return fmt.Errorf("bind inference chat: %w", err)
 		}
@@ -3634,18 +3627,6 @@ func clampUint64ToInt64(value uint64) int64 {
 // work only: directAuthorize also serves transcript APIs, which keep their own
 // authentication.
 func (s *Service) authorizeCompletion(r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
-	if assistanttokens.IsInferenceCredential(r.Header.Get("Authorization")) {
-		ctx, err := s.assistantTokens.AuthorizeInference(r.Context(), r.Header.Get("Authorization"))
-		if err != nil {
-			return ctx, nil, "", fmt.Errorf("authorize inference completion: %w", err)
-		}
-		ac, ok := contextvalues.GetAuthContext(ctx)
-		if !ok || ac == nil || ac.ProjectID == nil {
-			return ctx, nil, "", oops.C(oops.CodeUnauthorized)
-		}
-		return ctx, ac, billing.ModelUsageSourceAssistants, nil
-	}
-
 	if !assistanttokens.IsRuntimeCredential(r.Header.Get("Authorization")) {
 		return s.directAuthorizeWithKitAdmission(r.Context(), r, true)
 	}

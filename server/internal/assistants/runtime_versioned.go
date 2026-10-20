@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"sync"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/google/uuid"
 )
@@ -280,4 +283,67 @@ func (v *versionedRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assi
 		}
 	}
 	return runtimeSwitchReadiness{DestinationReady: true, Settled: true, Release: release}, nil
+}
+
+// RuntimeReadyForAdmission checks the production control plane without creating
+// a guest or minting credentials. Constructor validation owns the image contract;
+// authenticated ACP readiness is checked after provisioning by Ensure.
+func (k *KitGKERuntimeBackend) RuntimeReadyForAdmission(ctx context.Context) error {
+	if _, err := k.config.GKE.Dynamic.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
+		return fmt.Errorf("%w: inspect Kit GKE admission API: %w", errRuntimeSwitchUnavailable, err)
+	}
+	return nil
+}
+
+var _ runtimeSwitchCoordinator = (*KitGKERuntimeBackend)(nil)
+
+// PrepareRuntimeSwitch retains every guest fence until the caller commits the
+// selection. A missing or unverified production process is never proof of idle.
+func (k *KitGKERuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assistant assistantRecord, rows []assistantRuntimeRecord, destination int16) (runtimeSwitchReadiness, error) {
+	releases := make([]func(), 0, len(rows))
+	result := runtimeSwitchReadiness{Release: sync.OnceFunc(func() {
+		for _, release := range slices.Backward(releases) {
+			release()
+		}
+	})}
+	if destination != 2 && destination != 3 {
+		return result, errRuntimeSwitchUnavailable
+	}
+	if destination == 3 {
+		if err := k.RuntimeReadyForAdmission(ctx); err != nil {
+			return result, err
+		}
+		result.DestinationReady = true
+	}
+	for _, row := range rows {
+		if row.AssistantID != assistant.ID || row.ProjectID != assistant.ProjectID {
+			return result, ErrKitRuntimeBinding
+		}
+		if err := k.validate(row); err != nil {
+			return result, err
+		}
+		if row.State != runtimeStateActive {
+			return result, errRuntimeSwitchUnavailable
+		}
+		protocol, err := k.protocol(ctx, row)
+		if err != nil {
+			return result, fmt.Errorf("%w: inspect Kit GKE switch source: %w", errRuntimeSwitchUnavailable, err)
+		}
+		coordinator, ok := protocol.(runtimeSwitchCoordinator)
+		if !ok {
+			return result, errRuntimeSwitchUnavailable
+		}
+		fence, err := coordinator.PrepareRuntimeSwitch(ctx, assistant, []assistantRuntimeRecord{row}, destination)
+		if fence.Release != nil {
+			releases = append(releases, fence.Release)
+		}
+		if err != nil {
+			return result, err
+		}
+		if !fence.Settled || fence.Release == nil {
+			return result, errRuntimeSwitchBusy
+		}
+	}
+	result.Settled = true
+	return result, nil
 }

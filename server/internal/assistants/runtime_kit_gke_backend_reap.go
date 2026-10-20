@@ -15,13 +15,15 @@ import (
 // Reap is permanent deletion, not a substitute for checkpoint Stop. No cold
 // recreation is permitted for this row after deletion. The caller retires it.
 func (k *KitGKERuntimeBackend) Reap(ctx context.Context, r assistantRuntimeRecord) error {
-	k.mu.Lock()
-	defer k.mu.Unlock()
+	if k.config.Lifecycle != nil && r.LifecycleTx == nil {
+		return k.config.Lifecycle(ctx, r, k.Reap)
+	}
 	return k.reap(ctx, r, false)
 }
 func (k *KitGKERuntimeBackend) ReapStoppedMachine(ctx context.Context, r assistantRuntimeRecord) error {
-	k.mu.Lock()
-	defer k.mu.Unlock()
+	if k.config.Lifecycle != nil && r.LifecycleTx == nil {
+		return k.config.Lifecycle(ctx, r, k.ReapStoppedMachine)
+	}
 	return k.reap(ctx, r, true)
 }
 func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecord, stoppedOnly bool) error {
@@ -57,11 +59,21 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 	if stoppedOnly && exists[1] {
 		return fmt.Errorf("refusing to reap a live Kit GKE pod as a stopped machine")
 	}
-	if exists[1] && state.Phase == "active" {
+	if stoppedOnly && !r.Retired {
+		// A stopped reusable lineage still needs its template/bootstrap to restore.
+		// Only permanent retirement may destroy those resources or its latest snapshot.
+		if state.Phase != "stopped" {
+			return fmt.Errorf("Kit idle cleanup requires stopped authority")
+		}
+		_, _, err = k.gcSupersededCheckpoints(ctx, state, authority)
+		return err
+	}
+
+	if exists[1] && state.Phase == "active" && !r.Retired {
 		if stoppedOnly {
 			return fmt.Errorf("refusing to reap a live Kit GKE pod as a stopped machine")
 		}
-		p, err := k.protocol(ctx, r)
+		p, err := k.protocolForLifecycle(ctx, r, true)
 		if err != nil {
 			return err
 		}
@@ -97,30 +109,24 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 			return err
 		}
 	}
-	for _, s := range []struct {
-		gvr  schema.GroupVersionResource
-		name string
-		uid  types.UID
-	}{{kitGKETriggerGVR, state.TriggerName, state.TriggerUID}, {kitGKESnapshotGVR, state.SnapshotName, state.SnapshotUID}} {
-		if s.name != "" && s.uid != "" {
-			if err = k.deleteOwned(ctx, s.gvr, s.name, s.uid); err != nil {
-				return err
-			}
-		}
-	}
-	for _, checkpoint := range state.PriorCheckpoints {
-		if err = k.deleteOwned(ctx, kitGKETriggerGVR, checkpoint.TriggerName, checkpoint.TriggerUID); err != nil {
+	if !stoppedOnly || r.Retired {
+		// Persist permanent retirement before deleting the last restore point.
+		state.Phase = "retired"
+		authority, err = k.saveAuthority(ctx, authority, state)
+		if err != nil {
 			return err
 		}
-		if err = k.deleteOwned(ctx, kitGKESnapshotGVR, checkpoint.SnapshotName, checkpoint.SnapshotUID); err != nil {
-			return err
-		}
+		_, _, err = k.gcRetiredCheckpoints(ctx, state, authority)
+		return err
 	}
-	state.Phase = "retired"
-	_, err = k.saveAuthority(ctx, authority, state)
+	// Reaping idle machine resources must retain the latest restore point.
+	_, _, err = k.gcSupersededCheckpoints(ctx, state, authority)
 	return err
 }
 func (k *KitGKERuntimeBackend) deleteOwned(ctx context.Context, gvr schema.GroupVersionResource, name string, uid types.UID) error {
+	if name == "" || uid == "" {
+		return fmt.Errorf("refusing to delete Kit GKE resource without exact name and UID")
+	}
 	ctx, cancel := context.WithTimeout(ctx, gkeRuntimeReapCallTimeout)
 	defer cancel()
 	resource := k.config.GKE.Dynamic.Resource(gvr).Namespace(k.config.GKE.Namespace)

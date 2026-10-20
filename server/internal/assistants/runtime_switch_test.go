@@ -53,7 +53,7 @@ func TestRuntimeSwitchRejectsPendingAndProcessingEvents(t *testing.T) {
 		tx := testenv.BeginTx(t, t.Context(), conn)
 		queries := assistantrepo.New(tx)
 		require.NoError(t, queries.AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))
-		release, err := core.prepareRuntimeSelection(t.Context(), queries, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
+		release, err := core.prepareRuntimeSelection(t.Context(), queries, tx, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
 		require.ErrorIs(t, err, errRuntimeSwitchBusy)
 		require.Nil(t, release)
 		require.NoError(t, tx.Rollback(t.Context()))
@@ -76,7 +76,7 @@ func TestRuntimeSwitchRequiresAuthoritativeBackgroundReadiness(t *testing.T) {
 		tx := testenv.BeginTx(t, t.Context(), conn)
 		queries := assistantrepo.New(tx)
 		require.NoError(t, queries.AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))
-		release, err := core.prepareRuntimeSelection(t.Context(), queries, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
+		release, err := core.prepareRuntimeSelection(t.Context(), queries, tx, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
 		require.Error(t, err)
 		require.NoError(t, tx.Rollback(t.Context()))
 		if release != nil {
@@ -105,7 +105,7 @@ func TestRuntimeSwitchRetiresImmutableRowsAndChecksExpectedVersion(t *testing.T)
 	tx := testenv.BeginTx(t, t.Context(), conn)
 	qtx := assistantrepo.New(tx)
 	require.NoError(t, qtx.AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))
-	release, err := core.prepareRuntimeSelection(t.Context(), qtx, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
+	release, err := core.prepareRuntimeSelection(t.Context(), qtx, tx, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
 	require.NoError(t, err)
 	require.False(t, released)
 	require.NoError(t, tx.Commit(t.Context()))
@@ -123,7 +123,7 @@ func TestRuntimeSwitchRetiresImmutableRowsAndChecksExpectedVersion(t *testing.T)
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	qtx = assistantrepo.New(tx)
 	require.NoError(t, qtx.AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))
-	_, err = core.prepareRuntimeSelection(t.Context(), qtx, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
+	_, err = core.prepareRuntimeSelection(t.Context(), qtx, tx, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
 	require.ErrorIs(t, err, errRuntimeSwitchConflict)
 }
 
@@ -184,7 +184,7 @@ func TestRuntimeSwitchRejectsPendingAdmission(t *testing.T) {
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	qtx := assistantrepo.New(tx)
 	require.NoError(t, qtx.AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))
-	_, err = core.prepareRuntimeSelection(t.Context(), qtx, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
+	_, err = core.prepareRuntimeSelection(t.Context(), qtx, tx, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
 	require.ErrorIs(t, err, errRuntimeSwitchBusy)
 }
 
@@ -216,6 +216,6 @@ func TestRuntimeSwitchWaitsForPendingIngestionCommit(t *testing.T) {
 	queries := assistantrepo.New(contender)
 	require.NoError(t, queries.AcquireAssistantAdvisoryLock(t.Context(), assistantID.String()))
 	core := &ServiceCore{db: conn}
-	_, err = core.prepareRuntimeSelection(t.Context(), queries, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
+	_, err = core.prepareRuntimeSelection(t.Context(), queries, contender, projectID, assistantID, runtimeSelectionChange{Version: new(3), ExpectedVersion: new(2)})
 	require.ErrorIs(t, err, errRuntimeSwitchBusy)
 }

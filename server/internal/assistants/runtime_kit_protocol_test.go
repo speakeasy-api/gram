@@ -228,6 +228,8 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 	projector := NewKitTranscriptProjector(db, writer, nil, func(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
+		// Exercise transport backpressure with a deliberately slow real consumer.
+		time.Sleep(time.Millisecond)
 		_, err := core.ValidateKitRuntimeSessionInTx(ctx, tx, key, b.SessionID)
 		return err
 	})
@@ -315,6 +317,16 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 					result = catalog()
 				}
 				if msg.Method == "session/resume" && prompts > 0 {
+					// An unknown historical user must not wait for the new prompt's
+					// acknowledgement. Replay exceeds the transport queue, and the
+					// response is deliberately emitted only after the entire replay.
+					for range 300 {
+						select {
+						case ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"user_message","messageId":"historical-user","content":[{"type":"text","text":"historical"}]}}}` + "\n\n":
+						case <-r.Context().Done():
+							return
+						}
+					}
 					// Resident gateway replay is the original ordered journal,
 					// including chunks with their original live message ID.
 					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"agent_message_chunk","messageId":"reply","content":{"type":"text","text":"projected "}}}}` + "\n\n"
@@ -349,6 +361,15 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 				prompts++
 				// User notification can win the race with acknowledgement delivery.
 				ch <- fmt.Sprintf(`data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"user_message","messageId":"authoritative-user-message-%d","content":[{"type":"text","text":"hello"}]}}}`, prompts) + "\n\n"
+				// The live echo also must not block the same-stream response.
+				// Agent updates can arrive while acknowledgement is delayed.
+				for range 300 {
+					select {
+					case ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"agent_message_chunk","messageId":"reply","content":{"type":"text","text":""}}}}` + "\n\n":
+					case <-r.Context().Done():
+						return
+					}
+				}
 				saved, found, err := core.LoadKitRuntimeSession(r.Context(), key)
 				if err != nil || !found || saved.SessionID != session {
 					t.Error("prompt before persisted mapping")
@@ -396,7 +417,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	require.NoError(t, err)
 	p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: core, Endpoint: endpoint, Projector: projector, CWD: "/workspace", GatewayToken: "fixture-token", HTTPClient: kitProtocolTestHTTPClient(t)})
 	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	r := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3}
 	interrupted, err := p.InterruptTurn(ctx, r, key.ThreadID)
@@ -421,7 +442,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 			finals++
 		}
 	}
-	require.Equal(t, 1, users)
+	require.Equal(t, 2, users, "historical user plus canonical dashboard user; live echoes must not duplicate")
 	require.Equal(t, 1, finals)
 	// Desired-set removal cannot be expressed by an additive MCP upsert.
 	// Reject before opening another transport or submitting another prompt.

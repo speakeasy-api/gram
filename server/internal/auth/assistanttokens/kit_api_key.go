@@ -2,19 +2,18 @@ package assistanttokens
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -34,11 +33,32 @@ func (m *Manager) IssueKitAPIKey(ctx context.Context, in InferenceIssueInput, en
 	if in.RuntimeID == uuid.Nil || in.Lifetime <= 0 || in.Lifetime > MaxInferenceLifetime {
 		return KitAPIKey{}, fmt.Errorf("invalid Kit API-key runtime or lifetime")
 	}
-	ceiling, err := m.snapshotInferenceCeiling(ctx, in.Identity)
+	tx, err := m.db.Begin(ctx)
+	if err != nil {
+		return KitAPIKey{}, fmt.Errorf("begin Kit API-key issuance: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	key, err := m.IssueKitAPIKeyInTx(ctx, tx, in, environment)
+	if err != nil {
+		return KitAPIKey{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return KitAPIKey{}, fmt.Errorf("commit Kit API key: %w", err)
+	}
+	return key, nil
+}
+
+// IssueKitAPIKeyInTx issues a native key on the caller's lifecycle transaction.
+// The caller owns commit/rollback and must not publish the key before commit.
+func (m *Manager) IssueKitAPIKeyInTx(ctx context.Context, tx pgx.Tx, in InferenceIssueInput, environment string) (KitAPIKey, error) {
+	if tx == nil || in.RuntimeID == uuid.Nil || in.Lifetime <= 0 || in.Lifetime > MaxInferenceLifetime {
+		return KitAPIKey{}, fmt.Errorf("invalid Kit API-key transaction, runtime or lifetime")
+	}
+	ceiling, err := m.snapshotInferenceCeiling(ctx, tx, in.Identity)
 	if err != nil {
 		return KitAPIKey{}, fmt.Errorf("resolve Kit workload authority: %w", err)
 	}
-	project, err := projectsrepo.New(m.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: in.Identity.ProjectID, OrganizationID: in.Identity.OrganizationID})
+	project, err := projectsrepo.New(tx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: in.Identity.ProjectID, OrganizationID: in.Identity.OrganizationID})
 	if err != nil {
 		return KitAPIKey{}, fmt.Errorf("load Kit project: %w", err)
 	}
@@ -50,17 +70,13 @@ func (m *Manager) IssueKitAPIKey(ctx context.Context, in InferenceIssueInput, en
 	if err != nil {
 		return KitAPIKey{}, fmt.Errorf("generate Kit API key: %w", err)
 	}
-	tx, err := m.db.Begin(ctx)
-	if err != nil {
-		return KitAPIKey{}, fmt.Errorf("begin Kit API-key issuance: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	agent, err := agentrepo.New(tx).GetAgentByIDForUpdate(ctx, agentrepo.GetAgentByIDForUpdateParams{OrganizationID: in.Identity.OrganizationID, ID: in.Identity.AgentID})
 	if err != nil {
 		return KitAPIKey{}, fmt.Errorf("load Kit agent: %w", err)
 	}
 	expires := pgtype.Timestamptz{InfinityModifier: pgtype.Finite, Time: time.Now().Add(in.Lifetime), Valid: true}
-	key, err := keysrepo.New(tx).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{
+	key, err := tokenrepo.New(tx).CreateKitAPIKey(ctx, tokenrepo.CreateKitAPIKeyParams{
+		ProjectID:      uuid.NullUUID{UUID: in.Identity.ProjectID, Valid: true},
 		OrganizationID: in.Identity.OrganizationID, CreatedByUserID: agent.OwnerUserID,
 		Name: "assistant-runtime-" + in.RuntimeID.String(), KeyPrefix: prefix, KeyHash: hash,
 		SubjectUrn:      pgtype.Text{String: urn.NewPrincipal(urn.PrincipalTypeAgent, in.Identity.AgentID.String()).String(), Valid: true},
@@ -69,16 +85,12 @@ func (m *Manager) IssueKitAPIKey(ctx context.Context, in InferenceIssueInput, en
 	if err != nil {
 		return KitAPIKey{}, fmt.Errorf("create Kit agent API key: %w", err)
 	}
-	digest := sha256.Sum256([]byte(raw))
 	_, err = tokenrepo.New(tx).IssueKitAPIKeyBinding(ctx, tokenrepo.IssueKitAPIKeyBindingParams{
-		ID: key.ID, ProjectID: in.Identity.ProjectID, AssistantID: in.Identity.AssistantID, RuntimeID: in.RuntimeID,
-		TokenHash: digest[:], IdentityJson: identityJSON, PolicyJson: ceiling.Policy, PolicyVersion: int32(ceiling.EncodingVersion), ExpiresAt: expires,
+		ApiKeyID: key.ID, ProjectID: in.Identity.ProjectID, AssistantID: in.Identity.AssistantID, RuntimeID: in.RuntimeID,
+		IdentityJson: identityJSON,
 	})
 	if err != nil {
 		return KitAPIKey{}, fmt.Errorf("bind Kit API key to runtime: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return KitAPIKey{}, fmt.Errorf("commit Kit API key: %w", err)
 	}
 	return KitAPIKey{ID: key.ID, Key: raw, ProjectSlug: project.Slug}, nil
 }
@@ -86,7 +98,7 @@ func (m *Manager) IssueKitAPIKey(ctx context.Context, in InferenceIssueInput, en
 // AuthorizeKitAPIKey adds runtime authority only after ordinary API-key auth.
 // A known but revoked/stale runtime key fails closed, never becoming an ordinary
 // captured chat request. No caller-supplied attribution establishes ownership.
-func (m *Manager) AuthorizeKitAPIKey(ctx context.Context, raw string) (context.Context, bool, error) {
+func (m *Manager) AuthorizeKitAPIKey(ctx context.Context) (context.Context, bool, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || ac == nil || ac.APIKeyID == "" {
 		return ctx, false, nil
@@ -102,9 +114,8 @@ func (m *Manager) AuthorizeKitAPIKey(ctx context.Context, raw string) (context.C
 	if !managed {
 		return ctx, false, nil
 	}
-	digest := sha256.Sum256([]byte(bearerToken(raw)))
-	row, err := m.tokens.ReadInferenceCredential(ctx, digest[:])
-	if err != nil || row.ID != keyID || ac.ProjectID == nil || *ac.ProjectID != row.ProjectID {
+	row, err := m.tokens.ReadKitAPIKeyBinding(ctx, keyID)
+	if err != nil || row.ApiKeyID != keyID || ac.ProjectID == nil || *ac.ProjectID != row.ProjectID {
 		return ctx, true, oops.C(oops.CodeUnauthorized)
 	}
 	var identity assistantidentity.Identity
@@ -119,15 +130,5 @@ func (m *Manager) AuthorizeKitAPIKey(ctx context.Context, raw string) (context.C
 		return ctx, true, oops.C(oops.CodeUnauthorized)
 	}
 	ctx = context.WithValue(ctx, inferenceContextKey{}, identity)
-	ctx = context.WithValue(ctx, kitAPIKeyContextKey{}, true)
 	return context.WithValue(ctx, inferenceRuntimeContextKey{}, row.RuntimeID), true, nil
-}
-
-// kitAPIKeyContextKey distinguishes native Kit session attribution from startup credentials.
-type kitAPIKeyContextKey struct{}
-
-// IsKitAPIKey reports whether inference was authenticated with a native Kit API key.
-func IsKitAPIKey(ctx context.Context) bool {
-	kit, _ := ctx.Value(kitAPIKeyContextKey{}).(bool)
-	return kit
 }

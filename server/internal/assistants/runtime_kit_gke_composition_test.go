@@ -2,8 +2,12 @@ package assistants
 
 import (
 	"context"
+	"errors"
+	"github.com/jackc/pgx/v5/pgtype"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -123,4 +127,78 @@ func TestKitGKERejectsMalformedOCIReferences(t *testing.T) {
 	in.MCPFiles = map[string][]byte{"speakeasy.json": []byte("must-not-shadow-inference")}
 	_, err := RenderKitGKEProvision(in)
 	require.Error(t, err)
+}
+
+func TestKitGKELifecycleReloadsAndCommitsRecoveryEvidence(t *testing.T) {
+	t.Parallel()
+	core, db, key, _ := kitSessionFixture(t)
+	_, err := db.Exec(t.Context(), "UPDATE assistant_runtimes SET backend = 'gke' WHERE id = $1 AND project_id = $2", key.RuntimeID, key.ProjectID)
+	require.NoError(t, err)
+	stale := assistantRuntimeRecord{ID: key.RuntimeID, AssistantID: key.AssistantID, ProjectID: key.ProjectID, RuntimeVersion: 3, Backend: runtimeBackendGKE}
+	failure := errors.New("provisioning interrupted")
+	progress := []byte(`{"recovery":"required"}`)
+	err = core.kitGKELifecycle(t.Context(), stale, func(ctx context.Context, current assistantRuntimeRecord) error {
+		require.NotNil(t, current.LifecycleTx)
+		require.False(t, current.Retired)
+		require.Equal(t, runtimeBackendGKE, current.Backend)
+		writer, ok := ctx.Value(kitAdmissionProgressKey{}).(kitAdmissionProgressWriter)
+		require.True(t, ok)
+		require.NoError(t, writer(ctx, progress))
+		return failure
+	})
+	require.ErrorIs(t, err, failure)
+	row, err := assistantrepo.New(db).GetAssistantRuntime(t.Context(), assistantrepo.GetAssistantRuntimeParams{ID: key.RuntimeID, ProjectID: key.ProjectID})
+	require.NoError(t, err)
+	require.JSONEq(t, string(progress), string(row.BackendMetadataJson))
+	_, err = db.Exec(t.Context(), "UPDATE assistant_runtimes SET ended_at = clock_timestamp() WHERE id = $1 AND project_id = $2", key.RuntimeID, key.ProjectID)
+	require.NoError(t, err)
+	require.NoError(t, core.kitGKELifecycle(t.Context(), stale, func(_ context.Context, current assistantRuntimeRecord) error {
+		require.True(t, current.Retired)
+		require.JSONEq(t, string(progress), string(current.BackendMetadataJSON))
+		return nil
+	}))
+}
+
+func TestKitGKEEligibilityUsesPersistedAttachmentAndIssuer(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "kit_gke_eligibility")
+	origin, err := url.Parse("https://mcp.example")
+	require.NoError(t, err)
+	f.core.serverURL = origin
+	issuer, err := usersessionsrepo.New(f.db).CreateUserSessionIssuer(t.Context(), usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID: f.projectID, Slug: "kit-workload", AuthnChallengeMode: "interactive",
+		SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true},
+	})
+	require.NoError(t, err)
+	c := KitLocalCompositionConfig{MCPResource: origin.JoinPath("mcp", "team-remote"), MCPUserSessionIssuerID: issuer.ID}
+	a := assistantRecord{ID: f.assistant, ProjectID: f.projectID, OrganizationID: "org-test"}
+	check := func(want bool) {
+		t.Helper()
+		tx, err := f.db.Begin(t.Context())
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(t.Context()) }()
+		eligible, err := f.core.kitGKEAssistantEligible(t.Context(), tx, a, c)
+		require.NoError(t, err)
+		require.Equal(t, want, eligible)
+	}
+	check(false)
+	f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
+	check(false)
+	_, err = f.db.Exec(t.Context(), "UPDATE mcp_servers SET user_session_issuer_id = $1 WHERE id = $2 AND project_id = $3", issuer.ID, f.remote.ID, f.projectID)
+	require.NoError(t, err)
+	check(true)
+	c.MCPUserSessionIssuerID = uuid.New()
+	check(false)
+	c.MCPUserSessionIssuerID = issuer.ID
+	c.MCPResource = origin.JoinPath("mcp", "another-project")
+	check(false)
+	// Production derives the connection from persisted rows, not deployment-
+	// global issuer or resource flags. Stale flags cannot change its authority.
+	c.PersistedMCP = true
+	c.MCPResource = nil
+	c.MCPUserSessionIssuerID = uuid.Nil
+	check(true)
+	_, err = f.db.Exec(t.Context(), "UPDATE mcp_servers SET visibility = 'disabled' WHERE id = $1 AND project_id = $2", f.remote.ID, f.projectID)
+	require.NoError(t, err)
+	check(false)
 }

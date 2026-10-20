@@ -601,7 +601,7 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 }
 
 const deleteKitCompletionBindingFixture = `-- name: DeleteKitCompletionBindingFixture :exec
-DELETE FROM assistant_inference_credentials WHERE id = $1 AND project_id = $2
+DELETE FROM assistant_inference_credentials WHERE api_key_id = $1::uuid AND project_id = $2
 `
 
 type DeleteKitCompletionBindingFixtureParams struct {
@@ -4136,7 +4136,7 @@ func (q *Queries) RenameChat(ctx context.Context, arg RenameChatParams) error {
 
 const revokeKitCompletionBindingFixture = `-- name: RevokeKitCompletionBindingFixture :exec
 UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
-WHERE id = $1 AND project_id = $2
+WHERE api_key_id = $1::uuid AND project_id = $2
 `
 
 type RevokeKitCompletionBindingFixtureParams struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 )
@@ -23,4 +24,10 @@ func NewAssistantRuntimeWorkloadProvisioner(db *pgxpool.Pool, auditLogger *audit
 
 func (p *AssistantRuntimeWorkloadProvisioner) Provision(ctx context.Context, runtimeID uuid.UUID, c AssistantRuntimeWorkloadClientConfig) (ProvisionedAssistantWorkloadClient, error) {
 	return p.service.ProvisionAssistantRuntimeWorkloadClient(ctx, runtimeID, c)
+}
+
+// ProvisionLocked reuses the caller's lifecycle fence and transaction. The caller
+// owns commit/rollback; registration and revocation are published atomically.
+func (p *AssistantRuntimeWorkloadProvisioner) ProvisionLocked(ctx context.Context, tx pgx.Tx, runtimeID uuid.UUID, c AssistantRuntimeWorkloadClientConfig) (ProvisionedAssistantWorkloadClient, error) {
+	return p.service.provisionAssistantRuntimeWorkloadClientLocked(ctx, tx, runtimeID, c)
 }

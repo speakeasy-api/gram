@@ -219,7 +219,11 @@ type assistantThreadRecord struct {
 }
 
 type assistantRuntimeRecord struct {
-	ID uuid.UUID
+	// LifecycleTx is the explicit assistant advisory-lock holder, never persisted.
+	LifecycleTx pgx.Tx
+	// Retired is freshly loaded tombstone authority for permanent cleanup only.
+	Retired bool
+	ID      uuid.UUID
 	// AssistantThreadID is uuid.Nil on v2 runtime rows — one VM serves
 	// every thread under the assistant, so the binding is via AssistantID
 	// and the foreign key to assistant_threads is dropped on this column
@@ -442,7 +446,8 @@ type DashboardIngestor interface {
 
 type ServiceCore struct {
 	// Set only by production Kit composition; existing assistants are untouched.
-	newAssistantRuntimeVersion int16
+	newAssistantRuntimeVersion  int16
+	newAssistantRuntimeEligible func(context.Context, pgx.Tx, assistantRecord) (bool, error)
 
 	identities        *assistantidentity.Service
 	authz             *authz.Engine
@@ -1667,6 +1672,22 @@ func (s *ServiceCore) CreateAssistant(
 			return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
 		}
 	}
+	if provisionIdentity && s.newAssistantRuntimeEligible != nil {
+		eligible, err := s.newAssistantRuntimeEligible(ctx, tx, record)
+		if err != nil {
+			return assistantRecord{}, fmt.Errorf("check new assistant Kit eligibility: %w", err)
+		}
+		if eligible {
+			changed, err := queries.SetAssistantDesiredRuntimeVersion(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionParams{RuntimeVersion: 3, AssistantID: record.ID, ProjectID: projectID, ExpectedRuntimeVersion: record.RuntimeVersion})
+			if err != nil {
+				return assistantRecord{}, fmt.Errorf("select eligible assistant Kit runtime: %w", err)
+			}
+			if changed != 1 {
+				return assistantRecord{}, errRuntimeSwitchConflict
+			}
+			record.RuntimeVersion = 3
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
 	}
@@ -1792,7 +1813,7 @@ func (s *ServiceCore) UpdateAssistant(
 	if err != nil {
 		return assistantRecord{}, err
 	}
-	releaseRuntimeFence, err = s.prepareRuntimeSelection(ctx, queries, projectID, assistantID, change)
+	releaseRuntimeFence, err = s.prepareRuntimeSelection(ctx, queries, tx, projectID, assistantID, change)
 	if err != nil {
 		return assistantRecord{}, err
 	}
@@ -3057,7 +3078,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			BootstrappedRuntime: bootstrappedRuntime,
 		}, nil
 	}
-	if err := s.updateRuntimeEnsureResult(ctx, &runtimeRecord, ensureResult); err != nil {
+	if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) {
+		// The lifecycle transaction already persisted this authority. A second
+		// write after releasing the fence could overwrite a newer checkpoint.
+		if len(ensureResult.BackendMetadataJSON) != 0 {
+			runtimeRecord.BackendMetadataJSON = append([]byte(nil), ensureResult.BackendMetadataJSON...)
+		}
+	} else if err := s.updateRuntimeEnsureResult(ctx, &runtimeRecord, ensureResult); err != nil {
 		return ProcessThreadEventsResult{}, err
 	}
 

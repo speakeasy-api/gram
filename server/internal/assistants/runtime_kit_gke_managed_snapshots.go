@@ -115,11 +115,6 @@ func (d *KitGKEManagedCheckpointDriver) checkpointPolicy(ctx context.Context, po
 	return matched, nil
 }
 
-func (d *KitGKEManagedCheckpointDriver) VerifySettled(ctx context.Context, _ assistantRuntimeRecord, pod *unstructured.Unstructured) error {
-	_, err := d.checkpointPolicy(ctx, pod)
-	return err
-}
-
 // Select follows the documented trigger result, never a newest-by-label guess.
 // A pending trigger is retryable by the lifecycle reconciler; its persisted UID
 // and source binding remain authoritative across retries.
@@ -225,18 +220,6 @@ func (d *KitGKEManagedCheckpointDriver) VerifyAvailable(ctx context.Context, sel
 	return fmt.Errorf("%w: snapshot is not Ready", ErrKitGKEManagedSnapshotSchema)
 }
 
-// PrepareColdRestore validates provider scope; the backend renders a new immutable
-// bootstrap Secret and recreates the immutable template before the claim exists.
-func (d *KitGKEManagedCheckpointDriver) PrepareColdRestore(ctx context.Context, _ assistantRuntimeRecord, template, selected *unstructured.Unstructured, binding KitGKESnapshotBinding) (*unstructured.Unstructured, error) {
-	if err := d.VerifyAvailable(ctx, selected, binding); err != nil {
-		return nil, err
-	}
-	if err := kitCheckIdentity(template, binding.Identity); err != nil {
-		return nil, err
-	}
-	return template, nil
-}
-
 // VerifyRestored checks provider and Pod identity only. The backend must additionally
 // authenticate the new gateway before publication: its entrypoint checks the exact
 // checkpoint marker before listening, so Running/ps-name alone never opens admission.
@@ -251,11 +234,4 @@ func (d *KitGKEManagedCheckpointDriver) VerifyRestored(ctx context.Context, pod,
 		return fmt.Errorf("managed restore snapshot selection mismatch")
 	}
 	return d.VerifyAvailable(ctx, selected, binding)
-}
-func (*KitGKEManagedCheckpointDriver) RefreshRestored(_ context.Context, _ assistantRuntimeRecord, pod *unstructured.Unstructured, b KitLocalBootstrap) error {
-	if pod == nil {
-		return ErrKitGKEManagedSnapshotSchema
-	}
-	// Credentials are projected before startup, never injected into a running guest.
-	return validateKitBootstrap(b)
 }

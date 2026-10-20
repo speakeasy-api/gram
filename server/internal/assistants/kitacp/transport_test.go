@@ -237,3 +237,114 @@ func TestCallFailureDuringMarshalPreventsDispatch(t *testing.T) {
 		t.Fatal("terminal transport dispatched a new request")
 	}
 }
+
+func TestReplayBackpressureWithSlowConsumer(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	posted := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		close(posted)
+	}))
+	defer server.Close()
+	c := &Client{
+		http: testHTTPClient(t), endpoint: server.URL, done: ctx.Done(), cancel: cancel,
+		pending: make(map[string]pending), streams: map[string]bool{"session": true},
+		notifications: make(chan Notification, 256),
+	}
+	called := make(chan error, 1)
+	go func() {
+		_, err := c.Call(ctx, "session/resume", struct{}{}, "session")
+		called <- err
+	}()
+	select {
+	case <-posted:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	const count = 768
+	var replay strings.Builder
+	for i := range count {
+		fmt.Fprintf(&replay, "data: {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"index\":%d}}\n\n", i)
+	}
+	replay.WriteString("data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n\n")
+	read := make(chan error, 1)
+	go func() { read <- c.readSSE(strings.NewReader(replay.String()), "session") }()
+	// Hold the consumer until the buffer is full. Replay must wait, not fail.
+	for len(c.notifications) != cap(c.notifications) {
+		select {
+		case err := <-read:
+			t.Fatalf("replay failed before consumer started: %v", err)
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(time.Millisecond):
+		}
+	}
+	// Backpressure holds no correlation lock: another stream can still reply.
+	other := make(chan reply, 1)
+	c.mu.Lock()
+	c.pending["2"] = pending{session: "other", ch: other}
+	c.mu.Unlock()
+	correlated := make(chan error, 1)
+	go func() {
+		correlated <- c.dispatch([]byte(`{"jsonrpc":"2.0","id":2,"result":{}}`), "other")
+	}()
+	select {
+	case err := <-correlated:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("correlation blocked behind replay")
+	}
+	select {
+	case <-other:
+	case <-ctx.Done():
+		t.Fatal("response on independent stream was not correlated")
+	}
+	for i := range count {
+		select {
+		case n := <-c.Notifications():
+			want := fmt.Sprintf(`{"index":%d}`, i)
+			if n.SessionID != "session" || string(n.Params) != want {
+				t.Fatalf("notification %d: %+v", i, n)
+			}
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		}
+		time.Sleep(time.Millisecond)
+	}
+	select {
+	case err := <-called:
+		if err != nil {
+			t.Fatalf("resume response behind replay: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("resume response blocked behind replay")
+	}
+	if err := <-read; err == nil || err.Error() != "ACP event stream ended" {
+		t.Fatalf("unexpected replay reader result: %v", err)
+	}
+}
+
+func TestNotificationBackpressureUnblocksOnClose(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	c := &Client{done: ctx.Done(), cancel: cancel, notifications: make(chan Notification, 1)}
+	c.notifications <- Notification{}
+	dispatched := make(chan error, 1)
+	go func() {
+		dispatched <- c.dispatch([]byte(`{"jsonrpc":"2.0","method":"session/update","params":{}}`), "session")
+	}()
+	c.fail(ErrClosed)
+	select {
+	case err := <-dispatched:
+		if !errors.Is(err, ErrClosed) {
+			t.Fatalf("dispatch after close: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("backpressured dispatch did not stop on close")
+	}
+}

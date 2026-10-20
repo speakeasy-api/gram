@@ -1327,11 +1327,8 @@ func (q *Queries) EnablePreparationFixtureCIMD(ctx context.Context, arg EnablePr
 }
 
 const expireAssistantInferenceCredentialForTest = `-- name: ExpireAssistantInferenceCredentialForTest :exec
-UPDATE assistant_inference_credentials
-SET created_at = clock_timestamp() - interval '2 hours',
-    expires_at = clock_timestamp() - interval '1 hour'
-WHERE project_id = $1
-  AND id = $2
+UPDATE api_keys SET expires_at = clock_timestamp() - interval '1 hour'
+WHERE id IN (SELECT c.api_key_id FROM assistant_inference_credentials c WHERE c.project_id = $1 AND c.id = $2)
 `
 
 type ExpireAssistantInferenceCredentialForTestParams struct {

@@ -12,10 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
 
@@ -135,16 +133,16 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, secret.Name, changed.Secret.GetName())
 }
-func TestKitGKEProvisionCreateOrderingAndFailure(t *testing.T) {
+func TestKitGKEEnsureCreateOrderingAndFailure(t *testing.T) {
 	t.Parallel()
 	for _, failResource := range []string{"", "secrets", "sandboxtemplates", "sandboxclaims"} {
 		t.Run(failResource, func(t *testing.T) {
 			t.Parallel()
-			client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+			backend, client, record, _ := kitGKEBackendFixture(t)
 			if failResource != "" {
 				client.PrependReactor("create", failResource, func(k8stesting.Action) (bool, runtime.Object, error) { return true, nil, errors.New("blocked") })
 			}
-			err := ProvisionKitGKE(t.Context(), client, kitGKEInput())
+			_, err := backend.Ensure(t.Context(), record)
 			expected := []string{"secrets", "sandboxtemplates", "sandboxclaims"}
 			if failResource != "" {
 				require.Error(t, err)
@@ -157,7 +155,12 @@ func TestKitGKEProvisionCreateOrderingAndFailure(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
-			actions := client.Actions()
+			actions := make([]k8stesting.Action, 0)
+			for _, action := range client.Actions() {
+				if action.GetVerb() == "create" && action.GetResource().Resource != "configmaps" {
+					actions = append(actions, action)
+				}
+			}
 			require.Len(t, actions, len(expected))
 			for idx, action := range actions {
 				require.Equal(t, "create", action.GetVerb())
@@ -192,9 +195,8 @@ func TestKitGKEProvisionValidation(t *testing.T) {
 			t.Parallel()
 			in := kitGKEInput()
 			change(&in)
-			client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-			require.Error(t, ProvisionKitGKE(t.Context(), client, in))
-			require.Empty(t, client.Actions())
+			_, err := RenderKitGKEProvision(in)
+			require.Error(t, err)
 		})
 	}
 	in := kitGKEInput()
@@ -300,17 +302,21 @@ func TestKitGKESnapshotContracts(t *testing.T) {
 }
 
 // Keep the test's API object construction exercised through the dynamic client.
-func TestKitGKEProvisionDoesNotOverwriteExistingSecret(t *testing.T) {
+func TestKitGKEEnsureDoesNotOverwriteExistingSecret(t *testing.T) {
 	t.Parallel()
-	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-	in := kitGKEInput()
-	objects, err := RenderKitGKEProvision(in)
-	require.NoError(t, err)
-	_, err = client.Resource(kitSecretGVR).Namespace(in.Identity.Namespace).Create(t.Context(), objects.Secret, metav1.CreateOptions{})
-	require.NoError(t, err)
-	client.ClearActions()
-	require.Error(t, ProvisionKitGKE(t.Context(), client, in))
-	require.Len(t, client.Actions(), 1)
+	backend, client, record, _ := kitGKEBackendFixture(t)
+	client.PrependReactor("create", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		obj := action.(k8stesting.CreateAction).GetObject().(*unstructured.Unstructured)
+		require.NoError(t, client.Tracker().Create(kitSecretGVR, obj.DeepCopy(), obj.GetNamespace()))
+		return false, nil, nil
+	})
+	_, err := backend.Ensure(t.Context(), record)
+	require.Error(t, err)
+	for _, action := range client.Actions() {
+		require.NotEqual(t, "update", action.GetVerb())
+		require.NotEqual(t, "patch", action.GetVerb())
+		require.NotEqual(t, "delete", action.GetVerb())
+	}
 }
 
 func TestKitGKERejectsUnboundedOrMutableProvisioning(t *testing.T) {
@@ -340,9 +346,8 @@ func TestKitGKERejectsUnboundedOrMutableProvisioning(t *testing.T) {
 			t.Parallel()
 			in := kitGKEInput()
 			change(&in)
-			client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-			require.Error(t, ProvisionKitGKE(t.Context(), client, in))
-			require.Empty(t, client.Actions())
+			_, err := RenderKitGKEProvision(in)
+			require.Error(t, err)
 		})
 	}
 }

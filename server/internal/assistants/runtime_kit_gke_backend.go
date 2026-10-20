@@ -13,7 +13,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/distribution/reference"
@@ -30,18 +29,20 @@ import (
 // All lifecycle calls require the caller's shared runtime admission lock.
 // Bootstrap retires old inference authority before minting startup credentials.
 type KitGKERuntimeConfig struct {
-	GKE       GKERuntimeConfig
-	Provision KitGKEProvisionInput
-	Bootstrap func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error)
-	Protocol  func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error)
-	Fence     func(context.Context, assistantRuntimeRecord) error
-	Snapshots KitGKECheckpointDriver
+	GKE            GKERuntimeConfig
+	Provision      KitGKEProvisionInput
+	Bootstrap      func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error)
+	Protocol       func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error)
+	Fence          func(context.Context, assistantRuntimeRecord) error
+	Snapshots      KitGKECheckpointDriver
+	AuthorityStore KitGKEAuthorityStore
+	// Lifecycle acquires the assistant advisory fence and reloads authoritative state.
+	Lifecycle func(context.Context, assistantRuntimeRecord, func(context.Context, assistantRuntimeRecord) error) error
 }
 
 type KitGKERuntimeBackend struct {
 	config      KitGKERuntimeConfig
 	fingerprint string
-	mu          sync.Mutex
 }
 
 var _ RuntimeBackend = (*KitGKERuntimeBackend)(nil)
@@ -50,8 +51,8 @@ var _ RuntimeBackend = (*KitGKERuntimeBackend)(nil)
 const kitGKECheckpointUnavailable = "Kit GKE checkpoint/restore unavailable: snapshots are disabled or no driver is installed"
 
 func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend, error) {
-	if config.GKE.Dynamic == nil || config.GKE.Namespace == "" || config.GKE.ServerURL == nil || config.Bootstrap == nil || config.Protocol == nil || config.Fence == nil {
-		return nil, fmt.Errorf("kit GKE requires dynamic client, namespace, server URL, bootstrap, fence and ACP protocol")
+	if config.GKE.Dynamic == nil || config.GKE.Namespace == "" || config.GKE.ServerURL == nil || config.Bootstrap == nil || config.Protocol == nil || config.Fence == nil || config.AuthorityStore == nil {
+		return nil, fmt.Errorf("kit GKE requires dynamic client, namespace, server URL, bootstrap, fence, authority store and ACP protocol")
 	}
 	p := config.Provision
 	if p.GuestPort == 0 {
@@ -119,7 +120,7 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	if err != nil {
 		return nil, fmt.Errorf("kit GKE NewKitGKERuntimeBackend: %w", err)
 	}
-	return &KitGKERuntimeBackend{mu: sync.Mutex{}, config: config, fingerprint: fmt.Sprintf("%x", sha256.Sum256(raw))}, nil
+	return &KitGKERuntimeBackend{config: config, fingerprint: fmt.Sprintf("%x", sha256.Sum256(raw))}, nil
 }
 func (k *KitGKERuntimeBackend) Backend() string               { return runtimeBackendGKE }
 func (k *KitGKERuntimeBackend) SupportsBackend(b string) bool { return b == runtimeBackendGKE }
@@ -137,26 +138,27 @@ func (k *KitGKERuntimeBackend) validate(r assistantRuntimeRecord) error {
 }
 
 type kitGKEBackendMetadata struct {
-	TLSCertificate    []byte    `json:"tls_certificate"`
-	Provisioning      bool      `json:"provisioning,omitempty"`
-	CheckpointMarker  string    `json:"checkpoint_marker"`
-	ProxyImageDigest  string    `json:"proxy_image_digest"`
-	ImageDigest       string    `json:"image_digest"`
-	ContainerID       string    `json:"container_id"`
-	AuthorityUID      types.UID `json:"authority_uid,omitempty"`
-	AuthorityNotAfter time.Time `json:"authority_not_after"`
-	RuntimeID         uuid.UUID `json:"runtime_id"`
-	AssistantID       uuid.UUID `json:"assistant_id"`
-	ProjectID         uuid.UUID `json:"project_id"`
-	Version           int16     `json:"runtime_version"`
-	Namespace         string    `json:"namespace"`
-	Fingerprint       string    `json:"compatibility"`
-	ClaimUID          types.UID `json:"claim_uid"`
-	TemplateUID       types.UID `json:"template_uid"`
-	SecretUID         types.UID `json:"secret_uid"`
-	SecretName        string    `json:"secret_name"`
-	PodName           string    `json:"pod_name"`
-	PodUID            types.UID `json:"pod_uid"`
+	Checkpoint        json.RawMessage `json:"checkpoint,omitempty"`
+	TLSCertificate    []byte          `json:"tls_certificate"`
+	Provisioning      bool            `json:"provisioning,omitempty"`
+	CheckpointMarker  string          `json:"checkpoint_marker"`
+	ProxyImageDigest  string          `json:"proxy_image_digest"`
+	ImageDigest       string          `json:"image_digest"`
+	ContainerID       string          `json:"container_id"`
+	AuthorityUID      types.UID       `json:"authority_uid,omitempty"`
+	AuthorityNotAfter time.Time       `json:"authority_not_after"`
+	RuntimeID         uuid.UUID       `json:"runtime_id"`
+	AssistantID       uuid.UUID       `json:"assistant_id"`
+	ProjectID         uuid.UUID       `json:"project_id"`
+	Version           int16           `json:"runtime_version"`
+	Namespace         string          `json:"namespace"`
+	Fingerprint       string          `json:"compatibility"`
+	ClaimUID          types.UID       `json:"claim_uid"`
+	TemplateUID       types.UID       `json:"template_uid"`
+	SecretUID         types.UID       `json:"secret_uid"`
+	SecretName        string          `json:"secret_name"`
+	PodName           string          `json:"pod_name"`
+	PodUID            types.UID       `json:"pod_uid"`
 }
 
 func (k *KitGKERuntimeBackend) metadata(r assistantRuntimeRecord) (kitGKEBackendMetadata, error) {
@@ -199,10 +201,19 @@ func (k *KitGKERuntimeBackend) get(ctx context.Context, r assistantRuntimeRecord
 }
 
 func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRecord) (result RuntimeBackendEnsureResult, ensureErr error) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
+	if k.config.Lifecycle != nil && r.LifecycleTx == nil {
+		err := k.config.Lifecycle(ctx, r, func(ctx context.Context, locked assistantRuntimeRecord) error {
+			var err error
+			result, err = k.Ensure(ctx, locked)
+			return err
+		})
+		return result, err
+	}
 	if err := k.validate(r); err != nil {
 		return RuntimeBackendEnsureResult{}, err
+	}
+	if r.Retired {
+		return RuntimeBackendEnsureResult{}, ErrKitRuntimeBinding
 	}
 	if !kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
 		m, err := k.metadata(r)
@@ -219,7 +230,23 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 		if state.Phase != "active" {
 			return k.restore(ctx, r, state, obj)
 		}
-		r.BackendMetadataJSON, _ = json.Marshal(state.Metadata)
+		if !time.Now().Before(state.Metadata.AuthorityNotAfter) {
+			// Renew only through durable checkpoint and fresh-process restore;
+			// never rotate credentials beneath an existing process.
+			if err := k.Stop(ctx, r); err != nil {
+				return RuntimeBackendEnsureResult{}, fmt.Errorf("checkpoint expired Kit authority: %w", err)
+			}
+			state, obj, err = k.loadAuthority(ctx, r)
+			if err != nil {
+				return RuntimeBackendEnsureResult{}, err
+			}
+			return k.restore(ctx, r, state, obj)
+		}
+		state, obj, err = k.gcSupersededCheckpoints(ctx, state, obj)
+		if err != nil {
+			return RuntimeBackendEnsureResult{}, err
+		}
+		r.BackendMetadataJSON = obj.raw
 		if _, err := k.protocol(ctx, r); err != nil {
 			return RuntimeBackendEnsureResult{}, err
 		}
@@ -459,6 +486,12 @@ func (k *KitGKERuntimeBackend) checkPod(r assistantRuntimeRecord, p *unstructure
 	return nil
 }
 func (k *KitGKERuntimeBackend) protocol(ctx context.Context, r assistantRuntimeRecord) (runtimeProtocol, error) {
+	return k.protocolForLifecycle(ctx, r, false)
+}
+
+// Expired inference authority forbids turns, not authenticated settlement and
+// durability operations needed to checkpoint and renew that authority.
+func (k *KitGKERuntimeBackend) protocolForLifecycle(ctx context.Context, r assistantRuntimeRecord, allowExpired bool) (runtimeProtocol, error) {
 	state, _, err := k.loadAuthority(ctx, r)
 	if err != nil {
 		return nil, err
@@ -467,7 +500,7 @@ func (k *KitGKERuntimeBackend) protocol(ctx context.Context, r assistantRuntimeR
 		return nil, fmt.Errorf("kit GKE authority is fenced in phase %s", state.Phase)
 	}
 	m := state.Metadata
-	if !time.Now().Before(m.AuthorityNotAfter) {
+	if !allowExpired && !time.Now().Before(m.AuthorityNotAfter) {
 		return nil, fmt.Errorf("kit GKE startup authority expired; checkpoint and refresh required")
 	}
 	for _, s := range []struct {

@@ -43,7 +43,7 @@ func TestKitGKEManagedPolicyScopesFailBeforeCheckpoint(t *testing.T) {
 			require.NoError(t, err)
 			pod := kitObject("Pod", "v1", "source", identity)
 			pod.SetUID("source-uid")
-			err = driver.VerifySettled(t.Context(), assistantRuntimeRecord{}, pod)
+			_, err = driver.checkpointPolicy(t.Context(), pod)
 			if tc.schema {
 				require.ErrorIs(t, err, ErrKitGKEManagedSnapshotSchema)
 			} else {
@@ -151,7 +151,6 @@ func TestKitGKEManagedRestoreNeverTreatsRunningAsEvidence(t *testing.T) {
 	driver, err := NewKitGKEManagedCheckpointDriver(dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()))
 	require.NoError(t, err)
 	require.Error(t, driver.VerifyRestored(t.Context(), nil, nil, KitGKESnapshotBinding{}))
-	require.Error(t, driver.RefreshRestored(t.Context(), assistantRuntimeRecord{}, nil, KitLocalBootstrap{}))
 	_, err = NewKitGKEManagedCheckpointDriver(nil)
 	require.Error(t, err)
 }
@@ -172,7 +171,8 @@ func TestKitGKEManagedRootfsReady(t *testing.T) {
 	require.NoError(t, err)
 	pod := kitObject("Pod", "v1", "source", identity)
 	pod.SetUID(binding.SourcePodUID)
-	require.NoError(t, driver.VerifySettled(t.Context(), assistantRuntimeRecord{}, pod))
+	_, err = driver.checkpointPolicy(t.Context(), pod)
+	require.NoError(t, err)
 	_, err = VerifyKitGKESnapshot(t.Context(), snapshot, binding, driver)
 	require.NoError(t, err)
 	require.Error(t, driver.VerifyRestored(t.Context(), pod, snapshot, binding))

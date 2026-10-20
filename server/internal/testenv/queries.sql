@@ -2099,11 +2099,8 @@ WHERE starts_with(datname, @prefix::text);
 INSERT INTO chat_message_participants (project_id, chat_id, message_id, provider, provider_user_id, user_id)
 VALUES (@project_id, @chat_id, @message_id, @provider, @provider_user_id, sqlc.narg(user_id));
 -- name: ExpireAssistantInferenceCredentialForTest :exec
-UPDATE assistant_inference_credentials
-SET created_at = clock_timestamp() - interval '2 hours',
-    expires_at = clock_timestamp() - interval '1 hour'
-WHERE project_id = @project_id
-  AND id = @id;
+UPDATE api_keys SET expires_at = clock_timestamp() - interval '1 hour'
+WHERE id IN (SELECT c.api_key_id FROM assistant_inference_credentials c WHERE c.project_id = @project_id AND c.id = @id);
 
 -- name: CountOutboxRows :one
 -- Counts all legacy events in an isolated cloned test database.

@@ -16,10 +16,21 @@ import (
 // exclude queued events until the guest is fenced and checkpointed. This is
 // deliberately separate from DB-only runtime-switch readiness.
 func (p *KitRuntimeProtocol) VerifyCheckpointSettled(ctx context.Context, r assistantRuntimeRecord) error {
+	return p.checkpointSessions(ctx, r, false)
+}
+
+// CloseCheckpointSessions durably closes resident sessions. The caller must hold
+// admission and persist the checkpointing fence before calling; no session may
+// be resumed until the snapshot completes or the fenced attempt is reconciled.
+func (p *KitRuntimeProtocol) CloseCheckpointSessions(ctx context.Context, r assistantRuntimeRecord) error {
+	return p.checkpointSessions(ctx, r, true)
+}
+
+func (p *KitRuntimeProtocol) checkpointSessions(ctx context.Context, r assistantRuntimeRecord, closeSessions bool) error {
 	if p.config.Core == nil || p.config.Core.db == nil || r.RuntimeVersion != 3 {
 		return ErrKitRuntimeBinding
 	}
-	sessions, err := runtimeSwitchQueries(ctx, p.config.Core.db).ListKitProtocolSessions(ctx, assistantrepo.ListKitProtocolSessionsParams{ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, AssistantID: uuid.NullUUID{UUID: r.AssistantID, Valid: true}, RuntimeID: uuid.NullUUID{UUID: r.ID, Valid: true}})
+	sessions, err := runtimeSwitchQueries(ctx, p.config.Core.kitLifecycleDB(r)).ListKitProtocolSessions(ctx, assistantrepo.ListKitProtocolSessionsParams{ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, AssistantID: uuid.NullUUID{UUID: r.AssistantID, Valid: true}, RuntimeID: uuid.NullUUID{UUID: r.ID, Valid: true}})
 	if err != nil {
 		return fmt.Errorf("list canonical checkpoint sessions: %w", err)
 	}
@@ -50,7 +61,7 @@ func (p *KitRuntimeProtocol) VerifyCheckpointSettled(ctx context.Context, r assi
 			}
 		}
 	}()
-	return verifyKitCheckpointSessions(ctx, c, p.config.CWD, bound)
+	return settleKitCheckpointSessions(ctx, c, p.config.CWD, bound, closeSessions)
 }
 
 type kitCheckpointTransport interface {
@@ -95,6 +106,10 @@ func kitCheckpointInventory(raw json.RawMessage) (map[string]kitCheckpointSessio
 }
 
 func verifyKitCheckpointSessions(ctx context.Context, c kitCheckpointTransport, cwd string, bound map[string]bool) error {
+	return settleKitCheckpointSessions(ctx, c, cwd, bound, false)
+}
+
+func settleKitCheckpointSessions(ctx context.Context, c kitCheckpointTransport, cwd string, bound map[string]bool, closeSessions bool) error {
 	list := func() (map[string]kitCheckpointSession, error) {
 		// Do not filter by cwd: unbound sessions in any approved root must be seen.
 		raw, err := c.Call(ctx, "session/list", map[string]any{}, "")
@@ -138,6 +153,15 @@ func verifyKitCheckpointSessions(ctx context.Context, c kitCheckpointTransport, 
 		}
 		if !settled {
 			return errors.New("kit session has unsettled foreground or background work")
+		}
+		if closeSessions {
+			// Released Kit v0.2.17 session/close waits for cleanup, update
+			// delivery, and the transcript checkpoint. Idle status alone does
+			// not guarantee durable history. Never substitute session/delete.
+			if _, err := c.Call(ctx, "session/close", map[string]string{"sessionId": id}, id); err != nil {
+				return fmt.Errorf("durably close checkpoint session: %w", err)
+			}
+			before[id] = kitCheckpointSession{CWD: row.CWD, State: "restorable"}
 		}
 	}
 	after, err := list()

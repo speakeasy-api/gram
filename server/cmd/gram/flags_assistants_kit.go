@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/urfave/cli/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -77,7 +79,10 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 	if err != nil {
 		return fmt.Errorf("parse Kit MCP issuer: %w", err)
 	}
-	issuerID, err := uuid.Parse(c.String("assistant-kit-mcp-issuer-id"))
+	var issuerID uuid.UUID
+	if raw := c.String("assistant-kit-mcp-issuer-id"); raw != "" {
+		issuerID, err = uuid.Parse(raw)
+	}
 	if err != nil {
 		return fmt.Errorf("assistant-kit-mcp-issuer-id must identify the configured resource's issuer")
 	}
@@ -106,25 +111,52 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 	}
 	provisioner := mcp.NewAssistantRuntimeWorkloadProvisioner(db, auditLogger)
 	config := assistants.KitLocalCompositionConfig{
-		Environment: c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
+		PersistedMCP: base.Provider != assistants.RuntimeProviderLocal,
+		Environment:  c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
 		Origin: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, Network: c.String("assistant-kit-network"), AllowInsecureInference: false,
 		MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: issuerID, RootTriggerID: root, TurnStream: chat.NewTurnStream(redisClient),
 		ProvisionMCP: func(ctx context.Context, r assistants.KitMCPProvisionRequest) (assistants.KitMCPProvisionResult, error) {
 			var zero assistants.KitMCPProvisionResult
-			if err := validateKitMCPBinding(ctx, db, r, resource, issuer, hosts, localOrigin); err != nil {
+			tx := r.LifecycleTx
+			owned := tx == nil
+			if owned {
+				var err error
+				tx, err = db.Begin(ctx)
+				if err != nil {
+					return zero, fmt.Errorf("configure Kit workload: %w", err)
+				}
+				defer func() { _ = tx.Rollback(ctx) }()
+			}
+			resourceURL, issuerURL := resource, issuer
+			if base.Provider != assistants.RuntimeProviderLocal {
+				resourceURL = r.Resource
+				if resourceURL == nil {
+					return zero, fmt.Errorf("Kit requires a persisted MCP resource")
+				}
+				row, err := usersessionsrepo.New(tx).GetSharedUserSessionIssuerByID(ctx, r.UserSessionIssuerID)
+				if err != nil {
+					return zero, fmt.Errorf("resolve Kit MCP issuer: %w", err)
+				}
+				actual := resourceURL.String()
+				if authserver.IssuerInSharedMode(row.UserSessionIssuer) {
+					actual, err = hosts.SharedIssuerURL(row.UserSessionIssuer)
+					if err != nil {
+						return zero, err
+					}
+				} else if row.UserSessionIssuer.AuthorizationServerMode != string(authserver.ModeEndpoint) {
+					return zero, fmt.Errorf("unsupported Kit MCP issuer mode")
+				} else if row.UserSessionIssuer.UseAuthenticationHost && hosts.AuthenticationHostBaseURL != "" && resourceURL.Scheme+"://"+resourceURL.Host == strings.TrimSuffix(hosts.ServerURL, "/") {
+					actual = strings.TrimSuffix(hosts.AuthenticationHostBaseURL, "/") + resourceURL.Path
+				}
+				issuerURL, err = url.Parse(actual)
+				if err != nil {
+					return zero, err
+				}
+			}
+			if err := validateKitMCPBinding(ctx, tx, r, resourceURL, issuerURL, hosts, localOrigin); err != nil {
 				return zero, err
 			}
-			// Lifecycle admission already holds the shared assistant fence. Do not
-			// acquire it again on another connection while rotating startup credentials.
-			tx, err := db.Begin(ctx)
-			if err != nil {
-				return zero, fmt.Errorf("configure Kit workload: %w", err)
-			}
-			defer func() { _ = tx.Rollback(ctx) }()
 			if _, err := mcp.RevokeAssistantRuntimeWorkloadClients(ctx, tx, r.OrganizationID, r.ProjectID, r.RuntimeID); err != nil {
-				return zero, fmt.Errorf("configure Kit workload: %w", err)
-			}
-			if err := tx.Commit(ctx); err != nil {
 				return zero, fmt.Errorf("configure Kit workload: %w", err)
 			}
 			workloadConfig, privatePEM, err := kitWorkloadClientCredentials(authMethod)
@@ -133,14 +165,19 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 			}
 			workloadConfig.UserSessionIssuerID = r.UserSessionIssuerID
 			workloadConfig.TriggerID = r.TriggerID
-			client, err := provisioner.Provision(ctx, r.RuntimeID, workloadConfig)
+			client, err := provisioner.ProvisionLocked(ctx, tx, r.RuntimeID, workloadConfig)
 			if err != nil {
 				return zero, fmt.Errorf("configure Kit workload: %w", err)
 			}
 			if client.RuntimeID != r.RuntimeID || client.TriggerID != r.TriggerID {
 				return zero, fmt.Errorf("kit workload registration returned a mismatched runtime binding")
 			}
-			return assistants.KitMCPProvisionResult{ClientID: client.ClientID, Secret: client.Secret, AuthMethod: authMethod, PrivateKeyPEM: privatePEM}, nil
+			if owned {
+				if err := tx.Commit(ctx); err != nil {
+					return zero, err
+				}
+			}
+			return assistants.KitMCPProvisionResult{Resource: resourceURL, Issuer: issuerURL, ClientID: client.ClientID, Secret: client.Secret, AuthMethod: authMethod, PrivateKeyPEM: privatePEM}, nil
 		},
 	}
 	if base.Provider == assistants.RuntimeProviderLocal {

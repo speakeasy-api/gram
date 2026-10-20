@@ -48,6 +48,15 @@ func AdmitWorkloadSession(ctx context.Context, db *pgxpool.Pool) (authz.Workload
 	return admission, nil
 }
 
+// AdmitWorkloadSessionInTx evaluates live workload policy on a caller-owned
+// lifecycle transaction. The caller owns the snapshot and commit/rollback.
+func AdmitWorkloadSessionInTx(ctx context.Context, tx pgx.Tx) (authz.WorkloadSessionAdmission, error) {
+	if tx == nil || !hasWorkloadSessionAdmissionContext(ctx) {
+		return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
+	}
+	return admitWorkloadSessionInTx(ctx, tx)
+}
+
 // admitWorkloadSessionInTx reads every row admission depends on from one
 // snapshot.
 //

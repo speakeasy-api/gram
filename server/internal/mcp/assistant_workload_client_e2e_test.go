@@ -1,12 +1,14 @@
 package mcp_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
@@ -54,8 +56,19 @@ func TestAssistantWorkloadClientCredentialsEndToEnd(t *testing.T) {
 			_, err = ti.service.ProvisionAssistantWorkloadClient(t.Context(), p)
 			require.Error(t, err, "request-facing provisioning must not accept a worker without authority")
 			bootstrapConfig := mcp.AssistantRuntimeWorkloadClientConfig{UserSessionIssuerID: p.UserSessionIssuerID, TriggerID: trigger.ID, AuthMethod: method, JWKS: p.JWKS}
-			client, err := ti.service.ProvisionAssistantRuntimeWorkloadClient(t.Context(), runtime.ID, bootstrapConfig)
+			// Reuse the already-held identity/lifecycle transaction. Opening a
+			// second pool transaction here would block on these same row locks.
+			provisionTx := testenv.BeginTx(t, ctx, ti.conn)
+			_, err = identities.ResolveLocked(ctx, provisionTx, fx.orgID, fx.target.ProjectID, a.ID, trigger.ID)
 			require.NoError(t, err)
+			provisionCtx, cancelProvision := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancelProvision()
+			client, err := mcp.NewAssistantRuntimeWorkloadProvisioner(ti.conn, ti.audit).ProvisionLocked(provisionCtx, provisionTx, runtime.ID, bootstrapConfig)
+			require.NoError(t, err)
+			var visible bool
+			require.NoError(t, ti.conn.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM user_session_clients WHERE id = $1)", client.RegistrationID).Scan(&visible))
+			require.False(t, visible, "provisioning must not commit its caller's transaction")
+			require.NoError(t, provisionTx.Commit(ctx))
 			endpoint := workloadSessionEndpoint(fx)
 			resource, err := endpoint.RootURL(ti.serverURL.String())
 			require.NoError(t, err)

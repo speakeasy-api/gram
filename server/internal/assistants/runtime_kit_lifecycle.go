@@ -85,50 +85,54 @@ func (s *ServiceCore) sweepIdleKitRuntimes(ctx context.Context, now time.Time) i
 // never authorize destruction. Any unknown settlement/checkpoint failure leaves
 // the canonical runtime row intact so retries cannot create a new session owner.
 func (s *ServiceCore) checkpointIdleKitRuntime(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID, now time.Time) (bool, error) {
-	tx, err := s.db.Begin(ctx)
+	// Backend and runtime version are immutable. Skip non-production rows before
+	// entering the strict GKE authority helper; eligible rows are reloaded under
+	// its advisory fence before any checkpoint operation.
+	row, err := assistantrepo.New(s.db).GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
 	if err != nil {
-		return false, fmt.Errorf("begin Kit idle checkpoint: %w", err)
+		return false, fmt.Errorf("read Kit checkpoint eligibility: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := assistantrepo.New(tx)
-	if err := q.AcquireAssistantAdvisoryLock(ctx, assistantID.String()); err != nil {
-		return false, fmt.Errorf("lock Kit idle checkpoint: %w", err)
-	}
-	row, err := q.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
-	if err != nil {
-		return false, fmt.Errorf("reload Kit checkpoint authority: %w", err)
-	}
-	if row.AssistantID != assistantID || !kitProductionRuntime(row.RuntimeVersion, row.Backend) || row.State != runtimeStateActive || row.Deleted || row.Ended || !row.WarmUntil.Valid || row.WarmUntil.Time.After(now) {
+	if row.AssistantID != assistantID || !kitProductionRuntime(row.RuntimeVersion, row.Backend) {
 		return false, nil
 	}
-	inFlight, err := q.CountInFlightAssistantThreadEvents(ctx, assistantrepo.CountInFlightAssistantThreadEventsParams{ProjectID: projectID, AssistantID: assistantID, PendingStatus: eventStatusPending, ProcessingStatus: eventStatusProcessing})
-	if err != nil {
-		return false, fmt.Errorf("check Kit in-flight events: %w", err)
-	}
-	if inFlight != 0 {
-		return false, nil
-	}
-	record := assistantRuntimeRecord{ID: row.ID, AssistantThreadID: row.AssistantThreadID, AssistantID: row.AssistantID, ProjectID: row.ProjectID, RuntimeVersion: row.RuntimeVersion, Backend: row.Backend, BackendMetadataJSON: row.BackendMetadataJson, State: row.State, WarmUntil: row.WarmUntil}
-	capability, err := kitIdleCheckpointCapability(s.runtime, record)
-	if err != nil {
-		return false, err
-	}
-	if err := capability.CheckpointIdleRuntime(ctx, record); err != nil {
-		return false, fmt.Errorf("checkpoint and stop Kit runtime: %w", err)
-	}
-	// Deliberately no StopAssistantRuntime: ended/deleted rows cannot be restored
-	// as the same authority. Ensure restores this exact lineage on next admission.
-	// A NULL warm window records a nonterminal checkpoint. Admission assigns a
-	// fresh window after restoring this same runtime. Do not spend future sweep
-	// batches repeatedly stopping an already-checkpointed process.
-	row.WarmUntil.Valid = false
-	if err := q.SetAssistantRuntimeActive(ctx, assistantrepo.SetAssistantRuntimeActiveParams{
-		ActiveState: runtimeStateActive, RuntimeID: runtimeID, ProjectID: projectID, WarmUntil: row.WarmUntil,
-	}); err != nil {
-		return false, fmt.Errorf("record Kit idle checkpoint: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("commit Kit idle checkpoint: %w", err)
-	}
-	return true, nil
+	stopped := false
+	err = s.kitGKELifecycle(ctx, assistantRuntimeRecord{ID: runtimeID, ProjectID: projectID, AssistantID: assistantID}, func(ctx context.Context, record assistantRuntimeRecord) error {
+		q := assistantrepo.New(record.LifecycleTx)
+		row, err := q.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
+		if err != nil {
+			return fmt.Errorf("reload Kit checkpoint authority: %w", err)
+		}
+		if row.AssistantID != assistantID || !kitProductionRuntime(row.RuntimeVersion, row.Backend) || row.State != runtimeStateActive || row.Deleted || row.Ended || !row.WarmUntil.Valid || row.WarmUntil.Time.After(now) {
+			return nil
+		}
+		inFlight, err := q.CountInFlightAssistantThreadEvents(ctx, assistantrepo.CountInFlightAssistantThreadEventsParams{ProjectID: projectID, AssistantID: assistantID, PendingStatus: eventStatusPending, ProcessingStatus: eventStatusProcessing})
+		if err != nil {
+			return fmt.Errorf("check Kit in-flight events: %w", err)
+		}
+		if inFlight != 0 {
+			return nil
+		}
+
+		capability, err := kitIdleCheckpointCapability(s.runtime, record)
+		if err != nil {
+			return err
+		}
+		if err := capability.CheckpointIdleRuntime(ctx, record); err != nil {
+			return fmt.Errorf("checkpoint and stop Kit runtime: %w", err)
+		}
+		// Deliberately no StopAssistantRuntime: ended/deleted rows cannot be restored
+		// as the same authority. Ensure restores this exact lineage on next admission.
+		// A NULL warm window records a nonterminal checkpoint. Admission assigns a
+		// fresh window after restoring this same runtime. Do not spend future sweep
+		// batches repeatedly stopping an already-checkpointed process.
+		row.WarmUntil.Valid = false
+		if err := q.SetAssistantRuntimeActive(ctx, assistantrepo.SetAssistantRuntimeActiveParams{
+			ActiveState: runtimeStateActive, RuntimeID: runtimeID, ProjectID: projectID, WarmUntil: row.WarmUntil,
+		}); err != nil {
+			return fmt.Errorf("record Kit idle checkpoint: %w", err)
+		}
+		stopped = true
+		return nil
+	})
+	return stopped, err
 }

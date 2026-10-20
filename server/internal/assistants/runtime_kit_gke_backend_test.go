@@ -31,6 +31,9 @@ func (p *kitGKEBackendProtocol) InterruptTurn(context.Context, assistantRuntimeR
 func (p *kitGKEBackendProtocol) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	return RuntimeBackendStatus{Configured: true}, nil
 }
+func (p *kitGKEBackendProtocol) CloseCheckpointSessions(context.Context, assistantRuntimeRecord) error {
+	return nil
+}
 func (p *kitGKEBackendProtocol) VerifyCheckpointSettled(context.Context, assistantRuntimeRecord) error {
 	if !p.settled {
 		return errRuntimeSwitchBusy
@@ -43,11 +46,11 @@ func (p *kitGKEBackendProtocol) PrepareRuntimeSwitch(context.Context, assistantR
 
 func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.FakeDynamicClient, assistantRuntimeRecord, *int) {
 	t.Helper()
-	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gkePodGVR: "PodList"})
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gkePodGVR: "PodList", gkeSandboxClaimGVR: "SandboxClaimList"})
 	input := kitGKEInput()
 	input.Command, input.Args = KitGatewayCommand(int(input.GuestPort))
 	fences := new(int)
-	k, err := NewKitGKERuntimeBackend(KitGKERuntimeConfig{GKE: GKERuntimeConfig{Dynamic: client, Namespace: input.Identity.Namespace, ServerURL: &url.URL{Scheme: "https", Host: "example.invalid"}}, Provision: input,
+	k, err := NewKitGKERuntimeBackend(KitGKERuntimeConfig{GKE: GKERuntimeConfig{Dynamic: client, Namespace: input.Identity.Namespace, ServerURL: &url.URL{Scheme: "https", Host: "example.invalid"}}, Provision: input, AuthorityStore: newKitGKEAuthorityTestStore(),
 		Bootstrap: func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error) {
 			return KitLocalBootstrap{AgentsMD: input.AgentsMD, InferenceJSON: input.InferenceJSON, MCPJSON: input.MCPJSON, GatewayToken: []byte(uuid.NewString())}, nil
 		},
@@ -168,7 +171,6 @@ type kitGKEFakeCheckpointDriver struct {
 	selected    *unstructured.Unstructured
 	unavailable bool
 	restored    bool
-	refreshed   bool
 }
 
 func (d *kitGKEFakeCheckpointDriver) Select(ctx context.Context, trigger *unstructured.Unstructured, binding KitGKESnapshotBinding) (*unstructured.Unstructured, error) {
@@ -192,10 +194,6 @@ func (d *kitGKEFakeCheckpointDriver) VerifyRestored(context.Context, *unstructur
 	if !d.restored {
 		return fmt.Errorf("GKE silently cold started")
 	}
-	return nil
-}
-func (d *kitGKEFakeCheckpointDriver) RefreshRestored(context.Context, assistantRuntimeRecord, *unstructured.Unstructured, KitLocalBootstrap) error {
-	d.refreshed = true
 	return nil
 }
 
@@ -224,7 +222,6 @@ func TestKitGKEBackendCheckpointRestorePersistsAuthority(t *testing.T) {
 	result, err = k.Ensure(t.Context(), r)
 	require.NoError(t, err)
 	require.False(t, result.ColdStart)
-	require.True(t, driver.refreshed)
 	r.BackendMetadataJSON = result.BackendMetadataJSON
 	state, _, err = k.loadAuthority(t.Context(), r)
 	require.NoError(t, err)
@@ -251,7 +248,6 @@ func TestKitGKEBackendCheckpointRejectsColdFallback(t *testing.T) {
 	require.NoError(t, k.Stop(t.Context(), r))
 	_, err = k.Ensure(t.Context(), r)
 	require.ErrorContains(t, err, "cold started")
-	require.False(t, driver.refreshed)
 	state, _, err := k.loadAuthority(t.Context(), r)
 	require.NoError(t, err)
 	require.Equal(t, "restoring", state.Phase)
@@ -274,10 +270,6 @@ func TestKitGKEBackendCheckpointUnavailableNeverDeletes(t *testing.T) {
 	state, _, err := k.loadAuthority(t.Context(), r)
 	require.NoError(t, err)
 	require.Equal(t, "checkpointing", state.Phase)
-}
-
-func (d *kitGKEFakeCheckpointDriver) PrepareColdRestore(_ context.Context, _ assistantRuntimeRecord, template *unstructured.Unstructured, _ *unstructured.Unstructured, _ KitGKESnapshotBinding) (*unstructured.Unstructured, error) {
-	return template, nil
 }
 
 func TestKitGKEBackendObservedProcessIdentity(t *testing.T) {
@@ -348,10 +340,6 @@ func TestKitGKEBackendDerivesProductionDefaultsAndAcceptsTags(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int32(8081), backend.config.Provision.GuestPort)
 	require.NotEmpty(t, backend.config.Provision.Identity.CompatibilityGeneration)
-}
-
-func (d *kitGKEFakeCheckpointDriver) VerifySettled(context.Context, assistantRuntimeRecord, *unstructured.Unstructured) error {
-	return nil
 }
 
 // A protocol factory is not network evidence; failed initialization keeps the
@@ -508,5 +496,4 @@ func TestKitGKEBackendRestoreRejectsProxyImageDrift(t *testing.T) {
 	})
 	_, err = k.Ensure(t.Context(), r)
 	require.ErrorContains(t, err, "TLS proxy image digest compatibility mismatch")
-	require.False(t, driver.refreshed)
 }

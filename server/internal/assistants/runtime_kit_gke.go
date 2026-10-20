@@ -4,13 +4,11 @@ package assistants
 // b55e684f030da7a9e178bb24ddf229f11dbd9967. It deliberately does not implement
 // runtime admission, readiness, fencing, or snapshot status interpretation.
 import (
-	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"maps"
 	"net"
 	"slices"
@@ -24,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/client-go/dynamic"
 )
 
 var kitTemplateGVR = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxtemplates"}
@@ -94,7 +91,7 @@ func kitObject(kind, version, name string, i KitGKEIdentity) *unstructured.Unstr
 }
 
 // RenderKitGKEProvision is pure. Returned objects contain credentials and must
-// never be logged. ProvisionKitGKE creates them in Secret -> Template -> Claim order.
+// never be logged. KitGKERuntimeBackend.Ensure creates them in Secret -> Template -> Claim order.
 //
 //nolint:exhaustruct,exhaustive // Only renderer-defined Kubernetes fields and CPU/memory budgets are set; optional fields retain API defaults.
 func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
@@ -279,28 +276,6 @@ cp /bootstrap/checkpoint-marker /home/kit/.kit/checkpoint-marker
 chmod 600 /home/kit/.kit/checkpoint-marker
 `
 
-// ProvisionKitGKE is create-only: no adoption, mutation, cleanup, or readiness
-// inference. On partial failure the caller must reconcile under its admission
-// lock; existing objects are never overwritten or trusted by name alone.
-func ProvisionKitGKE(ctx context.Context, client dynamic.Interface, in KitGKEProvisionInput) error {
-	if client == nil {
-		return fmt.Errorf("kit provisioning requires a dynamic client")
-	}
-	objects, err := RenderKitGKEProvision(in)
-	if err != nil {
-		return err
-	}
-	for _, step := range []struct {
-		gvr    schema.GroupVersionResource
-		object *unstructured.Unstructured
-	}{{kitSecretGVR, objects.Secret}, {kitTemplateGVR, objects.Template}, {gkeSandboxClaimGVR, objects.Claim}} {
-		if _, err := client.Resource(step.gvr).Namespace(in.Identity.Namespace).Create(ctx, step.object, metav1.CreateOptions{}); err != nil {
-			return fmt.Errorf("create Kit %s: %w", step.object.GetKind(), err)
-		}
-	}
-	return nil
-}
-
 // Require explicit bounds rather than relying on cluster defaulting. These are
 // caller-selected budgets, not runtime sizing recommendations.
 func validateKitResources(resources corev1.ResourceRequirements) error {
@@ -312,22 +287,4 @@ func validateKitResources(resources corev1.ResourceRequirements) error {
 		}
 	}
 	return nil
-}
-
-// PrepareKitGKEStartup replaces any snapshot-derived credential bytes with fresh
-// startup authority before rendering a new pod. Caller must hold runtime admission
-// and ensure the gateway boots afresh (not resume a process with cached credentials).
-// The snapshot identity remains exact; inference authority is rotated for its row.
-func PrepareKitGKEStartup(ctx context.Context, manager *assistanttokens.Manager, startup KitStartupBootstrapInput, in KitGKEProvisionInput) (KitGKEProvisionInput, error) {
-	if in.Identity.AssistantID != startup.Identity.AssistantID.String() || in.Identity.Lineage != startup.RuntimeID.String() {
-		return KitGKEProvisionInput{}, fmt.Errorf("kit GKE startup credentials must match assistant and runtime lineage")
-	}
-	in.Model = startup.Model
-	in.Command, in.Args = KitGatewayCommand(int(in.GuestPort))
-	bootstrap, _, err := PrepareKitStartupBootstrap(ctx, manager, startup)
-	if err != nil {
-		return KitGKEProvisionInput{}, err
-	}
-	in.AgentsMD, in.InferenceJSON, in.MCPJSON, in.GatewayToken, in.MCPFiles = bootstrap.AgentsMD, bootstrap.InferenceJSON, bootstrap.MCPJSON, bootstrap.GatewayToken, bootstrap.MCPFiles
-	return in, nil
 }

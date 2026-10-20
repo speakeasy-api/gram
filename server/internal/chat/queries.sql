@@ -2255,8 +2255,8 @@ WHERE id = @runtime_id AND project_id = @project_id;
 -- name: RevokeKitCompletionBindingFixture :exec
 -- Test fixture: revoke only the binding, keeping the principal API key live.
 UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id;
+WHERE api_key_id = @id::uuid AND project_id = @project_id;
 
 -- name: DeleteKitCompletionBindingFixture :exec
 -- Test fixture: remove only the binding, keeping the principal API key live.
-DELETE FROM assistant_inference_credentials WHERE id = @id AND project_id = @project_id;
+DELETE FROM assistant_inference_credentials WHERE api_key_id = @id::uuid AND project_id = @project_id;

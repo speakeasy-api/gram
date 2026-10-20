@@ -33,14 +33,30 @@ type AssistantRuntimeWorkloadClientConfig struct {
 // assistant/root identity instead of impersonating an initiating user. Do not
 // expose this method to request payloads; use the authorized wrapper for those.
 func (s *Service) ProvisionAssistantRuntimeWorkloadClient(ctx context.Context, runtimeID uuid.UUID, c AssistantRuntimeWorkloadClientConfig) (ProvisionedAssistantWorkloadClient, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return ProvisionedAssistantWorkloadClient{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	result, err := s.provisionAssistantRuntimeWorkloadClientLocked(ctx, tx, runtimeID, c)
+	if err != nil {
+		return ProvisionedAssistantWorkloadClient{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ProvisionedAssistantWorkloadClient{}, err
+	}
+	return result, nil
+}
+
+func (s *Service) provisionAssistantRuntimeWorkloadClientLocked(ctx context.Context, tx pgx.Tx, runtimeID uuid.UUID, c AssistantRuntimeWorkloadClientConfig) (ProvisionedAssistantWorkloadClient, error) {
 	var zero ProvisionedAssistantWorkloadClient
-	runtime, err := usersessions_repo.New(s.db).GetAssistantWorkloadRuntime(ctx, runtimeID)
+	runtime, err := usersessions_repo.New(tx).GetAssistantWorkloadRuntime(ctx, runtimeID)
 	if err != nil {
 		return zero, fmt.Errorf("resolve assistant runtime workload: %w", err)
 	}
 	triggerID := c.TriggerID
 	if triggerID == uuid.Nil {
-		roots, err := usersessions_repo.New(s.db).ListAssistantWorkloadRuntimeRoots(ctx, usersessions_repo.ListAssistantWorkloadRuntimeRootsParams{ProjectID: runtime.ProjectID, OrganizationID: runtime.OrganizationID, AssistantID: runtime.AssistantID})
+		roots, err := usersessions_repo.New(tx).ListAssistantWorkloadRuntimeRoots(ctx, usersessions_repo.ListAssistantWorkloadRuntimeRootsParams{ProjectID: runtime.ProjectID, OrganizationID: runtime.OrganizationID, AssistantID: runtime.AssistantID})
 		if err != nil {
 			return zero, fmt.Errorf("resolve assistant runtime workload: %w", err)
 		}
@@ -54,7 +70,7 @@ func (s *Service) ProvisionAssistantRuntimeWorkloadClient(ctx context.Context, r
 	authContext.ActiveOrganizationID = runtime.OrganizationID
 	authContext.ProjectID = &runtime.ProjectID
 	ctx = contextvalues.WithAuthenticatedActor(ctx, authContext, actor)
-	return s.provisionAssistantWorkloadClient(ctx, ProvisionAssistantWorkloadClientParams{
+	return s.provisionAssistantWorkloadClientLocked(ctx, tx, ProvisionAssistantWorkloadClientParams{
 		RuntimeID: runtime.ID, OrganizationID: runtime.OrganizationID, ProjectID: runtime.ProjectID, AssistantID: runtime.AssistantID,
 		TriggerID: triggerID, UserSessionIssuerID: c.UserSessionIssuerID, AuthMethod: c.AuthMethod, Secret: c.Secret, JWKS: c.JWKS, JWKSURI: c.JWKSURI,
 	}, actor)

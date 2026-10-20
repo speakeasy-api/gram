@@ -23,10 +23,13 @@ import (
 // KitMCPProvisionRequest carries authoritative runtime/root identity to the
 // composition callback. It does not carry an initiating user's credential.
 type KitMCPProvisionRequest struct {
+	Resource                                                          *url.URL
+	LifecycleTx                                                       pgx.Tx
 	RuntimeID, ProjectID, AssistantID, TriggerID, UserSessionIssuerID uuid.UUID
 	OrganizationID                                                    string
 }
 type KitMCPProvisionResult struct {
+	Resource, Issuer             *url.URL
 	ClientID, Secret, AuthMethod string
 	PrivateKeyPEM                []byte
 }
@@ -37,6 +40,8 @@ type KitMCPProvisioner func(context.Context, KitMCPProvisionRequest) (KitMCPProv
 // Built-in platform endpoints are intentionally unsupported: no human token or
 // inference bearer is ever substituted for their missing machine-auth contract.
 type KitLocalCompositionConfig struct {
+	// PersistedMCP derives production machine connections from the assistant attachment.
+	PersistedMCP                                 bool
 	Environment, Image, ExtraCACertFile, Network string
 	Origin                                       *url.URL
 	AllowInsecureInference                       bool
@@ -57,11 +62,14 @@ func validateKitLocalComposition(c KitLocalCompositionConfig) error {
 }
 
 func validateKitComposition(c KitLocalCompositionConfig) error {
-	if c.Image == "" || c.ProvisionMCP == nil || c.TurnStream == nil || c.MCPUserSessionIssuerID == uuid.Nil {
+	if c.Image == "" || c.ProvisionMCP == nil || c.TurnStream == nil || (!c.PersistedMCP && c.MCPUserSessionIssuerID == uuid.Nil) {
 		return errors.New("kit composition requires explicit image, resource issuer, provisioning callback and turn stream")
 	}
 	if c.Origin == nil || c.Origin.String() != "https://ai.speakeasy.com" || c.AllowInsecureInference {
 		return errors.New("kit requires the HTTPS Speakeasy provider origin")
+	}
+	if c.PersistedMCP {
+		return nil
 	}
 	for _, u := range []*url.URL{c.MCPResource, c.MCPIssuer} {
 		if u == nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -172,16 +180,35 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	if r.RuntimeVersion != 3 {
 		return zero, ErrKitRuntimeBinding
 	}
-	assistant, err := s.GetAssistant(ctx, r.ProjectID, r.AssistantID)
+	db := s.kitLifecycleDB(r)
+	q := assistantrepo.New(db)
+	row, err := q.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID})
 	if err != nil {
 		return zero, err
+	}
+	assistant := assistantRecordFromGetRow(row)
+	attachments, err := q.LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: r.ProjectID, AssistantIds: []uuid.UUID{r.AssistantID}})
+	for _, attached := range attachments {
+		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug})
+	}
+	if err != nil {
+		return zero, err
+	}
+	if c.PersistedMCP {
+		c.MCPResource, c.MCPUserSessionIssuerID, err = s.kitPersistedMCP(ctx, db, assistant)
+		if err != nil {
+			return zero, err
+		}
 	}
 	if !kitResourceAttached(assistant, s.serverURL, c.MCPResource) {
 		return zero, errors.New("configured Kit MCP resource is not an enabled attachment of this assistant")
 	}
 	trigger := c.RootTriggerID
+	if c.PersistedMCP {
+		trigger = uuid.Nil // Production selects only this assistant's persisted root.
+	}
 	if trigger == uuid.Nil {
-		roots, err := usersessionsrepo.New(s.db).ListAssistantWorkloadRuntimeRoots(ctx, usersessionsrepo.ListAssistantWorkloadRuntimeRootsParams{ProjectID: r.ProjectID, OrganizationID: assistant.OrganizationID, AssistantID: r.AssistantID})
+		roots, err := usersessionsrepo.New(db).ListAssistantWorkloadRuntimeRoots(ctx, usersessionsrepo.ListAssistantWorkloadRuntimeRootsParams{ProjectID: r.ProjectID, OrganizationID: assistant.OrganizationID, AssistantID: r.AssistantID})
 		if err != nil {
 			return zero, fmt.Errorf("compose local kit runtime: %w", err)
 		}
@@ -190,16 +217,27 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		}
 		trigger = roots[0]
 	}
-	resolved, err := s.identities.Resolve(ctx, s.db, assistant.OrganizationID, r.ProjectID, r.AssistantID, trigger)
+	var resolved assistantidentity.Resolution
+	if r.LifecycleTx != nil {
+		resolved, err = s.identities.ResolveLocked(ctx, r.LifecycleTx, assistant.OrganizationID, r.ProjectID, r.AssistantID, trigger)
+	} else {
+		resolved, err = s.identities.Resolve(ctx, s.db, assistant.OrganizationID, r.ProjectID, r.AssistantID, trigger)
+	}
 	if err != nil {
 		return zero, fmt.Errorf("compose local kit runtime: %w", err)
 	}
 	if resolved.State != assistantidentity.Active || resolved.Identity == nil {
 		return zero, assistantidentity.ErrInvalidIdentity
 	}
-	client, err := c.ProvisionMCP(ctx, KitMCPProvisionRequest{RuntimeID: r.ID, ProjectID: r.ProjectID, AssistantID: r.AssistantID, OrganizationID: assistant.OrganizationID, TriggerID: trigger, UserSessionIssuerID: c.MCPUserSessionIssuerID})
+	client, err := c.ProvisionMCP(ctx, KitMCPProvisionRequest{Resource: c.MCPResource, LifecycleTx: r.LifecycleTx, RuntimeID: r.ID, ProjectID: r.ProjectID, AssistantID: r.AssistantID, OrganizationID: assistant.OrganizationID, TriggerID: trigger, UserSessionIssuerID: c.MCPUserSessionIssuerID})
 	if err != nil {
 		return zero, err
+	}
+	if c.PersistedMCP {
+		if client.Resource == nil || client.Issuer == nil || client.Resource.String() != c.MCPResource.String() {
+			return zero, errors.New("Kit MCP provisioner returned a mismatched resource")
+		}
+		c.MCPIssuer = client.Issuer
 	}
 	mcpJSON, files, err := kitCompositionMCP(c, client)
 	if err != nil {
@@ -210,7 +248,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		return zero, err
 	}
 	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n\nUse the configured independent workload MCP connection. Built-in platform endpoints and human-delegated sign-in are unavailable in this runtime. Never request or substitute a user's credentials.\n")
-	bootstrap, _, err := PrepareKitStartupBootstrap(ctx, s.assistantTokens, KitStartupBootstrapInput{Model: assistant.Model, Environment: c.Environment, Identity: *resolved.Identity, RuntimeID: r.ID, Lifetime: assistanttokens.MaxInferenceLifetime, Origin: c.Origin.String(), AgentsMD: instructions, MCPJSON: mcpJSON, MCPFiles: files, GatewayToken: []byte(gateway)})
+	bootstrap, _, err := PrepareKitStartupBootstrap(ctx, s.assistantTokens, KitStartupBootstrapInput{LifecycleTx: r.LifecycleTx, Model: assistant.Model, Environment: c.Environment, Identity: *resolved.Identity, RuntimeID: r.ID, Lifetime: assistanttokens.MaxInferenceLifetime, Origin: c.Origin.String(), AgentsMD: instructions, MCPJSON: mcpJSON, MCPFiles: files, GatewayToken: []byte(gateway)})
 	return bootstrap, err
 }
 
@@ -285,7 +323,7 @@ func (s *ServiceCore) rotateKitGatewayTokenAlreadyLocked(ctx context.Context, r 
 	if err != nil {
 		return "", errKitGatewayCredential
 	}
-	rows, err := assistantrepo.New(s.db).StoreKitGatewayCredential(ctx, assistantrepo.StoreKitGatewayCredentialParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeID: r.ID, TokenCiphertext: encrypted})
+	rows, err := assistantrepo.New(s.kitLifecycleDB(r)).StoreKitGatewayCredential(ctx, assistantrepo.StoreKitGatewayCredentialParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeID: r.ID, TokenCiphertext: encrypted})
 	if err != nil {
 		return "", fmt.Errorf("store Kit gateway credential: %w", err)
 	}
@@ -295,7 +333,7 @@ func (s *ServiceCore) rotateKitGatewayTokenAlreadyLocked(ctx context.Context, r 
 	return token, nil
 }
 func (s *ServiceCore) loadKitGatewayTokenAlreadyLocked(ctx context.Context, r assistantRuntimeRecord) (string, error) {
-	queries := runtimeSwitchQueries(ctx, s.db)
+	queries := runtimeSwitchQueries(ctx, s.kitLifecycleDB(r))
 	if _, err := queries.GetKitRuntimeControlAuthority(ctx, assistantrepo.GetKitRuntimeControlAuthorityParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeID: r.ID}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrKitRuntimeBinding
@@ -318,4 +356,14 @@ func (s *ServiceCore) loadKitGatewayTokenAlreadyLocked(ctx context.Context, r as
 		return "", errKitGatewayCredential
 	}
 	return value.Token, nil
+}
+
+// kitLifecycleDB keeps credential and attachment queries on the connection that
+// owns the assistant admission fence. Local callers without a transaction keep
+// their existing pool-backed behavior.
+func (s *ServiceCore) kitLifecycleDB(r assistantRuntimeRecord) assistantrepo.DBTX {
+	if r.LifecycleTx != nil {
+		return r.LifecycleTx
+	}
+	return s.db
 }

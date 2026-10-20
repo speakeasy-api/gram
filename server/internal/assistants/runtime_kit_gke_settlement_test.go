@@ -20,6 +20,7 @@ type kitCheckpointFake struct {
 	status      string
 	calls       []string
 	err         error
+	closeErr    error
 }
 
 func (f *kitCheckpointFake) AttachSession(context.Context, string) error { return f.err }
@@ -45,6 +46,12 @@ func (f *kitCheckpointFake) Call(_ context.Context, method string, params any, s
 			return nil, errors.New("unexpected resume overlay or replay")
 		}
 		return json.RawMessage(`{}`), nil
+	case "session/close":
+		p, ok := params.(map[string]string)
+		if !ok || len(p) != 1 || p["sessionId"] != session {
+			return nil, errors.New("unexpected close parameters")
+		}
+		return json.RawMessage(`{}`), f.closeErr
 	case "kit/session/status":
 		return json.RawMessage(f.status), nil
 	default:
@@ -208,4 +215,45 @@ func TestKitCheckpointAuthenticatedGateway(t *testing.T) {
 	p.config.GatewayToken = "wrong-token"
 	_, err = p.dial(ctx, assistantRuntimeRecord{RuntimeVersion: 3})
 	require.Error(t, err)
+}
+
+func TestKitCheckpointDurableClose(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name      string
+		next      string
+		closeErr  error
+		wantError bool
+	}{
+		{name: "acknowledged and restorable", next: kitCheckpointRestorable},
+		{name: "close failure", next: kitCheckpointRestorable, closeErr: errors.New("checkpoint failed"), wantError: true},
+		{name: "still resident", next: kitCheckpointResident, wantError: true},
+		{name: "history disappeared", next: `{"sessions":[]}`, wantError: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := &kitCheckpointFake{inventories: []string{kitCheckpointResident, tt.next}, status: kitCheckpointSettled, closeErr: tt.closeErr}
+			err := settleKitCheckpointSessions(t.Context(), f, "/workspace", map[string]bool{"bound": true}, true)
+			if tt.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, []string{"session/list", "session/resume", "kit/session/status", "session/close"}, f.calls[:4])
+		})
+	}
+}
+
+func TestKitCheckpointDurableCloseRetryDoesNotResumeHistory(t *testing.T) {
+	t.Parallel()
+	f := &kitCheckpointFake{inventories: []string{kitCheckpointRestorable}}
+	require.NoError(t, settleKitCheckpointSessions(t.Context(), f, "/workspace", map[string]bool{"bound": true}, true))
+	require.Equal(t, []string{"session/list", "session/list"}, f.calls)
+}
+
+func TestKitCheckpointDurableCloseRejectsActiveWork(t *testing.T) {
+	t.Parallel()
+	f := &kitCheckpointFake{inventories: []string{kitCheckpointResident}, status: `{"sessionId":"bound","settled":false,"foregroundActive":true,"backgroundActive":false,"pendingBackgroundTerminals":false,"activeSubagents":0}`}
+	require.Error(t, settleKitCheckpointSessions(t.Context(), f, "/workspace", map[string]bool{"bound": true}, true))
+	require.NotContains(t, f.calls, "session/close")
 }

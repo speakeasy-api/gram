@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
@@ -60,7 +61,7 @@ func validateRuntimeSelection(change runtimeSelectionChange) error {
 // prepareRuntimeSelection runs only under AcquireAssistantAdvisoryLock. Its
 // caller must end the transaction before invoking the returned release callback.
 // Runtime rows retain their original version even after physical retirement.
-func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assistantrepo.Queries, projectID, assistantID uuid.UUID, change runtimeSelectionChange) (func(), error) {
+func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assistantrepo.Queries, tx pgx.Tx, projectID, assistantID uuid.UUID, change runtimeSelectionChange) (func(), error) {
 	if err := validateRuntimeSelection(change); err != nil {
 		return nil, err
 	}
@@ -105,7 +106,8 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 			return nil, errRuntimeSwitchBusy
 		}
 		runtimes = append(runtimes, assistantRuntimeRecord{
-			ID: row.ID, AssistantThreadID: row.AssistantThreadID, AssistantID: row.AssistantID,
+			LifecycleTx: tx,
+			ID:          row.ID, AssistantThreadID: row.AssistantThreadID, AssistantID: row.AssistantID,
 			ProjectID: row.ProjectID, RuntimeVersion: row.RuntimeVersion, Backend: row.Backend,
 			BackendMetadataJSON: row.BackendMetadataJson, State: row.State, WarmUntil: row.WarmUntil,
 		})
@@ -174,6 +176,17 @@ func runtimeSwitchQueries(ctx context.Context, db assistantrepo.DBTX) *assistant
 // after the backend stop succeeds. Both rollback and crash recovery are safe:
 // rollback leaves no intent; a crash leaves it for the stopped-runtime janitor.
 func (s *ServiceCore) finishRuntimeSwitchRetirement(ctx context.Context, runtime assistantRuntimeRecord) error {
+	if kitProductionRuntime(runtime.RuntimeVersion, runtime.Backend) {
+		return s.kitGKELifecycle(ctx, runtime, func(ctx context.Context, locked assistantRuntimeRecord) error {
+			if locked.State != "switch_retiring" || !locked.Retired {
+				return nil
+			}
+			if err := s.runtime.Reap(ctx, locked); err != nil {
+				return fmt.Errorf("reap retired Kit runtime: %w", err)
+			}
+			return assistantrepo.New(locked.LifecycleTx).CompleteRuntimeSwitchRetirement(ctx, assistantrepo.CompleteRuntimeSwitchRetirementParams{ID: locked.ID, ProjectID: locked.ProjectID})
+		})
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin runtime retirement: %w", err)
@@ -192,6 +205,7 @@ func (s *ServiceCore) finishRuntimeSwitchRetirement(ctx context.Context, runtime
 	}
 	// Stop does not construct a protocol or read a credential; it operates on
 	// the immutable backend resource while admission and switching are fenced.
+	runtime.LifecycleTx = tx
 	if err := s.runtime.Stop(ctx, runtime); err != nil {
 		return fmt.Errorf("stop retired runtime: %w", err)
 	}

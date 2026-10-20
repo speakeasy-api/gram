@@ -71,11 +71,27 @@ func (s *Service) ProvisionAssistantWorkloadClient(ctx context.Context, p Provis
 }
 
 func (s *Service) provisionAssistantWorkloadClient(ctx context.Context, p ProvisionAssistantWorkloadClientParams, actor urn.Principal) (ProvisionedAssistantWorkloadClient, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return ProvisionedAssistantWorkloadClient{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	result, err := s.provisionAssistantWorkloadClientLocked(ctx, tx, p, actor)
+	if err != nil {
+		return ProvisionedAssistantWorkloadClient{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ProvisionedAssistantWorkloadClient{}, err
+	}
+	return result, nil
+}
+
+func (s *Service) provisionAssistantWorkloadClientLocked(ctx context.Context, tx pgx.Tx, p ProvisionAssistantWorkloadClientParams, actor urn.Principal) (ProvisionedAssistantWorkloadClient, error) {
 	var zero ProvisionedAssistantWorkloadClient
 	if p.RuntimeID == uuid.Nil || p.UserSessionIssuerID == uuid.Nil || s.auditLogger == nil {
 		return zero, errors.New("an active Kit runtime and issuer are required")
 	}
-	runtime, err := usersessions_repo.New(s.db).GetAssistantWorkloadRuntime(ctx, p.RuntimeID)
+	runtime, err := usersessions_repo.New(tx).GetAssistantWorkloadRuntime(ctx, p.RuntimeID)
 	if err != nil {
 		return zero, fmt.Errorf("provision assistant workload client: %w", err)
 	}
@@ -86,11 +102,6 @@ func (s *Service) provisionAssistantWorkloadClient(ctx context.Context, p Provis
 	if err != nil {
 		return zero, err
 	}
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return zero, fmt.Errorf("provision assistant workload client: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 	resolved, err := new(assistantidentity.Service).ResolveLocked(ctx, tx, p.OrganizationID, p.ProjectID, p.AssistantID, p.TriggerID)
 	if err != nil {
 		return zero, fmt.Errorf("provision assistant workload client: %w", err)
@@ -116,9 +127,6 @@ func (s *Service) provisionAssistantWorkloadClient(ctx context.Context, p Provis
 	if err := s.auditLogger.LogAssistantWorkloadOAuth(ctx, tx, audit.LogAssistantWorkloadOAuthEvent{
 		SessionURN: urn.UserSession{ID: uuid.Nil}, OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, Actor: actor, Runtime: p.RuntimeID, ClientURN: urn.NewUserSessionClient(row.ID), AssistantURN: urn.NewAssistant(p.AssistantID), TriggerURN: urn.NewTriggerInstance(p.TriggerID),
 	}); err != nil {
-		return zero, fmt.Errorf("provision assistant workload client: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
 		return zero, fmt.Errorf("provision assistant workload client: %w", err)
 	}
 	return ProvisionedAssistantWorkloadClient{RuntimeID: p.RuntimeID, TriggerID: p.TriggerID, RegistrationID: row.ID, ClientID: row.ClientID, AuthMethod: p.AuthMethod, Secret: secret}, nil

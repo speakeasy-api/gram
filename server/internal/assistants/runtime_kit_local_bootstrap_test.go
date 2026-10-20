@@ -2,7 +2,6 @@ package assistants
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -79,14 +78,12 @@ func TestKitLocalStartupBootstrapRotatesCredential(t *testing.T) {
 	var firstFile, secondFile kitInferenceFile
 	require.NoError(t, json.Unmarshal(first.InferenceJSON, &firstFile))
 	require.NoError(t, json.Unmarshal(second.InferenceJSON, &secondFile))
-	firstHash := sha256.Sum256([]byte(firstFile.APIKey))
-	secondHash := sha256.Sum256([]byte(secondFile.APIKey))
 	tokens := tokenrepo.New(db)
-	_, err = tokens.ReadInferenceCredential(t.Context(), firstHash[:])
+	_, err = tokens.ReadKitAPIKeyBinding(t.Context(), id)
 	require.ErrorIs(t, err, pgx.ErrNoRows, "previous startup credential must no longer authorize")
-	current, err := tokens.ReadInferenceCredential(t.Context(), secondHash[:])
+	current, err := tokens.ReadKitAPIKeyBinding(t.Context(), next)
 	require.NoError(t, err)
-	require.Equal(t, next, current.ID)
+	require.Equal(t, next, current.ApiKeyID)
 	firstKeyHash, err := auth.GetAPIKeyHash(firstFile.APIKey)
 	require.NoError(t, err)
 	secondKeyHash, err := auth.GetAPIKeyHash(secondFile.APIKey)
@@ -100,19 +97,44 @@ func TestKitLocalStartupBootstrapRotatesCredential(t *testing.T) {
 	require.NoError(t, validateKitBootstrap(second))
 	ac := &contextvalues.AuthContext{APIKeyID: next.String(), ProjectID: &project, ActiveOrganizationID: "org-test"}
 	authed := contextvalues.WithAuthenticatedActor(t.Context(), ac, urn.NewPrincipal(urn.PrincipalTypeAgent, resolved.Identity.AgentID.String()))
-	trusted, managed, err := manager.AuthorizeKitAPIKey(authed, secondFile.APIKey)
+	trusted, managed, err := manager.AuthorizeKitAPIKey(authed)
 	require.NoError(t, err)
 	require.True(t, managed)
 	require.True(t, assistanttokens.InferenceTranscriptOwned(trusted))
-	_, managed, err = manager.AuthorizeKitAPIKey(authed, firstFile.APIKey)
+	oldAC := *ac
+	oldAC.APIKeyID = id.String()
+	oldAuthed := contextvalues.WithAuthenticatedActor(t.Context(), &oldAC, urn.NewPrincipal(urn.PrincipalTypeAgent, resolved.Identity.AgentID.String()))
+	_, managed, err = manager.AuthorizeKitAPIKey(oldAuthed)
 	require.True(t, managed)
 	require.Error(t, err, "a rotated credential cannot inherit the new key's authority")
 	wrongActor := contextvalues.WithAuthenticatedActor(t.Context(), ac, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()))
-	_, managed, err = manager.AuthorizeKitAPIKey(wrongActor, secondFile.APIKey)
+	_, managed, err = manager.AuthorizeKitAPIKey(wrongActor)
 	require.True(t, managed)
 	require.Error(t, err)
+	// A locked lifecycle must not self-block on a second issuance connection.
+	// Rolling it back must restore the old authority and discard the new key.
+	txCtx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	tx, err := db.Begin(txCtx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	_, err = core.identities.ResolveLocked(txCtx, tx, "org-test", project, assistant.ID, trigger)
+	require.NoError(t, err)
+	txInput := in
+	txInput.LifecycleTx = tx
+	_, pendingKeyID, err := PrepareKitStartupBootstrap(txCtx, manager, txInput)
+	require.NoError(t, err)
+	_, err = tokenrepo.New(tx).ReadKitAPIKeyBinding(txCtx, pendingKeyID)
+	require.NoError(t, err)
+	_, err = tokenrepo.New(tx).ReadKitAPIKeyBinding(txCtx, next)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "rotation revokes old authority inside its transaction")
+	require.NoError(t, tx.Rollback(txCtx))
+	_, err = tokens.ReadKitAPIKeyBinding(t.Context(), pendingKeyID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "rolled-back bootstrap must not publish authority")
+	_, err = tokens.ReadKitAPIKeyBinding(t.Context(), next)
+	require.NoError(t, err, "rollback must restore previous authority")
 	require.NoError(t, manager.RevokeRuntimeInferenceCredentials(t.Context(), project, runtime))
-	_, managed, err = manager.AuthorizeKitAPIKey(authed, secondFile.APIKey)
+	_, managed, err = manager.AuthorizeKitAPIKey(authed)
 	require.True(t, managed, "revoked runtime credentials must not fall back to ordinary capture")
 	require.Error(t, err)
 }

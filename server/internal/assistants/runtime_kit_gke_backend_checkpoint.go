@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"net"
 	"net/url"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -20,7 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-var kitGKEAuthorityGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
 var kitGKETriggerGVR = schema.GroupVersionResource{Group: "podsnapshot.gke.io", Version: "v1", Resource: "podsnapshotmanualtriggers"}
 var kitGKESnapshotGVR = schema.GroupVersionResource{Group: "podsnapshot.gke.io", Version: "v1", Resource: "podsnapshots"}
 
@@ -32,14 +34,8 @@ var kitGKESnapshotGVR = schema.GroupVersionResource{Group: "podsnapshot.gke.io",
 // https://docs.cloud.google.com/kubernetes-engine/docs/how-to/pod-snapshots
 type KitGKECheckpointDriver interface {
 	KitGKESnapshotAvailabilityVerifier
-	// VerifySettled reconciles gateway session/list with canonical bindings and
-	// verifies ALL live/unbound sessions and jobs; DB-bound status alone is not
-	// sufficient. The caller holds admission and has checked queued work.
-	VerifySettled(context.Context, assistantRuntimeRecord, *unstructured.Unstructured) error
-	PrepareColdRestore(context.Context, assistantRuntimeRecord, *unstructured.Unstructured, *unstructured.Unstructured, KitGKESnapshotBinding) (*unstructured.Unstructured, error)
 	Select(context.Context, *unstructured.Unstructured, KitGKESnapshotBinding) (*unstructured.Unstructured, error)
 	VerifyRestored(context.Context, *unstructured.Unstructured, *unstructured.Unstructured, KitGKESnapshotBinding) error
-	RefreshRestored(context.Context, assistantRuntimeRecord, *unstructured.Unstructured, KitLocalBootstrap) error
 }
 
 type kitGKECheckpointRef struct {
@@ -82,83 +78,170 @@ type kitGKEAuthority struct {
 	Source           *kitGKECheckpointSource `json:"source,omitempty"`
 }
 
-func (k *KitGKERuntimeBackend) createAuthority(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) (kitGKEBackendMetadata, error) {
-	obj := kitObject("ConfigMap", "v1", kitGKEName(r)+"-authority", k.identity(r))
-	labels := obj.GetLabels()
-	labels["gram.ai/project-id"] = r.ProjectID.String()
-	obj.SetLabels(labels)
-	obj.SetAnnotations(map[string]string{"speakeasy.com/kit-spec": k.fingerprint})
-	raw, err := json.Marshal(kitGKEAuthority{PriorCheckpoints: nil, Phase: "active", Metadata: m, TriggerName: "", TriggerUID: "", SnapshotName: "", SnapshotUID: "", Source: nil})
-	if err != nil {
-		return m, fmt.Errorf("kit GKE createAuthority: %w", err)
-	}
-	obj.Object["data"] = map[string]any{"authority.json": string(raw)}
-	obj, err = k.config.GKE.Dynamic.Resource(kitGKEAuthorityGVR).Namespace(k.config.GKE.Namespace).Create(ctx, obj, metav1.CreateOptions{})
-	if err != nil {
-		return m, fmt.Errorf("kit GKE createAuthority: %w", err)
-	}
-	if obj.GetUID() == "" {
-		return m, fmt.Errorf("kit GKE authority has no UID")
-	}
-	m.AuthorityUID = obj.GetUID()
-	return m, nil
+// KitGKEAuthorityStore persists checkpoint state in the runtime row. Writes use
+// the caller's lifecycle transaction, never an independent connection.
+type KitGKEAuthorityStore interface {
+	Load(context.Context, pgx.Tx, assistantRuntimeRecord) ([]byte, error)
+	Save(context.Context, pgx.Tx, assistantRuntimeRecord, []byte, []byte) error
 }
-func (k *KitGKERuntimeBackend) loadAuthority(ctx context.Context, r assistantRuntimeRecord) (kitGKEAuthority, *unstructured.Unstructured, error) {
+
+type kitGKEPostgresAuthorityStore struct{ pool assistantrepo.DBTX }
+
+func NewKitGKEPostgresAuthorityStore(pool assistantrepo.DBTX) KitGKEAuthorityStore {
+	return &kitGKEPostgresAuthorityStore{pool: pool}
+}
+func (s *kitGKEPostgresAuthorityStore) Load(ctx context.Context, tx pgx.Tx, r assistantRuntimeRecord) ([]byte, error) {
+	db := s.pool
+	if tx != nil {
+		db = tx
+	}
+	if db == nil {
+		return nil, fmt.Errorf("Kit GKE authority database unavailable")
+	}
+	row, err := assistantrepo.New(db).GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ID: r.ID, ProjectID: r.ProjectID})
+	if err != nil {
+		return nil, err
+	}
+	if row.AssistantID != r.AssistantID || row.RuntimeVersion != r.RuntimeVersion || row.Backend != r.Backend {
+		return nil, fmt.Errorf("Kit GKE authority identity changed")
+	}
+	return row.BackendMetadataJson, nil
+}
+func (s *kitGKEPostgresAuthorityStore) Save(ctx context.Context, tx pgx.Tx, r assistantRuntimeRecord, expected, next []byte) error {
+	if tx == nil {
+		return fmt.Errorf("Kit GKE authority writes require a lifecycle transaction")
+	}
+	q := assistantrepo.New(tx)
+	row, err := q.GetAssistantRuntimeForAdmission(ctx, assistantrepo.GetAssistantRuntimeForAdmissionParams{ID: r.ID, ProjectID: r.ProjectID})
+	if err != nil {
+		return err
+	}
+	if row.AssistantID != r.AssistantID || row.RuntimeVersion != r.RuntimeVersion || row.Backend != r.Backend {
+		return fmt.Errorf("Kit GKE authority identity changed")
+	}
+	if !kitGKEEqualMetadata(row.BackendMetadataJson, expected) {
+		return fmt.Errorf("Kit GKE checkpoint authority changed")
+	}
+	// Publication must precede the external effect: a process crash cannot
+	// roll back the closing fence or the resource identity needed for cleanup.
+	publisher, ok := tx.(interface{ Publish(context.Context) error })
+	if !ok {
+		return fmt.Errorf("Kit lifecycle authority requires durable phase publication")
+	}
+	if err := q.UpdateAssistantRuntimeMetadata(ctx, assistantrepo.UpdateAssistantRuntimeMetadataParams{RuntimeID: r.ID, ProjectID: r.ProjectID, BackendMetadataJson: next}); err != nil {
+		return err
+	}
+	return publisher.Publish(ctx)
+}
+func kitGKEEqualMetadata(a, b []byte) bool {
+	var av, bv any
+	return json.Unmarshal(a, &av) == nil && json.Unmarshal(b, &bv) == nil && reflect.DeepEqual(av, bv)
+}
+
+type kitGKEAuthorityHandle struct {
+	record assistantRuntimeRecord
+	raw    []byte
+}
+
+// checkpoint contains only lifecycle state; resource identity remains in the
+// top-level metadata so ordinary metadata updates cannot recursively nest it.
+func kitGKEAuthorityMetadata(state kitGKEAuthority) (kitGKEBackendMetadata, error) {
+	m := state.Metadata
+	state.Metadata = kitGKEBackendMetadata{}
+	raw, err := json.Marshal(state)
+	if err != nil {
+		return m, err
+	}
+	var envelope map[string]json.RawMessage
+	if err = json.Unmarshal(raw, &envelope); err != nil {
+		return m, err
+	}
+	delete(envelope, "metadata")
+	m.Checkpoint, err = json.Marshal(envelope)
+	return m, err
+}
+func (k *KitGKERuntimeBackend) createAuthority(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) (kitGKEBackendMetadata, error) {
+	if k.config.AuthorityStore == nil {
+		return m, fmt.Errorf("Kit GKE requires a Postgres authority store")
+	}
+	expected, err := k.config.AuthorityStore.Load(ctx, r.LifecycleTx, r)
+	if err != nil {
+		return m, err
+	}
+	var prior kitGKEBackendMetadata
+	if err = json.Unmarshal(expected, &prior); err != nil {
+		return m, err
+	}
+	if len(prior.Checkpoint) != 0 {
+		return m, fmt.Errorf("Kit GKE checkpoint authority already exists")
+	}
+	m.AuthorityUID = types.UID(uuid.NewString())
+	m, err = kitGKEAuthorityMetadata(kitGKEAuthority{Phase: "active", Metadata: m})
+	if err != nil {
+		return m, err
+	}
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return m, err
+	}
+	return m, k.config.AuthorityStore.Save(ctx, r.LifecycleTx, r, expected, raw)
+}
+func (k *KitGKERuntimeBackend) loadAuthority(ctx context.Context, r assistantRuntimeRecord) (kitGKEAuthority, *kitGKEAuthorityHandle, error) {
 	var state kitGKEAuthority
-	m, err := k.metadata(r)
+	if k.config.AuthorityStore == nil {
+		return state, nil, fmt.Errorf("Kit GKE requires a Postgres authority store")
+	}
+	raw, err := k.config.AuthorityStore.Load(ctx, r.LifecycleTx, r)
 	if err != nil {
 		return state, nil, err
 	}
-	if m.AuthorityUID == "" {
-		return state, nil, fmt.Errorf("kit GKE runtime has no persisted authority UID")
-	}
-	obj, err := k.get(ctx, r, kitGKEAuthorityGVR, kitGKEName(r)+"-authority", m.AuthorityUID)
-	if err != nil {
-		return state, nil, err
-	}
-	raw, found, err := unstructured.NestedString(obj.Object, "data", "authority.json")
-	if err != nil || !found {
-		return state, nil, fmt.Errorf("kit GKE checkpoint authority is malformed")
-	}
-	if err = json.Unmarshal([]byte(raw), &state); err != nil {
-		return state, nil, fmt.Errorf("kit GKE loadAuthority: %w", err)
-	}
-	state.Metadata.AuthorityUID = m.AuthorityUID
 	record := r
-	record.BackendMetadataJSON, _ = json.Marshal(state.Metadata)
-	if _, err = k.metadata(record); err != nil {
+	record.BackendMetadataJSON = raw
+	m, err := k.metadata(record)
+	if err != nil {
 		return state, nil, err
 	}
+	if m.AuthorityUID == "" || len(m.Checkpoint) == 0 {
+		return state, nil, fmt.Errorf("Kit GKE runtime has no persisted checkpoint authority")
+	}
+	if err = json.Unmarshal(m.Checkpoint, &state); err != nil {
+		return state, nil, fmt.Errorf("Kit GKE checkpoint authority malformed: %w", err)
+	}
+	state.Metadata = m
 	switch state.Phase {
-	case "active", "checkpointing", "checkpointed", "stopped", "restoring", "retired":
+	case "active", "closing", "checkpointing", "checkpointed", "stopped", "restoring", "retired":
 	default:
 		return state, nil, fmt.Errorf("unknown Kit GKE checkpoint authority phase")
 	}
-	return state, obj, nil
+	return state, &kitGKEAuthorityHandle{record: r, raw: raw}, nil
 }
-func (k *KitGKERuntimeBackend) saveAuthority(ctx context.Context, obj *unstructured.Unstructured, state kitGKEAuthority) (*unstructured.Unstructured, error) {
-	if obj.GetUID() == "" || obj.GetResourceVersion() == "" {
-		return nil, fmt.Errorf("kit GKE authority update requires UID and resourceVersion")
+func (k *KitGKERuntimeBackend) saveAuthority(ctx context.Context, obj *kitGKEAuthorityHandle, state kitGKEAuthority) (*kitGKEAuthorityHandle, error) {
+	if obj == nil || k.config.AuthorityStore == nil {
+		return nil, fmt.Errorf("Kit GKE authority handle unavailable")
 	}
-	raw, err := json.Marshal(state)
+	m, err := kitGKEAuthorityMetadata(state)
 	if err != nil {
-		return nil, fmt.Errorf("kit GKE saveAuthority: %w", err)
+		return nil, err
 	}
-	next := obj.DeepCopy()
-	next.Object["data"] = map[string]any{"authority.json": string(raw)}
-	updated, err := k.config.GKE.Dynamic.Resource(kitGKEAuthorityGVR).Namespace(k.config.GKE.Namespace).Update(ctx, next, metav1.UpdateOptions{})
+	raw, err := json.Marshal(m)
 	if err != nil {
-		return nil, fmt.Errorf("kit GKE saveAuthority: %w", err)
+		return nil, err
 	}
-	if updated.GetUID() != obj.GetUID() {
-		return nil, fmt.Errorf("kit GKE checkpoint authority was replaced")
+	if err = k.config.AuthorityStore.Save(ctx, obj.record.LifecycleTx, obj.record, obj.raw, raw); err != nil {
+		return nil, err
 	}
-	return updated, nil
+	return &kitGKEAuthorityHandle{record: obj.record, raw: raw}, nil
 }
 
 func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecord) error {
-	k.mu.Lock()
-	defer k.mu.Unlock()
+	// Idle expiry may already hold admission without passing through Lifecycle.
+	// Bridge the explicit transaction for legacy protocol settlement helpers.
+	if r.LifecycleTx != nil {
+		ctx = context.WithValue(ctx, runtimeSwitchQueriesKey{}, assistantrepo.New(r.LifecycleTx))
+	}
+	if k.config.Lifecycle != nil && r.LifecycleTx == nil {
+		return k.config.Lifecycle(ctx, r, k.Stop)
+	}
 	if !k.config.Provision.SnapshotsEnabled || k.config.Snapshots == nil {
 		return fmt.Errorf("%s", kitGKECheckpointUnavailable)
 	}
@@ -167,14 +250,18 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 		return err
 	}
 	if state.Phase == "stopped" {
-		return nil
+		_, _, err = k.gcSupersededCheckpoints(ctx, state, obj)
+		return err
+	}
+	if state.Phase == "closing" {
+		return fmt.Errorf("Kit GKE session close acknowledgement is uncertain; explicit reconciliation required")
 	}
 	if state.Phase == "restoring" || state.Phase == "retired" {
 		return fmt.Errorf("cannot checkpoint Kit GKE phase %s", state.Phase)
 	}
 	if state.Phase == "active" {
 		r.BackendMetadataJSON, _ = json.Marshal(state.Metadata)
-		p, err := k.protocol(ctx, r)
+		p, err := k.protocolForLifecycle(ctx, r, true)
 		if err != nil {
 			return err
 		}
@@ -205,9 +292,6 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 		if e = k.checkPod(r, pod, state.Metadata); e != nil {
 			return e
 		}
-		if e = k.config.Snapshots.VerifySettled(ctx, r, pod); e != nil {
-			return fmt.Errorf("kit GKE Stop: %w", e)
-		}
 		settlement, ok := p.(interface {
 			VerifyCheckpointSettled(context.Context, assistantRuntimeRecord) error
 		})
@@ -225,7 +309,7 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 		state.TriggerUID = ""
 		state.SnapshotName = ""
 		state.SnapshotUID = ""
-		state.Phase = "checkpointing"
+		state.Phase = "closing"
 		state.TriggerName = "kit-checkpoint-" + uuid.NewString()
 		state.Source = &kitGKECheckpointSource{PolicyName: "", PolicyUID: "", PolicyGeneration: 0, CheckpointMarker: state.Metadata.CheckpointMarker, Identity: kitGKECheckpointIdentity(k.identity(r)), SourcePodName: state.Metadata.PodName, SourcePodUID: state.Metadata.PodUID}
 		if driver, ok := k.config.Snapshots.(*KitGKEManagedCheckpointDriver); ok {
@@ -235,6 +319,23 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 			}
 			state.Source.PolicyName, state.Source.PolicyUID, state.Source.PolicyGeneration = policy.GetName(), policy.GetUID(), policy.GetGeneration()
 		}
+		closer, ok := p.(interface {
+			CloseCheckpointSessions(context.Context, assistantRuntimeRecord) error
+		})
+		if !ok {
+			return errRuntimeSwitchUnavailable
+		}
+		// A lost close acknowledgement cannot be distinguished from an old
+		// restorable transcript. Persist a non-retryable phase before sending
+		// close; only a successful acknowledgement permits checkpointing.
+		obj, err = k.saveAuthority(ctx, obj, state)
+		if err != nil {
+			return err
+		}
+		if err = closer.CloseCheckpointSessions(ctx, r); err != nil {
+			return fmt.Errorf("durably close Kit checkpoint sessions: %w", err)
+		}
+		state.Phase = "checkpointing"
 		obj, err = k.saveAuthority(ctx, obj, state)
 		if err != nil {
 			return err
@@ -316,6 +417,10 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 	if _, e = VerifyKitGKESnapshot(ctx, selected, state.Source.binding(), k.config.Snapshots); e != nil {
 		return e
 	}
+	state, obj, err = k.gcSupersededCheckpoints(ctx, state, obj)
+	if err != nil {
+		return err
+	}
 	// Durable verified authority precedes deletion. Foreground deletion is waited
 	// through; no success is returned while the source process still exists.
 	if err = k.deleteOwned(ctx, gkeSandboxClaimGVR, kitGKEName(r), state.Metadata.ClaimUID); err != nil {
@@ -329,8 +434,13 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 	return err
 }
 
-func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRecord, state kitGKEAuthority, obj *unstructured.Unstructured) (_ RuntimeBackendEnsureResult, returnErr error) {
+func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRecord, state kitGKEAuthority, obj *kitGKEAuthorityHandle) (_ RuntimeBackendEnsureResult, returnErr error) {
 	var empty RuntimeBackendEnsureResult
+	var gcErr error
+	state, obj, gcErr = k.gcSupersededCheckpoints(ctx, state, obj)
+	if gcErr != nil {
+		return empty, gcErr
+	}
 	if k.config.Snapshots == nil {
 		return empty, fmt.Errorf("%s", kitGKECheckpointUnavailable)
 	}
@@ -360,13 +470,6 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	template, err := k.get(ctx, r, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID)
 	if err != nil {
 		return empty, err
-	}
-	template, err = k.config.Snapshots.PrepareColdRestore(ctx, r, template.DeepCopy(), snapshot, state.Source.binding())
-	if err != nil {
-		return empty, fmt.Errorf("kit GKE restore: %w", err)
-	}
-	if template == nil || template.GetUID() != state.Metadata.TemplateUID || template.GetName() != kitGKEName(r) {
-		return empty, fmt.Errorf("cold restore driver changed template authority")
 	}
 	if state.Source.CheckpointMarker == "" {
 		return empty, fmt.Errorf("checkpoint has no rootfs marker; legacy restore is unsupported")
@@ -518,9 +621,6 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if _, err = VerifyKitGKESnapshot(ctx, snapshot, state.Source.binding(), k.config.Snapshots); err != nil {
 		return empty, err
 	}
-	if err = k.config.Snapshots.RefreshRestored(ctx, r, pod, b); err != nil {
-		return empty, fmt.Errorf("kit GKE restore: %w", err)
-	}
 	pod, err = k.get(ctx, r, gkePodGVR, state.Metadata.PodName, state.Metadata.PodUID)
 	if err != nil {
 		return empty, err
@@ -577,8 +677,8 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	// Only authenticated startup proves the marker gate ran. Until this point
 	// all turn admission remains fenced, including silent cold-start fallback.
 	state.Phase = "active"
-	if _, err = k.saveAuthority(ctx, obj, state); err != nil {
+	if obj, err = k.saveAuthority(ctx, obj, state); err != nil {
 		return empty, err
 	}
-	return RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: raw}, nil
+	return RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: obj.raw}, nil
 }
