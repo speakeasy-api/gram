@@ -355,6 +355,7 @@ func deprovisionDirectoryUser(t *testing.T, ctx context.Context, f signInFixture
 		OrganizationID:        f.orgID,
 		UserID:                conv.ToPGText(f.userID),
 		WorkosDirectoryUserID: workosID,
+		DirectoryID:           pgtype.Text{},
 		Email:                 conv.ToPGText(mockidp.MockUserEmail),
 		Attributes:            []byte("{}"),
 		WorkosCreatedAt:       now,
@@ -364,9 +365,11 @@ func deprovisionDirectoryUser(t *testing.T, ctx context.Context, f signInFixture
 	})
 	require.NoError(t, err)
 	_, err = q.DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
+		DirectoryID:           pgtype.Text{},
 		WorkosDeletedAt:       now,
 		WorkosLastEventID:     conv.ToPGText("event_" + uuid.NewString()),
 		WorkosDirectoryUserID: workosID,
+		OrganizationID:        f.orgID,
 	})
 	require.NoError(t, err)
 }
