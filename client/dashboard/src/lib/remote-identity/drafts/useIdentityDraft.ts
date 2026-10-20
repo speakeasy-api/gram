@@ -10,6 +10,7 @@ import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/re
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { invalidateSharedIssuerImpact } from "@/lib/remote-identity/model/upstreamRepointing";
 import { queryKeyRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import {
@@ -843,6 +844,7 @@ export function useUserIdentityDraft({
       setLocalStatus({ kind: "done" });
       await Promise.all([
         invalidateAllRemoteSessionClients(queryClient),
+        invalidateAllServerClientAssociations(queryClient),
         invalidateAllRemoteSessionIssuers(queryClient),
         invalidateAllRemoteSessionsCount(queryClient),
         invalidateAllGetRemoteMcpServerScopes(queryClient),

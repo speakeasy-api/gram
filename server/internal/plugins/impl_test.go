@@ -838,6 +838,7 @@ func TestPluginsService_SetPluginAssignments_PreservesUnavailableDirectoryAssign
 	require.NoError(t, err)
 
 	_, err = directoryRepo.DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
 		WorkosDeletedAt:        conv.ToPGTimestamptz(now),
 		WorkosLastEventID:      conv.ToPGTextEmpty(""),
 		WorkosDirectoryGroupID: groupWorkOSID,

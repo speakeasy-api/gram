@@ -2763,6 +2763,34 @@ func (q *Queries) InsertKillswitchPrescriptionFixture(ctx context.Context, arg I
 	return err
 }
 
+const insertMCPServerRemoteSessionClientFixture = `-- name: InsertMCPServerRemoteSessionClientFixture :exec
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+VALUES (
+    $1, $2, $3, $4,
+    (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = $4)
+)
+`
+
+type InsertMCPServerRemoteSessionClientFixtureParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// Test-only fixture: inserts an MCP server upstream client association with
+// no application checks, so a test can prove the schema itself refuses a
+// cross-tenant row.
+func (q *Queries) InsertMCPServerRemoteSessionClientFixture(ctx context.Context, arg InsertMCPServerRemoteSessionClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertMCPServerRemoteSessionClientFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.RemoteSessionClientID,
+	)
+	return err
+}
+
 const insertMdmDeviceFixture = `-- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
 VALUES ($1, $2, $3, NULLIF($4::text, ''), $5::text, NULLIF($6::text, ''), $7::timestamptz)
@@ -3718,6 +3746,41 @@ func (q *Queries) ListSignInRevocationDeliveriesFixture(ctx context.Context, org
 			&i.ClaimedUntil,
 			&i.DeliveredAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserSessionCredentialsForSubjectFixture = `-- name: ListUserSessionCredentialsForSubjectFixture :many
+SELECT id, COALESCE(credential_id, id)::uuid AS credential_id, deleted
+FROM user_sessions
+WHERE subject_urn = $1
+ORDER BY created_at, id
+`
+
+type ListUserSessionCredentialsForSubjectFixtureRow struct {
+	ID           uuid.UUID
+	CredentialID uuid.UUID
+	Deleted      bool
+}
+
+// Test-only fixture: every session row of one subject, oldest first, with the
+// credential it belongs to, so a test can follow refresh rotation.
+func (q *Queries) ListUserSessionCredentialsForSubjectFixture(ctx context.Context, subjectUrn urn.SessionSubject) ([]ListUserSessionCredentialsForSubjectFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionCredentialsForSubjectFixture, subjectUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionCredentialsForSubjectFixtureRow
+	for rows.Next() {
+		var i ListUserSessionCredentialsForSubjectFixtureRow
+		if err := rows.Scan(&i.ID, &i.CredentialID, &i.Deleted); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -5253,6 +5316,20 @@ VALUES ($1, 'system', 'user', 'organization:enterprise_trial_demoted', $1, 'orga
 func (q *Queries) SeedTrialDemotionAuditFixture(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, seedTrialDemotionAuditFixture, organizationID)
 	return err
+}
+
+const seedTrialStartAuditFixture = `-- name: SeedTrialStartAuditFixture :one
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES ($1, 'system', 'user', 'organization:enterprise_trial_started', $1, 'organization')
+RETURNING id::text
+`
+
+// Test-only fixture: records an admin-started trial generation.
+func (q *Queries) SeedTrialStartAuditFixture(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, seedTrialStartAuditFixture, organizationID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
 
 const seedUnrelatedAuditHistoryFixture = `-- name: SeedUnrelatedAuditHistoryFixture :exec
