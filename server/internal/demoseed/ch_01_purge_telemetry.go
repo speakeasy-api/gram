@@ -794,12 +794,20 @@ func (s *seeder) chMCPSkillLoadRows() []chTelemetryRow {
 		chatID := s.chatID(i).String()
 		pos := 1 + int(hash64("mcpskl", i)%3)
 		name := skillNames[pos-1]
-		content := skillsManual[pos-1].content
-		digest := sha256.Sum256([]byte(content))
-		cidx := s.chClientIdx(i)
 		// Loads come early in a chat: the agent reads the skill before it
 		// starts calling tools.
-		ts := s.chatTS(i).UnixNano() + int64(20000000000+hash64("mcpsklt", i)%40000000000)
+		at := s.chatTS(i).Add(20*time.Second + time.Duration(hash64("mcpsklt", i)%40)*time.Second)
+		ts := at.UnixNano()
+		// The server serves a skill's latest promoted version, so runbook
+		// loads after its v2 was promoted (3 days ago) served v2.
+		versionID := s.skillVersionID(pos)
+		content := skillsManual[pos-1].content
+		if pos == 3 && at.After(s.now.Add(-3*24*time.Hour)) {
+			versionID = s.skillsRunbookV2()
+			content += skillRunbookV2Addition
+		}
+		digest := sha256.Sum256([]byte(content))
+		cidx := s.chClientIdx(i)
 		rows = append(rows, chTelemetryRow{
 			timeNano:     ts,
 			observedNano: ts,
@@ -811,7 +819,7 @@ func (s *seeder) chMCPSkillLoadRows() []chTelemetryRow {
 				`,"gen_ai.tool.call.arguments":"{\"skill\":\"` + name + `\"}"` +
 				`,"gram.resource.uri":"` + mcpskills.SkillURI(name) + `"` +
 				`,"gram.mcp.skill.id":"` + s.skillID(pos).String() + `"` +
-				`,"gram.mcp.skill.version_id":"` + s.skillVersionID(pos).String() + `"` +
+				`,"gram.mcp.skill.version_id":"` + versionID.String() + `"` +
 				`,"gram.mcp.skill.digest":"sha256:` + hex.EncodeToString(digest[:]) + `"` +
 				`,"gram.toolset.slug":"acme-support-tools"` +
 				`,"gram.mcp_server.id":"` + s.det("mcpserver-support").String() + `"` +

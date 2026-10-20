@@ -11,6 +11,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 )
 
+// skillRunbookV2Addition is the line SkillsInsertRunbookV2 appends to the
+// runbook's content to make v2; keep the two in step.
+const skillRunbookV2Addition = "- page the on-call before any manual failover.\n"
+
 // skillsRunbookV2 is the runbook's second version, which the drift split and
 // the recent runbook activations point at.
 func (s *seeder) skillsRunbookV2() uuid.UUID { return s.fixed("0000-4000-a000-0000000052b3") }
