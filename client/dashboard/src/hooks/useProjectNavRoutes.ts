@@ -79,8 +79,11 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         scope: ["assistant:read"],
         projectId,
       },
-      { route: routes.identities, scope: observe },
-      { route: routes.agents, scope: [] },
+      // Two rosters, two entries: a person arrives from the identity
+      // provider, an agent is registered here. The bare identities URL
+      // redirects to the people.
+      { route: routes.identities.people, scope: observe },
+      { route: routes.identities.agents, scope: observe },
       ...(userSessionsFlag.status === "enabled"
         ? [
             {

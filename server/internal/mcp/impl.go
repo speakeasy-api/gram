@@ -202,7 +202,10 @@ type Service struct {
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
-	remoteLoginCache       cache.TypedCacheObject[remotesessions.RemoteLoginState]
+	// Short-lived, single-use install codes. Holds a live agent key, so it is
+	// cache-only and never written to the database.
+	agentInstallCache cache.TypedCacheObject[agentInstallCode]
+	remoteLoginCache  cache.TypedCacheObject[remotesessions.RemoteLoginState]
 	// remoteLoginHopCache holds the single-use stops of the remote login
 	// browser hop onto a remote client's different callback host.
 	remoteLoginHopCache   cache.TypedCacheObject[remoteLoginHop]
@@ -576,6 +579,11 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		agentInstallCache: cache.NewTypedObjectCache[agentInstallCode](
+			logger.With(attr.SlogCacheNamespace("agent_install")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
 		remoteLoginCache:    cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
 		remoteLoginHopCache: cache.NewTypedObjectCache[remoteLoginHop](logger.With(attr.SlogCacheNamespace("remote_login_hop")), cacheImpl, cache.SuffixNone),
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
@@ -734,10 +742,21 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 	}
 
 	for _, route := range netingress.PrivateRoutes(netingress.RouteSurfaceAgentMCP) {
-		if route.ID != netingress.RouteRuntime {
+		var handler http.Handler
+		// Only these three ids are declared for this surface; anything else is
+		// a routing table change that must come with its handler.
+		switch route.ID { //nolint:exhaustive // the surface declares only these routes
+		case netingress.RouteRuntime:
+			handler = oops.MCPErrHandle(service.logger, service.ServeAgentGateway)
+		case netingress.RouteInstall:
+			handler = oops.ErrHandle(service.logger, service.HandleAgentInstallCode)
+		case netingress.RouteInstallScript:
+			handler = oops.ErrHandle(service.logger, service.HandleAgentInstallScript)
+		}
+		if handler == nil {
 			panic(fmt.Sprintf("private agent MCP route %s %s has no handler", route.Method, route.Path))
 		}
-		o11y.AttachHandler(mux, route.Method, route.Path, oops.MCPErrHandle(service.logger, service.ServeAgentGateway).ServeHTTP)
+		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
 	}
 }
 
@@ -766,6 +785,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// mounts here as well as on the private listener. Its own key is the
 	// credential, so being publicly routable is not being publicly readable.
 	o11y.AttachHandler(mux, "POST", AgentGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeAgentGateway).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", AgentInstallCodeRoute, oops.ErrHandle(service.logger, service.HandleAgentInstallCode).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", AgentInstallScriptRoute, oops.ErrHandle(service.logger, service.HandleAgentInstallScript).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute, oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute, oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)

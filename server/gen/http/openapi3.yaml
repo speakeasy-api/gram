@@ -15764,6 +15764,80 @@ paths:
             operationId: listAgents
             parameters:
                 - allowEmptyValue: true
+                  description: Cursor for the next page of agents.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of agents.
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of agents to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: The number of agents to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Case-insensitive substring match on the agent name.
+                  in: query
+                  name: search
+                  schema:
+                    description: Case-insensitive substring match on the agent name.
+                    type: string
+                - allowEmptyValue: true
+                  description: Name order for the page.
+                  in: query
+                  name: name_order
+                  schema:
+                    default: asc
+                    description: Name order for the page.
+                    enum:
+                        - asc
+                        - desc
+                    type: string
+                - allowEmptyValue: true
+                  description: Keep only agents in these lifecycle states.
+                  in: query
+                  name: lifecycle
+                  schema:
+                    description: Keep only agents in these lifecycle states.
+                    items:
+                        enum:
+                            - active
+                            - suspended
+                            - revoked
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Keep only agents owned by these users.
+                  in: query
+                  name: owner_user_ids
+                  schema:
+                    description: Keep only agents owned by these users.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Keep only agents registered at or after this moment.
+                  in: query
+                  name: registered_after
+                  schema:
+                    description: Keep only agents registered at or after this moment.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Keep only agents registered before this moment.
+                  in: query
+                  name: registered_before
+                  schema:
+                    description: Keep only agents registered before this moment.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -15775,9 +15849,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                items:
-                                    $ref: '#/components/schemas/ManagedAgent'
-                                type: array
+                                $ref: '#/components/schemas/ListAgentsResult'
                     description: OK response.
                 "400":
                     content:
@@ -15839,6 +15911,14 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
             x-speakeasy-react-hook:
                 name: Agents
     /rpc/agents.listDelegableGrants:
@@ -86749,7 +86829,7 @@ paths:
                 name: WorkloadIdentities
     /rpc/workloadIdentities.listPlatforms:
         get:
-            description: List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.
+            description: 'List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.'
             operationId: listWorkloadPlatforms
             parameters:
                 - allowEmptyValue: true
@@ -103226,6 +103306,20 @@ components:
                     description: The member attributes available to target conditions, in editor display order.
             required:
                 - attributes
+        ListAgentsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ManagedAgent'
+                    description: The agents in this page.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; absent when exhausted.
+            description: A page of managed agents, ordered by name.
+            required:
+                - items
         ListAiScanTargetsResult:
             type: object
             properties:
@@ -125323,11 +125417,6 @@ components:
                 key:
                     type: string
                     description: Identifies the entry permanently.
-                steps:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/WorkloadPlatformStep'
-                    description: The guided setup. Empty for a platform without one, which is listed as coming soon and cannot be opened.
                 subject:
                     $ref: '#/components/schemas/WorkloadPlatformSubject'
                 variables:
@@ -125335,7 +125424,7 @@ components:
                     items:
                         $ref: '#/components/schemas/WorkloadPlatformVariable'
                     description: What the operator supplies.
-            description: A platform the catalog offers to trust, with what the operator supplies and the guided setup that connects it.
+            description: A platform the catalog offers to trust, with what the operator supplies to connect it. How the setup is explained belongs to the dashboard, not to this policy.
             required:
                 - key
                 - display_name
@@ -125346,68 +125435,6 @@ components:
                 - jwks_uri
                 - variables
                 - subject
-                - steps
-        WorkloadPlatformBlock:
-            type: object
-            properties:
-                alt:
-                    type: string
-                    description: An image's alternative text.
-                caption:
-                    type: string
-                    description: Shown under an image.
-                help:
-                    type: string
-                    description: Shown under a computed value or checklist item.
-                href:
-                    type: string
-                    description: A link's https target.
-                label:
-                    type: string
-                    description: A link's or computed value's label, or the console field or control a checklist item names.
-                markdown:
-                    type: string
-                    description: A text block's Markdown, or what a checklist item without a value asks the operator to do. Raw HTML in it must not be rendered.
-                src:
-                    type: string
-                    description: An image's path on the dashboard's origin.
-                type:
-                    type: string
-                    description: The kind of content.
-                    enum:
-                        - text
-                        - image
-                        - link
-                        - field
-                        - subject_rule
-                        - agent_picker
-                        - tags
-                        - computed_status
-                        - computed
-                        - checklist_item
-                value:
-                    type: string
-                    description: The value a computed block or checklist item shows.
-                    enum:
-                        - ""
-                        - token_endpoint
-                        - issuer_url
-                        - mcp_host
-                variable:
-                    type: string
-                    description: The variable key a field collects.
-            description: One piece of a guided setup step. Which fields are set depends on type; the rest are empty.
-            required:
-                - type
-                - markdown
-                - src
-                - alt
-                - caption
-                - href
-                - label
-                - variable
-                - value
-                - help
         WorkloadPlatformCatalog:
             type: object
             properties:
@@ -125435,33 +125462,6 @@ components:
             required:
                 - value
                 - visibility
-        WorkloadPlatformStep:
-            type: object
-            properties:
-                blocks:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/WorkloadPlatformBlock'
-                    description: Rendered in order.
-                id:
-                    type: string
-                    description: Stable within the platform; used in the dashboard URL.
-                phase:
-                    type: string
-                    description: collect steps gather values, the create step writes the rows, connect steps describe the platform's side.
-                    enum:
-                        - collect
-                        - create
-                        - connect
-                title:
-                    type: string
-                    description: Heads the step.
-            description: One screen of a guided setup.
-            required:
-                - id
-                - title
-                - phase
-                - blocks
         WorkloadPlatformSubject:
             type: object
             properties:
