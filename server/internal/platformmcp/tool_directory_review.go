@@ -86,7 +86,7 @@ type ResolveDirectoryReviewItemOutput struct {
 	CreatedRoles    []DirectoryReviewCreatedRole `json:"created_roles"`
 	MappedRoles     []DirectoryReviewMappedRole  `json:"mapped_roles"`
 	RequestedWork   []string                     `json:"requested_work" jsonschema:"follow-up work requested after commit, never reported as done"`
-	PendingItems    int                          `json:"pending_items" jsonschema:"items still pending after this decision, from a fresh read"`
+	PendingItems    *int                         `json:"pending_items,omitempty" jsonschema:"items still pending after this decision, from a fresh read; absent when that read failed"`
 	NextSafeActions string                       `json:"next_safe_actions"`
 }
 
@@ -201,13 +201,15 @@ func resolveDirectoryReviewItem(ctx context.Context, backend DirectoryReviewBack
 		}
 	}
 
-	// A fresh read shows what is left to decide.
-	listed, err := backend.ListDirectoryReviewItems(ctx, &accessgen.ListDirectoryReviewItemsPayload{})
-	if err != nil {
-		return ResolveDirectoryReviewItemOutput{}, fmt.Errorf("list directory review items after decision: %w", err)
-	}
-	output.PendingItems = len(listed.Items)
+	// A fresh read shows what is left to decide. The decision has committed
+	// either way, so a failed read is reported, not returned as an error.
 	output.NextSafeActions = "Call list_directory_review_items for the remaining items."
+	if listed, err := backend.ListDirectoryReviewItems(ctx, &accessgen.ListDirectoryReviewItemsPayload{}); err == nil && listed != nil {
+		pending := len(listed.Items)
+		output.PendingItems = &pending
+	} else {
+		output.NextSafeActions = "The decision was saved, but the remaining items could not be read. " + output.NextSafeActions
+	}
 	if len(output.CreatedRoles) > 0 {
 		output.NextSafeActions = "New roles grant nothing until permissions are added to them. " + output.NextSafeActions
 	}
@@ -215,13 +217,14 @@ func resolveDirectoryReviewItem(ctx context.Context, backend DirectoryReviewBack
 }
 
 // directoryReviewContext acts as the calling admin, so the access service
-// authorizes, re-reads and audits as it does for the dashboard.
+// authorizes, re-reads and audits as it does for the dashboard. It is built
+// from the principal alone: no support-session or other provenance carries
+// over, so the service checks the caller's live org admin membership. Only
+// display fields are taken from the caller's own context.
 func directoryReviewContext(ctx context.Context, principal Principal) context.Context {
 	ac := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}
-	if current, ok := contextvalues.GetAuthContext(ctx); ok && current != nil {
-		actor := *current
-		actor.ActiveOrganizationID, actor.UserID, actor.ProjectID, actor.ProjectSlug = principal.OrganizationID, principal.UserID, nil, nil
-		ac = &actor
+	if current, ok := contextvalues.GetAuthContext(ctx); ok && current != nil && current.UserID == principal.UserID && current.ActiveOrganizationID == principal.OrganizationID {
+		ac.OrganizationSlug, ac.Email = current.OrganizationSlug, current.Email
 	}
 	return contextvalues.SetAuthContext(ctx, ac)
 }

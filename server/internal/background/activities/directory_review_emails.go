@@ -140,17 +140,20 @@ func (d *DirectoryReviewEmails) sendOne(ctx context.Context, candidate repo.List
 		return nil
 	}
 
-	// Recipients are whoever is an admin now. A failed resolution is retried;
-	// an organization with no admins is logged and recorded as sent, so it
-	// isn't retried every run.
-	recipients, err := authz.ResolveOrganizationAdminEmails(ctx, d.db, organizationID)
-	if err != nil {
-		return fmt.Errorf("resolve directory review email recipients: %w", err)
-	}
-	if len(recipients) == 0 {
+	// Recipients are whoever is an admin now. Admins that resolved are
+	// emailed even when others failed to; the failure is then returned
+	// without recording the send, so a retry reaches the rest and the
+	// idempotency key keeps the first ones from a second copy. An
+	// organization with no admins is logged and recorded as sent, so it isn't
+	// retried every run.
+	recipients, resolveErr := authz.ResolveOrganizationAdminEmails(ctx, d.db, organizationID)
+	if len(recipients) == 0 && resolveErr == nil {
 		d.logger.WarnContext(ctx, "no organization admins to email about directory review", attr.SlogOrganizationID(organizationID))
 	}
 	var sendErrs []error
+	if resolveErr != nil {
+		sendErrs = append(sendErrs, fmt.Errorf("resolve directory review email recipients: %w", resolveErr))
+	}
 	for _, recipient := range recipients {
 		key := recipientEmailIdempotencyKey(recipient, window...)
 		if err := d.emails.SendIdempotent(ctx, recipient, key, tmpl); err != nil {
@@ -161,12 +164,33 @@ func (d *DirectoryReviewEmails) sendOne(ctx context.Context, candidate repo.List
 		return err
 	}
 
-	q := repo.New(d.db)
+	if err := d.recordSend(ctx, candidate, kind, now); err != nil {
+		return err
+	}
+
+	d.logger.InfoContext(ctx, "emailed organization admins about directory review",
+		attr.SlogOrganizationID(organizationID),
+		attr.SlogEvent(string(kind)),
+	)
+	return nil
+}
+
+// recordSend records an email in one transaction, so a failure can't leave
+// items marked announced without the announcement that restarts reminders.
+func (d *DirectoryReviewEmails) recordSend(ctx context.Context, candidate repo.ListDirectoryReviewEmailCandidatesRow, kind directoryReviewEmailKind, now time.Time) error {
+	organizationID := candidate.OrganizationID
+	tx, err := d.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin directory review email record: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := repo.New(tx)
 	emailedAt := conv.ToPGTimestamptz(now)
 	switch kind {
 	case directoryReviewEmailAnnouncement:
 		if err := q.MarkDirectoryReviewItemsAnnounced(ctx, repo.MarkDirectoryReviewItemsAnnouncedParams{
-			NotifiedAt: emailedAt, OrganizationID: organizationID, CreatedUpTo: candidate.NewestUnannouncedAt,
+			NotifiedAt: emailedAt, OrganizationID: organizationID, Ids: candidate.UnannouncedIds,
 		}); err != nil {
 			return fmt.Errorf("mark directory review items announced: %w", err)
 		}
@@ -182,12 +206,11 @@ func (d *DirectoryReviewEmails) sendOne(ctx context.Context, candidate repo.List
 			return fmt.Errorf("record directory review reminder: %w", err)
 		}
 	case directoryReviewEmailNone:
+		return nil
 	}
-
-	d.logger.InfoContext(ctx, "emailed organization admins about directory review",
-		attr.SlogOrganizationID(organizationID),
-		attr.SlogEvent(string(kind)),
-	)
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit directory review email record: %w", err)
+	}
 	return nil
 }
 

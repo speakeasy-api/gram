@@ -446,7 +446,8 @@ SELECT
   COUNT(*) FILTER (WHERE i.kind = 'new_attribute_value')::bigint AS new_attribute_value_count,
   COUNT(*) FILTER (WHERE i.kind = 'source_missing')::bigint AS source_missing_count,
   COUNT(*) FILTER (WHERE i.notified_at IS NULL)::bigint AS unannounced_count,
-  MAX(i.created_at) FILTER (WHERE i.notified_at IS NULL)::timestamptz AS newest_unannounced_at
+  MAX(i.created_at) FILTER (WHERE i.notified_at IS NULL)::timestamptz AS newest_unannounced_at,
+  COALESCE(array_agg(i.id) FILTER (WHERE i.notified_at IS NULL), '{}')::uuid[] AS unannounced_ids
 FROM directory_review_org_states AS s
 JOIN organization_metadata AS o ON o.id = s.organization_id
 JOIN directory_review_items AS i ON i.organization_id = s.organization_id AND i.state = 'pending'
@@ -455,14 +456,13 @@ GROUP BY s.organization_id, o.name, o.slug, o.default_host, s.last_emailed_at, s
 ORDER BY s.organization_id;
 
 -- name: MarkDirectoryReviewItemsAnnounced :exec
--- Marks the pending items an announcement covered: those not yet announced
--- and created no later than the newest one it counted.
+-- Marks exactly the items an announcement counted, so an item committed
+-- after the count is announced by the next email instead.
 UPDATE directory_review_items
 SET notified_at = @notified_at, updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND state = 'pending'
   AND notified_at IS NULL
-  AND created_at <= @created_up_to;
+  AND id = ANY(@ids::uuid[]);
 
 -- name: RecordDirectoryReviewAnnouncement :exec
 -- An announcement restarts the reminder count.
@@ -476,6 +476,11 @@ UPDATE directory_review_org_states
 SET last_emailed_at = @emailed_at, reminders_sent = reminders_sent + 1, updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND reminders_sent = @reminders_sent;
+
+-- name: LockDirectoryReviewSettings :exec
+-- Serializes changes to one organization's directory review settings for the
+-- rest of the transaction.
+SELECT pg_advisory_xact_lock(hashtextextended('directory_review_settings:' || @organization_id::text, 0));
 
 -- name: GetDirectoryReviewEmailsDisabledAt :one
 -- When the organization turned directory review emails off. No row, or a NULL

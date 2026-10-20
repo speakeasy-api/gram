@@ -16,6 +16,7 @@ import (
 type fakeDirectoryReviewBackend struct {
 	listed      *accessgen.ListDirectoryReviewItemsResult
 	afterList   *accessgen.ListDirectoryReviewItemsResult
+	afterErr    error
 	resolved    *accessgen.ResolveDirectoryReviewItemResult
 	resolveErr  error
 	resolves    []*accessgen.ResolveDirectoryReviewItemPayload
@@ -24,8 +25,8 @@ type fakeDirectoryReviewBackend struct {
 
 func (f *fakeDirectoryReviewBackend) ListDirectoryReviewItems(ctx context.Context, _ *accessgen.ListDirectoryReviewItemsPayload) (*accessgen.ListDirectoryReviewItemsResult, error) {
 	f.authContext, _ = contextvalues.GetAuthContext(ctx)
-	if len(f.resolves) > 0 && f.afterList != nil {
-		return f.afterList, nil
+	if len(f.resolves) > 0 && (f.afterList != nil || f.afterErr != nil) {
+		return f.afterList, f.afterErr
 	}
 	return f.listed, nil
 }
@@ -143,8 +144,47 @@ func TestResolveDirectoryReviewItemUsesTheServicePathAndRereads(t *testing.T) {
 	require.Equal(t, "approved", output.State)
 	require.Equal(t, []DirectoryReviewCreatedRole{{RoleURN: "role:new", Name: "Platform"}}, output.CreatedRoles)
 	require.Equal(t, []string{"workos_role_sync"}, output.RequestedWork)
-	require.Zero(t, output.PendingItems)
+	require.NotNil(t, output.PendingItems)
+	require.Zero(t, *output.PendingItems)
 	require.Contains(t, output.NextSafeActions, "grant nothing")
+}
+
+func TestResolveDirectoryReviewItemReportsACommittedDecisionWhenTheRereadFails(t *testing.T) {
+	t.Parallel()
+
+	backend := &fakeDirectoryReviewBackend{
+		resolved: &accessgen.ResolveDirectoryReviewItemResult{State: "dismissed"},
+		afterErr: oops.E(oops.CodeUnexpected, nil, "read failed"),
+	}
+	output, err := resolveDirectoryReviewItem(t.Context(), backend, ResolveDirectoryReviewItemInput{ItemID: "item", Decision: "dismiss", Confirmed: true})
+	require.NoError(t, err, "the decision committed, so the call succeeds")
+	require.Equal(t, "dismissed", output.State)
+	require.Nil(t, output.PendingItems)
+	require.Contains(t, output.NextSafeActions, "could not be read")
+}
+
+func TestDirectoryReviewContextCarriesOnlyThePrincipal(t *testing.T) {
+	t.Parallel()
+
+	keyID := "key-1"
+	email := "admin@example.com"
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org-1", UserID: "user-1", APIKeyID: keyID, Email: &email, IsAdmin: true, OrganizationSlug: "acme",
+	})
+	ac, ok := contextvalues.GetAuthContext(directoryReviewContext(ctx, Principal{OrganizationID: "org-1", UserID: "user-1"}))
+	require.True(t, ok)
+	require.Equal(t, "org-1", ac.ActiveOrganizationID)
+	require.Equal(t, "user-1", ac.UserID)
+	require.Equal(t, &email, ac.Email)
+	require.Equal(t, "acme", ac.OrganizationSlug)
+	require.Empty(t, ac.APIKeyID)
+	require.False(t, ac.IsAdmin)
+	require.False(t, contextvalues.IsSupportSession(directoryReviewContext(ctx, Principal{OrganizationID: "org-1", UserID: "user-1"})))
+
+	// Another user's display fields are not borrowed.
+	other, ok := contextvalues.GetAuthContext(directoryReviewContext(ctx, Principal{OrganizationID: "org-1", UserID: "user-2"}))
+	require.True(t, ok)
+	require.Nil(t, other.Email)
 }
 
 func TestDirectoryReviewRefusals(t *testing.T) {

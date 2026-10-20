@@ -276,7 +276,8 @@ SELECT
   COUNT(*) FILTER (WHERE i.kind = 'new_attribute_value')::bigint AS new_attribute_value_count,
   COUNT(*) FILTER (WHERE i.kind = 'source_missing')::bigint AS source_missing_count,
   COUNT(*) FILTER (WHERE i.notified_at IS NULL)::bigint AS unannounced_count,
-  MAX(i.created_at) FILTER (WHERE i.notified_at IS NULL)::timestamptz AS newest_unannounced_at
+  MAX(i.created_at) FILTER (WHERE i.notified_at IS NULL)::timestamptz AS newest_unannounced_at,
+  COALESCE(array_agg(i.id) FILTER (WHERE i.notified_at IS NULL), '{}')::uuid[] AS unannounced_ids
 FROM directory_review_org_states AS s
 JOIN organization_metadata AS o ON o.id = s.organization_id
 JOIN directory_review_items AS i ON i.organization_id = s.organization_id AND i.state = 'pending'
@@ -297,6 +298,7 @@ type ListDirectoryReviewEmailCandidatesRow struct {
 	SourceMissingCount     int64
 	UnannouncedCount       int64
 	NewestUnannouncedAt    pgtype.Timestamptz
+	UnannouncedIds         []uuid.UUID
 }
 
 // Organizations with pending items and review emails on, with what the email
@@ -322,6 +324,7 @@ func (q *Queries) ListDirectoryReviewEmailCandidates(ctx context.Context) ([]Lis
 			&i.SourceMissingCount,
 			&i.UnannouncedCount,
 			&i.NewestUnannouncedAt,
+			&i.UnannouncedIds,
 		); err != nil {
 			return nil, err
 		}
@@ -531,25 +534,35 @@ func (q *Queries) ListPendingDirectoryReviewItems(ctx context.Context, organizat
 	return items, nil
 }
 
+const lockDirectoryReviewSettings = `-- name: LockDirectoryReviewSettings :exec
+SELECT pg_advisory_xact_lock(hashtextextended('directory_review_settings:' || $1::text, 0))
+`
+
+// Serializes changes to one organization's directory review settings for the
+// rest of the transaction.
+func (q *Queries) LockDirectoryReviewSettings(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockDirectoryReviewSettings, organizationID)
+	return err
+}
+
 const markDirectoryReviewItemsAnnounced = `-- name: MarkDirectoryReviewItemsAnnounced :exec
 UPDATE directory_review_items
 SET notified_at = $1, updated_at = clock_timestamp()
 WHERE organization_id = $2
-  AND state = 'pending'
   AND notified_at IS NULL
-  AND created_at <= $3
+  AND id = ANY($3::uuid[])
 `
 
 type MarkDirectoryReviewItemsAnnouncedParams struct {
 	NotifiedAt     pgtype.Timestamptz
 	OrganizationID string
-	CreatedUpTo    pgtype.Timestamptz
+	Ids            []uuid.UUID
 }
 
-// Marks the pending items an announcement covered: those not yet announced
-// and created no later than the newest one it counted.
+// Marks exactly the items an announcement counted, so an item committed
+// after the count is announced by the next email instead.
 func (q *Queries) MarkDirectoryReviewItemsAnnounced(ctx context.Context, arg MarkDirectoryReviewItemsAnnouncedParams) error {
-	_, err := q.db.Exec(ctx, markDirectoryReviewItemsAnnounced, arg.NotifiedAt, arg.OrganizationID, arg.CreatedUpTo)
+	_, err := q.db.Exec(ctx, markDirectoryReviewItemsAnnounced, arg.NotifiedAt, arg.OrganizationID, arg.Ids)
 	return err
 }
 

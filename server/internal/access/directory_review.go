@@ -151,6 +151,11 @@ func (s *Service) UpdateDirectoryReviewSettings(ctx context.Context, payload *ge
 		return nil, err
 	}
 	reviews := reviewrepo.New(dbtx)
+	// Concurrent changes take turns, so each one reads the state the previous
+	// one left and none is mistaken for a no-op.
+	if err := reviews.LockDirectoryReviewSettings(ctx, orgID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock directory review settings").LogError(ctx, s.logger)
+	}
 	before, err := directoryReviewEmailsEnabled(ctx, reviews, orgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get directory review settings").LogError(ctx, s.logger)
