@@ -11,10 +11,15 @@ import {
 } from "../components/registerworkloadissuerform.js";
 
 export type RegisterWorkloadIssuerSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
 export type RegisterWorkloadIssuerSecurityOption2 = {
+  sessionHeaderGramSession: string;
+};
+
+export type RegisterWorkloadIssuerSecurityOption3 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
 };
@@ -22,6 +27,7 @@ export type RegisterWorkloadIssuerSecurityOption2 = {
 export type RegisterWorkloadIssuerSecurity = {
   option1?: RegisterWorkloadIssuerSecurityOption1 | undefined;
   option2?: RegisterWorkloadIssuerSecurityOption2 | undefined;
+  option3?: RegisterWorkloadIssuerSecurityOption3 | undefined;
 };
 
 export type RegisterWorkloadIssuerRequest = {
@@ -42,6 +48,7 @@ export type RegisterWorkloadIssuerRequest = {
 
 /** @internal */
 export type RegisterWorkloadIssuerSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
@@ -52,10 +59,12 @@ export const RegisterWorkloadIssuerSecurityOption1$outboundSchema:
     RegisterWorkloadIssuerSecurityOption1
   > = z.pipe(
     z.object({
+      projectSlugHeaderGramProject: z.string(),
       sessionHeaderGramSession: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
+        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
         sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
@@ -73,8 +82,7 @@ export function registerWorkloadIssuerSecurityOption1ToJSON(
 
 /** @internal */
 export type RegisterWorkloadIssuerSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -84,13 +92,11 @@ export const RegisterWorkloadIssuerSecurityOption2$outboundSchema:
     RegisterWorkloadIssuerSecurityOption2
   > = z.pipe(
     z.object({
-      apikeyHeaderGramKey: z.string(),
-      projectSlugHeaderGramProject: z.string(),
+      sessionHeaderGramSession: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+        sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
   );
@@ -106,9 +112,44 @@ export function registerWorkloadIssuerSecurityOption2ToJSON(
 }
 
 /** @internal */
+export type RegisterWorkloadIssuerSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const RegisterWorkloadIssuerSecurityOption3$outboundSchema:
+  z.ZodMiniType<
+    RegisterWorkloadIssuerSecurityOption3$Outbound,
+    RegisterWorkloadIssuerSecurityOption3
+  > = z.pipe(
+    z.object({
+      apikeyHeaderGramKey: z.string(),
+      projectSlugHeaderGramProject: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      });
+    }),
+  );
+
+export function registerWorkloadIssuerSecurityOption3ToJSON(
+  registerWorkloadIssuerSecurityOption3: RegisterWorkloadIssuerSecurityOption3,
+): string {
+  return JSON.stringify(
+    RegisterWorkloadIssuerSecurityOption3$outboundSchema.parse(
+      registerWorkloadIssuerSecurityOption3,
+    ),
+  );
+}
+
+/** @internal */
 export type RegisterWorkloadIssuerSecurity$Outbound = {
   Option1?: RegisterWorkloadIssuerSecurityOption1$Outbound | undefined;
   Option2?: RegisterWorkloadIssuerSecurityOption2$Outbound | undefined;
+  Option3?: RegisterWorkloadIssuerSecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -123,11 +164,15 @@ export const RegisterWorkloadIssuerSecurity$outboundSchema: z.ZodMiniType<
     option2: z.optional(
       z.lazy(() => RegisterWorkloadIssuerSecurityOption2$outboundSchema),
     ),
+    option3: z.optional(
+      z.lazy(() => RegisterWorkloadIssuerSecurityOption3$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
       option1: "Option1",
       option2: "Option2",
+      option3: "Option3",
     });
   }),
 );

@@ -11,10 +11,15 @@ import {
 } from "../components/createdevicejointokenrequestbody.js";
 
 export type CreateWorkloadDeviceJoinTokenSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
 export type CreateWorkloadDeviceJoinTokenSecurityOption2 = {
+  sessionHeaderGramSession: string;
+};
+
+export type CreateWorkloadDeviceJoinTokenSecurityOption3 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
 };
@@ -22,6 +27,7 @@ export type CreateWorkloadDeviceJoinTokenSecurityOption2 = {
 export type CreateWorkloadDeviceJoinTokenSecurity = {
   option1?: CreateWorkloadDeviceJoinTokenSecurityOption1 | undefined;
   option2?: CreateWorkloadDeviceJoinTokenSecurityOption2 | undefined;
+  option3?: CreateWorkloadDeviceJoinTokenSecurityOption3 | undefined;
 };
 
 export type CreateWorkloadDeviceJoinTokenRequest = {
@@ -42,6 +48,7 @@ export type CreateWorkloadDeviceJoinTokenRequest = {
 
 /** @internal */
 export type CreateWorkloadDeviceJoinTokenSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
@@ -52,10 +59,12 @@ export const CreateWorkloadDeviceJoinTokenSecurityOption1$outboundSchema:
     CreateWorkloadDeviceJoinTokenSecurityOption1
   > = z.pipe(
     z.object({
+      projectSlugHeaderGramProject: z.string(),
       sessionHeaderGramSession: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
+        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
         sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
@@ -74,8 +83,7 @@ export function createWorkloadDeviceJoinTokenSecurityOption1ToJSON(
 
 /** @internal */
 export type CreateWorkloadDeviceJoinTokenSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -85,13 +93,11 @@ export const CreateWorkloadDeviceJoinTokenSecurityOption2$outboundSchema:
     CreateWorkloadDeviceJoinTokenSecurityOption2
   > = z.pipe(
     z.object({
-      apikeyHeaderGramKey: z.string(),
-      projectSlugHeaderGramProject: z.string(),
+      sessionHeaderGramSession: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+        sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
   );
@@ -108,9 +114,45 @@ export function createWorkloadDeviceJoinTokenSecurityOption2ToJSON(
 }
 
 /** @internal */
+export type CreateWorkloadDeviceJoinTokenSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const CreateWorkloadDeviceJoinTokenSecurityOption3$outboundSchema:
+  z.ZodMiniType<
+    CreateWorkloadDeviceJoinTokenSecurityOption3$Outbound,
+    CreateWorkloadDeviceJoinTokenSecurityOption3
+  > = z.pipe(
+    z.object({
+      apikeyHeaderGramKey: z.string(),
+      projectSlugHeaderGramProject: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      });
+    }),
+  );
+
+export function createWorkloadDeviceJoinTokenSecurityOption3ToJSON(
+  createWorkloadDeviceJoinTokenSecurityOption3:
+    CreateWorkloadDeviceJoinTokenSecurityOption3,
+): string {
+  return JSON.stringify(
+    CreateWorkloadDeviceJoinTokenSecurityOption3$outboundSchema.parse(
+      createWorkloadDeviceJoinTokenSecurityOption3,
+    ),
+  );
+}
+
+/** @internal */
 export type CreateWorkloadDeviceJoinTokenSecurity$Outbound = {
   Option1?: CreateWorkloadDeviceJoinTokenSecurityOption1$Outbound | undefined;
   Option2?: CreateWorkloadDeviceJoinTokenSecurityOption2$Outbound | undefined;
+  Option3?: CreateWorkloadDeviceJoinTokenSecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -130,11 +172,17 @@ export const CreateWorkloadDeviceJoinTokenSecurity$outboundSchema:
           CreateWorkloadDeviceJoinTokenSecurityOption2$outboundSchema
         ),
       ),
+      option3: z.optional(
+        z.lazy(() =>
+          CreateWorkloadDeviceJoinTokenSecurityOption3$outboundSchema
+        ),
+      ),
     }),
     z.transform((v) => {
       return remap$(v, {
         option1: "Option1",
         option2: "Option2",
+        option3: "Option3",
       });
     }),
   );

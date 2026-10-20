@@ -49,6 +49,7 @@ export function buildWorkloadIdentitiesQuery(
 } {
   return {
     queryKey: queryKeyWorkloadIdentities({
+      projectScoped: request?.projectScoped,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -79,6 +80,7 @@ export function buildWorkloadIdentitiesQuery(
 
 export function queryKeyWorkloadIdentities(
   parameters: {
+    projectScoped?: boolean | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

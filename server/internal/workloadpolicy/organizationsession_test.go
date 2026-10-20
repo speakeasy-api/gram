@@ -62,6 +62,7 @@ func TestList_WithoutAProjectReadsTheOrganizationTierAlone(t *testing.T) {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 	})
 	require.NoError(t, err)
 
@@ -91,6 +92,7 @@ func TestRegisterIssuer_WithoutAProjectWritesTheOrganizationTier(t *testing.T) {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 	})
 	require.NoError(t, err)
 	require.Equal(t, issuer.ID, onlyIssuer(t, fromProject).ID)
@@ -156,6 +158,7 @@ func TestWithdrawIssuer_WithoutAProjectWithdrawsTheOrganizationTier(t *testing.T
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 		ID:               issuer.ID,
 	})
 	require.NoError(t, err)
@@ -246,6 +249,7 @@ func TestWithdrawSubject_WithoutAProjectWithdrawsTheOrganizationTier(t *testing.
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 		ID:               onlyAdmission(t, policy).ID,
 	})
 	require.NoError(t, err)
@@ -272,6 +276,7 @@ func TestList_SessionCarryingAProjectReadsTheOrganizationTierAlone(t *testing.T)
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 	})
 	require.NoError(t, err)
 
@@ -280,23 +285,9 @@ func TestList_SessionCarryingAProjectReadsTheOrganizationTierAlone(t *testing.T)
 	require.Empty(t, issuer.ProjectID)
 }
 
-func TestRegisterIssuer_SessionCarryingAProjectCannotWriteTheProjectTier(t *testing.T) {
+func TestRegisterIssuer_SessionCarryingAProjectWritesTheOrganizationTier(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-
-	_, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
-		SessionToken:           nil,
-		ApikeyToken:            nil,
-		ProjectSlugInput:       nil,
-		Name:                   "GitHub Actions",
-		Issuer:                 githubIssuer,
-		JwksURI:                githubJWKS,
-		Description:            nil,
-		AllowWildcardAdmission: new(true),
-		Tags:                   nil,
-		ProjectScoped:          true,
-	})
-	requireOopsCode(t, err, oops.CodeInvalid)
 
 	issuer := onlyIssuer(t, registerAnthropic(t, ctx, ti, true))
 	require.Empty(t, issuer.ProjectID)
@@ -325,6 +316,7 @@ func TestList_APIKeyWithAProjectReadsBothTiers(t *testing.T) {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 	})
 	require.NoError(t, err)
 

@@ -130,7 +130,7 @@ export class WorkloadIdentities extends ClientSDK {
    * list workloadIdentities
    *
    * @remarks
-   * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.
+   * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when an API key names a project, with the agent each subject resolves to. With project_scoped, read the selected project's tier alone. Requires workload:read.
    */
   async list(
     request?: ListWorkloadIdentitiesRequest | undefined,
@@ -168,7 +168,7 @@ export class WorkloadIdentities extends ClientSDK {
    * listTokenEndpoints workloadIdentities
    *
    * @remarks
-   * List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.
+   * List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. With project_scoped, list the selected project's alone. Requires workload:read.
    */
   async listTokenEndpoints(
     request?: ListWorkloadTokenEndpointsRequest | undefined,

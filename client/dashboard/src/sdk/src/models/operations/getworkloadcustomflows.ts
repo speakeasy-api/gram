@@ -6,10 +6,15 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 export type GetWorkloadCustomFlowsSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
 export type GetWorkloadCustomFlowsSecurityOption2 = {
+  sessionHeaderGramSession: string;
+};
+
+export type GetWorkloadCustomFlowsSecurityOption3 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
 };
@@ -17,6 +22,7 @@ export type GetWorkloadCustomFlowsSecurityOption2 = {
 export type GetWorkloadCustomFlowsSecurity = {
   option1?: GetWorkloadCustomFlowsSecurityOption1 | undefined;
   option2?: GetWorkloadCustomFlowsSecurityOption2 | undefined;
+  option3?: GetWorkloadCustomFlowsSecurityOption3 | undefined;
 };
 
 export type GetWorkloadCustomFlowsRequest = {
@@ -36,6 +42,7 @@ export type GetWorkloadCustomFlowsRequest = {
 
 /** @internal */
 export type GetWorkloadCustomFlowsSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
@@ -46,10 +53,12 @@ export const GetWorkloadCustomFlowsSecurityOption1$outboundSchema:
     GetWorkloadCustomFlowsSecurityOption1
   > = z.pipe(
     z.object({
+      projectSlugHeaderGramProject: z.string(),
       sessionHeaderGramSession: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
+        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
         sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
@@ -67,8 +76,7 @@ export function getWorkloadCustomFlowsSecurityOption1ToJSON(
 
 /** @internal */
 export type GetWorkloadCustomFlowsSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -78,13 +86,11 @@ export const GetWorkloadCustomFlowsSecurityOption2$outboundSchema:
     GetWorkloadCustomFlowsSecurityOption2
   > = z.pipe(
     z.object({
-      apikeyHeaderGramKey: z.string(),
-      projectSlugHeaderGramProject: z.string(),
+      sessionHeaderGramSession: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+        sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
   );
@@ -100,9 +106,44 @@ export function getWorkloadCustomFlowsSecurityOption2ToJSON(
 }
 
 /** @internal */
+export type GetWorkloadCustomFlowsSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const GetWorkloadCustomFlowsSecurityOption3$outboundSchema:
+  z.ZodMiniType<
+    GetWorkloadCustomFlowsSecurityOption3$Outbound,
+    GetWorkloadCustomFlowsSecurityOption3
+  > = z.pipe(
+    z.object({
+      apikeyHeaderGramKey: z.string(),
+      projectSlugHeaderGramProject: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      });
+    }),
+  );
+
+export function getWorkloadCustomFlowsSecurityOption3ToJSON(
+  getWorkloadCustomFlowsSecurityOption3: GetWorkloadCustomFlowsSecurityOption3,
+): string {
+  return JSON.stringify(
+    GetWorkloadCustomFlowsSecurityOption3$outboundSchema.parse(
+      getWorkloadCustomFlowsSecurityOption3,
+    ),
+  );
+}
+
+/** @internal */
 export type GetWorkloadCustomFlowsSecurity$Outbound = {
   Option1?: GetWorkloadCustomFlowsSecurityOption1$Outbound | undefined;
   Option2?: GetWorkloadCustomFlowsSecurityOption2$Outbound | undefined;
+  Option3?: GetWorkloadCustomFlowsSecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -117,11 +158,15 @@ export const GetWorkloadCustomFlowsSecurity$outboundSchema: z.ZodMiniType<
     option2: z.optional(
       z.lazy(() => GetWorkloadCustomFlowsSecurityOption2$outboundSchema),
     ),
+    option3: z.optional(
+      z.lazy(() => GetWorkloadCustomFlowsSecurityOption3$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
       option1: "Option1",
       option2: "Option2",
+      option3: "Option3",
     });
   }),
 );

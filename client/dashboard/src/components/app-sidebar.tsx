@@ -238,6 +238,7 @@ export function AppSidebar({
                 item: routes.remoteIdentityProviders,
                 ...accessFor(routes.remoteIdentityProviders),
               },
+              { item: routes.accessHub, ...accessFor(routes.accessHub) },
             ]}
           />
 

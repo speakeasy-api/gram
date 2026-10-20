@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"unicode/utf8"
 
 	workloadidentities "github.com/speakeasy-api/gram/server/gen/workload_identities"
@@ -18,7 +19,17 @@ import (
 
 // BuildListPayload builds the payload for the workloadIdentities list endpoint
 // from CLI flags.
-func BuildListPayload(workloadIdentitiesListSessionToken string, workloadIdentitiesListApikeyToken string, workloadIdentitiesListProjectSlugInput string) (*workloadidentities.ListPayload, error) {
+func BuildListPayload(workloadIdentitiesListProjectScoped string, workloadIdentitiesListSessionToken string, workloadIdentitiesListApikeyToken string, workloadIdentitiesListProjectSlugInput string) (*workloadidentities.ListPayload, error) {
+	var err error
+	var projectScoped bool
+	{
+		if workloadIdentitiesListProjectScoped != "" {
+			projectScoped, err = strconv.ParseBool(workloadIdentitiesListProjectScoped)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for projectScoped, must be BOOL")
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if workloadIdentitiesListSessionToken != "" {
@@ -38,6 +49,7 @@ func BuildListPayload(workloadIdentitiesListSessionToken string, workloadIdentit
 		}
 	}
 	v := &workloadidentities.ListPayload{}
+	v.ProjectScoped = projectScoped
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -105,7 +117,17 @@ func BuildGetCustomFlowsPayload(workloadIdentitiesGetCustomFlowsSessionToken str
 
 // BuildListTokenEndpointsPayload builds the payload for the workloadIdentities
 // listTokenEndpoints endpoint from CLI flags.
-func BuildListTokenEndpointsPayload(workloadIdentitiesListTokenEndpointsSessionToken string, workloadIdentitiesListTokenEndpointsApikeyToken string, workloadIdentitiesListTokenEndpointsProjectSlugInput string) (*workloadidentities.ListTokenEndpointsPayload, error) {
+func BuildListTokenEndpointsPayload(workloadIdentitiesListTokenEndpointsProjectScoped string, workloadIdentitiesListTokenEndpointsSessionToken string, workloadIdentitiesListTokenEndpointsApikeyToken string, workloadIdentitiesListTokenEndpointsProjectSlugInput string) (*workloadidentities.ListTokenEndpointsPayload, error) {
+	var err error
+	var projectScoped bool
+	{
+		if workloadIdentitiesListTokenEndpointsProjectScoped != "" {
+			projectScoped, err = strconv.ParseBool(workloadIdentitiesListTokenEndpointsProjectScoped)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for projectScoped, must be BOOL")
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if workloadIdentitiesListTokenEndpointsSessionToken != "" {
@@ -125,6 +147,7 @@ func BuildListTokenEndpointsPayload(workloadIdentitiesListTokenEndpointsSessionT
 		}
 	}
 	v := &workloadidentities.ListTokenEndpointsPayload{}
+	v.ProjectScoped = projectScoped
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -207,7 +230,7 @@ func BuildUpdateIssuerPayload(workloadIdentitiesUpdateIssuerBody string, workloa
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesUpdateIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.Name != nil {
@@ -246,15 +269,22 @@ func BuildUpdateIssuerPayload(workloadIdentitiesUpdateIssuerBody string, workloa
 		}
 	}
 	v := &workloadidentities.UpdateIssuerPayload{
-		ID:          body.ID,
-		Name:        body.Name,
-		JwksURI:     body.JwksURI,
-		Description: body.Description,
+		ID:            body.ID,
+		Name:          body.Name,
+		JwksURI:       body.JwksURI,
+		Description:   body.Description,
+		ProjectScoped: body.ProjectScoped,
 	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))
 		for i, val := range body.Tags {
 			v.Tags[i] = val
+		}
+	}
+	{
+		var zero bool
+		if v.ProjectScoped == zero {
+			v.ProjectScoped = false
 		}
 	}
 	v.SessionToken = sessionToken
@@ -266,7 +296,7 @@ func BuildUpdateIssuerPayload(workloadIdentitiesUpdateIssuerBody string, workloa
 
 // BuildWithdrawIssuerPayload builds the payload for the workloadIdentities
 // withdrawIssuer endpoint from CLI flags.
-func BuildWithdrawIssuerPayload(workloadIdentitiesWithdrawIssuerID string, workloadIdentitiesWithdrawIssuerSessionToken string, workloadIdentitiesWithdrawIssuerApikeyToken string, workloadIdentitiesWithdrawIssuerProjectSlugInput string) (*workloadidentities.WithdrawIssuerPayload, error) {
+func BuildWithdrawIssuerPayload(workloadIdentitiesWithdrawIssuerID string, workloadIdentitiesWithdrawIssuerProjectScoped string, workloadIdentitiesWithdrawIssuerSessionToken string, workloadIdentitiesWithdrawIssuerApikeyToken string, workloadIdentitiesWithdrawIssuerProjectSlugInput string) (*workloadidentities.WithdrawIssuerPayload, error) {
 	var err error
 	var id string
 	{
@@ -274,6 +304,15 @@ func BuildWithdrawIssuerPayload(workloadIdentitiesWithdrawIssuerID string, workl
 		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
 		if err != nil {
 			return nil, err
+		}
+	}
+	var projectScoped bool
+	{
+		if workloadIdentitiesWithdrawIssuerProjectScoped != "" {
+			projectScoped, err = strconv.ParseBool(workloadIdentitiesWithdrawIssuerProjectScoped)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for projectScoped, must be BOOL")
+			}
 		}
 	}
 	var sessionToken *string
@@ -296,6 +335,7 @@ func BuildWithdrawIssuerPayload(workloadIdentitiesWithdrawIssuerID string, workl
 	}
 	v := &workloadidentities.WithdrawIssuerPayload{}
 	v.ID = id
+	v.ProjectScoped = projectScoped
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -386,7 +426,7 @@ func BuildUpdateSubjectPayload(workloadIdentitiesUpdateSubjectBody string, workl
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesUpdateSubjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"project_scoped\": false,\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.AgentID != nil {
@@ -415,14 +455,21 @@ func BuildUpdateSubjectPayload(workloadIdentitiesUpdateSubjectBody string, workl
 		}
 	}
 	v := &workloadidentities.UpdateSubjectPayload{
-		ID:      body.ID,
-		Name:    body.Name,
-		AgentID: body.AgentID,
+		ID:            body.ID,
+		Name:          body.Name,
+		AgentID:       body.AgentID,
+		ProjectScoped: body.ProjectScoped,
 	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))
 		for i, val := range body.Tags {
 			v.Tags[i] = val
+		}
+	}
+	{
+		var zero bool
+		if v.ProjectScoped == zero {
+			v.ProjectScoped = false
 		}
 	}
 	v.SessionToken = sessionToken
@@ -434,7 +481,7 @@ func BuildUpdateSubjectPayload(workloadIdentitiesUpdateSubjectBody string, workl
 
 // BuildWithdrawSubjectPayload builds the payload for the workloadIdentities
 // withdrawSubject endpoint from CLI flags.
-func BuildWithdrawSubjectPayload(workloadIdentitiesWithdrawSubjectID string, workloadIdentitiesWithdrawSubjectSessionToken string, workloadIdentitiesWithdrawSubjectApikeyToken string, workloadIdentitiesWithdrawSubjectProjectSlugInput string) (*workloadidentities.WithdrawSubjectPayload, error) {
+func BuildWithdrawSubjectPayload(workloadIdentitiesWithdrawSubjectID string, workloadIdentitiesWithdrawSubjectProjectScoped string, workloadIdentitiesWithdrawSubjectSessionToken string, workloadIdentitiesWithdrawSubjectApikeyToken string, workloadIdentitiesWithdrawSubjectProjectSlugInput string) (*workloadidentities.WithdrawSubjectPayload, error) {
 	var err error
 	var id string
 	{
@@ -442,6 +489,15 @@ func BuildWithdrawSubjectPayload(workloadIdentitiesWithdrawSubjectID string, wor
 		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
 		if err != nil {
 			return nil, err
+		}
+	}
+	var projectScoped bool
+	{
+		if workloadIdentitiesWithdrawSubjectProjectScoped != "" {
+			projectScoped, err = strconv.ParseBool(workloadIdentitiesWithdrawSubjectProjectScoped)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for projectScoped, must be BOOL")
+			}
 		}
 	}
 	var sessionToken *string
@@ -464,6 +520,7 @@ func BuildWithdrawSubjectPayload(workloadIdentitiesWithdrawSubjectID string, wor
 	}
 	v := &workloadidentities.WithdrawSubjectPayload{}
 	v.ID = id
+	v.ProjectScoped = projectScoped
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

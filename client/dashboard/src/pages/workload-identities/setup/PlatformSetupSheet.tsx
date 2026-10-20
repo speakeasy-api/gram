@@ -52,6 +52,7 @@ import {
   type StepInputs,
 } from "./steps";
 import { tagsProblem } from "../tagLimits";
+import { useAccessHubScope } from "../accessHubScope";
 import { subjectRule, type VariableValues } from "./template";
 import { duplicateRuleMessage, existingRule } from "./platforms";
 
@@ -86,6 +87,7 @@ export function PlatformSetupSheet({
   onClose,
 }: PlatformSetupSheetProps): JSX.Element {
   const queryClient = useQueryClient();
+  const { projectScoped } = useAccessHubScope();
   const [values, setValues] = useState<VariableValues>({});
   const [agentId, setAgentId] = useState("");
   const [tags, setTags] = useState<string[]>([]);
@@ -118,7 +120,7 @@ export function PlatformSetupSheet({
     agents.length,
   );
 
-  const setupValues = useSetupValues();
+  const setupValues = useSetupValues(projectScoped);
 
   const rule = subjectRule(entry, values);
   const conflicting =
@@ -152,7 +154,7 @@ export function PlatformSetupSheet({
   const createAgent = useCreateAgentMutation({ onError: inlineError });
   const onCreateAgent = async (name: string): Promise<boolean> => {
     try {
-      // Organization-wide, like the access rule it is assigned to.
+      // Agents belong to the organization, whichever tier the rule is at.
       const agent = await createAgent.mutateAsync({
         request: { createAgentForm: { name } },
       });
@@ -191,6 +193,7 @@ export function PlatformSetupSheet({
               issuer: entry.issuer.value,
               jwksUri: entry.jwksUri.value,
               tags: [],
+              projectScoped,
             },
           },
         });
@@ -205,6 +208,7 @@ export function PlatformSetupSheet({
             matchKind: rule.matchKind,
             agentId,
             tags,
+            projectScoped,
           },
         },
       });

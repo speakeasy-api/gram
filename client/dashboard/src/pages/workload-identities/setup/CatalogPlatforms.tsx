@@ -1,12 +1,12 @@
 import { SourceSectionError } from "@/components/sources/SourceSectionError";
 import { Badge } from "@/components/ui/Badge";
 import { Card, Cards } from "@/components/ui/Card";
-import { useOrgRoutes } from "@/routes";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { Check } from "lucide-react";
 import { Link } from "react-router";
 import type { CatalogEntry } from "./definition";
 import { connectedIssuer, useCatalogEntries } from "./platforms";
+import { useAccessHubScope } from "../accessHubScope";
 import { isRelativePath } from "@/components/setup-steps/origin";
 
 /** The catalog tab: one card per platform, each opening its own page. */
@@ -52,7 +52,7 @@ function CatalogCard({
   entry: CatalogEntry;
   connected: boolean;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const { catalogPlatformHref } = useAccessHubScope();
   const available = entry.enabled && entry.setup !== undefined;
   const card = (
     <Card className="hover:border-foreground/30 h-full transition-colors">
@@ -84,7 +84,7 @@ function CatalogCard({
   // free: middle-click, open in a new tab, and a focus ring for the keyboard.
   return (
     <Link
-      to={orgRoutes.workloadIssuers.catalogPlatform.href(entry.key)}
+      to={catalogPlatformHref(entry.key)}
       className="block h-full focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       {card}

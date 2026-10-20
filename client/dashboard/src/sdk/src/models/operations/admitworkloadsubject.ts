@@ -11,10 +11,15 @@ import {
 } from "../components/admitworkloadsubjectform.js";
 
 export type AdmitWorkloadSubjectSecurityOption1 = {
+  projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
 export type AdmitWorkloadSubjectSecurityOption2 = {
+  sessionHeaderGramSession: string;
+};
+
+export type AdmitWorkloadSubjectSecurityOption3 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
 };
@@ -22,6 +27,7 @@ export type AdmitWorkloadSubjectSecurityOption2 = {
 export type AdmitWorkloadSubjectSecurity = {
   option1?: AdmitWorkloadSubjectSecurityOption1 | undefined;
   option2?: AdmitWorkloadSubjectSecurityOption2 | undefined;
+  option3?: AdmitWorkloadSubjectSecurityOption3 | undefined;
 };
 
 export type AdmitWorkloadSubjectRequest = {
@@ -42,6 +48,7 @@ export type AdmitWorkloadSubjectRequest = {
 
 /** @internal */
 export type AdmitWorkloadSubjectSecurityOption1$Outbound = {
+  "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
@@ -51,10 +58,12 @@ export const AdmitWorkloadSubjectSecurityOption1$outboundSchema: z.ZodMiniType<
   AdmitWorkloadSubjectSecurityOption1
 > = z.pipe(
   z.object({
+    projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -72,8 +81,7 @@ export function admitWorkloadSubjectSecurityOption1ToJSON(
 
 /** @internal */
 export type AdmitWorkloadSubjectSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
@@ -82,13 +90,11 @@ export const AdmitWorkloadSubjectSecurityOption2$outboundSchema: z.ZodMiniType<
   AdmitWorkloadSubjectSecurityOption2
 > = z.pipe(
   z.object({
-    apikeyHeaderGramKey: z.string(),
-    projectSlugHeaderGramProject: z.string(),
+    sessionHeaderGramSession: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
 );
@@ -104,9 +110,43 @@ export function admitWorkloadSubjectSecurityOption2ToJSON(
 }
 
 /** @internal */
+export type AdmitWorkloadSubjectSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const AdmitWorkloadSubjectSecurityOption3$outboundSchema: z.ZodMiniType<
+  AdmitWorkloadSubjectSecurityOption3$Outbound,
+  AdmitWorkloadSubjectSecurityOption3
+> = z.pipe(
+  z.object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
+  }),
+);
+
+export function admitWorkloadSubjectSecurityOption3ToJSON(
+  admitWorkloadSubjectSecurityOption3: AdmitWorkloadSubjectSecurityOption3,
+): string {
+  return JSON.stringify(
+    AdmitWorkloadSubjectSecurityOption3$outboundSchema.parse(
+      admitWorkloadSubjectSecurityOption3,
+    ),
+  );
+}
+
+/** @internal */
 export type AdmitWorkloadSubjectSecurity$Outbound = {
   Option1?: AdmitWorkloadSubjectSecurityOption1$Outbound | undefined;
   Option2?: AdmitWorkloadSubjectSecurityOption2$Outbound | undefined;
+  Option3?: AdmitWorkloadSubjectSecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -121,11 +161,15 @@ export const AdmitWorkloadSubjectSecurity$outboundSchema: z.ZodMiniType<
     option2: z.optional(
       z.lazy(() => AdmitWorkloadSubjectSecurityOption2$outboundSchema),
     ),
+    option3: z.optional(
+      z.lazy(() => AdmitWorkloadSubjectSecurityOption3$outboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
       option1: "Option1",
       option2: "Option2",
+      option3: "Option3",
     });
   }),
 );

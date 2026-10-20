@@ -79,7 +79,7 @@ func (s *Service) requireDeviceEnrollmentGrant(ctx context.Context, db accessrep
 }
 
 func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.CreateDeviceJoinTokenPayload) (*gen.WorkloadDeviceJoinToken, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, false)
 	if err != nil {
 		return nil, err
 	}

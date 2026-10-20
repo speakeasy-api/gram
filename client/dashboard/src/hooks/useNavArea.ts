@@ -26,6 +26,7 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "agent-management": "Identity",
   "mcp-sessions": "Identity",
   "remote-identity-providers": "Identity",
+  "access-hub": "Identity",
   // Security and Policy
   watchdog: "Security and Policy",
   "risk-policies": "Security and Policy",

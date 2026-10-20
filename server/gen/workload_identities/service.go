@@ -20,8 +20,9 @@ import (
 // admitted workload inherits its policy from.
 type Service interface {
 	// Read the whole trust policy: every trusted issuer and every admitted subject
-	// at the organization tier, plus the selected project's tier when the caller
-	// names a project, with the agent each subject resolves to. Requires
+	// at the organization tier, plus the selected project's tier when an API key
+	// names a project, with the agent each subject resolves to. With
+	// project_scoped, read the selected project's tier alone. Requires
 	// workload:read.
 	List(context.Context, *ListPayload) (res *WorkloadIdentityPolicy, err error)
 	// List the platforms the catalog offers to trust without looking anything up,
@@ -35,7 +36,8 @@ type Service interface {
 	// List the token endpoints an external platform can be pointed at: one per
 	// user session issuer in shared mode, at the organization level and in each
 	// project, with the issuer it serves. Issuers this deployment does not serve a
-	// shared authorization server for are left out. Requires workload:read.
+	// shared authorization server for are left out. With project_scoped, list the
+	// selected project's alone. Requires workload:read.
 	ListTokenEndpoints(context.Context, *ListTokenEndpointsPayload) (res *types.WorkloadTokenEndpoints, err error)
 	// Trust an external issuer to vouch for workloads. Requires workload:write.
 	// Returns the whole policy, so a caller replaces its view rather than merging
@@ -132,8 +134,7 @@ type AdmitSubjectPayload struct {
 	// The agent whose policy the admitted workload inherits.
 	AgentID string
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires a caller that names a project. Defaults to false.
 	ProjectScoped bool
 }
 
@@ -160,6 +161,9 @@ type GetCustomFlowsPayload struct {
 // ListPayload is the payload type of the workloadIdentities service list
 // method.
 type ListPayload struct {
+	// Read the selected project's tier alone instead of the organization's.
+	// Requires a caller that names a project. Defaults to false.
+	ProjectScoped    bool
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -176,6 +180,9 @@ type ListPlatformsPayload struct {
 // ListTokenEndpointsPayload is the payload type of the workloadIdentities
 // service listTokenEndpoints method.
 type ListTokenEndpointsPayload struct {
+	// Read the selected project's tier alone instead of the organization's.
+	// Requires a caller that names a project. Defaults to false.
+	ProjectScoped    bool
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -222,8 +229,7 @@ type RegisterIssuerPayload struct {
 	// tags of at most 64 characters each.
 	Tags []string
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires a caller that names a project. Defaults to false.
 	ProjectScoped bool
 }
 
@@ -247,6 +253,10 @@ type UpdateIssuerPayload struct {
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
 	Tags []string `json:"tags,omitzero"`
+	// Act on the selected project's tier instead of the organization's, so only a
+	// row that project owns can be named. Requires a caller that names a project.
+	// Defaults to false.
+	ProjectScoped bool
 }
 
 // UpdateSubjectPayload is the payload type of the workloadIdentities service
@@ -267,13 +277,21 @@ type UpdateSubjectPayload struct {
 	// The agent whose policy the admitted workload inherits. Shared with any
 	// admission of the same subject under the same issuer at the other tier.
 	AgentID *string
+	// Act on the selected project's tier instead of the organization's, so only a
+	// row that project owns can be named. Requires a caller that names a project.
+	// Defaults to false.
+	ProjectScoped bool
 }
 
 // WithdrawIssuerPayload is the payload type of the workloadIdentities service
 // withdrawIssuer method.
 type WithdrawIssuerPayload struct {
 	// The workload issuer id.
-	ID               string
+	ID string
+	// Act on the selected project's tier instead of the organization's, so only a
+	// row that project owns can be named. Requires a caller that names a project.
+	// Defaults to false.
+	ProjectScoped    bool
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -283,7 +301,11 @@ type WithdrawIssuerPayload struct {
 // withdrawSubject method.
 type WithdrawSubjectPayload struct {
 	// The admission id.
-	ID               string
+	ID string
+	// Act on the selected project's tier instead of the organization's, so only a
+	// row that project owns can be named. Requires a caller that names a project.
+	// Defaults to false.
+	ProjectScoped    bool
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

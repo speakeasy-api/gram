@@ -59,7 +59,7 @@ export type WorkloadIdentitiesQueryError =
  * list workloadIdentities
  *
  * @remarks
- * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.
+ * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when an API key names a project, with the agent each subject resolves to. With project_scoped, read the selected project's tier alone. Requires workload:read.
  */
 export function useWorkloadIdentities(
   request?: ListWorkloadIdentitiesRequest | undefined,
@@ -85,7 +85,7 @@ export function useWorkloadIdentities(
  * list workloadIdentities
  *
  * @remarks
- * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.
+ * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when an API key names a project, with the agent each subject resolves to. With project_scoped, read the selected project's tier alone. Requires workload:read.
  */
 export function useWorkloadIdentitiesSuspense(
   request?: ListWorkloadIdentitiesRequest | undefined,
@@ -114,6 +114,7 @@ export function setWorkloadIdentitiesData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      projectScoped?: boolean | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -130,6 +131,7 @@ export function invalidateWorkloadIdentities(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      projectScoped?: boolean | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

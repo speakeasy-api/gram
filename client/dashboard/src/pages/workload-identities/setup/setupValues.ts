@@ -63,14 +63,15 @@ export function groupTokenEndpoints(
 /**
  * The values a platform is pointed at: the token endpoint and issuer of the
  * user session issuer the operator selects, at the organization level or in a
- * project. Only issuers in shared mode serve one, at /oauth/usi/{id}.
+ * project. A project's Access Hub offers only that project's. Only issuers in
+ * shared mode serve one, at /oauth/usi/{id}.
  *
  * These come from the server's own derivation, the one its authorization
  * server metadata publishes, and are never assembled here: a second derivation
  * would drift from what a client discovers and show values that fail.
  */
-export function useSetupValues(): SetupValues {
-  const query = useWorkloadTokenEndpoints(undefined, undefined, {
+export function useSetupValues(projectScoped: boolean): SetupValues {
+  const query = useWorkloadTokenEndpoints({ projectScoped }, undefined, {
     throwOnError: false,
   });
   const [chosenId, setChosenId] = useState("");
@@ -92,6 +93,7 @@ export function useSetupValues(): SetupValues {
       query.isPending,
       query.isError,
       endpoints.length,
+      projectScoped,
     ),
     endpointGroups: groupTokenEndpoints(endpoints),
     selectedEndpointId: selected?.userSessionIssuerId ?? "",
@@ -103,11 +105,14 @@ function unavailableReason(
   isPending: boolean,
   isError: boolean,
   count: number,
+  projectScoped: boolean,
 ): string | null {
   if (isPending) return "Loading token endpoints…";
   if (isError) return "Speakeasy couldn't load its token endpoints. Try again.";
   if (count === 0) {
-    return "No user session issuer serves a shared token endpoint yet. Ask your Speakeasy contact to enable one for your organization or a project.";
+    return projectScoped
+      ? "No user session issuer in this project serves a shared token endpoint yet. Ask your Speakeasy contact to enable one for this project."
+      : "No user session issuer serves a shared token endpoint yet. Ask your Speakeasy contact to enable one for your organization or a project.";
   }
   return null;
 }

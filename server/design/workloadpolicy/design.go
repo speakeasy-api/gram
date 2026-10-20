@@ -18,7 +18,11 @@ import (
 var _ = Service("workloadIdentities", func() {
 	Description("Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.")
 	// The trust policy belongs to the organization, so a dashboard session
-	// needs no project. An API key is issued to a project and keeps naming one.
+	// needs no project. One that names a project resolves it, so a request can
+	// opt in to that project's tier with project_scoped; the project alone never
+	// moves a session off the organization tier. An API key is issued to a
+	// project and keeps naming one.
+	Security(security.Session, security.ProjectSlug)
 	Security(security.Session)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -26,9 +30,10 @@ var _ = Service("workloadIdentities", func() {
 	shared.DeclareErrorResponses()
 
 	Method("list", func() {
-		Description("Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.")
+		Description("Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when an API key names a project, with the agent each subject resolves to. With project_scoped, read the selected project's tier alone. Requires workload:read.")
 
 		Payload(func() {
+			projectScoped(projectScopedReadDescription)
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -38,6 +43,7 @@ var _ = Service("workloadIdentities", func() {
 
 		HTTP(func() {
 			GET("/rpc/workloadIdentities.list")
+			Param("project_scoped")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -98,9 +104,10 @@ var _ = Service("workloadIdentities", func() {
 	})
 
 	Method("listTokenEndpoints", func() {
-		Description("List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.")
+		Description("List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. With project_scoped, list the selected project's alone. Requires workload:read.")
 
 		Payload(func() {
+			projectScoped(projectScopedReadDescription)
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -110,6 +117,7 @@ var _ = Service("workloadIdentities", func() {
 
 		HTTP(func() {
 			GET("/rpc/workloadIdentities.listTokenEndpoints")
+			Param("project_scoped")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -178,6 +186,7 @@ var _ = Service("workloadIdentities", func() {
 			Attribute("id", String, "The workload issuer id.", func() {
 				Format(FormatUUID)
 			})
+			projectScoped(projectScopedTargetDescription)
 			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -189,6 +198,7 @@ var _ = Service("workloadIdentities", func() {
 		HTTP(func() {
 			DELETE("/rpc/workloadIdentities.withdrawIssuer")
 			Param("id")
+			Param("project_scoped")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -257,6 +267,7 @@ var _ = Service("workloadIdentities", func() {
 			Attribute("id", String, "The admission id.", func() {
 				Format(FormatUUID)
 			})
+			projectScoped(projectScopedTargetDescription)
 			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -268,6 +279,7 @@ var _ = Service("workloadIdentities", func() {
 		HTTP(func() {
 			DELETE("/rpc/workloadIdentities.withdrawSubject")
 			Param("id")
+			Param("project_scoped")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -383,7 +395,7 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.")
 	Attribute("description", String, "What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters after trimming.")
 	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.")
-	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.", func() {
+	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project. Defaults to false.", func() {
 		Default(false)
 	})
 
@@ -410,6 +422,7 @@ var UpdateWorkloadIssuerForm = Type("UpdateWorkloadIssuerForm", func() {
 		Meta("struct:tag:json", "tags,omitzero")
 	})
 
+	projectScoped(projectScopedTargetDescription)
 	Required("id")
 })
 
@@ -431,7 +444,7 @@ var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("project_scoped", Boolean, "Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.", func() {
+	Attribute("project_scoped", Boolean, "Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project. Defaults to false.", func() {
 		Default(false)
 	})
 
@@ -454,6 +467,7 @@ var UpdateWorkloadSubjectForm = Type("UpdateWorkloadSubjectForm", func() {
 		Format(FormatUUID)
 	})
 
+	projectScoped(projectScopedTargetDescription)
 	Required("id")
 })
 
@@ -704,3 +718,17 @@ var WorkloadTokenEndpoints = Type("WorkloadTokenEndpoints", func() {
 
 	Required("items")
 })
+
+const (
+	projectScopedReadDescription   = "Read the selected project's tier alone instead of the organization's. Requires a caller that names a project. Defaults to false."
+	projectScopedTargetDescription = "Act on the selected project's tier instead of the organization's, so only a row that project owns can be named. Requires a caller that names a project. Defaults to false."
+)
+
+// projectScoped declares the flag that moves a request to the selected
+// project's tier. A dashboard session sends a project header on organization
+// pages too, so the header alone never says which tier a request means.
+func projectScoped(description string) {
+	Attribute("project_scoped", Boolean, description, func() {
+		Default(false)
+	})
+}

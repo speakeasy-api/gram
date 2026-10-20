@@ -49,6 +49,7 @@ export function buildWorkloadTokenEndpointsQuery(
 } {
   return {
     queryKey: queryKeyWorkloadTokenEndpoints({
+      projectScoped: request?.projectScoped,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -79,6 +80,7 @@ export function buildWorkloadTokenEndpointsQuery(
 
 export function queryKeyWorkloadTokenEndpoints(
   parameters: {
+    projectScoped?: boolean | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

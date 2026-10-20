@@ -179,7 +179,7 @@ func TestRegisterIssuer_RequiresWorkloadWrite(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	_, err = ti.service.List(readOnly, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	_, err = ti.service.List(readOnly, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ProjectScoped: false})
 	require.NoError(t, err)
 }
 

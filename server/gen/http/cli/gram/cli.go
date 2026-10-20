@@ -5000,6 +5000,7 @@ func ParseEndpoint(
 		workloadIdentitiesFlags = flag.NewFlagSet("workload-identities", flag.ContinueOnError)
 
 		workloadIdentitiesListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
+		workloadIdentitiesListProjectScopedFlag    = workloadIdentitiesListFlags.String("project-scoped", "", "")
 		workloadIdentitiesListSessionTokenFlag     = workloadIdentitiesListFlags.String("session-token", "", "")
 		workloadIdentitiesListApikeyTokenFlag      = workloadIdentitiesListFlags.String("apikey-token", "", "")
 		workloadIdentitiesListProjectSlugInputFlag = workloadIdentitiesListFlags.String("project-slug-input", "", "")
@@ -5015,6 +5016,7 @@ func ParseEndpoint(
 		workloadIdentitiesGetCustomFlowsProjectSlugInputFlag = workloadIdentitiesGetCustomFlowsFlags.String("project-slug-input", "", "")
 
 		workloadIdentitiesListTokenEndpointsFlags                = flag.NewFlagSet("list-token-endpoints", flag.ExitOnError)
+		workloadIdentitiesListTokenEndpointsProjectScopedFlag    = workloadIdentitiesListTokenEndpointsFlags.String("project-scoped", "", "")
 		workloadIdentitiesListTokenEndpointsSessionTokenFlag     = workloadIdentitiesListTokenEndpointsFlags.String("session-token", "", "")
 		workloadIdentitiesListTokenEndpointsApikeyTokenFlag      = workloadIdentitiesListTokenEndpointsFlags.String("apikey-token", "", "")
 		workloadIdentitiesListTokenEndpointsProjectSlugInputFlag = workloadIdentitiesListTokenEndpointsFlags.String("project-slug-input", "", "")
@@ -5033,6 +5035,7 @@ func ParseEndpoint(
 
 		workloadIdentitiesWithdrawIssuerFlags                = flag.NewFlagSet("withdraw-issuer", flag.ExitOnError)
 		workloadIdentitiesWithdrawIssuerIDFlag               = workloadIdentitiesWithdrawIssuerFlags.String("id", "REQUIRED", "")
+		workloadIdentitiesWithdrawIssuerProjectScopedFlag    = workloadIdentitiesWithdrawIssuerFlags.String("project-scoped", "", "")
 		workloadIdentitiesWithdrawIssuerSessionTokenFlag     = workloadIdentitiesWithdrawIssuerFlags.String("session-token", "", "")
 		workloadIdentitiesWithdrawIssuerApikeyTokenFlag      = workloadIdentitiesWithdrawIssuerFlags.String("apikey-token", "", "")
 		workloadIdentitiesWithdrawIssuerProjectSlugInputFlag = workloadIdentitiesWithdrawIssuerFlags.String("project-slug-input", "", "")
@@ -5051,6 +5054,7 @@ func ParseEndpoint(
 
 		workloadIdentitiesWithdrawSubjectFlags                = flag.NewFlagSet("withdraw-subject", flag.ExitOnError)
 		workloadIdentitiesWithdrawSubjectIDFlag               = workloadIdentitiesWithdrawSubjectFlags.String("id", "REQUIRED", "")
+		workloadIdentitiesWithdrawSubjectProjectScopedFlag    = workloadIdentitiesWithdrawSubjectFlags.String("project-scoped", "", "")
 		workloadIdentitiesWithdrawSubjectSessionTokenFlag     = workloadIdentitiesWithdrawSubjectFlags.String("session-token", "", "")
 		workloadIdentitiesWithdrawSubjectApikeyTokenFlag      = workloadIdentitiesWithdrawSubjectFlags.String("apikey-token", "", "")
 		workloadIdentitiesWithdrawSubjectProjectSlugInputFlag = workloadIdentitiesWithdrawSubjectFlags.String("project-slug-input", "", "")
@@ -12504,7 +12508,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list":
 				endpoint = c.List()
-				data, err = workloadidentitiesc.BuildListPayload(*workloadIdentitiesListSessionTokenFlag, *workloadIdentitiesListApikeyTokenFlag, *workloadIdentitiesListProjectSlugInputFlag)
+				data, err = workloadidentitiesc.BuildListPayload(*workloadIdentitiesListProjectScopedFlag, *workloadIdentitiesListSessionTokenFlag, *workloadIdentitiesListApikeyTokenFlag, *workloadIdentitiesListProjectSlugInputFlag)
 			case "list-platforms":
 				endpoint = c.ListPlatforms()
 				data, err = workloadidentitiesc.BuildListPlatformsPayload(*workloadIdentitiesListPlatformsSessionTokenFlag, *workloadIdentitiesListPlatformsApikeyTokenFlag, *workloadIdentitiesListPlatformsProjectSlugInputFlag)
@@ -12513,7 +12517,7 @@ func ParseEndpoint(
 				data, err = workloadidentitiesc.BuildGetCustomFlowsPayload(*workloadIdentitiesGetCustomFlowsSessionTokenFlag, *workloadIdentitiesGetCustomFlowsApikeyTokenFlag, *workloadIdentitiesGetCustomFlowsProjectSlugInputFlag)
 			case "list-token-endpoints":
 				endpoint = c.ListTokenEndpoints()
-				data, err = workloadidentitiesc.BuildListTokenEndpointsPayload(*workloadIdentitiesListTokenEndpointsSessionTokenFlag, *workloadIdentitiesListTokenEndpointsApikeyTokenFlag, *workloadIdentitiesListTokenEndpointsProjectSlugInputFlag)
+				data, err = workloadidentitiesc.BuildListTokenEndpointsPayload(*workloadIdentitiesListTokenEndpointsProjectScopedFlag, *workloadIdentitiesListTokenEndpointsSessionTokenFlag, *workloadIdentitiesListTokenEndpointsApikeyTokenFlag, *workloadIdentitiesListTokenEndpointsProjectSlugInputFlag)
 			case "register-issuer":
 				endpoint = c.RegisterIssuer()
 				data, err = workloadidentitiesc.BuildRegisterIssuerPayload(*workloadIdentitiesRegisterIssuerBodyFlag, *workloadIdentitiesRegisterIssuerSessionTokenFlag, *workloadIdentitiesRegisterIssuerApikeyTokenFlag, *workloadIdentitiesRegisterIssuerProjectSlugInputFlag)
@@ -12522,7 +12526,7 @@ func ParseEndpoint(
 				data, err = workloadidentitiesc.BuildUpdateIssuerPayload(*workloadIdentitiesUpdateIssuerBodyFlag, *workloadIdentitiesUpdateIssuerSessionTokenFlag, *workloadIdentitiesUpdateIssuerApikeyTokenFlag, *workloadIdentitiesUpdateIssuerProjectSlugInputFlag)
 			case "withdraw-issuer":
 				endpoint = c.WithdrawIssuer()
-				data, err = workloadidentitiesc.BuildWithdrawIssuerPayload(*workloadIdentitiesWithdrawIssuerIDFlag, *workloadIdentitiesWithdrawIssuerSessionTokenFlag, *workloadIdentitiesWithdrawIssuerApikeyTokenFlag, *workloadIdentitiesWithdrawIssuerProjectSlugInputFlag)
+				data, err = workloadidentitiesc.BuildWithdrawIssuerPayload(*workloadIdentitiesWithdrawIssuerIDFlag, *workloadIdentitiesWithdrawIssuerProjectScopedFlag, *workloadIdentitiesWithdrawIssuerSessionTokenFlag, *workloadIdentitiesWithdrawIssuerApikeyTokenFlag, *workloadIdentitiesWithdrawIssuerProjectSlugInputFlag)
 			case "admit-subject":
 				endpoint = c.AdmitSubject()
 				data, err = workloadidentitiesc.BuildAdmitSubjectPayload(*workloadIdentitiesAdmitSubjectBodyFlag, *workloadIdentitiesAdmitSubjectSessionTokenFlag, *workloadIdentitiesAdmitSubjectApikeyTokenFlag, *workloadIdentitiesAdmitSubjectProjectSlugInputFlag)
@@ -12531,7 +12535,7 @@ func ParseEndpoint(
 				data, err = workloadidentitiesc.BuildUpdateSubjectPayload(*workloadIdentitiesUpdateSubjectBodyFlag, *workloadIdentitiesUpdateSubjectSessionTokenFlag, *workloadIdentitiesUpdateSubjectApikeyTokenFlag, *workloadIdentitiesUpdateSubjectProjectSlugInputFlag)
 			case "withdraw-subject":
 				endpoint = c.WithdrawSubject()
-				data, err = workloadidentitiesc.BuildWithdrawSubjectPayload(*workloadIdentitiesWithdrawSubjectIDFlag, *workloadIdentitiesWithdrawSubjectSessionTokenFlag, *workloadIdentitiesWithdrawSubjectApikeyTokenFlag, *workloadIdentitiesWithdrawSubjectProjectSlugInputFlag)
+				data, err = workloadidentitiesc.BuildWithdrawSubjectPayload(*workloadIdentitiesWithdrawSubjectIDFlag, *workloadIdentitiesWithdrawSubjectProjectScopedFlag, *workloadIdentitiesWithdrawSubjectSessionTokenFlag, *workloadIdentitiesWithdrawSubjectApikeyTokenFlag, *workloadIdentitiesWithdrawSubjectProjectSlugInputFlag)
 			case "create-device-join-token":
 				endpoint = c.CreateDeviceJoinToken()
 				data, err = workloadidentitiesc.BuildCreateDeviceJoinTokenPayload(*workloadIdentitiesCreateDeviceJoinTokenBodyFlag, *workloadIdentitiesCreateDeviceJoinTokenSessionTokenFlag, *workloadIdentitiesCreateDeviceJoinTokenApikeyTokenFlag, *workloadIdentitiesCreateDeviceJoinTokenProjectSlugInputFlag)
@@ -34052,10 +34056,10 @@ func workloadIdentitiesUsage() {
 	fmt.Fprintln(os.Stderr, `Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] workload-identities COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list: Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `    list: Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when an API key names a project, with the agent each subject resolves to. With project_scoped, read the selected project's tier alone. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    list-platforms: List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    get-custom-flows: Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.`)
-	fmt.Fprintln(os.Stderr, `    list-token-endpoints: List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `    list-token-endpoints: List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. With project_scoped, list the selected project's alone. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    register-issuer: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
 	fmt.Fprintln(os.Stderr, `    update-issuer: Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
 	fmt.Fprintln(os.Stderr, `    withdraw-issuer: Stop trusting an issuer. Every subject admitted under it is withdrawn in the same transaction, so no admission can outlive the issuer it names. Requires workload:write.`)
@@ -34071,6 +34075,7 @@ func workloadIdentitiesUsage() {
 func workloadIdentitiesListUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -project-scoped BOOL")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -34078,16 +34083,17 @@ func workloadIdentitiesListUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when an API key names a project, with the agent each subject resolves to. With project_scoped, read the selected project's tier alone. Requires workload:read.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -project-scoped BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities list --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities list --project-scoped false --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesListPlatformsUsage() {
@@ -34137,6 +34143,7 @@ func workloadIdentitiesGetCustomFlowsUsage() {
 func workloadIdentitiesListTokenEndpointsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities list-token-endpoints", os.Args[0])
+	fmt.Fprint(os.Stderr, " -project-scoped BOOL")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -34144,16 +34151,17 @@ func workloadIdentitiesListTokenEndpointsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. With project_scoped, list the selected project's alone. Requires workload:read.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -project-scoped BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities list-token-endpoints --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities list-token-endpoints --project-scoped false --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesRegisterIssuerUsage() {
@@ -34201,13 +34209,14 @@ func workloadIdentitiesUpdateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities update-issuer --body '{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities update-issuer --body '{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesWithdrawIssuerUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities withdraw-issuer", os.Args[0])
 	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -project-scoped BOOL")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -34219,13 +34228,14 @@ func workloadIdentitiesWithdrawIssuerUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-scoped BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities withdraw-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities withdraw-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --project-scoped false --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesAdmitSubjectUsage() {
@@ -34273,13 +34283,14 @@ func workloadIdentitiesUpdateSubjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities update-subject --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities update-subject --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"project_scoped\": false,\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesWithdrawSubjectUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities withdraw-subject", os.Args[0])
 	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -project-scoped BOOL")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -34291,13 +34302,14 @@ func workloadIdentitiesWithdrawSubjectUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-scoped BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities withdraw-subject --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities withdraw-subject --id \"550e8400-e29b-41d4-a716-446655440000\" --project-scoped false --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesCreateDeviceJoinTokenUsage() {

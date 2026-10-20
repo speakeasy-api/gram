@@ -14,7 +14,7 @@ import { Column, Table } from "@/components/ui/Table";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { usePagedRows } from "@/components/ui/TablePagination/usePagedRows";
 import { Text } from "@/components/ui/Text";
-import { useOrgRoutes } from "@/routes";
+import { useAccessHubScope } from "./accessHubScope";
 import { admissionMatches } from "./search";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
@@ -186,7 +186,7 @@ export function IssuerDetail({
   issuerId: string;
   catalog?: CatalogPlatformContext;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const { projectScoped, hubHref } = useAccessHubScope();
   const queryClient = useQueryClient();
   const [admitOpen, setAdmitOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
@@ -198,7 +198,9 @@ export function IssuerDetail({
   const [editingAdmission, setEditingAdmission] =
     useState<WorkloadAdmission | null>(null);
   const [editAdmissionOpen, setEditAdmissionOpen] = useState(false);
-  const { data, isPending, isError, refetch } = useWorkloadIdentities({});
+  const { data, isPending, isError, refetch } = useWorkloadIdentities({
+    projectScoped,
+  });
   // throwOnError because the whole agents service 404s where the agent
   // management rollout is off, and the global query policy suppresses only 401
   // and 403 — left to throw it takes this page down with it.
@@ -377,7 +379,7 @@ export function IssuerDetail({
   // Withdrawn elsewhere, or a stale link. Send them back to the list rather than
   // rendering a page about a row that is gone.
   if (!isPending && issuer === undefined) {
-    return <Navigate to={orgRoutes.workloadIssuers.href()} replace />;
+    return <Navigate to={hubHref()} replace />;
   }
 
   const columns: Column<WorkloadAdmission>[] = [
@@ -579,6 +581,7 @@ export function IssuerDetail({
         updateWorkloadIssuerForm: {
           id: issuer.id,
           ...changedIssuerFields(baseline, values),
+          projectScoped,
         },
       },
     });
@@ -594,6 +597,7 @@ export function IssuerDetail({
         updateWorkloadSubjectForm: {
           id: editingAdmission.id,
           ...changedAdmissionFields(baseline, values),
+          projectScoped,
         },
       },
     });
@@ -610,6 +614,7 @@ export function IssuerDetail({
           name: label.length > 0 ? label : undefined,
           tags: values.tags,
           agentId: values.agentId,
+          projectScoped,
         },
       },
     });
@@ -655,7 +660,9 @@ export function IssuerDetail({
           if (!open) setRemoving(null);
         }}
         onConfirm={(admission) =>
-          withdrawSubject.mutate({ request: { id: admission.id } })
+          withdrawSubject.mutate({
+            request: { id: admission.id, projectScoped },
+          })
         }
         isPending={withdrawSubject.isPending}
       />
@@ -664,7 +671,7 @@ export function IssuerDetail({
         open={withdrawOpen}
         onOpenChange={setWithdrawOpen}
         onConfirm={(target) =>
-          withdrawIssuer.mutate({ request: { id: target.id } })
+          withdrawIssuer.mutate({ request: { id: target.id, projectScoped } })
         }
         isPending={withdrawIssuer.isPending}
         machineCount={admissions.length}

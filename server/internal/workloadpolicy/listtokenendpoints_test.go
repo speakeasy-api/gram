@@ -25,6 +25,7 @@ func listTokenEndpointsPayload() *gen.ListTokenEndpointsPayload {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		ProjectScoped:    false,
 	}
 }
 

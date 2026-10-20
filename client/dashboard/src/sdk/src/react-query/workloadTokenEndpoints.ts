@@ -59,7 +59,7 @@ export type WorkloadTokenEndpointsQueryError =
  * listTokenEndpoints workloadIdentities
  *
  * @remarks
- * List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.
+ * List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. With project_scoped, list the selected project's alone. Requires workload:read.
  */
 export function useWorkloadTokenEndpoints(
   request?: ListWorkloadTokenEndpointsRequest | undefined,
@@ -88,7 +88,7 @@ export function useWorkloadTokenEndpoints(
  * listTokenEndpoints workloadIdentities
  *
  * @remarks
- * List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.
+ * List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. With project_scoped, list the selected project's alone. Requires workload:read.
  */
 export function useWorkloadTokenEndpointsSuspense(
   request?: ListWorkloadTokenEndpointsRequest | undefined,
@@ -117,6 +117,7 @@ export function setWorkloadTokenEndpointsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      projectScoped?: boolean | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -133,6 +134,7 @@ export function invalidateWorkloadTokenEndpoints(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      projectScoped?: boolean | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

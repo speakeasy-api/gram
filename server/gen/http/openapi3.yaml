@@ -86006,6 +86006,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -86109,6 +86111,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -86206,6 +86210,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -86217,9 +86223,17 @@ paths:
                 name: WorkloadCustomFlows
     /rpc/workloadIdentities.list:
         get:
-            description: 'Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project''s tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.'
+            description: 'Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project''s tier when an API key names a project, with the agent each subject resolves to. With project_scoped, read the selected project''s tier alone. Requires workload:read.'
             operationId: listWorkloadIdentities
             parameters:
+                - allowEmptyValue: true
+                  description: Read the selected project's tier alone instead of the organization's. Requires a caller that names a project. Defaults to false.
+                  in: query
+                  name: project_scoped
+                  schema:
+                    default: false
+                    description: Read the selected project's tier alone instead of the organization's. Requires a caller that names a project. Defaults to false.
+                    type: boolean
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -86303,6 +86317,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -86400,6 +86416,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -86411,9 +86429,17 @@ paths:
                 name: WorkloadPlatforms
     /rpc/workloadIdentities.listTokenEndpoints:
         get:
-            description: 'List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.'
+            description: 'List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. With project_scoped, list the selected project''s alone. Requires workload:read.'
             operationId: listWorkloadTokenEndpoints
             parameters:
+                - allowEmptyValue: true
+                  description: Read the selected project's tier alone instead of the organization's. Requires a caller that names a project. Defaults to false.
+                  in: query
+                  name: project_scoped
+                  schema:
+                    default: false
+                    description: Read the selected project's tier alone instead of the organization's. Requires a caller that names a project. Defaults to false.
+                    type: boolean
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -86497,6 +86523,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -86675,6 +86703,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -86778,6 +86808,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -86881,6 +86913,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -86905,6 +86939,14 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
+                  description: Act on the selected project's tier instead of the organization's, so only a row that project owns can be named. Requires a caller that names a project. Defaults to false.
+                  in: query
+                  name: project_scoped
+                  schema:
+                    default: false
+                    description: Act on the selected project's tier instead of the organization's, so only a row that project owns can be named. Requires a caller that names a project. Defaults to false.
+                    type: boolean
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -86987,6 +87029,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -87011,6 +87055,14 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
+                  description: Act on the selected project's tier instead of the organization's, so only a row that project owns can be named. Requires a caller that names a project. Defaults to false.
+                  in: query
+                  name: project_scoped
+                  schema:
+                    default: false
+                    description: Act on the selected project's tier instead of the organization's, so only a row that project owns can be named. Requires a caller that names a project. Defaults to false.
+                    type: boolean
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -87093,6 +87145,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
@@ -90383,7 +90437,7 @@ components:
                     minLength: 1
                 project_scoped:
                     type: boolean
-                    description: Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+                    description: Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project. Defaults to false.
                     default: false
                 subject:
                     type: string
@@ -110036,7 +110090,7 @@ components:
                     maxLength: 100
                 project_scoped:
                     type: boolean
-                    description: Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+                    description: Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project. Defaults to false.
                     default: false
                 tags:
                     type: array
@@ -122773,6 +122827,10 @@ components:
                     description: The label an operator works with. Unique within its tier.
                     minLength: 1
                     maxLength: 100
+                project_scoped:
+                    type: boolean
+                    description: Act on the selected project's tier instead of the organization's, so only a row that project owns can be named. Requires a caller that names a project. Defaults to false.
+                    default: false
                 tags:
                     type: array
                     items:
@@ -122795,6 +122853,10 @@ components:
                 name:
                     type: string
                     description: Optional label, for platforms whose subjects are not self-describing. Trimmed on write; blank clears it.
+                project_scoped:
+                    type: boolean
+                    description: Act on the selected project's tier instead of the organization's, so only a row that project owns can be named. Requires a caller that names a project. Defaults to false.
+                    default: false
                 tags:
                     type: array
                     items:

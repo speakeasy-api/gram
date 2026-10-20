@@ -98,6 +98,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         route: routes.remoteIdentityProviders,
         scope: ["org:read", "org:admin"],
       },
+      { route: routes.accessHub, scope: ["workload:read", "workload:write"] },
       {
         route: routes.playground,
         scope: ["mcp:read", "mcp:write", "mcp:connect"],
