@@ -56,7 +56,11 @@ export class InstallCommandUnavailable extends Error {
  */
 export function useCreateDeviceInstallCommand(): CreateDeviceInstallCommand | null {
   const flag = useFeatureFlag(FEATURE_FLAGS.deviceBootstrapInstall);
-  const mutation = useCreateWorkloadDeviceInstallCommandMutation();
+  // The panel shows its own failures, and a 404 is not one at all, so the
+  // global "Request failed" toast is opted out of.
+  const mutation = useCreateWorkloadDeviceInstallCommandMutation({
+    onError: () => undefined,
+  });
   const { mutateAsync } = mutation;
   const create = useCallback<CreateDeviceInstallCommand>(
     async ({ agentId, hooksProjectSlug, expiresInSeconds }) => {

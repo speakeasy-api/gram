@@ -134,14 +134,9 @@ function InstallCommand({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1">
-        <Text className="font-medium">Run this on the box</Text>
-        <Text muted small>
-          On Linux with systemd, from the account that runs your AI tools. It
-          installs the Speakeasy device service and enrolls the box as this
-          agent.
-        </Text>
-      </div>
+      <Text muted small>
+        Run it on Linux with systemd, from the account that runs your AI tools.
+      </Text>
       {command ? (
         <>
           <CodeBlock
@@ -150,8 +145,8 @@ function InstallCommand({
             language="shell"
           />
           <Text muted small>
-            Single use, and it <Countdown to={command.codeExpiresAt} />. The
-            bootstrap token inside it <Countdown to={command.tokenExpiresAt} />.{" "}
+            Works once. The command <Countdown to={command.codeExpiresAt} />;
+            the bootstrap token in it <Countdown to={command.tokenExpiresAt} />.{" "}
             <button
               type="button"
               className="underline"
@@ -222,7 +217,10 @@ export function ManualSetup({
   onTokenCreated: (watched: WatchedToken) => void;
   defaultOpen?: boolean;
 }): JSX.Element {
-  const create = useCreateWorkloadDeviceJoinTokenMutation();
+  // Failures are shown under the button, not as a toast.
+  const create = useCreateWorkloadDeviceJoinTokenMutation({
+    onError: () => undefined,
+  });
   // Held only while this panel is mounted. Nothing writes it to the query
   // cache or to storage, and the server keeps only its hash.
   const [issued, setIssued] = useState<{

@@ -282,7 +282,7 @@ describe("the install command", () => {
       />,
     );
     await waitFor(() =>
-      expect(screen.queryByText("Run this on the box")).toBeNull(),
+      expect(screen.queryByText(/Run it on Linux/)).toBeNull(),
     );
     expect(screen.queryByRole("alert")).toBeNull();
     expect(

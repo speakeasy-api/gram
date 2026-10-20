@@ -128,7 +128,9 @@ function AgentBootstrapTokensContent({
     null,
   );
 
+  // Both confirm dialogs show their own failure, so no global toast.
   const revoke = useRevokeWorkloadDeviceJoinTokenMutation({
+    onError: () => undefined,
     onSuccess: async () => {
       await invalidateAllWorkloadDeviceJoinTokens(queryClient);
       setRevoking(null);
@@ -136,6 +138,7 @@ function AgentBootstrapTokensContent({
     },
   });
   const withdraw = useWithdrawWorkloadSubjectMutation({
+    onError: () => undefined,
     onSuccess: async () => {
       await invalidateAllWorkloadIdentities(queryClient, {
         refetchType: "all",
@@ -269,6 +272,8 @@ function AgentBootstrapTokensContent({
             columns={columns}
             data={rows}
             rowKey={(token) => token.id}
+            // The panel already draws the frame.
+            className="border-0"
             hasMore={tokens.hasNextPage}
             onLoadMore={async () => {
               await tokens.fetchNextPage();
@@ -405,7 +410,9 @@ export function IssueBootstrapTokenSheet({
     hooksProject !== undefined &&
     acceptsHooks(policy, organization.id, hooksProject.id);
 
-  const createGrant = useAgentsCreatePolicyGrantMutation();
+  const createGrant = useAgentsCreatePolicyGrantMutation({
+    onError: () => undefined,
+  });
   const [granting, setGranting] = useState(false);
   const [grantError, setGrantError] = useState<string | null>(null);
   const grant = async (
