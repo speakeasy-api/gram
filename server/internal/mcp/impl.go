@@ -528,7 +528,7 @@ func NewService(
 		auth:                      auth.New(logger, db, sessions, authzEngine),
 		env:                       env,
 		serverURL:                 serverURL,
-		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil},
+		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil, OrganizationHosts: nil},
 		authenticationHostBaseURL: "",
 		platformHosts:             nil,
 		openAIAppsChallengeToken:  "",

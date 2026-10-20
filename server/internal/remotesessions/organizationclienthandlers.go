@@ -387,6 +387,10 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		return nil, err
 	}
 
+	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, owner)
+	if err != nil {
+		return nil, err
+	}
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:                       clientProjectID,
 		OrganizationID:                  conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
@@ -402,7 +406,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		LegacyCallbackUrl:               false,
 		JsonWebKeySetID:                 keySetID,
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		CallbackBaseUrl:                 s.newClientCallbackBaseURL(owner),
+		CallbackBaseUrl:                 callbackBaseURL,
 		GrantTypes:                      clientCreateGrantTypes(owner),
 		CredentialOwner:                 conv.ToPGText(string(owner)),
 	})
@@ -551,7 +555,10 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		return nil, oops.E(oops.CodeUnexpected, err, "generate client id").LogError(ctx, logger)
 	}
 
-	callbackBaseURL := s.origins.NewClientBaseURL(true)
+	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, CredentialOwnerSubject)
+	if err != nil {
+		return nil, err
+	}
 	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    clientID,
 		ProjectID:             clientProjectID,

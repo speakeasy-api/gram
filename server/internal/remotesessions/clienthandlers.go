@@ -172,7 +172,7 @@ func lockUserSessionIssuers(
 
 // GetNewClientCallbackURL returns the redirect URI a client created now in the
 // caller's project registers upstream. Every project client is
-// organization-owned, so it adopts the registration origin when one is set.
+// organization-owned, so it adopts its organization's resolved origin.
 func (s *Service) GetNewClientCallbackURL(ctx context.Context, _ *gen.GetNewClientCallbackURLPayload) (*gen.NewClientCallbackURLResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -183,7 +183,11 @@ func (s *Service) GetNewClientCallbackURL(ctx context.Context, _ *gen.GetNewClie
 		return nil, err
 	}
 
-	return &gen.NewClientCallbackURLResult{CallbackURL: RemoteLoginCallbackURL(s.origins.ForNewClient(true))}, nil
+	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, CredentialOwnerSubject)
+	if err != nil {
+		return nil, err
+	}
+	return &gen.NewClientCallbackURLResult{CallbackURL: RemoteLoginCallbackURL(s.origins.ForClient(callbackBaseURL))}, nil
 }
 
 // clientView renders a client for an API response, including the redirect
@@ -210,12 +214,12 @@ func (s *Service) clientCallbackURL(row repo.RemoteSessionClient) *string {
 
 // newClientCallbackBaseURL is the callback_base_url a client created now
 // records. A self client records none, because it has no callback.
-func (s *Service) newClientCallbackBaseURL(owner CredentialOwner) pgtype.Text {
+func (s *Service) newClientCallbackBaseURL(ctx context.Context, organizationID string, owner CredentialOwner) (pgtype.Text, error) {
 	if owner == CredentialOwnerSelf {
-		return pgtype.Text{String: "", Valid: false}
+		return pgtype.Text{String: "", Valid: false}, nil
 	}
 
-	return s.origins.NewClientBaseURL(true)
+	return s.origins.ResolveNewClientBaseURL(ctx, s.db, organizationID)
 }
 
 func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.CreateRemoteSessionClientPayload) (*types.RemoteSessionClient, error) {
@@ -303,6 +307,10 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, err
 	}
 
+	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, owner)
+	if err != nil {
+		return nil, err
+	}
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:                       conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:                  conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
@@ -318,7 +326,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		LegacyCallbackUrl:               false,
 		JsonWebKeySetID:                 keySetID,
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		CallbackBaseUrl:                 s.newClientCallbackBaseURL(owner),
+		CallbackBaseUrl:                 callbackBaseURL,
 		GrantTypes:                      clientCreateGrantTypes(owner),
 		CredentialOwner:                 conv.ToPGText(string(owner)),
 	})
@@ -384,7 +392,10 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "generate client id").LogError(ctx, logger)
 	}
 
-	callbackBaseURL := s.origins.NewClientBaseURL(true)
+	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, CredentialOwnerSubject)
+	if err != nil {
+		return nil, err
+	}
 	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    clientID,
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
