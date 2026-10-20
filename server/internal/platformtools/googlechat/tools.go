@@ -30,7 +30,7 @@ type sendInput struct {
 	RequestID string `json:"request_id" jsonschema:"Required UUID idempotency key. Generate once per intended message and reuse unchanged on retries; never reuse for another message."`
 }
 type replyInput struct {
-	Thread    string `json:"thread" jsonschema:"Existing thread in a named space: spaces/{space}/threads/{thread}. For direct messages use send_message instead. Fails rather than creating a new thread when not found."`
+	Thread    string `json:"thread" jsonschema:"Existing thread in a named space: spaces/{space}/threads/{thread}. For direct messages and group chats use send_message instead. Fails rather than creating a new thread when not found."`
 	Text      string `json:"text" jsonschema:"Reply text (maximum 30000 UTF-8 bytes)."`
 	RequestID string `json:"request_id" jsonschema:"Required UUID idempotency key. Generate once per intended reply and reuse unchanged on retries."`
 }
@@ -70,7 +70,7 @@ func NewSendMessageTool(h *guardian.HTTPClient) core.PlatformToolExecutor {
 	return newTool(h, "send_message", "Send a new Google Chat message with chat.bot app auth. Supply a stable request_id for retry safety.", core.BuildInputSchema[sendInput](core.WithPropertyFormat("request_id", "uuid")), false, false)
 }
 func NewReplyToThreadTool(h *guardian.HTTPClient) core.PlatformToolExecutor {
-	return newTool(h, "reply_to_thread", "Reply to an existing Google Chat thread in a named space with chat.bot app auth. For direct messages use send_message instead. Never falls back to creating a new thread. Supply a stable request_id.", core.BuildInputSchema[replyInput](core.WithPropertyFormat("request_id", "uuid")), false, false)
+	return newTool(h, "reply_to_thread", "Reply to an existing Google Chat thread in a named space with chat.bot app auth. For direct messages and group chats use send_message instead. Never falls back to creating a new thread. Supply a stable request_id.", core.BuildInputSchema[replyInput](core.WithPropertyFormat("request_id", "uuid")), false, false)
 }
 func NewUpdateMessageTool(h *guardian.HTTPClient) core.PlatformToolExecutor {
 	return newTool(h, "update_message", "Replace the text of a message created by this Chat app using chat.bot. Cannot edit human or other apps' messages; Google enforces ownership. Does not create missing messages.", core.BuildInputSchema[updateInput](), false, true)

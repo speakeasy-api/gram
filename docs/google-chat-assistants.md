@@ -26,7 +26,7 @@ Use the secure environment form to set:
 | `GOOGLE_CHAT_PROJECT_NUMBER`       | The numeric Cloud project number selected as the Chat app's authentication audience. |
 | `GOOGLE_CHAT_SERVICE_ACCOUNT_JSON` | The complete downloaded service-account JSON, saved as a secret.                     |
 
-You can maintain these values later on **Environments**. Never put credentials in the trigger configuration JSON. **Save both values before creating the trigger.** Trigger creation validates its required environment before returning a webhook URL; empty declarations or a skipped/partial credential form are not sufficient. If either value is missing, finish the secure form first rather than retrying trigger creation. Then create the `googlechat` trigger targeting this assistant and copy its webhook URL. The Triggers page also exposes the URL and event status.
+You can maintain these values later on **Environments**. Never put credentials in the trigger configuration JSON. **Save both values before creating the trigger.** The backend checks required key presence; dashboard onboarding additionally checks that both values are populated before creating or resuming a trigger; empty declarations or a skipped/partial credential form are not sufficient. If either value is missing, finish the secure form first rather than retrying trigger creation. Then create the `googlechat` trigger targeting this assistant and copy its webhook URL. The Triggers page also exposes the URL and event status.
 
 ## 3. Finish the Google Chat connection
 
@@ -55,6 +55,14 @@ History reads are on demand, limited to spaces the app can access. This is not f
 - **403 on writes/spaces:** check Chat API is enabled, credentials belong to the configured app's project, the app is installed/allowed by Workspace policy, and it has access to the space. Updating/deleting messages is limited to app-owned messages.
 - **No reply:** check trigger is active, both environment values are populated, the toolset attachment uses the same environment, and you sent a DM or @mention. The event history distinguishes delivery problems from assistant/tool failures.
 - **Key creation blocked:** ask your Cloud administrator about the organization's service-account key policy. Do not bypass organization policy. Rotate compromised keys in Cloud and replace the environment secret.
+
+## Management surfaces
+
+Google Chat setup is intentionally a **dashboard onboarding workflow**, not a new Platform MCP administration tool. The operator selects an exact project and assistant, enters the customer-managed service-account key in the secure environment form, and binds the native toolset and trigger to that environment. The setup assistant receives populated key names, not credential values.
+
+The native Google Chat tools and existing generic trigger tools live in `server/internal/platformtools`; they are distinct from `server/internal/platformmcp`. The latter's assistant identity tool manages workload identity, not assistant creation, toolset attachment, or trigger setup. It is not an existing setup workflow to extend.
+
+**Platform MCP decision: omit a new setup tool in this release.** A raw service-account-key argument would expose credentials to the agent conversation, while a tool accepting only an existing environment would not complete the required secure credential-entry workflow. Do not claim that generic native trigger discovery provides Platform MCP parity. Use dashboard onboarding for installation and credential rotation; use native tools for the assistant's Chat actions. Regression coverage verifies the masked credential form, populated-key prerequisites, shared-environment binding, and discovery of the Google Chat trigger configuration.
 
 ## Google references
 

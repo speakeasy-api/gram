@@ -288,7 +288,12 @@ export function ShowWebhookUrlComponent({
       )}
       <div className="border-border bg-muted/30 flex items-center gap-2 border px-3 py-2">
         <code className="flex-1 truncate font-mono text-xs">{url}</code>
-        <Button size="sm" variant="tertiary" onClick={() => void copy()}>
+        <Button
+          size="sm"
+          variant="tertiary"
+          aria-label="Copy webhook URL"
+          onClick={() => void copy()}
+        >
           {copied ? (
             <Check className="h-3.5 w-3.5" />
           ) : (

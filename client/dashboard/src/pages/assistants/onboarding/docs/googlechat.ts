@@ -8,7 +8,7 @@ export const GOOGLE_CHAT_DOCS: IntegrationDoc = {
     "Connect a customer-managed Google Chat app: DMs, mentions, native tools, and optional approved thread history.",
   body: `# Setup assistant workflow
 
-Follow this order; Google Chat trigger creation validates its required environment before returning a webhook URL.
+Follow this order; the backend checks required key presence, while dashboard onboarding checks populated credential metadata before creating or resuming a Google Chat trigger.
 
 1. Discover list_available_tools with urn_prefix tools:platform:googlechat: and list_trigger_definitions. Never invent tool URNs. Ask which capabilities the user wants, explaining that history needs administrator approval.
 2. Create the assistant and shared environment. Create a fresh per-assistant toolset with only selected discovered tools; attach_toolset without environment_slug binds the shared assistant environment. Do not attach an unconfigured global provider endpoint instead.

@@ -2497,7 +2497,7 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
 			return "", nil, nil, nil, fmt.Errorf("decode Google Chat trigger event: %w", err)
 		}
-		sourceRefJSON, err := json.Marshal(googlechatSourceRef{SpaceName: event.SpaceName, ThreadName: event.ThreadName, MessageName: event.MessageName, UserName: event.UserName})
+		sourceRefJSON, err := json.Marshal(googlechatSourceRef{SpaceType: event.SpaceType, SpaceName: event.SpaceName, ThreadName: event.ThreadName, MessageName: event.MessageName, UserName: event.UserName})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal Google Chat source ref: %w", err)
 		}

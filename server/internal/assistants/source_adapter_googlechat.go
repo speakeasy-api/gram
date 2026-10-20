@@ -6,6 +6,7 @@ import (
 )
 
 type googlechatSourceRef struct {
+	SpaceType   string `json:"space_type"`
 	SpaceName   string `json:"space_name"`
 	ThreadName  string `json:"thread_name"`
 	MessageName string `json:"message_name"`
@@ -31,7 +32,7 @@ func (googlechatAdapter) ThreadContext(raw []byte) (string, error) {
 	if err := json.Unmarshal(raw, &ref); err != nil {
 		return "", fmt.Errorf("decode Google Chat source ref: %w", err)
 	}
-	return fmt.Sprintf("## Conversation context\n\nConversation originated on: Google Chat\nSpaceName: %s\nThreadName: %s\nMessageName: %s\nUserName: %s\n", ref.SpaceName, ref.ThreadName, ref.MessageName, ref.UserName), nil
+	return fmt.Sprintf("## Conversation context\n\nConversation originated on: Google Chat\nSpaceName: %s\nSpaceType: %s\nThreadName: %s\nMessageName: %s\nUserName: %s\n", ref.SpaceName, ref.SpaceType, ref.ThreadName, ref.MessageName, ref.UserName), nil
 }
 
 func (googlechatAdapter) OutputChannelGuidance() string {

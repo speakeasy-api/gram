@@ -440,7 +440,7 @@ function resolveSkillByName(skills: Skill[], requestedName: string): Skill {
   );
 }
 
-function buildAssistantTools(deps: ToolDeps) {
+export function buildAssistantTools(deps: ToolDeps) {
   const { sdk, draft, organizationId } = deps;
 
   // Live mirror of the assistant — `draft` is closure-captured by streamText
@@ -1746,16 +1746,23 @@ function buildAssistantTools(deps: ToolDeps) {
           args as CreateTriggerArgs;
         const run = async (): Promise<ToolResult> => {
           try {
-            const a = await ensureAssistant(deps, {}, live.id);
+            // Google Chat setup must not mutate anything before checking populated
+            // credential metadata, including when resuming an existing trigger.
+            const isGoogleChat = definition_slug === "googlechat";
+            if (isGoogleChat && !live.id) {
+              return errResult(
+                "Create the assistant and securely populate its Google Chat environment before creating a trigger.",
+              );
+            }
+            const a = isGoogleChat
+              ? await sdk.assistants.get({ id: live.id! })
+              : await ensureAssistant(deps, {}, live.id);
             trackLive(a);
             const notes: string[] = [];
             let boundEnvId = environment_id;
-            if (!boundEnvId) {
-              const envResult = await ensureAssistantEnv(deps, a.name);
-              boundEnvId = envResult.env.id;
-              if (envResult.note) notes.push(envResult.note);
-            }
-            const existingList = await sdk.triggers.list().catch(() => null);
+            const existingList = isGoogleChat
+              ? await sdk.triggers.list()
+              : await sdk.triggers.list().catch(() => null);
             const duplicate = existingList?.triggers.find(
               (t) =>
                 t.targetKind === "assistant" &&
@@ -1763,6 +1770,49 @@ function buildAssistantTools(deps: ToolDeps) {
                 t.definitionSlug === definition_slug &&
                 t.name === name,
             );
+            if (isGoogleChat) {
+              const { environments } = await sdk.environments.list();
+              // A duplicate keeps its stored environment on resume. Never validate
+              // a different environment and then resume with unverified secrets.
+              const selectedId = duplicate
+                ? duplicate.environmentId
+                : boundEnvId;
+              const selected = selectedId
+                ? environments.find((env) => env.id === selectedId)
+                : duplicate
+                  ? undefined
+                  : (environments.find(
+                      (env) => env.id === draft.assistantEnv?.id,
+                    ) ??
+                    environments.find(
+                      (env) => env.slug === draft.assistantEnv?.slug,
+                    ) ??
+                    environments.find(
+                      (env) => env.name === envNameFor(a.name),
+                    ));
+              const populatedNames = new Set(
+                selected?.entries
+                  .filter(
+                    (entry) =>
+                      entry.value !== "<EMPTY>" && entry.value.trim() !== "",
+                  )
+                  .map((entry) => entry.name) ?? [],
+              );
+              const missing = [
+                "GOOGLE_CHAT_PROJECT_NUMBER",
+                "GOOGLE_CHAT_SERVICE_ACCOUNT_JSON",
+              ].filter((key) => !populatedNames.has(key));
+              if (missing.length > 0) {
+                return errResult(
+                  `Google Chat requires populated environment values before creating or resuming a trigger. Save ${missing.join(", ")} using request_environment_secrets in the ${duplicate ? "existing trigger's" : "selected assistant"} environment, then retry. Empty declarations are not enough.`,
+                );
+              }
+              boundEnvId = selected!.id;
+            } else if (!boundEnvId) {
+              const envResult = await ensureAssistantEnv(deps, a.name);
+              boundEnvId = envResult.env.id;
+              if (envResult.note) notes.push(envResult.note);
+            }
             if (duplicate) {
               const trigger =
                 duplicate.status === "paused"
