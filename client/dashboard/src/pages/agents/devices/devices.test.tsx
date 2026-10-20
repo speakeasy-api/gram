@@ -14,7 +14,8 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkloadPlatformPicker } from "../provision/StepWorkload";
 import { AgentBootstrapTokens } from "./AgentBootstrapTokens";
-import { ManualSetup } from "./DeviceSetupPanel";
+import { DeviceSetupPanel, ManualSetup } from "./DeviceSetupPanel";
+import { InstallCommandUnavailable } from "./device-install-command";
 import { DeviceVerify } from "./DeviceVerify";
 
 const mocks = vi.hoisted(() => ({
@@ -59,6 +60,17 @@ vi.mock("@gram/client/react-query/createWorkloadDeviceJoinToken.js", () => ({
     isPending: false,
   }),
 }));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: "missing" }),
+}));
+vi.mock(
+  "@gram/client/react-query/createWorkloadDeviceInstallCommand.js",
+  () => ({
+    useCreateWorkloadDeviceInstallCommandMutation: () => ({
+      mutateAsync: vi.fn(),
+    }),
+  }),
+);
 vi.mock("@gram/client/react-query/workloadDeviceJoinTokens.js", () => ({
   useWorkloadDeviceJoinTokens: () => ({
     data: { result: { items: mocks.tokens } },
@@ -219,6 +231,63 @@ describe("setting a box up manually", () => {
     expect(
       screen.queryByRole("button", { name: "Create bootstrap token" }),
     ).toBeNull();
+  });
+});
+
+describe("the install command", () => {
+  const project = { id: "project_one", name: "Project one", slug: "p1" };
+
+  it("shows the command, and watches the token it carries", async () => {
+    const onTokenCreated = vi.fn<(watched: object) => void>();
+    const create = vi.fn().mockResolvedValue({
+      command:
+        "curl -fsSL 'https://example.test/v1/install/device/code' | sudo sh",
+      downloadCommand:
+        "curl -o speakeasy-device-install.sh\nsudo sh speakeasy-device-install.sh",
+      codeExpiresAt: new Date(Date.now() + 15 * 60_000),
+      joinTokenId: "token_from_command",
+      tokenExpiresAt: new Date(Date.now() + 3600_000),
+    });
+    wrap(
+      <DeviceSetupPanel
+        agentId="agent_one"
+        hooksProject={project}
+        lifetimeSeconds={3600}
+        onTokenCreated={onTokenCreated}
+        createInstallCommand={create}
+      />,
+    );
+    const block = await screen.findByLabelText("install command");
+    await waitFor(() => expect(block.textContent).toContain("| sudo sh"));
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith({
+      agentId: "agent_one",
+      hooksProjectSlug: "p1",
+      expiresInSeconds: 3600,
+    });
+    expect(onTokenCreated).toHaveBeenCalledWith({ id: "token_from_command" });
+    // Manual setup is still there, folded away.
+    expect(screen.getByText("Set up manually")).toBeTruthy();
+  });
+
+  it("falls back to manual setup when the server does not offer it", async () => {
+    const create = vi.fn().mockRejectedValue(new InstallCommandUnavailable());
+    wrap(
+      <DeviceSetupPanel
+        agentId="agent_one"
+        hooksProject={project}
+        lifetimeSeconds={3600}
+        onTokenCreated={vi.fn<(watched: object) => void>()}
+        createInstallCommand={create}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Run this on the box")).toBeNull(),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Create bootstrap token" }),
+    ).toBeTruthy();
   });
 });
 
