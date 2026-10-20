@@ -3062,6 +3062,40 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 	return items, nil
 }
 
+const listEnabledRiskPolicyIDsByOrganizationProject = `-- name: ListEnabledRiskPolicyIDsByOrganizationProject :many
+SELECT id
+FROM risk_policies
+WHERE organization_id = $1
+  AND project_id = $2
+  AND enabled IS TRUE
+  AND deleted IS FALSE
+`
+
+type ListEnabledRiskPolicyIDsByOrganizationProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ListEnabledRiskPolicyIDsByOrganizationProject(ctx context.Context, arg ListEnabledRiskPolicyIDsByOrganizationProjectParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listEnabledRiskPolicyIDsByOrganizationProject, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnabledShadowMCPPoliciesByProject = `-- name: ListEnabledShadowMCPPoliciesByProject :many
 SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies

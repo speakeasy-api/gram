@@ -250,3 +250,137 @@ FROM agents
 WHERE organization_id = @organization_id
   AND id = @id
   AND deleted IS FALSE;
+
+-- name: GetDeviceJoinAgent :one
+-- The agent a join token would enroll devices under, with what deciding who may
+-- create one needs: its owner, and whether it can run at all.
+SELECT id, name, owner_user_id, suspended_at, revoked_at, owner_reassignment_required_at
+FROM agents
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE;
+
+-- name: CreateWorkloadDeviceJoinToken :one
+INSERT INTO workload_device_join_tokens (organization_id, token_hash, agent_id, created_by_user_id, expires_at)
+VALUES (@organization_id, @token_hash, @agent_id, @created_by_user_id, @expires_at)
+RETURNING *;
+
+-- name: ConsumeWorkloadDeviceJoinToken :one
+-- Claims the token in the statement that reads it, so a replay or racing
+-- redemption updates nothing. Keyed by hash alone: the organization is what it
+-- discovers, and the hash is unique across organizations.
+UPDATE workload_device_join_tokens
+SET consumed_at = clock_timestamp(), consumed_by_subject = @subject, updated_at = clock_timestamp()
+WHERE token_hash = @token_hash
+  AND consumed_at IS NULL
+  AND expires_at > clock_timestamp()
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListWorkloadDeviceJoinTokens :many
+-- An organization's join tokens, newest first, revoked ones included so an
+-- administrator can see what was withdrawn. Ids are UUIDv7, so id order is
+-- creation order and the cursor is the last id of the previous page. Never
+-- selects token_hash. Filtering by agent uses
+-- workload_device_join_tokens_agent_idx.
+SELECT id, agent_id, created_by_user_id, created_at, expires_at, consumed_at, consumed_by_subject, deleted_at
+FROM workload_device_join_tokens
+WHERE organization_id = @organization_id
+  AND (sqlc.narg('agent_id')::uuid IS NULL OR agent_id = sqlc.narg('agent_id')::uuid)
+  AND (sqlc.narg('cursor_id')::uuid IS NULL OR id < sqlc.narg('cursor_id')::uuid)
+ORDER BY id DESC
+LIMIT @page_limit;
+
+-- name: GetWorkloadDeviceJoinToken :one
+-- One join token, revoked or not, so a refused revocation can say why. Never
+-- selects token_hash.
+SELECT id, agent_id, created_by_user_id, created_at, expires_at, consumed_at, consumed_by_subject, deleted_at
+FROM workload_device_join_tokens
+WHERE organization_id = @organization_id
+  AND id = @id;
+
+-- name: RevokeWorkloadDeviceJoinToken :one
+-- Revokes a token only while it is unspent and live, in the statement that
+-- checks it, so a revocation racing a redemption or a second revocation
+-- updates nothing. Scoped by the agent the caller was authorized against.
+UPDATE workload_device_join_tokens
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND agent_id = @agent_id
+  AND consumed_at IS NULL
+  AND deleted IS FALSE
+RETURNING id, agent_id, created_by_user_id, created_at, expires_at, consumed_at, consumed_by_subject, deleted_at;
+
+-- name: GetReplayedDeviceRegistration :one
+-- The enrollment a spent token produced, for the same key retrying after a crash.
+-- Only within the token's lifetime, while the device is still enrolled under its agent.
+-- Keys live only under the organization's device issuer, so the key is reached
+-- through it and workload_device_keys_subject_key serves the lookup.
+SELECT t.organization_id, t.agent_id, t.consumed_by_subject AS subject, i.issuer
+FROM workload_device_join_tokens t
+JOIN workload_issuers i
+  ON i.organization_id = t.organization_id
+  AND i.project_id IS NULL
+  AND i.key_source = 'device_keys'
+  AND i.deleted IS FALSE
+JOIN workload_device_keys k
+  ON k.organization_id = i.organization_id
+  AND k.workload_issuer_id = i.id
+  AND k.subject = t.consumed_by_subject
+  AND k.deleted IS FALSE
+JOIN workload_identity_admissions a
+  ON a.organization_id = k.organization_id
+  AND a.workload_issuer_id = k.workload_issuer_id
+  AND a.subject = k.subject
+  AND a.match_kind = 'exact'
+  AND a.deleted IS FALSE
+JOIN workload_agent_assignments w
+  ON w.organization_id = k.organization_id
+  AND w.workload_issuer_id = k.workload_issuer_id
+  AND w.subject = k.subject
+  AND w.match_kind = 'exact'
+  AND w.agent_id = t.agent_id
+  AND w.deleted IS FALSE
+WHERE t.token_hash = @token_hash
+  AND t.consumed_at IS NOT NULL
+  AND t.expires_at > clock_timestamp()
+  AND t.deleted IS FALSE
+  AND k.thumbprint = @thumbprint;
+
+-- name: FindDeviceIssuer :many
+-- The organization's Speakeasy device issuer, at the organization tier so its
+-- devices are recognised under both organization and project authorization
+-- servers.
+SELECT *
+FROM workload_issuers
+WHERE organization_id = @organization_id
+  AND project_id IS NULL
+  AND key_source = 'device_keys'
+  AND deleted IS FALSE
+ORDER BY created_at, id;
+
+-- name: CreateDeviceIssuer :one
+-- A concurrent enrollment may create it first; the caller then re-reads it.
+-- Wildcards are off: every device subject is minted by Speakeasy and admitted
+-- exactly.
+INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission, key_source)
+VALUES (@organization_id, NULL, @name, @issuer, @jwks_uri, false, 'device_keys')
+ON CONFLICT (organization_id, name) WHERE deleted IS FALSE AND project_id IS NULL DO NOTHING
+RETURNING *;
+
+-- name: CreateWorkloadDeviceKey :one
+INSERT INTO workload_device_keys (organization_id, workload_issuer_id, subject, public_jwk, thumbprint, hostname, serial)
+VALUES (@organization_id, @workload_issuer_id, @subject, @public_jwk, @thumbprint, @hostname, @serial)
+RETURNING *;
+
+-- name: SoftDeleteWorkloadDeviceKeysForSubject :many
+-- Withdrawing a device's admission also retires its key, so a re-admission of
+-- the same subject cannot quietly bring an old key back.
+UPDATE workload_device_keys
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND subject = @subject
+  AND deleted IS FALSE
+RETURNING *;

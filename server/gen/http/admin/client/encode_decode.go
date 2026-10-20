@@ -14561,6 +14561,240 @@ func DecodeGetMcpServerToolCallsResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetHookClientsRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "getHookClients" endpoint
+func (c *Client) BuildGetHookClientsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetHookClientsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getHookClients", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetHookClientsRequest returns an encoder for requests sent to the
+// admin getHookClients server.
+func EncodeGetHookClientsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetHookClientsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getHookClients", "*admin.GetHookClientsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("window_days", fmt.Sprintf("%v", p.WindowDays))
+		values.Add("refresh", fmt.Sprintf("%v", p.Refresh))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetHookClientsResponse returns a decoder for responses returned by the
+// admin getHookClients endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeGetHookClientsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetHookClientsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetHookClientsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			res := NewGetHookClientsAdminHookClientsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetHookClientsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetHookClientsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetHookClientsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetHookClientsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetHookClientsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetHookClientsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetHookClientsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetHookClientsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+				}
+				err = ValidateGetHookClientsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+				}
+				return nil, NewGetHookClientsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetHookClientsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+				}
+				err = ValidateGetHookClientsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+				}
+				return nil, NewGetHookClientsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getHookClients", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetHookClientsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getHookClients", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListExternalMcpMigrationCandidatesRequest instantiates a HTTP request
 // object with method and path set to call the "admin" service
 // "listExternalMcpMigrationCandidates" endpoint
@@ -21918,6 +22152,710 @@ func DecodeListCustomerUsageResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// BuildListUpstreamOAuthMigrationOrganizationsRequest instantiates a HTTP
+// request object with method and path set to call the "admin" service
+// "listUpstreamOAuthMigrationOrganizations" endpoint
+func (c *Client) BuildListUpstreamOAuthMigrationOrganizationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListUpstreamOAuthMigrationOrganizationsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listUpstreamOAuthMigrationOrganizations", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListUpstreamOAuthMigrationOrganizationsRequest returns an encoder for
+// requests sent to the admin listUpstreamOAuthMigrationOrganizations server.
+func EncodeListUpstreamOAuthMigrationOrganizationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListUpstreamOAuthMigrationOrganizationsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listUpstreamOAuthMigrationOrganizations", "*admin.ListUpstreamOAuthMigrationOrganizationsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListUpstreamOAuthMigrationOrganizationsResponse returns a decoder for
+// responses returned by the admin listUpstreamOAuthMigrationOrganizations
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeListUpstreamOAuthMigrationOrganizationsResponse may return the
+// following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListUpstreamOAuthMigrationOrganizationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListUpstreamOAuthMigrationOrganizationsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			err = ValidateListUpstreamOAuthMigrationOrganizationsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			res := NewListUpstreamOAuthMigrationOrganizationsAdminUpstreamOAuthMigrationOrganizationsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListUpstreamOAuthMigrationOrganizationsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			err = ValidateListUpstreamOAuthMigrationOrganizationsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			return nil, NewListUpstreamOAuthMigrationOrganizationsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListUpstreamOAuthMigrationOrganizationsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			err = ValidateListUpstreamOAuthMigrationOrganizationsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			return nil, NewListUpstreamOAuthMigrationOrganizationsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListUpstreamOAuthMigrationOrganizationsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			err = ValidateListUpstreamOAuthMigrationOrganizationsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			return nil, NewListUpstreamOAuthMigrationOrganizationsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListUpstreamOAuthMigrationOrganizationsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			err = ValidateListUpstreamOAuthMigrationOrganizationsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			return nil, NewListUpstreamOAuthMigrationOrganizationsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListUpstreamOAuthMigrationOrganizationsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			err = ValidateListUpstreamOAuthMigrationOrganizationsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			return nil, NewListUpstreamOAuthMigrationOrganizationsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListUpstreamOAuthMigrationOrganizationsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			err = ValidateListUpstreamOAuthMigrationOrganizationsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			return nil, NewListUpstreamOAuthMigrationOrganizationsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListUpstreamOAuthMigrationOrganizationsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			err = ValidateListUpstreamOAuthMigrationOrganizationsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			return nil, NewListUpstreamOAuthMigrationOrganizationsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListUpstreamOAuthMigrationOrganizationsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+				}
+				err = ValidateListUpstreamOAuthMigrationOrganizationsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+				}
+				return nil, NewListUpstreamOAuthMigrationOrganizationsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListUpstreamOAuthMigrationOrganizationsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+				}
+				err = ValidateListUpstreamOAuthMigrationOrganizationsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+				}
+				return nil, NewListUpstreamOAuthMigrationOrganizationsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listUpstreamOAuthMigrationOrganizations", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListUpstreamOAuthMigrationOrganizationsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			err = ValidateListUpstreamOAuthMigrationOrganizationsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUpstreamOAuthMigrationOrganizations", err)
+			}
+			return nil, NewListUpstreamOAuthMigrationOrganizationsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listUpstreamOAuthMigrationOrganizations", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetUpstreamOAuthMigrationStatusRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "getUpstreamOAuthMigrationStatus" endpoint
+func (c *Client) BuildGetUpstreamOAuthMigrationStatusRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetUpstreamOAuthMigrationStatusAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getUpstreamOAuthMigrationStatus", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetUpstreamOAuthMigrationStatusRequest returns an encoder for requests
+// sent to the admin getUpstreamOAuthMigrationStatus server.
+func EncodeGetUpstreamOAuthMigrationStatusRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetUpstreamOAuthMigrationStatusPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getUpstreamOAuthMigrationStatus", "*admin.GetUpstreamOAuthMigrationStatusPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetUpstreamOAuthMigrationStatusResponse returns a decoder for
+// responses returned by the admin getUpstreamOAuthMigrationStatus endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeGetUpstreamOAuthMigrationStatusResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetUpstreamOAuthMigrationStatusResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetUpstreamOAuthMigrationStatusResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			err = ValidateGetUpstreamOAuthMigrationStatusResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			res := NewGetUpstreamOAuthMigrationStatusAdminUpstreamOAuthMigrationStatusOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetUpstreamOAuthMigrationStatusUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			err = ValidateGetUpstreamOAuthMigrationStatusUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			return nil, NewGetUpstreamOAuthMigrationStatusUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetUpstreamOAuthMigrationStatusForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			err = ValidateGetUpstreamOAuthMigrationStatusForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			return nil, NewGetUpstreamOAuthMigrationStatusForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetUpstreamOAuthMigrationStatusBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			err = ValidateGetUpstreamOAuthMigrationStatusBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			return nil, NewGetUpstreamOAuthMigrationStatusBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetUpstreamOAuthMigrationStatusNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			err = ValidateGetUpstreamOAuthMigrationStatusNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			return nil, NewGetUpstreamOAuthMigrationStatusNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetUpstreamOAuthMigrationStatusConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			err = ValidateGetUpstreamOAuthMigrationStatusConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			return nil, NewGetUpstreamOAuthMigrationStatusConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetUpstreamOAuthMigrationStatusUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			err = ValidateGetUpstreamOAuthMigrationStatusUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			return nil, NewGetUpstreamOAuthMigrationStatusUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetUpstreamOAuthMigrationStatusInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			err = ValidateGetUpstreamOAuthMigrationStatusInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			return nil, NewGetUpstreamOAuthMigrationStatusInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetUpstreamOAuthMigrationStatusInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getUpstreamOAuthMigrationStatus", err)
+				}
+				err = ValidateGetUpstreamOAuthMigrationStatusInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getUpstreamOAuthMigrationStatus", err)
+				}
+				return nil, NewGetUpstreamOAuthMigrationStatusInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetUpstreamOAuthMigrationStatusUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getUpstreamOAuthMigrationStatus", err)
+				}
+				err = ValidateGetUpstreamOAuthMigrationStatusUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getUpstreamOAuthMigrationStatus", err)
+				}
+				return nil, NewGetUpstreamOAuthMigrationStatusUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getUpstreamOAuthMigrationStatus", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetUpstreamOAuthMigrationStatusGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			err = ValidateGetUpstreamOAuthMigrationStatusGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getUpstreamOAuthMigrationStatus", err)
+			}
+			return nil, NewGetUpstreamOAuthMigrationStatusGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getUpstreamOAuthMigrationStatus", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRunUpstreamOAuthMigrationRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "runUpstreamOAuthMigration" endpoint
+func (c *Client) BuildRunUpstreamOAuthMigrationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RunUpstreamOAuthMigrationAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "runUpstreamOAuthMigration", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRunUpstreamOAuthMigrationRequest returns an encoder for requests sent
+// to the admin runUpstreamOAuthMigration server.
+func EncodeRunUpstreamOAuthMigrationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.RunUpstreamOAuthMigrationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "runUpstreamOAuthMigration", "*admin.RunUpstreamOAuthMigrationPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewRunUpstreamOAuthMigrationRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "runUpstreamOAuthMigration", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRunUpstreamOAuthMigrationResponse returns a decoder for responses
+// returned by the admin runUpstreamOAuthMigration endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeRunUpstreamOAuthMigrationResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRunUpstreamOAuthMigrationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RunUpstreamOAuthMigrationResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runUpstreamOAuthMigration", err)
+			}
+			err = ValidateRunUpstreamOAuthMigrationResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runUpstreamOAuthMigration", err)
+			}
+			res := NewRunUpstreamOAuthMigrationAdminUpstreamOAuthMigrationRunOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RunUpstreamOAuthMigrationUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runUpstreamOAuthMigration", err)
+			}
+			err = ValidateRunUpstreamOAuthMigrationUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runUpstreamOAuthMigration", err)
+			}
+			return nil, NewRunUpstreamOAuthMigrationUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RunUpstreamOAuthMigrationForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runUpstreamOAuthMigration", err)
+			}
+			err = ValidateRunUpstreamOAuthMigrationForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runUpstreamOAuthMigration", err)
+			}
+			return nil, NewRunUpstreamOAuthMigrationForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RunUpstreamOAuthMigrationBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runUpstreamOAuthMigration", err)
+			}
+			err = ValidateRunUpstreamOAuthMigrationBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runUpstreamOAuthMigration", err)
+			}
+			return nil, NewRunUpstreamOAuthMigrationBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RunUpstreamOAuthMigrationNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runUpstreamOAuthMigration", err)
+			}
+			err = ValidateRunUpstreamOAuthMigrationNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runUpstreamOAuthMigration", err)
+			}
+			return nil, NewRunUpstreamOAuthMigrationNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RunUpstreamOAuthMigrationConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runUpstreamOAuthMigration", err)
+			}
+			err = ValidateRunUpstreamOAuthMigrationConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runUpstreamOAuthMigration", err)
+			}
+			return nil, NewRunUpstreamOAuthMigrationConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RunUpstreamOAuthMigrationUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runUpstreamOAuthMigration", err)
+			}
+			err = ValidateRunUpstreamOAuthMigrationUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runUpstreamOAuthMigration", err)
+			}
+			return nil, NewRunUpstreamOAuthMigrationUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RunUpstreamOAuthMigrationInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runUpstreamOAuthMigration", err)
+			}
+			err = ValidateRunUpstreamOAuthMigrationInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runUpstreamOAuthMigration", err)
+			}
+			return nil, NewRunUpstreamOAuthMigrationInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RunUpstreamOAuthMigrationInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "runUpstreamOAuthMigration", err)
+				}
+				err = ValidateRunUpstreamOAuthMigrationInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "runUpstreamOAuthMigration", err)
+				}
+				return nil, NewRunUpstreamOAuthMigrationInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RunUpstreamOAuthMigrationUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "runUpstreamOAuthMigration", err)
+				}
+				err = ValidateRunUpstreamOAuthMigrationUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "runUpstreamOAuthMigration", err)
+				}
+				return nil, NewRunUpstreamOAuthMigrationUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "runUpstreamOAuthMigration", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RunUpstreamOAuthMigrationGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runUpstreamOAuthMigration", err)
+			}
+			err = ValidateRunUpstreamOAuthMigrationGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runUpstreamOAuthMigration", err)
+			}
+			return nil, NewRunUpstreamOAuthMigrationGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "runUpstreamOAuthMigration", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -22974,6 +23912,65 @@ func unmarshalAdminMcpServerToolCallBucketResponseBodyToAdminAdminMcpServerToolC
 	return res
 }
 
+// unmarshalAdminHookClientOrganizationResponseBodyToAdminAdminHookClientOrganization
+// builds a value of type *admin.AdminHookClientOrganization from a value of
+// type *AdminHookClientOrganizationResponseBody.
+func unmarshalAdminHookClientOrganizationResponseBodyToAdminAdminHookClientOrganization(v *AdminHookClientOrganizationResponseBody) *admin.AdminHookClientOrganization {
+	res := &admin.AdminHookClientOrganization{
+		ID:   *v.ID,
+		Name: v.Name,
+		Slug: v.Slug,
+	}
+
+	return res
+}
+
+// unmarshalAdminHookClientSessionCellResponseBodyToAdminAdminHookClientSessionCell
+// builds a value of type *admin.AdminHookClientSessionCell from a value of
+// type *AdminHookClientSessionCellResponseBody.
+func unmarshalAdminHookClientSessionCellResponseBodyToAdminAdminHookClientSessionCell(v *AdminHookClientSessionCellResponseBody) *admin.AdminHookClientSessionCell {
+	res := &admin.AdminHookClientSessionCell{
+		OrganizationID: *v.OrganizationID,
+		Day:            *v.Day,
+		Client:         *v.Client,
+		Machines:       *v.Machines,
+		Sessions:       *v.Sessions,
+		MachinesAll:    *v.MachinesAll,
+	}
+
+	return res
+}
+
+// unmarshalAdminInferenceHookCellResponseBodyToAdminAdminInferenceHookCell
+// builds a value of type *admin.AdminInferenceHookCell from a value of type
+// *AdminInferenceHookCellResponseBody.
+func unmarshalAdminInferenceHookCellResponseBodyToAdminAdminInferenceHookCell(v *AdminInferenceHookCellResponseBody) *admin.AdminInferenceHookCell {
+	res := &admin.AdminInferenceHookCell{
+		OrganizationID: *v.OrganizationID,
+		Day:            *v.Day,
+		Surface:        *v.Surface,
+		Users:          *v.Users,
+		Events:         *v.Events,
+		Sessions:       *v.Sessions,
+	}
+
+	return res
+}
+
+// unmarshalAdminDeviceAgentCellResponseBodyToAdminAdminDeviceAgentCell builds
+// a value of type *admin.AdminDeviceAgentCell from a value of type
+// *AdminDeviceAgentCellResponseBody.
+func unmarshalAdminDeviceAgentCellResponseBodyToAdminAdminDeviceAgentCell(v *AdminDeviceAgentCellResponseBody) *admin.AdminDeviceAgentCell {
+	res := &admin.AdminDeviceAgentCell{
+		OrganizationID: *v.OrganizationID,
+		Day:            *v.Day,
+		Version:        *v.Version,
+		Machines:       *v.Machines,
+	}
+
+	return res
+}
+
 // unmarshalAdminExternalMcpMigrationCandidateResponseBodyToAdminAdminExternalMcpMigrationCandidate
 // builds a value of type *admin.AdminExternalMcpMigrationCandidate from a
 // value of type *AdminExternalMcpMigrationCandidateResponseBody.
@@ -23385,6 +24382,57 @@ func unmarshalAdminCustomerUsageProductCostResponseBodyToAdminAdminCustomerUsage
 	res := &admin.AdminCustomerUsageProductCost{
 		ProductID: *v.ProductID,
 		CostUsd:   *v.CostUsd,
+	}
+
+	return res
+}
+
+// unmarshalAdminUpstreamOAuthMigrationOrganizationResponseBodyToAdminAdminUpstreamOAuthMigrationOrganization
+// builds a value of type *admin.AdminUpstreamOAuthMigrationOrganization from a
+// value of type *AdminUpstreamOAuthMigrationOrganizationResponseBody.
+func unmarshalAdminUpstreamOAuthMigrationOrganizationResponseBodyToAdminAdminUpstreamOAuthMigrationOrganization(v *AdminUpstreamOAuthMigrationOrganizationResponseBody) *admin.AdminUpstreamOAuthMigrationOrganization {
+	res := &admin.AdminUpstreamOAuthMigrationOrganization{
+		ID:      *v.ID,
+		Name:    *v.Name,
+		Slug:    *v.Slug,
+		Servers: *v.Servers,
+	}
+
+	return res
+}
+
+// unmarshalAdminUpstreamOAuthMigrationServerResponseBodyToAdminAdminUpstreamOAuthMigrationServer
+// builds a value of type *admin.AdminUpstreamOAuthMigrationServer from a value
+// of type *AdminUpstreamOAuthMigrationServerResponseBody.
+func unmarshalAdminUpstreamOAuthMigrationServerResponseBodyToAdminAdminUpstreamOAuthMigrationServer(v *AdminUpstreamOAuthMigrationServerResponseBody) *admin.AdminUpstreamOAuthMigrationServer {
+	res := &admin.AdminUpstreamOAuthMigrationServer{
+		McpServerID: *v.McpServerID,
+		ProjectID:   *v.ProjectID,
+	}
+
+	return res
+}
+
+// unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamOAuthMigrationStatus
+// builds a value of type *admin.AdminUpstreamOAuthMigrationStatus from a value
+// of type *AdminUpstreamOAuthMigrationStatusResponseBody.
+func unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamOAuthMigrationStatus(v *AdminUpstreamOAuthMigrationStatusResponseBody) *admin.AdminUpstreamOAuthMigrationStatus {
+	res := &admin.AdminUpstreamOAuthMigrationStatus{
+		OrganizationID:       *v.OrganizationID,
+		Migrated:             *v.Migrated,
+		Servers:              *v.Servers,
+		PendingAssociations:  *v.PendingAssociations,
+		Credentials:          *v.Credentials,
+		PendingSelections:    *v.PendingSelections,
+		ReconnectCredentials: *v.ReconnectCredentials,
+	}
+	res.UnresolvedServers = make([]*admin.AdminUpstreamOAuthMigrationServer, len(v.UnresolvedServers))
+	for i, val := range v.UnresolvedServers {
+		if val == nil {
+			res.UnresolvedServers[i] = nil
+			continue
+		}
+		res.UnresolvedServers[i] = unmarshalAdminUpstreamOAuthMigrationServerResponseBodyToAdminAdminUpstreamOAuthMigrationServer(val)
 	}
 
 	return res

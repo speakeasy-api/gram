@@ -229,9 +229,8 @@ func (s *GatewayService) createGateway(ctx context.Context, principal Principal,
 		return GatewayOutput{}, fmt.Errorf("lock new gateway: %w", err)
 	}
 	var refusals []GatewayMemberRefusal
-	wired := false
 	for index, mcpID := range mcpIDs {
-		added, err := s.writer.AddMember(ctx, tx, actor, meta, mcpID, int32(index))
+		_, err := s.writer.AddMember(ctx, tx, actor, meta, mcpID, int32(index))
 		if refusal, ok := gatewayMemberRefusal(mcpID, err); ok {
 			refusals = append(refusals, refusal)
 			continue
@@ -239,7 +238,6 @@ func (s *GatewayService) createGateway(ctx context.Context, principal Principal,
 		if err != nil {
 			return GatewayOutput{}, fmt.Errorf("add gateway member: %w", err)
 		}
-		wired = wired || added.IssuerWired
 	}
 	if len(refusals) > 0 {
 		return GatewayOutput{}, gatewayMembersRefused(refusals, "Nothing was created.")
@@ -253,7 +251,7 @@ func (s *GatewayService) createGateway(ctx context.Context, principal Principal,
 		return GatewayOutput{}, fmt.Errorf("commit gateway creation: %w", err)
 	}
 	if len(mcpIDs) > 0 {
-		metamcp.AfterMembershipCommit(ctx, s.logger, s.db, s.publisher, actor, meta, wired)
+		metamcp.AfterMembershipCommit(ctx, s.logger, s.db, s.publisher, actor, meta)
 	}
 
 	return s.finish(ctx, project.ID, principal, created.ID, gatewayOutcomeCreated, uuidStrings(mcpIDs), nil), nil
@@ -318,7 +316,7 @@ func (s *GatewayService) setGatewayMembers(ctx context.Context, principal Princi
 		existing[member.McpServerID] = member
 	}
 
-	changed, wired := false, false
+	changed := false
 	var added, removed []string
 	// Removals first, so a server can be swapped for another that fronts
 	// the same backend in one request.
@@ -326,11 +324,10 @@ func (s *GatewayService) setGatewayMembers(ctx context.Context, principal Princi
 		if _, keep := position[member.McpServerID]; keep {
 			continue
 		}
-		_, issuerWired, err := s.writer.RemoveMember(ctx, tx, actor, meta, member.ID)
-		if err != nil {
+		if _, err := s.writer.RemoveMember(ctx, tx, actor, meta, member.ID); err != nil {
 			return GatewayOutput{}, fmt.Errorf("remove gateway member: %w", err)
 		}
-		changed, wired = true, wired || issuerWired
+		changed = true
 		removed = append(removed, member.McpServerID.String())
 	}
 	var refusals []GatewayMemberRefusal
@@ -346,7 +343,7 @@ func (s *GatewayService) setGatewayMembers(ctx context.Context, principal Princi
 			changed = true
 			continue
 		}
-		result, err := s.writer.AddMember(ctx, tx, actor, meta, mcpID, sortOrder)
+		_, err := s.writer.AddMember(ctx, tx, actor, meta, mcpID, sortOrder)
 		if refusal, ok := gatewayMemberRefusal(mcpID, err); ok {
 			refusals = append(refusals, refusal)
 			continue
@@ -354,7 +351,7 @@ func (s *GatewayService) setGatewayMembers(ctx context.Context, principal Princi
 		if err != nil {
 			return GatewayOutput{}, fmt.Errorf("add gateway member: %w", err)
 		}
-		changed, wired = true, wired || result.IssuerWired
+		changed = true
 		added = append(added, mcpID.String())
 	}
 	if len(refusals) > 0 {
@@ -369,7 +366,7 @@ func (s *GatewayService) setGatewayMembers(ctx context.Context, principal Princi
 	if err := tx.Commit(ctx); err != nil {
 		return GatewayOutput{}, fmt.Errorf("commit gateway member change: %w", err)
 	}
-	metamcp.AfterMembershipCommit(ctx, s.logger, s.db, s.publisher, actor, meta, wired)
+	metamcp.AfterMembershipCommit(ctx, s.logger, s.db, s.publisher, actor, meta)
 
 	return s.finish(ctx, project.ID, principal, meta.ID, gatewayOutcomeUpdated, added, removed), nil
 }

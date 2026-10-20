@@ -163,11 +163,6 @@ import {
   KillswitchIndexRedirect,
   KillswitchRecordRedirect,
 } from "./pages/killswitch/KillswitchesRoot";
-import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
-import {
-  ToolBuilderNew,
-  ToolBuilderPage,
-} from "./pages/toolBuilder/ToolBuilder";
 
 const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
 const SetupTaskRedirect = React.lazy(
@@ -309,25 +304,6 @@ const ROUTE_STRUCTURE = {
     url: "integrations",
     icon: "package",
     component: Integrations,
-  },
-  customTools: {
-    title: "Custom Tools",
-    url: "custom-tools",
-    icon: "pencil-ruler",
-    component: CustomToolsRoot,
-    indexComponent: CustomTools,
-    subPages: {
-      toolBuilderNew: {
-        title: "Tool Builder",
-        url: "new",
-        component: ToolBuilderNew,
-      },
-      toolBuilder: {
-        title: "Tool Builder",
-        url: ":toolName",
-        component: ToolBuilderPage,
-      },
-    },
   },
   prompts: {
     title: "Prompts",
@@ -687,14 +663,14 @@ const ROUTE_STRUCTURE = {
   },
 
   remoteIdentityProviders: {
-    title: "Remote Identity Providers",
+    title: "Authorization Servers",
     url: "remote-identity-providers",
     icon: "key-round",
     component: RemoteIdentityProvidersRoot,
     indexComponent: RemoteIdentityProvidersPage,
     subPages: {
       issuerDetail: {
-        title: "Remote Identity Provider",
+        title: "Authorization Server",
         url: ":issuerId",
         component: RemoteIdentityProviderDetail,
         subPages: {
@@ -1557,7 +1533,7 @@ const ORG_ROUTE_STRUCTURE = {
     component: ProjectIdentityRedirect,
   },
   legacyRemoteIdentityProviders: {
-    title: "Remote Identity Providers",
+    title: "Authorization Servers",
     url: "remote-identity-providers/*",
     legacyRedirect: true,
     component: ProjectIdentityRedirect,

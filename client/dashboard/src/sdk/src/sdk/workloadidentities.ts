@@ -3,17 +3,25 @@
  */
 
 import { workloadIdentitiesAdmitSubject } from "../funcs/workloadIdentitiesAdmitSubject.js";
+import { workloadIdentitiesCreateDeviceJoinToken } from "../funcs/workloadIdentitiesCreateDeviceJoinToken.js";
 import { workloadIdentitiesGetCustomFlows } from "../funcs/workloadIdentitiesGetCustomFlows.js";
 import { workloadIdentitiesList } from "../funcs/workloadIdentitiesList.js";
+import { workloadIdentitiesListDeviceJoinTokens } from "../funcs/workloadIdentitiesListDeviceJoinTokens.js";
 import { workloadIdentitiesListPlatforms } from "../funcs/workloadIdentitiesListPlatforms.js";
 import { workloadIdentitiesListTokenEndpoints } from "../funcs/workloadIdentitiesListTokenEndpoints.js";
+import { workloadIdentitiesRegisterDevice } from "../funcs/workloadIdentitiesRegisterDevice.js";
 import { workloadIdentitiesRegisterIssuer } from "../funcs/workloadIdentitiesRegisterIssuer.js";
+import { workloadIdentitiesRevokeDeviceJoinToken } from "../funcs/workloadIdentitiesRevokeDeviceJoinToken.js";
 import { workloadIdentitiesUpdateIssuer } from "../funcs/workloadIdentitiesUpdateIssuer.js";
 import { workloadIdentitiesUpdateSubject } from "../funcs/workloadIdentitiesUpdateSubject.js";
 import { workloadIdentitiesWithdrawIssuer } from "../funcs/workloadIdentitiesWithdrawIssuer.js";
 import { workloadIdentitiesWithdrawSubject } from "../funcs/workloadIdentitiesWithdrawSubject.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { RegisterDeviceRequestBody } from "../models/components/registerdevicerequestbody.js";
 import { WorkloadCustomFlows } from "../models/components/workloadcustomflows.js";
+import { WorkloadDeviceJoinToken } from "../models/components/workloaddevicejointoken.js";
+import { WorkloadDeviceJoinTokenSummary } from "../models/components/workloaddevicejointokensummary.js";
+import { WorkloadDeviceRegistration } from "../models/components/workloaddeviceregistration.js";
 import { WorkloadIdentityPolicy } from "../models/components/workloadidentitypolicy.js";
 import { WorkloadPlatformCatalog } from "../models/components/workloadplatformcatalog.js";
 import { WorkloadTokenEndpoints } from "../models/components/workloadtokenendpoints.js";
@@ -22,9 +30,18 @@ import {
   AdmitWorkloadSubjectSecurity,
 } from "../models/operations/admitworkloadsubject.js";
 import {
+  CreateWorkloadDeviceJoinTokenRequest,
+  CreateWorkloadDeviceJoinTokenSecurity,
+} from "../models/operations/createworkloaddevicejointoken.js";
+import {
   GetWorkloadCustomFlowsRequest,
   GetWorkloadCustomFlowsSecurity,
 } from "../models/operations/getworkloadcustomflows.js";
+import {
+  ListWorkloadDeviceJoinTokensRequest,
+  ListWorkloadDeviceJoinTokensResponse,
+  ListWorkloadDeviceJoinTokensSecurity,
+} from "../models/operations/listworkloaddevicejointokens.js";
 import {
   ListWorkloadIdentitiesRequest,
   ListWorkloadIdentitiesSecurity,
@@ -42,6 +59,10 @@ import {
   RegisterWorkloadIssuerSecurity,
 } from "../models/operations/registerworkloadissuer.js";
 import {
+  RevokeWorkloadDeviceJoinTokenRequest,
+  RevokeWorkloadDeviceJoinTokenSecurity,
+} from "../models/operations/revokeworkloaddevicejointoken.js";
+import {
   UpdateWorkloadIssuerRequest,
   UpdateWorkloadIssuerSecurity,
 } from "../models/operations/updateworkloadissuer.js";
@@ -58,6 +79,7 @@ import {
   WithdrawWorkloadSubjectSecurity,
 } from "../models/operations/withdrawworkloadsubject.js";
 import { unwrapAsync } from "../types/fp.js";
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class WorkloadIdentities extends ClientSDK {
   /**
@@ -72,6 +94,25 @@ export class WorkloadIdentities extends ClientSDK {
     options?: RequestOptions,
   ): Promise<WorkloadIdentityPolicy> {
     return unwrapAsync(workloadIdentitiesAdmitSubject(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createDeviceJoinToken workloadIdentities
+   *
+   * @remarks
+   * Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Only a person can create one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent's policy.
+   */
+  async createDeviceJoinToken(
+    request: CreateWorkloadDeviceJoinTokenRequest,
+    security?: CreateWorkloadDeviceJoinTokenSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkloadDeviceJoinToken> {
+    return unwrapAsync(workloadIdentitiesCreateDeviceJoinToken(
       this,
       request,
       security,
@@ -118,6 +159,27 @@ export class WorkloadIdentities extends ClientSDK {
   }
 
   /**
+   * listDeviceJoinTokens workloadIdentities
+   *
+   * @remarks
+   * List the organization's device join tokens, newest first, optionally for one agent. Revoked tokens are included. Each carries its status but never the token or its hash, which cannot be shown again. Requires workload:read.
+   */
+  async listDeviceJoinTokens(
+    request?: ListWorkloadDeviceJoinTokensRequest | undefined,
+    security?: ListWorkloadDeviceJoinTokensSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<
+    PageIterator<ListWorkloadDeviceJoinTokensResponse, { cursor: string }>
+  > {
+    return unwrapResultIterator(workloadIdentitiesListDeviceJoinTokens(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listPlatforms workloadIdentities
    *
    * @remarks
@@ -156,6 +218,23 @@ export class WorkloadIdentities extends ClientSDK {
   }
 
   /**
+   * registerDevice workloadIdentities
+   *
+   * @remarks
+   * Enroll a device with its public key, redeeming a join token. No session or API key: the single-use join token is the credential, and an unknown, expired, or already redeemed token returns 401. A key already registered to another device returns 409, and an agent whose policy no longer grants org:device_agent_sync returns a failed precondition without spending the token. In one transaction the device's key is registered, the device is admitted under the organization's Speakeasy device issuer, and it is assigned the token's agent.
+   */
+  async registerDevice(
+    request: RegisterDeviceRequestBody,
+    options?: RequestOptions,
+  ): Promise<WorkloadDeviceRegistration> {
+    return unwrapAsync(workloadIdentitiesRegisterDevice(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * registerIssuer workloadIdentities
    *
    * @remarks
@@ -167,6 +246,25 @@ export class WorkloadIdentities extends ClientSDK {
     options?: RequestOptions,
   ): Promise<WorkloadIdentityPolicy> {
     return unwrapAsync(workloadIdentitiesRegisterIssuer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * revokeDeviceJoinToken workloadIdentities
+   *
+   * @remarks
+   * Revoke a device join token that has not been redeemed, so it can no longer enroll a device. A token that was already redeemed or revoked returns a failed precondition; revoking stops future enrollments only and leaves a device the token already enrolled in place. Only a person can revoke one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the token's agent or agent:authorize on it, as creating one does.
+   */
+  async revokeDeviceJoinToken(
+    request: RevokeWorkloadDeviceJoinTokenRequest,
+    security?: RevokeWorkloadDeviceJoinTokenSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkloadDeviceJoinTokenSummary> {
+    return unwrapAsync(workloadIdentitiesRevokeDeviceJoinToken(
       this,
       request,
       security,

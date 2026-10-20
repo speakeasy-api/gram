@@ -26,7 +26,7 @@ export function ExistingIssuerLink({
   return (
     <Button asChild variant="secondary">
       <Link to={href} onClick={onClick}>
-        View existing provider
+        View existing authorization server
       </Link>
     </Button>
   );

@@ -56,3 +56,23 @@ func UpdateSubjectWorkloadIdentitiesPath() string {
 func WithdrawSubjectWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.withdrawSubject"
 }
+
+// CreateDeviceJoinTokenWorkloadIdentitiesPath returns the URL path to the workloadIdentities service createDeviceJoinToken HTTP endpoint.
+func CreateDeviceJoinTokenWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.createDeviceJoinToken"
+}
+
+// ListDeviceJoinTokensWorkloadIdentitiesPath returns the URL path to the workloadIdentities service listDeviceJoinTokens HTTP endpoint.
+func ListDeviceJoinTokensWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.listDeviceJoinTokens"
+}
+
+// RevokeDeviceJoinTokenWorkloadIdentitiesPath returns the URL path to the workloadIdentities service revokeDeviceJoinToken HTTP endpoint.
+func RevokeDeviceJoinTokenWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.revokeDeviceJoinToken"
+}
+
+// RegisterDeviceWorkloadIdentitiesPath returns the URL path to the workloadIdentities service registerDevice HTTP endpoint.
+func RegisterDeviceWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.registerDevice"
+}

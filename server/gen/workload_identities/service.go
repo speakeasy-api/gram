@@ -67,6 +67,34 @@ type Service interface {
 	// Withdraw an admitted subject and its agent assignment, stopping it
 	// authenticating. Requires workload:write.
 	WithdrawSubject(context.Context, *WithdrawSubjectPayload) (res *WorkloadIdentityPolicy, err error)
+	// Create a single-use join token that enrolls one headless box with no
+	// platform identity as a workload assigned to an agent. The token is returned
+	// once and only its hash is kept. Only a person can create one: a key backed
+	// by a principal rather than a user is refused with 403 whatever its grants.
+	// Requires workload:write, and either owning the agent or agent:authorize on
+	// it, since an enrolled box acts under the agent's policy.
+	CreateDeviceJoinToken(context.Context, *CreateDeviceJoinTokenPayload) (res *WorkloadDeviceJoinToken, err error)
+	// List the organization's device join tokens, newest first, optionally for one
+	// agent. Revoked tokens are included. Each carries its status but never the
+	// token or its hash, which cannot be shown again. Requires workload:read.
+	ListDeviceJoinTokens(context.Context, *ListDeviceJoinTokensPayload) (res *WorkloadDeviceJoinTokenList, err error)
+	// Revoke a device join token that has not been redeemed, so it can no longer
+	// enroll a device. A token that was already redeemed or revoked returns a
+	// failed precondition; revoking stops future enrollments only and leaves a
+	// device the token already enrolled in place. Only a person can revoke one: a
+	// key backed by a principal rather than a user is refused with 403 whatever
+	// its grants. Requires workload:write, and either owning the token's agent or
+	// agent:authorize on it, as creating one does.
+	RevokeDeviceJoinToken(context.Context, *RevokeDeviceJoinTokenPayload) (res *WorkloadDeviceJoinTokenSummary, err error)
+	// Enroll a device with its public key, redeeming a join token. No session or
+	// API key: the single-use join token is the credential, and an unknown,
+	// expired, or already redeemed token returns 401. A key already registered to
+	// another device returns 409, and an agent whose policy no longer grants
+	// org:device_agent_sync returns a failed precondition without spending the
+	// token. In one transaction the device's key is registered, the device is
+	// admitted under the organization's Speakeasy device issuer, and it is
+	// assigned the token's agent.
+	RegisterDevice(context.Context, *RegisterDevicePayload) (res *WorkloadDeviceRegistration, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -89,7 +117,7 @@ const ServiceName = "workloadIdentities"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"list", "listPlatforms", "getCustomFlows", "listTokenEndpoints", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject"}
+var MethodNames = [14]string{"list", "listPlatforms", "getCustomFlows", "listTokenEndpoints", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject", "createDeviceJoinToken", "listDeviceJoinTokens", "revokeDeviceJoinToken", "registerDevice"}
 
 // AdmitSubjectPayload is the payload type of the workloadIdentities service
 // admitSubject method.
@@ -123,9 +151,35 @@ type AdmitSubjectPayload struct {
 	ProjectScoped bool
 }
 
+// CreateDeviceJoinTokenPayload is the payload type of the workloadIdentities
+// service createDeviceJoinToken method.
+type CreateDeviceJoinTokenPayload struct {
+	// The agent the enrolled device inherits its policy from.
+	AgentID string
+	// How long the token stays redeemable. Defaults to one hour.
+	ExpiresInSeconds int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // GetCustomFlowsPayload is the payload type of the workloadIdentities service
 // getCustomFlows method.
 type GetCustomFlowsPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListDeviceJoinTokensPayload is the payload type of the workloadIdentities
+// service listDeviceJoinTokens method.
+type ListDeviceJoinTokensPayload struct {
+	// Only tokens that enroll devices under this agent.
+	AgentID *string
+	// Pagination cursor from a previous page.
+	Cursor *string
+	// Page size. Defaults to 50, maximum 200.
+	Limit            int
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -153,6 +207,20 @@ type ListTokenEndpointsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// RegisterDevicePayload is the payload type of the workloadIdentities service
+// registerDevice method.
+type RegisterDevicePayload struct {
+	// The join token from createDeviceJoinToken.
+	JoinToken string
+	// The device's public signing key as a JWK: EC P-256 (ES256) or OKP Ed25519
+	// (EdDSA). Private key material is refused.
+	PublicJwk map[string]any
+	// The device's hostname, shown to administrators. Self-reported.
+	Hostname *string
+	// The device's serial number, shown to administrators. Self-reported.
+	Serial *string
 }
 
 // RegisterIssuerPayload is the payload type of the workloadIdentities service
@@ -185,6 +253,16 @@ type RegisterIssuerPayload struct {
 	// organization. Requires a caller that names a project; a dashboard session
 	// does not. Defaults to false.
 	ProjectScoped bool
+}
+
+// RevokeDeviceJoinTokenPayload is the payload type of the workloadIdentities
+// service revokeDeviceJoinToken method.
+type RevokeDeviceJoinTokenPayload struct {
+	// The join token id.
+	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // UpdateIssuerPayload is the payload type of the workloadIdentities service
@@ -260,6 +338,63 @@ type WorkloadCustomFlows struct {
 	AllowAccess *WorkloadForm
 	// Edits allowed access; submits updateSubject.
 	EditAccess *WorkloadForm
+}
+
+// WorkloadDeviceJoinToken is the result type of the workloadIdentities service
+// createDeviceJoinToken method.
+type WorkloadDeviceJoinToken struct {
+	// The join token. Shown once; only its hash is stored.
+	Token string
+	// When the token stops being redeemable.
+	ExpiresAt string
+}
+
+// WorkloadDeviceJoinTokenList is the result type of the workloadIdentities
+// service listDeviceJoinTokens method.
+type WorkloadDeviceJoinTokenList struct {
+	// Join tokens, newest first.
+	Items []*WorkloadDeviceJoinTokenSummary
+	// Cursor for the next page. Omitted on the last page.
+	NextCursor *string
+}
+
+// WorkloadDeviceJoinTokenSummary is the result type of the workloadIdentities
+// service revokeDeviceJoinToken method.
+type WorkloadDeviceJoinTokenSummary struct {
+	// The join token id.
+	ID string
+	// The agent a device enrolled with this token inherits its policy from.
+	AgentID string
+	// The person who created the token.
+	CreatedByUserID string
+	CreatedAt       string
+	// When the token stops being redeemable.
+	ExpiresAt string
+	// When a device redeemed the token. Absent until redeemed.
+	ConsumedAt *string
+	// The workload subject, device:<uuid>, of the device that redeemed the token.
+	// Absent until redeemed.
+	ConsumedBySubject *string
+	// When the token was revoked. Absent unless revoked.
+	RevokedAt *string
+	// Derived in this order: revoked when revoked_at is set, redeemed when
+	// consumed_at is set, expired when expires_at has passed, otherwise active.
+	// Only an active token can enroll a device.
+	Status string
+}
+
+// WorkloadDeviceRegistration is the result type of the workloadIdentities
+// service registerDevice method.
+type WorkloadDeviceRegistration struct {
+	// The device's workload subject, device:<uuid>. Its assertions carry this as
+	// sub.
+	DeviceSubject string
+	// The issuer its assertions carry as iss.
+	Issuer string
+	// The agent the device inherits its policy from.
+	AgentID string
+	// The organization the device enrolled in.
+	OrganizationID string
 }
 
 // A custom flow's form, held to the management API form it submits.

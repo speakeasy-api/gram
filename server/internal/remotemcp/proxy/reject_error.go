@@ -130,7 +130,7 @@ func RejectErrorFromCause(err error) *RejectError {
 // rejectCodeForOops mirrors the mapping used by the /mcp endpoint's
 // NewErrorFromCause so an oops.ShareableError leaving an interceptor
 // produces the same JSON-RPC code regardless of which surface (the public
-// /mcp server or the /x/mcp proxy) it traversed.
+// /mcp server or the remote MCP proxy) it traversed.
 func rejectCodeForOops(code oops.Code) int {
 	switch code {
 	case oops.CodeBadRequest:

@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"unicode/utf8"
 
 	workloadidentities "github.com/speakeasy-api/gram/server/gen/workload_identities"
@@ -467,6 +468,220 @@ func BuildWithdrawSubjectPayload(workloadIdentitiesWithdrawSubjectID string, wor
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateDeviceJoinTokenPayload builds the payload for the
+// workloadIdentities createDeviceJoinToken endpoint from CLI flags.
+func BuildCreateDeviceJoinTokenPayload(workloadIdentitiesCreateDeviceJoinTokenBody string, workloadIdentitiesCreateDeviceJoinTokenSessionToken string, workloadIdentitiesCreateDeviceJoinTokenApikeyToken string, workloadIdentitiesCreateDeviceJoinTokenProjectSlugInput string) (*workloadidentities.CreateDeviceJoinTokenPayload, error) {
+	var err error
+	var body CreateDeviceJoinTokenRequestBody
+	{
+		err = json.Unmarshal([]byte(workloadIdentitiesCreateDeviceJoinTokenBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expires_in_seconds\": 61\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		if body.ExpiresInSeconds < 60 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_in_seconds", body.ExpiresInSeconds, 60, true))
+		}
+		if body.ExpiresInSeconds > 86400 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_in_seconds", body.ExpiresInSeconds, 86400, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if workloadIdentitiesCreateDeviceJoinTokenSessionToken != "" {
+			sessionToken = &workloadIdentitiesCreateDeviceJoinTokenSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesCreateDeviceJoinTokenApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesCreateDeviceJoinTokenApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesCreateDeviceJoinTokenProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesCreateDeviceJoinTokenProjectSlugInput
+		}
+	}
+	v := &workloadidentities.CreateDeviceJoinTokenPayload{
+		AgentID:          body.AgentID,
+		ExpiresInSeconds: body.ExpiresInSeconds,
+	}
+	{
+		var zero int
+		if v.ExpiresInSeconds == zero {
+			v.ExpiresInSeconds = 3600
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListDeviceJoinTokensPayload builds the payload for the
+// workloadIdentities listDeviceJoinTokens endpoint from CLI flags.
+func BuildListDeviceJoinTokensPayload(workloadIdentitiesListDeviceJoinTokensAgentID string, workloadIdentitiesListDeviceJoinTokensCursor string, workloadIdentitiesListDeviceJoinTokensLimit string, workloadIdentitiesListDeviceJoinTokensSessionToken string, workloadIdentitiesListDeviceJoinTokensApikeyToken string, workloadIdentitiesListDeviceJoinTokensProjectSlugInput string) (*workloadidentities.ListDeviceJoinTokensPayload, error) {
+	var err error
+	var agentID *string
+	{
+		if workloadIdentitiesListDeviceJoinTokensAgentID != "" {
+			agentID = &workloadIdentitiesListDeviceJoinTokensAgentID
+			err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", *agentID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if workloadIdentitiesListDeviceJoinTokensCursor != "" {
+			cursor = &workloadIdentitiesListDeviceJoinTokensCursor
+		}
+	}
+	var limit int
+	{
+		if workloadIdentitiesListDeviceJoinTokensLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(workloadIdentitiesListDeviceJoinTokensLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if workloadIdentitiesListDeviceJoinTokensSessionToken != "" {
+			sessionToken = &workloadIdentitiesListDeviceJoinTokensSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesListDeviceJoinTokensApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesListDeviceJoinTokensApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesListDeviceJoinTokensProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesListDeviceJoinTokensProjectSlugInput
+		}
+	}
+	v := &workloadidentities.ListDeviceJoinTokensPayload{}
+	v.AgentID = agentID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRevokeDeviceJoinTokenPayload builds the payload for the
+// workloadIdentities revokeDeviceJoinToken endpoint from CLI flags.
+func BuildRevokeDeviceJoinTokenPayload(workloadIdentitiesRevokeDeviceJoinTokenID string, workloadIdentitiesRevokeDeviceJoinTokenSessionToken string, workloadIdentitiesRevokeDeviceJoinTokenApikeyToken string, workloadIdentitiesRevokeDeviceJoinTokenProjectSlugInput string) (*workloadidentities.RevokeDeviceJoinTokenPayload, error) {
+	var err error
+	var id string
+	{
+		id = workloadIdentitiesRevokeDeviceJoinTokenID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if workloadIdentitiesRevokeDeviceJoinTokenSessionToken != "" {
+			sessionToken = &workloadIdentitiesRevokeDeviceJoinTokenSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesRevokeDeviceJoinTokenApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesRevokeDeviceJoinTokenApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesRevokeDeviceJoinTokenProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesRevokeDeviceJoinTokenProjectSlugInput
+		}
+	}
+	v := &workloadidentities.RevokeDeviceJoinTokenPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRegisterDevicePayload builds the payload for the workloadIdentities
+// registerDevice endpoint from CLI flags.
+func BuildRegisterDevicePayload(workloadIdentitiesRegisterDeviceBody string) (*workloadidentities.RegisterDevicePayload, error) {
+	var err error
+	var body RegisterDeviceRequestBody
+	{
+		err = json.Unmarshal([]byte(workloadIdentitiesRegisterDeviceBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"hostname\": \"aaa\",\n      \"join_token\": \"aa\",\n      \"public_jwk\": {\n         \"abc123\": \"abc123\"\n      },\n      \"serial\": \"aaa\"\n   }'")
+		}
+		if body.PublicJwk == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("public_jwk", "body"))
+		}
+		if utf8.RuneCountInString(body.JoinToken) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.join_token", body.JoinToken, utf8.RuneCountInString(body.JoinToken), 1, true))
+		}
+		if utf8.RuneCountInString(body.JoinToken) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.join_token", body.JoinToken, utf8.RuneCountInString(body.JoinToken), 512, false))
+		}
+		if body.Hostname != nil {
+			if utf8.RuneCountInString(*body.Hostname) > 255 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.hostname", *body.Hostname, utf8.RuneCountInString(*body.Hostname), 255, false))
+			}
+		}
+		if body.Serial != nil {
+			if utf8.RuneCountInString(*body.Serial) > 255 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.serial", *body.Serial, utf8.RuneCountInString(*body.Serial), 255, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &workloadidentities.RegisterDevicePayload{
+		JoinToken: body.JoinToken,
+		Hostname:  body.Hostname,
+		Serial:    body.Serial,
+	}
+	if body.PublicJwk != nil {
+		v.PublicJwk = make(map[string]any, len(body.PublicJwk))
+		for key, val := range body.PublicJwk {
+			tk := key
+			tv := val
+			v.PublicJwk[tk] = tv
+		}
+	}
 
 	return v, nil
 }

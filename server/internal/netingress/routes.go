@@ -14,8 +14,7 @@ type RouteSurface string
 type RouteID string
 
 const (
-	RouteSurfaceMCP  RouteSurface = "mcp"
-	RouteSurfaceXMCP RouteSurface = "xmcp"
+	RouteSurfaceMCP RouteSurface = "mcp"
 	// A gateway addressed by agent rather than by slug. Its own prefix, not a
 	// reserved slug under /mcp, so it can never be shadowed by a real server
 	// whose slug happens to be "agent".
@@ -66,23 +65,6 @@ var privateRoutes = []RouteSpec{
 	{Surface: RouteSurfaceMCP, ID: RouteToken, Method: http.MethodPost, Path: "/mcp/{mcpSlug}/token"},
 	{Surface: RouteSurfaceMCP, ID: RouteRevoke, Method: http.MethodPost, Path: "/mcp/{mcpSlug}/revoke"},
 
-	{Surface: RouteSurfaceXMCP, ID: RouteRuntime, Method: http.MethodDelete, Path: "/x/mcp/{slug}"},
-	{Surface: RouteSurfaceXMCP, ID: RouteRuntime, Method: http.MethodGet, Path: "/x/mcp/{slug}"},
-	{Surface: RouteSurfaceXMCP, ID: RouteRuntime, Method: http.MethodPost, Path: "/x/mcp/{slug}"},
-	{Surface: RouteSurfaceXMCP, ID: RouteInstall, Method: http.MethodGet, Path: "/x/mcp/{mcpSlug}/install"},
-	{Surface: RouteSurfaceXMCP, ID: RouteProtectedResource, Method: http.MethodGet, Path: wellknown.OAuthProtectedResourcePath + "/x/mcp/{mcpSlug}"},
-	{Surface: RouteSurfaceXMCP, ID: RouteAuthorizationServer, Method: http.MethodGet, Path: wellknown.OAuthAuthorizationServerPath + "/x/mcp/{mcpSlug}"},
-	{Surface: RouteSurfaceXMCP, ID: RouteRegister, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/register"},
-	{Surface: RouteSurfaceXMCP, ID: RouteAuthorize, Method: http.MethodGet, Path: "/x/mcp/{mcpSlug}/authorize"},
-	{Surface: RouteSurfaceXMCP, ID: RouteConnect, Method: http.MethodGet, Path: "/x/mcp/{mcpSlug}/connect"},
-	{Surface: RouteSurfaceXMCP, ID: RouteConnect, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/connect"},
-	{Surface: RouteSurfaceXMCP, ID: RouteConnectRemoteSession, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/connect/remote-session"},
-	{Surface: RouteSurfaceXMCP, ID: RouteConnectMCP, Method: http.MethodDelete, Path: "/x/mcp/{mcpSlug}/connect/mcp"},
-	{Surface: RouteSurfaceXMCP, ID: RouteConnectMCP, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/connect/mcp"},
-	{Surface: RouteSurfaceXMCP, ID: RouteConnectFirstParty, Method: http.MethodGet, Path: "/x/mcp/{mcpSlug}/connect/first-party"},
-	{Surface: RouteSurfaceXMCP, ID: RouteToken, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/token"},
-	{Surface: RouteSurfaceXMCP, ID: RouteRevoke, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/revoke"},
-
 	// POST only: an agent gateway has no proxied stream and no upstream
 	// session, so it needs neither the GET stream nor the DELETE teardown the
 	// slug surfaces carry. Its members are derived per request, so there is no
@@ -126,8 +108,6 @@ func isReservedGlobalPath(method, requestPath string) bool {
 		"/mcp/idp_callback",
 		"/mcp/remote_login_callback",
 		"/mcp/remote_login_bind",
-		"/x/mcp/idp_callback",
-		"/x/mcp/remote_login_callback",
 	} {
 		if requestPath == callback || strings.HasPrefix(requestPath, callback+"/") {
 			return true

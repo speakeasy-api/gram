@@ -423,6 +423,7 @@ func ahpToolPermissionPayload(e *ahp.ToolPermissionRequestEvent) *gen.IngestPayl
 func ahpPayload(source string, harness *ahp.Harness, id, rawType, occurredAt, eventType string, session ahp.Optional[*ahp.Session], turnID string) *gen.IngestPayload {
 	payload := &gen.IngestPayload{
 		ApikeyToken:      nil,
+		DeviceAgentToken: nil,
 		ProjectSlugInput: nil,
 		Replayed:         nil,
 		SchemaVersion:    hookIngestSchemaV1,

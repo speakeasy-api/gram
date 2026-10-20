@@ -410,7 +410,7 @@ const (
 	// 2026-07-28), otherwise from the observed `initialize` response.
 	McpNegotiatedProtocolVersionKey = attribute.Key("gram.mcp.negotiated_protocol_version")
 	// McpSurfaceKey is the inbound MCP serving surface: "hosting" for the
-	// third-party-facing /mcp/{slug} and /x/mcp/{slug} paths (all backends), or
+	// third-party-facing /mcp/{slug} path (all backends), or
 	// "platform" for the assistant-token-only /platform/mcp/{toolsetSlug} path.
 	McpSurfaceKey = attribute.Key("gram.mcp.surface")
 	// McpRejectionReasonKey is the bounded reason an inbound MCP request was
@@ -662,6 +662,7 @@ const (
 	PackageVersionKey                 = attribute.Key("gram.package.version")
 	PKCEMethodKey                     = attribute.Key("gram.pkce.method")
 	PKCESupportKey                    = attribute.Key("gram.pkce.support")
+	PluginSlugKey                     = attribute.Key("gram.plugin.slug")
 	ProductFeatureNameKey             = attribute.Key("gram.product.feature.name")
 	ProjectIDKey                      = attribute.Key("gram.project.id")
 	ProjectNameKey                    = attribute.Key("gram.project.name")
@@ -1240,6 +1241,7 @@ func SlogHookServerNameOverrideID(v string) slog.Attr {
 }
 
 func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v) }
+func SlogHookDecision(v string) slog.Attr      { return slog.String(string(HookDecisionKey), v) }
 
 func HookRiskScanned(v bool) attribute.KeyValue { return HookRiskScannedKey.Bool(v) }
 
@@ -3035,6 +3037,9 @@ func MetaDispatchOutcome[V ~string](v V) attribute.KeyValue {
 
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }
 func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetIDKey), v) }
+
+func PluginSlug(v string) attribute.KeyValue { return PluginSlugKey.String(v) }
+func SlogPluginSlug(v string) slog.Attr      { return slog.String(string(PluginSlugKey), v) }
 
 func ToolsetSlug(v string) attribute.KeyValue { return ToolsetSlugKey.String(v) }
 func SlogToolsetSlug(v string) slog.Attr      { return slog.String(string(ToolsetSlugKey), v) }

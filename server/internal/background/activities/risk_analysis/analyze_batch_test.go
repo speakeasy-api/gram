@@ -39,7 +39,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -176,22 +175,40 @@ func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
 	return pub
 }
 
-func newFindingsPub() *gcp.MockPublisher[*riskv1.Finding] {
-	pub := gcp.NewMockPublisher[*riskv1.Finding]()
+func newToolCallPub() *gcp.MockPublisher[*riskv1.ToolCallAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.ToolCallAnalysis]()
 	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
 	return pub
 }
 
-// capturingFindingsPub records every Finding the batch path mirrors onto the
-// shared findings topic, so tests can assert exactly which sources publish.
-func capturingFindingsPub(t *testing.T) (*gcp.MockPublisher[*riskv1.Finding], *[]*riskv1.Finding) {
+func newAccountIdentityPub() *gcp.MockPublisher[*riskv1.AccountIdentityAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.AccountIdentityAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
+func capturingAccountIdentityPub(t *testing.T) (*gcp.MockPublisher[*riskv1.AccountIdentityAnalysis], *[]*riskv1.AccountIdentityAnalysis) {
 	t.Helper()
-	pub := gcp.NewMockPublisher[*riskv1.Finding]()
-	var published []*riskv1.Finding
+	pub := gcp.NewMockPublisher[*riskv1.AccountIdentityAnalysis]()
+	var published []*riskv1.AccountIdentityAnalysis
 	pub.On("Publish", mock.Anything, mock.Anything).
 		Return(gcp.NewSuccessPublishResult()).
 		Run(func(args mock.Arguments) {
-			msg, ok := args.Get(1).(*riskv1.Finding)
+			msg, ok := args.Get(1).(*riskv1.AccountIdentityAnalysis)
+			require.True(t, ok)
+			published = append(published, msg)
+		})
+	return pub, &published
+}
+
+func capturingToolCallPub(t *testing.T) (*gcp.MockPublisher[*riskv1.ToolCallAnalysis], *[]*riskv1.ToolCallAnalysis) {
+	t.Helper()
+	pub := gcp.NewMockPublisher[*riskv1.ToolCallAnalysis]()
+	var published []*riskv1.ToolCallAnalysis
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*riskv1.ToolCallAnalysis)
 			require.True(t, ok)
 			published = append(published, msg)
 		})
@@ -200,7 +217,7 @@ func capturingFindingsPub(t *testing.T) (*gcp.MockPublisher[*riskv1.Finding], *[
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()), false)
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newToolCallPub(), newAccountIdentityPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()), false)
 	require.NoError(t, err)
 	require.NotNil(t, ab)
 
@@ -234,15 +251,12 @@ func TestAnalyzeBatch_MeterPublishFailureDoesNotDiscardFindings(t *testing.T) {
 	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).
 		Return(gcp.NewErrPublishResult(errors.New("meter transport unavailable"))).Once()
-	ab, err := risk_analysis.NewAnalyzeBatch(
-		logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t),
+	ab, err := risk_analysis.NewAnalyzeBatch(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t),
 		conn, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil,
 		newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(),
-		newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(),
-		mustCustomRuleScanner(t, conn), mustCELEngine(t), nil, nil,
+		newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newToolCallPub(), newAccountIdentityPub(), mustCustomRuleScanner(t, conn), mustCELEngine(t), nil, nil,
 		metering.NewRiskRecorder(publisher),
-		false,
-	)
+		false)
 	require.NoError(t, err)
 	var ts testsuite.WorkflowTestSuite
 	env := ts.NewTestActivityEnvironment()
@@ -309,8 +323,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		testenv.NewLogger(t),
 	)
 
-	ab, err := risk_analysis.NewAnalyzeBatch(
-		testenv.NewLogger(t),
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		conn,
@@ -325,15 +338,12 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(), newLLMPub(),
-		newFindingsPub(),
-		mustCustomRuleScanner(t, conn),
+		newCustomRulesPub(), newLLMPub(), newToolCallPub(), newAccountIdentityPub(), mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-		false,
-	)
+		false)
 	require.NoError(t, err)
 
 	// Execute via Temporal test activity environment to satisfy activity.RecordHeartbeat
@@ -378,7 +388,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	assert.True(t, sawDeadLetter, "expected a presidio dead-letter row with dead_letter_reason set")
 }
 
-func TestAnalyzeBatch_ContentSourcesNotRepublishedToFindingsTopic(t *testing.T) {
+func TestAnalyzeBatch_ContentSourcesDoNotPublishToolCallRequests(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
@@ -394,7 +404,7 @@ func TestAnalyzeBatch_ContentSourcesNotRepublishedToFindingsTopic(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	findingsPub, published := capturingFindingsPub(t)
+	toolCallPub, published := capturingToolCallPub(t)
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
@@ -412,7 +422,8 @@ func TestAnalyzeBatch_ContentSourcesNotRepublishedToFindingsTopic(t *testing.T) 
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
 		newCustomRulesPub(), newLLMPub(),
-		findingsPub,
+		toolCallPub,
+		newAccountIdentityPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
@@ -440,10 +451,7 @@ func TestAnalyzeBatch_ContentSourcesNotRepublishedToFindingsTopic(t *testing.T) 
 	require.NoError(t, val.Get(&result))
 	require.Positive(t, result.Findings, "gitleaks should flag the seeded secret")
 
-	// Content sources already publish from their stream handlers with their
-	// own ids; the batch path re-publishing them would double-write ClickHouse
-	// rows that uniqExact(id) cannot dedupe.
-	require.Empty(t, *published, "content-source findings must not be mirrored onto the findings topic by the batch path")
+	require.Empty(t, *published)
 }
 
 func TestContentPartBatchPreservesDeletedChatContentWithoutOwnerAttribution(t *testing.T) {
@@ -618,8 +626,7 @@ func TestAnalyzeBatch_PromptInjectionCutoverPublishesRealJudgeRequests(t *testin
 		return nil, nil
 	})
 
-	ab, err := risk_analysis.NewAnalyzeBatch(
-		testenv.NewLogger(t),
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		conn,
@@ -634,15 +641,12 @@ func TestAnalyzeBatch_PromptInjectionCutoverPublishesRealJudgeRequests(t *testin
 		newGitleaksPub(),
 		promptInjectionPub,
 		newPromptPolicyPub(),
-		newCustomRulesPub(), newLLMPub(),
-		newFindingsPub(),
-		mustCustomRuleScanner(t, conn),
+		newCustomRulesPub(), newLLMPub(), newToolCallPub(), newAccountIdentityPub(), mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-		false,
-	)
+		false)
 	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
@@ -725,8 +729,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesStrictlyBoundedTrajectory(t *testi
 	}
 
 	promptInjectionPub, published := capturingPromptInjectionPub(t)
-	ab, err := risk_analysis.NewAnalyzeBatch(
-		testenv.NewLogger(t),
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		conn,
@@ -741,15 +744,12 @@ func TestAnalyzeBatch_PromptInjectionPublishesStrictlyBoundedTrajectory(t *testi
 		newGitleaksPub(),
 		promptInjectionPub,
 		newPromptPolicyPub(),
-		newCustomRulesPub(), newLLMPub(),
-		newFindingsPub(),
-		mustCustomRuleScanner(t, conn),
+		newCustomRulesPub(), newLLMPub(), newToolCallPub(), newAccountIdentityPub(), mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-		false,
-	)
+		false)
 	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
@@ -853,9 +853,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 		newGitleaksPub(),
 		promptInjectionPub,
 		newPromptPolicyPub(),
-		newCustomRulesPub(), newLLMPub(),
-		newFindingsPub(),
-		mustCustomRuleScanner(t, conn),
+		newCustomRulesPub(), newLLMPub(), newToolCallPub(), newAccountIdentityPub(), mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
@@ -934,8 +932,7 @@ func TestAnalyzeBatch_PromptPolicyCutoverPublishesRealJudgeRequests(t *testing.T
 	judge := &recordingPromptJudge{}
 	meterPub, readings := capturingMeterPub(t)
 
-	ab, err := risk_analysis.NewAnalyzeBatch(
-		testenv.NewLogger(t),
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		conn,
@@ -950,9 +947,7 @@ func TestAnalyzeBatch_PromptPolicyCutoverPublishesRealJudgeRequests(t *testing.T
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		promptPolicyPub,
-		newCustomRulesPub(), newLLMPub(),
-		newFindingsPub(),
-		mustCustomRuleScanner(t, conn),
+		newCustomRulesPub(), newLLMPub(), newToolCallPub(), newAccountIdentityPub(), mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
@@ -996,7 +991,7 @@ func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
 	toolsetID := seedHTTPToolset(t, conn, td, "delete_records", &destructive)
 	msgID := insertAssistantToolCall(t, conn, td, "mcp__gram__delete_records", toolsetID)
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{shadowmcp.SourceDestructiveTool}, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{shadowmcp.SourceDestructiveTool}, newToolCallPub())
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 1, result.Findings)
 
@@ -1062,7 +1057,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		newPromptInjectionPub(),
 		promptPolicyPub,
 		newCustomRulesPub(), newLLMPub(),
-		newFindingsPub(),
+		newToolCallPub(), newAccountIdentityPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
@@ -1155,8 +1150,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
 	judge := &recordingPromptJudge{}
-	ab, err := risk_analysis.NewAnalyzeBatch(
-		testenv.NewLogger(t),
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		conn,
@@ -1171,15 +1165,12 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(), newLLMPub(),
-		newFindingsPub(),
-		mustCustomRuleScanner(t, conn),
+		newCustomRulesPub(), newLLMPub(), newToolCallPub(), newAccountIdentityPub(), mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-		false,
-	)
+		false)
 	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
@@ -1227,7 +1218,7 @@ func TestAnalyzeBatch_DestructiveToolAnnotationSkipsFalseHint(t *testing.T) {
 	toolsetID := seedHTTPToolset(t, conn, td, "read_records", &destructive)
 	msgID := insertAssistantToolCall(t, conn, td, "MCP:read_records", toolsetID)
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{shadowmcp.SourceDestructiveTool}, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{shadowmcp.SourceDestructiveTool}, newToolCallPub())
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 0, result.Findings)
 }
@@ -1244,7 +1235,7 @@ func TestAnalyzeBatch_CLIDestructive_BashRmRf(t *testing.T) {
 
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "rm -rf *"})
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive}, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive}, newToolCallPub())
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 1, result.Findings)
 
@@ -1262,27 +1253,26 @@ func TestAnalyzeBatch_CLIDestructive_BashRmRf(t *testing.T) {
 	assert.Equal(t, "Bash", rows[0].Match.String)
 }
 
-func TestAnalyzeBatch_CLIDestructivePublishesFindingsToTopic(t *testing.T) {
+func TestAnalyzeBatch_CLIDestructivePublishesAnalysisRequest(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "rm -rf *"})
 
-	// cli_destructive runs only in the batch path (no stream handler), so the
-	// batch must mirror its findings onto the findings topic itself.
-	pub, published := capturingFindingsPub(t)
+	pub, published := capturingToolCallPub(t)
 	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive}, pub)
 	require.Equal(t, 1, result.Findings)
 
 	require.Len(t, *published, 1)
-	finding := (*published)[0]
-	assert.Equal(t, risk_analysis.SourceCLIDestructive, finding.GetSource())
-	assert.Equal(t, "destructive.shell.rm_rf", finding.GetRuleId())
-	assert.Equal(t, msgID.String(), finding.GetChatMessageId())
+	request := (*published)[0]
+	require.Equal(t, []string{risk_analysis.SourceCLIDestructive}, request.GetSources())
+	require.Equal(t, msgID.String(), request.GetChatMessageId())
+	require.Len(t, request.GetToolCalls(), 1)
+	require.Equal(t, "Bash", request.GetToolCalls()[0].GetName())
 }
 
-func TestAnalyzeBatch_DestructiveToolPublishesFindingsToTopic(t *testing.T) {
+func TestAnalyzeBatch_DestructiveToolPublishesAnalysisRequest(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
@@ -1291,17 +1281,17 @@ func TestAnalyzeBatch_DestructiveToolPublishesFindingsToTopic(t *testing.T) {
 	toolsetID := seedHTTPToolset(t, conn, td, "delete_records", &destructive)
 	msgID := insertAssistantToolCall(t, conn, td, "mcp__gram__delete_records", toolsetID)
 
-	pub, published := capturingFindingsPub(t)
+	pub, published := capturingToolCallPub(t)
 	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{shadowmcp.SourceDestructiveTool}, pub)
 	require.Equal(t, 1, result.Findings)
 
 	require.Len(t, *published, 1)
-	finding := (*published)[0]
-	assert.Equal(t, shadowmcp.SourceDestructiveTool, finding.GetSource())
-	assert.Equal(t, msgID.String(), finding.GetChatMessageId())
+	request := (*published)[0]
+	require.Equal(t, []string{shadowmcp.SourceDestructiveTool}, request.GetSources())
+	require.Equal(t, msgID.String(), request.GetChatMessageId())
 }
 
-func TestAnalyzeBatch_ShadowMCPPublishesFindingsToTopic(t *testing.T) {
+func TestAnalyzeBatch_ShadowMCPPublishesAnalysisRequest(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
@@ -1310,97 +1300,14 @@ func TestAnalyzeBatch_ShadowMCPPublishesFindingsToTopic(t *testing.T) {
 	// provenance is shadow MCP by signature validation.
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__rogue__exfiltrate", map[string]any{"target": "data"})
 
-	pub, published := capturingFindingsPub(t)
+	pub, published := capturingToolCallPub(t)
 	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{shadowmcp.SourceShadowMCP}, pub)
 	require.Equal(t, 1, result.Findings)
 
 	require.Len(t, *published, 1)
-	finding := (*published)[0]
-	assert.Equal(t, shadowmcp.SourceShadowMCP, finding.GetSource())
-	assert.Equal(t, msgID.String(), finding.GetChatMessageId())
-}
-
-// deletingPIIScanner deletes the batch's risk policy the first time it is
-// invoked, simulating a policy deletion racing a running analysis. The scan
-// itself returns no findings.
-type deletingPIIScanner struct {
-	conn      *pgxpool.Pool
-	projectID uuid.UUID
-	policyID  uuid.UUID
-}
-
-func (s *deletingPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, _ []string, _ float64, _ func()) ([]scanners.Result, error) {
-	if err := riskrepo.New(s.conn).DeleteRiskPolicy(ctx, riskrepo.DeleteRiskPolicyParams{
-		ID:        s.policyID,
-		ProjectID: s.projectID,
-	}); err != nil {
-		return nil, fmt.Errorf("delete risk policy mid-analysis: %w", err)
-	}
-	return make([]scanners.Result, len(texts)), nil
-}
-
-func TestAnalyzeBatch_PolicyDeletedMidAnalysisPublishesNothing(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-
-	// A cli_destructive finding that WOULD publish, plus the presidio source so
-	// the deleting scanner runs mid-analysis, after scanning starts and before
-	// writeResults re-checks the policy inside its transaction.
-	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "rm -rf *"})
-
-	pub, published := capturingFindingsPub(t)
-	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, nil)
-	ab, err := risk_analysis.NewAnalyzeBatch(
-		testenv.NewLogger(t),
-		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
-		conn,
-		nil,
-		&deletingPIIScanner{conn: conn, projectID: td.projectID, policyID: td.policyID},
-		nil,
-		shadowMCPClient,
-		stubProvenanceLookup{},
-		nil,
-		nil,
-		newPresidioPub(),
-		newGitleaksPub(),
-		newPromptInjectionPub(),
-		newPromptPolicyPub(),
-		newCustomRulesPub(), newLLMPub(),
-		pub,
-		mustCustomRuleScanner(t, conn),
-		mustCELEngine(t),
-		nil,
-		nil,
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-		false,
-	)
-	require.NoError(t, err)
-
-	var ts testsuite.WorkflowTestSuite
-	env := ts.NewTestActivityEnvironment()
-	env.RegisterActivity(ab.Do)
-	_, err = env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:      td.projectID,
-		OrganizationID: td.orgID,
-		RiskPolicyID:   td.policyID,
-		PolicyVersion:  td.policyVersion,
-		MessageIDs:     []uuid.UUID{msgID},
-		Sources:        []string{"presidio", risk_analysis.SourceCLIDestructive},
-	})
-	require.NoError(t, err)
-
-	// The policy vanished before writeResults committed, so the results were
-	// dropped — and the findings-topic mirror must be suppressed with them:
-	// ClickHouse must never hold findings Postgres never stored.
-	rows, err := testrepo.New(conn).ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
-		ProjectID:    td.projectID,
-		RiskPolicyID: td.policyID,
-	})
-	require.NoError(t, err)
-	require.Empty(t, rows)
-	require.Empty(t, *published, "publish must be gated on a committed write")
+	request := (*published)[0]
+	require.Equal(t, []string{shadowmcp.SourceShadowMCP}, request.GetSources())
+	require.Equal(t, msgID.String(), request.GetChatMessageId())
 }
 
 // TestAnalyzeBatch_Gitleaks_SecretInToolCallArgsOnly plants a secret solely in
@@ -1418,7 +1325,7 @@ func TestAnalyzeBatch_Gitleaks_SecretInToolCallArgsOnly(t *testing.T) {
 		"command": "aws configure set aws_access_key_id ASIAZ2XY3WNBQR5TUVWX aws_secret_access_key wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd",
 	})
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newToolCallPub())
 	require.Equal(t, 1, result.Processed)
 	require.Positive(t, result.Findings)
 
@@ -1458,8 +1365,7 @@ func TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly(t *testing.T) {
 		"email": "alice.smith@bluesky-mail.com",
 	})
 
-	ab, err := risk_analysis.NewAnalyzeBatch(
-		testenv.NewLogger(t),
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		conn,
@@ -1474,15 +1380,12 @@ func TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(), newLLMPub(),
-		newFindingsPub(),
-		mustCustomRuleScanner(t, conn),
+		newCustomRulesPub(), newLLMPub(), newToolCallPub(), newAccountIdentityPub(), mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-		false,
-	)
+		false)
 	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
@@ -1531,7 +1434,7 @@ func TestAnalyzeBatch_CLIDestructive_GitForcePush(t *testing.T) {
 
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "run_terminal_cmd", map[string]any{"command": "git push --force origin main"})
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive}, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive}, newToolCallPub())
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 1, result.Findings)
 
@@ -1557,7 +1460,7 @@ func TestAnalyzeBatch_CLIDestructive_MCPArgsDropTable(t *testing.T) {
 
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__db__run_query", map[string]any{"query": "DROP TABLE users"})
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive}, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive}, newToolCallPub())
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 1, result.Findings)
 
@@ -1589,7 +1492,7 @@ func TestAnalyzeBatch_CLIDestructive_StableRuleIDAcrossKeys(t *testing.T) {
 		"alt":     "git push --force origin main", // git/push_force
 	})
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive}, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive}, newToolCallPub())
 	require.Equal(t, 1, result.Findings)
 
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
@@ -1624,7 +1527,7 @@ func TestAnalyzeBatch_BothSources_OnSameMCPCall(t *testing.T) {
 		"query":                       "DROP TABLE users",
 	})
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{shadowmcp.SourceDestructiveTool, risk_analysis.SourceCLIDestructive}, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{shadowmcp.SourceDestructiveTool, risk_analysis.SourceCLIDestructive}, newToolCallPub())
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 2, result.Findings, "destructive_tool + cli_destructive must both fire")
 
@@ -1648,7 +1551,7 @@ func TestAnalyzeBatch_CLIDestructive_BenignBash(t *testing.T) {
 
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "ls -la"})
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive}, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive}, newToolCallPub())
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 0, result.Findings)
 }
@@ -1668,7 +1571,7 @@ func TestAnalyzeBatch_CustomDetectionRuleFinding(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil, newToolCallPub())
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 1, result.Findings)
 
@@ -1717,7 +1620,7 @@ func TestAnalyzeBatch_ExclusionSuppressesMessageFinding(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil, newToolCallPub())
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 0, result.Findings, "excluded content finding must be suppressed end-to-end through Do()")
 
@@ -1750,7 +1653,7 @@ func TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil, newToolCallPub())
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 0, result.Findings)
 
@@ -1776,7 +1679,7 @@ func TestAnalyzeBatch_CustomDetectionRuleToolServer(t *testing.T) {
 
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__mise__run_task", map[string]any{"task": "build"})
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil, newToolCallPub())
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 1, result.Findings)
 
@@ -1940,9 +1843,9 @@ func (stubProvenanceLookup) LookupMCPProvenanceByToolCallID(_ context.Context, _
 	return map[string]telemetryrepo.MCPProvenance{}, nil
 }
 
-func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageIDs []uuid.UUID, sources []string, findingsPub gcp.Publisher[*riskv1.Finding]) risk_analysis.AnalyzeBatchResult {
+func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageIDs []uuid.UUID, sources []string, toolCallPub gcp.Publisher[*riskv1.ToolCallAnalysis]) risk_analysis.AnalyzeBatchResult {
 	t.Helper()
-	return executeAnalyzeBatchForIDs(t, conn, nil, td, messageIDs, nil, sources, findingsPub)
+	return executeAnalyzeBatchForIDs(t, conn, nil, td, messageIDs, nil, sources, toolCallPub, nil)
 }
 
 func TestAnalyzeBatch_ContentPartHydratesFullAssetContent(t *testing.T) {
@@ -1982,10 +1885,10 @@ func TestAnalyzeBatch_ContentPartHydratesFullAssetContent(t *testing.T) {
 
 func executeAnalyzeBatchWithContentParts(t *testing.T, conn *pgxpool.Pool, assetStorage assets.BlobStore, td testData, contentPartIDs []uuid.UUID, sources []string) risk_analysis.AnalyzeBatchResult {
 	t.Helper()
-	return executeAnalyzeBatchForIDs(t, conn, assetStorage, td, nil, contentPartIDs, sources, newFindingsPub())
+	return executeAnalyzeBatchForIDs(t, conn, assetStorage, td, nil, contentPartIDs, sources, newToolCallPub(), nil)
 }
 
-func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage assets.BlobStore, td testData, messageIDs []uuid.UUID, contentPartIDs []uuid.UUID, sources []string, findingsPub gcp.Publisher[*riskv1.Finding]) risk_analysis.AnalyzeBatchResult {
+func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage assets.BlobStore, td testData, messageIDs []uuid.UUID, contentPartIDs []uuid.UUID, sources []string, toolCallPub gcp.Publisher[*riskv1.ToolCallAnalysis], flags feature.Provider) risk_analysis.AnalyzeBatchResult {
 	t.Helper()
 	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, nil)
 	ab, err := risk_analysis.NewAnalyzeBatch(
@@ -1999,13 +1902,14 @@ func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage as
 		shadowMCPClient,
 		stubProvenanceLookup{},
 		nil,
-		nil,
+		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
 		newCustomRulesPub(), newLLMPub(),
-		findingsPub,
+		toolCallPub,
+		newAccountIdentityPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
@@ -2268,7 +2172,7 @@ func TestAnalyzeBatch_SkipsWhenPolicyDisabled(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newToolCallPub())
 	assert.Equal(t, 0, result.Processed)
 	assert.Equal(t, 0, result.Findings)
 
@@ -2300,7 +2204,7 @@ func TestAnalyzeBatch_SkipsWhenPolicyDeleted(t *testing.T) {
 		ProjectID: td.projectID,
 	}))
 
-	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newToolCallPub())
 	assert.Equal(t, 0, result.Processed)
 	assert.Equal(t, 0, result.Findings)
 }
@@ -2328,7 +2232,7 @@ func TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	first := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	first := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newToolCallPub())
 	require.GreaterOrEqual(t, first.Findings, 1)
 
 	firstRows, err := testQueries.ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
@@ -2367,7 +2271,7 @@ func TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, dismissed, 1)
 
-	second := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	second := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newToolCallPub())
 	require.Equal(t, first.Findings, second.Findings)
 
 	secondRows, err := testQueries.ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
@@ -2399,6 +2303,28 @@ func TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents(t *testing.T) {
 	require.Len(t, allOutbox, len(firstOutbox), "a redrive must not re-emit webhook events for already-announced findings")
 }
 
+func TestAnalyzeBatch_ClickHouseCutoverDisablesBatchEmitter(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd",
+	})
+	require.NoError(t, err)
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, td.orgID, true)
+	result := executeAnalyzeBatchForIDs(t, conn, nil, td, []uuid.UUID{msgID}, nil, []string{"gitleaks"}, newToolCallPub(), flags)
+	require.Positive(t, result.Findings)
+
+	count, err := testrepo.New(conn).CountOutboxEntriesByEventType(t.Context(), string(events.RiskFindingCreatedV1.EventType()))
+	require.NoError(t, err)
+	require.Zero(t, count, "the batch emitter stays off after the ClickHouse emitter is enabled")
+}
+
 func riskResultIDs(rows []testrepo.RiskResult) []uuid.UUID {
 	ids := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {
@@ -2428,7 +2354,7 @@ func TestAnalyzeBatch_LegacyRandomIDRowsConverge(t *testing.T) {
 	require.NoError(t, err)
 
 	// First analysis establishes the canonical rows and their announcements.
-	first := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	first := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newToolCallPub())
 	require.GreaterOrEqual(t, first.Findings, 1)
 
 	canonical, err := testQueries.ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
@@ -2492,7 +2418,7 @@ func TestAnalyzeBatch_LegacyRandomIDRowsConverge(t *testing.T) {
 
 	// Re-analysis replaces the legacy rows with deterministic ones. Identity
 	// matching must carry the dismissal over and announce nothing new.
-	second := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	second := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newToolCallPub())
 	require.Equal(t, first.Findings, second.Findings)
 
 	after, err := testQueries.ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{

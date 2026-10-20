@@ -18,17 +18,21 @@ import (
 
 // Server lists the workloadIdentities service endpoint HTTP handlers.
 type Server struct {
-	Mounts             []*MountPoint
-	List               http.Handler
-	ListPlatforms      http.Handler
-	GetCustomFlows     http.Handler
-	ListTokenEndpoints http.Handler
-	RegisterIssuer     http.Handler
-	UpdateIssuer       http.Handler
-	WithdrawIssuer     http.Handler
-	AdmitSubject       http.Handler
-	UpdateSubject      http.Handler
-	WithdrawSubject    http.Handler
+	Mounts                []*MountPoint
+	List                  http.Handler
+	ListPlatforms         http.Handler
+	GetCustomFlows        http.Handler
+	ListTokenEndpoints    http.Handler
+	RegisterIssuer        http.Handler
+	UpdateIssuer          http.Handler
+	WithdrawIssuer        http.Handler
+	AdmitSubject          http.Handler
+	UpdateSubject         http.Handler
+	WithdrawSubject       http.Handler
+	CreateDeviceJoinToken http.Handler
+	ListDeviceJoinTokens  http.Handler
+	RevokeDeviceJoinToken http.Handler
+	RegisterDevice        http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -68,17 +72,25 @@ func New(
 			{"AdmitSubject", "POST", "/rpc/workloadIdentities.admitSubject"},
 			{"UpdateSubject", "POST", "/rpc/workloadIdentities.updateSubject"},
 			{"WithdrawSubject", "DELETE", "/rpc/workloadIdentities.withdrawSubject"},
+			{"CreateDeviceJoinToken", "POST", "/rpc/workloadIdentities.createDeviceJoinToken"},
+			{"ListDeviceJoinTokens", "GET", "/rpc/workloadIdentities.listDeviceJoinTokens"},
+			{"RevokeDeviceJoinToken", "DELETE", "/rpc/workloadIdentities.revokeDeviceJoinToken"},
+			{"RegisterDevice", "POST", "/rpc/workloadIdentities.registerDevice"},
 		},
-		List:               NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
-		ListPlatforms:      NewListPlatformsHandler(e.ListPlatforms, mux, decoder, encoder, errhandler, formatter),
-		GetCustomFlows:     NewGetCustomFlowsHandler(e.GetCustomFlows, mux, decoder, encoder, errhandler, formatter),
-		ListTokenEndpoints: NewListTokenEndpointsHandler(e.ListTokenEndpoints, mux, decoder, encoder, errhandler, formatter),
-		RegisterIssuer:     NewRegisterIssuerHandler(e.RegisterIssuer, mux, decoder, encoder, errhandler, formatter),
-		UpdateIssuer:       NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
-		WithdrawIssuer:     NewWithdrawIssuerHandler(e.WithdrawIssuer, mux, decoder, encoder, errhandler, formatter),
-		AdmitSubject:       NewAdmitSubjectHandler(e.AdmitSubject, mux, decoder, encoder, errhandler, formatter),
-		UpdateSubject:      NewUpdateSubjectHandler(e.UpdateSubject, mux, decoder, encoder, errhandler, formatter),
-		WithdrawSubject:    NewWithdrawSubjectHandler(e.WithdrawSubject, mux, decoder, encoder, errhandler, formatter),
+		List:                  NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
+		ListPlatforms:         NewListPlatformsHandler(e.ListPlatforms, mux, decoder, encoder, errhandler, formatter),
+		GetCustomFlows:        NewGetCustomFlowsHandler(e.GetCustomFlows, mux, decoder, encoder, errhandler, formatter),
+		ListTokenEndpoints:    NewListTokenEndpointsHandler(e.ListTokenEndpoints, mux, decoder, encoder, errhandler, formatter),
+		RegisterIssuer:        NewRegisterIssuerHandler(e.RegisterIssuer, mux, decoder, encoder, errhandler, formatter),
+		UpdateIssuer:          NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
+		WithdrawIssuer:        NewWithdrawIssuerHandler(e.WithdrawIssuer, mux, decoder, encoder, errhandler, formatter),
+		AdmitSubject:          NewAdmitSubjectHandler(e.AdmitSubject, mux, decoder, encoder, errhandler, formatter),
+		UpdateSubject:         NewUpdateSubjectHandler(e.UpdateSubject, mux, decoder, encoder, errhandler, formatter),
+		WithdrawSubject:       NewWithdrawSubjectHandler(e.WithdrawSubject, mux, decoder, encoder, errhandler, formatter),
+		CreateDeviceJoinToken: NewCreateDeviceJoinTokenHandler(e.CreateDeviceJoinToken, mux, decoder, encoder, errhandler, formatter),
+		ListDeviceJoinTokens:  NewListDeviceJoinTokensHandler(e.ListDeviceJoinTokens, mux, decoder, encoder, errhandler, formatter),
+		RevokeDeviceJoinToken: NewRevokeDeviceJoinTokenHandler(e.RevokeDeviceJoinToken, mux, decoder, encoder, errhandler, formatter),
+		RegisterDevice:        NewRegisterDeviceHandler(e.RegisterDevice, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -97,6 +109,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.AdmitSubject = m(s.AdmitSubject)
 	s.UpdateSubject = m(s.UpdateSubject)
 	s.WithdrawSubject = m(s.WithdrawSubject)
+	s.CreateDeviceJoinToken = m(s.CreateDeviceJoinToken)
+	s.ListDeviceJoinTokens = m(s.ListDeviceJoinTokens)
+	s.RevokeDeviceJoinToken = m(s.RevokeDeviceJoinToken)
+	s.RegisterDevice = m(s.RegisterDevice)
 }
 
 // MethodNames returns the methods served.
@@ -114,6 +130,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountAdmitSubjectHandler(mux, h.AdmitSubject)
 	MountUpdateSubjectHandler(mux, h.UpdateSubject)
 	MountWithdrawSubjectHandler(mux, h.WithdrawSubject)
+	MountCreateDeviceJoinTokenHandler(mux, h.CreateDeviceJoinToken)
+	MountListDeviceJoinTokensHandler(mux, h.ListDeviceJoinTokens)
+	MountRevokeDeviceJoinTokenHandler(mux, h.RevokeDeviceJoinToken)
+	MountRegisterDeviceHandler(mux, h.RegisterDevice)
 }
 
 // Mount configures the mux to serve the workloadIdentities endpoints.
@@ -630,6 +650,221 @@ func NewWithdrawSubjectHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "withdrawSubject")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateDeviceJoinTokenHandler configures the mux to serve the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint.
+func MountCreateDeviceJoinTokenHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/workloadIdentities.createDeviceJoinToken", f)
+}
+
+// NewCreateDeviceJoinTokenHandler creates a HTTP handler which loads the HTTP
+// request and calls the "workloadIdentities" service "createDeviceJoinToken"
+// endpoint.
+func NewCreateDeviceJoinTokenHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateDeviceJoinTokenRequest(mux, decoder)
+		encodeResponse = EncodeCreateDeviceJoinTokenResponse(encoder)
+		encodeError    = EncodeCreateDeviceJoinTokenError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createDeviceJoinToken")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListDeviceJoinTokensHandler configures the mux to serve the
+// "workloadIdentities" service "listDeviceJoinTokens" endpoint.
+func MountListDeviceJoinTokensHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/workloadIdentities.listDeviceJoinTokens", f)
+}
+
+// NewListDeviceJoinTokensHandler creates a HTTP handler which loads the HTTP
+// request and calls the "workloadIdentities" service "listDeviceJoinTokens"
+// endpoint.
+func NewListDeviceJoinTokensHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDeviceJoinTokensRequest(mux, decoder)
+		encodeResponse = EncodeListDeviceJoinTokensResponse(encoder)
+		encodeError    = EncodeListDeviceJoinTokensError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDeviceJoinTokens")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRevokeDeviceJoinTokenHandler configures the mux to serve the
+// "workloadIdentities" service "revokeDeviceJoinToken" endpoint.
+func MountRevokeDeviceJoinTokenHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/workloadIdentities.revokeDeviceJoinToken", f)
+}
+
+// NewRevokeDeviceJoinTokenHandler creates a HTTP handler which loads the HTTP
+// request and calls the "workloadIdentities" service "revokeDeviceJoinToken"
+// endpoint.
+func NewRevokeDeviceJoinTokenHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRevokeDeviceJoinTokenRequest(mux, decoder)
+		encodeResponse = EncodeRevokeDeviceJoinTokenResponse(encoder)
+		encodeError    = EncodeRevokeDeviceJoinTokenError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "revokeDeviceJoinToken")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRegisterDeviceHandler configures the mux to serve the
+// "workloadIdentities" service "registerDevice" endpoint.
+func MountRegisterDeviceHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/workloadIdentities.registerDevice", f)
+}
+
+// NewRegisterDeviceHandler creates a HTTP handler which loads the HTTP request
+// and calls the "workloadIdentities" service "registerDevice" endpoint.
+func NewRegisterDeviceHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRegisterDeviceRequest(mux, decoder)
+		encodeResponse = EncodeRegisterDeviceResponse(encoder)
+		encodeError    = EncodeRegisterDeviceError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "registerDevice")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
 		payload, err := decodeRequest(r)
 		if err != nil {
