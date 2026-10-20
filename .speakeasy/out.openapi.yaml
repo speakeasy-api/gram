@@ -81475,6 +81475,33 @@ components:
           format: uuid
       required:
         - agent_id
+    AgentMCPServer:
+      type: object
+      properties:
+        audience:
+          type: string
+          description: The exact `aud` the identity assertion must carry for token_endpoint. Present exactly when token_endpoint is.
+        name:
+          type: string
+          description: 'Stable key the agent writes the server under in each tool''s MCP configuration: `speakeasy-` followed by the server''s slug, using only lowercase letters, digits and `-`. Unique within the response; a second server with the same name gets a numeric suffix such as `speakeasy-linear-2`.'
+          pattern: ^speakeasy-[a-z0-9-]+$
+        resource:
+          type: string
+          description: Resource indicator (RFC 8707) to send with the grant. Present only when token_endpoint mints sessions for this one server; absent when it mints one session for every server of its issuer.
+        token_endpoint:
+          type: string
+          description: Token endpoint where a workload exchanges an identity assertion (RFC 7523 JWT bearer grant) for a session that reaches this server. Absent when the server's authorization server offers no workload grant, so the server cannot be reached without a person.
+        tools:
+          type: array
+          items:
+            type: string
+          description: Stable IDs of the managed tools this server applies to. Absent or empty means every managed tool.
+        url:
+          type: string
+          description: The server's streamable-HTTP URL.
+      required:
+        - name
+        - url
     AgentMarketplace:
       type: object
       properties:
@@ -90233,12 +90260,17 @@ components:
           $ref: '#/components/schemas/DeviceAgentConfiguration'
         etag:
           type: string
-          description: Opaque revision identifier covering the marketplace, plugin, remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
+          description: Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
         marketplaces:
           type: array
           items:
             $ref: '#/components/schemas/AgentMarketplace'
           description: Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
+        mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentMCPServer'
+          description: 'Speakeasy-hosted MCP servers the agent registers directly in each managed tool''s configuration, authorized by the device''s own mcp:connect credential. Populated only when the caller polls as an agent (an agent API key, or a workload acting for its assigned agent), from the MCP servers in the plugins assigned to that agent; always empty for people, who reach these servers through their plugins. Always present: an empty list tells the agent to remove the entries it wrote earlier.'
         organization_gateway_url:
           type: string
           description: URL of the active organization's gateway. Absent when the organization gateway is unavailable.
@@ -90254,6 +90286,7 @@ components:
         - etag
         - marketplaces
         - plugins
+        - mcp_servers
     GetProjectMetricsSummaryPayload:
       type: object
       properties:

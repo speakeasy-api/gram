@@ -148,6 +148,31 @@ type AIScanMatch struct {
 	Version *string
 }
 
+type AgentMCPServer struct {
+	// Stable key the agent writes the server under in each tool's MCP
+	// configuration: `speakeasy-` followed by the server's slug, using only
+	// lowercase letters, digits and `-`. Unique within the response; a second
+	// server with the same name gets a numeric suffix such as `speakeasy-linear-2`.
+	Name string
+	// The server's streamable-HTTP URL.
+	URL string
+	// Stable IDs of the managed tools this server applies to. Absent or empty
+	// means every managed tool.
+	Tools []string
+	// Token endpoint where a workload exchanges an identity assertion (RFC 7523
+	// JWT bearer grant) for a session that reaches this server. Absent when the
+	// server's authorization server offers no workload grant, so the server cannot
+	// be reached without a person.
+	TokenEndpoint *string
+	// The exact `aud` the identity assertion must carry for token_endpoint.
+	// Present exactly when token_endpoint is.
+	Audience *string
+	// Resource indicator (RFC 8707) to send with the grant. Present only when
+	// token_endpoint mints sessions for this one server; absent when it mints one
+	// session for every server of its issuer.
+	Resource *string
+}
+
 type AgentMarketplace struct {
 	// Stable identifier for the marketplace, used as its key when the agent
 	// registers it with a managed tool. Matches the name written into the
@@ -381,7 +406,8 @@ type GetPluginsPayload struct {
 
 // GetPluginsResult is the result type of the agent service getPlugins method.
 type GetPluginsResult struct {
-	// Opaque revision identifier covering the marketplace, plugin,
+	// Opaque revision identifier covering the marketplace, plugin, MCP server
+	// (including each server's token endpoint, audience and resource),
 	// remote-configuration, and organization-gateway set. The agent stores this to
 	// detect changes between polls.
 	Etag string
@@ -404,6 +430,14 @@ type GetPluginsResult struct {
 	// The non-human principal the plugin set was resolved for. Present only when
 	// the caller authenticated with an agent API key.
 	Principal *AgentPollingPrincipal
+	// Speakeasy-hosted MCP servers the agent registers directly in each managed
+	// tool's configuration, authorized by the device's own mcp:connect credential.
+	// Populated only when the caller polls as an agent (an agent API key, or a
+	// workload acting for its assigned agent), from the MCP servers in the plugins
+	// assigned to that agent; always empty for people, who reach these servers
+	// through their plugins. Always present: an empty list tells the agent to
+	// remove the entries it wrote earlier.
+	McpServers []*AgentMCPServer
 }
 
 // GetSessionMetaPayload is the payload type of the agent service

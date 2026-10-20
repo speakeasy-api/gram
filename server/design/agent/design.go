@@ -434,8 +434,8 @@ var _ = Service("agent", func() {
 // --- Types ---
 
 var GetPluginsResult = Type("GetPluginsResult", func() {
-	Required("etag", "marketplaces", "plugins")
-	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.")
+	Required("etag", "marketplaces", "plugins", "mcp_servers")
+	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.")
 	Attribute("marketplaces", ArrayOf(AgentMarketplaceModel), "Plugin marketplaces the agent should register with the tools it manages. Sorted by name.")
 	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.")
 	Attribute("configuration", DeviceAgentConfigurationModel, "Organization-wide remote configuration. Absent until an administrator saves a configuration, allowing an agent with no cached remote layer to keep using its local configuration.")
@@ -443,6 +443,19 @@ var GetPluginsResult = Type("GetPluginsResult", func() {
 		Format(FormatURI)
 	})
 	Attribute("principal", AgentPollingPrincipalModel, "The non-human principal the plugin set was resolved for. Present only when the caller authenticated with an agent API key.")
+	Attribute("mcp_servers", ArrayOf(AgentMCPServerModel), "Speakeasy-hosted MCP servers the agent registers directly in each managed tool's configuration, authorized by the device's own mcp:connect credential. Populated only when the caller polls as an agent (an agent API key, or a workload acting for its assigned agent), from the MCP servers in the plugins assigned to that agent; always empty for people, who reach these servers through their plugins. Always present: an empty list tells the agent to remove the entries it wrote earlier.")
+})
+
+var AgentMCPServerModel = Type("AgentMCPServer", func() {
+	Required("name", "url")
+	Attribute("name", String, "Stable key the agent writes the server under in each tool's MCP configuration: `speakeasy-` followed by the server's slug, using only lowercase letters, digits and `-`. Unique within the response; a second server with the same name gets a numeric suffix such as `speakeasy-linear-2`.", func() {
+		Pattern(`^speakeasy-[a-z0-9-]+$`)
+	})
+	Attribute("url", String, "The server's streamable-HTTP URL.")
+	Attribute("tools", ArrayOf(String), "Stable IDs of the managed tools this server applies to. Absent or empty means every managed tool.")
+	Attribute("token_endpoint", String, "Token endpoint where a workload exchanges an identity assertion (RFC 7523 JWT bearer grant) for a session that reaches this server. Absent when the server's authorization server offers no workload grant, so the server cannot be reached without a person.")
+	Attribute("audience", String, "The exact `aud` the identity assertion must carry for token_endpoint. Present exactly when token_endpoint is.")
+	Attribute("resource", String, "Resource indicator (RFC 8707) to send with the grant. Present only when token_endpoint mints sessions for this one server; absent when it mints one session for every server of its issuer.")
 })
 
 var AgentPollingPrincipalModel = Type("AgentPollingPrincipal", func() {
