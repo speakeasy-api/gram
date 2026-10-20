@@ -126,7 +126,7 @@ func directoryUserReviewSnapshot(ctx context.Context, dbtx database.DBTX, organi
 // reviewDirectoryGroup raises and settles the directory review decisions for
 // a group an event created, changed or deleted, within the organization the
 // event names.
-func reviewDirectoryGroup(ctx context.Context, dbtx database.DBTX, workosOrganizationID, workosDirectoryGroupID string) error {
+func reviewDirectoryGroup(ctx context.Context, dbtx pgx.Tx, workosOrganizationID, workosDirectoryGroupID string) error {
 	organizationID, err := directoryReviewOrganizationID(ctx, dbtx, workosOrganizationID)
 	if err != nil || organizationID == "" {
 		return err
@@ -188,7 +188,7 @@ func applyDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.
 	}
 }
 
-func handleDirectoryGroupEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+func handleDirectoryGroupEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event) error {
 	var payload workosDirectoryGroupEventPayload
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
 		return oops.Permanent(oops.E(oops.CodeBadRequest, err, "unmarshal directory group event payload"))
@@ -212,7 +212,7 @@ func handleDirectoryGroupEvent(ctx context.Context, logger *slog.Logger, dbtx da
 	return reviewDirectoryGroup(ctx, dbtx, payload.OrganizationID, payload.ID)
 }
 
-func handleDirectoryGroupMembershipEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+func handleDirectoryGroupMembershipEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event) error {
 	var payload workosDirectoryGroupMembershipEventPayload
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
 		return oops.Permanent(oops.E(oops.CodeBadRequest, err, "unmarshal directory group membership event payload"))
@@ -475,7 +475,7 @@ func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx databas
 	return nil
 }
 
-func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryGroupMembershipEventPayload) error {
+func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event, payload workosDirectoryGroupMembershipEventPayload) error {
 	// Lock the group before reading its memberships, so this event runs
 	// strictly before or after a member reconcile of the same group.
 	groupID, err := directoryrepo.New(dbtx).GetDirectoryGroupIDByWorkOSID(ctx, payload.Group.ID)
@@ -532,7 +532,7 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 // and every membership event for it would be dropped. A group row that exists
 // but is deleted is left alone, so a deletion is never undone here. It
 // returns pgx.ErrNoRows when the group cannot be created.
-func createDirectoryGroupFromMembership(ctx context.Context, dbtx database.DBTX, event events.Event, group workosDirectoryGroupEventPayload) (uuid.UUID, error) {
+func createDirectoryGroupFromMembership(ctx context.Context, dbtx pgx.Tx, event events.Event, group workosDirectoryGroupEventPayload) (uuid.UUID, error) {
 	_, err := directoryrepo.New(dbtx).GetDirectoryGroupSyncStateByWorkOSID(ctx, group.ID)
 	switch {
 	case err == nil:

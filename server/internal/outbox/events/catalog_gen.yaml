@@ -5572,6 +5572,96 @@ webhooks:
                                 - subject_type
                             type: object
                 required: true
+    directory_review.opened_v1:
+        post:
+            description: 'A directory change needs a decision from an organization admin: a new group, a new attribute value, or a mapped source that has gone'
+            operationId: directory_review.opened_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                directory_group_id:
+                                    format: uuid
+                                    type:
+                                        - "null"
+                                        - string
+                                id:
+                                    format: uuid
+                                    type: string
+                                kind:
+                                    type: string
+                                occurred_at:
+                                    type: string
+                                occurrence:
+                                    maximum: 2.147483647e+09
+                                    minimum: -2.147483648e+09
+                                    type: integer
+                                organization_id:
+                                    type: string
+                                pending_count:
+                                    type: integer
+                                source_kind:
+                                    type: string
+                                state:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - kind
+                                - source_kind
+                                - occurrence
+                                - state
+                                - pending_count
+                                - occurred_at
+                            type: object
+                required: true
+    directory_review.resolved_v1:
+        post:
+            description: 'A directory change no longer needs a decision: an admin approved or dismissed it, or a later directory change superseded it'
+            operationId: directory_review.resolved_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                directory_group_id:
+                                    format: uuid
+                                    type:
+                                        - "null"
+                                        - string
+                                id:
+                                    format: uuid
+                                    type: string
+                                kind:
+                                    type: string
+                                occurred_at:
+                                    type: string
+                                occurrence:
+                                    maximum: 2.147483647e+09
+                                    minimum: -2.147483648e+09
+                                    type: integer
+                                organization_id:
+                                    type: string
+                                pending_count:
+                                    type: integer
+                                source_kind:
+                                    type: string
+                                state:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - kind
+                                - source_kind
+                                - occurrence
+                                - state
+                                - pending_count
+                                - occurred_at
+                            type: object
+                required: true
     risk_finding.created:
         post:
             description: A potential risk was detected in a LLM message or tool call

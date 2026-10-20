@@ -181,9 +181,10 @@ func (s *Service) ResolveDirectoryReviewItem(ctx context.Context, payload *gen.R
 	if payload.Decision == directoryReviewDecisionApprove {
 		state = directoryreview.StateApproved
 	}
-	if _, err := reviews.ResolveDirectoryReviewItem(ctx, reviewrepo.ResolveDirectoryReviewItemParams{
+	resolved, err := reviews.ResolveDirectoryReviewItem(ctx, reviewrepo.ResolveDirectoryReviewItemParams{
 		State: state, ResolvedByUserID: conv.ToPGText(ac.UserID), OrganizationID: orgID, ID: itemID,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve directory review item").LogError(ctx, s.logger)
 	}
 
@@ -233,6 +234,11 @@ func (s *Service) ResolveDirectoryReviewItem(ctx context.Context, payload *gen.R
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log directory review decision").LogError(ctx, s.logger)
+	}
+	// Announce the decision after its mapping write, so the pending count
+	// includes whatever else that write settled.
+	if err := directoryreview.PublishResolved(ctx, dbtx, orgID, directoryreview.Item(resolved)); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "publish directory review decision").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
