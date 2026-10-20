@@ -1,18 +1,21 @@
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { useCreateWorkloadDeviceInstallCommandMutation } from "@gram/client/react-query/createWorkloadDeviceInstallCommand.js";
+import { useCallback } from "react";
+
 /**
  * The one-command install for a headless device.
  *
- * The server mints a short-lived download code for a script that carries the
- * bootstrap token, so the raw token never appears in the command, in shell
- * history, or on this page. That endpoint (`createDeviceInstallCommand`) is
- * landing in a sibling change; until it does, this adapter reports that the
- * command is unavailable and the setup panel leads with manual setup instead.
- * Nothing here fakes a request.
+ * The server mints a short-lived, single-use download code for a script that
+ * carries a new bootstrap token, so the raw token never appears in the
+ * command, in shell history, or on this page.
  */
 
 export interface DeviceInstallCommand {
   /** Pipes the install script to a shell. */
   command: string;
-  /** Saves the script to a file, to read before running it. */
+  /** Saves the script to a file, then runs it: two lines. */
   downloadCommand: string;
   /** When the download code stops working. */
   codeExpiresAt: Date;
@@ -33,13 +36,55 @@ export type CreateDeviceInstallCommand = (
 ) => Promise<DeviceInstallCommand>;
 
 /**
- * How to mint an install command, or null while the server cannot.
+ * The install command is not offered to this organization. The server answers
+ * 404 and issues no token, so the page falls back to manual setup rather than
+ * showing an error.
+ */
+export class InstallCommandUnavailable extends Error {
+  constructor() {
+    super("The one-command install is not available for this organization.");
+    this.name = "InstallCommandUnavailable";
+  }
+}
+
+/**
+ * How to mint an install command, or null where it is switched off.
  *
- * TODO(createDeviceInstallCommand): once the SDK ships the endpoint, return a
- * function that calls it and maps `{command, download_command,
- * code_expires_at, join_token_id, token_expires_at}` onto
- * {@link DeviceInstallCommand}.
+ * The rollout flag decides up front when it has an answer. When it has none
+ * (still loading, or not configured, as in local development), the request is
+ * tried and the server, which holds the same flag, answers 404 if it is off.
  */
 export function useCreateDeviceInstallCommand(): CreateDeviceInstallCommand | null {
-  return null;
+  const flag = useFeatureFlag(FEATURE_FLAGS.deviceBootstrapInstall);
+  const mutation = useCreateWorkloadDeviceInstallCommandMutation();
+  const { mutateAsync } = mutation;
+  const create = useCallback<CreateDeviceInstallCommand>(
+    async ({ agentId, hooksProjectSlug, expiresInSeconds }) => {
+      try {
+        const result = await mutateAsync({
+          request: {
+            createDeviceInstallCommandRequestBody: {
+              agentId,
+              hooksProjectSlug,
+              expiresInSeconds,
+            },
+          },
+        });
+        return {
+          command: result.command,
+          downloadCommand: result.downloadCommand,
+          codeExpiresAt: result.codeExpiresAt,
+          joinTokenId: result.joinTokenId,
+          tokenExpiresAt: result.tokenExpiresAt,
+        };
+      } catch (failure) {
+        if (failure instanceof GramError && failure.statusCode === 404) {
+          throw new InstallCommandUnavailable();
+        }
+        throw failure;
+      }
+    },
+    [mutateAsync],
+  );
+  return flag.status === "disabled" ? null : create;
 }

@@ -11,6 +11,7 @@ import {
   type WatchedToken,
 } from "./device-enrollment";
 import {
+  InstallCommandUnavailable,
   useCreateDeviceInstallCommand,
   type CreateDeviceInstallCommand,
   type DeviceInstallCommand,
@@ -18,7 +19,7 @@ import {
 import type { HooksProject } from "./useHooksProjects";
 
 /**
- * Getting a headless box enrolled: one command when the server can mint it,
+ * Getting a headless box enrolled: one command where the server offers it,
  * and the bootstrap token with its config file for anyone setting the box up
  * by hand. Both lead to the same place, a box enrolled as this agent.
  */
@@ -39,24 +40,21 @@ export function DeviceSetupPanel({
 }): JSX.Element {
   const fromServer = useCreateDeviceInstallCommand();
   const createInstallCommand = injected === undefined ? fromServer : injected;
+  // The server can still turn the command down when the flag had no answer
+  // here. That is not an error, just the manual path.
+  const [unavailable, setUnavailable] = useState(false);
+  const markUnavailable = useCallback(() => setUnavailable(true), []);
+  const offered = createInstallCommand !== null && !unavailable;
   return (
     <div className="space-y-6">
-      {createInstallCommand === null ? (
-        <div className="border-border space-y-1 border border-dashed p-4">
-          <Text small className="font-medium">
-            One-command install is coming soon
-          </Text>
-          <Text muted small>
-            Until then, set the box up by hand with a bootstrap token.
-          </Text>
-        </div>
-      ) : (
+      {offered && (
         <InstallCommand
           agentId={agentId}
           hooksProject={hooksProject}
           lifetimeSeconds={lifetimeSeconds}
           create={createInstallCommand}
           onTokenCreated={onTokenCreated}
+          onUnavailable={markUnavailable}
         />
       )}
       <ManualSetup
@@ -66,7 +64,7 @@ export function DeviceSetupPanel({
         onTokenCreated={onTokenCreated}
         // With no command to run, setting up by hand is the only way, so it
         // is not folded away.
-        defaultOpen={createInstallCommand === null}
+        defaultOpen={!offered}
       />
     </div>
   );
@@ -78,17 +76,21 @@ function InstallCommand({
   lifetimeSeconds,
   create,
   onTokenCreated,
+  onUnavailable,
 }: {
   agentId: string;
   hooksProject: HooksProject;
   lifetimeSeconds: number;
   create: CreateDeviceInstallCommand;
   onTokenCreated: (watched: WatchedToken) => void;
+  onUnavailable: () => void;
 }): JSX.Element {
   const [command, setCommand] = useState<DeviceInstallCommand | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
+  // Each command carries a new bootstrap token, so this is also how a reader
+  // replaces one that expired.
   const mint = useCallback(() => {
     setPending(true);
     setError(null);
@@ -101,18 +103,28 @@ function InstallCommand({
         setCommand(next);
         onTokenCreated({ id: next.joinTokenId });
       })
-      .catch((failure: unknown) =>
+      .catch((failure: unknown) => {
+        if (failure instanceof InstallCommandUnavailable) {
+          onUnavailable();
+          return;
+        }
         setError(
-          failure instanceof Error
+          failure instanceof Error && failure.message
             ? failure.message
             : "Could not prepare the install command. Try again.",
-        ),
-      )
+        );
+      })
       .finally(() => setPending(false));
-  }, [create, agentId, hooksProject.slug, lifetimeSeconds, onTokenCreated]);
+  }, [
+    create,
+    agentId,
+    hooksProject.slug,
+    lifetimeSeconds,
+    onTokenCreated,
+    onUnavailable,
+  ]);
 
-  // Once per panel: every command carries a fresh bootstrap token, so a
-  // re-render must not mint another.
+  // Once per panel: a re-render must not mint another token.
   const minted = useRef(false);
   useEffect(() => {
     if (minted.current) return;
@@ -125,8 +137,9 @@ function InstallCommand({
       <div className="space-y-1">
         <Text className="font-medium">Run this on the box</Text>
         <Text muted small>
-          As root, on Linux. It installs the Speakeasy device service and
-          enrolls the box as this agent.
+          On Linux with systemd, from the account that runs your AI tools. It
+          installs the Speakeasy device service and enrolls the box as this
+          agent.
         </Text>
       </div>
       {command ? (
@@ -137,17 +150,23 @@ function InstallCommand({
             language="shell"
           />
           <Text muted small>
-            The command works once and <Countdown to={command.codeExpiresAt} />.
-            The bootstrap token it carries{" "}
-            <Countdown to={command.tokenExpiresAt} />.{" "}
+            Single use, and it <Countdown to={command.codeExpiresAt} />. The
+            bootstrap token inside it <Countdown to={command.tokenExpiresAt} />.{" "}
             <button
               type="button"
               className="underline"
               disabled={pending}
               onClick={mint}
             >
-              Get a new command
+              Generate a new command
             </button>
+          </Text>
+          <Text muted small>
+            Running as root, or for another account? End the command with{" "}
+            <code className="text-xs">
+              | sudo sh -s -- --user &lt;account&gt;
+            </code>
+            .
           </Text>
           <details>
             <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm">
@@ -156,7 +175,7 @@ function InstallCommand({
             <div className="mt-2 space-y-2">
               <CodeBlock
                 value={command.downloadCommand}
-                label="download the script"
+                label="download, then run"
                 language="shell"
               />
               <Text muted small>
@@ -167,9 +186,13 @@ function InstallCommand({
           </details>
         </>
       ) : (
-        <Text muted small>
-          {pending ? "Preparing the install command…" : null}
-        </Text>
+        // Holds the command's place while it is minted, so the manual setup
+        // below does not jump when it lands.
+        <div className="border-border h-12 border border-dashed px-4 py-3">
+          <Text muted small>
+            {pending ? "Preparing the install command…" : null}
+          </Text>
+        </div>
       )}
       {error && (
         <div role="alert" className="space-y-2">
@@ -182,7 +205,6 @@ function InstallCommand({
     </div>
   );
 }
-
 /**
  * Setting the box up by hand: a bootstrap token, shown once, and the config
  * file the device service reads it from.

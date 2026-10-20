@@ -141,6 +141,17 @@ vi.mock("@gram/client/react-query/createWorkloadDeviceJoinToken.js", () => ({
     isPending: false,
   }),
 }));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: "disabled" }),
+}));
+vi.mock(
+  "@gram/client/react-query/createWorkloadDeviceInstallCommand.js",
+  () => ({
+    useCreateWorkloadDeviceInstallCommandMutation: () => ({
+      mutateAsync: vi.fn(),
+    }),
+  }),
+);
 vi.mock("@gram/client/react-query/workloadDeviceJoinTokens.js", () => ({
   useWorkloadDeviceJoinTokens: () => ({ data: undefined, isPending: true }),
 }));
@@ -453,7 +464,7 @@ describe("Enrolling a headless device", () => {
         },
       },
     ]);
-    // Until the install command ships, setting up by hand is open.
+    // With the install command switched off, setting up by hand is open.
     expect(screen.getByText("Set up manually")).toBeTruthy();
   });
 

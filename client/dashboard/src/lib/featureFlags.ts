@@ -2,6 +2,9 @@ export const FEATURE_FLAGS = {
   budgets: "gram-budgets",
   deploymentsPage: "gram-deployments-page",
   deviceAgent: "gram-device-agent",
+  // The one-command install for a headless device. The server enforces it
+  // too: with it off, createDeviceInstallCommand answers 404.
+  deviceBootstrapInstall: "device-bootstrap-install",
   deviceIntegrations: "gram-device-integrations",
   // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
   emaProviders: "ema-providers",
