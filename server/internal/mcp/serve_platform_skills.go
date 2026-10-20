@@ -62,12 +62,6 @@ func (s *Service) getPlatformSkill(ctx context.Context, req *rawRequest) (json.R
 	return marshalSkillsGet(ctx, s.logger, req.ID, entry, serverInfoPlatformToolset)
 }
 
-// readPlatformSkill answers resources/read for an embedded skill's SKILL.md
-// with the exact embedded bytes. Embedded skills are reviewed Speakeasy
-// content rather than a customer's managed skill, so a read is counted on the
-// skill read metric but recorded as no activation: there is no stored version
-// to observe. uri is the skill URI the request named, already known to have
-// the shape of a served skill.
 // readPlatformResource answers resources/read while the platform toolset
 // declares the Skills extension. An embedded skill's SKILL.md is read from the
 // catalog; any other URI, skill:// or not, names no resource this surface
@@ -83,6 +77,12 @@ func (s *Service) readPlatformResource(ctx context.Context, req *rawRequest) (js
 	return s.readPlatformSkill(ctx, req, params.URI)
 }
 
+// readPlatformSkill answers resources/read for an embedded skill's SKILL.md
+// with the exact embedded bytes. Embedded skills are reviewed Speakeasy
+// content rather than a customer's managed skill, so a read is counted on the
+// skill read metric but recorded as no activation: there is no stored version
+// to observe. uri is the skill URI the request named, already known to have
+// the shape of a served skill.
 func (s *Service) readPlatformSkill(ctx context.Context, req *rawRequest, uri string) (json.RawMessage, error) {
 	entry, ok := s.platformSkills.Get(uri)
 	if !ok {
