@@ -3598,11 +3598,7 @@ func pluginServerToGen(s repo.PluginServer, wrappers map[uuid.UUID]bool) *gen.Pl
 		SortOrder:       s.SortOrder,
 		CreatedAt:       formatTime(s.CreatedAt),
 	}
-	// Exactly one backend is set per row (DB XOR check); populate whichever.
-	if s.ToolsetID.Valid {
-		id := s.ToolsetID.UUID.String()
-		result.ToolsetID = &id
-	}
+	// A leftover toolset-keyed row has no server, so it reports no backend.
 	if s.McpServerID.Valid {
 		id := s.McpServerID.UUID.String()
 		result.McpServerID = &id
