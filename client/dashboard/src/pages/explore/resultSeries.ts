@@ -188,8 +188,8 @@ export function sharedUnit(
 
 /**
  * Axis tick for a bucket start. Daily and coarser grains are dates; finer
- * grains are UTC times, except a midnight bucket, which reads as the date
- * so the day boundaries stand out.
+ * grains use the caller's time zone (local when omitted). Midnight ticks show
+ * a date, except UTC hourly ticks, which retain both the date and hour.
  */
 export function bucketTick(
   iso: string,

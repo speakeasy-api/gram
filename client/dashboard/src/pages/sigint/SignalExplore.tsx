@@ -79,17 +79,28 @@ function SignalWorkbench({
   const sensor =
     catalog.sensors.find((item) => item.id === filters.values.sensor) ??
     catalog.sensors[0]!;
-  const signalId = sensor.signalIds.includes(filters.values.signal ?? "")
+  const signalOptions =
+    sensor.mode === "ordered_score"
+      ? sensor.signalIds.map((_, index) => String(index))
+      : sensor.signalIds;
+  const signalId = signalOptions.includes(filters.values.signal ?? "")
     ? filters.values.signal!
-    : sensor.signalIds[0]!;
+    : signalOptions[0]!;
   const values = {
     ...filters.values,
     sensor: sensor.id,
     signal: signalId,
     window: filters.values.window ?? "7d",
   };
+  const threshold = values.threshold ?? 0.5;
+  const validThreshold =
+    Number.isFinite(threshold) && threshold > 0 && threshold <= 1;
   const [submitted, setSubmitted] = useState(() =>
-    signalPayload(catalog, values, new Date()),
+    signalPayload(
+      catalog,
+      { ...values, threshold: validThreshold ? threshold : 0.5 },
+      new Date(),
+    ),
   );
   const query = useRunQuery(submitted);
   const names = new Map(
@@ -100,11 +111,12 @@ function SignalWorkbench({
       value: item.id,
       label: item.name,
     })),
-    signal: sensor.signalIds.map((id) => ({
+    signal: signalOptions.map((id) => ({
       value: id,
       label:
-        (sensor.mode === "ordered_score" ? "At least " : "") +
-        (names.get(id) ?? "Removed signal"),
+        sensor.mode === "ordered_score"
+          ? `Level ${Number(id) + 1} and higher`
+          : (names.get(id) ?? "Removed signal"),
     })),
     window: WINDOW_OPTIONS,
     step: catalog.steps
@@ -124,11 +136,9 @@ function SignalWorkbench({
   );
   const selection = submitted.signalQuery!.selection;
   const selectedName =
-    names.get(
-      selection.signalId ??
-        submittedSensor?.signalIds[selection.minimumLevel ?? 0] ??
-        "",
-    ) ?? "Selected signal";
+    selection.minimumLevel !== undefined
+      ? `Level ${selection.minimumLevel + 1} and higher`
+      : (names.get(selection.signalId ?? "") ?? "Selected signal");
   const run = () => setSubmitted(signalPayload(catalog, values, new Date()));
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -167,11 +177,17 @@ function SignalWorkbench({
               },
             ]}
           />
-          <Button onClick={run} disabled={query.isFetching}>
+          <Button onClick={run} disabled={query.isFetching || !validThreshold}>
             Run query
           </Button>
         </Page.Toolbar.Actions>
       </Page.Toolbar>
+      {!validThreshold && (
+        <p role="alert" className="text-sm text-destructive">
+          Choose a minimum probability greater than 0 and at most 1 in More
+          filters.
+        </p>
+      )}
       <SignalResults
         metric={metric}
         query={query}

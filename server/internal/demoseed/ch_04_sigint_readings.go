@@ -100,7 +100,7 @@ func (s *seeder) sigintReadingRows() ([]chrepo.ReadingRow, error) {
 			row := s.sigintReading(sensor, members, definitionHash, n)
 			switch {
 			case n%43 == 0:
-				row.Status, row.FailureReason = chrepo.StatusFailed, "demo evaluation failure"
+				row.Status, row.FailureReason = chrepo.StatusFailed, "demo_evaluation_failure"
 			case n%37 == 0:
 				row.Status = chrepo.StatusNotApplicable
 			case n%31 == 0:
@@ -131,7 +131,8 @@ func (s *seeder) sigintReadingRows() ([]chrepo.ReadingRow, error) {
 }
 
 func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMembership, definitionHash string, n int) chrepo.ReadingRow {
-	day := float64(n)
+	conversationID, messageID, sourceTime := s.signalSource(n)
+	day := s.now.UTC().Sub(sourceTime).Hours() / 24
 	probability := 0.5 + 0.3*math.Sin(day*2*math.Pi/365) + 0.1*math.Sin(day*2*math.Pi/7)
 	remainderShare := 0.5 + 0.3*math.Sin(day*2*math.Pi/7+1)
 	distribution := [sigintReadingMembers]float64{probability, (1 - probability) * remainderShare, (1 - probability) * (1 - remainderShare)}
@@ -209,7 +210,6 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		}
 		attributes["inference_provider"] = providers[(n/2)%len(providers)]
 	}
-	conversationID, messageID, sourceTime := s.signalSource(n)
 	request := readings.Context{TriggerKind: readings.TriggerStream, RunID: uuid.Nil, RequestedAt: sourceTime.Add(time.Second)}
 	eventID := messageID.String()
 	sensorID := s.det("sigint-sensor-" + sensor.key)

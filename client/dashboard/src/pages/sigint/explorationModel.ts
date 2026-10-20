@@ -44,9 +44,9 @@ export const SIGNAL_FILTERS = defineFilters([
     kind: "number",
     min: 0.01,
     max: 1,
-    step: 0.05,
+    step: 0.01,
     description:
-      "Defaults to 0.5. Ordered sensors use the probability of the selected level or higher. Exclusive sensors use the selected answer.",
+      "Use a value greater than 0 and at most 1. Defaults to 0.5. Ordered levels follow each measured definition’s order; inspect definitions to interpret them.",
   },
   {
     id: "attribute",
@@ -102,10 +102,12 @@ export function signalPayload(
   const signalId = sensor.signalIds.includes(values.signal ?? "")
     ? values.signal!
     : sensor.signalIds[0]!;
-  const from = new Date(now);
+  const to = new Date(now);
+  to.setUTCSeconds(0, 0);
+  const from = new Date(to);
   switch (values.window) {
     case "6h":
-      from.setTime(now.getTime() - 6 * 3_600_000);
+      from.setTime(to.getTime() - 6 * 3_600_000);
       break;
     case "90d":
       from.setUTCDate(from.getUTCDate() - 90);
@@ -122,12 +124,12 @@ export function signalPayload(
   return {
     dataset: "signals",
     from,
-    to: now,
+    to,
     grain: values.step ?? (values.window === "24mo" ? "month" : "auto"),
     signalQuery: {
       selection:
         sensor.mode === "ordered_score"
-          ? { ...selection, minimumLevel: sensor.signalIds.indexOf(signalId) }
+          ? { ...selection, minimumLevel: Number(values.signal ?? 0) }
           : { ...selection, signalId },
       trigger: values.run ? "manual" : "stream",
       runId: values.run || undefined,

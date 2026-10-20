@@ -332,6 +332,7 @@ function DebouncedNumberInput({
         max={max}
         step={step}
         onChange={(e) => {
+          if (e.currentTarget.validity.badInput) return;
           setLocal(e.target.value);
           if (debounceMs === 0)
             onChange(e.target.value === "" ? null : e.target.valueAsNumber);

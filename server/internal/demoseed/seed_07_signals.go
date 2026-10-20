@@ -51,8 +51,9 @@ func (s *seeder) seedSignalConversations(ctx context.Context) error {
 			}
 		}
 		texts := [...]string{"Review the release plan and identify the remaining risks.", "The deployment needs a rollback check and a permissions review.", "Could we simplify the implementation before shipping?", "We can remove the duplicate check and keep the test focused.", "Check the validation results and explain the tradeoffs.", "The tests passed. The remaining uncertainty is the rollout window."}
-		roles := [...]string{"assistant", "user"}
-		seq, err := s.q.ActivityInsertSignalMessage(ctx, repo.ActivityInsertSignalMessageParams{ID: message, ChatID: chat, ProjectID: s.projectID(), Role: roles[n%2], Content: texts[n%len(texts)], CreatedAt: conv.ToPGTimestamptz(at)})
+		position := signalSessionSize - 1 - n%signalSessionSize
+		roles := [...]string{"user", "assistant"}
+		seq, err := s.q.ActivityInsertSignalMessage(ctx, repo.ActivityInsertSignalMessageParams{ID: message, ChatID: chat, ProjectID: s.projectID(), Role: roles[position%2], Content: texts[position%len(texts)], CreatedAt: conv.ToPGTimestamptz(at)})
 		if err != nil {
 			return fmt.Errorf("seed signal message: %w", err)
 		}

@@ -104,8 +104,16 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 		if row.Status != chrepo.StatusAnswered {
 			require.Empty(t, row.Probabilities)
 			require.Empty(t, row.ResultType)
+			require.Nil(t, row.SelectedSignalID)
+			require.Empty(t, row.SelectedSignalSlug)
+			require.Nil(t, row.ExpectedIndex)
+			require.Nil(t, row.Confidence)
+			if row.Status == chrepo.StatusFailed {
+				require.Regexp(t, `^[a-z][a-z0-9_]*$`, row.FailureReason)
+			}
 			continue
 		}
+		require.Empty(t, row.FailureReason)
 
 		signals := make(map[uuid.UUID]string, len(row.Probabilities))
 		for _, p := range row.Probabilities {

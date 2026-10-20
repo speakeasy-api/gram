@@ -251,14 +251,16 @@ export function SignalResults({
           <p>
             Minimum probability: {request.signalQuery?.selection.threshold}.{" "}
             {request.signalQuery?.selection.minimumLevel !== undefined &&
-              "Ordered matches use cumulative probability at or above the selected level."}{" "}
-            Exclusive matches use the chosen answer.
+              "Ordered matches use cumulative probability at or above this position in each measured definition. Inspect definitions before interpreting level meanings across edits."}
+            {request.signalQuery?.selection.signalId &&
+              "Exclusive matches use the chosen answer."}
           </p>
           <p>
             Latest available results, queried{" "}
-            {result.metadata.queriedAt.toLocaleString()}. Corrections can change
-            a later query. Output uses {result.metadata.step} intervals; storage
-            reads use {result.metadata.physicalResolution} resolution.
+            {result.metadata.queriedAt.toLocaleString("en-US", dateOptions)}{" "}
+            UTC. Corrections can change a later query. Output uses{" "}
+            {result.metadata.step} intervals; storage reads use{" "}
+            {result.metadata.physicalResolution} resolution.
           </p>
           <p>
             {signalNumber(summary.definition_count)} contributing definitions.
@@ -277,6 +279,13 @@ export function SignalResults({
               </Button>
             ))}
           </div>
+          {Number(summary.definition_count) > hashes.length && (
+            <p>
+              Showing {hashes.length} of{" "}
+              {signalNumber(summary.definition_count)} definitions. Narrow the
+              time range to inspect the remaining definitions.
+            </p>
+          )}
         </div>
       </details>
       <Sheet

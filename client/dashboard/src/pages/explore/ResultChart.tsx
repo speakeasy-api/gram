@@ -151,7 +151,12 @@ export function ResultChart({
           type: "line",
           backgroundColor: chartType === "area" ? withAlpha(color, 0.2) : color,
           borderWidth: 1.5,
-          pointRadius: !connectGaps || isSparse(one.points) ? 3 : 0,
+          pointRadius:
+            !connectGaps ||
+            isSparse(one.points) ||
+            (partialBuckets?.size ?? 0) > 0
+              ? 3
+              : 0,
           pointStyle: (context) =>
             partialBuckets?.has(buckets[context.dataIndex] ?? "")
               ? "triangle"
