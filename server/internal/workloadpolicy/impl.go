@@ -467,7 +467,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 	// Device issuers are Speakeasy's own and verify against per-device keys. An
 	// operator row at the same URL would verify against a key set of its
 	// choosing instead, so the prefix is reserved.
-	if isReservedDeviceIssuer(payload.Issuer, s.sharedHosts.ServerURL) {
+	if workloadidentity.IsUnderDeviceIssuerPrefix(s.sharedHosts.ServerURL, payload.Issuer) {
 		return nil, oops.E(oops.CodeInvalid, nil, "issuer is reserved for Speakeasy device enrollment")
 	}
 	if err := validateJWKSURI(payload.JwksURI); err != nil {

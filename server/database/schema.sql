@@ -6802,6 +6802,7 @@ CREATE TABLE IF NOT EXISTS directory_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   workos_directory_group_id TEXT NOT NULL,
+  directory_id TEXT,
   name TEXT NOT NULL,
   attributes JSONB NOT NULL DEFAULT '{}'::jsonb,
 
@@ -6839,6 +6840,13 @@ COMMENT ON COLUMN directory_groups.workos_last_event_id IS '@access: confidentia
 CREATE INDEX IF NOT EXISTS directory_groups_organization_id_idx
 ON directory_groups (organization_id);
 
+CREATE INDEX IF NOT EXISTS directory_groups_organization_id_directory_id_idx
+ON directory_groups (organization_id, directory_id)
+WHERE directory_id IS NOT NULL;
+
+COMMENT ON COLUMN directory_groups.directory_id IS 'WorkOS directory ID. NULL until an authoritative directory inventory or entity payload attributes this source.
+@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS directory_groups_workos_directory_group_id_key
 ON directory_groups (workos_directory_group_id);
 
@@ -6852,6 +6860,7 @@ CREATE TABLE IF NOT EXISTS directory_users (
   organization_id TEXT NOT NULL,
   user_id TEXT,
   workos_directory_user_id TEXT NOT NULL,
+  directory_id TEXT,
   email TEXT,
   attributes JSONB NOT NULL DEFAULT '{}'::jsonb,
 
@@ -6889,6 +6898,13 @@ COMMENT ON COLUMN directory_users.workos_last_event_id IS '@access: confidential
 
 CREATE INDEX IF NOT EXISTS directory_users_organization_id_idx
 ON directory_users (organization_id);
+
+CREATE INDEX IF NOT EXISTS directory_users_organization_id_directory_id_idx
+ON directory_users (organization_id, directory_id)
+WHERE directory_id IS NOT NULL;
+
+COMMENT ON COLUMN directory_users.directory_id IS 'WorkOS directory ID. NULL until an authoritative directory inventory or entity payload attributes this source.
+@access: confidential';
 
 CREATE INDEX IF NOT EXISTS directory_users_user_id_idx
 ON directory_users (user_id)
