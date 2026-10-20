@@ -10,17 +10,17 @@ Two surfaces serve skills.
 
 **Hosted MCP servers.** The endpoint of a toolset with MCP enabled, including any MCP server record fronting that toolset, serves the managed skills distributed to the plugins that include the server. Each entry is the skill's current served version: the version the distribution is pinned to, or else the latest version that passes Agent Skills validation. Versions that fail validation are never served, even when they are newer.
 
-**The Platform MCP.** Both Platform MCP endpoints serve the reviewed Platform MCP skills that ship inside the Platform plugin, straight from the binary: the external Platform MCP at `/platform-mcp`, which administrators reach through the Platform plugin with OAuth, and the platform toolset at `/platform/mcp/{toolsetSlug}`, which managed assistants call with their runtime token. Both build their catalog from `mcpskills.NewEmbeddedCatalog`, and its entries are the same `SKILL.md` files kept under `server/internal/plugins/platform_mcp_skills/<name>/SKILL.md`, so what the plugin package carries and what the endpoints serve are byte-identical. Every caller whose organization has the flag receives the whole catalog; there is no per-caller filtering.
+**The Platform MCP.** Both Platform MCP endpoints serve the reviewed Platform MCP skills that ship inside the Platform plugin, straight from the binary: the external Platform MCP at `/platform-mcp`, which administrators reach through the Platform plugin with OAuth, and the platform toolset at `/platform/mcp/{toolsetSlug}`, which managed assistants call with their runtime token. Both build their catalog from `mcpskills.NewEmbeddedCatalog`, and its entries are the same `SKILL.md` files kept under `server/internal/plugins/platform_mcp_skills/<name>/SKILL.md`, so what the plugin package carries and what the endpoints serve are byte-identical. Embedded skills belong to no project, so their URIs use the fixed slug `speakeasy`: `skill://speakeasy/<name>/SKILL.md`. Every caller whose organization has the flag receives the whole catalog; there is no per-caller filtering.
 
 A skill is served as a single file. Its entry has exactly one resource:
 
-| Field                 | Value                                                                                                                                                 |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `uri`                 | `skill://<name>/SKILL.md`, where `<name>` is the skill's canonical name                                                                               |
-| `resources[0].uri`    | the same URI                                                                                                                                          |
-| `resources[0].digest` | `sha256:<hex>` over the served bytes: the version's `skill_versions.raw_sha256` on a hosted endpoint, a hash of the embedded file on the Platform MCP |
-| `resources[0].size`   | the length of those bytes                                                                                                                             |
-| `frontmatter`         | the version's YAML frontmatter rendered verbatim as JSON: `name`, `description`, and every other field the author wrote                               |
+| Field                 | Value                                                                                                                                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `uri`                 | `skill://<project-slug>/<name>/SKILL.md`, where `<project-slug>` is the slug of the skill's project and `<name>` is its canonical name. On the Platform MCP, `<project-slug>` is `speakeasy` |
+| `resources[0].uri`    | the same URI                                                                                                                                                                                 |
+| `resources[0].digest` | `sha256:<hex>` over the served bytes: the version's `skill_versions.raw_sha256` on a hosted endpoint, a hash of the embedded file on the Platform MCP                                        |
+| `resources[0].size`   | the length of those bytes                                                                                                                                                                    |
+| `frontmatter`         | the version's YAML frontmatter rendered verbatim as JSON: `name`, `description`, and every other field the author wrote                                                                      |
 
 The frontmatter is never curated. `allowed-tools`, `license`, `metadata` and any future field appear only when the author wrote them. The extension requires the frontmatter `name` to equal the URI's final segment. Validation trims the name before checking it, so a version whose author quoted a padded name (`name: "refunds "`) is stored valid under the trimmed name while its frontmatter keeps the padding; such a version is never served (the resolver skips it with an error log, and the platform catalog refuses to build), so every served entry's frontmatter `name`, canonical name and URI segment agree.
 
@@ -81,14 +81,14 @@ Params are `{}` or `{"cursor": ...}`. Every listing is answered in one page sort
     "resultType": "complete",
     "skills": [
       {
-        "uri": "skill://refund-policy/SKILL.md",
+        "uri": "skill://my-project/refund-policy/SKILL.md",
         "frontmatter": {
           "name": "refund-policy",
           "description": "Handle refund requests under the current policy"
         },
         "resources": [
           {
-            "uri": "skill://refund-policy/SKILL.md",
+            "uri": "skill://my-project/refund-policy/SKILL.md",
             "digest": "sha256:b95a384300adeea2d902f7d19cd7c04b378ef58e09759107b9c7db4dcacbaa25",
             "size": 190
           }
@@ -105,17 +105,17 @@ A caller served nothing gets `"skills": []`, never `null`.
 
 ### `skills/get`
 
-Params are `{"uri": "skill://<name>/SKILL.md"}`. The result is `{"skill": <entry>}` with the same cache hints. A URI that does not name a skill served to this caller, whether because it is malformed, unknown, or carried only by a plugin the caller is not assigned, answers `-32602` with the message `no skill is served at <uri>`.
+Params are `{"uri": "skill://<project-slug>/<name>/SKILL.md"}`. The result is `{"skill": <entry>}` with the same cache hints. A URI that does not name a skill served to this caller, whether because it is malformed, unknown, or carried only by a plugin the caller is not assigned, answers `-32602` with the message `no skill is served at <uri>`.
 
 ### `resources/read`
 
-Params are `{"uri": "skill://<name>/SKILL.md"}`. The result carries the served version's content, exactly the bytes the digest covers:
+Params are `{"uri": "skill://<project-slug>/<name>/SKILL.md"}`. The result carries the served version's content, exactly the bytes the digest covers:
 
 ```json
 {
   "contents": [
     {
-      "uri": "skill://refund-policy/SKILL.md",
+      "uri": "skill://my-project/refund-policy/SKILL.md",
       "mimeType": "text/markdown",
       "text": "---\nname: refund-policy\n...\n"
     }
@@ -123,7 +123,7 @@ Params are `{"uri": "skill://<name>/SKILL.md"}`. The result carries the served v
 }
 ```
 
-A skill read is answered from the distribution, not from a toolset resource. It invokes nothing, so it is not metered, not billed, writes no tool-call telemetry row, and runs no risk scan on the way out; the content was validated when the version was recorded. An unknown or unassigned URI answers `-32602`. On a hosted endpoint, any `resources/read` whose URI does not have the `skill://<name>/SKILL.md` shape takes the existing toolset resource path untouched. The platform toolset has no other resources to read: with the flag on, a `resources/read` of any other URI there answers `-32602`, and with it off the method stays method-not-found (`-32601`). On the external Platform MCP, any `skill://` URI that names no served skill answers `-32602`, and other URIs take the setup guide resource path.
+A skill read is answered from the distribution, not from a toolset resource. It invokes nothing, so it is not metered, not billed, writes no tool-call telemetry row, and runs no risk scan on the way out; the content was validated when the version was recorded. An unknown or unassigned URI answers `-32602`. On a hosted endpoint, any `resources/read` whose URI does not have the `skill://<project-slug>/<name>/SKILL.md` shape takes the existing toolset resource path untouched. The platform toolset has no other resources to read: with the flag on, a `resources/read` of any other URI there answers `-32602`, and with it off the method stays method-not-found (`-32601`). On the external Platform MCP, any `skill://` URI that names no served skill answers `-32602`, and other URIs take the setup guide resource path.
 
 Skills never appear in `resources/list`. The platform toolset answers `resources/list` with an empty list while the flag is on, so its declared `resources` capability is honest. The external Platform MCP keeps listing and reading its setup guides as before; only `skill://` URIs are answered from the catalog.
 
