@@ -78,11 +78,11 @@ func TestDirectorySourceLifecycleDeletionAndRestoration(t *testing.T) {
 		WorkosDirectoryUserID: "directory_user_a", WorkosDirectoryGroupID: "group_a", WorkosCreatedAt: conv.ToPGTimestamptz(at),
 	})
 	require.NoError(t, err)
-	_, err = accessrepo.New(conn).UpsertDirectoryGroupRoleMapping(ctx, accessrepo.UpsertDirectoryGroupRoleMappingParams{
+	_, err = accessrepo.New(conn).InsertDirectoryGroupRoleMapping(ctx, accessrepo.InsertDirectoryGroupRoleMappingParams{
 		OrganizationID: orgID, DirectoryGroupID: uuid.NullUUID{UUID: group.ID, Valid: true}, RoleUrn: roleURN,
 	})
 	require.NoError(t, err)
-	_, err = accessrepo.New(conn).UpsertDirectoryAttributeRoleMapping(ctx, accessrepo.UpsertDirectoryAttributeRoleMappingParams{
+	_, err = accessrepo.New(conn).InsertDirectoryAttributeRoleMapping(ctx, accessrepo.InsertDirectoryAttributeRoleMappingParams{
 		OrganizationID: orgID, AttributeKey: conv.ToPGText("department_name"), AttributeValue: conv.ToPGText("Engineering"), RoleUrn: roleURN,
 	})
 	require.NoError(t, err)
@@ -234,7 +234,7 @@ func TestDirectoryDeletionFallsBackToProfileInSurvivingDirectory(t *testing.T) {
 	for _, department := range []string{"Engineering", "Sales"} {
 		role := seedOrganizationRole(t, ctx, conn, orgID, strings.ToLower(department))
 		roleURNs[department] = "role:organization:" + role.ID.String()
-		_, err := accessrepo.New(conn).UpsertDirectoryAttributeRoleMapping(ctx, accessrepo.UpsertDirectoryAttributeRoleMappingParams{
+		_, err := accessrepo.New(conn).InsertDirectoryAttributeRoleMapping(ctx, accessrepo.InsertDirectoryAttributeRoleMappingParams{
 			OrganizationID: orgID, AttributeKey: conv.ToPGText("department_name"), AttributeValue: conv.ToPGText(department), RoleUrn: roleURNs[department],
 		})
 		require.NoError(t, err)
