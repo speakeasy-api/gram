@@ -1,5 +1,5 @@
 import { ToolUsageIdentity } from "@/components/tool-usage-identity";
-import { useReadableAgents } from "@/hooks/useReadableAgents";
+import { useReadableAgentsById } from "@/hooks/useReadableAgents";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { Heading } from "@/components/ui/Heading";
 import { SkeletonTable } from "@/components/ui/Skeleton";
@@ -85,18 +85,8 @@ export function TopUsersTable({
     }),
   );
 
-  const agents = useReadableAgents(
+  const agentsById = useReadableAgentsById(
     data?.users.some((row) => row.userKind === "agent_id") ?? false,
-  );
-  const agentsById = useMemo(
-    () =>
-      new Map(
-        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
-          agent.id,
-          agent,
-        ]),
-      ),
-    [agents.data, agents.isError],
   );
   const users = useMemo(
     () =>

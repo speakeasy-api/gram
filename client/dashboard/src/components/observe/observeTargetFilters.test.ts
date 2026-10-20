@@ -3,7 +3,9 @@ import {
   buildServerOptionGroups,
   encodeGatewayServerFilter,
   parseTargetFilter,
+  selectedUserAgentIds,
   selectedUserEmails,
+  selectedUserFilterValues,
 } from "./observeTargetFilters";
 
 describe("selectedUserEmails", () => {
@@ -17,6 +19,31 @@ describe("selectedUserEmails", () => {
         },
       ]),
     ).toEqual(["alice@example.com", "bob@example.com"]);
+  });
+});
+
+describe("agent user filters", () => {
+  const chips = [
+    {
+      display: "Alice@Example.com, agent:a1",
+      filters: [" Alice@Example.com ", "agent:a1", "agent:"],
+      path: "user.email",
+    },
+  ];
+
+  it("keeps agents out of the email filters", () => {
+    expect(selectedUserEmails(chips)).toEqual(["alice@example.com"]);
+  });
+
+  it("selects agents by id", () => {
+    expect(selectedUserAgentIds(chips)).toEqual(["a1"]);
+  });
+
+  it("round-trips both kinds as the URL holds them", () => {
+    expect(selectedUserFilterValues(chips)).toEqual([
+      "alice@example.com",
+      "agent:a1",
+    ]);
   });
 });
 

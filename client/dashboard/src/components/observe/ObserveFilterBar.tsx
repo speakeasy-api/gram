@@ -124,7 +124,7 @@ export function ObserveFilterBar({
   serverOptions,
   serverOptionGroups,
   onServerSelectionChange,
-  userEmailOptions,
+  userOptions,
   onUserEmailSelectionChange,
   sourceOptions,
   onSourceSelectionChange,
@@ -157,7 +157,8 @@ export function ObserveFilterBar({
   serverOptions: string[];
   serverOptionGroups?: MultiSelectGroup[];
   onServerSelectionChange: (values: string[]) => void;
-  userEmailOptions: string[];
+  /** People by email and agents by their encoded id, each with its display name. */
+  userOptions: Array<{ label: string; value: string }>;
   onUserEmailSelectionChange: (values: string[]) => void;
   sourceOptions: string[];
   onSourceSelectionChange: (values: string[]) => void;
@@ -274,7 +275,7 @@ export function ObserveFilterBar({
   const optionsById = useMemo<OptionsById>(
     () => ({
       server: serverOptionsResolved,
-      user: userEmailOptions.map((e) => ({ label: e, value: e })),
+      user: userOptions,
       role: roleOptions.map((r) => ({ label: r.name, value: r.id })),
       source: sourceOptionsWithIcons,
       type: typeOptions,
@@ -283,7 +284,7 @@ export function ObserveFilterBar({
     }),
     [
       serverOptionsResolved,
-      userEmailOptions,
+      userOptions,
       roleOptions,
       sourceOptionsWithIcons,
       typeOptions,

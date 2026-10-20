@@ -1,4 +1,5 @@
 import { hashKey, useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { useMemo } from "react";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -23,4 +24,24 @@ export function useReadableAgents(
     throwOnError: false,
     retry: false,
   });
+}
+
+/**
+ * The agents this viewer may read, by id. An agent missing from the map is
+ * one they cannot read or one that no longer exists, so its name stays hidden.
+ */
+export function useReadableAgentsById(
+  enabled: boolean,
+): Map<string, ManagedAgent> {
+  const agents = useReadableAgents(enabled);
+  return useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
 }

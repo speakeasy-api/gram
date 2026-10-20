@@ -14,8 +14,10 @@ import {
   TOOL_USAGE_TYPE_OPTIONS,
   TOOL_USAGE_VALID_TYPES,
   buildServerOptionGroups,
-  selectedUserEmails,
+  encodeAgentUserFilter,
+  selectedUserFilterValues,
 } from "@/components/observe/observeTargetFilters";
+import { useReadableAgentsById } from "@/hooks/useReadableAgents";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -319,14 +321,34 @@ export function InsightsToolsContent(): JSX.Element {
     ],
   );
 
-  const toolUsageUserEmailOptions = useMemo(() => {
-    const selected = selectedUserEmails(activeFilters);
-    const known = (filterOptionsData?.users ?? [])
-      .filter((user) => user.userKind === "email")
-      .map((user) => user.userKey || user.userLabel)
-      .filter(Boolean);
-    return [...new Set([...known, ...selected])];
-  }, [activeFilters, filterOptionsData?.users]);
+  const agentsById = useReadableAgentsById(
+    filterOptionsData?.users.some((user) => user.userKind === "agent_id") ??
+      false,
+  );
+  // People filter by email and agents by id. An agent the viewer cannot read
+  // keeps its id label, never its name.
+  const toolUsageUserOptions = useMemo(() => {
+    const options = (filterOptionsData?.users ?? []).flatMap((user) => {
+      if (user.userKind === "email") {
+        const email = user.userKey || user.userLabel;
+        return email ? [{ label: email, value: email }] : [];
+      }
+      if (user.userKind === "agent_id") {
+        return [
+          {
+            label: agentsById.get(user.userKey)?.name ?? user.userLabel,
+            value: encodeAgentUserFilter(user.userKey),
+          },
+        ];
+      }
+      return [];
+    });
+    const present = new Set(options.map((option) => option.value));
+    for (const value of selectedUserFilterValues(activeFilters)) {
+      if (!present.has(value)) options.push({ label: value, value });
+    }
+    return options;
+  }, [activeFilters, agentsById, filterOptionsData?.users]);
 
   const displayError = error
     ? new Error("Unable to load tool usage. Please try again.")
@@ -389,7 +411,7 @@ export function InsightsToolsContent(): JSX.Element {
           serverOptions={serverOptions}
           serverOptionGroups={serverOptionGroups}
           onServerSelectionChange={handleServerSelectionChange}
-          userEmailOptions={toolUsageUserEmailOptions}
+          userOptions={toolUsageUserOptions}
           onUserEmailSelectionChange={handleUserEmailSelectionChange}
           sourceOptions={hookSourceOptions}
           onSourceSelectionChange={handleHookSourceSelectionChange}
@@ -431,7 +453,7 @@ function HooksInnerContent({
   serverOptions,
   serverOptionGroups,
   onServerSelectionChange,
-  userEmailOptions,
+  userOptions,
   onUserEmailSelectionChange,
   sourceOptions,
   onSourceSelectionChange,
@@ -468,7 +490,7 @@ function HooksInnerContent({
   serverOptions: string[];
   serverOptionGroups: MultiSelectGroup[];
   onServerSelectionChange: (values: string[]) => void;
-  userEmailOptions: string[];
+  userOptions: Array<{ label: string; value: string }>;
   onUserEmailSelectionChange: (values: string[]) => void;
   sourceOptions: string[];
   onSourceSelectionChange: (values: string[]) => void;
@@ -530,7 +552,7 @@ function HooksInnerContent({
           serverOptions={serverOptions}
           serverOptionGroups={serverOptionGroups}
           onServerSelectionChange={onServerSelectionChange}
-          userEmailOptions={userEmailOptions}
+          userOptions={userOptions}
           onUserEmailSelectionChange={onUserEmailSelectionChange}
           sourceOptions={sourceOptions}
           onSourceSelectionChange={onSourceSelectionChange}

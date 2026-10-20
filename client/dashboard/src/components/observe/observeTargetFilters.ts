@@ -20,6 +20,10 @@ const HOSTED_SERVER_PREFIX = "hosted:";
 const SHADOW_SERVER_PREFIX = "shadow:";
 const GATEWAY_SERVER_PREFIX = "gateway:";
 
+// An agent shares the user filter with people. Its value carries a prefix
+// that no email address can start with, so the two never collide.
+const AGENT_USER_PREFIX = "agent:";
+
 // Local tools are excluded by default: they dominate event volume and drown
 // out the MCP server and skill usage these pages are meant to surface. Users
 // can opt back in via the type filter.
@@ -121,12 +125,39 @@ export function selectedTargetValues(activeFilters: FilterChip[]): string[] {
     .filter(Boolean);
 }
 
-export function selectedUserEmails(activeFilters: FilterChip[]): string[] {
+export function encodeAgentUserFilter(agentId: string): string {
+  return `${AGENT_USER_PREFIX}${agentId}`;
+}
+
+function selectedUserValues(activeFilters: FilterChip[]): string[] {
   return activeFilters
     .filter((f) => f.path === USER_EMAIL_FILTER_PATH)
     .flatMap((f) => f.filters)
-    .map(normalizeUserEmailFilter)
+    .map((value) => value.trim())
     .filter(Boolean);
+}
+
+export function selectedUserEmails(activeFilters: FilterChip[]): string[] {
+  return selectedUserValues(activeFilters)
+    .filter((value) => !value.startsWith(AGENT_USER_PREFIX))
+    .map(normalizeUserEmailFilter);
+}
+
+export function selectedUserAgentIds(activeFilters: FilterChip[]): string[] {
+  return selectedUserValues(activeFilters)
+    .filter((value) => value.startsWith(AGENT_USER_PREFIX))
+    .map((value) => value.slice(AGENT_USER_PREFIX.length))
+    .filter(Boolean);
+}
+
+/** Every selected user filter value, people and agents, as the URL holds them. */
+export function selectedUserFilterValues(
+  activeFilters: FilterChip[],
+): string[] {
+  return [
+    ...selectedUserEmails(activeFilters),
+    ...selectedUserAgentIds(activeFilters).map(encodeAgentUserFilter),
+  ];
 }
 
 export function selectedHookSources(activeFilters: FilterChip[]): string[] {
