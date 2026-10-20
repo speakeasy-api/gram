@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -185,7 +186,7 @@ func directoryReviewEmailsEnabled(ctx context.Context, reviews *reviewrepo.Queri
 	case errors.Is(err, pgx.ErrNoRows):
 		return true, nil
 	case err != nil:
-		return false, err
+		return false, fmt.Errorf("get directory review emails disabled at: %w", err)
 	}
 	return !disabledAt.Valid, nil
 }

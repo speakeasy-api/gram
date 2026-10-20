@@ -474,6 +474,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerAccessReadTools(reg, accessRead)
 	}
 	registerAccessRoleMutationTools(reg, accessRoleMutations)
+	registerDirectoryReviewTools(reg, accessRead)
 	if !sessionRecall.valid() {
 		registerUnavailableSessionRecallTools(reg)
 	} else {

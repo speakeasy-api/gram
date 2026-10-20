@@ -1879,6 +1879,7 @@ func newStartCommand() *cli.Command {
 				AuditLogger:               auditLogger,
 				AccessRoles:               roleClient,
 				PluginManagement:          pluginsSvc,
+				DirectoryReview:           accessService,
 				PluginPublisher:           pluginPublisher,
 				PluginPublishSignaler:     pluginsPublishSignaler,
 				NetworkAccessAdmission:    networkIngressAdmission,

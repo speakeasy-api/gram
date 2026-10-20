@@ -205,11 +205,14 @@ type AccessReadService struct {
 	references *subjectReferenceCodec
 	now        func() time.Time
 	versionKey []byte
+	// directoryReview backs the directory review tools; nil leaves them
+	// reporting unavailable.
+	directoryReview DirectoryReviewBackend
 }
 
 func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget OperationBudget, keyMaterial string) *AccessReadService {
 	if logger == nil {
-		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil, versionKey: nil}
+		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil, versionKey: nil, directoryReview: nil}
 	}
 	references, err := newSubjectReferenceCodec(keyMaterial)
 	if err != nil {
@@ -224,6 +227,8 @@ func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget Operatio
 		references: references,
 		now:        time.Now,
 		versionKey: versionKey[:],
+
+		directoryReview: nil,
 	}
 }
 
