@@ -4,7 +4,6 @@ import {
   chainingBound,
   chainingGrantDeclaration,
   chainingResourceMetadata,
-  chainingScopeOptions,
   chainingScopesAllowed,
   chainingUnlinkable,
   defaultChainingScopes,
@@ -58,43 +57,6 @@ describe("chainingScopesAllowed", () => {
 
   it("accepts anything when the client sets no scope", () => {
     expect(chainingScopesAllowed(["anything"], undefined)).toBe(true);
-  });
-});
-
-describe("chainingScopeOptions", () => {
-  it("disables advertised resource scopes outside the client's scope", () => {
-    expect(
-      chainingScopeOptions(
-        ["openid", "todos.read"],
-        ["todos.read", "todos.write", "email"],
-        [],
-      ),
-    ).toEqual([
-      {
-        value: "todos.read",
-        label: "todos.read",
-        description: "Advertised by this server",
-      },
-      {
-        value: "todos.write",
-        label: "todos.write",
-        disabled: true,
-        description: "Add to the client's scope first",
-      },
-    ]);
-  });
-
-  it("offers advertised scopes when the client sets no scope", () => {
-    expect(chainingScopeOptions(undefined, ["todos.read"], ["custom"])).toEqual(
-      [
-        {
-          value: "todos.read",
-          label: "todos.read",
-          description: "Advertised by this server",
-        },
-        { value: "custom", label: "custom" },
-      ],
-    );
   });
 });
 

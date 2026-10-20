@@ -17,8 +17,7 @@ import (
 // `GET /mcp/{mcpSlug}/connect/first-party`. It
 // resolves the slug to a `/mcp`-keyed ResolvedMcpEndpoint and delegates to
 // ServeFirstPartyConnect — the dashboard's entry point for linking an
-// issuer-gated server's upstream sessions. /x/mcp registers the equivalent
-// via its mcp_endpoint-keyed adapter (see xmcp.Service.handleFirstPartyConnect).
+// issuer-gated server's upstream sessions.
 func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
@@ -49,9 +48,21 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 // No ClientID/RedirectURI: a first-party challenge has no MCP client to grant
 // to or redirect back to. Once the user links every card on the consent page,
 // the flow is terminal and the page closes its dashboard-opened tab.
+//
+// On a gateway, a `server` query parameter names the server to connect, and
+// the flow lands on that server's connect page. A gateway tool call links here
+// when a server cannot be reached without the user's sign-in.
 func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	if s.redirectToAuthorizationServer(w, r, endpoint) {
+		return nil
+	}
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
+
+	focusServer := r.URL.Query().Get("server")
+	if len(focusServer) > maxFocusServerLength {
+		return oops.E(oops.CodeBadRequest, nil, "server is too long").LogError(ctx, logger)
+	}
 
 	csrfToken, err := generateOpaqueToken()
 	if err != nil {
@@ -65,7 +76,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
 	}
-	challengeState := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+	challengeState := AuthnChallengeState{ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 		Browser:    nil,
 		Federation: nil,
 
@@ -74,6 +85,8 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
 		AuthorizerUserID:         "",
 		AuthorizerImpersonated:   nil,
+		SignInID:                 nil,
+		FreshLoginForced:         false,
 		AgentAuthorizationTarget: nil,
 		Endpoint:                 endpointRef,
 		ClientID:                 "",
@@ -89,6 +102,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		FirstParty: true,
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
+		FocusServer:     focusServer,
 	}
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
@@ -120,6 +134,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		ScopesSupported: nil,
 		LoginHint:       "",
 		ScreenHint:      "",
+		Prompt:          "",
 	})
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)

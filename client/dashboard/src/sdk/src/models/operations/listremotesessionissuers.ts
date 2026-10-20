@@ -31,7 +31,7 @@ export type ListRemoteSessionIssuersSecurity = {
 /**
  * Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.
  */
-export const QueryParamTier = {
+export const ListRemoteSessionIssuersQueryParamTier = {
   Project: "project",
   Organization: "organization",
   Platform: "platform",
@@ -39,7 +39,9 @@ export const QueryParamTier = {
 /**
  * Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.
  */
-export type QueryParamTier = ClosedEnum<typeof QueryParamTier>;
+export type ListRemoteSessionIssuersQueryParamTier = ClosedEnum<
+  typeof ListRemoteSessionIssuersQueryParamTier
+>;
 
 export type ListRemoteSessionIssuersRequest = {
   /**
@@ -61,7 +63,7 @@ export type ListRemoteSessionIssuersRequest = {
   /**
    * Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.
    */
-  tier?: QueryParamTier | undefined;
+  tier?: ListRemoteSessionIssuersQueryParamTier | undefined;
   /**
    * Session header
    */
@@ -188,9 +190,10 @@ export function listRemoteSessionIssuersSecurityToJSON(
 }
 
 /** @internal */
-export const QueryParamTier$outboundSchema: z.ZodMiniEnum<
-  typeof QueryParamTier
-> = z.enum(QueryParamTier);
+export const ListRemoteSessionIssuersQueryParamTier$outboundSchema:
+  z.ZodMiniEnum<typeof ListRemoteSessionIssuersQueryParamTier> = z.enum(
+    ListRemoteSessionIssuersQueryParamTier,
+  );
 
 /** @internal */
 export type ListRemoteSessionIssuersRequest$Outbound = {
@@ -214,7 +217,7 @@ export const ListRemoteSessionIssuersRequest$outboundSchema: z.ZodMiniType<
     limit: z.optional(z.int()),
     search: z.optional(z.string()),
     upstreamHost: z.optional(z.string()),
-    tier: z.optional(QueryParamTier$outboundSchema),
+    tier: z.optional(ListRemoteSessionIssuersQueryParamTier$outboundSchema),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),

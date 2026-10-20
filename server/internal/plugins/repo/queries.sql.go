@@ -978,6 +978,27 @@ func (q *Queries) GetRoleSetupBlockedPIDFixture(ctx context.Context, blocker int
 	return pid, err
 }
 
+const hasCanonicalWrapper = `-- name: HasCanonicalWrapper :one
+SELECT EXISTS (
+  SELECT 1 FROM mcp_servers
+  WHERE id = $1 AND toolset_id = $1 AND project_id = $2
+    AND deleted IS FALSE AND visibility <> 'disabled'
+)::bool
+`
+
+type HasCanonicalWrapperParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// A hosted entry is stored under its enabled canonical wrapper (same id); a drifted, disabled one keeps the toolset key.
+func (q *Queries) HasCanonicalWrapper(ctx context.Context, arg HasCanonicalWrapperParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasCanonicalWrapper, arg.ToolsetID, arg.ProjectID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const hasPluginGithubConnectionForProject = `-- name: HasPluginGithubConnectionForProject :one
 SELECT EXISTS (
   SELECT 1 FROM plugin_github_connections WHERE project_id = $1
@@ -1421,6 +1442,38 @@ func (q *Queries) ListAgentPluginCompatibilityIssuesForProject(ctx context.Conte
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCanonicalWrapperIDs = `-- name: ListCanonicalWrapperIDs :many
+SELECT s.id FROM mcp_servers s
+JOIN toolsets t ON t.id = s.toolset_id AND t.project_id = s.project_id AND t.deleted IS FALSE
+WHERE s.project_id = $1 AND s.id = ANY($2::uuid[]) AND s.toolset_id = s.id AND s.deleted IS FALSE
+`
+
+type ListCanonicalWrapperIDsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+// Of the given ids, those that are a live canonical hosted wrapper (toolset id = server id) of a live toolset in the project.
+func (q *Queries) ListCanonicalWrapperIDs(ctx context.Context, arg ListCanonicalWrapperIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listCanonicalWrapperIDs, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

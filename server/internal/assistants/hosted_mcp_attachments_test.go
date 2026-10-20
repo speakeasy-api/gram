@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -31,13 +32,28 @@ type hostedAttachmentFixture struct {
 	remote    mcpserversrepo.McpServer
 }
 
+// newHostedAttachmentFixture writes with the server-key rollout on (phase B).
 func newHostedAttachmentFixture(t *testing.T, name string) hostedAttachmentFixture {
+	t.Helper()
+	return newHostedAttachmentFixtureKeyed(t, name, true)
+}
+
+// newPhaseAHostedAttachmentFixture writes with the server-key rollout off, as every pod did before it.
+func newPhaseAHostedAttachmentFixture(t *testing.T, name string) hostedAttachmentFixture {
+	t.Helper()
+	return newHostedAttachmentFixtureKeyed(t, name, false)
+}
+
+func newHostedAttachmentFixtureKeyed(t *testing.T, name string, serverKey bool) hostedAttachmentFixture {
 	t.Helper()
 	ctx := t.Context()
 	db, err := assistantsInfra.CloneTestDatabase(t, name)
 	require.NoError(t, err)
 	projectID := newProvisioningProject(t, db, name)
 	core := newProvisioningCore(t, db)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, serverKey)
+	core.SetFeatureProvider(flags)
 
 	for _, slug := range []string{"default-env", "staging"} {
 		_, err := environmentsrepo.New(db).CreateEnvironment(ctx, environmentsrepo.CreateEnvironmentParams{
@@ -81,7 +97,7 @@ func newHostedAttachmentFixture(t *testing.T, name string) hostedAttachmentFixtu
 	})
 	require.NoError(t, err)
 
-	record, err := core.CreateAssistant(ctx, "org-test", projectID, "user-1", "Assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false)
+	record, err := core.CreateAssistant(ctx, "org-test", projectID, "user-1", "Assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false, nil)
 	require.NoError(t, err)
 
 	return hostedAttachmentFixture{core: core, db: db, projectID: projectID, assistant: record.ID, hosted: hosted, legacy: legacy, remote: remote}
@@ -270,7 +286,7 @@ func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
 	ctx := t.Context()
 	name := "updated"
 
-	t.Run("toolsets write keeps the toolset row shape", func(t *testing.T) {
+	t.Run("toolsets write stores the hosted server under its wrapper", func(t *testing.T) {
 		t.Parallel()
 		f := newHostedAttachmentFixture(t, "hosted_write_toolsets")
 		f.addLegacyRow(t, f.hosted.ID, uuid.NullUUID{})
@@ -279,11 +295,11 @@ func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
 		before := f.runtime(t)
 
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil,
-			[]*types.AssistantToolsetRef{{ToolsetSlug: "billing"}}, nil, nil, nil, nil)
+			[]*types.AssistantToolsetRef{{ToolsetSlug: "billing"}}, nil, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		counts := f.counts(t)
-		require.EqualValues(t, 1, counts.Toolsets, "older pods read hosted servers from assistant_toolsets")
-		require.EqualValues(t, 1, counts.McpServers, "twin removed; remote server untouched")
+		require.Zero(t, counts.Toolsets, "twin collapsed onto the wrapper")
+		require.EqualValues(t, 2, counts.McpServers, "hosted server and untouched remote server")
 		require.ElementsMatch(t, before, f.runtime(t))
 	})
 
@@ -295,7 +311,7 @@ func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
 		before := f.runtime(t)
 
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, nil,
-			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		counts := f.counts(t)
 		require.EqualValues(t, 1, counts.Toolsets)
@@ -310,11 +326,11 @@ func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
 		view := f.view(t)
 
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, view.Toolsets,
-			append(view.McpServers, &types.AssistantMCPServerRef{McpServerSlug: "org-test-billing-x1"}), nil, nil, nil)
+			append(view.McpServers, &types.AssistantMCPServerRef{McpServerSlug: "org-test-billing-x1"}), nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		counts := f.counts(t)
-		require.EqualValues(t, 2, counts.Toolsets, "attached in today's row shape")
-		require.Zero(t, counts.McpServers)
+		require.EqualValues(t, 1, counts.Toolsets, "a toolset without a wrapper keeps assistant_toolsets")
+		require.EqualValues(t, 1, counts.McpServers, "the hosted server is stored under its wrapper")
 		require.ElementsMatch(t, []string{"billing", "legacy"}, runtimeIDs(f.runtime(t)))
 	})
 
@@ -326,7 +342,7 @@ func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
 		f.setToolsetMCPEnabled(t, false)
 
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, nil,
-			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, nil, nil, nil)
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		counts := f.counts(t)
 		require.EqualValues(t, 1, counts.Toolsets)
@@ -346,11 +362,11 @@ func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
 		before := f.runtime(t)
 		view := f.view(t)
 
-		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, view.Toolsets, view.McpServers, nil, nil, nil)
+		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, view.Toolsets, view.McpServers, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		counts := f.counts(t)
-		require.EqualValues(t, 2, counts.Toolsets)
-		require.EqualValues(t, 1, counts.McpServers)
+		require.EqualValues(t, 1, counts.Toolsets, "only the toolset without a wrapper")
+		require.EqualValues(t, 2, counts.McpServers)
 		require.ElementsMatch(t, before, f.runtime(t))
 		require.Equal(t, view.McpServers, f.view(t).McpServers)
 	})
@@ -363,13 +379,13 @@ func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
 		// An older dashboard echoes a hosted server in both arrays.
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil,
 			[]*types.AssistantToolsetRef{{ToolsetSlug: "billing", EnvironmentSlug: &staging}},
-			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		require.Equal(t, "staging", f.runtime(t)[0].Headers["Gram-Environment"])
 
 		_, err = f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil,
 			[]*types.AssistantToolsetRef{},
-			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, nil, nil, nil)
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		require.Equal(t, []string{"remote"}, runtimeIDs(f.runtime(t)), "removing it from toolsets detaches it")
 	})
@@ -381,7 +397,7 @@ func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
 		f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
 
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, nil,
-			[]*types.AssistantMCPServerRef{}, nil, nil, nil)
+			[]*types.AssistantMCPServerRef{}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		require.Equal(t, []string{"billing"}, runtimeIDs(f.runtime(t)))
 	})
@@ -391,12 +407,12 @@ func TestHostedAttachmentCreateByServerSlug(t *testing.T) {
 	t.Parallel()
 	f := newHostedAttachmentFixture(t, "hosted_create_by_server")
 	record, err := f.core.CreateAssistant(t.Context(), "org-test", f.projectID, "user-1", "Second", "openai/gpt-4o-mini", "", nil,
-		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, 300, 1, StatusActive, false)
+		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, 300, 1, StatusActive, false, allowAllMCPEnable)
 	require.NoError(t, err)
 	f.assistant = record.ID
 	counts := f.counts(t)
-	require.EqualValues(t, 1, counts.Toolsets)
-	require.EqualValues(t, 1, counts.McpServers)
+	require.Zero(t, counts.Toolsets)
+	require.EqualValues(t, 2, counts.McpServers)
 	require.ElementsMatch(t, []string{"billing", "remote"}, runtimeIDs(f.runtime(t)))
 }
 
@@ -412,7 +428,7 @@ func TestHostedAttachmentByServerSlugLeavesMCPOff(t *testing.T) {
 		wrapper := f.wrapper(t)
 
 		_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil, nil,
-			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil, allowAllMCPEnable)
 		require.ErrorIs(t, err, errAssistantValidation)
 		require.ErrorContains(t, err, "is disabled")
 		require.False(t, f.toolset(t).McpEnabled)
@@ -428,7 +444,7 @@ func TestHostedAttachmentByServerSlugLeavesMCPOff(t *testing.T) {
 		wrapper := f.wrapper(t)
 
 		_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil, nil,
-			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		require.False(t, f.toolset(t).McpEnabled)
 		require.Equal(t, wrapper.Visibility, f.wrapper(t).Visibility)
@@ -513,4 +529,51 @@ func TestHostedAttachmentLegacyRowOnDisabledWrapper(t *testing.T) {
 	view := f.view(t)
 	require.Empty(t, view.McpServers)
 	require.Len(t, view.Toolsets, 1)
+}
+
+// A phase A save left hosted servers in assistant_toolsets; the next save moves them
+// onto their wrappers without changing what the runner or the API sees.
+func TestHostedAttachmentPhaseARowUpgradedOnSave(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_upgrade_phase_a")
+	f.addLegacyRow(t, f.hosted.ID, f.environmentID(t, "staging"))
+	f.addLegacyRow(t, f.legacy.ID, uuid.NullUUID{})
+	f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
+	before := f.runtime(t)
+	view := f.view(t)
+	require.Equal(t, []string{"billing", "legacy"}, []string{view.Toolsets[0].ToolsetSlug, view.Toolsets[1].ToolsetSlug})
+
+	name := "updated"
+	_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil, view.Toolsets, view.McpServers, nil, nil, nil, allowAllMCPEnable)
+	require.NoError(t, err)
+
+	counts := f.counts(t)
+	require.EqualValues(t, 1, counts.Toolsets, "the toolset without a wrapper stays")
+	require.EqualValues(t, 2, counts.McpServers, "hosted server moved beside the remote one")
+	require.Equal(t, before, f.runtime(t))
+	after := f.view(t)
+	require.Equal(t, view.Toolsets, after.Toolsets, "same order and environments")
+	require.Equal(t, view.McpServers, after.McpServers)
+}
+
+// A wrapped toolset the runtime cannot dial stays in assistant_toolsets, as the dependent move leaves it.
+func TestHostedAttachmentUndialableToolsetKeepsLegacyRow(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_undialable")
+	_, err := f.db.Exec(t.Context(), `UPDATE toolsets SET mcp_slug = NULL, mcp_enabled = FALSE WHERE id = $1 AND project_id = $2`, f.hosted.ID, f.projectID) //nolint:glint // notestingrawsql: undialable toolset fixture
+	require.NoError(t, err)
+	noSlug := f.toolset(t)
+	tx := testenv.BeginTx(t, t.Context(), f.db)
+	_, err = hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), noSlug, nil)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+	require.Equal(t, f.hosted.ID, f.wrapper(t).ID, "the wrapper outlives the slug")
+
+	name := "updated"
+	_, err = f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil,
+		[]*types.AssistantToolsetRef{{ToolsetSlug: "billing"}}, nil, nil, nil, nil, allowAllMCPEnable)
+	require.NoError(t, err)
+	counts := f.counts(t)
+	require.EqualValues(t, 1, counts.Toolsets)
+	require.Zero(t, counts.McpServers)
 }

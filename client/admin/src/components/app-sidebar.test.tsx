@@ -224,9 +224,15 @@ describe("AppSidebar", () => {
         links: [
           { label: "MCP Registry", href: "/registry" },
           { label: "Support matrix", href: "/integration-coverage" },
+          { label: "Signup offers", href: "/signup-offers" },
           { label: "Steps", href: "/onboarding-steps" },
           { label: "Use Cases & Playbooks", href: "/onboarding-playbooks" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
+          {
+            label: "External MCP migration",
+            href: "/external-mcp-migration",
+          },
+          { label: "Hook clients", href: "/hook-clients" },
           { label: "Admin MCP", href: "/mcp-setup" },
           {
             label: "Demo organization",

@@ -2,12 +2,8 @@ package evaluation
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -24,9 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/classifier/classifiertest"
-	"github.com/speakeasy-api/gram/server/internal/classifier/jev"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -51,7 +45,19 @@ func (d *dependencies) IsFeatureEnabled(ctx context.Context, org string, feature
 type capturePublisher struct {
 	readings []*sigintv1.Reading
 	err      error
+	outcomes outcomeCapture
 }
+
+type outcomeCapture struct {
+	messages []*sigintv1.Outcome
+	err      error
+}
+
+func (p *outcomeCapture) Publish(_ context.Context, outcome *sigintv1.Outcome, _ ...gcp.PublishOption) gcp.PublishResult {
+	p.messages = append(p.messages, outcome)
+	return gcp.NewErrPublishResult(p.err)
+}
+func (p *outcomeCapture) Stop(context.Context) error { return nil }
 
 func (p *capturePublisher) Publish(_ context.Context, reading *sigintv1.Reading, _ ...gcp.PublishOption) gcp.PublishResult {
 	p.readings = append(p.readings, reading)
@@ -68,6 +74,7 @@ func message() *conversationv1.MessageEvent {
 	m.SetProjectId(uuid.NewString())
 	m.SetOrganizationId("test-organization")
 	m.SetMessageCreatedAt("2026-09-28T12:00:00.123456789Z")
+	m.SetOccurredAt("2026-10-01T09:00:00.987654321Z")
 	m.SetRole(conversationv1.MessageEvent_ROLE_USER)
 	return m
 }
@@ -77,7 +84,7 @@ type storedMessages map[uuid.UUID]repo.LoadEvaluationMessagesRow
 func (s storedMessages) LoadMessages(_ context.Context, _ string, project uuid.UUID, ids []uuid.UUID) ([]repo.LoadEvaluationMessagesRow, error) {
 	var rows []repo.LoadEvaluationMessagesRow
 	for _, id := range ids {
-		if row, ok := s[id]; ok && row.ChatMessage.ProjectID.UUID == project {
+		if row, ok := s[id]; ok && row.ProjectID.UUID == project {
 			rows = append(rows, row)
 		}
 	}
@@ -86,13 +93,13 @@ func (s storedMessages) LoadMessages(_ context.Context, _ string, project uuid.U
 
 func storedMessage(m *conversationv1.MessageEvent) repo.LoadEvaluationMessagesRow {
 	var row repo.LoadEvaluationMessagesRow
-	row.ChatMessage.ID = uuid.MustParse(m.GetMessageId())
-	row.ChatMessage.ChatID = uuid.MustParse(m.GetConversationId())
-	row.ChatMessage.ProjectID = uuid.NullUUID{UUID: uuid.MustParse(m.GetProjectId()), Valid: true}
-	row.ChatMessage.Role = strings.TrimPrefix(strings.ToLower(m.GetRole().String()), "role_")
-	row.ChatMessage.Content = "Please help with a failed payment"
+	row.ID = uuid.MustParse(m.GetMessageId())
+	row.ChatID = uuid.MustParse(m.GetConversationId())
+	row.ProjectID = uuid.NullUUID{UUID: uuid.MustParse(m.GetProjectId()), Valid: true}
+	row.Role = strings.TrimPrefix(strings.ToLower(m.GetRole().String()), "role_")
+	row.Content = "Please help with a failed payment"
 	created, _ := time.Parse(time.RFC3339Nano, m.GetMessageCreatedAt())
-	row.ChatMessage.CreatedAt = conv.ToPGTimestamptz(created)
+	row.CreatedAt = conv.ToPGTimestamptz(created)
 	return row
 }
 
@@ -132,49 +139,16 @@ func handler(t *testing.T, m *conversationv1.MessageEvent, definitions []Sensor,
 	deps.On("Load", mock.Anything, m.GetOrganizationId(), uuid.MustParse(m.GetProjectId()), ConversationMessageKind).Return(definitions, nil)
 	var pub capturePublisher
 
-	evaluator, err := NewEvaluator(testenv.NewLogger(t), meters, &deps, &deps, &pub, c)
+	evaluator, err := NewEvaluator(testenv.NewLogger(t), meters, &deps, &deps, &pub, &pub.outcomes, c)
 	require.NoError(t, err)
 
 	row := storedMessage(m)
-	return NewConversationHandler(evaluator, nil, storedMessages{row.ChatMessage.ID: row}), &pub
+	return NewConversationHandler(evaluator, nil, storedMessages{row.ID: row}), &pub
 }
 
 func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 	t.Parallel()
-	calls := 0
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
-		var req struct {
-			Questions map[string]struct {
-				Type string `json:"type"`
-			} `json:"questions"`
-		}
-		if json.NewDecoder(r.Body).Decode(&req) != nil {
-			w.WriteHeader(400)
-			return
-		}
-		answers := map[string]any{}
-		for key, q := range req.Questions {
-			switch q.Type {
-			case "noul":
-				answers[key] = map[string]any{"type": "noul", "noul": 0.8}
-			case "choice":
-				answers[key] = map[string]any{"type": "choice", "choice": "1", "probabilities": map[string]float64{"0": 0.2, "1": 0.8}, "confidence": 0.5}
-			case "score":
-				answers[key] = map[string]any{"type": "score", "score": 0.8, "probabilities": map[string]float64{"0": 0.2, "1": 0.8}, "confidence": 0.5}
-			}
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "answers": answers, "usage": map[string]int{"input_tokens": 100, "output_tokens": 20}})
-	}))
-	t.Cleanup(server.Close)
-	roots := x509.NewCertPool()
-	roots.AddCert(server.Certificate())
-
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(roots))
-	require.NoError(t, err)
-
-	c, err := jev.New(policy, conv.NewSecret([]byte("test-key")), jev.WithEndpoint(server.URL))
-	require.NoError(t, err)
+	c, requests := newRecordingClassifier(t)
 	m := message()
 	m.SetRole(conversationv1.MessageEvent_ROLE_ASSISTANT)
 	provenance := &conversationv1.MessageEvent_IngestionContext{}
@@ -189,16 +163,16 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 	m.SetIngestion(provenance)
 	h, pub := handler(t, m, sensors(), c, testenv.NewMeterProvider(t))
 	row := storedMessage(m)
-	row.ChatMessage.UserID = conv.ToPGText("message-user")
-	row.ChatMessage.ExternalUserID = conv.ToPGText("external-user")
+	row.UserID = conv.ToPGText("message-user")
+	row.ExternalUserID = conv.ToPGText("external-user")
 	row.UserAccountID = uuid.NullUUID{UUID: accountID, Valid: true}
-	h.messages = storedMessages{row.ChatMessage.ID: row}
+	h.messages = storedMessages{row.ID: row}
 	var meta gcp.MessageMetadata
 	require.NoError(t, h.Handle(t.Context(), m, meta))
 	provenance.SetSource("promoted")
 	provenance.SetBillingUserId("promoted-billing-user")
 	require.NoError(t, h.Handle(t.Context(), m, meta))
-	require.Equal(t, 2, calls)
+	require.Equal(t, 2, requests.count())
 	require.Len(t, pub.readings, 6)
 	for i := range 3 {
 		a, b := pub.readings[i], pub.readings[i+3]
@@ -208,6 +182,10 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 		require.Equal(t, []string{"test-model"}, a.GetModels())
 		require.Equal(t, "openrouter", a.GetProvider())
 		require.Equal(t, m.GetMessageCreatedAt(), a.GetEvent().GetOccurredAt())
+		require.Equal(t, "stream", a.GetTriggerKind())
+		require.False(t, a.HasRunId())
+		require.Equal(t, m.GetOccurredAt(), a.GetEvaluationRequestedAt())
+		require.Equal(t, a.GetEvaluationRequestedAt(), b.GetEvaluationRequestedAt())
 		require.Equal(t, "message-user", a.GetActor().GetUserId())
 		require.Equal(t, "external-user", a.GetActor().GetExternalUserId())
 		require.Equal(t, "actor@example.test", a.GetActor().GetUserEmail())
@@ -378,6 +356,9 @@ func TestHandlerOversizedReadingIsPermanentAndPreservesOtherReadings(t *testing.
 	require.NoError(t, h.Handle(t.Context(), m, meta))
 	require.Len(t, pub.readings, 1)
 	require.Equal(t, "other", pub.readings[0].GetSensorId())
+	require.Len(t, pub.outcomes.messages, 1)
+	require.Equal(t, "multi", pub.outcomes.messages[0].GetSensorId())
+	require.Equal(t, "reading_too_large", pub.outcomes.messages[0].GetFailureReason())
 	var data metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &data))
 	found := false
@@ -418,14 +399,16 @@ func TestHandlerSkipsDisabledAndOtherRoles(t *testing.T) {
 	m := message()
 	deps.On("IsFeatureEnabled", mock.Anything, m.GetOrganizationId(), productfeatures.FeatureSignalsIntelligence).Return(false, nil).Once()
 
-	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil)
+	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil, nil)
 	require.NoError(t, err)
 
 	row := storedMessage(m)
-	h := NewConversationHandler(evaluator, nil, storedMessages{row.ChatMessage.ID: row})
+	h := NewConversationHandler(evaluator, nil, storedMessages{row.ID: row})
 	var meta gcp.MessageMetadata
 	require.NoError(t, h.Handle(t.Context(), m, meta))
 	m.SetRole(conversationv1.MessageEvent_ROLE_TOOL)
+	require.NoError(t, h.Handle(t.Context(), m, meta))
+	m.SetRole(conversationv1.MessageEvent_ROLE_SYSTEM)
 	require.NoError(t, h.Handle(t.Context(), m, meta))
 }
 
@@ -437,11 +420,11 @@ func TestHandlerEntitlementFailureNacks(t *testing.T) {
 	t.Cleanup(func() { deps.AssertExpectations(t) })
 	deps.On("IsFeatureEnabled", mock.Anything, mock.Anything, mock.Anything).Return(false, fmt.Errorf("lookup unavailable")).Once()
 
-	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil)
+	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil, nil)
 	require.NoError(t, err)
 
 	row := storedMessage(m)
-	h := NewConversationHandler(evaluator, nil, storedMessages{row.ChatMessage.ID: row})
+	h := NewConversationHandler(evaluator, nil, storedMessages{row.ID: row})
 	var meta gcp.MessageMetadata
 	require.ErrorContains(t, h.Handle(t.Context(), m, meta), "check evaluation entitlement")
 }

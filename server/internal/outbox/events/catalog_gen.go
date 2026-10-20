@@ -36,6 +36,7 @@ var All = []outbox.EventRegistration{
 	GcpIamCredentialV1,
 	GcpKmsKeyV1,
 	IdentityProviderConnectionV1,
+	InternalSessionIssuerV1,
 	JsonWebKeySetV1,
 	JsonWebKeyV1,
 	KillswitchV1,
@@ -100,5 +101,6 @@ var All = []outbox.EventRegistration{
 	VariationV1,
 	WidgetV1,
 	WorkloadAdmissionV1,
+	WorkloadDeviceJoinTokenV1,
 	WorkloadIssuerV1,
 }

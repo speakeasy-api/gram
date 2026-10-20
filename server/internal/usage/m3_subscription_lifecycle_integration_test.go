@@ -147,6 +147,7 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 			SubscriptionID: subscriptionID,
 		}
 		stripe.checkout = stripeclient.CheckoutSessionState{
+			Partner:                nil,
 			ID:                     stripe.event.ObjectID,
 			Status:                 "complete",
 			CustomerID:             m3CustomerID,
@@ -221,4 +222,8 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	deactivations, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationPaygDeactivated)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deactivations)
+}
+
+func (*m3StripeWebhookClient) ResolveGatewayPromotionCode(context.Context, string) (string, error) {
+	return "", errors.New("promotion resolution is not used by billing")
 }

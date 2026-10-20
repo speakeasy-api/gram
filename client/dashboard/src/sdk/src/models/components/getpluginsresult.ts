@@ -31,7 +31,7 @@ export type GetPluginsResult = {
    */
   configuration?: DeviceAgentConfiguration | undefined;
   /**
-   * Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), and remote-configuration set. The agent stores this to detect changes between polls.
+   * Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
    */
   etag: string;
   /**
@@ -39,9 +39,13 @@ export type GetPluginsResult = {
    */
   marketplaces: Array<AgentMarketplace>;
   /**
-   * Speakeasy-hosted MCP servers the agent registers directly in each managed tool's configuration, authorized by the device's own mcp:connect credential. Populated only for agent API keys, from the MCP servers in the plugins assigned to the agent; always empty for people, who reach these servers through their plugins. Always present: an empty list tells the agent to remove the entries it wrote earlier.
+   * Speakeasy-hosted MCP servers the agent registers directly in each managed tool's configuration, authorized by the device's own mcp:connect credential. Populated only when the caller polls as an agent (an agent API key, or a workload acting for its assigned agent), from the MCP servers in the plugins assigned to that agent; always empty for people, who reach these servers through their plugins. Always present: an empty list tells the agent to remove the entries it wrote earlier.
    */
   mcpServers: Array<AgentMCPServer>;
+  /**
+   * URL of the active organization's gateway. Absent when the organization gateway is unavailable.
+   */
+  organizationGatewayUrl?: string | undefined;
   /**
    * Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.
    */
@@ -59,12 +63,14 @@ export const GetPluginsResult$inboundSchema: z.ZodMiniType<
     etag: z.string(),
     marketplaces: z.array(AgentMarketplace$inboundSchema),
     mcp_servers: z.array(AgentMCPServer$inboundSchema),
+    organization_gateway_url: z.optional(z.string()),
     plugins: z.array(AgentPlugin$inboundSchema),
     principal: z.optional(AgentPollingPrincipal$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
       "mcp_servers": "mcpServers",
+      "organization_gateway_url": "organizationGatewayUrl",
     });
   }),
 );

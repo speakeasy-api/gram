@@ -1706,6 +1706,9 @@ type DirectoryGroup struct {
 	OrganizationID string
 	// @access: confidential
 	WorkosDirectoryGroupID string
+	// WorkOS directory ID. NULL until an authoritative directory inventory or entity payload attributes this source.
+	// @access: confidential
+	DirectoryID pgtype.Text
 	// @access: confidential
 	Name string
 	// @access: opaque-restricted
@@ -1764,6 +1767,9 @@ type DirectoryUser struct {
 	UserID pgtype.Text
 	// @access: confidential-pii
 	WorkosDirectoryUserID string
+	// WorkOS directory ID. NULL until an authoritative directory inventory or entity payload attributes this source.
+	// @access: confidential
+	DirectoryID pgtype.Text
 	// @access: confidential-pii
 	Email pgtype.Text
 	// @access: opaque-restricted
@@ -2400,6 +2406,10 @@ type InternalSessionIssuer struct {
 	// @access: confidential
 	DisabledAt pgtype.Timestamptz
 	// @access: confidential
+	AllowedSignInMethods []string
+	// @access: opaque-confidential
+	AllowedMicrosoftTenantIds []string
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -2986,6 +2996,8 @@ type MetaMcpServer struct {
 	Name string
 	// @access: opaque-restricted
 	Instructions pgtype.Text
+	// @access: confidential
+	DiscoveryMode string
 	// @access: confidential
 	Visibility string
 	// @access: confidential
@@ -3685,6 +3697,23 @@ type OrganizationOnboardingVendor struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
+}
+
+type OrganizationPromotionApplication struct {
+	// @access: confidential
+	RedeemedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: restricted
+	StripePromotionCodeID string
+	// @access: restricted
+	StripeSubscriptionID pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
 }
 
 type OrganizationRole struct {
@@ -5017,6 +5046,18 @@ type RemoteSessionEmaCredential struct {
 	EmaBindingGeneration pgtype.Int8
 	// @access: confidential
 	TrustedIssuerSessionID uuid.NullUUID
+	// @access: confidential
+	EmaProvider string
+	// @access: confidential
+	InternalSessionIssuerID uuid.NullUUID
+	// @access: confidential
+	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	InternalSessionIssuerKeyID uuid.NullUUID
+	// @access: confidential
+	SignInID uuid.NullUUID
+	// @access: confidential
+	UserSessionID uuid.NullUUID
 	// @access: opaque-restricted
 	RequestedScopes []string
 	// @access: opaque-restricted
@@ -5577,6 +5618,12 @@ type SigintSensor struct {
 	MatchExpression string
 	// @access: confidential
 	Enabled bool
+	// Absent means single_message; sliding_window supplies preceding conversation context.
+	// @access: confidential
+	InputStrategy pgtype.Text
+	// Total messages including the target; absent means five for sliding windows.
+	// @access: confidential
+	WindowSize pgtype.Int4
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -5606,6 +5653,96 @@ type SigintSensorSignal struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type SignIn struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID string
+	// @access: restricted
+	WorkosSessionID string
+	// @access: confidential
+	AuthenticationMethod string
+	// @access: restricted
+	IdpHostedDomain pgtype.Text
+	// @access: opaque-confidential
+	IdpTenantID pgtype.Text
+	// @access: confidential-pii
+	VerifiedEmail pgtype.Text
+	// @access: confidential
+	IdpAuthenticatedAt pgtype.Timestamptz
+	// @access: confidential
+	AuthenticatedAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	RevokeReason pgtype.Text
+	// @access: confidential
+	SessionSignedOutAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type SignInRevocationCutoff struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID string
+	// @access: confidential
+	CutoffAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type SignInRevocationDelivery struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Kind string
+	// @access: secret-restricted
+	Target string
+	// @access: confidential
+	EffectiveAt pgtype.Timestamptz
+	// @access: confidential
+	Attempts int32
+	// @access: opaque-restricted
+	LastError pgtype.Text
+	// @access: confidential
+	ClaimedUntil pgtype.Timestamptz
+	// @access: confidential
+	NextAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DeliveredAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type SignupOffer struct {
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: opaque-confidential
+	Name string
+	// @access: restricted
+	StripePromotionCodeID string
+	// @access: confidential
+	SignupFlow string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Enabled bool
 }
 
 type Skill struct {
@@ -7170,6 +7307,8 @@ type UserSession struct {
 	// @access: restricted
 	Resource pgtype.Text
 	// @access: confidential
+	SignInID uuid.NullUUID
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -7239,6 +7378,36 @@ type UserSessionConsent struct {
 	RemoteSetHash string
 	// @access: confidential
 	ConsentedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type UserSessionConsentResource struct {
+	// @access: confidential
+	ID uuid.UUID
+	// Target resource project, independent of issuer tenancy.
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	UserSessionConsentID uuid.NullUUID
+	// @access: confidential
+	Resource string
+	// Versioned fingerprint of the complete approved tool inventory.
+	// @access: confidential
+	InventoryHash string
+	// Fingerprint of the approved upstream clients, resources and requested permissions.
+	// @access: confidential
+	RemoteSetHash string
+	// @access: opaque-restricted
+	ToolSelection []byte
+	// @access: confidential
+	SessionDurationHours int32
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -7361,6 +7530,60 @@ type WorkloadAgentAssignment struct {
 	Deleted bool
 }
 
+type WorkloadDeviceJoinToken struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: secret-restricted
+	TokenHash string
+	// @access: confidential
+	AgentID uuid.UUID
+	// @access: confidential
+	CreatedByUserID string
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	ConsumedAt pgtype.Timestamptz
+	// @access: restricted
+	ConsumedBySubject pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type WorkloadDeviceKey struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	WorkloadIssuerID uuid.UUID
+	// @access: restricted
+	Subject string
+	// @access: confidential
+	PublicJwk []byte
+	// @access: confidential
+	Thumbprint string
+	// @access: confidential-pii
+	Hostname pgtype.Text
+	// @access: confidential-pii
+	Serial pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type WorkloadIdentityAdmission struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -7407,6 +7630,8 @@ type WorkloadIssuer struct {
 	JwksUri string
 	// @access: confidential
 	AllowWildcardAdmission bool
+	// @access: confidential
+	KeySource pgtype.Text
 	// @access: opaque-restricted
 	Metadata []byte
 	// @access: confidential

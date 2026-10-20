@@ -504,7 +504,8 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
   updating: boolean;
 } {
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write");
+  // These controls offer no public state for hosted servers; their visibility stays on the toolset page.
+  const canWrite = hasScope("mcp:write") && !isCanonicalHostedWrapper(server);
   const queryClient = useQueryClient();
   const update = useUpdateMcpServerMutation({
     onSuccess: async (_data, variables) => {

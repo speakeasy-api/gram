@@ -36,6 +36,7 @@ const (
 	subjectTypeIdentityProviderConnection  subjectType = "identity_provider_connection"
 	subjectTypeJsonWebKey                  subjectType = "json_web_key"
 	subjectTypeJsonWebKeySet               subjectType = "json_web_key_set"
+	subjectTypeInternalSessionIssuer       subjectType = "internal_session_issuer"
 	subjectTypeKillswitchPrescription      subjectType = "killswitch_prescription"
 	subjectTypeLiteLLMInstance             subjectType = "litellm_instance"
 	subjectTypeMcpApprovalRequest          subjectType = "mcp_approval_request"
@@ -83,8 +84,9 @@ const (
 	subjectTypeVariation                   subjectType = "variation"
 	// The admitted subject, not the machine it admits: the row is the grant, so
 	// it is audited under its own subject rather than under the issuer's.
-	subjectTypeWorkloadAdmission subjectType = "workload_admission"
-	subjectTypeWorkloadIssuer    subjectType = "workload_issuer"
+	subjectTypeWorkloadAdmission       subjectType = "workload_admission"
+	subjectTypeWorkloadDeviceJoinToken subjectType = "workload_device_join_token"
+	subjectTypeWorkloadIssuer          subjectType = "workload_issuer"
 )
 
 type Action string

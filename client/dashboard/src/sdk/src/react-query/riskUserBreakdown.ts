@@ -59,7 +59,7 @@ export type RiskUserBreakdownQueryError =
  * getRiskUserBreakdown risk
  *
  * @remarks
- * Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.
+ * Per-user breakdowns of findings by category and by rule_id within a time window. Powers the risk panels on identity pages.
  */
 export function useRiskUserBreakdown(
   request: GetRiskUserBreakdownRequest,
@@ -85,7 +85,7 @@ export function useRiskUserBreakdown(
  * getRiskUserBreakdown risk
  *
  * @remarks
- * Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.
+ * Per-user breakdowns of findings by category and by rule_id within a time window. Powers the risk panels on identity pages.
  */
 export function useRiskUserBreakdownSuspense(
   request: GetRiskUserBreakdownRequest,

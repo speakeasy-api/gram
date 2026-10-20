@@ -8,7 +8,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * Mirrors the server-side ResourceKindForScope in authz/selector.go.
  */
 export function resourceKindForScope(scope: string): string {
-  if (scope.startsWith("project:") || scope.startsWith("plugin:"))
+  if (
+    scope.startsWith("project:") ||
+    scope.startsWith("plugin:") ||
+    scope.startsWith("log:")
+  )
     return "project";
   if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
   if (scope.startsWith("org:")) return "org";

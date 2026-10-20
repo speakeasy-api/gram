@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
@@ -80,6 +81,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -140,8 +142,12 @@ type Service struct {
 	// canonical host, to the base URL rendered for requests on them. Set by
 	// SetPlatformHosts; nil means the server URL is the only platform host.
 	platformHosts map[string]string
-	siteURL       *url.URL
-	posthog       *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	// openAIAppsChallengeToken is served at /.well-known/openai-apps-challenge
+	// on the platform hosts. Empty serves not found. Set by
+	// SetOpenAIAppsChallengeToken.
+	openAIAppsChallengeToken string
+	siteURL                  *url.URL
+	posthog                  *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	// features resolves flag-controlled behavior (the managed assistant's
 	// Platform MCP toolset variant). Wired from the environment-aware
 	// provider: the posthog client in production, the CSV-backed in-memory
@@ -167,16 +173,19 @@ type Service struct {
 	idJAGValidator *idjag.Validator
 	// aiToolBlockReads are the database reads behind the Shadow AI gateway
 	// block check, held as values so a test can make one of them fail.
-	aiToolBlockReads       aiToolBlockReads
-	toolProxy              *gateway.ToolProxy
-	oauthRepo              *oauth_repo.Queries
-	billingTracker         billing.Tracker
-	billingRepository      billing.Repository
-	toolsetCache           cache.TypedCacheObject[mv.ToolsetBaseContents]
-	telemLogger            *tm.Logger
+	aiToolBlockReads  aiToolBlockReads
+	toolProxy         *gateway.ToolProxy
+	oauthRepo         *oauth_repo.Queries
+	billingTracker    billing.Tracker
+	billingRepository billing.Repository
+	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
+	telemLogger       *tm.Logger
+	// toolCallLogger emits tool call records into the OTel pipeline.
+	toolCallLogger         *otelpub.Logger
 	vectorToolStore        *rag.ToolsetVectorStore
 	assistantTokens        *assistanttokens.Manager
 	principalCredentials   *principalcredential.Issuer
+	deviceAgentTokens      *deviceagenttoken.Issuer
 	sessions               *sessions.Manager
 	consentBindings        ConsentBindingService
 	identityResolver       IdentityResolver
@@ -227,8 +236,8 @@ type Service struct {
 	// remoteSessionRecheck sweeps idle grants with no refresh token; runs only where StartRemoteSessionRecheck is called.
 	remoteSessionRecheck *remoteSessionRecheck
 	// remoteProxyManager builds configured remotemcp proxies wired with the
-	// MCP-aware interceptor stack. Only consulted by ServeMCPEndpoint's
-	// remote-backed branch; may be nil in non-HTTP contexts (e.g. the
+	// MCP-aware interceptor stack. Used by the endpoint dispatcher's
+	// remote-backed branch, the consent transport and meta servers; may be nil in non-HTTP contexts (e.g. the
 	// Temporal worker, which constructs *Service for its programmatic
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
@@ -238,6 +247,9 @@ type Service struct {
 
 	// metaRuntime bounds the gateway's per-member upstream work.
 	metaRuntime MetaRuntimeConfig
+	// replayLiveness overrides the refresh-replay session check in unit tests
+	// that run without a database.
+	replayLiveness func(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool)
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -443,6 +455,7 @@ func NewService(
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	telemLogger *tm.Logger,
+	toolCallLogger *otelpub.Logger,
 	telemSvc *tm.Service,
 	vectorToolStore *rag.ToolsetVectorStore,
 	triggerApp *bgtriggers.App,
@@ -492,6 +505,7 @@ func NewService(
 	)
 
 	service := &Service{
+		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
 		consentBindings:           nil,
@@ -516,6 +530,7 @@ func NewService(
 		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil},
 		authenticationHostBaseURL: "",
 		platformHosts:             nil,
+		openAIAppsChallengeToken:  "",
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,
@@ -541,9 +556,11 @@ func NewService(
 		billingRepository:      billingRepository,
 		toolsetCache:           cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:            telemLogger,
+		toolCallLogger:         toolCallLogger,
 		vectorToolStore:        vectorToolStore,
 		assistantTokens:        assistantTokens,
 		principalCredentials:   principalCredentials,
+		deviceAgentTokens:      deviceagenttoken.New(callerAssertions, db),
 		sessions:               sessions,
 		chatSessionsManager:    chatSessionsManager,
 		enc:                    enc,
@@ -725,6 +742,7 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.MCPErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", deviceagenttoken.TokenPathPattern, oops.ErrHandle(service.logger, service.HandleDeviceAgentToken).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback/{clientID}", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
@@ -776,13 +794,12 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 
 	attachSharedAuthorizationServers(mux, service)
+	attachOrganizationGateway(mux, service)
 }
 
 // HandleRemoteLoginCallback is the chi handler at
 // `GET /mcp/remote_login_callback` (plus the legacy per-slug variant). Thin
-// passthrough to remotesessions.ChallengeManager so /x/mcp can reuse the
-// same handler via the public method instead of reaching into the
-// unexported manager field.
+// passthrough to remotesessions.ChallengeManager.
 func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
 	if err := s.validateRemoteLoginBrowser(r); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "invalid remote login browser binding")
@@ -831,14 +848,25 @@ func (s *Service) HandleClientJSONWebKeySet(w http.ResponseWriter, r *http.Reque
 	return s.remoteChallengeMgr.HandleClientJSONWebKeySet(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
 
+// SetOpenAIAppsChallengeToken records the token served at
+// /.well-known/openai-apps-challenge on the platform hosts. Empty serves not
+// found there.
+func (s *Service) SetOpenAIAppsChallengeToken(token string) {
+	s.openAIAppsChallengeToken = token
+}
+
 // HandleOpenAIAppsChallenge serves the domain-verification token configured
-// for the custom domain resolved by middleware. The platform host has no
-// custom-domain context and intentionally returns not found.
+// for the custom domain resolved by middleware. On a platform host it serves
+// the deployment-wide token, or not found when none is configured.
 func (s *Service) HandleOpenAIAppsChallenge(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	domainCtx := customdomains.FromContext(ctx)
 	if domainCtx == nil {
-		return oops.E(oops.CodeNotFound, nil, "OpenAI apps challenge token not found").LogInfo(ctx, s.logger)
+		origin, ok := requestorigin.FromContext(ctx)
+		if !ok || origin.Surface != requestorigin.SurfacePlatform || s.openAIAppsChallengeToken == "" {
+			return oops.E(oops.CodeNotFound, nil, "OpenAI apps challenge token not found").LogInfo(ctx, s.logger)
+		}
+		return writeOpenAIAppsChallengeToken(w, s.openAIAppsChallengeToken)
 	}
 
 	domain, err := customdomains_repo.New(s.db).GetCustomDomainByID(ctx, domainCtx.DomainID)
@@ -852,8 +880,12 @@ func (s *Service) HandleOpenAIAppsChallenge(w http.ResponseWriter, r *http.Reque
 		return oops.E(oops.CodeNotFound, nil, "OpenAI apps challenge token not found").LogInfo(ctx, s.logger)
 	}
 
+	return writeOpenAIAppsChallengeToken(w, domain.OpenaiAppsChallengeToken.String)
+}
+
+func writeOpenAIAppsChallengeToken(w http.ResponseWriter, token string) error {
 	w.Header().Set("Content-Type", "text/plain")
-	if _, err := w.Write([]byte(domain.OpenaiAppsChallengeToken.String)); err != nil {
+	if _, err := w.Write([]byte(token)); err != nil {
 		return fmt.Errorf("write OpenAI apps challenge token: %w", err)
 	}
 	return nil
@@ -1031,11 +1063,15 @@ func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *sl
 	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
+// publicMCPNotFoundMessage is the one message ServePublic answers for an
+// address miss and a policy denial alike, so neither reveals the other.
+const publicMCPNotFoundMessage = "mcp server not found"
+
 // ServePublic serves /mcp/{mcpSlug}. Resolution tries mcp_endpoints
 // first — a slug bound to a custom-domain request resolves only against
 // that domain; a slug arriving on the platform domain resolves only
 // against (custom_domain_id IS NULL) endpoints. On a hit, dispatch
-// matches /x/mcp: issuer-gated mcp_servers run the JWT gate before
+// runs issuer-gated mcp_servers through the JWT gate before
 // backend dispatch, then RemoteMcpServerID-backed rows proxy via
 // remotemcp and ToolsetID-backed rows delegate to ServeToolsetResolved.
 //
@@ -1071,11 +1107,15 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if metaServer != nil {
-			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, uuid.Nil)
+			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{agentID: uuid.Nil, organization: false}, nil)
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 	case mcpendpoints.IsAddressMiss(err):
 		// Address miss: fall through to the legacy toolset lookup.
+	case mcpendpoints.IsPolicyDenied(err):
+		// A denial must answer exactly as a miss, or it reveals the endpoint.
+		return rejectMissingMCPTarget(w, r, logger, mcpversions.SupportedHostedToolset(),
+			oops.E(oops.CodeNotFound, err, publicMCPNotFoundMessage))
 	default:
 		return err
 	}
@@ -1087,7 +1127,8 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+		return rejectMissingMCPTarget(w, r, logger, mcpversions.SupportedHostedToolset(),
+			oops.E(oops.CodeNotFound, err, publicMCPNotFoundMessage))
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
@@ -1162,8 +1203,8 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset, wrapperID uuid.Nul
 //
 // mcpSlug and mcpRouteBase are used to build the WWW-Authenticate
 // resource_metadata URL. mcpRouteBase is the route segment that sits
-// between the well-known prefix and the slug — "mcp" for /mcp/{slug} or
-// "x/mcp" for /x/mcp/{slug}, no leading or trailing slashes.
+// between the well-known prefix and the slug — "mcp" for /mcp/{slug}, no
+// leading or trailing slashes.
 //
 // extraUpstreamTokens are the upstream remote-session access tokens
 // collected by a caller-side issuer gate, keyed by remote_session_issuer_id.
@@ -1228,11 +1269,8 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	runInToolsetGate := cfg.runInToolsetGate
 	callerAlreadyGated := cfg.callerGated
 	if runInToolsetGate {
-		// Pass mcpRouteBase (the surface the request arrived under) rather
-		// than letting the constructor default to "mcp": when called from
-		// /x/mcp the WWW-Authenticate URL, issuer URL, and consent action
-		// all need to match the caller's surface, not the toolset's
-		// canonical /mcp surface.
+		// The WWW-Authenticate URL, issuer URL, and consent action follow
+		// the surface the request arrived under.
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcpRouteBase)
 		newCtx, authentication, gateToolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
 		if err != nil {
@@ -1240,7 +1278,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		}
 		ctx = newCtx
 		pendingIssuerGate = authentication
-		callerToolSelection = gateToolSelection
+		if gateToolSelection != nil {
+			callerToolSelection = gateToolSelection.Selection
+		}
 	}
 
 	isHostedToolsCall := req.Method == mcpversions.MethodToolsCall && cfg.mcpServerID != nil
@@ -1861,7 +1901,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 	case mcpversions.MethodPromptsList:
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case mcpversions.MethodPromptsGet:
@@ -2130,6 +2170,7 @@ func (s *Service) HandleToolsCall(
 		s.billingRepository,
 		&s.toolsetCache,
 		s.telemLogger,
+		s.toolCallLogger,
 		s.vectorToolStore,
 		s.mcpMetadataRepo,
 		s.auditLogger,

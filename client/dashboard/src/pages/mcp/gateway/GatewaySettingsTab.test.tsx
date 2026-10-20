@@ -26,6 +26,15 @@ const state = vi.hoisted(() => ({
   invalidateGet: vi.fn().mockResolvedValue(undefined),
   invalidateList: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/hooks/useToolsetUrl", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useToolsetUrl")>()),
+  useResolvedMcpServerUrl: () => ({
+    mcpUrl: undefined,
+    installPageUrl: undefined,
+    loading: false,
+  }),
+}));
+
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: state.hasScope }),
 }));
@@ -38,6 +47,9 @@ vi.mock("@/components/require-scope", () => ({
     state.requireScope(props);
     return props.children;
   },
+}));
+vi.mock("./GatewayDiscoverySection", () => ({
+  GatewayDiscoverySection: () => null,
 }));
 vi.mock("@/routes", () => ({ useRoutes: vi.fn() }));
 vi.mock(

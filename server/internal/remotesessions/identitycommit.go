@@ -251,6 +251,12 @@ type RegistrationPolicy struct {
 	// Scope is requested at registration and authorization time.
 	Scope []string
 
+	// RegistrationResource is the protected resource a client without Scope
+	// will discover at login. Registration names what that login would request
+	// from it, so a provider that limits a client to its registered scopes
+	// allows them; nil names what the provider alone decides. Never stored.
+	RegistrationResource *ResourceScopes
+
 	// Audience is sent as the resource/audience parameter, if set.
 	Audience *string
 
@@ -602,7 +608,7 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.origins.ForClient(c.newClientBaseURL()), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
 		TunneledMcpServerID:     conv.PtrEmpty(tunnelBindingID(c.provider.TunneledMcpServerID)),
-		Scope:                   conv.PtrEmpty(strings.Join(policy.Scope, " ")),
+		Scope:                   conv.PtrEmpty(strings.Join(c.registrationScope(policy), " ")),
 		TokenEndpointAuthMethod: policy.TokenEndpointAuthMethod,
 	}, c.committer.telemetry)
 	if err != nil {
@@ -674,6 +680,29 @@ func (p providerCapabilities) supportsCIMD() bool {
 
 // capabilities is what registration is chosen from: the new provider's submitted
 // parameters or the stored provider's row.
+// registrationScope is the scope a dynamic registration names: the client's
+// own, else what its first login would request through RequestedScopes.
+func (c *IdentityCommit) registrationScope(policy RegistrationPolicy) []string {
+	if len(policy.Scope) > 0 {
+		return policy.Scope
+	}
+	resource := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: true}
+	if policy.RegistrationResource != nil {
+		resource = *policy.RegistrationResource
+	}
+	login := Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
+		IssuerScopesSupported:   c.provider.ScopesSupported,
+		IssuerScopeOverride:     c.provider.ScopeOverride,
+		IssuerOmitScopeFallback: c.provider.OmitScopeFallback.Valid && c.provider.OmitScopeFallback.Bool,
+	}
+	if create := c.plan.Provider.create; create != nil {
+		login.IssuerScopesSupported = create.ScopesSupported
+		login.IssuerScopeOverride = create.ScopeOverride
+		login.IssuerOmitScopeFallback = create.OmitScopeFallback.Valid && create.OmitScopeFallback.Bool
+	}
+	return login.RequestedScopes(resource).Scopes
+}
+
 func (c *IdentityCommit) capabilities() providerCapabilities {
 	if c.plan.Provider.create != nil {
 		return c.createCapabilities

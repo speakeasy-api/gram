@@ -79,16 +79,6 @@ type sharedAuthorizationServer struct {
 	// authorization server issues.
 	issuer string
 
-	// onAuthenticationHost reports whether the authorization server is served
-	// on the authentication host, which serves only its metadata, token, and
-	// revocation endpoints. Such a server accepts only the workload grant, and
-	// MCP clients keep using the per-endpoint authorization servers for
-	// browser sign-in.
-	//
-	// TODO(AIM-418): serve authorization, consent, and registration on the
-	// authentication host, and drop the restrictions this flag drives.
-	onAuthenticationHost bool
-
 	// projectID is the project of a project issuer, or uuid.Nil for an
 	// organization issuer. A session minted for all of the issuer's MCP
 	// servers resolves workload trust in, and is bounded to, this scope.
@@ -199,12 +189,10 @@ func (s *Service) sharedAuthorizationServerFor(issuer usersessions_repo.UserSess
 	if err != nil {
 		return nil, fmt.Errorf("derive shared issuer: %w", err)
 	}
-	onAuthenticationHost := s.authenticationHostBaseURL != "" && requestorigin.URLOrigin(issuerURL) == requestorigin.URLOrigin(s.authenticationHostBaseURL)
 	return &sharedAuthorizationServer{
-		issuerID:             issuer.ID,
-		issuer:               issuerURL,
-		onAuthenticationHost: onAuthenticationHost,
-		projectID:            issuer.ProjectID.UUID,
+		issuerID:  issuer.ID,
+		issuer:    issuerURL,
+		projectID: issuer.ProjectID.UUID,
 	}, nil
 }
 
@@ -367,8 +355,8 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 	routeBase := ""
 	slug := ""
 	switch {
-	case strings.HasPrefix(routePath, "x/mcp/"):
-		routeBase, slug = "x/mcp", strings.TrimPrefix(routePath, "x/mcp/")
+	case strings.HasPrefix(routePath, organizationGatewayRouteBase+"/"):
+		routeBase, slug = organizationGatewayRouteBase, strings.TrimPrefix(routePath, organizationGatewayRouteBase+"/")
 	case strings.HasPrefix(routePath, "mcp/"):
 		routeBase, slug = "mcp", strings.TrimPrefix(routePath, "mcp/")
 	default:
@@ -378,7 +366,7 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 		return nil, sharedResourceMalformed, nil
 	}
 
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(resourceCtx, logger, slug, routeBase)
+	endpoint, err := s.loadResolvedMcpEndpointBySlug(resourceCtx, logger, slug, routeBase, mcpmetrics.LegacyFallbackSharedResource)
 	if err != nil {
 		var shareable *oops.ShareableError
 		if errors.As(err, &shareable) && shareable.Code == oops.CodeNotFound {

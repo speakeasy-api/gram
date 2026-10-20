@@ -34,7 +34,6 @@ import {
   isPrivateKeyJwtAuthMethod,
   narrowTokenEndpointAuthMethod,
 } from "../../../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
-import { IssuerScopeOverrideAlert } from "../../clientAlerts";
 import { InfoField, InfoText } from "../../detailFields";
 import { formatTimestamp } from "./formatTimestamp";
 import { KeySetField } from "./KeySetField";
@@ -87,7 +86,7 @@ export function ClientCard({
   const privateKeyJwtSelected = isPrivateKeyJwtAuthMethod(shownAuthMethod);
   const serviceAccount = client.credentialOwner === "self";
   const { entitled: customerManagedKeys } = useCustomerManagedKeys();
-  const issuerName = issuer?.name ?? "the identity provider";
+  const issuerName = issuer?.name ?? "the authorization server";
   const privateKeyJwtMissingKeySet =
     privateKeyJwtSelected && client.jsonWebKeySetId == null;
 
@@ -135,6 +134,12 @@ export function ClientCard({
     },
   });
 
+  // Unchanged scopes are omitted, so a save never turns an unset scope into [].
+  const savedScope = client.scope ?? [];
+  const scopeChanged =
+    scope.length !== savedScope.length ||
+    scope.some((s, i) => s !== savedScope[i]);
+
   const handleSave = () => {
     update.mutate({
       request: {
@@ -144,7 +149,7 @@ export function ClientCard({
           tokenEndpointAuthAudienceFormat: privateKeyJwtSelected
             ? authAudienceFormat
             : undefined,
-          scope,
+          scope: scopeChanged ? scope : undefined,
           audience: audience.trim() || undefined,
           clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
           legacyCallbackUrl:
@@ -196,17 +201,14 @@ export function ClientCard({
                 options={issuer?.scopesSupported ?? []}
                 value={shownScope}
                 onValueChange={setScope}
-                placeholder="No scopes"
+                placeholder="Discovered at sign-in"
                 disabled={!canEdit}
               />
               <Text small muted>
-                Choose from the scopes this identity provider advertises, or
-                type one to add it.
+                Leave empty to request what the MCP server asks for at each
+                sign-in. Choose from the scopes this authorization server
+                advertises, or type one to add it.
               </Text>
-              {/* Only warn once there are client scopes to be overridden. */}
-              {shownScope.length > 0 && (
-                <IssuerScopeOverrideAlert issuer={issuer} />
-              )}
             </div>
             <TokenEndpointAuthMethodField
               value={shownAuthMethod}
@@ -297,7 +299,7 @@ export function ClientCard({
                   </Label>
                 </div>
                 <Text small muted>
-                  On for apps registered with the identity provider under the
+                  On for apps registered with the authorization server under the
                   legacy /oauth/callback URL. Turn it off once the app has the
                   /mcp/remote_login_callback URL registered. Saved with your
                   other changes.

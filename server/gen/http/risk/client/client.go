@@ -113,10 +113,6 @@ type Client struct {
 	// getRiskUserBreakdown endpoint.
 	GetRiskUserBreakdownDoer goahttp.Doer
 
-	// GetRiskRuleBreakdown Doer is the HTTP client used to make requests to the
-	// getRiskRuleBreakdown endpoint.
-	GetRiskRuleBreakdownDoer goahttp.Doer
-
 	// GetRiskSignals Doer is the HTTP client used to make requests to the
 	// getRiskSignals endpoint.
 	GetRiskSignalsDoer goahttp.Doer
@@ -281,7 +277,6 @@ func NewClient(
 		SuggestRiskPolicyDoer:              doer,
 		CompileExprDoer:                    doer,
 		GetRiskUserBreakdownDoer:           doer,
-		GetRiskRuleBreakdownDoer:           doer,
 		GetRiskSignalsDoer:                 doer,
 		GetRiskMcpServerCountsDoer:         doer,
 		GetRiskAnalysisStatusDoer:          doer,
@@ -891,30 +886,6 @@ func (c *Client) GetRiskUserBreakdown() goa.Endpoint {
 		resp, err := c.GetRiskUserBreakdownDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "getRiskUserBreakdown", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// GetRiskRuleBreakdown returns an endpoint that makes HTTP requests to the
-// risk service getRiskRuleBreakdown server.
-func (c *Client) GetRiskRuleBreakdown() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetRiskRuleBreakdownRequest(c.encoder)
-		decodeResponse = DecodeGetRiskRuleBreakdownResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetRiskRuleBreakdownRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetRiskRuleBreakdownDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("risk", "getRiskRuleBreakdown", err)
 		}
 		return decodeResponse(resp)
 	}

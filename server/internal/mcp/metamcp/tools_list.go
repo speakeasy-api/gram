@@ -44,7 +44,7 @@ var describeToolsSchema = json.RawMessage(`{
 	"additionalProperties": false
 }`)
 
-// Tools returns the fixed four-tool contract. executeToolSchema is supplied
+// Tools returns the fixed gateway tool contract. executeToolSchema is supplied
 // by the caller so the meta surface serves the exact execute_tool schema the
 // dynamic toolset surface serves, without this package importing it.
 func Tools(executeToolSchema json.RawMessage) []Tool {
@@ -68,6 +68,11 @@ func Tools(executeToolSchema json.RawMessage) []Tool {
 			Name:        ToolExecuteTool,
 			Description: "Execute one tool. Pass its qualified name (serverslug--toolname) as `name` and its JSON payload, matching the schema from describe_tools, as `arguments`.",
 			InputSchema: executeToolSchema,
+		},
+		{
+			Name:        ToolConnectionStatus,
+			Description: "Show which member servers the user is signed in to, with a link to sign in to the rest when this gateway has a sign-in page. Call it when a server reports it needs authentication, or when the user asks what they are connected to. Call it again after the user signs in to refresh.",
+			InputSchema: connectionStatusSchema,
 		},
 	}
 }

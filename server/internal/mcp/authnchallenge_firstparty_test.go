@@ -52,3 +52,35 @@ func TestHandleFirstPartyConnect_RemoteMcpEndpointStaysOnMcpSurface(t *testing.T
 	require.Equal(t, mcpServer.ID, stored.Endpoint.McpServerID.UUID)
 	require.Equal(t, issuerID, stored.UserSessionIssuerID)
 }
+
+// A gateway tool call links to a server's connect page through first-party
+// connect, which carries the server through sign-in to the consent page.
+func TestHandleFirstPartyConnect_CarriesGatewayServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, _ := newTestMCPServiceWithDevIDP(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	slug := "first-party-focus-" + uuid.NewString()[:8]
+	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "private", issuerID)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", slug)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect/first-party?server=eng.github", nil)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleFirstPartyConnect(w, req))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	stored, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+loc.Query().Get("state"))
+	require.NoError(t, err)
+	require.True(t, stored.FirstParty)
+	require.Equal(t, "eng.github", stored.FocusServer)
+}

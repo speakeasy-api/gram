@@ -91,7 +91,7 @@ vi.mock("./RemoteIdentityProvidersField", () => ({
     readOnly?: boolean;
   }) => (
     <>
-      <button onClick={onAdd}>Add provider</button>
+      <button onClick={onAdd}>Add authorization server</button>
       <output>providers-{readOnly ? "read-only" : "editable"}</output>
       <output>
         attached-{associatedIssuers.map(({ id }) => id).join(",")}
@@ -342,6 +342,7 @@ const standardTargetWithSessionIssuer: AuthTarget = {
   slug: "standard-server",
   projectId: "project-1",
   permissionResourceId: "mcp-server-1",
+  attachImpactTarget: { mcpServerId: "mcp-server-1" },
   supportsOrganizationIssuers: true,
   userSessionIssuerId: "user-session-issuer",
   invalidate: vi.fn(),

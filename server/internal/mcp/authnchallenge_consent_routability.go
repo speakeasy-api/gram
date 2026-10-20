@@ -33,11 +33,22 @@ type consentRouting struct {
 	backend  consentBackend
 	upstream string        // the single proxied server's upstream
 	issuer   uuid.NullUUID // a tunneled server's derived issuer
-	// members claiming each provider's authorization server, meta only.
+	// members claiming each client's grant, keyed by remote session client,
+	// meta only.
 	members map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow
 	// active grants per normalized remote upstream; a remote backend refuses
 	// when more than one names it.
-	grants map[string]int
+	grants map[consentGrantKey]int
+	// projectScoped counts grants per project, for an organization gateway,
+	// whose members each route only their own project's clients.
+	projectScoped bool
+}
+
+// consentGrantKey counts active grants per upstream within one project.
+// Unscoped routing and organization-level clients use uuid.Nil.
+type consentGrantKey struct {
+	projectID uuid.UUID
+	upstream  string
 }
 
 // unroutable reports whether the runtime would refuse to forward a card's
@@ -45,17 +56,17 @@ type consentRouting struct {
 func (r consentRouting) unroutable(client remotesessions.Client, resource string) bool {
 	switch r.backend {
 	case consentBackendRemote:
-		return !grantRoutesToUpstream(resource, r.upstream, false) || r.duplicated(r.upstream)
+		return !grantRoutesToUpstream(resource, r.upstream, false) || r.duplicated(uuid.Nil, r.upstream)
 	case consentBackendTunneled:
 		// A tunneled backend only reads the entry keyed by its own issuer.
 		return r.issuer.Valid && client.RemoteSessionIssuerID == r.issuer.UUID && !grantRoutesToUpstream(resource, r.upstream, true)
 	case consentBackendMeta:
-		members := r.members[client.RemoteSessionIssuerID]
+		members := r.members[client.ID]
 		if len(members) == 0 {
 			return false
 		}
 		for _, m := range members {
-			if grantRoutesToUpstream(resource, m.UpstreamUrl, m.Tunneled) && (m.Tunneled || !r.duplicated(m.UpstreamUrl)) {
+			if grantRoutesToUpstream(resource, m.UpstreamUrl, m.Tunneled) && (m.Tunneled || !r.duplicated(m.ProjectID, m.UpstreamUrl)) {
 				return false
 			}
 		}
@@ -74,7 +85,7 @@ func (r consentRouting) canValidate(client remotesessions.Client, resource strin
 			return false
 		}
 	case consentBackendMeta:
-		if len(r.members[client.RemoteSessionIssuerID]) == 0 {
+		if len(r.members[client.ID]) == 0 {
 			return false
 		}
 	case consentBackendNone:
@@ -83,8 +94,19 @@ func (r consentRouting) canValidate(client remotesessions.Client, resource strin
 	return !r.unroutable(client, resource)
 }
 
-func (r consentRouting) duplicated(upstream string) bool {
-	return r.grants[strings.TrimRight(upstream, "/")] > 1
+// duplicated reports whether more than one active grant names upstream where
+// projectID's members route. An organization-level client's grant routes in
+// every project, so it counts in each.
+func (r consentRouting) duplicated(projectID uuid.UUID, upstream string) bool {
+	upstream = strings.TrimRight(upstream, "/")
+	if !r.projectScoped {
+		projectID = uuid.Nil
+	}
+	n := r.grants[consentGrantKey{projectID: projectID, upstream: upstream}]
+	if projectID != uuid.Nil {
+		n += r.grants[consentGrantKey{projectID: uuid.Nil, upstream: upstream}]
+	}
+	return n > 1
 }
 
 // resolveConsentRouting loads the rule for the endpoint being consented to: a
@@ -97,10 +119,21 @@ func (s *Service) resolveConsentRouting(
 	clients []remotesessions.Client,
 	statuses map[uuid.UUID]remotesessions.RemoteSessionState,
 ) (consentRouting, error) {
-	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: map[string]int{}}
-	for _, st := range statuses {
-		if st.Status == remotesessions.RemoteSessionActive && st.Resource != "" {
-			r.grants[strings.TrimRight(st.Resource, "/")]++
+	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: map[consentGrantKey]int{}, projectScoped: endpoint.IsOrganizationGateway()}
+	if r.projectScoped {
+		// The organization gateway's statuses span every project; only the
+		// clients listed for this subject, each in its own project, decide
+		// what routes for them.
+		for _, c := range clients {
+			if st, ok := statuses[c.ID]; ok && st.Status == remotesessions.RemoteSessionActive && st.Resource != "" {
+				r.grants[consentGrantKey{projectID: c.ProjectID.UUID, upstream: strings.TrimRight(st.Resource, "/")}]++
+			}
+		}
+	} else {
+		for _, st := range statuses {
+			if st.Status == remotesessions.RemoteSessionActive && st.Resource != "" {
+				r.grants[consentGrantKey{projectID: uuid.Nil, upstream: strings.TrimRight(st.Resource, "/")}]++
+			}
 		}
 	}
 
@@ -116,11 +149,11 @@ func (s *Service) resolveConsentRouting(
 			if st, ok := statuses[c.ID]; !ok || st.Status != remotesessions.RemoteSessionActive {
 				continue
 			}
-			members, _, err := s.claimingMetaMembers(memberCtx, endpoint, c.RemoteSessionIssuerID)
+			members, _, err := s.claimingMetaMembers(memberCtx, endpoint, c)
 			if err != nil {
 				return r, fmt.Errorf("resolve consent routing: %w", err)
 			}
-			r.members[c.RemoteSessionIssuerID] = members
+			r.members[c.ID] = members
 		}
 
 	case endpoint.McpServerID.Valid:

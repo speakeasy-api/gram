@@ -221,7 +221,6 @@ func TestQuerySkillInsightsAggregatesMappingsAndScoresWithoutUsage(t *testing.T)
 	}
 	require.NoError(t, queries.InsertSkillSessionVersions(ctx, mappings))
 	require.NoError(t, queries.InsertSkillEfficacyScores(ctx, []repo.SkillEfficacyScore{score}))
-	testenv.FlushClickHouseAsyncInserts(t, conn)
 
 	rows, err := queries.QuerySkillInsights(ctx, repo.QuerySkillInsightsParams{
 		OrganizationID:      orgID,
@@ -283,7 +282,6 @@ func TestQuerySkillInsightsDeduplicatesPhysicalScoresByEventID(t *testing.T) {
 	}}))
 	require.NoError(t, queries.InsertSkillEfficacyScores(ctx, []repo.SkillEfficacyScore{score}))
 	require.NoError(t, queries.InsertSkillEfficacyScores(ctx, []repo.SkillEfficacyScore{duplicate}))
-	testenv.FlushClickHouseAsyncInserts(t, conn)
 
 	rows, err := queries.QuerySkillInsights(ctx, repo.QuerySkillInsightsParams{
 		OrganizationID: orgID, ProjectID: projectID.String(), SkillIDs: []string{score.SkillID.String()}, SkillVersionIDs: nil,
@@ -330,7 +328,6 @@ func TestListSkillEfficacyScoreSessionsReturnsActivationAndVerdict(t *testing.T)
 		Surface:         score.Surface,
 	}}))
 	require.NoError(t, queries.InsertSkillEfficacyScores(ctx, []repo.SkillEfficacyScore{score}))
-	testenv.FlushClickHouseAsyncInserts(t, conn)
 
 	rows, err := queries.ListSkillEfficacyScoreSessions(ctx, repo.ListSkillEfficacyScoreSessionsParams{
 		OrganizationID: orgID,
@@ -382,7 +379,6 @@ func TestListSkillEfficacyScoreSessionsDeduplicatesAndPaginates(t *testing.T) {
 	require.NoError(t, queries.InsertSkillSessionVersions(ctx, mappings))
 	require.NoError(t, queries.InsertSkillEfficacyScores(ctx, []repo.SkillEfficacyScore{first, second}))
 	require.NoError(t, queries.InsertSkillEfficacyScores(ctx, []repo.SkillEfficacyScore{duplicate}))
-	testenv.FlushClickHouseAsyncInserts(t, conn)
 
 	rows, err := queries.ListSkillEfficacyScoreSessions(ctx, repo.ListSkillEfficacyScoreSessionsParams{
 		OrganizationID: orgID, ProjectID: projectID.String(), SkillIDs: []string{first.SkillID.String()},

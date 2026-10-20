@@ -27,6 +27,21 @@ func UpdateIssuerOrganizationUserSessionIssuersPath() string {
 	return "/rpc/organizationUserSessionIssuers.update"
 }
 
+// ListMcpServersOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service listMcpServers HTTP endpoint.
+func ListMcpServersOrganizationUserSessionIssuersPath() string {
+	return "/rpc/organizationUserSessionIssuers.listMcpServers"
+}
+
+// GetAuthenticationHostImpactOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service getAuthenticationHostImpact HTTP endpoint.
+func GetAuthenticationHostImpactOrganizationUserSessionIssuersPath() string {
+	return "/rpc/organizationUserSessionIssuers.getAuthenticationHostImpact"
+}
+
+// SetAuthenticationHostOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service setAuthenticationHost HTTP endpoint.
+func SetAuthenticationHostOrganizationUserSessionIssuersPath() string {
+	return "/rpc/organizationUserSessionIssuers.setAuthenticationHost"
+}
+
 // GetIssuerDeletePreflightOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service getIssuerDeletePreflight HTTP endpoint.
 func GetIssuerDeletePreflightOrganizationUserSessionIssuersPath() string {
 	return "/rpc/organizationUserSessionIssuers.getDeletePreflight"

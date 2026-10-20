@@ -81,6 +81,10 @@ type Server struct {
 	GetSupportCoverage                    http.Handler
 	DescribeMcpServerHealth               http.Handler
 	GetMcpServerToolCalls                 http.Handler
+	GetHookClients                        http.Handler
+	ListExternalMcpMigrationCandidates    http.Handler
+	PreviewExternalMcpMigration           http.Handler
+	MigrateExternalMcpServers             http.Handler
 	GetRegistryOktaCandidates             http.Handler
 	ListRegistryOktaUnmapped              http.Handler
 	ListRegistryEntries                   http.Handler
@@ -103,6 +107,9 @@ type Server struct {
 	CloneOnboardingPlaybook               http.Handler
 	GetOrganizationOnboardingPlaybook     http.Handler
 	AssignOrganizationOnboardingPlaybook  http.Handler
+	ListSignupOffers                      http.Handler
+	CreateSignupOffer                     http.Handler
+	UpdateSignupOffer                     http.Handler
 	GetStripeSubscriptionCandidate        http.Handler
 	SetStripeSubscription                 http.Handler
 	ListCustomerUsage                     http.Handler
@@ -195,6 +202,10 @@ func New(
 			{"GetSupportCoverage", "GET", "/admin/supportCoverage.get"},
 			{"DescribeMcpServerHealth", "GET", "/admin/project.mcpServerHealth"},
 			{"GetMcpServerToolCalls", "GET", "/admin/project.mcpServerToolCalls"},
+			{"GetHookClients", "GET", "/admin/hookClients.get"},
+			{"ListExternalMcpMigrationCandidates", "GET", "/admin/externalMcpMigration.listCandidates"},
+			{"PreviewExternalMcpMigration", "POST", "/admin/externalMcpMigration.preview"},
+			{"MigrateExternalMcpServers", "POST", "/admin/externalMcpMigration.migrate"},
 			{"GetRegistryOktaCandidates", "GET", "/admin/registry.oktaCandidates"},
 			{"ListRegistryOktaUnmapped", "GET", "/admin/registry.oktaUnmapped"},
 			{"ListRegistryEntries", "GET", "/admin/registry.list"},
@@ -217,6 +228,9 @@ func New(
 			{"CloneOnboardingPlaybook", "POST", "/admin/onboarding.playbooks.clone"},
 			{"GetOrganizationOnboardingPlaybook", "GET", "/admin/organization.onboardingPlaybook"},
 			{"AssignOrganizationOnboardingPlaybook", "POST", "/admin/organization.onboardingPlaybook"},
+			{"ListSignupOffers", "GET", "/admin/signupOffers"},
+			{"CreateSignupOffer", "POST", "/admin/signupOffers.create"},
+			{"UpdateSignupOffer", "POST", "/admin/signupOffers.update"},
 			{"GetStripeSubscriptionCandidate", "GET", "/admin/organization.stripeSubscriptionCandidate"},
 			{"SetStripeSubscription", "POST", "/admin/organization.setStripeSubscription"},
 			{"ListCustomerUsage", "GET", "/admin/organizations.customerUsage"},
@@ -281,6 +295,10 @@ func New(
 		GetSupportCoverage:                    NewGetSupportCoverageHandler(e.GetSupportCoverage, mux, decoder, encoder, errhandler, formatter),
 		DescribeMcpServerHealth:               NewDescribeMcpServerHealthHandler(e.DescribeMcpServerHealth, mux, decoder, encoder, errhandler, formatter),
 		GetMcpServerToolCalls:                 NewGetMcpServerToolCallsHandler(e.GetMcpServerToolCalls, mux, decoder, encoder, errhandler, formatter),
+		GetHookClients:                        NewGetHookClientsHandler(e.GetHookClients, mux, decoder, encoder, errhandler, formatter),
+		ListExternalMcpMigrationCandidates:    NewListExternalMcpMigrationCandidatesHandler(e.ListExternalMcpMigrationCandidates, mux, decoder, encoder, errhandler, formatter),
+		PreviewExternalMcpMigration:           NewPreviewExternalMcpMigrationHandler(e.PreviewExternalMcpMigration, mux, decoder, encoder, errhandler, formatter),
+		MigrateExternalMcpServers:             NewMigrateExternalMcpServersHandler(e.MigrateExternalMcpServers, mux, decoder, encoder, errhandler, formatter),
 		GetRegistryOktaCandidates:             NewGetRegistryOktaCandidatesHandler(e.GetRegistryOktaCandidates, mux, decoder, encoder, errhandler, formatter),
 		ListRegistryOktaUnmapped:              NewListRegistryOktaUnmappedHandler(e.ListRegistryOktaUnmapped, mux, decoder, encoder, errhandler, formatter),
 		ListRegistryEntries:                   NewListRegistryEntriesHandler(e.ListRegistryEntries, mux, decoder, encoder, errhandler, formatter),
@@ -303,6 +321,9 @@ func New(
 		CloneOnboardingPlaybook:               NewCloneOnboardingPlaybookHandler(e.CloneOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationOnboardingPlaybook:     NewGetOrganizationOnboardingPlaybookHandler(e.GetOrganizationOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
 		AssignOrganizationOnboardingPlaybook:  NewAssignOrganizationOnboardingPlaybookHandler(e.AssignOrganizationOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		ListSignupOffers:                      NewListSignupOffersHandler(e.ListSignupOffers, mux, decoder, encoder, errhandler, formatter),
+		CreateSignupOffer:                     NewCreateSignupOfferHandler(e.CreateSignupOffer, mux, decoder, encoder, errhandler, formatter),
+		UpdateSignupOffer:                     NewUpdateSignupOfferHandler(e.UpdateSignupOffer, mux, decoder, encoder, errhandler, formatter),
 		GetStripeSubscriptionCandidate:        NewGetStripeSubscriptionCandidateHandler(e.GetStripeSubscriptionCandidate, mux, decoder, encoder, errhandler, formatter),
 		SetStripeSubscription:                 NewSetStripeSubscriptionHandler(e.SetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 		ListCustomerUsage:                     NewListCustomerUsageHandler(e.ListCustomerUsage, mux, decoder, encoder, errhandler, formatter),
@@ -374,6 +395,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetSupportCoverage = m(s.GetSupportCoverage)
 	s.DescribeMcpServerHealth = m(s.DescribeMcpServerHealth)
 	s.GetMcpServerToolCalls = m(s.GetMcpServerToolCalls)
+	s.GetHookClients = m(s.GetHookClients)
+	s.ListExternalMcpMigrationCandidates = m(s.ListExternalMcpMigrationCandidates)
+	s.PreviewExternalMcpMigration = m(s.PreviewExternalMcpMigration)
+	s.MigrateExternalMcpServers = m(s.MigrateExternalMcpServers)
 	s.GetRegistryOktaCandidates = m(s.GetRegistryOktaCandidates)
 	s.ListRegistryOktaUnmapped = m(s.ListRegistryOktaUnmapped)
 	s.ListRegistryEntries = m(s.ListRegistryEntries)
@@ -396,6 +421,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CloneOnboardingPlaybook = m(s.CloneOnboardingPlaybook)
 	s.GetOrganizationOnboardingPlaybook = m(s.GetOrganizationOnboardingPlaybook)
 	s.AssignOrganizationOnboardingPlaybook = m(s.AssignOrganizationOnboardingPlaybook)
+	s.ListSignupOffers = m(s.ListSignupOffers)
+	s.CreateSignupOffer = m(s.CreateSignupOffer)
+	s.UpdateSignupOffer = m(s.UpdateSignupOffer)
 	s.GetStripeSubscriptionCandidate = m(s.GetStripeSubscriptionCandidate)
 	s.SetStripeSubscription = m(s.SetStripeSubscription)
 	s.ListCustomerUsage = m(s.ListCustomerUsage)
@@ -466,6 +494,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetSupportCoverageHandler(mux, h.GetSupportCoverage)
 	MountDescribeMcpServerHealthHandler(mux, h.DescribeMcpServerHealth)
 	MountGetMcpServerToolCallsHandler(mux, h.GetMcpServerToolCalls)
+	MountGetHookClientsHandler(mux, h.GetHookClients)
+	MountListExternalMcpMigrationCandidatesHandler(mux, h.ListExternalMcpMigrationCandidates)
+	MountPreviewExternalMcpMigrationHandler(mux, h.PreviewExternalMcpMigration)
+	MountMigrateExternalMcpServersHandler(mux, h.MigrateExternalMcpServers)
 	MountGetRegistryOktaCandidatesHandler(mux, h.GetRegistryOktaCandidates)
 	MountListRegistryOktaUnmappedHandler(mux, h.ListRegistryOktaUnmapped)
 	MountListRegistryEntriesHandler(mux, h.ListRegistryEntries)
@@ -488,6 +520,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCloneOnboardingPlaybookHandler(mux, h.CloneOnboardingPlaybook)
 	MountGetOrganizationOnboardingPlaybookHandler(mux, h.GetOrganizationOnboardingPlaybook)
 	MountAssignOrganizationOnboardingPlaybookHandler(mux, h.AssignOrganizationOnboardingPlaybook)
+	MountListSignupOffersHandler(mux, h.ListSignupOffers)
+	MountCreateSignupOfferHandler(mux, h.CreateSignupOffer)
+	MountUpdateSignupOfferHandler(mux, h.UpdateSignupOffer)
 	MountGetStripeSubscriptionCandidateHandler(mux, h.GetStripeSubscriptionCandidate)
 	MountSetStripeSubscriptionHandler(mux, h.SetStripeSubscription)
 	MountListCustomerUsageHandler(mux, h.ListCustomerUsage)
@@ -3733,6 +3768,221 @@ func NewGetMcpServerToolCallsHandler(
 	})
 }
 
+// MountGetHookClientsHandler configures the mux to serve the "admin" service
+// "getHookClients" endpoint.
+func MountGetHookClientsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/hookClients.get", f)
+}
+
+// NewGetHookClientsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "admin" service "getHookClients" endpoint.
+func NewGetHookClientsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetHookClientsRequest(mux, decoder)
+		encodeResponse = EncodeGetHookClientsResponse(encoder)
+		encodeError    = EncodeGetHookClientsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getHookClients")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListExternalMcpMigrationCandidatesHandler configures the mux to serve
+// the "admin" service "listExternalMcpMigrationCandidates" endpoint.
+func MountListExternalMcpMigrationCandidatesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/externalMcpMigration.listCandidates", f)
+}
+
+// NewListExternalMcpMigrationCandidatesHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "listExternalMcpMigrationCandidates" endpoint.
+func NewListExternalMcpMigrationCandidatesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListExternalMcpMigrationCandidatesRequest(mux, decoder)
+		encodeResponse = EncodeListExternalMcpMigrationCandidatesResponse(encoder)
+		encodeError    = EncodeListExternalMcpMigrationCandidatesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listExternalMcpMigrationCandidates")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountPreviewExternalMcpMigrationHandler configures the mux to serve the
+// "admin" service "previewExternalMcpMigration" endpoint.
+func MountPreviewExternalMcpMigrationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/externalMcpMigration.preview", f)
+}
+
+// NewPreviewExternalMcpMigrationHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "previewExternalMcpMigration"
+// endpoint.
+func NewPreviewExternalMcpMigrationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodePreviewExternalMcpMigrationRequest(mux, decoder)
+		encodeResponse = EncodePreviewExternalMcpMigrationResponse(encoder)
+		encodeError    = EncodePreviewExternalMcpMigrationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "previewExternalMcpMigration")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountMigrateExternalMcpServersHandler configures the mux to serve the
+// "admin" service "migrateExternalMcpServers" endpoint.
+func MountMigrateExternalMcpServersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/externalMcpMigration.migrate", f)
+}
+
+// NewMigrateExternalMcpServersHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "migrateExternalMcpServers"
+// endpoint.
+func NewMigrateExternalMcpServersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeMigrateExternalMcpServersRequest(mux, decoder)
+		encodeResponse = EncodeMigrateExternalMcpServersResponse(encoder)
+		encodeError    = EncodeMigrateExternalMcpServersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "migrateExternalMcpServers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountGetRegistryOktaCandidatesHandler configures the mux to serve the
 // "admin" service "getRegistryOktaCandidates" endpoint.
 func MountGetRegistryOktaCandidatesHandler(mux goahttp.Muxer, h http.Handler) {
@@ -4892,6 +5142,165 @@ func NewAssignOrganizationOnboardingPlaybookHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "assignOrganizationOnboardingPlaybook")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListSignupOffersHandler configures the mux to serve the "admin" service
+// "listSignupOffers" endpoint.
+func MountListSignupOffersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/signupOffers", f)
+}
+
+// NewListSignupOffersHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listSignupOffers" endpoint.
+func NewListSignupOffersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListSignupOffersRequest(mux, decoder)
+		encodeResponse = EncodeListSignupOffersResponse(encoder)
+		encodeError    = EncodeListSignupOffersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listSignupOffers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateSignupOfferHandler configures the mux to serve the "admin"
+// service "createSignupOffer" endpoint.
+func MountCreateSignupOfferHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/signupOffers.create", f)
+}
+
+// NewCreateSignupOfferHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "createSignupOffer" endpoint.
+func NewCreateSignupOfferHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateSignupOfferRequest(mux, decoder)
+		encodeResponse = EncodeCreateSignupOfferResponse(encoder)
+		encodeError    = EncodeCreateSignupOfferError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createSignupOffer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateSignupOfferHandler configures the mux to serve the "admin"
+// service "updateSignupOffer" endpoint.
+func MountUpdateSignupOfferHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/signupOffers.update", f)
+}
+
+// NewUpdateSignupOfferHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "updateSignupOffer" endpoint.
+func NewUpdateSignupOfferHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateSignupOfferRequest(mux, decoder)
+		encodeResponse = EncodeUpdateSignupOfferResponse(encoder)
+		encodeError    = EncodeUpdateSignupOfferError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateSignupOffer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

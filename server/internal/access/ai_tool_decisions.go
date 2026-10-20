@@ -9,6 +9,7 @@ import (
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -111,16 +112,6 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 
 	return &gen.SetAIToolDecisionResult{
 		TargetID: targetID,
-		Access:   aiToolAccessView(aitargets.SummarizeAccess(entry.Target, after)),
+		Access:   mv.BuildAIToolAccessSummaryView(aitargets.SummarizeAccess(entry.Target, after)),
 	}, nil
-}
-
-// aiToolAccessView renders an access summary.
-func aiToolAccessView(summary aitargets.AccessSummary) *gen.AIToolAccessSummary {
-	return &gen.AIToolAccessSummary{
-		State:       string(summary.State),
-		Decision:    string(summary.Decision),
-		Enforceable: summary.Enforceable,
-		Rationale:   conv.PtrEmpty(summary.Record.Rationale),
-	}
 }

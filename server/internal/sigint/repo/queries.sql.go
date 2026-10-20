@@ -51,7 +51,9 @@ INSERT INTO sigint_sensors (
     instructions,
     mode,
     enabled,
-    match_expression
+    match_expression,
+    input_strategy,
+    window_size
 )
 VALUES (
     $1,
@@ -62,9 +64,11 @@ VALUES (
     $6,
     $7,
     $8,
-    $9
+    $9,
+    $10,
+    $11
 )
-RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, input_strategy, window_size, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateSensorParams struct {
@@ -77,6 +81,8 @@ type CreateSensorParams struct {
 	Mode            string
 	Enabled         bool
 	MatchExpression string
+	InputStrategy   pgtype.Text
+	WindowSize      pgtype.Int4
 }
 
 func (q *Queries) CreateSensor(ctx context.Context, arg CreateSensorParams) (SigintSensor, error) {
@@ -90,6 +96,8 @@ func (q *Queries) CreateSensor(ctx context.Context, arg CreateSensorParams) (Sig
 		arg.Mode,
 		arg.Enabled,
 		arg.MatchExpression,
+		arg.InputStrategy,
+		arg.WindowSize,
 	)
 	var i SigintSensor
 	err := row.Scan(
@@ -102,6 +110,8 @@ func (q *Queries) CreateSensor(ctx context.Context, arg CreateSensorParams) (Sig
 		&i.Mode,
 		&i.MatchExpression,
 		&i.Enabled,
+		&i.InputStrategy,
+		&i.WindowSize,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -171,7 +181,7 @@ SET deleted_at = clock_timestamp(),
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, input_strategy, window_size, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteSensorParams struct {
@@ -192,6 +202,8 @@ func (q *Queries) DeleteSensor(ctx context.Context, arg DeleteSensorParams) (Sig
 		&i.Mode,
 		&i.MatchExpression,
 		&i.Enabled,
+		&i.InputStrategy,
+		&i.WindowSize,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -298,6 +310,8 @@ SELECT
     sensor.mode,
     sensor.enabled,
     sensor.match_expression,
+    COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
+    COALESCE(sensor.window_size, 5)::integer AS window_size,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
     sensor.updated_at
@@ -329,6 +343,8 @@ type GetSensorRow struct {
 	Mode            string
 	Enabled         bool
 	MatchExpression string
+	InputStrategy   string
+	WindowSize      int32
 	SignalIds       []uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -347,6 +363,8 @@ func (q *Queries) GetSensor(ctx context.Context, arg GetSensorParams) (GetSensor
 		&i.Mode,
 		&i.Enabled,
 		&i.MatchExpression,
+		&i.InputStrategy,
+		&i.WindowSize,
 		&i.SignalIds,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -365,6 +383,8 @@ SELECT
     sensor.mode,
     sensor.enabled,
     sensor.match_expression,
+    COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
+    COALESCE(sensor.window_size, 5)::integer AS window_size,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
     sensor.updated_at
@@ -397,6 +417,8 @@ type GetSensorsByIDsRow struct {
 	Mode            string
 	Enabled         bool
 	MatchExpression string
+	InputStrategy   string
+	WindowSize      int32
 	SignalIds       []uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -421,6 +443,8 @@ func (q *Queries) GetSensorsByIDs(ctx context.Context, arg GetSensorsByIDsParams
 			&i.Mode,
 			&i.Enabled,
 			&i.MatchExpression,
+			&i.InputStrategy,
+			&i.WindowSize,
 			&i.SignalIds,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -511,6 +535,8 @@ SELECT
     sensor.mode,
     sensor.enabled,
     sensor.match_expression,
+    COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
+    COALESCE(sensor.window_size, 5)::integer AS window_size,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
     sensor.updated_at
@@ -545,6 +571,8 @@ type ListSensorsRow struct {
 	Mode            string
 	Enabled         bool
 	MatchExpression string
+	InputStrategy   string
+	WindowSize      int32
 	SignalIds       []uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -569,6 +597,8 @@ func (q *Queries) ListSensors(ctx context.Context, arg ListSensorsParams) ([]Lis
 			&i.Mode,
 			&i.Enabled,
 			&i.MatchExpression,
+			&i.InputStrategy,
+			&i.WindowSize,
 			&i.SignalIds,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -594,6 +624,8 @@ SELECT
     sensor.mode,
     sensor.enabled,
     sensor.match_expression,
+    COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
+    COALESCE(sensor.window_size, 5)::integer AS window_size,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
     sensor.updated_at
@@ -630,6 +662,8 @@ type ListSensorsForSignalRow struct {
 	Mode            string
 	Enabled         bool
 	MatchExpression string
+	InputStrategy   string
+	WindowSize      int32
 	SignalIds       []uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -654,6 +688,8 @@ func (q *Queries) ListSensorsForSignal(ctx context.Context, arg ListSensorsForSi
 			&i.Mode,
 			&i.Enabled,
 			&i.MatchExpression,
+			&i.InputStrategy,
+			&i.WindowSize,
 			&i.SignalIds,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -715,12 +751,142 @@ func (q *Queries) ListSignals(ctx context.Context, arg ListSignalsParams) ([]Sig
 	return items, nil
 }
 
-const loadEvaluationMessages = `-- name: LoadEvaluationMessages :many
-SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.replayed, m.created_at, m.risk_analyzed_at, c.user_account_id,
+const loadEvaluationHistory = `-- name: LoadEvaluationHistory :many
+WITH candidates AS MATERIALIZED (
+    SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq,
+           m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls,
+           m.origin, m.external_message_id
+    FROM chat_messages m
+    JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+    JOIN projects p ON p.id = m.project_id
+    WHERE m.project_id = $1::uuid AND p.organization_id = $2
+      AND p.deleted IS FALSE AND c.deleted IS FALSE
+      AND m.role <> 'system'
+      AND m.chat_id = $3 AND m.generation = $4
+      AND m.id <> $5
+      AND (m.created_at, m.seq) < ($6::timestamptz, $7::bigint)
+    ORDER BY m.created_at DESC, m.seq DESC
+    LIMIT $8
+), sized AS (
+    SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq, m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls, m.origin, m.external_message_id,
+           (octet_length(m.role)::bigint + octet_length(m.content)::bigint
+            + COALESCE(octet_length(m.content_raw::text), 0)::bigint
+            + COALESCE(octet_length(m.content_asset_url), 0)::bigint
+            + COALESCE(octet_length(m.tool_calls::text), 0)::bigint
+            + COALESCE((SELECT sum(octet_length(cp.content_asset_url)::bigint + 8)
+                        FROM chat_content_parts cp
+                        WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id
+                          AND cp.parent_chat_message_id = m.id AND cp.deleted IS FALSE), 0)
+           ) AS payload_bytes
+    FROM candidates m
+), bounded AS (
+    SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq, m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls, m.origin, m.external_message_id, m.payload_bytes,
+           (sum(payload_bytes) OVER (ORDER BY created_at DESC, seq DESC ROWS UNBOUNDED PRECEDING)
+            > $9::bigint)::boolean AS content_too_large
+    FROM sized m
+)
+SELECT m.id,
+       (CASE WHEN m.content_too_large THEN '' ELSE m.role END)::text AS role,
+       (CASE WHEN m.content_too_large THEN '' ELSE m.content END)::text AS content,
+       (CASE WHEN m.content_too_large THEN NULL ELSE m.content_raw END)::jsonb AS content_raw,
+       (CASE WHEN m.content_too_large THEN '' ELSE COALESCE(m.content_asset_url, '') END)::text AS content_asset_url,
+       (CASE WHEN m.content_too_large THEN NULL ELSE m.tool_calls END)::jsonb AS tool_calls,
        COALESCE(m.origin = 'anthropic-inference' AND (
          m.external_message_id LIKE '%/block:%' OR EXISTS (
            SELECT 1 FROM chat_messages sibling
            WHERE sibling.project_id = m.project_id AND sibling.chat_id = m.chat_id
+             AND sibling.role <> 'system'
+             AND sibling.external_message_id = m.external_message_id || '/block:0'
+         )
+       ), false)::boolean AS row_local_content,
+        CASE WHEN m.content_too_large THEN ARRAY[]::text[] ELSE
+        ARRAY(SELECT cp.content_asset_url FROM chat_content_parts cp
+             WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id
+               AND cp.parent_chat_message_id = m.id AND cp.deleted IS FALSE
+              ORDER BY cp.created_at, cp.id)::text[] END AS attachment_uris,
+        m.content_too_large
+FROM bounded m
+ORDER BY m.created_at DESC, m.seq DESC
+`
+
+type LoadEvaluationHistoryParams struct {
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	ChatID          uuid.UUID
+	Generation      int32
+	TargetID        uuid.UUID
+	TargetCreatedAt pgtype.Timestamptz
+	TargetSeq       int64
+	HistoryLimit    int32
+	ContentBudget   int64
+}
+
+type LoadEvaluationHistoryRow struct {
+	ID              uuid.UUID
+	Role            string
+	Content         string
+	ContentRaw      []byte
+	ContentAssetUrl string
+	ToolCalls       []byte
+	RowLocalContent bool
+	AttachmentUris  []string
+	ContentTooLarge bool
+}
+
+// Anchor to the target snapshot, never to the latest message in the conversation.
+// Filter system messages before LIMIT so they do not consume window capacity.
+// Bound the cumulative inline payload before transferring it to the application.
+// Keep overflow rows as markers: skipping them would change window membership.
+// Reserve eight bytes per attachment locator for array element framing.
+func (q *Queries) LoadEvaluationHistory(ctx context.Context, arg LoadEvaluationHistoryParams) ([]LoadEvaluationHistoryRow, error) {
+	rows, err := q.db.Query(ctx, loadEvaluationHistory,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ChatID,
+		arg.Generation,
+		arg.TargetID,
+		arg.TargetCreatedAt,
+		arg.TargetSeq,
+		arg.HistoryLimit,
+		arg.ContentBudget,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LoadEvaluationHistoryRow
+	for rows.Next() {
+		var i LoadEvaluationHistoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.ToolCalls,
+			&i.RowLocalContent,
+			&i.AttachmentUris,
+			&i.ContentTooLarge,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const loadEvaluationMessages = `-- name: LoadEvaluationMessages :many
+SELECT m.id, m.chat_id, m.project_id, m.seq, m.generation, m.created_at,
+       m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls,
+       m.user_id, m.external_user_id, c.user_account_id,
+       COALESCE(m.origin = 'anthropic-inference' AND (
+         m.external_message_id LIKE '%/block:%' OR EXISTS (
+           SELECT 1 FROM chat_messages sibling
+           WHERE sibling.project_id = m.project_id AND sibling.chat_id = m.chat_id
+             AND sibling.role <> 'system'
              AND sibling.external_message_id = m.external_message_id || '/block:0'
          )
        ), false)::boolean AS row_local_content,
@@ -733,6 +899,7 @@ JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = m.project_id
 WHERE m.project_id = $1::uuid AND p.organization_id = $2
   AND p.deleted IS FALSE AND c.deleted IS FALSE
+  AND m.role <> 'system'
   AND m.id = ANY($3::uuid[])
 `
 
@@ -743,13 +910,26 @@ type LoadEvaluationMessagesParams struct {
 }
 
 type LoadEvaluationMessagesRow struct {
-	ChatMessage     ChatMessage
+	ID              uuid.UUID
+	ChatID          uuid.UUID
+	ProjectID       uuid.NullUUID
+	Seq             int64
+	Generation      int32
+	CreatedAt       pgtype.Timestamptz
+	Role            string
+	Content         string
+	ContentRaw      []byte
+	ContentAssetUrl pgtype.Text
+	ToolCalls       []byte
+	UserID          pgtype.Text
+	ExternalUserID  pgtype.Text
 	UserAccountID   uuid.NullUUID
 	RowLocalContent bool
 	AttachmentUris  []string
 }
 
 // One tenant-pinned read resolves the batch and its current attachment locators.
+// System messages are excluded for every input strategy.
 func (q *Queries) LoadEvaluationMessages(ctx context.Context, arg LoadEvaluationMessagesParams) ([]LoadEvaluationMessagesRow, error) {
 	rows, err := q.db.Query(ctx, loadEvaluationMessages, arg.ProjectID, arg.OrganizationID, arg.MessageIds)
 	if err != nil {
@@ -760,39 +940,19 @@ func (q *Queries) LoadEvaluationMessages(ctx context.Context, arg LoadEvaluation
 	for rows.Next() {
 		var i LoadEvaluationMessagesRow
 		if err := rows.Scan(
-			&i.ChatMessage.ID,
-			&i.ChatMessage.Seq,
-			&i.ChatMessage.ChatID,
-			&i.ChatMessage.ProjectID,
-			&i.ChatMessage.Role,
-			&i.ChatMessage.Content,
-			&i.ChatMessage.ContentRaw,
-			&i.ChatMessage.ContentAssetUrl,
-			&i.ChatMessage.Model,
-			&i.ChatMessage.MessageID,
-			&i.ChatMessage.FinishReason,
-			&i.ChatMessage.ToolCalls,
-			&i.ChatMessage.PromptTokens,
-			&i.ChatMessage.CompletionTokens,
-			&i.ChatMessage.TotalTokens,
-			&i.ChatMessage.StorageError,
-			&i.ChatMessage.UserID,
-			&i.ChatMessage.ExternalUserID,
-			&i.ChatMessage.ExternalMessageID,
-			&i.ChatMessage.Origin,
-			&i.ChatMessage.UserAgent,
-			&i.ChatMessage.IpAddress,
-			&i.ChatMessage.Source,
-			&i.ChatMessage.ToolCallID,
-			&i.ChatMessage.ToolUrn,
-			&i.ChatMessage.ToolOutcome,
-			&i.ChatMessage.ToolOutcomeNotes,
-			&i.ChatMessage.ToolCallSummaries,
-			&i.ChatMessage.ContentHash,
-			&i.ChatMessage.Generation,
-			&i.ChatMessage.Replayed,
-			&i.ChatMessage.CreatedAt,
-			&i.ChatMessage.RiskAnalyzedAt,
+			&i.ID,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Seq,
+			&i.Generation,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.ToolCalls,
+			&i.UserID,
+			&i.ExternalUserID,
 			&i.UserAccountID,
 			&i.RowLocalContent,
 			&i.AttachmentUris,
@@ -809,6 +969,8 @@ func (q *Queries) LoadEvaluationMessages(ctx context.Context, arg LoadEvaluation
 
 const loadEvaluationSensors = `-- name: LoadEvaluationSensors :many
 SELECT sensor.id AS sensor_id, sensor.slug AS sensor_slug, sensor.mode, sensor.instructions, sensor.match_expression,
+       COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
+       COALESCE(sensor.window_size, 5)::integer AS window_size,
        signal.id AS signal_id, signal.slug AS signal_slug, signal.classifier_criteria
 FROM sigint_sensors AS sensor
 JOIN projects AS project ON project.id = sensor.project_id
@@ -837,6 +999,8 @@ type LoadEvaluationSensorsRow struct {
 	Mode               string
 	Instructions       pgtype.Text
 	MatchExpression    string
+	InputStrategy      string
+	WindowSize         int32
 	SignalID           uuid.NullUUID
 	SignalSlug         pgtype.Text
 	ClassifierCriteria pgtype.Text
@@ -858,6 +1022,8 @@ func (q *Queries) LoadEvaluationSensors(ctx context.Context, arg LoadEvaluationS
 			&i.Mode,
 			&i.Instructions,
 			&i.MatchExpression,
+			&i.InputStrategy,
+			&i.WindowSize,
 			&i.SignalID,
 			&i.SignalSlug,
 			&i.ClassifierCriteria,
@@ -972,11 +1138,13 @@ SET name = $1,
     mode = $5,
     enabled = $6,
     match_expression = $7,
+    input_strategy = $8,
+    window_size = $9,
     updated_at = clock_timestamp()
-WHERE id = $8
-  AND project_id = $9
+WHERE id = $10
+  AND project_id = $11
   AND deleted IS FALSE
-RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, input_strategy, window_size, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateSensorParams struct {
@@ -987,6 +1155,8 @@ type UpdateSensorParams struct {
 	Mode            string
 	Enabled         bool
 	MatchExpression string
+	InputStrategy   pgtype.Text
+	WindowSize      pgtype.Int4
 	ID              uuid.UUID
 	ProjectID       uuid.UUID
 }
@@ -1000,6 +1170,8 @@ func (q *Queries) UpdateSensor(ctx context.Context, arg UpdateSensorParams) (Sig
 		arg.Mode,
 		arg.Enabled,
 		arg.MatchExpression,
+		arg.InputStrategy,
+		arg.WindowSize,
 		arg.ID,
 		arg.ProjectID,
 	)
@@ -1014,6 +1186,8 @@ func (q *Queries) UpdateSensor(ctx context.Context, arg UpdateSensorParams) (Sig
 		&i.Mode,
 		&i.MatchExpression,
 		&i.Enabled,
+		&i.InputStrategy,
+		&i.WindowSize,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

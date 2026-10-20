@@ -1,9 +1,13 @@
 package platformmcp
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,6 +18,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -121,7 +126,7 @@ func attachmentTestCommit(t *testing.T, service *CatalogIdentityProviderAttachme
 			ClientSecret:            "",
 			SecretExpiresAt:         pgtype.Timestamptz{},
 			TokenEndpointAuthMethod: nil,
-			Scope:                   resource.ScopesSupported,
+			Scope:                   nil,
 			Audience:                nil,
 		}),
 		Bound:           remotesessions.ReuseBound,
@@ -170,7 +175,7 @@ func TestSharedAuthorizationServerDoesNotShareResourceBranding(t *testing.T) {
 	issuer, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
 	require.True(t, reuse, "one authorization server, one issuer")
-	require.Equal(t, "Remote identity provider", issuer.Name.String)
+	require.Equal(t, "Authorization server", issuer.Name.String)
 	require.False(t, issuer.ServiceDocumentation.Valid)
 	require.False(t, issuer.OpPolicyUri.Valid)
 	require.NoError(t, attachmentTestCommit(t, service, principal, project, usiB, metadata, "client-b", resourceB.Resource, resourceB))
@@ -356,7 +361,7 @@ func attachmentTestRegister(t *testing.T, service *CatalogIdentityProviderAttach
 	ctx := t.Context()
 	existing, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
-	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, metadata, existing, reuse, resource.Resource, resource))
+	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, metadata, existing, reuse, resource.Resource, resource, remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resource.ScopesSupported, Live: true, UseDiscovered: true}))
 	require.NoError(t, commit.Preflight(ctx))
 	reg, err := commit.Register(ctx)
 	require.NoError(t, err)
@@ -401,6 +406,7 @@ func TestAttachmentUsesClientIDMetadataDocumentWithoutDynamicRegistration(t *tes
 	require.Len(t, clients, 1)
 	require.True(t, strings.HasPrefix(clients[0].ExternalClientID, "https://app.example.com/.well-known/oauth-client/"), clients[0].ExternalClientID)
 	require.False(t, clients[0].ClientSecretEncrypted.Valid)
+	require.Empty(t, clients[0].ClientScope, "the resource's advertised scopes are not copied onto the client")
 
 	issuer, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
@@ -450,4 +456,51 @@ func TestAttachmentRecordsDiscoveredGrantProfiles(t *testing.T) {
 	require.Equal(t, []string{"urn:ietf:params:oauth:grant-profile:id-jag"}, issuer.AuthorizationGrantProfilesSupported)
 	require.True(t, issuer.MetadataFetchedAt.Valid, "attached provider is stamped as discovered")
 	require.JSONEq(t, `{"issuer":"https://auth.example.com"}`, string(issuer.Metadata))
+}
+
+// Dynamic registration names the scopes the client's first login would
+// request from the resource, while the client itself stores none.
+func TestAttachmentRegistersDiscoveredScopesWithoutStoringThem(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_dcr_scope")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	var requested atomic.Value
+	registration := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requested.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "dcr-scope-client",
+			"client_secret":              "dcr-scope-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registration.Close)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	serverURL := &url.URL{Scheme: "https", Host: "app.example.com"}
+	service := &CatalogIdentityProviderAttachmentService{db: conn, identity: remotesessions.NewIdentityCommitter(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), audit.NewLogger(), serverURL, policy, nil, nil), policy: policy, serverURL: serverURL}
+	metadata := attachmentTestIssuerMetadata(registration.URL)
+	metadata.ScopesSupported = []string{"read", "openid"}
+	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
+	resource := attachmentTestResource("https://mcp.example.com/mcp", "Example", "")
+	resource.ScopesSupported = []string{"files:read"}
+
+	reg := attachmentTestRegister(t, service, principal, project, usi, metadata, resource)
+	require.True(t, reg.Ready(), "manual=%v failure=%+v requested=%v", reg.ManualSetupRequired, reg.Failure, requested.Load())
+	require.Equal(t, remotesessions.RegistrationDCR, reg.Method)
+	require.Equal(t, "files:read", requested.Load(), "the resource's scopes as published, as the login requests")
+
+	clients := attachmentTestClients(t, conn, principal, project, usi)
+	require.Len(t, clients, 1)
+	require.Empty(t, clients[0].ClientScope)
 }

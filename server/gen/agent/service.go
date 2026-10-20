@@ -10,6 +10,7 @@ package agent
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -18,9 +19,11 @@ import (
 // machines. Authenticates via an API key carrying the 'agent_user' scope — the
 // per-user credential minted by token-exchange. An org key with the broader
 // 'agent' scope also satisfies most of these endpoints (it implies
-// 'agent_user'), so existing installs keep working during the transition. The
-// content-bearing session-portability endpoints — getSessionMeta and
-// createSessionHandoff — refuse it and require a per-user key.
+// 'agent_user'), so existing installs keep working during the transition. A
+// headless device enrolled as a workload may call getPlugins with a
+// device-agent token instead. The content-bearing session-portability
+// endpoints — getSessionMeta and createSessionHandoff — refuse it and require
+// a per-user key.
 type Service interface {
 	// Resolve the marketplaces, plugins, and optional organization configuration
 	// assigned to the enrolled user. The device agent reconciles these into the AI
@@ -106,6 +109,8 @@ type Service interface {
 
 // Auther defines the authorization functions to be implemented by the service.
 type Auther interface {
+	// JWTAuth implements the authorization logic for the JWT security scheme.
+	JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error)
 	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
 	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
 }
@@ -240,6 +245,11 @@ type AiScanTarget struct {
 	// For a built-in, whether the organization has recorded an access decision
 	// about it. Always false for organization targets.
 	Customized bool
+	// The organization's access decision for the target, computed with the same
+	// rules the AI detections carry: unreviewed when nothing is recorded, and
+	// never enforceable without a verifiable gateway matcher. Absent only from a
+	// server that predates it; read a missing summary as unreviewed.
+	Access *types.AIToolAccessSummary
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string
 	// When the organization's row last changed; absent for an untouched default.
@@ -368,7 +378,8 @@ type GetConfigurationPayload struct {
 
 // GetPluginsPayload is the payload type of the agent service getPlugins method.
 type GetPluginsPayload struct {
-	ApikeyToken *string
+	DeviceAgentToken *string
+	ApikeyToken      *string
 	// Email address of the enrolled user, sent in the Gram-User-Email header.
 	// Required when authenticating with an org-scoped agent install key (the MDM
 	// zero-touch path); ignored for a per-user key, whose owner is the enrolled
@@ -396,9 +407,9 @@ type GetPluginsPayload struct {
 // GetPluginsResult is the result type of the agent service getPlugins method.
 type GetPluginsResult struct {
 	// Opaque revision identifier covering the marketplace, plugin, MCP server
-	// (including each server's token endpoint, audience and resource), and
-	// remote-configuration set. The agent stores this to detect changes between
-	// polls.
+	// (including each server's token endpoint, audience and resource),
+	// remote-configuration, and organization-gateway set. The agent stores this to
+	// detect changes between polls.
 	Etag string
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
@@ -413,13 +424,17 @@ type GetPluginsResult struct {
 	// a configuration, allowing an agent with no cached remote layer to keep using
 	// its local configuration.
 	Configuration *DeviceAgentConfiguration
+	// URL of the active organization's gateway. Absent when the organization
+	// gateway is unavailable.
+	OrganizationGatewayURL *string
 	// The non-human principal the plugin set was resolved for. Present only when
 	// the caller authenticated with an agent API key.
 	Principal *AgentPollingPrincipal
 	// Speakeasy-hosted MCP servers the agent registers directly in each managed
 	// tool's configuration, authorized by the device's own mcp:connect credential.
-	// Populated only for agent API keys, from the MCP servers in the plugins
-	// assigned to the agent; always empty for people, who reach these servers
+	// Populated only when the caller polls as an agent (an agent API key, or a
+	// workload acting for its assigned agent), from the MCP servers in the plugins
+	// assigned to that agent; always empty for people, who reach these servers
 	// through their plugins. Always present: an empty list tells the agent to
 	// remove the entries it wrote earlier.
 	McpServers []*AgentMCPServer

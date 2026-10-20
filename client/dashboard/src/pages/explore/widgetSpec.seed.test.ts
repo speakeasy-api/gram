@@ -8,7 +8,7 @@ import { specFromWidget, widgetFromSpec } from "./widgetSpec";
 // back exactly as it is stored, or it would open marked unsaved.
 const SEED = resolve(
   import.meta.dirname,
-  "../../../../../server/internal/demoseed/postgres.sql",
+  "../../../../../server/internal/demoseed/queries/07_activity.sql",
 );
 
 interface SeededWidget {

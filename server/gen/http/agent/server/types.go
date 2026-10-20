@@ -113,9 +113,9 @@ type CreateSessionHandoffRequestBody struct {
 // endpoint HTTP response body.
 type GetPluginsResponseBody struct {
 	// Opaque revision identifier covering the marketplace, plugin, MCP server
-	// (including each server's token endpoint, audience and resource), and
-	// remote-configuration set. The agent stores this to detect changes between
-	// polls.
+	// (including each server's token endpoint, audience and resource),
+	// remote-configuration, and organization-gateway set. The agent stores this to
+	// detect changes between polls.
 	Etag string `form:"etag" json:"etag" xml:"etag"`
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
@@ -130,13 +130,17 @@ type GetPluginsResponseBody struct {
 	// a configuration, allowing an agent with no cached remote layer to keep using
 	// its local configuration.
 	Configuration *DeviceAgentConfigurationResponseBody `form:"configuration,omitempty" json:"configuration,omitempty" xml:"configuration,omitempty"`
+	// URL of the active organization's gateway. Absent when the organization
+	// gateway is unavailable.
+	OrganizationGatewayURL *string `form:"organization_gateway_url,omitempty" json:"organization_gateway_url,omitempty" xml:"organization_gateway_url,omitempty"`
 	// The non-human principal the plugin set was resolved for. Present only when
 	// the caller authenticated with an agent API key.
 	Principal *AgentPollingPrincipalResponseBody `form:"principal,omitempty" json:"principal,omitempty" xml:"principal,omitempty"`
 	// Speakeasy-hosted MCP servers the agent registers directly in each managed
 	// tool's configuration, authorized by the device's own mcp:connect credential.
-	// Populated only for agent API keys, from the MCP servers in the plugins
-	// assigned to the agent; always empty for people, who reach these servers
+	// Populated only when the caller polls as an agent (an agent API key, or a
+	// workload acting for its assigned agent), from the MCP servers in the plugins
+	// assigned to that agent; always empty for people, who reach these servers
 	// through their plugins. Always present: an empty list tells the agent to
 	// remove the entries it wrote earlier.
 	McpServers []*AgentMCPServerResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
@@ -2362,6 +2366,11 @@ type AiScanTargetResponseBody struct {
 	// For a built-in, whether the organization has recorded an access decision
 	// about it. Always false for organization targets.
 	Customized bool `form:"customized" json:"customized" xml:"customized"`
+	// The organization's access decision for the target, computed with the same
+	// rules the AI detections carry: unreviewed when nothing is recorded, and
+	// never enforceable without a verifiable gateway matcher. Absent only from a
+	// server that predates it; read a missing summary as unreviewed.
+	Access *AIToolAccessSummaryResponseBody `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the organization's row last changed; absent for an untouched default.
@@ -2401,6 +2410,32 @@ type AiScanTargetGatewayClientResponseBody struct {
 	// Names an MCP client reports at initialize. Detection only, never
 	// authorization: the value is self-reported and any client can claim any name.
 	ClientInfoNames []string `form:"client_info_names" json:"client_info_names" xml:"client_info_names"`
+}
+
+// AIToolAccessSummaryResponseBody is used to define fields on response body
+// types.
+type AIToolAccessSummaryResponseBody struct {
+	// The effective decision as a table renders it: allowed and blocked mean an
+	// organization decision is recorded and in force, unreviewed means nothing is
+	// enforced — either because nobody has decided or because the tool is not
+	// enforceable, in which case a stored decision is projected as unreviewed.
+	// Read enforceable to tell the two apart.
+	State string `form:"state" json:"state" xml:"state"`
+	// The effective organization decision behind state, which is not always the
+	// stored one. Absent rows read as unreviewed, so every tool has a value, and a
+	// tool that is not enforceable reads as unreviewed however it was decided —
+	// the stored decision is left untouched and takes effect again if the tool
+	// gains a verifiable gateway matcher.
+	Decision string `form:"decision" json:"decision" xml:"decision"`
+	// Whether a block on this tool would actually reach the gateway. False when
+	// the tool is linked only by a self-reported client name, or by nothing at
+	// all: the decision is recorded honestly and enforces nothing. Surfaced so an
+	// admin is never told a tool is blocked when it is not.
+	Enforceable bool `form:"enforceable" json:"enforceable" xml:"enforceable"`
+	// Why the decision was made, when an admin gave a reason. Who recorded it and
+	// when are in the audit log rather than here, so there is one record of that
+	// and not two.
+	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 }
 
 // AgentSessionMetaResponseBody is used to define fields on response body types.
@@ -2473,7 +2508,8 @@ type AIScanMatchRequestBody struct {
 // the "getPlugins" endpoint of the "agent" service.
 func NewGetPluginsResponseBody(res *agent.GetPluginsResult) *GetPluginsResponseBody {
 	body := &GetPluginsResponseBody{
-		Etag: res.Etag,
+		Etag:                   res.Etag,
+		OrganizationGatewayURL: res.OrganizationGatewayURL,
 	}
 	if res.Marketplaces != nil {
 		body.Marketplaces = make([]*AgentMarketplaceResponseBody, len(res.Marketplaces))
@@ -4215,9 +4251,10 @@ func NewCreateSessionHandoffGatewayErrorResponseBody(res *goa.ServiceError) *Cre
 }
 
 // NewGetPluginsPayload builds a agent service getPlugins endpoint payload.
-func NewGetPluginsPayload(legacyEmail *string, apikeyToken *string, email *string, serialNumber *string, hostname *string, environment *string) *agent.GetPluginsPayload {
+func NewGetPluginsPayload(legacyEmail *string, deviceAgentToken *string, apikeyToken *string, email *string, serialNumber *string, hostname *string, environment *string) *agent.GetPluginsPayload {
 	v := &agent.GetPluginsPayload{}
 	v.LegacyEmail = legacyEmail
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.Email = email
 	v.SerialNumber = serialNumber

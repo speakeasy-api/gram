@@ -37,6 +37,7 @@ func AdmitWorkloadAssertion(
 		issuers:    newWorkloadIssuerAdmission(workloadIssuerStoreLookup(db), allowAllWorkloadLookups),
 		identities: workloadIdentityStoreLookup(db),
 		verifier:   verifier,
+		deviceKeys: workloadDeviceKeyStoreLookup(db),
 	}
 	_, err := admitWorkloadAssertion(ctx, grant, endpoint.workloadTenancy(), audiences, raw)
 	return err

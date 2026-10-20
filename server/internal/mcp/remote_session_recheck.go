@@ -370,20 +370,9 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			logger.InfoContext(ctx, "remote session re-check skipped: no endpoint serves this grant")
 			continue
 		}
-		clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
-		if err != nil {
-			logger.ErrorContext(ctx, "list clients for remote session re-check", attr.SlogError(err))
-			continue
-		}
-		clients = subjectConnectedClients(clients)
-		client := findConsentClient(clients, sess.RemoteSessionClientID)
-		if client == nil {
-			logger.InfoContext(ctx, "remote session re-check skipped: client is not bound to the endpoint")
-			continue
-		}
 		subject := sess.SubjectUrn
 		// A synthetic first-party state: the probe reads only the subject, the id it keys its session on, and the endpoint.
-		state := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+		state := AuthnChallengeState{ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 			Browser:                  nil,
 			Federation:               nil,
 			ID:                       "keepalive:" + sess.ID.String(),
@@ -391,6 +380,8 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			UserSessionIssuerID:      endpoint.UserSessionIssuerID,
 			AuthorizerUserID:         "",
 			AuthorizerImpersonated:   nil,
+			SignInID:                 nil,
+			FreshLoginForced:         false,
 			AgentAuthorizationTarget: nil,
 			Endpoint:                 ref,
 			ClientID:                 "",
@@ -403,6 +394,18 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			CreatedAt:                now,
 			FirstParty:               true,
 			AutoConnectDone:          false,
+			FocusServer:              "",
+		}
+		clients, err := s.listEndpointClients(ctx, endpoint, state)
+		if err != nil {
+			logger.ErrorContext(ctx, "list clients for remote session re-check", attr.SlogError(err))
+			continue
+		}
+		clients = subjectConnectedClients(clients)
+		client := findConsentClient(clients, sess.RemoteSessionClientID)
+		if client == nil {
+			logger.InfoContext(ctx, "remote session re-check skipped: client is not bound to the endpoint")
+			continue
 		}
 		// The probe logs its own refusals; only a dialled probe ends the search.
 		err = s.probeRemoteSession(ctx, logger, endpoint, state, *client, nil, remotesessionmetrics.ValidationTriggerKeepalive)
@@ -445,6 +448,13 @@ func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Lo
 		RouteBase:       "mcp",
 
 		SharedAuthorizationServer: false,
+		UseAuthenticationHost:     nil,
+	}
+	if placement.OrganizationGateway {
+		// Addressed by organization slug; the synthetic id is what the
+		// resolver checks the ref against.
+		ref.RouteBase = organizationGatewayRouteBase
+		ref.MetaMcpServerID = uuid.NullUUID{UUID: organizationGatewayID(organizationID), Valid: true}
 	}
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, ref)
 	if errors.Is(err, mcpendpoints.ErrPolicyDenied) {

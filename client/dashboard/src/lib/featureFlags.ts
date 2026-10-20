@@ -4,6 +4,8 @@ export const FEATURE_FLAGS = {
   deploymentsPage: "gram-deployments-page",
   deviceAgent: "gram-device-agent",
   deviceIntegrations: "gram-device-integrations",
+  // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
+  emaProviders: "ema-providers",
   experimentalChat: "gram-experimental-chat",
   explore: "gram-explore",
   functions: "gram-functions",
@@ -26,6 +28,9 @@ export const FEATURE_FLAGS = {
   riskLlmAnalyzer: "gram-risk-llm-analyzer",
   riskWatchdog: "gram-risk-watchdog",
   tunneledMcp: "gram-tunneled-mcp",
+  // UI-only rollout gate for the organization's Speakeasy authorization
+  // servers page; the APIs behind it are not gated.
+  userSessionIssuerDashboard: "gram-user-session-issuer-dashboard",
   userSessionsDashboard: "user-sessions-dashboard",
 } as const;
 

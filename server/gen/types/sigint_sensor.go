@@ -9,6 +9,11 @@ package types
 
 // SigintSensor is the result type of the sigint service createSensor method.
 type SigintSensor struct {
+	// Message context strategy; defaults to single_message
+	InputStrategy SigintInputStrategy
+	// Sliding window size including the target message, between 2 and 10; defaults
+	// to 5
+	WindowSize int
 	// Whether the sensor is eligible for evaluation. Disabled sensors remain
 	// visible and editable.
 	Enabled bool

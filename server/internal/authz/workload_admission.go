@@ -6,28 +6,30 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // WorkloadSessionAdmission contains the policy sets a workload session acts
 // under, loaded independently and never cached across requests.
 //
-// Two sets rather than the three a principal credential carries. A workload
-// holds no grants of its own and inherits the live policy of the agent assigned
-// to it, so there is no separate workload policy to load. The agent owner's own
-// policy is deliberately absent: a workload is a principal in its own right
-// rather than something acting on an owner's behalf, so the owner bounds which
-// agent may be assigned, not what the machine may reach.
+// Each operation must satisfy the immutable session ceiling, the assigned
+// agent's live policy, and the current owner's live effective permissions.
 type WorkloadSessionAdmission struct {
 	// AgentPrincipal is the agent the workload inherited from. Admission
 	// refuses a result that names none.
 	AgentPrincipal string
-	// OwnerUserID owns that agent. Recorded as credential owner provenance for
-	// attribution only; the owner's own policy is never evaluated.
+
+	// OwnerUserID currently owns that agent and supplies the owner policy.
 	OwnerUserID string
+
 	// Ceiling is the session's immutable policy R, fixed at issuance.
 	Ceiling []Grant
+
 	// Agent is the assigned agent's live policy A.
 	Agent []Grant
+
+	// Owner is the current owner's live effective policy O.
+	Owner []Grant
 }
 
 // WorkloadSessionAdmitter supplies application-owned workload admission without
@@ -35,7 +37,7 @@ type WorkloadSessionAdmission struct {
 type WorkloadSessionAdmitter func(context.Context, *pgxpool.Pool) (WorkloadSessionAdmission, error)
 
 // AdmitWorkloadSession fails closed unless application-owned admission is
-// configured and succeeds, then preserves R and A as independent policies.
+// configured and succeeds, then preserves R, A, and O as independent policies.
 func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, error) {
 	if e.admitWorkloadSession == nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
@@ -50,8 +52,13 @@ func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, err
 	if admission.AgentPrincipal == "" || admission.OwnerUserID == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
+	agent, err := urn.ParsePrincipal(admission.AgentPrincipal)
+	if err != nil || agent.Type != urn.PrincipalTypeAgent {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	// Record the agent whose policy was admitted, so every later use reads this
+	// one value instead of resolving the assignment again.
+	ctx = contextvalues.WithWorkloadAgent(ctx, agent)
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, admission.OwnerUserID)
-	// Two sets and no owner set. An empty owner set would read as "the owner
-	// allows nothing" and deny every check.
-	return admittedPoliciesToContext(ctx, admission.Ceiling, admission.Agent), nil
+	return admittedPoliciesToContext(ctx, admission.Ceiling, admission.Agent, admission.Owner), nil
 }

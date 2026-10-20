@@ -30,11 +30,12 @@ type DimensionValue struct {
 	Count int64
 }
 
-// CompileValues turns a values request into SQL. Values are resolved after
-// the dataset collapses its observations, so a caller never sees a value no
-// row would actually match, and the empty value is never offered. The
-// dimension is read through its lookup, so the picker offers what a filter
-// will match.
+// CompileValues turns a values request into SQL. A dimension with a Typeahead
+// column is listed from the dataset's observations and counted at its grain,
+// so the listing never pays for the redelivery collapse. Any other dimension
+// is listed from the folded rows. The dimension is read through its lookup,
+// so the picker offers what a filter will match, and the empty value is never
+// offered.
 func CompileValues(catalog *Catalog, tenant Tenant, lookups LookupMaps, req ValuesRequest) (*Plan, error) {
 	ds, ok := catalog.Dataset(req.Dataset)
 	if !ok {
@@ -59,11 +60,18 @@ func CompileValues(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Valu
 	}
 
 	qc := QueryContext{Tenant: tenant, Window: Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}, Lookups: lookups}
+	source, count := ds.Source.Rows(qc), "count()"
+	if field.Typeahead != "" {
+		typeahead := *field
+		typeahead.Expr = field.Typeahead
+		field = &typeahead
+		source, count = ds.Source.Observations(qc), "uniqExact("+ds.Source.Key+")"
+	}
 	expr, args := readExpr(qc, field)
 	builder := sq.Select().
 		Column(expr+" AS value", args...).
-		Column("count() AS n").
-		FromSelect(ds.Source(qc), "src").
+		Column(count+" AS n").
+		FromSelect(source, "src").
 		Where(expr+" <> ?", append(slices.Clone(args), "")...).
 		GroupBy("value").
 		OrderBy("n DESC", "value ASC").
