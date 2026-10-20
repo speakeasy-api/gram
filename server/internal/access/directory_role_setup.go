@@ -203,10 +203,12 @@ func reuseProposal(role *gen.Role) *gen.DirectoryRoleSetupProposedRole {
 }
 
 // directoryRoleName turns a source name into a valid role name: characters a
-// role name refuses become spaces, so "R&D (EMEA)" proposes "R D EMEA".
+// role name refuses become spaces, so "R&D (EMEA)" proposes "R D EMEA". A name
+// left with no letter or digit, such as "-", falls back to a generic name,
+// since creating a role from it would be refused.
 func directoryRoleName(sourceName string) string {
 	name := strings.Join(strings.Fields(invalidRoleNameChars.ReplaceAllString(sourceName, " ")), " ")
-	if name == "" {
+	if _, err := slugify(name); err != nil {
 		return fallbackDirectoryRoleName
 	}
 	return name
@@ -259,6 +261,9 @@ func (s *Service) ApplyDirectoryRoleSetup(ctx context.Context, payload *gen.Appl
 
 	items := make([]directoryRoleSetupItem, 0, len(payload.Items))
 	lockKeys := make([]string, 0, len(payload.Items))
+	// Several sources may ask for the same new role. Names that differ but
+	// make the same slug would silently become one role, so they are refused.
+	newRoleNameBySlug := map[string]string{}
 	for _, item := range payload.Items {
 		if item == nil || item.Source == nil {
 			return nil, oops.E(oops.CodeBadRequest, nil, "every item needs a source").LogError(ctx, s.logger)
@@ -275,6 +280,18 @@ func (s *Service) ApplyDirectoryRoleSetup(ctx context.Context, payload *gen.Appl
 			if role == nil || (role.RoleUrn == nil) == (role.CreateName == nil) {
 				return nil, oops.E(oops.CodeBadRequest, nil, "each role needs exactly one of role_urn or create_name").LogError(ctx, s.logger)
 			}
+			if role.CreateName == nil {
+				continue
+			}
+			slug, err := slugify(*role.CreateName)
+			if err != nil {
+				return nil, err
+			}
+			name := strings.TrimSpace(*role.CreateName)
+			if earlier, ok := newRoleNameBySlug[slug]; ok && !strings.EqualFold(earlier, name) {
+				return nil, oops.E(oops.CodeBadRequest, nil, "new roles %q and %q would have the same identifier; rename one", earlier, name).LogWarn(ctx, s.logger)
+			}
+			newRoleNameBySlug[slug] = name
 		}
 		lockKeys = append(lockKeys, lockKey)
 		items = append(items, directoryRoleSetupItem{item: item, groupID: groupID, lockKey: lockKey})

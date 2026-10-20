@@ -7229,8 +7229,10 @@ type DirectoryRoleSetupPreviewItemResponseBody struct {
 	Source *DirectoryRoleSetupSourceResponseBody `form:"source" json:"source" xml:"source"`
 	// The group name, or key=value for an attribute value.
 	SourceName string `form:"source_name" json:"source_name" xml:"source_name"`
-	// Live directory profiles that match the source. These are directory people,
-	// not organization members or role members.
+	// People with a live directory profile that matches the source, counted once
+	// per email address, so someone with profiles in two directories counts once
+	// and a profile with no email is not counted. These are directory people, not
+	// organization members or role members.
 	DirectoryPeople int64 `form:"directory_people" json:"directory_people" xml:"directory_people"`
 	// Roles the source already maps to. Empty for an unmapped source.
 	ExistingRoleUrns []string `form:"existing_role_urns" json:"existing_role_urns" xml:"existing_role_urns"`
