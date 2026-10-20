@@ -110,6 +110,8 @@ type Service struct {
 	supportCoverage SupportCoverageReader
 	mcpServerHealth MCPServerHealthReader
 	hookClients     HookClientsReader
+	// deviceAgentVersions feeds the device agent grid on the same page.
+	deviceAgentVersions DeviceAgentVersionsReader
 	// hookClientsCache keeps the fleet-wide grids for an hour, since each
 	// read scans weeks of telemetry.
 	hookClientsCache cache.TypedCacheObject[hookClientsSnapshot]
@@ -270,11 +272,12 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:           trialNotifier,
-		billing:         billing,
-		supportCoverage: supportCoverage,
-		mcpServerHealth: mcpServerHealth,
-		hookClients:     nil,
+		trial:               trialNotifier,
+		billing:             billing,
+		supportCoverage:     supportCoverage,
+		mcpServerHealth:     mcpServerHealth,
+		hookClients:         nil,
+		deviceAgentVersions: nil,
 		hookClientsCache: cache.NewTypedObjectCache[hookClientsSnapshot](
 			logger.With(attr.SlogCacheNamespace("admin_hook_clients")),
 			adminCache,
