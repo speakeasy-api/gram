@@ -105064,6 +105064,10 @@ components:
           type: string
           description: The skill ID.
           format: uuid
+        last_loaded_over_mcp_at:
+          type: string
+          description: When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Returned by list and get only.
+          format: date-time
         last_seen_at:
           type: string
           description: When this skill was most recently activated.
