@@ -6743,6 +6743,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - device_agent_token_header_Authorization: []
         - apikey_header_Gram-Key: []
         - {}
       summary: getPlugins agent
@@ -24641,6 +24642,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       security:
+        - device_agent_token_header_Authorization: []
+          project_slug_header_Gram-Project: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -24748,6 +24751,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       security:
+        - device_agent_token_header_Authorization: []
+          project_slug_header_Gram-Project: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -25157,7 +25162,7 @@ paths:
       tags:
         - hooks
       summary: logs hooks
-      description: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.
+      description: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.
       operationId: hooks#logs
       parameters:
         - name: Gram-Key
@@ -25238,6 +25243,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       security:
+        - device_agent_token_header_Authorization: []
+          project_slug_header_Gram-Project: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -25246,7 +25253,7 @@ paths:
       tags:
         - hooks
       summary: metrics hooks
-      description: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.
+      description: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.
       operationId: hooks#metrics
       parameters:
         - name: Gram-Key
@@ -25327,6 +25334,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       security:
+        - device_agent_token_header_Authorization: []
+          project_slug_header_Gram-Project: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -52819,6 +52828,107 @@ paths:
       tags:
         - remoteSessions
       x-speakeasy-name-override: detachBinding
+  /rpc/remoteSessions.detachServerClientAssociation:
+    post:
+      description: 'Remove one MCP server''s association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer''s client binding and is refused here with a conflict: turn off User Identity on the server instead. Requires mcp:write on the server.'
+      operationId: detachServerClientAssociation
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetachServerClientAssociationRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: detachServerClientAssociation remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: detachServerClientAssociation
+      x-speakeasy-react-hook:
+        name: DetachServerClientAssociation
   /rpc/remoteSessions.getServerIdentityImpact:
     get:
       description: Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
@@ -53218,6 +53328,114 @@ paths:
       tags:
         - remoteSessions
       x-speakeasy-name-override: listBindings
+  /rpc/remoteSessions.listServerClientAssociations:
+    get:
+      description: 'List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Associations are recorded ahead of the serving path that will read them; until then the server keeps signing in through its user session issuer''s bindings. Requires mcp:read on the server.'
+      operationId: listServerClientAssociations
+      parameters:
+        - allowEmptyValue: true
+          description: The MCP server.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The MCP server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListServerClientAssociationsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listServerClientAssociations remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: listServerClientAssociations
+      x-speakeasy-react-hook:
+        name: ServerClientAssociations
   /rpc/remoteSessions.revoke:
     post:
       description: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.
@@ -78976,6 +79194,110 @@ paths:
       x-speakeasy-name-override: admitSubject
       x-speakeasy-react-hook:
         name: AdmitWorkloadSubject
+  /rpc/workloadIdentities.createDeviceJoinToken:
+    post:
+      description: 'Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Only a person can create one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent''s policy.'
+      operationId: createWorkloadDeviceJoinToken
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeviceJoinTokenRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadDeviceJoinToken'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createDeviceJoinToken workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: createDeviceJoinToken
+      x-speakeasy-react-hook:
+        name: CreateWorkloadDeviceJoinToken
   /rpc/workloadIdentities.getCustomFlows:
     get:
       description: 'Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.'
@@ -79368,6 +79690,81 @@ paths:
       x-speakeasy-name-override: listTokenEndpoints
       x-speakeasy-react-hook:
         name: WorkloadTokenEndpoints
+  /rpc/workloadIdentities.registerDevice:
+    post:
+      description: 'Enroll a device with its public key, redeeming a join token. No session or API key: the single-use join token is the credential, and an unknown, expired, or already redeemed token returns 401. A key already registered to another device returns 409, and an agent whose policy no longer grants org:device_agent_sync returns a failed precondition without spending the token. In one transaction the device''s key is registered, the device is admitted under the organization''s Speakeasy device issuer, and it is assigned the token''s agent.'
+      operationId: registerWorkloadDevice
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadDeviceRegistration'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: registerDevice workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: registerDevice
   /rpc/workloadIdentities.registerIssuer:
     post:
       description: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
@@ -84451,6 +84848,22 @@ components:
       required:
         - name
         - destination_type
+    CreateDeviceJoinTokenRequestBody:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent the enrolled device inherits its policy from.
+          format: uuid
+        expires_in_seconds:
+          type: integer
+          description: How long the token stays redeemable. Defaults to one hour.
+          default: 3600
+          format: int64
+          minimum: 60
+          maximum: 86400
+      required:
+        - agent_id
     CreateDomainRequestBody:
       type: object
       properties:
@@ -85149,7 +85562,6 @@ components:
           description: The kind of prompt the template is used for
           enum:
             - prompt
-            - higher_order_tool
         name:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
@@ -86884,6 +87296,20 @@ components:
         - principal_id
         - user_session_issuer_id
         - id
+    DetachServerClientAssociationRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server.
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The associated remote session client.
+          format: uuid
+      required:
+        - mcp_server_id
+        - remote_session_client_id
     DeviceAgentConfiguration:
       type: object
       properties:
@@ -93904,6 +94330,16 @@ components:
           description: The scopes available in access control.
       required:
         - scopes
+    ListServerClientAssociationsResult:
+      type: object
+      properties:
+        associations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServerClientAssociation'
+          description: The server's associated upstream OAuth clients, oldest first.
+      required:
+        - associations
     ListServerHeadersResult:
       type: object
       properties:
@@ -99717,6 +100153,29 @@ components:
       properties:
         deployment:
           $ref: '#/components/schemas/Deployment'
+    RegisterDeviceRequestBody:
+      type: object
+      properties:
+        hostname:
+          type: string
+          description: The device's hostname, shown to administrators. Self-reported.
+          maxLength: 255
+        join_token:
+          type: string
+          description: The join token from createDeviceJoinToken.
+          minLength: 1
+          maxLength: 512
+        public_jwk:
+          type: object
+          description: 'The device''s public signing key as a JWK: EC P-256 (ES256) or OKP Ed25519 (EdDSA). Private key material is refused.'
+          additionalProperties: true
+        serial:
+          type: string
+          description: The device's serial number, shown to administrators. Self-reported.
+          maxLength: 255
+      required:
+        - join_token
+        - public_jwk
     RegisterRequestBody:
       type: object
       properties:
@@ -100553,7 +101012,6 @@ components:
           description: The kind of prompt the template is used for
           enum:
             - prompt
-            - higher_order_tool
         prompt:
           type: string
           description: The template content to render
@@ -103718,6 +104176,54 @@ components:
       required:
         - chat_id
         - accepted
+    ServerClientAssociation:
+      type: object
+      properties:
+        associated_at:
+          type: string
+          description: When the association was recorded.
+          format: date-time
+        client_id:
+          type: string
+          description: The provider-issued client_id.
+        issuer_name:
+          type: string
+          description: Display name of the remote session issuer, if set.
+        issuer_slug:
+          type: string
+          description: Slug of the remote session issuer.
+        issuer_url:
+          type: string
+          description: The remote session issuer's issuer identifier.
+        remote_session_client_id:
+          type: string
+          description: The associated remote session client.
+          format: uuid
+        remote_session_issuer_id:
+          type: string
+          description: 'The client''s remote session issuer: the upstream authorization server it signs in with.'
+          format: uuid
+        scope:
+          type: string
+          description: Who owns the client.
+          enum:
+            - project
+            - organization
+            - global
+        server_count:
+          type: integer
+          description: How many live MCP servers are associated with this client, including this one.
+          format: int64
+      description: One upstream OAuth client an MCP server is associated with. Client secrets are never returned.
+      required:
+        - remote_session_client_id
+        - client_id
+        - remote_session_issuer_id
+        - issuer_slug
+        - issuer_url
+        - scope
+        - server_count
+        - associated_at
     ServerIdentityClientConfiguration:
       type: object
       properties:
@@ -110555,7 +111061,6 @@ components:
           description: The kind of prompt the template is used for
           enum:
             - prompt
-            - higher_order_tool
         name:
           type: string
           description: The name of the prompt template. Will be updated via variation
@@ -112940,6 +113445,40 @@ components:
         - edit_platform
         - allow_access
         - edit_access
+    WorkloadDeviceJoinToken:
+      type: object
+      properties:
+        expires_at:
+          type: string
+          description: When the token stops being redeemable.
+          format: date-time
+        token:
+          type: string
+          description: The join token. Shown once; only its hash is stored.
+      required:
+        - token
+        - expires_at
+    WorkloadDeviceRegistration:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent the device inherits its policy from.
+          format: uuid
+        device_subject:
+          type: string
+          description: The device's workload subject, device:<uuid>. Its assertions carry this as sub.
+        issuer:
+          type: string
+          description: The issuer its assertions carry as iss.
+        organization_id:
+          type: string
+          description: The organization the device enrolled in.
+      required:
+        - device_subject
+        - issuer
+        - agent_id
+        - organization_id
     WorkloadForm:
       type: object
       properties:
@@ -113470,6 +114009,10 @@ components:
       type: http
       description: Speakeasy Chat Sessions token based auth.
       scheme: bearer
+    device_agent_token_header_Authorization:
+      type: http
+      description: Device-agent token from the workload assertion grant at /oauth/workload/device-agent/{organization_id}/token.
+      scheme: bearer
     function_token_header_Authorization:
       type: http
       description: Speakeasy Functions token based auth.
@@ -113490,7 +114033,7 @@ tags:
   - name: access
     description: Manage roles, team member access control, and authorization challenge events.
   - name: agent
-    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
+    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. A headless device enrolled as a workload may call getPlugins with a device-agent token instead. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
   - name: agents
     description: Human-only management of first-class agent principals.
   - name: aiIntegrations
@@ -113636,7 +114179,7 @@ tags:
   - name: telemetry
     description: Fetch telemetry data for tools in Speakeasy.
   - name: templates
-    description: Manages re-usable prompt templates and higher-order tools for a project.
+    description: Manages re-usable prompt templates for a project.
   - name: tokenExchange
     description: 'Device-agent token exchange: trade an org-scoped install credential (an API key with the ''agent'' scope) plus a vouched user email for a long-lived, per-user API key scoped for the device agent.'
   - name: tools

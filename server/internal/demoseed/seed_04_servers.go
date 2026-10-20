@@ -184,6 +184,15 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("stamp demo linear remote session issuer: %w", err)
 	}
+	if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
+		ID:                    s.det("server-client-association-linear"),
+		ProjectID:             proj,
+		OrgID:                 org,
+		McpServerID:           s.det("mcpserver-linear"),
+		RemoteSessionClientID: s.det("remote-identity-client-linear"),
+	}); err != nil {
+		return fmt.Errorf("associate demo linear server with its client: %w", err)
+	}
 	if err := s.q.ServersUpsertLinearProtectedResource(ctx, repo.ServersUpsertLinearProtectedResourceParams{
 		ID:        s.det("protected-resource-linear"),
 		ProjectID: proj,
@@ -303,6 +312,17 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		UserSessionIssuerID:   s.det("issuer-linear"),
 	}); err != nil {
 		return fmt.Errorf("bind demo attachment client: %w", err)
+	}
+	// The Linear server is its issuer's only consumer, so every client bound
+	// to the issuer is associated with it, as the app's reconcile would do.
+	if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
+		ID:                    s.det("server-client-association-attachment"),
+		ProjectID:             proj,
+		OrgID:                 org,
+		McpServerID:           s.det("mcpserver-linear"),
+		RemoteSessionClientID: s.det("attachment-client"),
+	}); err != nil {
+		return fmt.Errorf("associate demo linear server with the attachment client: %w", err)
 	}
 	if err := s.q.ServersInsertAttachmentSession(ctx, repo.ServersInsertAttachmentSessionParams{
 		ID:                    s.det("attachment-session"),
@@ -509,6 +529,20 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 			UserSessionIssuerID:   workforce,
 		}); err != nil {
 			return fmt.Errorf("bind demo %s: %w", client, err)
+		}
+	}
+	// The workforce issuer is shared, so each service's server is associated
+	// with the one client of the authorization server its protected resource
+	// names. GitHub, on the same issuer, uses neither client.
+	for _, service := range []string{"tracker", "wiki"} {
+		if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
+			ID:                    s.det("server-client-association-ema-" + service),
+			ProjectID:             proj,
+			OrgID:                 org,
+			McpServerID:           s.det("mcpserver-ema-" + service),
+			RemoteSessionClientID: s.det("ema-client-" + service),
+		}); err != nil {
+			return fmt.Errorf("associate demo ema %s server with its client: %w", service, err)
 		}
 	}
 	if err := s.q.ServersInsertEMAProtectedResources(ctx, repo.ServersInsertEMAProtectedResourcesParams{

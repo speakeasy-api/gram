@@ -142,6 +142,7 @@ func (s *Service) IngestAuthenticatedDetailed(ctx context.Context, authCtx *cont
 	authCopy.ProjectID = &projectID
 	payloadCopy := *payload
 	payloadCopy.ApikeyToken = nil
+	payloadCopy.DeviceAgentToken = nil
 	payloadCopy.ProjectSlugInput = nil
 	options.SourceAttributes = maps.Clone(options.SourceAttributes)
 	options.OutputToolCalls = append([]any(nil), options.OutputToolCalls...)
@@ -186,7 +187,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		if res != nil && res.Result != nil {
 			decision = res.Result.Decision
 		}
-		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
 	if err := validateCanonicalIngestPayload(payload); err != nil {
@@ -194,7 +195,14 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 	source = strings.TrimSpace(payload.Source.Adapter)
 	eventType = strings.TrimSpace(payload.Event.Type)
-	if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
+	if token := pluginDeviceAgentToken(payload.DeviceAgentToken); token != "" {
+		authedCtx, err := s.authorizeWorkloadPluginRequest(ctx, token, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
+		if err != nil {
+			outcome = hookMetricOutcomeUnauthorized
+			return nil, workloadHookAuthError(err)
+		}
+		ctx = authedCtx
+	} else if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
 		authedCtx, err := s.authorizePluginRequest(ctx, apikey, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
 		if err != nil {
 			outcome = hookMetricOutcomeUnauthorized

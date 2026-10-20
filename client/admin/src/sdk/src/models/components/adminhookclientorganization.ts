@@ -8,7 +8,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * An organization that appears in either hook client grid.
+ * An organization that appears in any of the fleet health grids.
  */
 export type AdminHookClientOrganization = {
   /**

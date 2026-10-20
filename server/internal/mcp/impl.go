@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
@@ -185,6 +186,7 @@ type Service struct {
 	vectorToolStore        *rag.ToolsetVectorStore
 	assistantTokens        *assistanttokens.Manager
 	principalCredentials   *principalcredential.Issuer
+	deviceAgentTokens      *deviceagenttoken.Issuer
 	sessions               *sessions.Manager
 	consentBindings        ConsentBindingService
 	identityResolver       IdentityResolver
@@ -560,6 +562,7 @@ func NewService(
 		vectorToolStore:        vectorToolStore,
 		assistantTokens:        assistantTokens,
 		principalCredentials:   principalCredentials,
+		deviceAgentTokens:      deviceagenttoken.New(callerAssertions, db),
 		sessions:               sessions,
 		chatSessionsManager:    chatSessionsManager,
 		enc:                    enc,
@@ -744,6 +747,7 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.MCPErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", deviceagenttoken.TokenPathPattern, oops.ErrHandle(service.logger, service.HandleDeviceAgentToken).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback/{clientID}", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)

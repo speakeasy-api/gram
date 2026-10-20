@@ -62,6 +62,9 @@ func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, err
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	ctx = context.WithValue(ctx, admittedWorkloadAgentKey{}, agentID)
+	// Record the agent whose policy was admitted, so every later use reads this
+	// one value instead of resolving the assignment again.
+	ctx = contextvalues.WithWorkloadAgent(ctx, principal)
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, admission.OwnerUserID)
 	return admittedPoliciesToContext(ctx, admission.Ceiling, admission.Agent, admission.Owner), nil
 }

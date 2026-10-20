@@ -547,7 +547,7 @@
     status.setAttribute("data-chain-check", state);
     if (state === "connected") {
       status.className = "text-xs text-default-success";
-      status.textContent = "Connected through your identity provider";
+      status.textContent = "Service connected through your identity provider";
       if (connectedSummary) {
         var count =
           Number(connectedSummary.getAttribute("data-connected-count")) + 1;
