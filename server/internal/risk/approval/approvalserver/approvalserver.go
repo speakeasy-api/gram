@@ -1,7 +1,9 @@
 // Package approvalserver gives a project its approvals MCP server: the server
 // agents call request_approval on. Speakeasy creates it with the project's
 // first approval policy and adds it to the Default plugin, so agents that use
-// the plugin already have it. After that it is an ordinary plugin server.
+// the plugin already have it. Agents with a key call it with the key; others
+// sign the user in through its issuer. After that it is an ordinary plugin
+// server.
 package approvalserver
 
 import (
@@ -22,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 )
 
 const (
@@ -114,6 +117,20 @@ func Ensure(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *
 	}
 	if err != nil {
 		return none, fmt.Errorf("create approvals server: %w", err)
+	}
+	// Callers without a key sign in through the server's own issuer, as on a
+	// remote server. It is minted after the create, so a create that lost a
+	// race to another transaction leaves no issuer behind.
+	issuerID, err := serverissuer.Mint(ctx, tx, authCtx.ActiveOrganizationID, projectID, created.Slug.String)
+	if err != nil {
+		return none, fmt.Errorf("create approvals server issuer: %w", err)
+	}
+	if err := repo.New(tx).SetBuiltinMCPServerUserSessionIssuer(ctx, repo.SetBuiltinMCPServerUserSessionIssuerParams{
+		UserSessionIssuerID: issuerID,
+		ID:                  created.ID,
+		ProjectID:           projectID,
+	}); err != nil {
+		return none, fmt.Errorf("attach approvals server issuer: %w", err)
 	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	if err := auditLogger.LogMcpServerCreate(ctx, tx, audit.LogMcpServerCreateEvent{

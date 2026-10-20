@@ -897,6 +897,28 @@ func (q *Queries) MarkApprovalRequested(ctx context.Context, arg MarkApprovalReq
 	return i, err
 }
 
+const setBuiltinMCPServerUserSessionIssuer = `-- name: SetBuiltinMCPServerUserSessionIssuer :exec
+UPDATE mcp_servers
+SET user_session_issuer_id = $1
+  , updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND builtin_backend IS NOT NULL
+  AND deleted IS FALSE
+`
+
+type SetBuiltinMCPServerUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+// Gives a first-party backend's server the issuer its callers sign in with.
+func (q *Queries) SetBuiltinMCPServerUserSessionIssuer(ctx context.Context, arg SetBuiltinMCPServerUserSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, setBuiltinMCPServerUserSessionIssuer, arg.UserSessionIssuerID, arg.ID, arg.ProjectID)
+	return err
+}
+
 const upsertBlockedApproval = `-- name: UpsertBlockedApproval :one
 INSERT INTO risk_policy_approvals (
     organization_id

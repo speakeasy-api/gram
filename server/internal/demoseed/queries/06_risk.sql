@@ -20,13 +20,21 @@ VALUES (@id, @project_id, @organization_id, @name, 'standard',
 -- name: RiskInsertApprovalsServer :exec
 -- The project's approvals server, the first-party server agents call
 -- request_approval on. Speakeasy creates it with a project's first approval
--- policy (internal/risk/approval/approvalserver): an endpoint at
--- <org>-<project>-approvals and a place in the Default plugin as
+-- policy (internal/risk/approval/approvalserver): its own sign-in issuer, an
+-- endpoint at <org>-<project>-approvals and a place in the Default plugin as
 -- speakeasy-approvals. The project delete cascades every row.
-WITH server AS (
-  INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
-  VALUES (@server_id::uuid, @project_id::uuid, 'Speakeasy Approvals',
-          'speakeasy-approvals', 'approvals', 'private')
+WITH issuer AS (
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                    authn_challenge_mode, session_duration)
+  VALUES (@issuer_id::uuid, @project_id::uuid, @org_id::text, 'speakeasy-approvals',
+          'interactive', make_interval(secs => 14 * 24 * 60 * 60))
+  RETURNING id
+), server AS (
+  INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility,
+                           user_session_issuer_id)
+  SELECT @server_id::uuid, @project_id::uuid, 'Speakeasy Approvals',
+         'speakeasy-approvals', 'approvals', 'private', issuer.id
+  FROM issuer
   RETURNING id
 ), endpoint AS (
   INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)

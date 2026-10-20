@@ -194,6 +194,7 @@ func (s *seeder) seedRiskPolicies(ctx context.Context) error {
 	// The approval policy's first save gives the project its approvals
 	// server, so the demo has one too.
 	if err := s.q.RiskInsertApprovalsServer(ctx, repo.RiskInsertApprovalsServerParams{
+		IssuerID:     s.det("issuer-approvals"),
 		ServerID:     s.det("mcpserver-approvals"),
 		ProjectID:    s.projectID(),
 		EndpointID:   s.det("endpoint-approvals"),

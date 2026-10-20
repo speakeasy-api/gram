@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -25,6 +24,7 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 )
 
 // The refusals a gateway write can return. Each caller maps them to its own
@@ -97,7 +97,7 @@ func (w GatewayWriter) CreateGateway(ctx context.Context, tx pgx.Tx, actor Actor
 		// A gateway without sign-in serves everyone anonymously, which hides
 		// every private member and can hold no member credentials — a trap,
 		// not a use case. Mint a dedicated issuer when the caller supplies none.
-		minted, err := mcpservers.MintServerUserSessionIssuer(ctx, tx, actor.OrganizationID, actor.ProjectID, input.Name)
+		minted, err := serverissuer.Mint(ctx, tx, actor.OrganizationID, actor.ProjectID, input.Name)
 		if err != nil {
 			return repo.MetaMcpServer{}, fmt.Errorf("mint meta mcp issuer: %w", err)
 		}

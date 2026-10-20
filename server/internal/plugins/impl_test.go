@@ -1587,8 +1587,8 @@ func TestPluginsService_PublishPlugins_ApprovalsServerAppearsInDefaultPlugin(t *
 	server, ok := config.MCPServers[approval.MCPServerName]
 	require.True(t, ok, "approvals server missing from the Default plugin")
 	require.True(t, strings.HasSuffix(server.URL, "/mcp/"+setup.Server.EndpointSlug), "unexpected URL %q", server.URL)
-	require.True(t, strings.HasPrefix(server.Headers["Authorization"], "Bearer "),
-		"the approvals server authenticates agents with the plugin's Speakeasy key")
+	require.Empty(t, server.Headers["Authorization"],
+		"the approvals server has its own issuer, so the plugin signs the user in instead of sending a key")
 }
 
 // Reproduces the plugin_github_connections_installation_repo_key conflict:

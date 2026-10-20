@@ -321,3 +321,13 @@ INSERT INTO mcp_servers (
 )
 ON CONFLICT (project_id, builtin_backend) WHERE builtin_backend IS NOT NULL AND deleted IS FALSE DO NOTHING
 RETURNING id, slug;
+
+-- name: SetBuiltinMCPServerUserSessionIssuer :exec
+-- Gives a first-party backend's server the issuer its callers sign in with.
+UPDATE mcp_servers
+SET user_session_issuer_id = @user_session_issuer_id
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND builtin_backend IS NOT NULL
+  AND deleted IS FALSE;

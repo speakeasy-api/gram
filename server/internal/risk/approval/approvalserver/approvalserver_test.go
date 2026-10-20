@@ -14,10 +14,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/approvalserver"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 var infra *testenv.Environment
@@ -98,4 +100,29 @@ func TestEnsureCreatesTheServerOnceAndAddsItToTheDefaultPlugin(t *testing.T) {
 	require.False(t, second.Created)
 	require.False(t, second.AddedToDefaultPlugin)
 	require.Equal(t, first.Server, second.Server)
+}
+
+func TestEnsureGivesTheServerItsOwnSignInIssuer(t *testing.T) {
+	t.Parallel()
+	conn, authCtx := newProject(t)
+
+	outcome := ensure(t, conn, authCtx)
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: outcome.Server.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.True(t, server.UserSessionIssuerID.Valid, "callers without a key sign in through the server's issuer")
+
+	issuer, err := usersessionsrepo.New(conn).GetUserSessionIssuerByID(t.Context(), usersessionsrepo.GetUserSessionIssuerByIDParams{
+		ID:             server.UserSessionIssuerID.UUID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "interactive", issuer.AuthnChallengeMode)
+	require.Contains(t, issuer.Slug, outcome.Server.Slug)
+
+	// A later call keeps the same issuer.
+	ensure(t, conn, authCtx)
+	again, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: outcome.Server.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, server.UserSessionIssuerID, again.UserSessionIssuerID)
 }

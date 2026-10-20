@@ -203,6 +203,9 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	if endpoint.ToolsetID.Valid {
 		return s.serveConsentToolsetMCP(w, r, endpoint, challengeState, draft)
 	}
+	if serverRow != nil && serverRow.BuiltinBackend.Valid {
+		return s.serveConsentBuiltinMCP(w, r, endpoint, challengeState, draft, serverRow)
+	}
 	if serverRow != nil {
 		return s.serveConsentProxiedMCP(w, r, endpoint, challengeState, draft, serverRow)
 	}
@@ -214,6 +217,37 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 // handshake and the whole inventory is one page, snapshotted before the
 // response is written.
 func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, draft consentToolInventory) error {
+	return s.serveConsentLocalMCP(w, r, endpoint, draft, func(ctx context.Context) ([]consentInventoryTool, []string, error) {
+		return s.authorizedToolsetConsentInventory(ctx, endpoint, challengeState)
+	})
+}
+
+// serveConsentBuiltinMCP answers the consent method surface locally for a
+// first-party backend. Its tools are the same for every caller, and the
+// backend authorizes each call itself, so the inventory needs only a signed-in
+// subject.
+func (s *Service) serveConsentBuiltinMCP(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, draft consentToolInventory, serverRow *mcpservers_repo.McpServer) error {
+	backend, ok := s.builtinBackends[serverRow.BuiltinBackend.String]
+	if !ok {
+		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+	}
+	return s.serveConsentLocalMCP(w, r, endpoint, draft, func(ctx context.Context) ([]consentInventoryTool, []string, error) {
+		if challengeState.Subject.Kind == urn.SessionSubjectKindAnonymous {
+			return nil, nil, oops.E(oops.CodeBadRequest, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, endpoint.LogWith(s.logger))
+		}
+		tools := make([]consentInventoryTool, 0, len(backend.Tools))
+		for _, tool := range backend.Tools {
+			tools = append(tools, consentInventoryTool{Name: tool.Name, Annotations: consentAnnotationsFromSDK(tool.Annotations)})
+		}
+		return tools, nil, nil
+	})
+}
+
+// serveConsentLocalMCP answers the consent method surface for an endpoint
+// Speakeasy serves itself. listTools returns the whole inventory as one page,
+// with the names of tools the subject's roles hide; its errors are returned
+// as they are.
+func (s *Service) serveConsentLocalMCP(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, draft consentToolInventory, listTools func(ctx context.Context) ([]consentInventoryTool, []string, error)) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
 
@@ -253,9 +287,9 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 	case mcpversions.MethodPing:
 		return writeConsentJSONRPCResult(w, req.ID, map[string]any{}, nil)
 	case mcpversions.MethodToolsList:
-		tools, roleHidden, terr := s.authorizedToolsetConsentInventory(ctx, endpoint, challengeState)
-		if terr != nil {
-			return terr
+		tools, roleHidden, err := listTools(ctx)
+		if err != nil {
+			return err
 		}
 		if _, aerr := s.appendConsentInventoryPage(ctx, draft, consentRequestCursor(req.Params), tools, ""); aerr != nil {
 			if errors.Is(aerr, errConsentInventoryUnavailable) {
