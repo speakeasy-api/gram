@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_metadata"
@@ -12,26 +11,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // A save waits for a concurrent save of the same backend, so it sees a row that save inserted under the other key.
 func TestSetMcpMetadata_SerializesConcurrentSavesAcrossKeys(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newServerKeyMCPMetadataService(t)
+	ctx, ti := newTestMCPMetadataService(t)
 	toolset := createHostedToolset(t, ctx, ti, "hosted-save-lock")
 	createCanonicalWrapper(t, ctx, ti, toolset)
 	seedServerKeyedTwin(t, ctx, ti, toolset, "server", "SERVER_KEY")
 
-	// Another save, with the rollout off, holds the backend and inserts a toolset-keyed row.
+	// A save on a pod from before the server-key writers holds the backend and inserts a toolset-keyed row.
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	other := repo.New(tx)
 	require.NoError(t, other.AcquireMetadataBackendLock(ctx, repo.AcquireMetadataBackendLockParams{ProjectID: toolset.ProjectID, BackendID: toolset.ID}))
-	inserted, err := other.UpsertMetadata(ctx, repo.UpsertMetadataParams{
+	inserted, err := testrepo.New(tx).InsertToolsetKeyedMcpMetadataFixture(ctx, testrepo.InsertToolsetKeyedMcpMetadataFixtureParams{
 		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: toolset.ProjectID,
-		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false}, ExternalDocumentationText: pgtype.Text{String: "", Valid: false},
-		LogoID: uuid.NullUUID{}, Instructions: conv.ToPGText("toolset"), DefaultEnvironmentID: uuid.NullUUID{},
-		InstallationOverrideUrl: pgtype.Text{String: "", Valid: false},
+		Instructions: conv.ToPGText("toolset"), HeaderDisplayNames: []byte(`{}`), DefaultEnvironmentID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
 
@@ -50,7 +48,7 @@ func TestSetMcpMetadata_SerializesConcurrentSavesAcrossKeys(t *testing.T) {
 
 	got := <-done
 	require.NoError(t, got.err)
-	require.Equal(t, inserted.ID.String(), got.metadata.ID, "the toolset-keyed row wins and is re-keyed")
+	require.Equal(t, inserted.String(), got.metadata.ID, "the toolset-keyed row wins and is re-keyed")
 	require.Equal(t, "after", *got.metadata.Instructions)
 	requireHostedIDs(t, ctx, ti, got.metadata, toolset.ID, true)
 	requireSingleMetadataRow(t, ctx, ti, toolset.ID)

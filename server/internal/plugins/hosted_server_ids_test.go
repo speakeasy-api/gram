@@ -34,18 +34,18 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestPluginsService(t)
 
-	serverKeyed := createTestToolset(t, ctx, ti.conn, "server-keyed")
+	serverKeyed := createUnwrappedTestToolset(t, ctx, ti.conn, "server-keyed")
 	createCanonicalWrapper(t, ctx, ti, serverKeyed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, serverKeyed.McpSlug.String)
-	toolsetKeyed := createTestToolset(t, ctx, ti.conn, "toolset-keyed")
+	toolsetKeyed := createUnwrappedTestToolset(t, ctx, ti.conn, "toolset-keyed")
 	createCanonicalWrapper(t, ctx, ti, toolsetKeyed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, toolsetKeyed.McpSlug.String)
-	unwrapped := createTestToolset(t, ctx, ti.conn, "unwrapped")
-	deletedWrapper := createTestToolset(t, ctx, ti.conn, "deleted-wrapper")
+	unwrapped := createUnwrappedTestToolset(t, ctx, ti.conn, "unwrapped")
+	deletedWrapper := createUnwrappedTestToolset(t, ctx, ti.conn, "deleted-wrapper")
 	createCanonicalWrapper(t, ctx, ti, deletedWrapper, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	_, err := mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: deletedWrapper.ID, ProjectID: deletedWrapper.ProjectID})
 	require.NoError(t, err)
 	fresh := createTestMcpServer(t, ctx, ti.conn, "fresh", "private")
 
-	orphaned := createTestToolset(t, ctx, ti.conn, "orphaned")
+	orphaned := createUnwrappedTestToolset(t, ctx, ti.conn, "orphaned")
 	createCanonicalWrapper(t, ctx, ti, orphaned, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Both IDs"})
@@ -60,7 +60,7 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 	require.Equal(t, serverKeyed.ID.String(), conv.PtrValOr(added.ToolsetID, ""))
 	require.Equal(t, serverKeyed.ID.String(), conv.PtrValOr(added.McpServerID, ""))
 
-	byToolset := createTestToolset(t, ctx, ti.conn, "by-toolset")
+	byToolset := createUnwrappedTestToolset(t, ctx, ti.conn, "by-toolset")
 	createCanonicalWrapper(t, ctx, ti, byToolset, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, byToolset.McpSlug.String)
 	addedByToolset, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(byToolset.ID.String()), DisplayName: conv.PtrEmpty("ByToolset"), Policy: "required"})
 	require.NoError(t, err)
@@ -68,7 +68,7 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 	require.Equal(t, new(byToolset.ID.String()), addedByToolset.McpServerID)
 
 	// An entry echoed from a read carries both ids; equal ids name the toolset, unequal ones are rejected.
-	echoed := createTestToolset(t, ctx, ti.conn, "echoed")
+	echoed := createUnwrappedTestToolset(t, ctx, ti.conn, "echoed")
 	createCanonicalWrapper(t, ctx, ti, echoed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, echoed.McpSlug.String)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(echoed.ID.String()), McpServerID: conv.PtrEmpty(fresh.idStr), DisplayName: conv.PtrEmpty("Mismatched"), Policy: "required"})
 	var shareable *oops.ShareableError

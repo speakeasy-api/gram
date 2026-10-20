@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -33,9 +35,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -44,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -70,10 +75,23 @@ type Service struct {
 	blobStore       assets.BlobStore
 	telemetry       *telemetry.Logger
 	growth          *growthsignals.Emitter
+	// workloadTokens resolves where a workload obtains a session for each
+	// polled MCP server. Nil leaves the token fields of every entry empty.
+	workloadTokens WorkloadTokenTargets
 
 	// deviceAgentTokens authenticates headless devices that present a
 	// device-agent token instead of an agent API key. Nil refuses them.
 	deviceAgentTokens *deviceagenttoken.Issuer
+
+	// agentVersions records each polling agent's speakeasyd version for the
+	// staff fleet view. Nil skips recording.
+	agentVersions *deviceagentversions.Store
+}
+
+// WorkloadTokenTargets resolves where a workload exchanges an identity
+// assertion for a session that reaches the MCP server at a URL.
+type WorkloadTokenTargets interface {
+	WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (mcp.WorkloadTokenTarget, bool, error)
 }
 
 var (
@@ -112,8 +130,17 @@ func NewService(
 		blobStore:         blobStore,
 		telemetry:         telemetryLogger,
 		growth:            growthEmitter,
+		workloadTokens:    nil,
 		deviceAgentTokens: deviceAgentTokens,
+		agentVersions:     nil,
 	}
+}
+
+// WithWorkloadTokenTargets sets the resolver that fills each polled MCP
+// server's token endpoint.
+func (s *Service) WithWorkloadTokenTargets(targets WorkloadTokenTargets) *Service {
+	s.workloadTokens = targets
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -231,6 +258,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// An agent-principal key, or a workload acting for its assigned agent, polls
 	// as that agent; the auth step already required the device-sync grant.
 	if agent, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
+		s.recordAgentVersion(ctx, authCtx.ActiveOrganizationID, agentPrincipalMachine(payload, agent.String()))
 		return s.getAgentPlugins(ctx, authCtx, agent)
 	}
 
@@ -330,6 +358,8 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		}
 	}
 
+	s.recordAgentVersion(ctx, authCtx.ActiveOrganizationID, agentMachine(payload, email, environment))
+
 	// Resolve the reported email through current organization membership before
 	// adding user:<id>, user:all, or role principals. Agent keys can outlive their
 	// owner's membership, so the authenticated user id is not trusted directly.
@@ -338,7 +368,8 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
 	}
 
-	return s.pluginSetFor(ctx, authCtx, principals)
+	result, _, err := s.pluginSetFor(ctx, authCtx, principals)
+	return result, err
 }
 
 // getAgentPlugins resolves plugins for an agent-principal key: the agent, the
@@ -363,16 +394,108 @@ func (s *Service) getAgentPlugins(ctx context.Context, authCtx *contextvalues.Au
 	}
 	principals := append([]string{canonical.String(), urn.PrincipalWildcard}, rolePrincipals...)
 
-	result, err := s.pluginSetFor(ctx, authCtx, principals)
+	result, rows, err := s.pluginSetFor(ctx, authCtx, principals)
 	if err != nil {
 		return nil, err
 	}
+	servers, err := s.agentMCPServers(ctx, rows)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent MCP servers").LogError(ctx, s.logger)
+	}
+	mv.AttachAgentMCPServers(result, servers)
 	mv.AttachAgentPrincipal(result, &gen.AgentPollingPrincipal{Urn: canonical.String(), DisplayName: agent.Name})
 	return result, nil
 }
 
+// agentMCPServers lists the Speakeasy-hosted servers in the plugins delivered to
+// an agent, once each. `available` plugins are skipped: nobody on an agent's
+// machine can turn them on.
+func (s *Service) agentMCPServers(ctx context.Context, rows []repo.GetAgentPluginSetRow) ([]*gen.AgentMCPServer, error) {
+	var projectIDs []uuid.UUID
+	pluginsByProject := make(map[uuid.UUID][]uuid.UUID)
+	for _, row := range mv.DeliveredAgentPluginRows(rows) {
+		if installmode.FromStored(row.PluginInstallMode) == installmode.Available {
+			continue
+		}
+		if _, seen := pluginsByProject[row.ProjectID]; !seen {
+			projectIDs = append(projectIDs, row.ProjectID)
+		}
+		pluginsByProject[row.ProjectID] = append(pluginsByProject[row.ProjectID], row.PluginID.UUID)
+	}
+
+	var candidates []plugins.DeviceMCPServer
+	listedURLs := make(map[string]bool)
+	for _, projectID := range projectIDs {
+		projectServers, err := plugins.ListDeviceMCPServers(ctx, s.logger, s.db, s.serverURL, projectID, pluginsByProject[projectID])
+		if err != nil {
+			return nil, fmt.Errorf("list plugin MCP servers: %w", err)
+		}
+		for _, server := range projectServers {
+			if !listedURLs[server.URL] {
+				listedURLs[server.URL] = true
+				candidates = append(candidates, server)
+			}
+		}
+	}
+
+	// The device keys ownership by name, so suffixes are assigned in name and
+	// URL order: a server keeps its name however plugins and projects are
+	// arranged, and only a new server sharing its name can renumber it.
+	slices.SortFunc(candidates, func(a, b plugins.DeviceMCPServer) int {
+		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.URL, b.URL))
+	})
+	// Every natural name is reserved up front, so a suffix never claims a name
+	// another server already has on its own (`speakeasy-linear-2`).
+	naturalNames := make(map[string]bool, len(candidates))
+	for _, server := range candidates {
+		naturalNames[server.Name] = true
+	}
+	servers := make([]*gen.AgentMCPServer, 0, len(candidates))
+	takenNames := make(map[string]bool, len(candidates))
+	for _, server := range candidates {
+		name := server.Name
+		for suffix := 2; takenNames[name]; suffix++ {
+			candidate := fmt.Sprintf("%s-%d", server.Name, suffix)
+			if !naturalNames[candidate] {
+				name = candidate
+			}
+		}
+		takenNames[name] = true
+		entry := &gen.AgentMCPServer{Name: name, URL: server.URL, Tools: nil, TokenEndpoint: nil, Audience: nil, Resource: nil}
+		if err := s.attachWorkloadTokenTarget(ctx, entry); err != nil {
+			return nil, err
+		}
+		servers = append(servers, entry)
+	}
+	return servers, nil
+}
+
+// attachWorkloadTokenTarget fills the entry's token fields. Servers no workload
+// grant reaches stay listed so the device can remove entries it wrote before.
+func (s *Service) attachWorkloadTokenTarget(ctx context.Context, entry *gen.AgentMCPServer) error {
+	if s.workloadTokens == nil {
+		return nil
+	}
+	target, ok, err := s.workloadTokens.WorkloadTokenTargetFor(ctx, entry.URL)
+	if err != nil {
+		return fmt.Errorf("resolve workload token target: %w", err)
+	}
+	if !ok {
+		s.logger.DebugContext(ctx, "plugin MCP server offers no workload grant; a workload cannot reach it headless",
+			attr.SlogURL(entry.URL),
+		)
+		return nil
+	}
+	entry.TokenEndpoint = &target.TokenEndpoint
+	entry.Audience = &target.Audience
+	if target.Resource != "" {
+		entry.Resource = &target.Resource
+	}
+	return nil
+}
+
 // pluginSetFor builds the poll response for an already-resolved principal set.
-func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthContext, principals []string) (*gen.GetPluginsResult, error) {
+func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthContext, principals []string) (*gen.GetPluginsResult, []repo.GetAgentPluginSetRow, error) {
 	var (
 		rows                   []repo.GetAgentPluginSetRow
 		configurationRow       repo.DeviceAgentConfiguration
@@ -422,7 +545,7 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 		return nil
 	})
 	if err := group.Wait(); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent policy").LogError(ctx, s.logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "error resolving agent policy").LogError(ctx, s.logger)
 	}
 
 	base := strings.TrimRight(s.serverURL, "/")
@@ -435,7 +558,7 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 	if hasConfiguration {
 		built, err := buildDeviceAgentConfigurationView(configurationRow)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error decoding agent configuration").LogError(ctx, s.logger)
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "error decoding agent configuration").LogError(ctx, s.logger)
 		}
 		configuration = built
 	}
@@ -450,7 +573,7 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 	attachDeviceAgentConfiguration(result, configuration)
 	attachOrganizationGatewayURL(result, organizationGatewayURL)
 
-	return result, nil
+	return result, rows, nil
 }
 
 // optionalOrganizationGatewayURL keeps this additive display metadata from

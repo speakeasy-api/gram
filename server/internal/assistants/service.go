@@ -949,8 +949,8 @@ func normalizeMaxConcurrency(v *int) int {
 	return *v
 }
 
-// resolvedToolsetInsert captures the FK values we need to write one row in
-// assistant_toolsets for a single (toolset_slug, environment_slug?) ref
+// resolvedToolsetInsert captures the FK values we need to write one hosted row
+// in assistant_mcp_servers for a single (toolset_slug, environment_slug?) ref
 // supplied by the user.
 type resolvedToolsetInsert struct {
 	ToolsetID     uuid.UUID
@@ -1315,6 +1315,9 @@ func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid
 // the caller cannot write.
 var errMCPEnableForbidden = errors.New("attaching a toolset with MCP disabled requires mcp:write on it")
 
+// errToolsetNoMCPServer rejects attaching a toolset that has no canonical MCP server.
+var errToolsetNoMCPServer = errors.New(hostedmcp.NoServerMessage)
+
 // enableAssistantToolsets turns MCP on for newly attached toolsets that have it
 // off, so every attached hosted server is reachable at runtime, and syncs their
 // canonical wrappers. Toolsets in alreadyAttached keep their MCP state. Toolset
@@ -1370,17 +1373,9 @@ func toolsetIDSet(resolved []resolvedToolsetInsert) map[uuid.UUID]struct{} {
 	return out
 }
 
-// assistantAttachmentRow is one attachment in write order; exactly one row is set.
-type assistantAttachmentRow struct {
-	toolset *assistantrepo.AddAssistantToolsetsParams
-	server  *assistantrepo.AddAssistantMcpServersParams
-}
-
-// writeAssistantAttachments stores hosted servers under their wrapper when
-// serverKey is on, keeping toolsets without a dialable wrapper in
-// assistant_toolsets; with serverKey off every hosted server stays in
-// assistant_toolsets. It clears both tables for every written server so none
-// is stored twice.
+// writeAssistantAttachments stores every attachment in assistant_mcp_servers,
+// hosted ones under their toolset's canonical wrapper (same id), and clears
+// legacy assistant_toolsets rows for every written server.
 // toolsets replaces the hosted servers; mcpServers replaces the other servers
 // and adds hosted ones not yet attached.
 func writeAssistantAttachments(
@@ -1391,11 +1386,10 @@ func writeAssistantAttachments(
 	replaceToolsets bool,
 	servers []resolvedMcpServerInsert,
 	replaceServers bool,
-	serverKey bool,
 ) error {
 	queries := assistantrepo.New(tx)
 	wrapped := map[uuid.UUID]bool{}
-	if serverKey && len(toolsets) > 0 {
+	if len(toolsets) > 0 {
 		toolsetIDs := make([]uuid.UUID, 0, len(toolsets))
 		for _, r := range toolsets {
 			toolsetIDs = append(toolsetIDs, r.ToolsetID)
@@ -1408,38 +1402,27 @@ func writeAssistantAttachments(
 			wrapped[id] = true
 		}
 	}
-	addServer := func(id uuid.UUID, environmentID uuid.NullUUID) assistantAttachmentRow {
-		return assistantAttachmentRow{toolset: nil, server: &assistantrepo.AddAssistantMcpServersParams{
-			AssistantID: assistantID, McpServerID: id, EnvironmentID: environmentID, ProjectID: projectID,
-		}}
+	addServer := func(id uuid.UUID, environmentID uuid.NullUUID) assistantrepo.AddAssistantMcpServersParams {
+		return assistantrepo.AddAssistantMcpServersParams{AssistantID: assistantID, McpServerID: id, EnvironmentID: environmentID, ProjectID: projectID}
 	}
-	// Hosted rows come first, in request order, as they did in one assistant_toolsets insert.
-	hostedRows := make([]assistantAttachmentRow, 0, len(toolsets)+len(servers))
-	serverRows := make([]assistantAttachmentRow, 0, len(servers))
+	// Hosted rows come first, in request order, so created_at keeps that order.
+	hostedRows := make([]assistantrepo.AddAssistantMcpServersParams, 0, len(toolsets)+len(servers))
+	serverRows := make([]assistantrepo.AddAssistantMcpServersParams, 0, len(servers))
 	written := make([]uuid.UUID, 0, len(toolsets)+len(servers))
 	for _, r := range toolsets {
-		written = append(written, r.ToolsetID)
-		if wrapped[r.ToolsetID] {
-			hostedRows = append(hostedRows, addServer(r.ToolsetID, r.EnvironmentID))
-			continue
+		if !wrapped[r.ToolsetID] {
+			return fmt.Errorf("toolset %q: %w", r.Slug, errToolsetNoMCPServer)
 		}
-		hostedRows = append(hostedRows, assistantAttachmentRow{server: nil, toolset: &assistantrepo.AddAssistantToolsetsParams{
-			AssistantID: assistantID, ToolsetID: r.ToolsetID, EnvironmentID: r.EnvironmentID, ProjectID: projectID,
-		}})
+		written = append(written, r.ToolsetID)
+		hostedRows = append(hostedRows, addServer(r.ToolsetID, r.EnvironmentID))
 	}
 	for _, r := range servers {
 		if slices.Contains(written, r.MCPServerID) {
 			continue
 		}
 		written = append(written, r.MCPServerID)
-		if r.Hosted && serverKey {
-			hostedRows = append(hostedRows, addServer(r.MCPServerID, r.EnvironmentID))
-			continue
-		}
 		if r.Hosted {
-			hostedRows = append(hostedRows, assistantAttachmentRow{server: nil, toolset: &assistantrepo.AddAssistantToolsetsParams{
-				AssistantID: assistantID, ToolsetID: r.MCPServerID, EnvironmentID: r.EnvironmentID, ProjectID: projectID,
-			}})
+			hostedRows = append(hostedRows, addServer(r.MCPServerID, r.EnvironmentID))
 			continue
 		}
 		serverRows = append(serverRows, addServer(r.MCPServerID, r.EnvironmentID))
@@ -1466,36 +1449,12 @@ func writeAssistantAttachments(
 			return fmt.Errorf("clear assistant mcp servers for written servers: %w", err)
 		}
 	}
-	return insertAssistantAttachments(ctx, queries, append(hostedRows, serverRows...))
-}
-
-// insertAssistantAttachments batches runs of one table so created_at keeps request order.
-func insertAssistantAttachments(ctx context.Context, queries *assistantrepo.Queries, rows []assistantAttachmentRow) error {
-	for len(rows) > 0 {
-		toolsetRun := rows[0].toolset != nil
-		n := 1
-		for n < len(rows) && (rows[n].toolset != nil) == toolsetRun {
-			n++
-		}
-		run := rows[:n]
-		rows = rows[n:]
-		if toolsetRun {
-			params := make([]assistantrepo.AddAssistantToolsetsParams, 0, len(run))
-			for _, row := range run {
-				params = append(params, *row.toolset)
-			}
-			if _, err := queries.AddAssistantToolsets(ctx, params); err != nil {
-				return fmt.Errorf("insert assistant toolsets: %w", err)
-			}
-			continue
-		}
-		params := make([]assistantrepo.AddAssistantMcpServersParams, 0, len(run))
-		for _, row := range run {
-			params = append(params, *row.server)
-		}
-		if _, err := queries.AddAssistantMcpServers(ctx, params); err != nil {
-			return fmt.Errorf("insert assistant mcp servers: %w", err)
-		}
+	rows := slices.Concat(hostedRows, serverRows)
+	if len(rows) == 0 {
+		return nil
+	}
+	if _, err := queries.AddAssistantMcpServers(ctx, rows); err != nil {
+		return fmt.Errorf("insert assistant mcp servers: %w", err)
 	}
 	return nil
 }
@@ -1505,7 +1464,7 @@ func deterministicChatID(assistantID uuid.UUID, correlationID string) uuid.UUID 
 }
 
 func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
-	// Phase A keeps main's shape: hosted servers are listed only under toolsets.
+	// Hosted servers are listed only under toolsets.
 	toolsets := make([]*types.AssistantToolsetRef, 0, len(record.MCPServers))
 	mcpServers := make([]*types.AssistantMCPServerRef, 0, len(record.MCPServers))
 	for _, row := range record.MCPServers {
@@ -1578,8 +1537,6 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
 	}
 
-	// Resolved before the transaction: the lookup takes its own pool connection.
-	serverKey := s.hostedServerKeyWrites(ctx, projectID)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
@@ -1615,7 +1572,7 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, err
 	}
-	if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, true, resolvedMcpServers, true, serverKey); err != nil {
+	if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, true, resolvedMcpServers, true); err != nil {
 		return assistantRecord{}, err
 	}
 
@@ -1716,8 +1673,6 @@ func (s *ServiceCore) UpdateAssistant(
 	status *string,
 	canEnableMCP func(toolsetID uuid.UUID) bool,
 ) (assistantRecord, error) {
-	// Resolved before the transaction: the lookup takes its own pool connection.
-	serverKey := s.hostedServerKeyWrites(ctx, projectID)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
@@ -1774,7 +1729,7 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 	}
 	if toolsets != nil || mcpServers != nil {
-		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil, serverKey); err != nil {
+		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil); err != nil {
 			return assistantRecord{}, err
 		}
 	}
@@ -3289,23 +3244,6 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 	return platformSlugs, nil
 }
 
-// hostedServerKeyWrites reports whether the project's organization writes hosted attachments under the canonical server key; any failure keeps assistant_toolsets.
-func (s *ServiceCore) hostedServerKeyWrites(ctx context.Context, projectID uuid.UUID) bool {
-	if s.featureFlags == nil {
-		return false
-	}
-	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "resolve organization for hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
-		return false
-	}
-	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.featureFlags, project.ID, project.Slug)
-	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
-	}
-	return enabled
-}
-
 // assistantToolsVariant reports which managed-assistant platform toolset the
 // organization owning projectID is on. Evaluation mirrors the Platform MCP
 // organization gate: distinct ID is the org ID with the org-slug PostHog
@@ -3670,8 +3608,8 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 	}
 
 	// Platform toolsets granted to this runtime (caller-determined); not
-	// surfaced as user-managed toolsets and not persisted in
-	// assistant_toolsets so users can't detach them. The "_p-" prefix
+	// surfaced as user-managed toolsets and not persisted as
+	// attachments so users can't detach them. The "_p-" prefix
 	// marks the runtime server ID as platform-issued and gives it enough
 	// distance from any plausible user toolset slug (the current SlugPattern
 	// still allows leading "_", so this is convention, not a hard fence —

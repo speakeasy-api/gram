@@ -233,8 +233,7 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	require.NoError(t, err)
 	require.NotEmpty(t, servers)
 	_, err = pluginsrepo.New(conn).AddPluginServer(prepared, pluginsrepo.AddPluginServerParams{
-		PluginID: pluginsBySlug["direct-user"].ID, ToolsetID: uuid.NullUUID{},
-		McpServerID: uuid.NullUUID{UUID: servers[0].ID, Valid: true}, DisplayName: "Assigned MCP", Policy: "required", SortOrder: 0,
+		PluginID: pluginsBySlug["direct-user"].ID, McpServerID: uuid.NullUUID{UUID: servers[0].ID, Valid: true}, DisplayName: "Assigned MCP", Policy: "required", SortOrder: 0,
 	})
 	require.NoError(t, err)
 

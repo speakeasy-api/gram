@@ -3195,3 +3195,63 @@ func BuildListCustomerUsagePayload(adminListCustomerUsageInterval string, adminL
 
 	return v, nil
 }
+
+// BuildListUpstreamOAuthMigrationOrganizationsPayload builds the payload for
+// the admin listUpstreamOAuthMigrationOrganizations endpoint from CLI flags.
+func BuildListUpstreamOAuthMigrationOrganizationsPayload(adminListUpstreamOAuthMigrationOrganizationsAdminSessionToken string) (*admin.ListUpstreamOAuthMigrationOrganizationsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListUpstreamOAuthMigrationOrganizationsAdminSessionToken != "" {
+			adminSessionToken = &adminListUpstreamOAuthMigrationOrganizationsAdminSessionToken
+		}
+	}
+	v := &admin.ListUpstreamOAuthMigrationOrganizationsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetUpstreamOAuthMigrationStatusPayload builds the payload for the admin
+// getUpstreamOAuthMigrationStatus endpoint from CLI flags.
+func BuildGetUpstreamOAuthMigrationStatusPayload(adminGetUpstreamOAuthMigrationStatusOrganizationID string, adminGetUpstreamOAuthMigrationStatusAdminSessionToken string) (*admin.GetUpstreamOAuthMigrationStatusPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetUpstreamOAuthMigrationStatusOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetUpstreamOAuthMigrationStatusAdminSessionToken != "" {
+			adminSessionToken = &adminGetUpstreamOAuthMigrationStatusAdminSessionToken
+		}
+	}
+	v := &admin.GetUpstreamOAuthMigrationStatusPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRunUpstreamOAuthMigrationPayload builds the payload for the admin
+// runUpstreamOAuthMigration endpoint from CLI flags.
+func BuildRunUpstreamOAuthMigrationPayload(adminRunUpstreamOAuthMigrationBody string, adminRunUpstreamOAuthMigrationAdminSessionToken string) (*admin.RunUpstreamOAuthMigrationPayload, error) {
+	var err error
+	var body RunUpstreamOAuthMigrationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRunUpstreamOAuthMigrationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRunUpstreamOAuthMigrationAdminSessionToken != "" {
+			adminSessionToken = &adminRunUpstreamOAuthMigrationAdminSessionToken
+		}
+	}
+	v := &admin.RunUpstreamOAuthMigrationPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

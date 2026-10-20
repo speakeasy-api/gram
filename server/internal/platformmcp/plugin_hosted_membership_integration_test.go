@@ -44,8 +44,9 @@ func TestGetPluginReadsToolsetKeyedEntryThroughCanonicalServer(t *testing.T) {
 	})
 	require.NoError(t, err)
 	legacy := newToolset("legacy")
+	// Live toolset-keyed rows, as pods before the server-key writers stored them.
 	for i, toolset := range []toolsetsrepo.Toolset{hosted, legacy} {
-		_, err = pluginsrepo.New(conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		_, err = testrepo.New(conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
 			PluginID: plugin.ID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
 			DisplayName: toolset.Name, Policy: "required", SortOrder: int32(i),
 		})
@@ -112,12 +113,15 @@ func TestGetPluginEndpointlessWrapperKeepsToolsetSlugUnderEitherKey(t *testing.T
 	freshID := uuid.New()
 	newServer(freshID, freshBacking)
 
+	_, err = testrepo.New(conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
+		PluginID: plugin.ID, ToolsetID: uuid.NullUUID{UUID: toolsetKeyed.ID, Valid: true}, DisplayName: "a", Policy: "required", SortOrder: 0,
+	})
+	require.NoError(t, err)
 	for i, entry := range []pluginsrepo.AddPluginServerParams{
-		{ToolsetID: uuid.NullUUID{UUID: toolsetKeyed.ID, Valid: true}, DisplayName: "a"},
 		{McpServerID: uuid.NullUUID{UUID: serverKeyed.ID, Valid: true}, DisplayName: "b"},
 		{McpServerID: uuid.NullUUID{UUID: freshID, Valid: true}, DisplayName: "c"},
 	} {
-		entry.PluginID, entry.Policy, entry.SortOrder = plugin.ID, "required", int32(i)
+		entry.PluginID, entry.Policy, entry.SortOrder = plugin.ID, "required", int32(i+1)
 		_, err = pluginsrepo.New(conn).AddPluginServer(ctx, entry)
 		require.NoError(t, err)
 	}

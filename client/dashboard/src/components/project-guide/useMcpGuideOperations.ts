@@ -1,4 +1,7 @@
-import { shellQuote } from "@/lib/shell";
+import {
+  claudeCodeAddCommand,
+  codexAddCommand,
+} from "@/lib/mcp-client-install";
 import {
   catalogBackedMcpServers,
   findMcpServerActivity,
@@ -127,9 +130,9 @@ function connectionCommandFor(
 ): string {
   switch (client) {
     case "claude":
-      return `claude mcp add --transport http --scope user ${shellQuote(serverName)} ${shellQuote(endpointUrl)}`;
+      return claudeCodeAddCommand(serverName, endpointUrl);
     case "codex":
-      return `codex mcp add ${shellQuote(serverName)} --url ${shellQuote(endpointUrl)}`;
+      return codexAddCommand(serverName, endpointUrl);
     case "cursor":
       return JSON.stringify(
         {

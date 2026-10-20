@@ -84,7 +84,7 @@ func describeHostedServer(ctx context.Context, logger *slog.Logger, metadataRepo
 
 	description.cacheHints = hostedListCacheHints(!payload.effectiveMCPPrivate(payload.toolsetIsPublic), payload.authenticated)
 
-	metadata, err := metadataRepo.GetMetadataByBackendID(ctx, metadata_repo.GetMetadataByBackendIDParams{ProjectID: payload.projectID, BackendID: payload.toolsetID.UUID})
+	metadata, err := metadataRepo.GetMetadataByBackendID(ctx, metadata_repo.GetMetadataByBackendIDParams{ProjectID: payload.projectID, BackendID: payload.toolsetID.UUID, ToolsetBackend: true})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			logger.WarnContext(ctx, "failed to fetch MCP metadata for instructions", attr.SlogError(err))
