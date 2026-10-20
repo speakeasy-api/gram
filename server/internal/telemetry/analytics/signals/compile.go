@@ -13,9 +13,9 @@ import (
 
 var sql = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
-// Query limits are per physical read. Overflow throws rather than returning
+// QuerySettings bounds each physical read. Overflow throws rather than returning
 // incomplete charts. FINAL partition independence follows immutable request time.
-const settings = ` SETTINGS do_not_merge_across_partitions_select_final = 1,
+const QuerySettings = ` SETTINGS do_not_merge_across_partitions_select_final = 1,
  optimize_move_to_prewhere_if_final = 0, max_execution_time = 5,
  timeout_before_checking_execution_speed = 0, max_rows_to_read = 25000000,
  max_bytes_to_read = 4000000000, max_memory_usage = 1000000000,
@@ -120,7 +120,10 @@ func predicate(selection Selection) (probability, population string, args []any)
 
 // Series compiles complete time series for groups selected across the full window.
 func (p *Plan) Series(keys []string) (Query, error) {
-	if len(keys) == 0 || len(keys) > p.Request.Groups {
+	if len(keys) == 0 {
+		return Query{}, &Error{Field: "groups", Message: "select at least one group", LimitExceeded: false}
+	}
+	if len(keys) > p.Request.Groups {
 		return Query{}, &Error{Field: "groups", Message: "select at least one group within the group budget", LimitExceeded: true}
 	}
 	step := bucket(p.Context.Step)
@@ -142,7 +145,7 @@ func build(builder squirrel.SelectBuilder, bounded bool) (Query, error) {
 		return Query{}, fmt.Errorf("compile signal measurement: %w", err)
 	}
 	if bounded {
-		query += settings
+		query += QuerySettings
 	}
 	return Query{SQL: query, Args: args}, nil
 }

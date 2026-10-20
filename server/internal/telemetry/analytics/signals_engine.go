@@ -207,10 +207,13 @@ func (e *Engine) signalManualContext(ctx context.Context, scope signalquery.Cont
 	cohort, err := runSignalPlan(ctx, e.ch, signalquery.Query{
 		SQL: `SELECT uniqExact(evaluation_requested_at) AS request_times, min(evaluation_requested_at) AS requested_at
  FROM sigint_readings_v2 WHERE organization_id = ? AND project_id = toUUID(?) AND trigger_kind = 'manual' AND run_id = toUUID(?)
- LIMIT 1 SETTINGS max_execution_time = 5, timeout_before_checking_execution_speed = 0, max_rows_to_read = 25000000, max_bytes_to_read = 4000000000, max_memory_usage = 1000000000`,
+ LIMIT 1` + signalquery.QuerySettings,
 		Args: []any{scope.OrganizationID, scope.ProjectID, runID},
 	})
 	if err != nil {
+		if refusal, ok := errors.AsType[*Error](err); ok && refusal.Code == ErrLimitExceeded {
+			return scope, newError(ErrLimitExceeded, signalquery.Dataset, "run_id", "", "this manual run exceeds the interactive validation budget; select a smaller run")
+		}
 		return scope, err
 	}
 	if len(cohort) != 1 {

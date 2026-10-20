@@ -335,6 +335,9 @@ func writeReportData(ctx context.Context, path string, data []byte) error {
 	if _, err := file.Write(data); err != nil {
 		return fmt.Errorf("write report checkpoint: %w", err)
 	}
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("sync report checkpoint: %w", err)
+	}
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("close report checkpoint: %w", err)
 	}

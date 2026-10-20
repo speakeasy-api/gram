@@ -47,6 +47,13 @@ func TestSignalLabelsAndIdentityAreBound(t *testing.T) {
 	series, err := plan.Series([]string{"[[1,\"engineering\"]]"})
 	require.NoError(t, err)
 	require.Len(t, series.Args, strings.Count(series.SQL, "?"))
+	_, err = plan.Series(nil)
+	var invalid *Error
+	require.ErrorAs(t, err, &invalid)
+	require.False(t, invalid.LimitExceeded)
+	_, err = plan.Series(make([]string, plan.Request.Groups+1))
+	require.ErrorAs(t, err, &invalid)
+	require.True(t, invalid.LimitExceeded)
 }
 
 func TestSelectionRejectsAmbiguousPopulations(t *testing.T) {
