@@ -38,7 +38,7 @@ type AssistantWorkloadToken struct {
 	ExpiresAt   time.Time
 }
 
-// AssistantWorkloadTokenIssuer is the provisioning-neutral registration boundary.
+// AssistantWorkloadTokenIssuer is the internal registered-workload issuance contract.
 // Implementations MUST resolve a durable client-to-assistant binding, reject
 // deleted/revoked registrations and assistants, and require live AGENT identity
 // policy (never HUMAN or delegated identity). They MUST enforce every requested
@@ -60,13 +60,6 @@ type AssistantWorkloadToken struct {
 // not choose one. Both use the existing exact-method client authentication path.
 type AssistantWorkloadTokenIssuer interface {
 	IssueAssistantWorkloadToken(context.Context, AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error)
-}
-
-// SetAssistantWorkloadTokenIssuer installs the independently authorized workload
-// issuer at service composition time. Nil disables the grant. It must not be
-// changed concurrently with serving requests.
-func (s *Service) SetAssistantWorkloadTokenIssuer(issuer AssistantWorkloadTokenIssuer) {
-	s.assistantWorkloadTokens = issuer
 }
 
 func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, client *usersessions_repo.UserSessionClient, baseURL, presentedAuthMethod string, logger *slog.Logger) error {

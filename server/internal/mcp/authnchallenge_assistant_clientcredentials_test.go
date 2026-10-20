@@ -27,9 +27,9 @@ func TestAssistantClientCredentialsDispatch(t *testing.T) {
 	r := newTokenDispatchRequest(t, url.Values{})
 	_, ok := s.tokenGrantFor(r, "client_credentials", presentedClientCredentials{})
 	require.False(t, ok)
-	s.SetAssistantWorkloadTokenIssuer(assistantWorkloadIssuerFunc(func(context.Context, AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error) {
+	s.assistantWorkloadTokens = assistantWorkloadIssuerFunc(func(context.Context, AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error) {
 		return AssistantWorkloadToken{}, errors.New("denied")
-	}))
+	})
 	g, ok := s.tokenGrantFor(r, "client_credentials", presentedClientCredentials{})
 	require.True(t, ok)
 	require.Equal(t, tokenClientAuthRequired, g.clientAuth)
@@ -58,7 +58,7 @@ func TestAssistantClientCredentialsBoundRequest(t *testing.T) {
 			s, endpoint, _ := newTokenDispatchTestService(t)
 			calls := 0
 			client := &usersessions_repo.UserSessionClient{ID: uuid.New(), ClientID: "test-client", UserSessionIssuerID: endpoint.UserSessionIssuerID, ClientSecretHash: pgtype.Text{String: "hashed", Valid: !tc.public}}
-			s.SetAssistantWorkloadTokenIssuer(assistantWorkloadIssuerFunc(func(_ context.Context, req AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error) {
+			s.assistantWorkloadTokens = assistantWorkloadIssuerFunc(func(_ context.Context, req AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error) {
 				calls++
 				require.Equal(t, client.ID, req.ClientRegistrationID)
 				require.Equal(t, endpoint.OrganizationID, req.OrganizationID)
@@ -68,7 +68,7 @@ func TestAssistantClientCredentialsBoundRequest(t *testing.T) {
 					return AssistantWorkloadToken{}, errors.New("denied")
 				}
 				return AssistantWorkloadToken{AssistantID: uuid.New(), AccessToken: "opaque-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
-			}))
+			})
 			r := newTokenDispatchRequest(t, url.Values{"resource": {tc.resource}, "scope": {tc.scope}})
 			w := httptest.NewRecorder()
 			require.NoError(t, s.handleAssistantClientCredentialsGrant(r.Context(), w, r, endpoint, client, "https://gram.example", "client_secret_post", s.logger))

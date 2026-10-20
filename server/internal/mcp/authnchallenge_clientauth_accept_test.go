@@ -334,8 +334,11 @@ func TestHandleGetAuthorizationServer_AdvertisesPrivateKeyJWT(t *testing.T) {
 	var meta struct {
 		Methods []string `json:"token_endpoint_auth_methods_supported"`
 		Algs    []string `json:"token_endpoint_auth_signing_alg_values_supported"`
+		Grants  []string `json:"grant_types_supported"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
+	// NewService installs the production issuer without a test-only setter.
+	require.Contains(t, meta.Grants, "client_credentials")
 	require.Contains(t, meta.Methods, "private_key_jwt")
 	require.Contains(t, meta.Algs, "RS256")
 	require.Contains(t, meta.Algs, "ES256")
