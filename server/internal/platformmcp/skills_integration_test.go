@@ -171,10 +171,10 @@ func TestPlatformMCPSkillsToolsAuthorAndDistributeEndToEnd(t *testing.T) {
 	// reports when, as an RFC 3339 time.
 	readAt := time.Now().UTC().Truncate(time.Second)
 	written, err := mcpskills.NewResolver(testenv.NewLogger(t), fixture.conn).RecordRead(ctx, mcpskills.Read{
-		ProjectID: fixture.project.ID,
 		Entry: mcpskills.Entry{
-			SkillID: uuid.MustParse(created.Skill.ID), VersionID: uuid.MustParse(revised.Version.ID), PluginID: fixture.marketingPluginID,
-			Name: "add-mcp", Content: "", RawSHA256: "", Frontmatter: nil, Pinned: false,
+			SkillID: uuid.MustParse(created.Skill.ID), ProjectID: fixture.project.ID, ProjectSlug: fixture.project.Slug,
+			VersionID: uuid.MustParse(revised.Version.ID),
+			Name:      "add-mcp", Content: "", RawSHA256: "", Frontmatter: nil,
 		},
 		UserID: "", SessionID: "mcp-session", SeenAt: readAt,
 	})

@@ -5,12 +5,7 @@ import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints";
 
-export function usePluginServerQueries({
-  enabled = true,
-}: {
-  /** Keep every query off, e.g. behind a feature flag that is not on. */
-  enabled?: boolean;
-} = {}): {
+export function usePluginServerQueries(): {
   canReadServers: boolean;
   toolsetsQuery: Pick<
     ReturnType<typeof useListToolsets>,
@@ -35,13 +30,13 @@ export function usePluginServerQueries({
   const canReadEndpoints =
     !isLoading && hasScopeInGrants(grants, "mcp:read", project.id, project.id);
   const toolsetsQuery = useListToolsets(scope, undefined, {
-    enabled: enabled && canReadServers,
+    enabled: canReadServers,
   });
   const serversQuery = useMcpServers(scope, undefined, {
-    enabled: enabled && canReadServers,
+    enabled: canReadServers,
   });
   const endpointsQuery = useMcpEndpoints(scope, undefined, {
-    enabled: enabled && canReadEndpoints,
+    enabled: canReadEndpoints,
   });
   // Disabled queries can still expose a previous identity's cache. Never pass
   // that metadata (or a stale error that would offer a retry) to the page or
