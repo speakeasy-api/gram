@@ -246,13 +246,6 @@ func TestConsentPost_DeferredInventoryApprovesAllTools(t *testing.T) {
 // page's client holding a restrictive selection for this endpoint.
 func seedSubjectToolSelection(t *testing.T, ctx context.Context, fx consentActionFixture, tools []string) {
 	t.Helper()
-	q := usersessions_repo.New(fx.ti.conn)
-	client, err := q.GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: fx.shared,
-		ClientID:            "age3328-mcp-client",
-	})
-	require.NoError(t, err)
-
 	entries := make([]toolfilter.AllowEntry, 0, len(tools))
 	for _, name := range tools {
 		entries = append(entries, toolfilter.AllowEntry{Type: toolfilter.AllowTypeTool, Name: name, Mode: nil, Tools: nil})
@@ -260,6 +253,19 @@ func seedSubjectToolSelection(t *testing.T, ctx context.Context, fx consentActio
 	sel, err := toolfilter.NewSessionSelection("mcp_server:"+fx.endpoint.McpServerID.UUID.String(), uuid.New(), entries)
 	require.NoError(t, err)
 	raw, err := json.Marshal(sel)
+	require.NoError(t, err)
+	seedSubjectSessionPolicy(t, ctx, fx, raw)
+}
+
+// seedSubjectSessionPolicy stores raw as the tool policy of a live session
+// for the fixture subject and page client.
+func seedSubjectSessionPolicy(t *testing.T, ctx context.Context, fx consentActionFixture, raw []byte) {
+	t.Helper()
+	q := usersessions_repo.New(fx.ti.conn)
+	client, err := q.GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+		UserSessionIssuerID: fx.shared,
+		ClientID:            "age3328-mcp-client",
+	})
 	require.NoError(t, err)
 
 	sum := sha256.Sum256([]byte("refresh-" + uuid.NewString()))

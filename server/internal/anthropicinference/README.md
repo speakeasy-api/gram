@@ -16,7 +16,7 @@ per-organization environment variables or server restarts.
    Inference hooks**. Test the connection and save with **Enforce verdicts** off.
 2. Paste the signing secret Claude reveals into Speakeasy and save it.
 3. In Claude, enable **Enforce verdicts**, choose **Block** for the failure posture,
-   set the timeout to **10 seconds**, and save.
+   keep the timeout at its **5,000ms** default or higher, and save.
 
 Claude configuration: https://platform.claude.com/docs/en/manage-claude/inference-hooks-configuration
 
@@ -112,6 +112,15 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   a later matching anchor never hides earlier edits. Ambiguous repeated anchors and
   newly introduced compaction summaries are conservatively rescanned. The
   current turn (messages after the last assistant reply) is always scanned.
+- The verdict waits only on messages the archive has not stored before and on
+  the current turn. Stored messages the checkpoint has not accepted, such as
+  those from a delivery the upstream timeout cut off or history invalidated by
+  a policy change, are backlog. Backlog is scanned oldest first in the slots the
+  verdict leaves free, for at most one second. A backlog match still denies,
+  but unscanned backlog does not, and the checkpoint advances through whatever
+  cleared, so the next delivery continues from there. Content edited in place
+  before the archive's alignment anchor is therefore enforced only once the
+  backlog reaches it.
 - Each block keeps its native scope: user, assistant, tool request, tool response,
   or prompt attachment. Block, warn, and quarantine matches deny the current
   inference. There is no interactive warning acknowledgement or persistent
@@ -143,8 +152,8 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   generic HTTP-200 deny verdict. Suppressed per-policy analyzer failures retain
   their existing disposition, including fail-open, without advancing acceptance.
   Configuration lookup, body reading, storage, and policy evaluation share a
-  9.75-second deadline, leaving 250ms before the configured upstream timeout.
-  Evaluation is capped at nine seconds and shortened when necessary to reserve
+  4.5-second deadline, leaving 500ms of Anthropic's default 5-second timeout.
+  Evaluation is capped at 3.75 seconds and shortened when necessary to reserve
   500ms for checkpointing and 250ms for the response. These margins do not
   guarantee network delivery before the upstream timeout. The endpoint returns a
   generic HTTP-200 deny when it expires and cancels remaining work. Operational configuration lookup failures
@@ -154,8 +163,8 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   and current turn are evaluated against current policies. Unknown event types allow after signature and tenant validation;
   unknown fields, source values, and content block types are tolerated.
 
-Configure a 10-second verdict timeout and select block-on-failure in Anthropic if
-network failures must not allow inference. Long transcripts
-or conservative rescans that cannot complete within the nine-second budget
-receive a deny verdict. A checkpoint reduces repeated scans; it does not remove
+Keep the verdict timeout at 5 seconds or more and select block-on-failure in
+Anthropic if network failures must not allow inference. Anthropic defaults to
+allow-on-failure. A current turn or new content that cannot be scanned within the
+3.75-second budget receives a deny verdict. A checkpoint reduces repeated scans; it does not remove
 the deadline or guarantee that every transcript fits within it.

@@ -290,7 +290,10 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// to write: an undecided overlay row renders as unreviewed and is
 		// indistinguishable on the page from a tool nobody has touched.
 		{byOrg(s.q.PostflightIDUndecidedAITools), 0, "demo seed postflight: %d AI tool rows carry a status other than approved or blocked"},
-		{byOrg(s.q.PostflightIDDirectoryRoleMappings), 3, "demo seed postflight: expected 3 directory role mappings, found %d"},
+		{byOrg(s.q.PostflightIDDirectoryRoleMappings), 4, "demo seed postflight: expected 4 directory role mappings, found %d"},
+		// One group grants a set of roles, so the mapping page shows two role
+		// chips on a single source.
+		{byOrg(s.q.PostflightIDInfraGroupMappedRoles), 2, "demo seed postflight: expected 2 roles for Infra, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDGitHubCheckAccessGrants(ctx, repo.PostflightIDGitHubCheckAccessGrantsParams{
 				OrgID:            org,

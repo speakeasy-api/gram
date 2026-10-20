@@ -366,6 +366,7 @@ type PostgresReader struct {
 	riskFindings              riskFindingsLister
 	riskFindingList           riskFindingListLister
 	chatMetadata              *ChatMetadataService
+	chatSearch                *ChatSearchService
 	organizationGateway       *OrganizationGatewayService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
@@ -383,6 +384,7 @@ type PostgresReader struct {
 	reviewRequestBudget       OperationBudget
 	reviewLinks               ShadowMCPReviewLinker
 	toolExposure              *MCPToolExposureService
+	gateways                  *GatewayService
 	projectLifecycle          *ProjectLifecycleService
 	analytics                 *AnalyticsService
 	widgets                   *WidgetService
@@ -402,6 +404,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskFindings:              nil,
 		riskFindingList:           nil,
 		chatMetadata:              nil,
+		chatSearch:                nil,
 		organizationGateway:       nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
@@ -421,6 +424,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		reviewLinks:               nil,
 		toolExposure:              nil,
+		gateways:                  nil,
 		projectLifecycle:          nil,
 		analytics:                 nil,
 		widgets:                   nil,
@@ -441,6 +445,15 @@ func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader
 func (r *PostgresReader) WithToolExposure(service *MCPToolExposureService) *PostgresReader {
 	if r != nil {
 		r.toolExposure = service
+	}
+	return r
+}
+
+// WithGateways composes gateway creation and membership changes. Without it
+// the tools stay in the catalogue as stable refusals rather than disappearing.
+func (r *PostgresReader) WithGateways(service *GatewayService) *PostgresReader {
+	if r != nil {
+		r.gateways = service
 	}
 	return r
 }
@@ -596,6 +609,14 @@ func (r *PostgresReader) WithRiskFindingList(service *RiskFindingListService, bu
 func (r *PostgresReader) WithChatMetadata(service *ChatMetadataService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.chatMetadata = service
+	}
+	return r
+}
+
+// WithChatSearch attaches explicitly authorized transcript search and reads.
+func (r *PostgresReader) WithChatSearch(service *ChatSearchService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.chatSearch = service
 	}
 	return r
 }

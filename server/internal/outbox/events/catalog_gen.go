@@ -101,5 +101,6 @@ var All = []outbox.EventRegistration{
 	VariationV1,
 	WidgetV1,
 	WorkloadAdmissionV1,
+	WorkloadDeviceJoinTokenV1,
 	WorkloadIssuerV1,
 }

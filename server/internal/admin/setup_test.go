@@ -85,15 +85,16 @@ func newTestAdminServiceOnDB(t *testing.T, conn *pgxpool.Pool) (context.Context,
 	validator, err := loadRegistryValidator()
 	require.NoError(t, err)
 	svc := &Service{
-		registry:        mcpregistry.New(conn, validator),
-		tracer:          tracerProvider.Tracer("admin_test"),
-		logger:          logger,
-		db:              conn,
-		audit:           audit.NewLogger(),
-		trial:           trialemails.NoopNotifier{},
-		sessions:        sessions,
-		loginStates:     cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
-		productFeatures: productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
+		registry:         mcpregistry.New(conn, validator),
+		tracer:           tracerProvider.Tracer("admin_test"),
+		logger:           logger,
+		db:               conn,
+		audit:            audit.NewLogger(),
+		trial:            trialemails.NoopNotifier{},
+		sessions:         sessions,
+		loginStates:      cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
+		hookClientsCache: cache.NewTypedObjectCache[hookClientsSnapshot](logger, adminCache, cache.SuffixNone),
+		productFeatures:  productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
 	}
 	svc.oidc = newTestOIDCClient(t, userinfoOK("sub-admin", "operator@example.com"))
 	svc.verifier = NewVerifier(logger, sessions, svc.oidc, adminCache)

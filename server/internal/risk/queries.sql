@@ -129,6 +129,14 @@ WHERE project_id = @project_id
   AND enabled IS TRUE
   AND deleted IS FALSE;
 
+-- name: ListEnabledRiskPolicyIDsByOrganizationProject :many
+SELECT id
+FROM risk_policies
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND enabled IS TRUE
+  AND deleted IS FALSE;
+
 -- name: ListEnabledUnscopedRiskPoliciesByProject :many
 -- MCP-scoped policies are evaluated only at the MCP seams.
 SELECT *

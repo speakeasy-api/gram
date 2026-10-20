@@ -10,7 +10,7 @@ import (
 // --- Service ---
 
 var _ = Service("agent", func() {
-	Description("Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.")
+	Description("Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. A headless device enrolled as a workload may call getPlugins with a device-agent token instead. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.")
 	Security(security.ByKey, func() {
 		Scope("agent_user")
 	})
@@ -24,11 +24,16 @@ var _ = Service("agent", func() {
 		// owner and the org derives from the key. An org `agent` install key also
 		// passes (it implies `agent_user`; see auth.Authorize); the MDM profile
 		// then vouches the enrolled user's email via the Gram-User-Email header.
+		//
+		// A headless device presents a device-agent token instead, tried first so a
+		// request without one falls through to the API key and keeps its errors.
+		Security(security.DeviceAgentToken)
 		Security(security.ByKey, func() {
 			Scope("agent_user")
 		})
 
 		Payload(func() {
+			security.DeviceAgentTokenPayload()
 			security.ByKeyPayload()
 			// Authoritative when authenticating with an org install key (`agent`
 			// scope): that key's owner is an admin, not the enrolled developer, so
@@ -85,6 +90,7 @@ var _ = Service("agent", func() {
 
 		HTTP(func() {
 			GET("/rpc/agent.getPlugins")
+			security.DeviceAgentTokenHeader()
 			security.ByKeyHeader()
 			// Headers rather than query params: all three identify a person or
 			// a machine, and the request logger records URLs but not headers.
@@ -429,10 +435,13 @@ var _ = Service("agent", func() {
 
 var GetPluginsResult = Type("GetPluginsResult", func() {
 	Required("etag", "marketplaces", "plugins")
-	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.")
+	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.")
 	Attribute("marketplaces", ArrayOf(AgentMarketplaceModel), "Plugin marketplaces the agent should register with the tools it manages. Sorted by name.")
 	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.")
 	Attribute("configuration", DeviceAgentConfigurationModel, "Organization-wide remote configuration. Absent until an administrator saves a configuration, allowing an agent with no cached remote layer to keep using its local configuration.")
+	Attribute("organization_gateway_url", String, "URL of the active organization's gateway. Absent when the organization gateway is unavailable.", func() {
+		Format(FormatURI)
+	})
 	Attribute("principal", AgentPollingPrincipalModel, "The non-human principal the plugin set was resolved for. Present only when the caller authenticated with an agent API key.")
 })
 

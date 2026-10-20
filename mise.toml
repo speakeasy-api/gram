@@ -35,7 +35,7 @@ melange = "0.56.5"
 # aube resolves its own runtime and cannot read this file, so without that
 # mirror it falls through to whatever `node` is first on PATH.
 nodejs = "24.16.0"
-aube = "1.38.1"
+aube = "2.8.0"
 # Kept for `changeset publish` only. Changesets v3 asks manypkg for the
 # workspace tool, which answers pnpm because pnpm-workspace.yaml is present.
 # Release versioning uses the custom aube command in the release workflow.
