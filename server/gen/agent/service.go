@@ -19,9 +19,11 @@ import (
 // machines. Authenticates via an API key carrying the 'agent_user' scope — the
 // per-user credential minted by token-exchange. An org key with the broader
 // 'agent' scope also satisfies most of these endpoints (it implies
-// 'agent_user'), so existing installs keep working during the transition. The
-// content-bearing session-portability endpoints — getSessionMeta and
-// createSessionHandoff — refuse it and require a per-user key.
+// 'agent_user'), so existing installs keep working during the transition. A
+// headless device enrolled as a workload may call getPlugins with a
+// device-agent token instead. The content-bearing session-portability
+// endpoints — getSessionMeta and createSessionHandoff — refuse it and require
+// a per-user key.
 type Service interface {
 	// Resolve the marketplaces, plugins, and optional organization configuration
 	// assigned to the enrolled user. The device agent reconciles these into the AI
@@ -107,6 +109,8 @@ type Service interface {
 
 // Auther defines the authorization functions to be implemented by the service.
 type Auther interface {
+	// JWTAuth implements the authorization logic for the JWT security scheme.
+	JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error)
 	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
 	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
 }
@@ -349,7 +353,8 @@ type GetConfigurationPayload struct {
 
 // GetPluginsPayload is the payload type of the agent service getPlugins method.
 type GetPluginsPayload struct {
-	ApikeyToken *string
+	DeviceAgentToken *string
+	ApikeyToken      *string
 	// Email address of the enrolled user, sent in the Gram-User-Email header.
 	// Required when authenticating with an org-scoped agent install key (the MDM
 	// zero-touch path); ignored for a per-user key, whose owner is the enrolled

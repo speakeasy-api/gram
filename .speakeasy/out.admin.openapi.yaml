@@ -11673,6 +11673,10 @@ components:
       type: http
       description: Speakeasy Chat Sessions token based auth.
       scheme: bearer
+    device_agent_token_header_Authorization:
+      type: http
+      description: Device-agent token from the workload assertion grant at /oauth/workload/device-agent/{organization_id}/token.
+      scheme: bearer
     function_token_header_Authorization:
       type: http
       description: Speakeasy Functions token based auth.
