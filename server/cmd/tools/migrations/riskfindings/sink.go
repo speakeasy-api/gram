@@ -80,9 +80,10 @@ type Sink struct {
 	gapFill            bool
 	now                func() time.Time
 
-	inserted      int64
-	lastCommitted uuid.UUID
-	bySource      map[string]SourceStats
+	inserted             int64
+	lastCommitted        uuid.UUID
+	lastCommittedGapFill GapFillCursor
+	bySource             map[string]SourceStats
 }
 
 // NewSink builds a ClickHouse sink.
@@ -94,16 +95,17 @@ func NewSink(conn clickhouse.Conn, options SinkOptions) *Sink {
 		options.BatchSize = DefaultSinkBatchSize
 	}
 	return &Sink{
-		conn:               conn,
-		in:                 make(chan FindingRow, options.BufferSize),
-		batchSize:          options.BatchSize,
-		dryRun:             options.DryRun,
-		liftPartitionGuard: options.LiftPartitionGuard,
-		gapFill:            options.GapFill,
-		now:                time.Now,
-		inserted:           0,
-		lastCommitted:      uuid.Nil,
-		bySource:           make(map[string]SourceStats),
+		conn:                 conn,
+		in:                   make(chan FindingRow, options.BufferSize),
+		batchSize:            options.BatchSize,
+		dryRun:               options.DryRun,
+		liftPartitionGuard:   options.LiftPartitionGuard,
+		gapFill:              options.GapFill,
+		now:                  time.Now,
+		inserted:             0,
+		lastCommitted:        uuid.Nil,
+		lastCommittedGapFill: GapFillCursor{ProjectID: uuid.Nil, CreatedAt: time.Time{}, ID: uuid.Nil},
+		bySource:             make(map[string]SourceStats),
 	}
 }
 
@@ -125,6 +127,10 @@ func (s *Sink) StatsBySource() map[string]SourceStats {
 // durable checkpoint exists.
 func (s *Sink) LastCommitted() uuid.UUID { return s.lastCommitted }
 
+// LastCommittedGapFill returns the gap-fill resume position of the last
+// committed batch; zero in dry-run mode and outside gap-fill.
+func (s *Sink) LastCommittedGapFill() GapFillCursor { return s.lastCommittedGapFill }
+
 // Run implements pipeline.Sink. It keeps every transformed row from one
 // Postgres finding in the same flush so a committed cursor cannot split spans.
 func (s *Sink) Run(ctx context.Context) error {
@@ -138,7 +144,15 @@ func (s *Sink) Run(ctx context.Context) error {
 			return err
 		}
 		if !s.dryRun && s.conn != nil {
-			s.lastCommitted = buf[len(buf)-1].sourceID
+			last := buf[len(buf)-1]
+			s.lastCommitted = last.sourceID
+			if s.gapFill {
+				projectID, err := uuid.Parse(last.ProjectID)
+				if err != nil {
+					return fmt.Errorf("parse committed project id: %w", err)
+				}
+				s.lastCommittedGapFill = GapFillCursor{ProjectID: projectID, CreatedAt: last.CreatedAt, ID: last.sourceID}
+			}
 		}
 		log.Printf("sink: flushed batch=%d inserted=%d committed=%s", len(buf), s.inserted, s.lastCommitted)
 		buf = buf[:0]
