@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -219,9 +220,18 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	require.False(t, result.Changed)
 	_, err = stream.Publish(t.Context(), chatID, chat.TurnFrame{Kind: chat.TurnFrameText, Text: "still-open"})
 	require.NoError(t, err)
-	frames, err := stream.Subscribe(t.Context(), chatID, anchor)
+	receiveCtx, cancelReceive := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancelReceive()
+	frames, err := stream.Subscribe(receiveCtx, chatID, anchor)
 	require.NoError(t, err)
-	frame := <-frames
+	var frame chat.TurnFrame
+	select {
+	case received, ok := <-frames:
+		require.True(t, ok, "stream closed before the expected frame")
+		frame = received
+	case <-receiveCtx.Done():
+		t.Fatal("timed out waiting for the expected stream frame")
+	}
 	require.Equal(t, chat.TurnFrameText, frame.Kind, "ambiguous idle and no-output terminal must not close the stream")
 	require.Equal(t, "still-open", frame.Text)
 	projector.stream = nil

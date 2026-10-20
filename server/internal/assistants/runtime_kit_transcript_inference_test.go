@@ -108,7 +108,7 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	require.True(t, bound)
 	require.Equal(t, chatID, boundChat)
 	require.True(t, assistanttokens.InferenceTranscriptOwned(ctx))
-	for _, state := range []string{"failed", "expired", "stopped"} {
+	for _, state := range []string{"failed", "expiring", "stopped"} {
 		require.NoError(t, queries.SetAssistantRuntimeStateForTest(t.Context(), assistantrepo.SetAssistantRuntimeStateForTestParams{ProjectID: project, RuntimeID: runtime, State: state, UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}))
 		_, err = manager.BindKitSession(ctx, uuid.NewSHA1(uuid.NameSpaceDNS, []byte(sessionID)))
 		require.Error(t, err, "non-live runtime %s must not bind session attribution", state)

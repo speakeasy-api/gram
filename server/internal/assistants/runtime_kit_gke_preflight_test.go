@@ -19,7 +19,7 @@ func TestKitGKEAdmissionPermissions(t *testing.T) {
 			t.Parallel()
 			client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gkeSandboxClaimGVR: "SandboxClaimList"})
 			k := &KitGKERuntimeBackend{config: KitGKERuntimeConfig{GKE: GKERuntimeConfig{Dynamic: client, Namespace: "assistants"}, Provision: KitGKEProvisionInput{SnapshotsEnabled: snapshots}}}
-			seen := map[string][]string{}
+			seen := map[schema.GroupVersionResource][]string{}
 			client.PrependReactor("create", "selfsubjectaccessreviews", func(action ktesting.Action) (bool, runtime.Object, error) {
 				require.Empty(t, action.GetNamespace(), "reviews are cluster scoped")
 				create, ok := action.(ktesting.CreateAction)
@@ -31,23 +31,22 @@ func TestKitGKEAdmissionPermissions(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, found)
 				require.Equal(t, "assistants", attributes["namespace"])
-				require.NotEmpty(t, attributes["version"])
-				key := attributes["group"] + "/" + attributes["resource"]
+				key := schema.GroupVersionResource{Group: attributes["group"], Version: attributes["version"], Resource: attributes["resource"]}
 				seen[key] = append(seen[key], attributes["verb"])
 				review.Object["status"] = map[string]any{"allowed": true}
 				return true, review, nil
 			})
 			require.NoError(t, k.RuntimeReadyForAdmission(t.Context()))
-			expected := map[string][]string{
-				"/secrets": {"create", "get", "delete"},
-				kitTemplateGVR.Group + "/sandboxtemplates":  {"create", "get", "delete"},
-				gkeSandboxClaimGVR.Group + "/sandboxclaims": {"create", "get", "delete", "list"},
-				"/pods": {"get", "list", "delete"},
+			expected := map[schema.GroupVersionResource][]string{
+				kitSecretGVR:       {"create", "get", "delete"},
+				kitTemplateGVR:     {"create", "get", "delete"},
+				gkeSandboxClaimGVR: {"create", "get", "delete", "list"},
+				gkePodGVR:          {"get", "list", "delete"},
 			}
 			if snapshots {
-				expected["podsnapshot.gke.io/podsnapshotmanualtriggers"] = []string{"create", "get", "delete"}
-				expected["podsnapshot.gke.io/podsnapshots"] = []string{"get", "delete"}
-				expected["podsnapshot.gke.io/podsnapshotpolicies"] = []string{"get", "list"}
+				expected[kitGKETriggerGVR] = []string{"create", "get", "delete"}
+				expected[kitGKESnapshotGVR] = []string{"get", "delete"}
+				expected[kitGKEPolicyGVR] = []string{"get", "list"}
 			}
 			require.Equal(t, expected, seen)
 			for _, action := range client.Actions() {

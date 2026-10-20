@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ktesting "k8s.io/client-go/testing"
 	"net/url"
 	"testing"
@@ -127,27 +128,43 @@ func TestKitGKEColdCreationFailureCleansOwnedResources(t *testing.T) {
 		t.Run(failed, func(t *testing.T) {
 			t.Parallel()
 			k, client, r, fences := kitGKEBackendFixture(t)
+			var secretName string
+			client.PrependReactor("create", "secrets", func(action ktesting.Action) (bool, runtime.Object, error) {
+				create, ok := action.(ktesting.CreateAction)
+				require.True(t, ok)
+				secret, ok := create.GetObject().(*unstructured.Unstructured)
+				require.True(t, ok)
+				secretName = secret.GetName()
+				return false, nil, nil
+			})
 			client.PrependReactor("create", failed, func(ktesting.Action) (bool, runtime.Object, error) {
 				return true, nil, fmt.Errorf("injected create failure")
 			})
 			_, err := k.Ensure(t.Context(), r)
 			require.ErrorContains(t, err, "injected create failure")
 			require.Equal(t, 1, *fences)
-			deleted := 0
+			require.NotEmpty(t, secretName)
+			type objectIdentity struct {
+				gvr  schema.GroupVersionResource
+				name string
+			}
+			expected := []objectIdentity{{gvr: kitSecretGVR, name: secretName}}
+			if failed == gkeSandboxClaimGVR.Resource {
+				expected = append(expected, objectIdentity{gvr: kitTemplateGVR, name: kitGKEName(r)})
+			}
+			deleted := []objectIdentity{}
 			for _, action := range client.Actions() {
 				if action.GetVerb() == "delete" {
 					deletion, ok := action.(ktesting.DeleteAction)
 					require.True(t, ok)
 					require.NotEmpty(t, *deletion.GetDeleteOptions().Preconditions.UID)
-					_, err := client.Resource(action.GetResource()).Namespace(k.config.GKE.Namespace).Get(t.Context(), deletion.GetName(), metav1.GetOptions{})
-					require.True(t, apierrors.IsNotFound(err))
-					deleted++
+					deleted = append(deleted, objectIdentity{gvr: action.GetResource(), name: deletion.GetName()})
 				}
 			}
-			if failed == kitTemplateGVR.Resource {
-				require.Equal(t, 1, deleted)
-			} else {
-				require.Equal(t, 2, deleted)
+			require.ElementsMatch(t, expected, deleted)
+			for _, object := range expected {
+				_, err := client.Resource(object.gvr).Namespace(k.config.GKE.Namespace).Get(t.Context(), object.name, metav1.GetOptions{})
+				require.True(t, apierrors.IsNotFound(err), "created object must be absent: %s/%s", object.gvr, object.name)
 			}
 		})
 	}

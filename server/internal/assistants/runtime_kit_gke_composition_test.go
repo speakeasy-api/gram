@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -100,7 +101,7 @@ func TestKitGKEFencePreservesCanonicalSession(t *testing.T) {
 
 func TestKitGKEExplicitVersionTagsRender(t *testing.T) {
 	t.Parallel()
-	for _, image := range []string{"registry.example/kit:0.2.17", "registry.example:5000/kit:release-1"} {
+	for _, image := range []string{"registry.example/kit:0.2.17", "registry.example:5000/kit:release-1", "kit:latest@sha256:" + strings.Repeat("a", 64), "kit:LATEST@sha256:" + strings.Repeat("b", 64)} {
 		t.Run(image, func(t *testing.T) {
 			t.Parallel()
 			in := kitGKEInput()
@@ -116,7 +117,7 @@ func TestKitGKEExplicitVersionTagsRender(t *testing.T) {
 
 func TestKitGKERejectsMalformedOCIReferences(t *testing.T) {
 	t.Parallel()
-	for _, image := range []string{"bad!name:tag", "/kit:tag", "registry.example//kit:tag", "registry.example/kit:", "registry.example/Kit:tag", "registry.example/kit:latest", "registry.example/kit"} {
+	for _, image := range []string{"bad!name:tag", "/kit:tag", "registry.example//kit:tag", "registry.example/kit:", "registry.example/Kit:tag", "registry.example/kit:latest", "registry.example/kit", "kit:latest@sha256:short"} {
 		t.Run(image, func(t *testing.T) {
 			t.Parallel()
 			require.False(t, validKitGKEImage(image))

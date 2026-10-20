@@ -74,7 +74,7 @@ func TestCompletionKitAPIKeyAdmission(t *testing.T) {
 	require.Error(t, err, "runtime key must not enter transcript authentication")
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request("wrong-project"), true)
 	require.Error(t, err)
-	for _, state := range []string{"failed", "expired", "stopped"} {
+	for _, state := range []string{"failed", "expiring", "stopped"} {
 		require.NoError(t, assistantsrepo.New(ti.conn).SetAssistantRuntimeStateForTest(ctx, assistantsrepo.SetAssistantRuntimeStateForTestParams{ProjectID: ti.projectID, RuntimeID: runtimeID, State: state, UpdatedAt: now}))
 		_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
 		require.Error(t, err, "non-live runtime %s must reject its key", state)

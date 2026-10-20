@@ -623,12 +623,12 @@ func kitGKEExplicitImage(image string) bool {
 	if err != nil {
 		return false
 	}
-	tag, tagged := named.(reference.Tagged)
-	if tagged && strings.EqualFold(tag.Tag(), "latest") {
-		return false
+	// A digest selects immutable content even when a mutable tag is also present.
+	if _, digested := named.(reference.Digested); digested {
+		return true
 	}
-	_, digested := named.(reference.Digested)
-	return tagged || digested
+	tag, tagged := named.(reference.Tagged)
+	return tagged && !strings.EqualFold(tag.Tag(), "latest")
 }
 
 // Container identity, not a mutable tag or Pod phase, proves process continuity.

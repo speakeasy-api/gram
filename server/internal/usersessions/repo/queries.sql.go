@@ -1561,6 +1561,7 @@ JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 WHERE s.jti = $1 AND s.subject_urn = $2
   AND s.organization_id = $3 AND r.project_id = $4
   AND s.deleted IS FALSE AND s.expires_at > clock_timestamp() AND c.deleted IS FALSE
+  AND r.state IN ('starting', 'active')
   AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
   AND a.deleted IS FALSE AND a.status = 'active' AND a.organization_id = $3
   AND t.definition_slug <> 'wake' AND t.target_kind = 'assistant' AND t.target_ref = a.id::text
