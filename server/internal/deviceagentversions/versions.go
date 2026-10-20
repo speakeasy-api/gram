@@ -25,6 +25,14 @@ const Retention = 31 * 24 * time.Hour
 
 const keyPrefix = "device_agent_versions"
 
+// MaxMachineLength and MaxMachinesPerDay bound what one agent credential can
+// write. Identities come partly from client-supplied headers, so without them
+// a key holder could send unique serials and grow a day's hash without limit.
+const (
+	MaxMachineLength  = 256
+	MaxMachinesPerDay = 20000
+)
+
 // userAgentPattern matches the User-Agent speakeasyd sends, such as
 // "speakeasyd/0.3.31". Dev builds report a non-semver version and do not
 // match, so they stay out of the fleet view.
@@ -59,8 +67,27 @@ func NewStore(client *redis.Client) *Store {
 // Record notes that a machine ran version on the UTC day of at. machine is a
 // stable identity for one installation, such as its hardware serial, so a
 // machine that polls all day counts once and its latest version wins.
+//
+// An identity longer than MaxMachineLength is ignored, and a day that already
+// holds MaxMachinesPerDay machines accepts updates for those machines only.
 func (s *Store) Record(ctx context.Context, organizationID, machine, version string, at time.Time) error {
+	if machine == "" || len(machine) > MaxMachineLength {
+		return nil
+	}
 	day := at.UTC().Format(time.DateOnly)
+	size, err := s.redis.HLen(ctx, dayKey(day, organizationID)).Result()
+	if err != nil {
+		return fmt.Errorf("size device agent versions: %w", err)
+	}
+	if size >= MaxMachinesPerDay {
+		known, err := s.redis.HExists(ctx, dayKey(day, organizationID), machine).Result()
+		if err != nil {
+			return fmt.Errorf("check device agent machine: %w", err)
+		}
+		if !known {
+			return nil
+		}
+	}
 	pipe := s.redis.Pipeline()
 	pipe.HSet(ctx, dayKey(day, organizationID), machine, version)
 	pipe.Expire(ctx, dayKey(day, organizationID), Retention)

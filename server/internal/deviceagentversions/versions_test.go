@@ -1,6 +1,8 @@
 package deviceagentversions_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,4 +84,30 @@ func TestStore_ReadOutsideWindowIsEmpty(t *testing.T) {
 	rows, err := store.Read(ctx, 3, now)
 	require.NoError(t, err)
 	require.Empty(t, rows)
+}
+
+func TestStore_BoundsMachineIdentities(t *testing.T) {
+	t.Parallel()
+
+	server := miniredis.RunT(t)
+	store := deviceagentversions.NewStore(redis.NewClient(&redis.Options{Addr: server.Addr()}))
+	ctx := t.Context()
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, store.Record(ctx, "org-a", strings.Repeat("x", deviceagentversions.MaxMachineLength+1), "0.3.31", now))
+	require.NoError(t, store.Record(ctx, "org-a", "", "0.3.31", now))
+	rows, err := store.Read(ctx, 1, now)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+
+	// Fill the day to the cap, then a new machine is dropped but a known one
+	// still updates.
+	key := "device_agent_versions:2026-10-20:org-a"
+	for i := range deviceagentversions.MaxMachinesPerDay {
+		server.HSet(key, fmt.Sprintf("m-%d", i), "0.3.30")
+	}
+	require.NoError(t, store.Record(ctx, "org-a", "m-new", "0.3.31", now))
+	require.NoError(t, store.Record(ctx, "org-a", "m-0", "0.3.31", now))
+	require.False(t, server.Exists(key) && server.HGet(key, "m-new") != "")
+	require.Equal(t, "0.3.31", server.HGet(key, "m-0"))
 }
