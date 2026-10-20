@@ -229,7 +229,7 @@ func newTestMCPServiceWithoutTemporal(t *testing.T) (context.Context, *testInsta
 		false,
 		mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0},
 		testenv.NewTracerProvider(t),
-		nil, nil,
+		nil, nil, "",
 	)
 }
 
@@ -413,7 +413,7 @@ func newTestMCPServiceWithPoolConfig(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, testenv.NewTracerProvider(t), nil, nil, guardianOpts...)
+	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, testenv.NewTracerProvider(t), nil, nil, "", guardianOpts...)
 }
 
 // newTestMCPServiceWithPlatformMCPReadTools composes the Platform MCP read
@@ -427,7 +427,7 @@ func newTestMCPServiceWithPlatformMCPReadTools(t *testing.T) (context.Context, *
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, provider, nil, nil, true)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, provider, nil, nil, "", true)
 	return ctx, ti, recorder
 }
 
@@ -444,10 +444,13 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	tracerProvider trace.TracerProvider,
 	funcs functions.ToolCaller,
 	callerAssertions *mcpauthz.Issuer,
+	// serverURLOverride replaces the default http://0.0.0.0 server URL when
+	// non-empty, for paths that only accept an https issuer on it.
+	serverURLOverride string,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return buildTestMCPService(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, withTemporal, metaRuntime, tracerProvider, funcs, callerAssertions, false, guardianOpts...)
+	return buildTestMCPService(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, withTemporal, metaRuntime, tracerProvider, funcs, callerAssertions, serverURLOverride, false, guardianOpts...)
 }
 
 func buildTestMCPService(
@@ -463,6 +466,7 @@ func buildTestMCPService(
 	tracerProvider trace.TracerProvider,
 	funcs functions.ToolCaller,
 	callerAssertions *mcpauthz.Issuer,
+	serverURLOverride string,
 	withPlatformMCPReadTools bool,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
@@ -496,7 +500,11 @@ func buildTestMCPService(
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
-	serverURL, err := url.Parse("http://0.0.0.0")
+	rawServerURL := "http://0.0.0.0"
+	if serverURLOverride != "" {
+		rawServerURL = serverURLOverride
+	}
+	serverURL, err := url.Parse(rawServerURL)
 	require.NoError(t, err)
 
 	siteURL, err := url.Parse("http://0.0.0.0")
@@ -665,7 +673,7 @@ func newTestMCPServiceWithScanSpans(t *testing.T, callers ...functions.ToolCalle
 			MaxRequestLifetime: 0,
 		}, nil, nil, false, mcp.MetaRuntimeConfig{
 			MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: 0,
-		}, provider, caller, nil)
+		}, provider, caller, nil, "")
 	return ctx, ti, recorder
 }
 
@@ -886,7 +894,7 @@ func requireTelemetryRowCount(t *testing.T, where string, want uint64, args ...a
 
 func newTestMCPServiceWithCallerAssertions(t *testing.T, issuer *mcpauthz.Issuer) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer)
+	return newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer, "")
 }
 
 // createTestUser stores a user so authentication can resolve its profile, as

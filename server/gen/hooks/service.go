@@ -34,10 +34,12 @@ type Service interface {
 	// Records agent-volunteered feedback about a distributed skill.
 	SkillFeedback(context.Context, *SkillFeedbackPayload) (err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
-	// authentication.
+	// authentication, or a device-agent token from a headless device enrolled as a
+	// workload.
 	Logs(context.Context, *LogsPayload) (err error)
 	// Endpoint to receive OTEL metrics data from Claude Code. Requires API key
-	// authentication.
+	// authentication, or a device-agent token from a headless device enrolled as a
+	// workload.
 	Metrics(context.Context, *MetricsPayload) (err error)
 	// Report whether the organization has any hook telemetry source configured.
 	// Reads configuration only; it does not query hook traffic.
@@ -46,6 +48,8 @@ type Service interface {
 
 // Auther defines the authorization functions to be implemented by the service.
 type Auther interface {
+	// JWTAuth implements the authorization logic for the JWT security scheme.
+	JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error)
 	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
 	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
 }
@@ -92,6 +96,9 @@ type ClaudePayload struct {
 	ApikeyToken *string
 	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
+	// Optional `Bearer` device-agent token a headless device presents in place of
+	// an API key.
+	DeviceAgentToken *string
 	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
 	HookHostname *string
 	// Optional per-invocation token reused across retries so the server stores a
@@ -152,6 +159,7 @@ type CodexHookResult struct {
 
 // CodexPayload is the payload type of the hooks service codex method.
 type CodexPayload struct {
+	DeviceAgentToken *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
@@ -201,6 +209,7 @@ type CursorHookResult struct {
 
 // CursorPayload is the payload type of the hooks service cursor method.
 type CursorPayload struct {
+	DeviceAgentToken *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
@@ -511,6 +520,9 @@ type IngestPayload struct {
 	ApikeyToken *string
 	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
+	// Optional `Bearer` device-agent token a headless device presents in place of
+	// an API key.
+	DeviceAgentToken *string
 	// Set when the event is redelivered from a device's offline spool after
 	// control-plane downtime, under its original Idempotency-Key and occurred_at.
 	Replayed *bool
@@ -530,6 +542,7 @@ type IngestPayload struct {
 
 // LogsPayload is the payload type of the hooks service logs method.
 type LogsPayload struct {
+	DeviceAgentToken *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Array of resource logs
@@ -538,6 +551,7 @@ type LogsPayload struct {
 
 // MetricsPayload is the payload type of the hooks service metrics method.
 type MetricsPayload struct {
+	DeviceAgentToken *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Array of resource metrics

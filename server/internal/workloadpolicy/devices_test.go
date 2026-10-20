@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy"
 )
 
@@ -88,7 +89,7 @@ func TestRegisterDevice_EnrollsTheDeviceUnderTheTokensAgent(t *testing.T) {
 	reg, err := registerDevice(ctx, ti, token, publicJWK(t, newDeviceKey(t).Public()))
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(reg.DeviceSubject, "device:"))
-	require.Equal(t, workloadpolicy.DeviceIssuer(testServerURL, ti.orgID), reg.Issuer)
+	require.Equal(t, workloadidentity.DeviceIssuerURL(testServerURL, ti.orgID), reg.Issuer)
 	require.Equal(t, agentID.String(), reg.AgentID)
 	require.Equal(t, ti.orgID, reg.OrganizationID)
 
@@ -439,7 +440,7 @@ func TestRegisterIssuer_RefusesTheDeviceIssuerPrefix(t *testing.T) {
 
 	// Every spelling issuer lookup treats as the same URL is reserved.
 	for _, issuer := range []string{
-		workloadpolicy.DeviceIssuer(testServerURL, ti.orgID),
+		workloadidentity.DeviceIssuerURL(testServerURL, ti.orgID),
 		"https://gram.example.com:443/workload/devices/" + ti.orgID,
 		"https://GRAM.example.com/workload/devices/" + ti.orgID,
 		"https://gram.example.com/workload/devices/" + ti.orgID + "/",
