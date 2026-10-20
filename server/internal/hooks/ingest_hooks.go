@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -563,10 +564,9 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if isReservedServerAdapter(adapter) {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is reserved")
 	}
-	// Hosted MCP reads dedupe on keys with this prefix (mcpskills
-	// ObservationIdempotencyKey). A hook claiming one first would make the
-	// real read a silent duplicate.
-	if strings.HasPrefix(strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, "")), reservedMCPIdempotencyKeyPrefix) {
+	// Hosted MCP reads dedupe on keys with this prefix. A hook claiming one
+	// first would make the real read a silent duplicate.
+	if strings.HasPrefix(strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, "")), mcpskills.IdempotencyKeyPrefix) {
 		return oops.E(oops.CodeInvalid, nil, "idempotency_key prefix is reserved")
 	}
 	if strings.TrimSpace(payload.Event.Type) == "" {
@@ -578,11 +578,9 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	return nil
 }
 
-const reservedMCPIdempotencyKeyPrefix = "mcp:"
-
 func isReservedServerAdapter(adapter string) bool {
 	switch strings.ToLower(strings.Join(strings.Fields(adapter), "")) {
-	case "assistant", "assistants", "mcp":
+	case "assistant", "assistants", mcpskills.ObservationProvider:
 		return true
 	default:
 		return false
