@@ -199,7 +199,7 @@ func skillResourceURI(params json.RawMessage) (string, bool) {
 	if err := json.Unmarshal(params, &read); err != nil {
 		return "", false
 	}
-	if _, ok := mcpskills.ParseSkillURI(read.URI); !ok {
+	if _, _, ok := mcpskills.ParseSkillURI(read.URI); !ok {
 		return "", false
 	}
 	return read.URI, true
