@@ -108,6 +108,37 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-mcpevents-v1-delivery
+    name: gram-mcpevents-v1-delivery
+    spec:
+      definition: |
+        edition = "2024";
+        message Delivery {
+          string id = 1;
+          string organization_id = 2;
+          string project_id = 3;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-mcpevents-v1-review-changed
+    name: gram-mcpevents-v1-review-changed
+    spec:
+      definition: |
+        edition = "2024";
+        message ReviewChanged {
+          string event_id = 1;
+          string organization_id = 2;
+          string project_id = 3;
+          string request_id = 4;
+          string decision_id = 5;
+          string event_name = 6;
+          string occurred_at = 7;
+          repeated string recipient_user_ids = 8;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading
     spec:
@@ -1714,6 +1745,40 @@ pubsub:
         name: gram-authz-v1-challenge
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-mcpevents-v1-review-router
+      topic_proto_message: gram-mcpevents-v1-review-changed
+    name: gram-mcpevents-v1-review-router
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-mcpevents-v1-review-router-dlq
+        maxDeliveryAttempts: 10
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-mcpevents-v1-review-changed
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-mcpevents-v1-webhook-sender
+      topic_proto_message: gram-mcpevents-v1-delivery
+    name: gram-mcpevents-v1-webhook-sender
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-mcpevents-v1-webhook-sender-dlq
+        maxDeliveryAttempts: 10
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-mcpevents-v1-delivery
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading-ch-writer
       topic_proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading-ch-writer
@@ -2297,6 +2362,38 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-conversation-v1-message-event
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-mcpevents-v1-delivery
+    name: gram-mcpevents-v1-delivery
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-mcpevents-v1-delivery
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-mcpevents-v1-review-changed
+    name: gram-mcpevents-v1-review-changed
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-mcpevents-v1-review-changed
+  - labels:
+      dlq_for: gram-mcpevents-v1-review-router
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-mcpevents-v1-review-router
+    name: gram-mcpevents-v1-review-router-dlq
+    spec: {}
+  - labels:
+      dlq_for: gram-mcpevents-v1-webhook-sender
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-mcpevents-v1-webhook-sender
+    name: gram-mcpevents-v1-webhook-sender-dlq
+    spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading

@@ -53,6 +53,9 @@ const (
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated
 	// at invocation time and fails closed when absent, disabled, or indeterminate.
 	FlagPlatformMCPRiskMutations Flag = "platform-mcp-risk-mutations"
+	// FlagPlatformMCPEvents gates experimental review-event subscriptions and
+	// delivery on the server, targeted by the PostHog organization group.
+	FlagPlatformMCPEvents Flag = "platform-mcp-events"
 	// FlagPlatformMCPPluginAssignmentMutations is the exact-project kill switch for
 	// replacing a plugin's complete audience assignment set through Platform MCP.
 	// It is evaluated at invocation time and fails closed.

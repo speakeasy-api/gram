@@ -639,6 +639,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
 	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
 	temporalWorker.RegisterActivity(activities.SendDirectoryReviewEmails)
+	temporalWorker.RegisterActivity(activities.CleanupMCPEvents)
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
@@ -789,6 +790,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewEmailsWorkflow)
+	temporalWorker.RegisterWorkflow(MCPEventsCleanupWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
@@ -953,6 +955,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddAssistantMemoriesReaperSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add assistant memories reaper schedule", attr.SlogError(err))
+	}
+
+	if err := AddMCPEventsCleanupSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add MCP events cleanup schedule", attr.SlogError(err))
 	}
 
 	if err := AddMCPFindingEvidenceCleanupSchedule(ctx, env); err != nil {

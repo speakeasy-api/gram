@@ -1,0 +1,17 @@
+edition = "2024";
+package gram.mcpevents.v1;
+import "gcp/pubsub/v1/options.proto";
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/mcpevents/v1;mcpeventsv1";
+
+
+message ReviewChanged {
+  string event_id = 1;
+  string organization_id = 2;
+  string project_id = 3;
+  string request_id = 4;
+  string decision_id = 5;
+  string event_name = 6;
+  string occurred_at = 7;
+  repeated string recipient_user_ids = 8;
+  option (gcp.pubsub.v1.topic) = {retention_hint: {seconds: 604800}};
+}

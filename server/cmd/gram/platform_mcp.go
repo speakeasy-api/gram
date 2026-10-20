@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpevents"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -593,6 +594,9 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
+	if err := attachPlatformMCPEvents(config, runtime, budgets.ReviewRequests); err != nil {
+		return AssistantSurface{}, err
+	}
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
@@ -1297,6 +1301,9 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
+	if err := attachPlatformMCPEvents(config, runtime, budgets.ReviewRequests); err != nil {
+		return AssistantSurface{}, err
+	}
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
@@ -1312,4 +1319,14 @@ func newPlatformMCPDeploymentRedeploy(config platformMCPConfig, projects *platfo
 		Connection:   ratelimit.New(limitStore, platformmcp.DeploymentRedeployConnectionLimitName, ratelimit.PerMinute(platformmcp.DeploymentRedeploysPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		Organization: ratelimit.New(limitStore, platformmcp.DeploymentRedeployOrganizationLimitName, ratelimit.PerMinute(platformmcp.DeploymentRedeploysPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 	})
+}
+
+
+func attachPlatformMCPEvents(config platformMCPConfig, runtime *platformmcp.Runtime, budget platformmcp.OperationBudget) error {
+	authorizer := platformmcp.NewEventAuthorizer(config.DB, config.FeatureFlags)
+	service, err := mcpevents.NewService(config.DB, config.Encryption, authorizer, mcpevents.NewWebhook(guardian.NewDefaultPolicy(config.TracerProvider)))
+	if err != nil {
+		return fmt.Errorf("create Platform MCP events: %w", err)
+	}
+	return runtime.RegisterReviewEvents(service, authorizer, budget)
 }

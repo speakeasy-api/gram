@@ -10,6 +10,7 @@ import (
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
+	mcpeventsv1 "github.com/speakeasy-api/gram/infra/gen/gram/mcpevents/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	networkingressv1 "github.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -35,6 +36,10 @@ const (
 	GramAuthzV1Challenge Topic = "gram.authz.v1.Challenge"
 	// GramConversationV1MessageEvent publishes to gram-conversation-v1-message-event.
 	GramConversationV1MessageEvent Topic = "gram.conversation.v1.MessageEvent"
+	// GramMcpeventsV1Delivery publishes to gram-mcpevents-v1-delivery.
+	GramMcpeventsV1Delivery Topic = "gram.mcpevents.v1.Delivery"
+	// GramMcpeventsV1ReviewChanged publishes to gram-mcpevents-v1-review-changed.
+	GramMcpeventsV1ReviewChanged Topic = "gram.mcpevents.v1.ReviewChanged"
 	// GramMeteringV1MeterReading publishes to gram-metering-v1-meter-reading.
 	GramMeteringV1MeterReading Topic = "gram.metering.v1.MeterReading"
 	// GramNetworkingressV1ReconcileRequested publishes to gram-networkingress-v1-reconcile-requested.
@@ -102,6 +107,8 @@ func All() []Topic {
 	return []Topic{
 		GramAuthzV1Challenge,
 		GramConversationV1MessageEvent,
+		GramMcpeventsV1Delivery,
+		GramMcpeventsV1ReviewChanged,
 		GramMeteringV1MeterReading,
 		GramNetworkingressV1ReconcileRequested,
 		GramOtelV1InboundLogRecord,
@@ -142,6 +149,10 @@ func Lookup(name string) (Topic, bool) {
 		return GramAuthzV1Challenge, true
 	case GramConversationV1MessageEvent:
 		return GramConversationV1MessageEvent, true
+	case GramMcpeventsV1Delivery:
+		return GramMcpeventsV1Delivery, true
+	case GramMcpeventsV1ReviewChanged:
+		return GramMcpeventsV1ReviewChanged, true
 	case GramMeteringV1MeterReading:
 		return GramMeteringV1MeterReading, true
 	case GramNetworkingressV1ReconcileRequested:
@@ -217,6 +228,10 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &authzv1.Challenge{}, gcp.WithEncodedPublishSettings(settings))
 	case GramConversationV1MessageEvent:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &conversationv1.MessageEvent{}, gcp.WithEncodedPublishSettings(settings))
+	case GramMcpeventsV1Delivery:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &mcpeventsv1.Delivery{}, gcp.WithEncodedPublishSettings(settings))
+	case GramMcpeventsV1ReviewChanged:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &mcpeventsv1.ReviewChanged{}, gcp.WithEncodedPublishSettings(settings))
 	case GramMeteringV1MeterReading:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &meteringv1.MeterReading{}, gcp.WithEncodedPublishSettings(settings))
 	case GramNetworkingressV1ReconcileRequested:
