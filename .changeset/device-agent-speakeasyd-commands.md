@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-Point device agent setup at `speakeasyd` commands. The Linux steps now install only `speakeasyd`, so they no longer overwrite another `speakeasy` binary in `/usr/local/bin`. Status, enroll and config path commands use `speakeasyd` on every platform. With a resolved version, the Linux download command uses no shell variables, so it also runs in fish.
+Keep the device agent off `PATH` in the Linux setup steps. Both binaries now go into `~/.speakeasy/bin` without `sudo`, so they no longer overwrite another `speakeasy` binary in `/usr/local/bin`, and the agent can update itself there. The verify and personal enrollment steps call `speakeasy status` and `speakeasy enroll` by that path, which fixes the invalid `speakeasyd status` step. With a resolved version, the Linux download commands use no shell variables, so they also run in fish.
