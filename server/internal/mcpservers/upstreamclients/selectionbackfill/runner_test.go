@@ -373,7 +373,9 @@ func TestClassifyMatchesTheRecordedChoice(t *testing.T) {
 		row  ListUpstreamClientSelectionCoverageRow
 		want Outcome
 	}{
-		{"already chosen", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: true, EligibleClients: 2, AssociatedClients: 2}, OutcomeSelected},
+		{"already chosen", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: true, ChoseClient: true, EligibleClients: 2, AssociatedClients: 2}, OutcomeSelected},
+		{"chosen client no longer usable", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, ChoseClient: true, EligibleClients: 1, AssociatedClients: 1}, OutcomeUnusableClient},
+		{"no-auth choice the server's new client makes unusable", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, ChoseClient: false, EligibleClients: 1, AssociatedClients: 1}, OutcomeClient},
 		{"one eligible client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 1, AssociatedClients: 2}, OutcomeClient},
 		{"several eligible clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, AssociatedClients: 2}, OutcomeAmbiguous},
 		{"associated but not through this issuer", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 1}, OutcomeUnreachableClient},

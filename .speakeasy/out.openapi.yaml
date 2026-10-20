@@ -95805,6 +95805,9 @@ components:
           type: string
           description: The ID of the environment associated with the server
           format: uuid
+        has_endpoint:
+          type: boolean
+          description: Whether any endpoint routes to this server, including one on a custom domain that is not live yet. Absent when it could not be read.
         id:
           type: string
           description: The ID of the MCP server
@@ -95919,6 +95922,9 @@ components:
     McpServerToolsetSummary:
       type: object
       properties:
+        description:
+          type: string
+          description: The toolset's description, if any
         external_mcp_proxy_only:
           type: boolean
           description: Whether every configured tool is an external MCP proxy tool, so the real tool count is unknown until a user signs in

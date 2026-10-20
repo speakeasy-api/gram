@@ -354,6 +354,7 @@ func (s *Service) serverMintTarget(ctx context.Context, server *mcpserversrepo.M
 
 // wrapperMintTarget binds a toolset's wrapper only when an endpoint addresses
 // it; a nil target means the legacy toolset route is the one that serves.
+// Endpoints on a domain that cannot serve yet still bind the wrapper.
 func (s *Service) wrapperMintTarget(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (*mintTarget, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -364,8 +365,24 @@ func (s *Service) wrapperMintTarget(ctx context.Context, server *mcpserversrepo.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
 	}
-	if issuerURL == "" {
+	if issuerURL != "" {
+		return serverMintTargetAt(server, issuerURL), nil
+	}
+
+	endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		McpServerID:    server.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mint wrapper endpoints").LogError(ctx, s.logger)
+	}
+	if len(endpoints) == 0 {
 		return nil, nil
+	}
+	issuerURL, err = s.serverSlugIssuerURL(ctx, server)
+	if err != nil {
+		return nil, err
 	}
 	return serverMintTargetAt(server, issuerURL), nil
 }
@@ -395,11 +412,14 @@ func (s *Service) serverMintIssuerURL(ctx context.Context, server *mcpserversrep
 	if issuerURL != "" {
 		return issuerURL, nil
 	}
+	return s.serverSlugIssuerURL(ctx, server)
+}
 
+func (s *Service) serverSlugIssuerURL(ctx context.Context, server *mcpserversrepo.McpServer) (string, error) {
 	if server.Slug.String == "" {
 		return "", oops.E(oops.CodeInvariantViolation, nil, "issuer-gated mcp server has no addressable endpoint or slug").LogError(ctx, s.logger)
 	}
-	issuerURL, err = url.JoinPath(s.serverURL, "mcp", server.Slug.String)
+	issuerURL, err := url.JoinPath(s.serverURL, "mcp", server.Slug.String)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
 	}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #MISE dir="{{ config_root }}"
-#MISE hide="true"
+#MISE hide=true
 #MISE alias="gwi"
 #MISE description="Initialize a worktree"
 

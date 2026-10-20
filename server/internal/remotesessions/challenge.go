@@ -1615,12 +1615,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		AssertionSigner:       m.assertions,
 	}, audience, code)
 	if err != nil {
-		var oauthErr oautherr.RFC6749Error
-		if errors.As(err, &oauthErr) && oauthErr.Code == oautherr.CodeInvalidTarget {
+		if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok && oauthErr.Code == oautherr.CodeInvalidTarget {
 			return m.retryWithoutResource(ctx, logger, state, err)
 		}
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
-		return none, oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
+		return none, exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
@@ -1881,7 +1880,11 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 	var none RemoteLoginResult
 	logger = logger.With(attr.SlogOAuthError(oautherr.CodeInvalidTarget))
 	if state.Resource == "" || state.OmitResource || state.ResourceRetried {
-		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger)
+		var attrs []slog.Attr
+		if endpointErr, ok := errors.AsType[*tokenEndpointError](cause); ok {
+			attrs = append(attrs, attr.SlogHTTPResponseStatusCode(endpointErr.statusCode))
+		}
+		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger, attrs...)
 	}
 
 	clients, err := m.ListClients(ctx, state.ProjectID, state.OrganizationID, state.UserSessionIssuerID)
@@ -1970,23 +1973,34 @@ func (m *ChallengeManager) exchangeCode(
 		return tokenResponse{}, &tokenExchangeUnavailableError{err: fmt.Errorf("read token response body: %w", err)}
 	}
 	if resp.StatusCode/100 != 2 {
-		return tokenResponse{}, newTokenEndpointError(resp.StatusCode, resp.Status, body)
+		endpointErr := newTokenEndpointError(resp.StatusCode, resp.Status, body)
+		endpointErr.tunnelError = resp.Header.Get(tunnelrouting.ErrorHeader)
+		return tokenResponse{}, endpointErr
 	}
 	var tok tokenResponse
-	if err := json.Unmarshal(body, &tok); err != nil {
-		return tokenResponse{}, fmt.Errorf("decode token response: %w", err)
-	}
-	if tok.AccessToken == "" {
-		return tokenResponse{}, errors.New("token endpoint returned no access_token")
+	decodeErr := json.Unmarshal(body, &tok)
+	if decodeErr != nil || tok.AccessToken == "" {
+		// An OAuth error body under 2xx is checked first: it may not decode as a token response at all.
+		if _, ok := oautherr.ParseTokenError(body); ok {
+			return tokenResponse{}, newTokenEndpointError(resp.StatusCode, resp.Status, body)
+		}
+		if decodeErr != nil {
+			return tokenResponse{}, &tokenEndpointError{statusCode: resp.StatusCode, tunnelError: "", err: fmt.Errorf("decode token response: %w", decodeErr)}
+		}
+		return tokenResponse{}, &tokenEndpointError{statusCode: resp.StatusCode, tunnelError: "", err: errors.New("token endpoint returned no access_token")}
 	}
 	tok.raw = body
 	return tok, nil
 }
 
-// tokenEndpointError is a non-2xx code exchange; the status is kept for the reactive metadata refresh, the text is unchanged.
+// tokenEndpointError is a code exchange the token endpoint answered without a usable token; the status is kept for the reactive metadata refresh, the text is unchanged.
 type tokenEndpointError struct {
 	statusCode int
-	err        error
+
+	// tunnelError is the tunnel gateway's error status when the gateway, not the provider, produced the response.
+	tunnelError string
+
+	err error
 }
 
 func (e *tokenEndpointError) Error() string { return e.err.Error() }
@@ -1998,9 +2012,73 @@ func newTokenEndpointError(statusCode int, status string, body []byte) *tokenEnd
 	if parsed, ok := oautherr.ParseTokenError(body); ok {
 		parsed.Description = truncateForMessage(parsed.Description)
 		parsed.URI = truncateForMessage(parsed.URI)
-		return &tokenEndpointError{statusCode: statusCode, err: fmt.Errorf("token endpoint %s: %w", status, parsed)}
+		return &tokenEndpointError{statusCode: statusCode, tunnelError: "", err: fmt.Errorf("token endpoint %s: %w", status, parsed)}
 	}
-	return &tokenEndpointError{statusCode: statusCode, err: fmt.Errorf("token endpoint %s: %s", status, truncateForMessage(string(body)))}
+	return &tokenEndpointError{statusCode: statusCode, tunnelError: "", err: fmt.Errorf("token endpoint %s: %s", status, truncateForMessage(string(body)))}
+}
+
+// exchangeFailure names why the code exchange failed with fixed text only: an
+// IETF-registered OAuth error code, the token endpoint's non-2xx status, or a
+// fixed reason for transport, tunnel and signing failures. The provider's
+// description and vendor codes reach logs only. invalid_grant stays at error
+// level: a PKCE verifier or redirect_uri regression on our side answers it too.
+func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunneled bool) *oops.ShareableError {
+	const message = "token exchange with the identity provider failed"
+	if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
+		code := oops.CodeUnexpected
+		if errors.Is(err, errTokenEndpointSigningUnavailable) {
+			code = oops.CodeUnavailable
+		}
+		return oops.E(code, err, "%s: the client assertion could not be signed", message).LogError(ctx, logger)
+	}
+	if _, ok := errors.AsType[*tokenExchangeUnavailableError](err); ok {
+		reason := "the identity provider could not be reached"
+		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
+			reason = "the MCP tunnel is not connected"
+		}
+		return oops.E(oops.CodeGatewayError, err, "%s: %s", message, reason).LogError(ctx, logger)
+	}
+	endpointErr, ok := errors.AsType[*tokenEndpointError](err)
+	if !ok {
+		return oops.E(oops.CodeUnauthorized, err, message).LogError(ctx, logger)
+	}
+
+	attrs := []slog.Attr{attr.SlogHTTPResponseStatusCode(endpointErr.statusCode)}
+	if tunneled && endpointErr.tunnelError != "" {
+		return oops.E(oops.CodeGatewayError, err, "%s: the MCP tunnel could not reach the identity provider", message).LogError(ctx, logger, attrs...)
+	}
+	code := ""
+	if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok {
+		code = tokenEndpointErrorCode(oauthErr.Code)
+		if code != "" {
+			attrs = append(attrs, attr.SlogOAuthError(code))
+		}
+		attrs = append(attrs, attr.SlogOAuthErrorDescription(ProviderErrorDescription(oauthErr.Description)))
+	}
+	status := exchangeFailureCode(endpointErr.statusCode, code)
+	switch {
+	case oautherr.IsIETFRegisteredCode(code):
+		return oops.E(status, err, "%s: %s", message, code).LogError(ctx, logger, attrs...)
+	case endpointErr.statusCode/100 == 2:
+		return oops.E(status, err, message).LogError(ctx, logger, attrs...)
+	case tunneled && endpointErr.statusCode == http.StatusBadGateway:
+		// The tunnel agent answers a bare 502 when it cannot reach the provider, indistinguishable from the provider's own.
+		return oops.E(status, err, "%s: HTTP 502 from the identity provider or the MCP tunnel agent", message).LogError(ctx, logger, attrs...)
+	default:
+		return oops.E(status, err, "%s: HTTP %d", message, endpointErr.statusCode).LogError(ctx, logger, attrs...)
+	}
+}
+
+// exchangeFailureCode answers a provider outage with 503 or 502 rather than blaming the user's credentials with 401.
+func exchangeFailureCode(status int, oauthCode string) oops.Code {
+	switch {
+	case oauthCode == oautherr.CodeTemporarilyUnavailable, status == http.StatusServiceUnavailable:
+		return oops.CodeUnavailable
+	case oauthCode == oautherr.CodeServerError, status >= http.StatusInternalServerError:
+		return oops.CodeGatewayError
+	default:
+		return oops.CodeUnauthorized
+	}
 }
 
 // exchangeIssuerReadBudget bounds the detached issuer read a withdrawn token endpoint triggers.

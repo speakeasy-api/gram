@@ -153,6 +153,7 @@ func requireNoEnrichment(t *testing.T, got *types.McpServer) {
 	require.Nil(t, got.PrimaryEndpointID)
 	require.Nil(t, got.PrimaryEndpointURL)
 	require.Nil(t, got.PlatformEndpointSlug)
+	require.False(t, got.HasEndpoint != nil && *got.HasEndpoint, "a foreign tenant's endpoint never counts")
 }
 
 func TestMcpServerSummary_HostedAcrossReads(t *testing.T) {
@@ -272,9 +273,61 @@ func TestMcpServerSummary_ForeignTenantRowsNeverAttach(t *testing.T) {
 	for _, server := range []mcpserversrepo.McpServer{foreignBacked, otherProjectBacked} {
 		requireNoEnrichment(t, getSummaryServer(t, ctx, ti, server.ID))
 	}
+	// The list only keeps toolset-backed rows whose toolset is live in the same project.
 	byID := listSummaryServers(t, ctx, ti, false)
-	requireNoEnrichment(t, byID[foreignBacked.ID.String()])
-	requireNoEnrichment(t, byID[otherProjectBacked.ID.String()])
+	require.NotContains(t, byID, foreignBacked.ID.String())
+	require.NotContains(t, byID, otherProjectBacked.ID.String())
+}
+
+func TestListMcpServers_OmitsWrappersOfDeletedToolsets(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	orgID, projectID := summaryAuth(t, ctx)
+
+	live := seedSummaryToolset(t, ctx, ti, orgID, projectID, []urn.Tool{urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets")})
+	deleted := seedSummaryToolset(t, ctx, ti, orgID, projectID, []urn.Tool{urn.NewTool(urn.ToolKindHTTP, "petstore", "get_pet")})
+	liveServer := seedSummaryServer(t, ctx, ti, projectID, live.ID)
+	ghost := seedSummaryServer(t, ctx, ti, projectID, deleted.ID)
+	remote := seedSummaryRemoteServer(t, ctx, ti, projectID)
+	_, err := toolsetsrepo.New(ti.conn).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{Slug: deleted.Slug, ProjectID: projectID})
+	require.NoError(t, err)
+
+	byID := listSummaryServers(t, ctx, ti, false)
+	require.Contains(t, byID, liveServer.ID.String())
+	require.Contains(t, byID, remote.ID.String())
+	require.NotContains(t, byID, ghost.ID.String())
+
+	forOrg := listSummaryServers(t, ctx, ti, true)
+	require.Contains(t, forOrg, liveServer.ID.String())
+	require.NotContains(t, forOrg, ghost.ID.String())
+
+	filtered, err := ti.service.ListMcpServers(ctx, &gen.ListMcpServersPayload{ToolsetID: conv.PtrEmpty(deleted.ID.String())})
+	require.NoError(t, err)
+	require.Empty(t, filtered.McpServers)
+
+	// A direct read still resolves the row so it can be opened and deleted.
+	require.Equal(t, ghost.ID.String(), getSummaryServer(t, ctx, ti, ghost.ID).ID)
+}
+
+func TestMcpServerSummary_CarriesToolsetDescription(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	orgID, projectID := summaryAuth(t, ctx)
+
+	toolsets := toolsetsrepo.New(ti.conn)
+	slug := "summary-" + uuid.NewString()[:8]
+	described, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: orgID, ProjectID: projectID, Name: slug, Slug: slug, McpEnabled: true,
+		Description: conv.ToPGText("Answers support questions"),
+	})
+	require.NoError(t, err)
+	plain := seedSummaryToolset(t, ctx, ti, orgID, projectID)
+	describedServer := seedSummaryServer(t, ctx, ti, projectID, described.ID)
+	plainServer := seedSummaryServer(t, ctx, ti, projectID, plain.ID)
+
+	byID := listSummaryServers(t, ctx, ti, false)
+	require.Equal(t, conv.PtrEmpty("Answers support questions"), byID[describedServer.ID.String()].Toolset.Description)
+	require.Nil(t, byID[plainServer.ID.String()].Toolset.Description)
 }
 
 func TestListMcpServersForOrg_SummariesAcrossProjects(t *testing.T) {
@@ -451,4 +504,34 @@ func TestCreateAndUpdateMcpServer_ResponsesCarrySummary(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, remoteUpdated.Toolset)
 	require.Equal(t, conv.PtrEmpty(remoteEndpoint.ID.String()), remoteUpdated.PrimaryEndpointID)
+}
+
+func TestMcpServerSummary_HasEndpointCountsAnyLiveEndpoint(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	withSummaryServerURL(t, ti)
+	orgID, projectID := summaryAuth(t, ctx)
+
+	toolset := seedSummaryToolset(t, ctx, ti, orgID, projectID)
+	bare := seedSummaryServer(t, ctx, ti, projectID, toolset.ID)
+	platform := seedSummaryServer(t, ctx, ti, projectID, toolset.ID)
+	seedSummaryEndpoint(t, ctx, ti, projectID, platform.ID, uuid.NullUUID{})
+	pending := seedSummaryServer(t, ctx, ti, projectID, toolset.ID)
+	domain := seedSummaryCustomDomain(t, ctx, ti, orgID, false)
+	seedSummaryEndpoint(t, ctx, ti, projectID, pending.ID, uuid.NullUUID{UUID: domain.ID, Valid: true})
+
+	want := map[uuid.UUID]bool{bare.ID: false, platform.ID: true, pending.ID: true}
+	for _, forOrg := range []bool{false, true} {
+		byID := listSummaryServers(t, ctx, ti, forOrg)
+		for id, has := range want {
+			got := byID[id.String()]
+			require.NotNil(t, got)
+			require.NotNil(t, got.HasEndpoint)
+			require.Equal(t, has, *got.HasEndpoint)
+		}
+	}
+	got := getSummaryServer(t, ctx, ti, pending.ID)
+	require.NotNil(t, got.HasEndpoint)
+	require.True(t, *got.HasEndpoint, "an endpoint on a domain that is not live yet still counts")
+	require.Nil(t, got.PrimaryEndpointID)
 }

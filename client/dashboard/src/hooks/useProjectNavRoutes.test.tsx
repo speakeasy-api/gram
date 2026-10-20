@@ -101,7 +101,6 @@ beforeEach(() => {
   };
   testState.featureFlags = {
     [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
-    [FEATURE_FLAGS.assistants]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
@@ -225,7 +224,6 @@ describe("useProjectNavRoutes", () => {
     (status) => {
       testState.featureFlags = {
         [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
-        [FEATURE_FLAGS.assistants]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
@@ -234,7 +232,7 @@ describe("useProjectNavRoutes", () => {
       const { result } = renderHook(() => useProjectNavRoutes());
       const navRoutes = result.current.map((entry) => entry.route);
 
-      expect(navRoutes).not.toContain(routes.assistants);
+      expect(navRoutes).toContain(routes.assistants);
       expect(navRoutes).not.toContain(routes.watchdog);
       expect(navRoutes).not.toContain(routes.explore);
       expect(navRoutes).toContain(routes.deployments);
@@ -261,7 +259,6 @@ describe("useProjectNavRoutes", () => {
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
       [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
-      [FEATURE_FLAGS.assistants]: { status: "enabled" },
       [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
       [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },
       [FEATURE_FLAGS.explore]: { status: "enabled" },
@@ -278,8 +275,6 @@ describe("useProjectNavRoutes", () => {
   });
 
   it("uses assistant read on the active project for assistant surfaces", () => {
-    testState.featureFlags[FEATURE_FLAGS.assistants] = { status: "enabled" };
-
     const { result } = renderHook(() => useProjectNavRoutes());
     const assistantRoutes = result.current.filter(
       (entry) =>
