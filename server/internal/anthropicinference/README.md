@@ -163,6 +163,32 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   and current turn are evaluated against current policies. Unknown event types allow after signature and tenant validation;
   unknown fields, source values, and content block types are tolerated.
 
+## Tool call frames
+
+With **Validate tool calls** on (Anthropic's default for new configurations),
+Anthropic sends a `tool_call` frame before any tool call in a model response runs.
+One verdict covers the whole frame: a deny stops every call in it.
+
+- Each `tool_use` block in the frame's last message is scanned as a tool request,
+  with the same policies, tool name, and call ID as in a prompt frame. Text in that
+  message has already been delivered to the user and is enforced by the next prompt
+  frame, as are any earlier messages the protocol may add.
+- Nothing is stored and the checkpoint does not move. The next prompt frame
+  carries the same assistant message, without `tool_info`, and archives it once.
+  It also scans those tool calls again: only a prompt frame's transcript can be
+  accepted. Calls the frame denied never run, and are archived only if a later
+  prompt frame includes them.
+- The verdict shares the prompt frame's 3.75-second evaluation budget. A tool call
+  that cannot be scanned in time is denied, so every tool-using response waits on
+  this verdict. A frame without tool calls allows.
+- The user is the connected user matching the actor email, else the last known user
+  of the conversation that `session_id` names. A frame without a session cannot be
+  matched to its conversation (it carries no earlier transcript), so an
+  unresolvable actor receives organization-wide policies.
+- `tool_info` is ignored. It says who runs or provides the tool, not what the tool
+  can reach, and its names are chosen by whoever defined the tool or wrote the
+  request, so it feeds neither policy scope nor audience.
+
 Keep the verdict timeout at 5 seconds or more and select block-on-failure in
 Anthropic if network failures must not allow inference. Anthropic defaults to
 allow-on-failure. A current turn or new content that cannot be scanned within the
