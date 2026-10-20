@@ -12,6 +12,13 @@ brew install speakeasy-api/tap/cli
 npm i -g @speakeasy-api/cli
 ```
 
+Check that `speakeasy` on your `PATH` is this CLI. It prints
+`speakeasy-ai-control-plane-cli`:
+
+```bash
+speakeasy --control-plane-cli
+```
+
 Then authenticate and check your setup:
 
 ```bash
@@ -19,9 +26,19 @@ speakeasy auth
 speakeasy whoami
 ```
 
-The Homebrew `cli` formula conflicts with the Speakeasy SDK generator formula
-(`speakeasy-api/tap/speakeasy`), because both install a binary named
-`speakeasy`. Install one or the other with Homebrew.
+### Using it next to the Speakeasy SDK generator
+
+The Speakeasy SDK generator also installs a binary named `speakeasy`, and it
+rejects `--control-plane-cli`. The Homebrew `cli` formula conflicts with the SDK
+generator formula (`speakeasy-api/tap/speakeasy`), so Homebrew installs only one
+of them. To keep both, install the SDK generator as `speakeasy-sdks`:
+
+```bash
+curl -fsSL https://go.speakeasy.com/cli-install.sh | BINARY_NAME=speakeasy-sdks sh
+```
+
+Running an SDK generator command such as `speakeasy run` with this CLI prints
+the same instructions.
 
 ### Migrating from `gram`
 

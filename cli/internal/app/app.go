@@ -90,6 +90,9 @@ func newApp() *cli.App {
 				return nil
 			}
 			if c.Args().Present() {
+				if message, ok := sdkGeneratorCommandMessage(c.Args().First()); ok {
+					return cli.Exit(message, unknownCommandExitCode)
+				}
 				return cli.ShowCommandHelp(c, c.Args().First())
 			}
 			return cli.ShowAppHelp(c)

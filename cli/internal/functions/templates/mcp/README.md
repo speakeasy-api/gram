@@ -13,7 +13,8 @@ interacting with hosted databases.
 
 - [Node.js](https://nodejs.org) version 22.18.0 or later
 - The Speakeasy AI Control Plane CLI: `brew install speakeasy-api/tap/cli` or
-  `npm i -g @speakeasy-api/cli`
+  `npm i -g @speakeasy-api/cli`. Check it with `speakeasy --control-plane-cli`,
+  which prints `speakeasy-ai-control-plane-cli`.
 
 ## Quick start
 

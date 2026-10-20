@@ -26,8 +26,9 @@ export default functions;
 ## Quickstart
 
 Install the Speakeasy AI Control Plane CLI with
-`brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`, then
-scaffold, build and deploy a project:
+`brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`. Check
+it with `speakeasy --control-plane-cli`, which prints
+`speakeasy-ai-control-plane-cli`. Then scaffold, build and deploy a project:
 
 ```
 speakeasy functions init my-tools

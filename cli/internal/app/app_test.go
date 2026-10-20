@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 )
 
 func TestInvokedAs(t *testing.T) {
@@ -87,4 +88,53 @@ func TestNewApp_NoArgsShowsHelp(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, stdout.String(), "speakeasy-ai-control-plane-cli")
 	require.Contains(t, stdout.String(), "USAGE:")
+}
+
+func TestNewApp_SDKGeneratorCommandNamesTheOtherCLI(t *testing.T) {
+	t.Parallel()
+
+	var exitErr error
+	app := newApp()
+	app.Writer = &bytes.Buffer{}
+	app.ErrWriter = &bytes.Buffer{}
+	app.ExitErrHandler = func(_ *cli.Context, err error) { exitErr = err }
+
+	profilePath := filepath.Join(t.TempDir(), "profile.json")
+	err := app.RunContext(t.Context(), []string{"speakeasy", "--profile-path", profilePath, "run"})
+
+	require.Error(t, err)
+	require.Equal(t, err, exitErr)
+	var exitCoder cli.ExitCoder
+	require.ErrorAs(t, err, &exitCoder)
+	require.Equal(t, unknownCommandExitCode, exitCoder.ExitCode())
+	require.Contains(t, err.Error(), `"run" is a command of the Speakeasy SDK generator`)
+	require.Contains(t, err.Error(), "BINARY_NAME=speakeasy-sdks")
+	require.Contains(t, err.Error(), "Then run: speakeasy-sdks run")
+}
+
+func TestNewApp_UnknownCommandKeepsDefaultError(t *testing.T) {
+	t.Parallel()
+
+	app := newApp()
+	app.Writer = &bytes.Buffer{}
+	app.ErrWriter = &bytes.Buffer{}
+	app.ExitErrHandler = func(*cli.Context, error) {}
+
+	profilePath := filepath.Join(t.TempDir(), "profile.json")
+	err := app.RunContext(t.Context(), []string{"speakeasy", "--profile-path", profilePath, "nope"})
+
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "SDK generator")
+}
+
+func TestSDKGeneratorCommandsSkipSharedAndOwnCommands(t *testing.T) {
+	t.Parallel()
+
+	for _, command := range newApp().Commands {
+		require.NotContains(t, sdkGeneratorCommands, command.Name, "this CLI has its own %q command", command.Name)
+	}
+	for _, shared := range []string{"auth", "status", "update"} {
+		_, ok := sdkGeneratorCommandMessage(shared)
+		require.False(t, ok, "%q exists in both CLIs", shared)
+	}
 }
