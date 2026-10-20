@@ -59,7 +59,9 @@ export default function SkillUsage(): JSX.Element {
                 "Not loaded over MCP yet."
               )}
             </SettingsSection.Description>
-            {latestVersion && (
+            {/* MCP serves only valid versions, so an invalid latest version
+                is not what agents load. */}
+            {latestVersion?.specValid && (
               <Text small muted className="flex flex-wrap items-center gap-x-2">
                 Agents loading the current version over MCP see the digest
                 <SkillServedDigest rawSha256={latestVersion.rawSha256} />
