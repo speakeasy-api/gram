@@ -708,7 +708,7 @@ paths:
             x-speakeasy-name-override: previewExternalMcpMigration
     /admin/hookClients.get:
         get:
-            description: 'Fleet-wide hook client grids: which hook client (legacy curl or hooks binary version) each organization''s new sessions use per day, and inference hook traffic per Claude app.'
+            description: 'Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization''s new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.'
             operationId: adminGetHookClients
             parameters:
                 - allowEmptyValue: true
@@ -88561,6 +88561,29 @@ components:
             required:
                 - location
                 - cache_control
+        AdminDeviceAgentCell:
+            type: object
+            properties:
+                day:
+                    type: string
+                    description: The UTC day, as YYYY-MM-DD.
+                    format: date
+                machines:
+                    type: integer
+                    description: Machines whose agent polled on this day, by the last version each reported that day.
+                    format: int64
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                version:
+                    type: string
+                    description: The speakeasyd version, or empty for the organization-day total.
+            description: One (organization, day, version) cell of the device agent grid.
+            required:
+                - organization_id
+                - day
+                - version
+                - machines
         AdminExternalMcpMigrationCandidate:
             type: object
             properties:
@@ -88727,7 +88750,7 @@ components:
                 slug:
                     type: string
                     description: The organization slug. Absent when the organization no longer exists.
-            description: An organization that appears in either hook client grid.
+            description: An organization that appears in any of the fleet health grids.
             required:
                 - id
         AdminHookClientSessionCell:
@@ -88766,6 +88789,11 @@ components:
         AdminHookClientsResult:
             type: object
             properties:
+                device_agents:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminDeviceAgentCell'
+                    description: The device agent version grid. Empty for days before versions were recorded.
                 from_cache:
                     type: boolean
                     description: True when the grids came from the one-hour cache rather than a fresh ClickHouse read.
@@ -88778,7 +88806,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AdminHookClientOrganization'
-                    description: Every organization that appears in either grid.
+                    description: Every organization that appears in any grid.
                 queried_at:
                     type: string
                     description: When the grids were read from ClickHouse.
@@ -88792,7 +88820,7 @@ components:
                     type: integer
                     description: Length of the window in days.
                     format: int64
-            description: Fleet-wide hook client grids over a fixed window.
+            description: 'Fleet-wide client health grids over a fixed window: hook clients, inference hook traffic and device agent versions.'
             required:
                 - window_days
                 - queried_at
@@ -88800,6 +88828,7 @@ components:
                 - organizations
                 - sessions
                 - inference
+                - device_agents
         AdminInferenceHookCell:
             type: object
             properties:
@@ -95051,7 +95080,6 @@ components:
                     description: The kind of prompt the template is used for
                     enum:
                         - prompt
-                        - higher_order_tool
                 name:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -111065,7 +111093,6 @@ components:
                     description: The kind of prompt the template is used for
                     enum:
                         - prompt
-                        - higher_order_tool
                 prompt:
                     type: string
                     description: The template content to render
@@ -122069,7 +122096,6 @@ components:
                     description: The kind of prompt the template is used for
                     enum:
                         - prompt
-                        - higher_order_tool
                 name:
                     type: string
                     description: The name of the prompt template. Will be updated via variation
@@ -125330,7 +125356,7 @@ tags:
     - name: telemetry
       description: Fetch telemetry data for tools in Speakeasy.
     - name: templates
-      description: Manages re-usable prompt templates and higher-order tools for a project.
+      description: Manages re-usable prompt templates for a project.
     - name: tokenExchange
       description: 'Device-agent token exchange: trade an org-scoped install credential (an API key with the ''agent'' scope) plus a vouched user email for a long-lived, per-user API key scoped for the device agent.'
     - name: tools
