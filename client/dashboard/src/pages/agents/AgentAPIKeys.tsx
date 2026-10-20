@@ -533,8 +533,12 @@ function AgentAPIKeysContent({
       {!creation && (
         <IdentityPanel
           title="API keys"
-          loading={keys.isLoading}
-          error={keys.isError}
+          loading={keys.isPending}
+          // A failed refetch keeps the keys it already has: they were really
+          // returned, and blanking the list throws away the only true thing
+          // the panel holds. The failure is said above them instead.
+          error={keys.isError && !keys.data}
+          refreshFailed={keys.isError && !!keys.data}
           onRetry={() => void keys.refetch()}
           loadingRows={1}
           footer={

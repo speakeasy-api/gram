@@ -257,7 +257,7 @@ export function WizardSummary({
               would read as the agent's name rather than as its absence. */}
           <div className="flex flex-wrap items-baseline justify-between gap-x-4">
             <dt className="text-muted-foreground">Name</dt>
-            <dd className="grow basis-28 text-right break-words">
+            <dd className="min-w-0 grow basis-28 text-right break-words">
               {name.trim() ? (
                 <Marked on={highlight === "Name"}>{name.trim()}</Marked>
               ) : (
@@ -271,7 +271,7 @@ export function WizardSummary({
               className="flex flex-wrap items-baseline justify-between gap-x-4"
             >
               <dt className="text-muted-foreground">{row.label}</dt>
-              <dd className="grow basis-28 text-right break-words">
+              <dd className="min-w-0 grow basis-28 text-right break-words">
                 <Marked on={highlight === row.label}>{row.value}</Marked>
               </dd>
             </div>

@@ -844,6 +844,14 @@ const ROUTE_STRUCTURE = {
             url: "credentials",
             component: IdentityAgentSection,
           },
+          // The section this one was renamed from. Kept so the links and
+          // bookmarks that name it still resolve: the page itself sends the
+          // old segment on to the new one.
+          provisioning: {
+            title: "Agent Credentials",
+            url: "provisioning",
+            component: IdentityAgentSection,
+          },
           sessions: {
             title: "Agent Sessions",
             url: "sessions",
