@@ -20,7 +20,7 @@ export type GrantedServer = {
  * The servers an agent's policy grants it, by the resource id the server
  * list uses. A wildcard grant is left out: it is not a server anyone picked,
  * and rewriting it as one would narrow the agent on the next save. Ask
- * `hasWildcardConnectGrant` whether one is there, because a selection that
+ * `wildcardConnectGrant` whether one is there, because a selection that
  * silently omits it is a narrower list than the policy enforces.
  */
 export function grantedServers(
@@ -45,21 +45,39 @@ export function grantedServers(
   return servers;
 }
 
+/** A wildcard MCP grant, and how far its selector reaches. */
+export type WildcardConnectGrant = {
+  /** The project it is scoped to, or `""` where it reaches every project. */
+  projectId: string;
+};
+
 /**
- * Whether the policy reaches every MCP server through a wildcard grant.
+ * The wildcard MCP grant the policy holds, if it holds one.
  *
- * Such an agent has no server selection to show: the picker would come up
- * empty, saving it would look like a narrowing, and the wildcard would stay
- * in place and keep granting everything. The caller has to say so rather than
- * present a list it cannot enforce.
+ * Such an agent has no server selection to show for the reach that grant
+ * covers: the picker would come up empty, saving it would look like a
+ * narrowing, and the wildcard would stay in place and keep granting
+ * everything. The caller has to say so rather than present a list it cannot
+ * enforce — and the project comes back with it, because a grant scoped to one
+ * project reaches that project's servers, which is not every server the
+ * organization has.
  */
-export function hasWildcardConnectGrant(grants: AgentPolicyGrant[]): boolean {
-  return grants.some(
+export function wildcardConnectGrant(
+  grants: AgentPolicyGrant[],
+): WildcardConnectGrant | undefined {
+  const wildcards = grants.filter(
     (grant) =>
       grant.scope === CONNECT_SCOPE &&
       grant.selector.resourceKind === "mcp" &&
       grant.selector.resourceId === "*",
   );
+  if (wildcards.length === 0) return undefined;
+  // An unscoped wildcard swallows every scoped one, so it is the reach to
+  // report: naming one project beside it would understate what the agent has.
+  if (wildcards.some((grant) => !grant.selector.projectId)) {
+    return { projectId: "" };
+  }
+  return { projectId: wildcards[0]?.selector.projectId ?? "" };
 }
 
 /**

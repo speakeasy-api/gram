@@ -36,7 +36,7 @@ import {
   CONNECT_SCOPE,
   grantChanges,
   grantedServers,
-  hasWildcardConnectGrant,
+  wildcardConnectGrant,
   type GrantedServer,
 } from "@/pages/agents/agentPolicyEdit";
 import { useAgentsCreatePolicyGrantMutation } from "@gram/client/react-query/agentsCreatePolicyGrant.js";
@@ -289,10 +289,12 @@ export function ProvisionWizard({
     inventory.isError,
     reconciled,
   ]);
-  // A wildcard grant reaches every server and is deliberately not a row in
-  // the list, so the reader has to be told it is there.
-  const reachesEveryServer =
-    editing && grants !== undefined && hasWildcardConnectGrant(grants);
+  // A wildcard grant reaches every server its selector covers and is
+  // deliberately not a row in the list, so the reader has to be told it is
+  // there — and how far it goes, because one scoped to a project does not
+  // reach the organization's other projects.
+  const wildcardReach =
+    editing && grants !== undefined ? wildcardConnectGrant(grants) : undefined;
 
   // What provisioning produced. The secret is held only while this page is
   // open; nothing writes it to storage or to the query cache.
@@ -338,10 +340,11 @@ export function ProvisionWizard({
       : undefined;
   // Falls back to the id, not the browsed project: an agent bound to a project
   // the caller cannot see would otherwise be labelled with the wrong one.
+  const projectName = (id: string): string =>
+    (organization.projects ?? []).find((candidate) => candidate.id === id)
+      ?.name ?? id;
   const scopeName = scopedProjectID
-    ? ((organization.projects ?? []).find(
-        (candidate) => candidate.id === scopedProjectID,
-      )?.name ?? scopedProjectID)
+    ? projectName(scopedProjectID)
     : organization.name;
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
@@ -847,14 +850,15 @@ export function ProvisionWizard({
                 below leaves it out — and a save writes only the servers that
                 changed, so it stays. Without this the reader would read an
                 unticked list as the agent's whole reach. */}
-            {reachesEveryServer && (
+            {wildcardReach && (
               <Alert variant="warning" alignTop>
                 <span>
-                  This agent reaches every MCP server through a wildcard grant,
-                  which the list below does not show. Saving a narrower list
-                  leaves that grant in place, so the agent keeps reaching
-                  everything. Remove it from the agent&rsquo;s permissions
-                  first.
+                  {wildcardReach.projectId
+                    ? `This agent reaches every MCP server in ${projectName(wildcardReach.projectId)} through a wildcard grant, which the list below does not show.`
+                    : "This agent reaches every MCP server through a wildcard grant, which the list below does not show."}{" "}
+                  Saving a narrower list leaves that grant in place, so the
+                  agent keeps reaching all of them. Remove it from the
+                  agent&rsquo;s permissions first.
                 </span>
               </Alert>
             )}

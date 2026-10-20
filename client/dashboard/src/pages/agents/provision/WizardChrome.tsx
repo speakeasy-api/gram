@@ -4,7 +4,7 @@ import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
 import { Check } from "lucide-react";
-import type { JSX, ReactNode } from "react";
+import { useEffect, useRef, type JSX, type ReactNode } from "react";
 
 /**
  * The frame every provisioning step shares: the five-cell stepper, the body,
@@ -44,6 +44,21 @@ export function WizardStepper({
   // becomes: what is finished, what you are on, how much is left.
   const dense = steps.length > 5;
   const crowded = steps.length > 7;
+
+  // Where the row scrolls, the step just reached can sit past its right edge:
+  // moving on is a click on a footer button, so nothing in the row is focused
+  // and the browser never brings it back by itself.
+  const currentCell = useRef<HTMLLIElement | null>(null);
+  useEffect(() => {
+    // Not smooth, and "nearest" on both axes: the reader did not ask the page
+    // to move, so a cell already in view stays where it is and the page itself
+    // is never scrolled — only the row that overflows.
+    currentCell.current?.scrollIntoView({
+      behavior: "instant",
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [current]);
 
   return (
     // Narrow enough and the cells have nowhere left to go, so the row scrolls
@@ -142,6 +157,7 @@ export function WizardStepper({
         return (
           <li
             key={label}
+            ref={state === "current" ? currentCell : undefined}
             className={cn(
               "border-border flex border-r last:border-r-0",
               collapsed || shortened

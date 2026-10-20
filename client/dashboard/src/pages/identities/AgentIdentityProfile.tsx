@@ -135,9 +135,19 @@ export function AgentIdentityProfile({
               the panel only opens its own wizard in creation mode. */}
           {/* Whichever way in the agent actually uses comes first: a
               federated agent never holds a key, and leading with the key
-              panel told it that it could not authenticate. Which way that is
-              has to be known first, so nothing below is ordered or worded
-              until the read settles. */}
+              panel told it that it could not authenticate. Only the order and
+              the wording wait on the read — issuing and revoking keys is
+              managed under a scope of its own, so someone who may do it must
+              not lose the panel because this read was refused. */}
+          {credentialKnown && federated && (
+            <AgentFederatedAccess agent={agent} />
+          )}
+          <AgentAPIKeys
+            agent={agent}
+            variant="bare"
+            federated={credentialKnown ? federated : "unknown"}
+            onCreate={() => setIssuing(true)}
+          />
           {!credentialKnown ? (
             admissions.isError ? (
               <div role="alert" className="space-y-2">
@@ -150,16 +160,7 @@ export function AgentIdentityProfile({
               <Text muted>Checking how this agent signs in…</Text>
             )
           ) : (
-            <>
-              {federated && <AgentFederatedAccess agent={agent} />}
-              <AgentAPIKeys
-                agent={agent}
-                variant="bare"
-                federated={federated}
-                onCreate={() => setIssuing(true)}
-              />
-              {!federated && <AgentFederatedAccess agent={agent} />}
-            </>
+            !federated && <AgentFederatedAccess agent={agent} />
           )}
         </IdentitySection>
       );

@@ -5,12 +5,14 @@ import {
   CONNECT_SCOPE,
   grantChanges,
   grantedServers,
-  hasWildcardConnectGrant,
+  wildcardConnectGrant,
 } from "./agentPolicyEdit";
 
 function grant(
   id: string,
   resourceId: string,
+  // "" leaves the selector unscoped, the way an organization-wide grant comes
+  // back from the server.
   projectId = "project-1",
 ): AgentPolicyGrant {
   return {
@@ -18,7 +20,11 @@ function grant(
     agentId: "agent-1",
     effect: "allow",
     scope: CONNECT_SCOPE,
-    selector: { resourceKind: "mcp", resourceId, projectId },
+    selector: {
+      resourceKind: "mcp",
+      resourceId,
+      ...(projectId ? { projectId } : {}),
+    },
   } as unknown as AgentPolicyGrant;
 }
 
@@ -36,10 +42,27 @@ describe("grantedServers", () => {
   });
 });
 
-describe("hasWildcardConnectGrant", () => {
+describe("wildcardConnectGrant", () => {
   it("reports a wildcard the selection cannot show", () => {
-    expect(hasWildcardConnectGrant([grant("g1", "*")])).toBe(true);
-    expect(hasWildcardConnectGrant([grant("g1", "server-a")])).toBe(false);
+    expect(wildcardConnectGrant([grant("g1", "*", "")])).toEqual({
+      projectId: "",
+    });
+    expect(wildcardConnectGrant([grant("g1", "server-a")])).toBeUndefined();
+  });
+
+  it("names the project a scoped wildcard is confined to", () => {
+    expect(wildcardConnectGrant([grant("g1", "*", "project-1")])).toEqual({
+      projectId: "project-1",
+    });
+  });
+
+  it("reports the org-wide reach when both kinds are granted", () => {
+    expect(
+      wildcardConnectGrant([
+        grant("g1", "*", "project-1"),
+        grant("g2", "*", ""),
+      ]),
+    ).toEqual({ projectId: "" });
   });
 });
 

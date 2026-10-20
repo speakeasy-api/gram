@@ -831,12 +831,14 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     [registeredAgents],
   );
   // How each agent signs in. Only the agents roster shows it, and both reads
-  // are workload-policy requests: asking for them on the people roster is a
-  // request whose every answer is discarded, over a wider authorization
-  // surface than the page needs.
-  const catalog = useCatalogEntries(kind === "agent");
+  // are workload-policy requests: asking for them on the people roster, or on
+  // a roster this organization is not shown at all, is a request whose every
+  // answer is discarded, over a wider authorization surface than the page
+  // needs.
+  const agentPlatformsShown = agentsEnabled && kind === "agent";
+  const catalog = useCatalogEntries(agentPlatformsShown);
   const workloads = useWorkloadIdentities({}, undefined, {
-    enabled: kind === "agent",
+    enabled: agentPlatformsShown,
     throwOnError: false,
   });
   // An agent can be admitted from more than one platform, so each row keeps
@@ -846,6 +848,13 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     const byAgent = new Map<string, string[]>();
     for (const admission of workloads.data?.admissions ?? []) {
       if (admission.agentId === "") continue;
+      // A wildcard rule the platform has not enabled admits nothing, so no
+      // sign-in happens through it. The column answers "how does this agent
+      // sign in", and a dormant rule is not an answer; the agent's own page
+      // flags it, which a 160px column of platform names cannot.
+      if (admission.matchKind === "wildcard" && !admission.wildcardActive) {
+        continue;
+      }
       // A catalog platform by its own name; anything else was registered by
       // hand and carries the label its operator gave it. "Custom" is the
       // fallback for one that was left unnamed, not the name of all of them.

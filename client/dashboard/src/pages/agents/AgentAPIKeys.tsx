@@ -58,8 +58,13 @@ export function AgentAPIKeys({
 }: {
   agent: ManagedAgent;
   creation?: boolean;
-  /** The agent signs in with a platform's tokens, so a key is optional. */
-  federated?: boolean;
+  /**
+   * The agent signs in with a platform's tokens, so a key is optional.
+   * "unknown" where the caller's own read of that has not settled: the panel
+   * then claims neither, rather than telling a federated agent it cannot
+   * authenticate.
+   */
+  federated?: boolean | "unknown";
   /** "bare" drops the section chrome for a caller that supplies its own. */
   variant?: "section" | "bare";
   onCreate?: () => void;
@@ -153,7 +158,7 @@ function AgentAPIKeysContent({
   organizationId: string;
   userId: string;
   creation?: boolean;
-  federated?: boolean;
+  federated?: boolean | "unknown";
   onCreate?: () => void;
   onDone?: () => void;
   onBusy?: (busy: boolean) => void;
@@ -628,9 +633,14 @@ function AgentAPIKeysContent({
             // The state that matters most on this page: an identity nothing
             // is holding yet, and the one step that changes that.
             <Text muted small>
-              {federated
-                ? "No key issued. This agent signs in with its platform's own tokens, so it only needs a key for a runtime that cannot do that."
-                : "No key issued yet. The agent cannot authenticate until you issue one and install it where it runs."}
+              {federated === "unknown"
+                ? // Whether a key is this agent's only way in is not settled
+                  // yet, and the guess that it is tells a federated agent it
+                  // cannot authenticate.
+                  "No key issued."
+                : federated
+                  ? "No key issued. This agent signs in with its platform's own tokens, so it only needs a key for a runtime that cannot do that."
+                  : "No key issued yet. The agent cannot authenticate until you issue one and install it where it runs."}
             </Text>
           ) : null}
           {issuanceBlocked && (
