@@ -381,6 +381,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMustEqual(1, "expected 1 removed gateway member, found %d"),
 		},
 		{
+			what:  "mcp skill links",
+			count: byProject(s.q.PostflightCountMCPSkillLinks),
+			fail:  postflightMustEqual(5, "expected 5 skills served over MCP, found %d"),
+		},
+		{
 			what:  "hosted toolset wrappers",
 			count: byProject(s.q.PostflightCountUnwrappedToolsets),
 			fail:  postflightMustBeZero("%d hosted toolsets lack a matching canonical wrapper and endpoint"),
