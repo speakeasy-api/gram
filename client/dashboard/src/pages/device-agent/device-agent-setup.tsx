@@ -126,9 +126,11 @@ function bashVersionAssign(version: string | null) {
 // folder that is not on PATH, matching the macOS pkg and Windows msi layouts.
 // It keeps the agent's `speakeasy` CLI from shadowing or overwriting the
 // Speakeasy CLI or the SDK generator, which install a `speakeasy` too, and it
-// stays writable so the agent can update itself. The hooks already look for
-// speakeasyd here. `~` expands in bash, zsh and fish alike.
-const LINUX_AGENT_DIR = "~/.speakeasy/bin";
+// stays writable so the agent can update itself. It is the agent's own XDG
+// state folder, apart from `~/.speakeasy`, which the SDK generator owns and
+// cleans. The hooks look for speakeasyd here. `~` expands in bash, zsh and
+// fish alike.
+const LINUX_AGENT_DIR = "~/.local/state/speakeasy/bin";
 
 // linuxDownload fetches both binaries. With a resolved version the snippet uses
 // no shell variables, so it also runs in fish and other non-POSIX shells.

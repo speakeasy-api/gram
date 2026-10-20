@@ -172,8 +172,15 @@ func deviceAgentCommands() []string {
 		}
 	case "windows":
 	default:
+		// The dashboard's Linux setup installs into the agent's XDG state
+		// folder, written as ~/.local/state so it ignores XDG_STATE_HOME; an
+		// absolute XDG_STATE_HOME is probed too for installs that honour it.
+		if stateHome := strings.TrimSpace(os.Getenv("XDG_STATE_HOME")); filepath.IsAbs(stateHome) {
+			candidates = append(candidates, filepath.Join(stateHome, "speakeasy", "bin", "speakeasyd"))
+		}
 		if home != "" {
 			candidates = append(candidates,
+				filepath.Join(home, ".local", "state", "speakeasy", "bin", "speakeasyd"),
 				// ~/.speakeasy is the agent's conventional dotdir on Linux
 				// (its IPC socket lives there); kept as a supported install
 				// location by maintainer decision even though no packaged
