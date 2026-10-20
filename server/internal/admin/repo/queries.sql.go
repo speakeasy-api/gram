@@ -249,7 +249,10 @@ WITH latest_arm AS (
     FROM audit_logs AS armed
     WHERE armed.organization_id = $1
       AND armed.project_id IS NULL
-      AND armed.action = 'organization:enterprise_trial_armed'
+      AND armed.action IN (
+          'organization:enterprise_trial_armed',
+          'organization:enterprise_trial_started'
+      )
       AND armed.subject_id = $1
       AND armed.subject_type = 'organization'
     ORDER BY armed.seq DESC, armed.id DESC
@@ -291,9 +294,10 @@ type AdminGetEnterpriseTrialRetryOperationIDsRow struct {
 	MatchingRearmCount  int64
 }
 
-// The arm audit id is the immutable generation token. Every production trial
-// creation writes exactly one arm audit in the creation transaction; extension
-// writes neither. seq orders generations; id breaks any equal-seq tie.
+// The creation audit id is the immutable generation token. Self-service trial
+// creation records an armed action, while an admin grant records a started
+// action. Extension writes neither. seq orders generations; id breaks any
+// equal-seq tie.
 func (q *Queries) AdminGetEnterpriseTrialRetryOperationIDs(ctx context.Context, targetOrganizationID string) (AdminGetEnterpriseTrialRetryOperationIDsRow, error) {
 	row := q.db.QueryRow(ctx, adminGetEnterpriseTrialRetryOperationIDs, targetOrganizationID)
 	var i AdminGetEnterpriseTrialRetryOperationIDsRow

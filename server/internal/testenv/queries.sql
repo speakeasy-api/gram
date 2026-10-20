@@ -683,6 +683,12 @@ INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_i
 VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_armed', @organization_id, 'organization')
 RETURNING id::text;
 
+-- name: SeedTrialStartAuditFixture :one
+-- Test-only fixture: records an admin-started trial generation.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_started', @organization_id, 'organization')
+RETURNING id::text;
+
 -- name: SeedTrialDemotionAuditFixture :exec
 -- Test-only fixture: records the committed demotion boundary for a retry cycle.
 INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)

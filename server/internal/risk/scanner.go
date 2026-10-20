@@ -26,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
@@ -45,7 +44,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // RiskScanner checks text against blocking risk policies.
@@ -815,14 +813,9 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 }
 
 func (s *Scanner) riskPolicyGrants(ctx context.Context, organizationID string, userID string) ([]authz.Grant, error) {
-	var principals []urn.Principal
-	var err error
-	// An agent actor is evaluated as itself and its roles, never as a supplied user.
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
-		principals, err = authz.ResolveAgentPrincipals(ctx, s.db, organizationID, actor)
-	} else {
-		principals, err = authz.ResolveUserPrincipals(ctx, s.db, organizationID, userID)
-	}
+	// An agent, or a workload acting for one, is evaluated as that agent and its
+	// roles, never as a supplied user.
+	principals, err := authz.ResolveActorPrincipals(ctx, s.db, organizationID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve risk policy audience principals: %w", err)
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -69,6 +70,10 @@ type Service struct {
 	blobStore       assets.BlobStore
 	telemetry       *telemetry.Logger
 	growth          *growthsignals.Emitter
+
+	// deviceAgentTokens authenticates headless devices that present a
+	// device-agent token instead of an agent API key. Nil refuses them.
+	deviceAgentTokens *deviceagenttoken.Issuer
 }
 
 var (
@@ -90,22 +95,24 @@ func NewService(
 	blobStore assets.BlobStore,
 	telemetryLogger *telemetry.Logger,
 	growthEmitter *growthsignals.Emitter,
+	deviceAgentTokens *deviceagenttoken.Issuer,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
-		logger:          logger,
-		db:              db,
-		repo:            repo.New(db),
-		auth:            auth.New(logger, db, sessions, authzEngine),
-		authz:           authzEngine,
-		audit:           auditLogger,
-		productFeatures: productFeatures,
-		serverURL:       serverURL,
-		orgHosts:        orgHosts,
-		blobStore:       blobStore,
-		telemetry:       telemetryLogger,
-		growth:          growthEmitter,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
+		logger:            logger,
+		db:                db,
+		repo:              repo.New(db),
+		auth:              auth.New(logger, db, sessions, authzEngine),
+		authz:             authzEngine,
+		audit:             auditLogger,
+		productFeatures:   productFeatures,
+		serverURL:         serverURL,
+		orgHosts:          orgHosts,
+		blobStore:         blobStore,
+		telemetry:         telemetryLogger,
+		growth:            growthEmitter,
+		deviceAgentTokens: deviceAgentTokens,
 	}
 }
 
@@ -113,16 +120,23 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	// Only getPlugins accepts device-agent tokens.
+	server.GetPlugins = deviceagenttoken.BearerChallenge(server.GetPlugins)
+	srv.Mount(mux, server)
 	// Public capability-URL route for minted session handoffs (see
 	// handoffs.go): unauthenticated by design, the token is the credential.
 	o11y.AttachHandler(mux, http.MethodGet, "/shared/handoffs/{token}", oops.ErrHandle(service.logger, service.ServeSessionHandoff).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	// A refused device-agent token is the better answer than a missing key
+	// for a device that sent no key.
+	if key == "" {
+		if err := deviceagenttoken.AuthFailure(ctx); err != nil {
+			return ctx, fmt.Errorf("device-agent token refused: %w", err)
+		}
+	}
 	ctx, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, err
@@ -143,6 +157,43 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 		return ctx, fmt.Errorf("authorize agent device sync: %w", err)
 	}
 	return ctx, nil
+}
+
+// JWTAuth authenticates a headless device's device-agent token, admitting the
+// workload through its agent's live policy; like an agent key it needs the
+// device-sync grant. Without a token the context passes to the API key scheme.
+func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
+	if token == "" {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if !deviceagenttoken.IsToken(token) {
+		// A bearer is presented but is not a device-agent token.
+		deviceagenttoken.MarkInvalidToken(ctx)
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if s.deviceAgentTokens == nil {
+		refusal := oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
+		return deviceagenttoken.WithAuthFailure(ctx, refusal), refusal
+	}
+	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+
+	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	if err != nil {
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	authCtx, ok := contextvalues.GetAuthContext(admitted)
+	if !ok || authCtx == nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(admitted, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		err = fmt.Errorf("authorize workload device sync: %w", err)
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	// The workload stays the actor; getPlugins reads the agent it acts for
+	// through deviceagenttoken.EffectiveAgent.
+	return admitted, nil
 }
 
 // GetPlugins returns every plugin assigned to the device user's resolved
@@ -177,10 +228,10 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// An agent-principal key is itself the identity; APIKeyAuth already
-	// required its device-sync grant.
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
-		return s.getAgentPlugins(ctx, authCtx, actor)
+	// An agent-principal key, or a workload acting for its assigned agent, polls
+	// as that agent; the auth step already required the device-sync grant.
+	if agent, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
+		return s.getAgentPlugins(ctx, authCtx, agent)
 	}
 
 	// Resolve the polling identity by credential type. An org install key carries
