@@ -146,14 +146,8 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		return output, nil
 	}
 	if !target.signInRequired() {
-		// Direct upstreams select chaining bindings by resource, even without an interactive issuer.
-		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
-		if err != nil {
-			return GetMyMCPConnectionStatusOutput{}, err
-		}
-		if chained {
-			return output, nil
-		}
+		// Identity chaining serves a server only through a client the
+		// caller's sign-in chooses, so one without a client needs none.
 		output.State = MCPConnectionStateNotApplicable
 		output.Reason = "authorization_not_required"
 		output.NextAction = "use_mcp"
@@ -175,27 +169,12 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 	}
 	clients = memberMCPConnectionClients(clients, target)
 	if len(clients) > 1 {
-		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
-		if err != nil {
-			return GetMyMCPConnectionStatusOutput{}, err
-		}
-		if chained {
-			return output, nil
-		}
 		output.State = MCPConnectionStateSetupRequired
 		output.Reason = "multiple_authorization_clients"
 		output.NextAction = "ask_administrator"
 		return output, nil
 	}
 	if len(clients) == 0 {
-		// Without an interactive client the runtime chains whenever chaining serves the upstream.
-		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
-		if err != nil {
-			return GetMyMCPConnectionStatusOutput{}, err
-		}
-		if chained {
-			return output, nil
-		}
 		output.State = MCPConnectionStateSetupRequired
 		output.Reason = "upstream_authorization_not_configured"
 		output.NextAction = "ask_administrator"
@@ -232,7 +211,7 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		output.Reason = memberMCPReauthorizationReason(status, s.now())
 		output.NextAction = "reconnect"
 	}
-	if _, err := s.memberMCPChainedStatus(ctx, principal, target, &output); err != nil {
+	if _, err := s.memberMCPChainedStatus(ctx, principal, target, clients[0], &output); err != nil {
 		return GetMyMCPConnectionStatusOutput{}, err
 	}
 	return output, nil
@@ -241,8 +220,8 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 // memberMCPChainedStatus applies identity chaining to output when it serves
 // the target's upstream: active on a usable chained credential, otherwise the
 // first call through the server obtains access and Connect stays a fallback.
-func (s *PluginsService) memberMCPChainedStatus(ctx context.Context, principal Principal, target memberMCPStatusTarget, output *GetMyMCPConnectionStatusOutput) (bool, error) {
-	served, usable, err := s.memberMCPIdentityChaining(ctx, principal, target)
+func (s *PluginsService) memberMCPChainedStatus(ctx context.Context, principal Principal, target memberMCPStatusTarget, chosen remotesessions.Client, output *GetMyMCPConnectionStatusOutput) (bool, error) {
+	served, usable, err := s.memberMCPIdentityChaining(ctx, principal, target, chosen)
 	switch {
 	case err != nil:
 		return false, err
@@ -331,8 +310,9 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 // memberMCPIdentityChaining reports whether identity chaining is configured
 // to serve the target's upstream for the caller, and whether a stored chained
 // credential is usable now. It resolves the upstream as the MCP runtime does
-// and never acquires a token.
-func (s *PluginsService) memberMCPIdentityChaining(ctx context.Context, principal Principal, target memberMCPStatusTarget) (bool, bool, error) {
+// and never acquires a token, through the one client the caller's sign-in
+// chooses for it.
+func (s *PluginsService) memberMCPIdentityChaining(ctx context.Context, principal Principal, target memberMCPStatusTarget, chosen remotesessions.Client) (bool, bool, error) {
 	if s.identityChaining == nil {
 		return false, false, nil
 	}
@@ -363,23 +343,15 @@ func (s *PluginsService) memberMCPIdentityChaining(ctx context.Context, principa
 	}
 	tunnelIssuer := uuid.NullUUID{UUID: target.remoteSessionIssuerID, Valid: target.remoteSessionIssuerID != uuid.Nil}
 	if tunneled {
-		// A tunneled upstream routes, and chains, by the issuer of the one
-		// client the caller's sign-in would choose for it.
-		tunnelIssuer = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		if s.remoteSessions != nil && target.userSessionIssuerID != uuid.Nil {
-			clients, err := s.remoteSessions.ListClients(ctx, target.projectID, principal.OrganizationID, target.userSessionIssuerID)
-			if err != nil {
-				return false, false, fmt.Errorf("list MCP authorization clients: %w", err)
-			}
-			if chosen := memberMCPConnectionClients(clients, target); len(chosen) == 1 {
-				tunnelIssuer = uuid.NullUUID{UUID: chosen[0].RemoteSessionIssuerID, Valid: true}
-			}
-		}
+		// A tunneled upstream routes, and chains, by the chosen client's own
+		// issuer.
+		tunnelIssuer = uuid.NullUUID{UUID: chosen.RemoteSessionIssuerID, Valid: true}
 	}
 	req, ok := identitychaining.NewRequest(principal.OrganizationID, target.projectID, target.userSessionIssuerID, principal.UserID, upstream, tunneled, tunnelIssuer)
 	if !ok {
 		return false, false, nil
 	}
+	req.RemoteSessionClientID = uuid.NullUUID{UUID: chosen.ID, Valid: true}
 	if _, served := s.identityChaining.Serves(ctx, req); !served {
 		return false, false, nil
 	}

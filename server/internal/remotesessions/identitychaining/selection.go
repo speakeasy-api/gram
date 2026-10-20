@@ -107,6 +107,7 @@ func (g *Governor) selectBindingWith(ctx context.Context, logger *slog.Logger, r
 		UserSessionIssuerID:   req.UserSessionIssuerID,
 		UpstreamResource:      strings.TrimRight(resource.Resource, "/"),
 		RemoteSessionIssuerID: req.RemoteSessionIssuerID,
+		RemoteSessionClientID: req.RemoteSessionClientID,
 	})
 	if err != nil {
 		// Unknown configuration keeps the upstream on the interactive path.

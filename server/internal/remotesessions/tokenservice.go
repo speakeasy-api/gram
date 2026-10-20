@@ -749,6 +749,30 @@ func (m *ChallengeManager) RemoteSessionsNeedReconnect(
 	return m.storedGrantsNeedReconnect(ctx, projectID, organizationID, userSessionIssuerID, clients, subject)
 }
 
+// ClientNeedsReconnect is RemoteSessionsNeedReconnect for one client the
+// caller chose: only that client's stored credential decides, and a client
+// no longer bound to the user-session issuer needs reconnecting.
+func (m *ChallengeManager) ClientNeedsReconnect(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	clientID uuid.UUID,
+) (bool, error) {
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
+	if err != nil {
+		return false, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	chosen := slices.IndexFunc(clients, func(c remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
+		return c.ClientID == clientID
+	})
+	if chosen < 0 {
+		return true, nil
+	}
+	return m.storedGrantsNeedReconnect(ctx, projectID, organizationID, userSessionIssuerID, clients[chosen:chosen+1], subject)
+}
+
 // storedGrantsNeedReconnect reports whether the stored credential the caller
 // would resolve for any of clients needs re-linking. It selects the credential
 // source exactly as resolveCallerUpstreamToken does and applies

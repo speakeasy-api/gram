@@ -88,7 +88,7 @@ func TestConsentChainedClients_RequestMatchesRuntime(t *testing.T) {
 
 			require.True(t, s.consentChainedClients(t.Context(), endpoint, state, []remotesessions.Client{client}, tc.routing)[client.ID])
 
-			runtime, ok := s.identityChainingRequest(humanChainingContext(t, "user-1", chainingTestOrg), endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, endpoint.UpstreamResource, tc.tunneled, uuid.NullUUID{UUID: tunnelIssuer, Valid: true}, uuid.NullUUID{})
+			runtime, ok := s.identityChainingRequest(humanChainingContext(t, "user-1", chainingTestOrg), endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, endpoint.UpstreamResource, tc.tunneled, uuid.NullUUID{UUID: tunnelIssuer, Valid: true}, uuid.NullUUID{UUID: client.ID, Valid: true})
 			require.True(t, ok)
 			require.NotEmpty(t, runtime.UserSessionJTI)
 			runtime.UserSessionJTI = "" // Consent precedes grant creation and carries no validated grant identifier.
@@ -108,7 +108,7 @@ func TestConsentChainedClients_AttributesSelectedBindingIssuer(t *testing.T) {
 	chained := s.consentChainedClients(t.Context(), endpoint, state, []remotesessions.Client{clientA, clientB}, directRouting(consentBackendRemote))
 	require.True(t, chained[clientA.ID])
 	require.False(t, chained[clientB.ID])
-	require.Len(t, g.requests, 1)
+	require.Len(t, g.requests, 2, "each card is judged with its own client's request")
 }
 
 func TestConsentChainedClients_UnservedUpstreamIsNotChained(t *testing.T) {
@@ -253,7 +253,7 @@ func TestConsentChainedMetaClients_ServesEachRequestOnce(t *testing.T) {
 	chained := s.consentChainedClients(t.Context(), endpoint, state, []remotesessions.Client{clientA, clientB}, routing)
 	require.True(t, chained[clientA.ID])
 	require.True(t, chained[clientB.ID])
-	require.Len(t, g.requests, 1, "one render judges each distinct request once")
+	require.Len(t, g.requests, 2, "one render judges each distinct request once, and each client's request is its own")
 }
 
 func (g *funcGovernor) CheckConsent(context.Context, identitychaining.Request, uuid.UUID) identitychaining.Outcome {

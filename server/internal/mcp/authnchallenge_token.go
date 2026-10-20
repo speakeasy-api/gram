@@ -1368,31 +1368,39 @@ func (s *Service) rotateRefreshToken(
 // reconnects the upstream. It fails open (meta MCP endpoints, check errors)
 // because many clients treat any failed refresh as a sign-out.
 //
+// A direct proxied server is served through the credential's choice, so
+// refresh judges that choice: a missing or unusable one is refused, as the
+// runtime would refuse it, a no-auth one needs no upstream, and a chosen
+// client needs reconnecting only when its own stored grant does. Sibling
+// clients on the user session issuer never decide. Other endpoints keep the
+// issuer-wide check.
+//
 // When identity chaining owns the upstream, refresh follows the runtime, which
-// then serves the call from the upstream's own token or by chaining and never
-// consults sibling clients on the user session issuer; the consent page
-// likewise lets a chained card stand in for a connection. So once chaining
-// serves the grant, sibling sessions need no reconnect either. The reconnect
-// stands only when chaining does not serve the upstream, stored state
-// confirms the human must sign in again, or a provider just refused chaining
-// for good, which only the consent page's separate sign-in works around.
-// Anything chaining cannot confirm,
-// a failed read included, fails open, because no reconnect would change it.
+// then serves the call from the chosen client's token or by chaining through
+// that client's binding; the consent page likewise lets a chained card stand
+// in for a connection. The reconnect stands only when chaining does not serve
+// the upstream, stored state confirms the human must sign in again, or a
+// provider just refused chaining for good, which only the consent page's
+// separate sign-in works around. Anything chaining cannot confirm, a failed
+// read included, fails open, because no reconnect would change it.
 func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) bool {
 	if endpoint.MetaMcpServerID.Valid {
 		return false
 	}
-	reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
+	_, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
 	if err != nil {
-		logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
 		return false
 	}
-	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
+	if !proxied {
+		reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		if err != nil {
+			logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
+			return false
+		}
 		return reconnect
 	}
-	// The runtime serves the server through the credential's choice, so
-	// refresh judges chaining through it too: no usable choice means the
-	// runtime asks for a reconnect, and a no-auth choice needs no upstream.
+
 	choice, err := s.refreshUpstreamChoice(ctx, endpoint, jti)
 	switch {
 	case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
@@ -1403,7 +1411,14 @@ func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger 
 	case choice.noAuth():
 		return false
 	}
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
+	reconnect, err := s.remoteChallengeMgr.ClientNeedsReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, choice.clientID.UUID)
+	if err != nil {
+		logger.WarnContext(ctx, "check chosen upstream remote session before refresh", attr.SlogError(err))
+		return false
+	}
+	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
+		return reconnect
+	}
 	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, choice)
 	switch {
 	case err != nil:
