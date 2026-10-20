@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { BellOff } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
@@ -11,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { pluralize } from "@/lib/format";
 import type { DirectoryReviewItem } from "@gram/client/models/components/directoryreviewitem.js";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -274,16 +276,23 @@ function ReviewRow({
               <Button.Text>Leave unmapped</Button.Text>
             </Button>
             {item.kind === "new_attribute_value" && (
-              <Button
-                variant="tertiary"
-                size="sm"
-                disabled={disabled}
-                onClick={() => onDecide("opt_out_key")}
+              <SimpleTooltip
+                tooltip={`Stop asking about ${item.item.source.attributeKey}`}
               >
-                <Button.Text>
-                  Stop asking about {item.item.source.attributeKey}
-                </Button.Text>
-              </Button>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  disabled={disabled}
+                  onClick={() => onDecide("opt_out_key")}
+                >
+                  <Button.LeftIcon>
+                    <BellOff className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">
+                    Stop asking about {item.item.source.attributeKey}
+                  </Button.Text>
+                </Button>
+              </SimpleTooltip>
             )}
           </div>
         </div>
