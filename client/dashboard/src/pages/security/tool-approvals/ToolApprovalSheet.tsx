@@ -42,6 +42,54 @@ function DetailRow({
 }
 
 /**
+ * One argument value. Text reads as text; numbers, booleans and nested values
+ * read as code, so a string "true" and the boolean true look different.
+ */
+function ArgumentValue({ value }: { value: unknown }): JSX.Element {
+  if (typeof value === "string") {
+    return <span className="break-words whitespace-pre-wrap">{value}</span>;
+  }
+  if (value !== null && typeof value === "object") {
+    return (
+      <pre className="bg-muted/40 overflow-x-auto p-2 font-mono text-xs whitespace-pre-wrap">
+        {JSON.stringify(value, null, 2)}
+      </pre>
+    );
+  }
+  return <code className="font-mono text-xs">{String(value)}</code>;
+}
+
+/**
+ * The call's arguments as a card with one row per argument, in the same
+ * layout as the request details.
+ */
+function ArgumentsCard({
+  args,
+}: {
+  args: Record<string, unknown>;
+}): JSX.Element {
+  const entries = Object.entries(args).sort(([a], [b]) => a.localeCompare(b));
+  if (entries.length === 0) {
+    return (
+      <section className="border-border border p-3">
+        <Text small muted>
+          This call has no arguments.
+        </Text>
+      </section>
+    );
+  }
+  return (
+    <section className="border-border border p-3">
+      {entries.map(([key, value]) => (
+        <DetailRow key={key} label={key}>
+          <ArgumentValue value={value} />
+        </DetailRow>
+      ))}
+    </section>
+  );
+}
+
+/**
  * One tool approval request: what was called, with what, and why, and, for
  * an approver while it is pending, Approve once and Deny. The same decision
  * as the Slack card; only listed approvers see the buttons.
@@ -142,9 +190,7 @@ export function ToolApprovalSheet({
                 <Text variant="small" className="font-medium">
                   Arguments
                 </Text>
-                <pre className="bg-muted/40 border-border max-h-80 overflow-auto border p-3 font-mono text-xs whitespace-pre-wrap">
-                  {JSON.stringify(approval.argumentsPreview, null, 2)}
-                </pre>
+                <ArgumentsCard args={approval.argumentsPreview} />
                 <Text small muted>
                   Long values are shortened. The retry must send exactly these
                   arguments.

@@ -69,7 +69,10 @@ describe("ToolApprovalSheet", () => {
 
     expect(screen.getByText("slack__post_message")).toBeTruthy();
     expect(screen.getByText("Tell the team the deploy finished.")).toBeTruthy();
-    expect(screen.getByText(/"Deploy finished"/)).toBeTruthy();
+    // Each argument is its own row, with the value as plain text.
+    expect(screen.getByText("channel")).toBeTruthy();
+    expect(screen.getByText("C1")).toBeTruthy();
+    expect(screen.getByText("Deploy finished")).toBeTruthy();
 
     fireEvent.change(screen.getByPlaceholderText("Optional"), {
       target: { value: "Go ahead." },
