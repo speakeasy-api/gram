@@ -67,38 +67,38 @@ checksum = "sha256:4d8fda6d16c11531e2d0df6b0c6d954e48b0dd7637163f044c638309f7a86
 url = "https://release.ariga.io/atlas/atlas-windows-amd64-v1.3.4.exe"
 
 [[tools.aube]]
-version = "1.38.1"
-backend = "aqua:jdx/aube"
+version = "2.8.0"
+backend = "packslip:github.com/aubepkg/aube"
 
 [tools.aube."platforms.linux-arm64"]
-checksum = "sha256:dda1d6ac8d4c9cba58b52be8f86ceb222bb3b28ca79b76fb4ca0d46633f44212"
-url = "https://github.com/aubepkg/aube/releases/download/v1.38.1/aube-v1.38.1-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/508113920"
+checksum = "sha256:064c68059dcbd32c7744cf9a0e77eb68593b7979453a2c9808427b13d1d7e397"
+url = "https://github.com/aubepkg/aube/releases/download/v2.8.0/aube-v2.8.0-aarch64-unknown-linux-gnu.tar.gz"
+signer = "sigstore-oidc:https://github.com/aubepkg/aube/.github/workflows/release.yml"
 
 [tools.aube."platforms.linux-arm64-musl"]
-checksum = "sha256:c19365e4dd68f1177da4dc36e9b3e5dad623b12bfa252298c907564ab0cfa099"
-url = "https://github.com/aubepkg/aube/releases/download/v1.38.1/aube-v1.38.1-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/508077830"
+checksum = "sha256:2b1d6554bb0996b5a4261d97b6c6bd75f974de08e2f4d74f65cd00bdb96e5a96"
+url = "https://github.com/aubepkg/aube/releases/download/v2.8.0/aube-v2.8.0-aarch64-unknown-linux-musl.tar.gz"
+signer = "sigstore-oidc:https://github.com/aubepkg/aube/.github/workflows/release.yml"
 
 [tools.aube."platforms.linux-x64"]
-checksum = "sha256:1f10a0a7bd38d94b348b52f785a7496dab6985775b3dfc2ba74914d1c739fba9"
-url = "https://github.com/aubepkg/aube/releases/download/v1.38.1/aube-v1.38.1-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/508095865"
+checksum = "sha256:4d1789e591fad8b2c3a6d99aaa7ce75d322a60cdc6076c5e3c5b76f1f6679298"
+url = "https://github.com/aubepkg/aube/releases/download/v2.8.0/aube-v2.8.0-x86_64-unknown-linux-gnu.tar.gz"
+signer = "sigstore-oidc:https://github.com/aubepkg/aube/.github/workflows/release.yml"
 
 [tools.aube."platforms.linux-x64-musl"]
-checksum = "sha256:3557dc1c64f47479440eda76c41bee23998ea3336a70aee22749d298a95938cf"
-url = "https://github.com/aubepkg/aube/releases/download/v1.38.1/aube-v1.38.1-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/508091774"
+checksum = "sha256:113da2c13ac911aacac9efdd0c537e5295cacf5a06d474de88bc34754162890d"
+url = "https://github.com/aubepkg/aube/releases/download/v2.8.0/aube-v2.8.0-x86_64-unknown-linux-musl.tar.gz"
+signer = "sigstore-oidc:https://github.com/aubepkg/aube/.github/workflows/release.yml"
 
 [tools.aube."platforms.macos-arm64"]
-checksum = "sha256:120989b5613a48333424c0aa4c3518573baec74836ba700d8d791900b974004b"
-url = "https://github.com/aubepkg/aube/releases/download/v1.38.1/aube-v1.38.1-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/508129180"
+checksum = "sha256:e131b822724760ea5c94bc59a2ae22eee8be2f866d1634c19f1fa10f62ae19e3"
+url = "https://github.com/aubepkg/aube/releases/download/v2.8.0/aube-v2.8.0-aarch64-apple-darwin.tar.gz"
+signer = "sigstore-oidc:https://github.com/aubepkg/aube/.github/workflows/release.yml"
 
 [tools.aube."platforms.windows-x64"]
-checksum = "sha256:3eadbe826a79184792f423c52e6ad3a20575f0c408ede66612f6db175339a180"
-url = "https://github.com/aubepkg/aube/releases/download/v1.38.1/aube-v1.38.1-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/aubepkg/aube/releases/assets/508093335"
+checksum = "sha256:cb6f6bb9b64874e77a03efd8a17dfb05e0072e2e4e6777187483d1b956f18d67"
+url = "https://github.com/aubepkg/aube/releases/download/v2.8.0/aube-v2.8.0-x86_64-pc-windows-msvc.zip"
+signer = "sigstore-oidc:https://github.com/aubepkg/aube/.github/workflows/release.yml"
 
 [[tools.buf]]
 version = "1.72.0"

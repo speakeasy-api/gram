@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
@@ -123,13 +124,17 @@ func (s *Service) SyncDirectoryGroups(ctx context.Context, _ *gen.SyncDirectoryG
 		return nil, err
 	}
 
+	snapshot, err := directory.SnapshotOrganizationSync(ctx, s.db, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "snapshot organization sync").LogError(ctx, s.logger)
+	}
+
 	directories, err := s.roleMgr.roles.ListDirectories(ctx, workosOrgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "list directories").LogError(ctx, s.logger)
 	}
 
-	dirQueries := directoryrepo.New(s.db)
-	groupCount := 0
+	var inventory []directoryrepo.UpsertListedDirectoryGroupParams
 	for _, directory := range directories {
 		if !workos.HasActiveDirectory([]workos.Directory{directory}) {
 			continue
@@ -139,31 +144,50 @@ func (s *Service) SyncDirectoryGroups(ctx context.Context, _ *gen.SyncDirectoryG
 		if err != nil {
 			return nil, oops.E(oops.CodeGatewayError, err, "list directory groups").LogError(ctx, s.logger)
 		}
-		groupCount += len(groups)
 
 		for _, group := range groups {
 			attributes := []byte(group.RawAttributes)
 			if len(attributes) == 0 || string(attributes) == "null" {
 				attributes = []byte("{}")
 			}
-			if _, err := dirQueries.UpsertListedDirectoryGroup(ctx, directoryrepo.UpsertListedDirectoryGroupParams{
+			inventory = append(inventory, directoryrepo.UpsertListedDirectoryGroupParams{
 				OrganizationID:         ac.ActiveOrganizationID,
 				WorkosDirectoryGroupID: group.ID,
+				DirectoryID:            conv.ToPGText(directory.ID),
 				Name:                   group.Name,
 				Attributes:             attributes,
 				WorkosCreatedAt:        conv.ToPGTimestamptz(workosTimeOrNow(group.CreatedAt)),
 				WorkosUpdatedAt:        conv.ToPGTimestamptz(workosTimeOrNow(group.UpdatedAt)),
-			}); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "save directory group").LogError(ctx, s.logger)
-			}
-
-			if err := s.reconcileDirectoryGroupMembers(ctx, ac.ActiveOrganizationID, group.ID); err != nil {
-				return nil, err
-			}
+			})
 		}
 	}
 
-	return &gen.SyncDirectoryGroupsResult{GroupCount: groupCount}, nil
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin directory group sync").LogError(ctx, s.logger)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := snapshot.LockAndValidate(ctx, tx); err != nil {
+		return nil, oops.E(oops.CodeConflict, err, "directory inventory changed; retry sync").LogError(ctx, s.logger)
+	}
+	dirQueries := directoryrepo.New(tx)
+	for _, group := range inventory {
+		if _, err := dirQueries.UpsertListedDirectoryGroup(ctx, group); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "save directory group").LogError(ctx, s.logger)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit directory group sync").LogError(ctx, s.logger)
+	}
+
+	// Member listings call WorkOS, so they run after the inventory commits.
+	// A group the inventory left tombstoned is skipped by the reconcile.
+	for _, group := range inventory {
+		if err := s.reconcileDirectoryGroupMembers(ctx, ac.ActiveOrganizationID, group.WorkosDirectoryGroupID); err != nil {
+			return nil, err
+		}
+	}
+	return &gen.SyncDirectoryGroupsResult{GroupCount: len(inventory)}, nil
 }
 
 // reconcileDirectoryGroupMembers makes a group's memberships match its full
@@ -233,6 +257,23 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 		attr.UserID(ac.UserID),
 	)
 
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	mappings, err := s.setDirectoryRoleMappingsTx(ctx, dbtx, ac, payload, legacy)
+	if err != nil {
+		return nil, err
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit directory role mappings").LogError(ctx, s.logger)
+	}
+	return mappings, nil
+}
+
+func (s *Service) setDirectoryRoleMappingsTx(ctx context.Context, dbtx pgx.Tx, ac *contextvalues.AuthContext, payload *gen.SetDirectoryRoleMappingsPayload, legacy bool) ([]*gen.DirectoryRoleMapping, error) {
 	var groupID uuid.NullUUID
 	switch payload.SourceKind {
 	case directoryRoleMappingSourceGroup:
@@ -251,12 +292,6 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 	default:
 		return nil, oops.E(oops.CodeBadRequest, nil, "unknown source kind").LogError(ctx, s.logger)
 	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
 
@@ -428,9 +463,6 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 		})
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit directory role mappings").LogError(ctx, s.logger)
-	}
 	return mappings, nil
 }
 
