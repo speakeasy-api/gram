@@ -89,13 +89,7 @@ export function StepServers({
     <div className="space-y-5">
       <WizardStepHeader
         title="Server selection"
-        description={
-          <>
-            Grants <code className="text-xs">mcp:connect</code> on each selected
-            server. Keys are narrowed again at issuance against the owner's live
-            permissions.
-          </>
-        }
+        description="The MCP servers this agent may call. It can reach nothing else, and never more than you can reach yourself."
       />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex-1">
