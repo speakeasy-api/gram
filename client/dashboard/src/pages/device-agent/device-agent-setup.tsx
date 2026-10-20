@@ -580,6 +580,9 @@ function ManualIdentity({ os }: { os: OsKey }) {
     linux: `${LINUX_AGENT_DIR}/speakeasy enroll`,
   };
   const command = commands[os];
+  // The macOS and Windows installers ship the agent's menu bar app, which can
+  // start the same sign-in. Linux has no app, so the CLI is the only way.
+  const hasApp = os !== "linux";
 
   return (
     <div className="flex flex-col gap-4">
@@ -587,6 +590,13 @@ function ManualIdentity({ os }: { os: OsKey }) {
         On a device that isn't MDM-managed, set identity by signing in once
         after installing with no <code>managed.json</code> required.
       </Text>
+      {hasApp && (
+        <Text muted>
+          Open the Speakeasy Agent app and click{" "}
+          <strong className="font-medium">Sign in to Speakeasy</strong>. To sign
+          in from a terminal instead, run:
+        </Text>
+      )}
       <CodeBlock language="bash">{command}</CodeBlock>
       <Text small muted>
         It opens a browser, you sign in, and the agent stores your email locally
