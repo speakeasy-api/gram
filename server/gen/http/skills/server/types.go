@@ -220,6 +220,9 @@ type UpdateResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of reconciled activations observed for this skill.
 	SeenCount int64 `form:"seen_count" json:"seen_count" xml:"seen_count"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Returned by list and get only.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 	// The active public share token, absent when the skill is not shared.
 	ShareToken *string `form:"share_token,omitempty" json:"share_token,omitempty" xml:"share_token,omitempty"`
 	// When the skill was created.
@@ -4663,6 +4666,9 @@ type SkillResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of reconciled activations observed for this skill.
 	SeenCount int64 `form:"seen_count" json:"seen_count" xml:"seen_count"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Returned by list and get only.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 	// The active public share token, absent when the skill is not shared.
 	ShareToken *string `form:"share_token,omitempty" json:"share_token,omitempty" xml:"share_token,omitempty"`
 	// When the skill was created.
@@ -5016,22 +5022,23 @@ func NewRestoreVersionResponseBody(res *skills.RecordSkillResult) *RestoreVersio
 // "update" endpoint of the "skills" service.
 func NewUpdateResponseBody(res *types.Skill) *UpdateResponseBody {
 	body := &UpdateResponseBody{
-		ID:              res.ID,
-		ProjectID:       res.ProjectID,
-		Name:            res.Name,
-		DisplayName:     res.DisplayName,
-		Summary:         res.Summary,
-		SourceKind:      res.SourceKind,
-		Classification:  res.Classification,
-		LatestVersionID: res.LatestVersionID,
-		VersionCount:    res.VersionCount,
-		HasValidVersion: res.HasValidVersion,
-		FirstSeenAt:     res.FirstSeenAt,
-		LastSeenAt:      res.LastSeenAt,
-		SeenCount:       res.SeenCount,
-		ShareToken:      res.ShareToken,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		Name:                res.Name,
+		DisplayName:         res.DisplayName,
+		Summary:             res.Summary,
+		SourceKind:          res.SourceKind,
+		Classification:      res.Classification,
+		LatestVersionID:     res.LatestVersionID,
+		VersionCount:        res.VersionCount,
+		HasValidVersion:     res.HasValidVersion,
+		FirstSeenAt:         res.FirstSeenAt,
+		LastSeenAt:          res.LastSeenAt,
+		SeenCount:           res.SeenCount,
+		LastLoadedOverMcpAt: res.LastLoadedOverMcpAt,
+		ShareToken:          res.ShareToken,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
 	}
 	if res.Tags != nil {
 		body.Tags = make([]string, len(res.Tags))

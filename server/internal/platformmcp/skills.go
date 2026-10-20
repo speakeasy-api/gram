@@ -144,6 +144,9 @@ type SkillSummary struct {
 	VersionCount    int64    `json:"version_count"`
 	HasValidVersion bool     `json:"has_valid_version"`
 	UpdatedAt       string   `json:"updated_at"`
+	// LastLoadedOverMcpAt is set only on list and get, and only when an agent
+	// has loaded the skill over a hosted MCP server.
+	LastLoadedOverMcpAt *string `json:"last_loaded_over_mcp_at,omitempty"`
 }
 
 // SkillVersionSummary is one immutable version. Content appears only when the
@@ -1261,15 +1264,16 @@ func buildSkillSummary(skill *types.Skill) SkillSummary {
 		return SkillSummary{}
 	}
 	return SkillSummary{
-		ID:              skill.ID,
-		Name:            skill.Name,
-		DisplayName:     skill.DisplayName,
-		Summary:         stringOrEmpty(skill.Summary),
-		Tags:            skill.Tags,
-		LatestVersionID: stringOrEmpty(skill.LatestVersionID),
-		VersionCount:    skill.VersionCount,
-		HasValidVersion: skill.HasValidVersion,
-		UpdatedAt:       skill.UpdatedAt,
+		ID:                  skill.ID,
+		Name:                skill.Name,
+		DisplayName:         skill.DisplayName,
+		Summary:             stringOrEmpty(skill.Summary),
+		Tags:                skill.Tags,
+		LatestVersionID:     stringOrEmpty(skill.LatestVersionID),
+		VersionCount:        skill.VersionCount,
+		HasValidVersion:     skill.HasValidVersion,
+		UpdatedAt:           skill.UpdatedAt,
+		LastLoadedOverMcpAt: skill.LastLoadedOverMcpAt,
 	}
 }
 

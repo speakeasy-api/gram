@@ -590,7 +590,7 @@ func (s *Service) recordVersion(
 		}
 
 		return &gen.RecordSkillResult{
-			Skill:          mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}),
+			Skill:          mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}),
 			Version:        matchedView,
 			CreatedSkill:   false,
 			CreatedVersion: false,
@@ -628,7 +628,7 @@ func (s *Service) recordVersion(
 	if err != nil {
 		return nil, false, oops.E(oops.CodeUnexpected, err, "load skill state after adding version").LogError(ctx, logger)
 	}
-	afterView := mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false})
+	afterView := mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false})
 	versionView, err := mv.BuildSkillVersionView(version, derivedFromVersionID, manifestFrontmatter(version.Content), mv.SkillVersionSightingStats{
 		FirstSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		LastSeenAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -952,7 +952,7 @@ func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersio
 		s.signalPluginPublishForSkills(ctx, authCtx, []uuid.UUID{skill.ID}, true)
 	}
 	return &gen.RecordSkillResult{
-		Skill:   mv.BuildSkillView(skill, stateAfter.LatestVersionID, stateAfter.VersionCount, stateAfter.HasValidVersion, pgtype.Text{String: "", Valid: false}),
+		Skill:   mv.BuildSkillView(skill, stateAfter.LatestVersionID, stateAfter.VersionCount, stateAfter.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}),
 		Version: versionView, CreatedSkill: false, CreatedVersion: false,
 	}, nil
 }
@@ -1021,7 +1021,7 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		}
 		// Returned before the write so a replay neither advances updated_at nor
 		// records a second update event for an edit that already happened.
-		return mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+		return mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}), nil
 	}
 
 	updated, err := queries.UpdateSkillDetails(ctx, repo.UpdateSkillDetailsParams{
@@ -1063,7 +1063,7 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		s.signalPluginPublishForSkills(ctx, authCtx, []uuid.UUID{skill.ID}, false)
 	}
 
-	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}), nil
 }
 
 // skillMetadataMatches reports whether a skill already carries exactly the
@@ -1491,7 +1491,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	return &gen.GetSkillResult{
-		Skill:                   mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken),
+		Skill:                   mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken, details.LastLoadedOverMcpAt),
 		LatestVersion:           latestView,
 		AssistantCount:          details.AssistantCount,
 		PromptInjectionFindings: promptInjectionFindings,

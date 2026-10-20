@@ -218,6 +218,9 @@ type UpdateResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of reconciled activations observed for this skill.
 	SeenCount *int64 `form:"seen_count,omitempty" json:"seen_count,omitempty" xml:"seen_count,omitempty"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Returned by list and get only.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 	// The active public share token, absent when the skill is not shared.
 	ShareToken *string `form:"share_token,omitempty" json:"share_token,omitempty" xml:"share_token,omitempty"`
 	// When the skill was created.
@@ -4661,6 +4664,9 @@ type SkillResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of reconciled activations observed for this skill.
 	SeenCount *int64 `form:"seen_count,omitempty" json:"seen_count,omitempty" xml:"seen_count,omitempty"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Returned by list and get only.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 	// The active public share token, absent when the skill is not shared.
 	ShareToken *string `form:"share_token,omitempty" json:"share_token,omitempty" xml:"share_token,omitempty"`
 	// When the skill was created.
@@ -5599,22 +5605,23 @@ func NewRestoreVersionGatewayError(body *RestoreVersionGatewayErrorResponseBody)
 // HTTP "OK" response.
 func NewUpdateSkillOK(body *UpdateResponseBody) *types.Skill {
 	v := &types.Skill{
-		ID:              *body.ID,
-		ProjectID:       *body.ProjectID,
-		Name:            *body.Name,
-		DisplayName:     *body.DisplayName,
-		Summary:         body.Summary,
-		SourceKind:      *body.SourceKind,
-		Classification:  *body.Classification,
-		LatestVersionID: body.LatestVersionID,
-		VersionCount:    *body.VersionCount,
-		HasValidVersion: *body.HasValidVersion,
-		FirstSeenAt:     body.FirstSeenAt,
-		LastSeenAt:      body.LastSeenAt,
-		SeenCount:       *body.SeenCount,
-		ShareToken:      body.ShareToken,
-		CreatedAt:       *body.CreatedAt,
-		UpdatedAt:       *body.UpdatedAt,
+		ID:                  *body.ID,
+		ProjectID:           *body.ProjectID,
+		Name:                *body.Name,
+		DisplayName:         *body.DisplayName,
+		Summary:             body.Summary,
+		SourceKind:          *body.SourceKind,
+		Classification:      *body.Classification,
+		LatestVersionID:     body.LatestVersionID,
+		VersionCount:        *body.VersionCount,
+		HasValidVersion:     *body.HasValidVersion,
+		FirstSeenAt:         body.FirstSeenAt,
+		LastSeenAt:          body.LastSeenAt,
+		SeenCount:           *body.SeenCount,
+		LastLoadedOverMcpAt: body.LastLoadedOverMcpAt,
+		ShareToken:          body.ShareToken,
+		CreatedAt:           *body.CreatedAt,
+		UpdatedAt:           *body.UpdatedAt,
 	}
 	v.Tags = make([]string, len(body.Tags))
 	for i, val := range body.Tags {
@@ -9020,6 +9027,9 @@ func ValidateUpdateResponseBody(body *UpdateResponseBody) (err error) {
 	}
 	if body.LastSeenAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
+	}
+	if body.LastLoadedOverMcpAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_loaded_over_mcp_at", *body.LastLoadedOverMcpAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -15044,6 +15054,9 @@ func ValidateSkillResponseBody(body *SkillResponseBody) (err error) {
 	}
 	if body.LastSeenAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
+	}
+	if body.LastLoadedOverMcpAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_loaded_over_mcp_at", *body.LastLoadedOverMcpAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

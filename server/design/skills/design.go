@@ -914,6 +914,7 @@ var Skill = Type("Skill", func() {
 	Attribute("first_seen_at", String, "When this skill was first activated.", func() { Format(FormatDateTime) })
 	Attribute("last_seen_at", String, "When this skill was most recently activated.", func() { Format(FormatDateTime) })
 	Attribute("seen_count", Int64, "The number of reconciled activations observed for this skill.")
+	Attribute("last_loaded_over_mcp_at", String, "When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Returned by list and get only.", func() { Format(FormatDateTime) })
 	Attribute("share_token", String, "The active public share token, absent when the skill is not shared.")
 	Attribute("created_at", String, "When the skill was created.", func() {
 		Format(FormatDateTime)

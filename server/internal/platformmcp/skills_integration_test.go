@@ -189,6 +189,12 @@ func TestPlatformMCPSkillsToolsAuthorAndDistributeEndToEnd(t *testing.T) {
 	lastLoaded, err := time.Parse(time.RFC3339, *listed.Distributions[0].LastLoadedOverMcpAt)
 	require.NoError(t, err)
 	require.True(t, lastLoaded.Equal(readAt), "last_loaded_over_mcp_at=%s readAt=%s", lastLoaded, readAt)
+	// get_skill carries the same per-skill value, with no distribution needed.
+	got := callSkillsTool[GetSkillOutput](t, ctx, session, "get_skill", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+	})
+	require.Equal(t, listed.Distributions[0].LastLoadedOverMcpAt, got.Skill.LastLoadedOverMcpAt)
 
 	// Taking the skill back is gated on the user's explicit confirmation, and
 	// an unconfirmed call revokes nothing.

@@ -437,6 +437,20 @@ func TestSkillDistributionReportsLastLoadOverMCP(t *testing.T) {
 		return &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(pluginID.String()), PinnedVersionID: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}
 	}
 
+	// The skill's own list and get report the same per-skill value, so a skill
+	// with no plugin distribution can still be observed.
+	requireSkillLoad := func(want *string) {
+		t.Helper()
+		listedSkills, err := ti.service.List(ctx, &gen.ListPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Len(t, listedSkills.Skills, 1)
+		require.Equal(t, want, listedSkills.Skills[0].LastLoadedOverMcpAt)
+		details, err := ti.service.Get(ctx, &gen.GetPayload{ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Equal(t, want, details.Skill.LastLoadedOverMcpAt)
+	}
+	requireSkillLoad(nil)
+
 	distribution, err := ti.service.Distribute(ctx, distributePayload(pluginA.ID))
 	require.NoError(t, err)
 	require.Nil(t, distribution.LastLoadedOverMcpAt, "a skill no agent loaded over MCP reports no load")
@@ -465,6 +479,7 @@ func TestSkillDistributionReportsLastLoadOverMCP(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, listed.Distributions, 1)
 	require.Nil(t, listed.Distributions[0].LastLoadedOverMcpAt, "hook-reported activations do not count as MCP loads")
+	requireSkillLoad(nil)
 
 	// Two hosted MCP reads in different sessions: the newest one is reported.
 	resolver := mcpskills.NewResolver(testenv.NewLogger(t), ti.conn)
@@ -488,6 +503,7 @@ func TestSkillDistributionReportsLastLoadOverMCP(t *testing.T) {
 	require.Len(t, listed.Distributions, 1)
 	require.NotNil(t, listed.Distributions[0].LastLoadedOverMcpAt)
 	require.Equal(t, want, *listed.Distributions[0].LastLoadedOverMcpAt)
+	requireSkillLoad(&want)
 
 	// The load belongs to the skill, so an unchanged re-distribution and a
 	// fresh distribution to another plugin both report it.
