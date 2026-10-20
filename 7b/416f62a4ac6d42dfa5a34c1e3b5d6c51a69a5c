@@ -1,0 +1,41 @@
+server/internal/directoryreview/review.go
+  h_9630b74bdac540 6-7,88-96,128-133,161,168-169,213-221,316-324
+server/internal/outbox/events/directory_review.go
+  h_9630b74bdac540 1-49
+server/internal/background/activities/process_workos_directory_attributes_events.go
+  h_9630b74bdac540 129,191,215,478,535
+server/internal/access/directory_review.go
+  h_9630b74bdac540 184,187,238-241
+  s_c97e1da528e04d::t_3eaf0b5c1ff189 186,242
+server/internal/directoryreview/webhooks.go
+  h_9630b74bdac540 1-99
+server/internal/access/directory_review_test.go
+  h_9630b74bdac540 16,109-111
+server/internal/directoryreview/webhooks_test.go
+  h_9630b74bdac540 1-124
+server/internal/outbox/events/catalog_gen.go
+  h_9630b74bdac540 35-36
+server/internal/outbox/events/catalog_gen.yaml
+  h_9630b74bdac540 5575-5664
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7b416f62a4ac6d42dfa5a34c1e3b5d6c51a69a5c",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_c97e1da528e04d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6d64a4cd-07f5-4ba7-8d65-019dc7855e95",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
