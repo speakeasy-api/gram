@@ -250,14 +250,14 @@ func (s *Service) handlePlatformToolsetRequest(
 		}
 		return s.listPlatformResources(ctx, req)
 	case mcpversions.MethodResourcesRead:
-		// An embedded skill's SKILL.md is the only resource this surface
-		// reads. Any other URI, and every URI while the extension is off, is
-		// answered as it was before the extension existed: as an unknown
-		// method, since the surface declares no resources then.
-		if uri, ok := skillResourceURI(req.Params); ok && s.platformSkillsEnabled(ctx, authCtx) {
-			return s.readPlatformSkill(ctx, req, uri)
+		// While the extension is off the surface declares no resources, so
+		// the method stays unknown, as it was before the extension existed.
+		// While it is on, an embedded skill's SKILL.md is the only resource
+		// this surface reads, and any other URI is an unknown resource.
+		if !s.platformSkillsEnabled(ctx, authCtx) {
+			return nil, unavailableMethod(req)
 		}
-		return nil, unavailableMethod(req)
+		return s.readPlatformResource(ctx, req)
 	case mcpversions.MethodSkillsList:
 		return s.listPlatformSkills(ctx, req)
 	case mcpversions.MethodSkillsGet:

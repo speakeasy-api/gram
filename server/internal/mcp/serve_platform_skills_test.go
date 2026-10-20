@@ -255,10 +255,13 @@ func TestServePlatformToolset_Skills_ReadUnknownURIIsInvalidParams(t *testing.T)
 	require.NoError(t, err)
 	requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
 
-	// A URI that is not a skill at all is not a resource this surface has.
-	w, err = servePlatformHTTP(t, ti, f.slug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": "file:///etc/passwd"}), f.token)
-	require.NoError(t, err)
-	requireRPCErrorCode(t, w, oops.MCPCodeMethodNotFound)
+	// Any other URI the surface does not serve is an unknown resource, not an
+	// unknown method, while the extension declares resources.
+	for _, uri := range []string{"skill://not-an-embedded-skill/references/example.md", "file:///etc/passwd"} {
+		w, err = servePlatformHTTP(t, ti, f.slug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": uri}), f.token)
+		require.NoError(t, err)
+		requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
+	}
 }
 
 func TestServePlatformToolset_Skills_ResourcesListIsEmpty(t *testing.T) {

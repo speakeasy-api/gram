@@ -157,7 +157,7 @@ func skillsMiddleware(catalog *mcpskills.EmbeddedCatalog, gate SkillsGate) mcp.M
 				if !ok || read.Params == nil {
 					return next(ctx, method, req)
 				}
-				if _, isSkill := mcpskills.ParseSkillURI(read.Params.URI); !isSkill || !skillsEnabled(ctx, gate) {
+				if !mcpskills.IsSkillURI(read.Params.URI) || !skillsEnabled(ctx, gate) {
 					return next(ctx, method, req)
 				}
 				entry, found := catalog.Get(read.Params.URI)

@@ -24,6 +24,14 @@ func SkillURI(name string) string {
 	return skillURIPrefix + name + "/" + skillFileName
 }
 
+// IsSkillURI reports whether a URI uses the skill:// scheme, whether or not
+// it names a skill this server could serve. A surface that declares the
+// Skills extension answers every such URI it does not serve as an unknown
+// skill rather than as an unknown resource.
+func IsSkillURI(uri string) bool {
+	return strings.HasPrefix(uri, skillURIPrefix)
+}
+
 // ParseSkillURI recovers the skill name from a URI of the exact form
 // skill://<name>/SKILL.md. It reports false for any other shape, including
 // nested skill paths and supporting files, and for a name that does not

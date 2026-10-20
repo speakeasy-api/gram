@@ -157,9 +157,11 @@ func TestRuntimeServesEmbeddedSkillsWhenFlagOn(t *testing.T) {
 	require.NotNil(t, unknown.Error)
 	require.Equal(t, -32602, unknown.Error.Code)
 
-	unknownRead := postSkillsRPC(t, handler, "resources/read", map[string]any{"uri": mcpskills.SkillURI("no-such-skill")})
-	require.NotNil(t, unknownRead.Error)
-	require.Equal(t, -32602, unknownRead.Error.Code)
+	for _, uri := range []string{mcpskills.SkillURI("no-such-skill"), "skill://no-such-skill/references/example.md"} {
+		unknownRead := postSkillsRPC(t, handler, "resources/read", map[string]any{"uri": uri})
+		require.NotNil(t, unknownRead.Error, uri)
+		require.Equal(t, -32602, unknownRead.Error.Code, uri)
+	}
 
 	cursor := postSkillsRPC(t, handler, mcpversions.MethodSkillsList, map[string]any{"cursor": "next"})
 	require.NotNil(t, cursor.Error)
