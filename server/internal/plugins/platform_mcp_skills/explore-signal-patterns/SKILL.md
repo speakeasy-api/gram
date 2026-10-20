@@ -43,6 +43,9 @@ client's own connection and select the exact project requested by the user.
    and unknown census coverage. Gaps are unknown, not supported zeroes. Report
    partial edge buckets and top-group selection. A session can belong to several
    attribute groups, so distinct-session counts are not additive.
+   Terminal event-level failures such as `invalid_evaluation_context` emit no
+   sensor outcome. They contribute to unknown census coverage, not to the
+   `failed` counter or any other sensor-outcome companion.
 6. When definitions are mixed or an interpretation needs inspection, call
    `get_signal_definition` for an exact contributing sensor and fingerprint.
    Historical snapshots may be unavailable; current configuration is not a
