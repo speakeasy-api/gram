@@ -119,5 +119,5 @@ func TestRawToolUsageAttributionUsesTrustedEventExpression(t *testing.T) {
 	sql, _, err := toolUsageTraceRowsCTE(ListToolUsageTracesParams{Query: "raw-path"})
 	require.NoError(t, err)
 	require.Contains(t, sql, toolUsageAgentIDExpr+" AS agent_id")
-	require.Contains(t, sql, "telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery')")
+	require.Contains(t, sql, "telemetry_logs.event_source NOT IN ('tool_call', 'resource_read', 'meta_discovery'), ''")
 }

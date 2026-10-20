@@ -5778,10 +5778,11 @@ func appendMetaMCPTargetBranch(typeArgs, kindArgs, idArgs, labelArgs *[]string, 
 	*labelArgs = append(*labelArgs, condition, "arrayElement(?, meta_mcp_match_index)")
 }
 
-// Only the authenticated managed-agent actor is an agent identity; owners and
-// approving humans are credential provenance, never the caller. Keep in sync
-// with trace_summaries_mv.agent_id. Client-supplied hook attributes are untrusted.
-const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')"
+// The agent a server-written event acted for: the recorded agent of an admitted
+// workload, else the authenticated agent actor. Owners and approving humans are
+// credential provenance, never the caller. Keep in sync with
+// trace_summaries_mv.agent_id. Client-supplied hook attributes are untrusted.
+const toolUsageAgentIDExpr = "multiIf(telemetry_logs.event_source NOT IN ('tool_call', 'resource_read', 'meta_discovery'), '', toString(attributes.gram.authorization.agent.id) != '', toString(attributes.gram.authorization.agent.id), toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')"
 
 // The gateway an event belongs to: the target itself, else the gateway that dispatched it.
 const toolUsageGatewayIDExpr = "if(target_type = '" + ToolUsageTargetTypeMetaMCP + "', target_id, meta_mcp_server_id)"

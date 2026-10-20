@@ -31,7 +31,7 @@ func TestToolUsageAgentAttributionSQL(t *testing.T) {
 				require.NotContains(t, query, "telemetry_logs")
 			} else {
 				require.Contains(t, query, toolUsageAgentIDExpr+" AS agent_id")
-				require.Contains(t, query, "telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent'")
+				require.Contains(t, query, "telemetry_logs.event_source NOT IN ('tool_call', 'resource_read', 'meta_discovery'), ''")
 			}
 			agentExpr := prefix + "agent_id"
 			if !tt.grouped {
