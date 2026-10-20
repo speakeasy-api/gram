@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AdminDeviceAgentCell,
+  AdminDeviceAgentCell$inboundSchema,
+} from "./admindeviceagentcell.js";
+import {
   AdminHookClientOrganization,
   AdminHookClientOrganization$inboundSchema,
 } from "./adminhookclientorganization.js";
@@ -21,11 +25,15 @@ import {
 } from "./admininferencehookcell.js";
 
 /**
- * Fleet-wide hook client grids over a fixed window.
+ * Fleet-wide client health grids over a fixed window: hook clients, inference hook traffic and device agent versions.
  */
 export type AdminHookClientsResult = {
   /**
-   * True when the grids came from the one-hour cache rather than a fresh ClickHouse read.
+   * The device agent version grid. Empty for days before versions were recorded.
+   */
+  deviceAgents: Array<AdminDeviceAgentCell>;
+  /**
+   * True when the grids came from the cache rather than a fresh ClickHouse read. Cached grids last 24 hours and refresh in the background once an hour old.
    */
   fromCache: boolean;
   /**
@@ -33,7 +41,7 @@ export type AdminHookClientsResult = {
    */
   inference: Array<AdminInferenceHookCell>;
   /**
-   * Every organization that appears in either grid.
+   * Every organization that appears in any grid.
    */
   organizations: Array<AdminHookClientOrganization>;
   /**
@@ -56,6 +64,7 @@ export const AdminHookClientsResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    device_agents: z.array(AdminDeviceAgentCell$inboundSchema),
     from_cache: z.boolean(),
     inference: z.array(AdminInferenceHookCell$inboundSchema),
     organizations: z.array(AdminHookClientOrganization$inboundSchema),
@@ -68,6 +77,7 @@ export const AdminHookClientsResult$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "device_agents": "deviceAgents",
       "from_cache": "fromCache",
       "queried_at": "queriedAt",
       "window_days": "windowDays",

@@ -2917,6 +2917,29 @@ type McpServer struct {
 	Deleted bool
 }
 
+type McpServerRemoteSessionClient struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	RemoteSessionClientID uuid.UUID
+	// @access: confidential
+	ClientAttachmentScope string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type McpServerToolMetadatum struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -7169,6 +7192,37 @@ type UnproxiedMcpServer struct {
 	Deleted bool
 }
 
+type UpstreamClientSelection struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	CredentialKind string
+	// @access: confidential
+	CredentialID uuid.UUID
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	RemoteSessionClientID uuid.NullUUID
+	// @access: confidential
+	ClientAttachmentScope pgtype.Text
+	// @access: confidential
+	NoAuth bool
+	// @access: confidential
+	Source string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type User struct {
 	// @access: confidential
 	ID string
@@ -7308,6 +7362,8 @@ type UserSession struct {
 	Resource pgtype.Text
 	// @access: confidential
 	SignInID uuid.NullUUID
+	// @access: confidential
+	CredentialID uuid.NullUUID
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

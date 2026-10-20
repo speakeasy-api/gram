@@ -1,9 +1,7 @@
-import { registeredAgentHref } from "./identityRoster";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useOrgMcpServers } from "@/pages/access/useOrgMcpServers";
 import { AGENT_POLICY_SCOPES } from "@/pages/agents/agent-policy-grants";
-import { useRoutes } from "@/routes";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPolicySelector } from "@gram/client/models/components/agentpolicyselector.js";
 import { useQuery } from "@tanstack/react-query";
@@ -36,7 +34,6 @@ export function AgentIdentityPermissions({
 }): JSX.Element {
   const organization = useOrganization();
   const sdk = useSdkClient();
-  const routes = useRoutes();
   // The policy endpoint requires setup/write access, independently of agent:read.
   const canRead = agent.permissions.write;
   const grants = useQuery({
@@ -109,8 +106,6 @@ export function AgentIdentityPermissions({
   return (
     <IdentityPanel
       title="Agent permissions"
-      handoffLabel="Agent Identity"
-      handoffHref={registeredAgentHref(routes.agents.href(), "", agent.id)}
       loading={canRead && grants.isLoading}
       error={canRead && grants.isError && rows.length === 0}
       refreshFailed={canRead && grants.isError && rows.length > 0}

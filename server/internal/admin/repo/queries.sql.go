@@ -249,7 +249,10 @@ WITH latest_arm AS (
     FROM audit_logs AS armed
     WHERE armed.organization_id = $1
       AND armed.project_id IS NULL
-      AND armed.action = 'organization:enterprise_trial_armed'
+      AND armed.action IN (
+          'organization:enterprise_trial_armed',
+          'organization:enterprise_trial_started'
+      )
       AND armed.subject_id = $1
       AND armed.subject_type = 'organization'
     ORDER BY armed.seq DESC, armed.id DESC
@@ -291,9 +294,10 @@ type AdminGetEnterpriseTrialRetryOperationIDsRow struct {
 	MatchingRearmCount  int64
 }
 
-// The arm audit id is the immutable generation token. Every production trial
-// creation writes exactly one arm audit in the creation transaction; extension
-// writes neither. seq orders generations; id breaks any equal-seq tie.
+// The creation audit id is the immutable generation token. Self-service trial
+// creation records an armed action, while an admin grant records a started
+// action. Extension writes neither. seq orders generations; id breaks any
+// equal-seq tie.
 func (q *Queries) AdminGetEnterpriseTrialRetryOperationIDs(ctx context.Context, targetOrganizationID string) (AdminGetEnterpriseTrialRetryOperationIDsRow, error) {
 	row := q.db.QueryRow(ctx, adminGetEnterpriseTrialRetryOperationIDs, targetOrganizationID)
 	var i AdminGetEnterpriseTrialRetryOperationIDsRow
@@ -1734,6 +1738,97 @@ func (q *Queries) AdminListRegistryOktaMappings(ctx context.Context) ([]AdminLis
 	for rows.Next() {
 		var i AdminListRegistryOktaMappingsRow
 		if err := rows.Scan(&i.RegistryEntryID, &i.EntryName, &i.OinName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListUpstreamOAuthMigrationOrganizations = `-- name: AdminListUpstreamOAuthMigrationOrganizations :many
+WITH reached AS (
+    SELECT p.organization_id, s.id AS server_id
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.deleted IS FALSE
+    JOIN user_session_issuers AS usi
+      ON usi.id = s.user_session_issuer_id
+     AND usi.deleted IS FALSE
+     AND (usi.project_id = p.id
+          OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+    WHERE s.deleted IS FALSE
+    UNION
+    SELECT g.organization_id, m.mcp_server_id AS server_id
+    FROM meta_mcp_servers AS g
+    JOIN projects AS gp
+      ON gp.id = g.project_id
+     AND gp.deleted IS FALSE
+    JOIN user_session_issuers AS usi
+      ON usi.id = g.user_session_issuer_id
+     AND usi.deleted IS FALSE
+    JOIN meta_mcp_server_members AS m
+      ON m.meta_mcp_server_id = g.id
+     AND m.project_id = g.project_id
+     AND m.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.id = m.mcp_server_id
+     AND s.deleted IS FALSE
+     AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+    WHERE g.deleted IS FALSE
+    UNION
+    SELECT oi.organization_id, s.id AS server_id
+    FROM user_session_issuers AS oi
+    JOIN projects AS p
+      ON p.organization_id = oi.organization_id
+     AND p.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.project_id = p.id
+     AND s.deleted IS FALSE
+     AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+    WHERE oi.project_id IS NULL
+      AND oi.deleted IS FALSE
+)
+SELECT
+    om.id,
+    om.name,
+    om.slug,
+    count(DISTINCT reached.server_id)::bigint AS servers
+FROM organization_metadata AS om
+JOIN reached
+  ON reached.organization_id = om.id
+GROUP BY om.id, om.name, om.slug
+ORDER BY om.name, om.id
+`
+
+type AdminListUpstreamOAuthMigrationOrganizationsRow struct {
+	ID      string
+	Name    string
+	Slug    string
+	Servers int64
+}
+
+// The organizations the upstream OAuth migration writes for: those with a
+// live MCP server on a live user session issuer of its own tenant, or a live
+// proxied server fronted by a gateway issuer. servers counts those servers.
+func (q *Queries) AdminListUpstreamOAuthMigrationOrganizations(ctx context.Context) ([]AdminListUpstreamOAuthMigrationOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListUpstreamOAuthMigrationOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUpstreamOAuthMigrationOrganizationsRow
+	for rows.Next() {
+		var i AdminListUpstreamOAuthMigrationOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Servers,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

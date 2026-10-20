@@ -6,7 +6,7 @@ Gives every live hosted toolset (non-empty `mcp_slug`) created before eager wrap
 go run ./server/cmd/tools/migrations hosted-mcp-wrappers -h
 ```
 
-Flags: `-apply` (default is a dry run), `-project <PROJECT_ID>`, `-limit N`, `-cursor <TOOLSET_ID>`, `-report <path>`, `-move-dependents`, `-readers-cut-over`.
+Flags: `-apply` (default is a dry run), `-project <PROJECT_ID>`, `-limit N`, `-cursor <TOOLSET_ID>`, `-report <path>`, `-move-dependents`, `-readers-cut-over`, `-cleanup-orphans`.
 
 ## Precondition
 
@@ -158,3 +158,56 @@ jq -r -s --arg p <PROJECT_ID> -f rollback.jq <journal> > rollback-<PROJECT_ID>.s
 ```
 
 `reverse` replays rows newest first, and within a row the moved row is re-keyed before its twin is restored, so the twin's unique key is free again. A statement that fails on a unique index means a toolset-keyed twin was written after the move; resolve that row by hand.
+
+## Orphan cleanup (`-cleanup-orphans`)
+
+Removes the toolset-keyed dependents the move left as `orphaned`: rows whose toolset, or whose project, is deleted. It walks the same candidates as `-move-dependents`, with the same `-project`, `-cursor`, `-limit` and `-report` conventions, and each row runs in its own transaction with the move's 5s `lock_timeout` and lock order: the advisory lock, project distribution admission (plugin members), the toolset row `FOR NO KEY UPDATE` together with its project row `FOR SHARE` (so a project delete or restore waits until the row commits), the assistant (attachments), the dependent row, then any twin. Under those locks it re-checks that the toolset or project is deleted and that the row is still toolset-keyed, and that no server-keyed twin exists under the toolset's canonical id (`mcp_server_id = toolset.id`: the wrapper's metadata, the same plugin's member, or the same assistant's attachment). A row whose toolset and project are both live is never written.
+
+| Table                | Removal                                                                                                                                                                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mcp_metadata`       | Its `mcp_environment_configs` are locked and imaged, then the row is deleted and they cascade. Audited as `mcp_metadata:update` with a before snapshot and no after: there is no metadata delete action, and an update with an empty after records the removal. |
+| `plugin_servers`     | Soft-deleted, as toolset deletion does. Audited as `plugin:server_remove` with `toolset_urn`. In a live project it then requests a plugin publication (see below).                                                                                              |
+| `assistant_toolsets` | Deleted, as toolset deletion does; attachment changes are not audited on any path.                                                                                                                                                                              |
+
+Audit rows carry the system principal `system:hosted-mcp-orphan-cleanup` and publish no webhook events.
+
+Plugin publication: with `-plugin-publication-emit` (default `$GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED`, the app's switch) a removed member of a live project enqueues a publication request in the same transaction, as DeleteToolset does; it is written only when the project has a marketplace connection, and the report row says `publication_requested`. A dry run rolls back, so it enqueues nothing. Members of a deleted project request none.
+
+| Outcome                    | Meaning                                                                                                                                                         |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `would_delete` / `deleted` | Orphan removed; `reason` says whether the toolset or the project is deleted, `removed` names the table, id and `deletion` (`deleted` or `soft_deleted`).        |
+| `blocked_no_wrapper`       | "toolset is not in the row's project", or a live toolset without a canonical wrapper (no `mcp_slug`, or the wrapper phase has not run); left for a manual call. |
+| `blocked_twin`             | A server-keyed twin exists under the canonical id; left untouched.                                                                                              |
+| `blocked_distributed`      | A platform distribution references the plugin member; left untouched.                                                                                           |
+| `blocked_foreign_config`   | An env config of the metadata belongs to another project, so the cascade would reach outside the row's project; left untouched.                                 |
+| `skipped`                  | The toolset is live (`-move-dependents` moves the row), or the row changed concurrently; rerun.                                                                 |
+| `orphaned`                 | The attachment's assistant is not in the row's project; left untouched.                                                                                         |
+| `commit_unknown`           | The commit errored after the server may have committed; the run stops. The journal covers the row either way.                                                   |
+
+`-cleanup-orphans -apply` requires `-report` and writes `<report>.journal.jsonl` (mode 0600) like the move: an `intent` record before the commit and a `committed` (or `commit_unknown`) record after. Each record carries `from` (the toolset key) and `removed` with the full row image (`to_jsonb`), the metadata's env configs, and for plugin members the `soft_deleted_at` this tool set. The report, dry run or apply, carries only table, id and deletion; row images live only in the journal.
+
+### Run book
+
+1. Dev: dry run with `-cleanup-orphans -report <path>`; `-apply -cleanup-orphans -report <new path>`; rerun and confirm `writes: 0`.
+2. Prod dry run with `-report`; confirm the `would_delete` count and review every `blocked_*` row.
+3. Prod `-apply -cleanup-orphans -report <path>`, optionally a canary `-project <PROJECT_ID>` first. Pass `-plugin-publication-emit` to match the app's setting.
+4. A rerun must report `writes: 0`.
+
+### Rollback
+
+[`hostedmcpbackfill/restore-orphans.jq`](hostedmcpbackfill/restore-orphans.jq) turns a journal into restore SQL for one project:
+
+```
+jq -r -s --arg p <PROJECT_ID> -f server/cmd/tools/migrations/hostedmcpbackfill/restore-orphans.jq <journal> > restore-orphans-<PROJECT_ID>.sql
+```
+
+Review it, then run it in one transaction. It replays only rows with a `committed` record, newest first; `commit_unknown` rows, and intents with no outcome record (a crash between the two), are printed as `--` comments to check by hand. Metadata, env configs and attachments are re-inserted from their images with `ON CONFLICT (id) DO NOTHING`, so a replay is a no-op. A plugin member gets back its recorded `deleted_at` and `updated_at`, and only while its `deleted_at` still equals the value this tool set, so a member someone else restored or deleted again is left alone.
+
+Failure modes, each of which stops the transaction for a hand fix:
+
+- `mcp_metadata_toolset_id_key`: the toolset already has new toolset-keyed metadata.
+- `assistant_toolsets_assistant_id_toolset_id_key`: the assistant was attached to the toolset again.
+- The plugin `display_name` unique index: another live member of the plugin took the name.
+- A foreign key: a referenced environment, assistant, plugin or project was hard-deleted since.
+
+`TestRestoreOrphansJQReplaysCommittedRows` runs this program against a real journal.

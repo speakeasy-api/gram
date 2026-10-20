@@ -7,13 +7,12 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
-import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import {
   ShadowAISectionRedirect,
   ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
-import { orgRoutePaths, useOrgRoutes, useRoutes } from "./routes";
+import { orgRoutePaths, useRoutes } from "./routes";
 
 function GuideHref(): JSX.Element {
   const routes = useRoutes();
@@ -249,64 +248,6 @@ describe("organization routes", () => {
     expect(
       await screen.findByText("/org/data/event-feed?filter=errors#latest"),
     ).toBeTruthy();
-  });
-});
-
-describe("Access Hub", () => {
-  function AccessHubHrefs(): JSX.Element {
-    const orgRoutes = useOrgRoutes();
-    return (
-      <output data-testid="access-hub-hrefs">
-        {[
-          orgRoutes.workloadIssuers.href(),
-          orgRoutes.workloadIssuers.issuerDetail.href("issuer-1"),
-        ].join("\n")}
-      </output>
-    );
-  }
-
-  it("lists its detail page among the organization route paths", () => {
-    expect(orgRoutePaths).toContain("access-hub/:issuerId");
-  });
-
-  it("is an organization route with no project in its path", () => {
-    expect(orgRoutePaths).toContain("access-hub");
-    render(
-      <MemoryRouter initialEntries={["/org"]}>
-        <AccessHubHrefs />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByTestId("access-hub-hrefs").textContent).toBe(
-      "/org/access-hub\n/org/access-hub/issuer-1",
-    );
-  });
-
-  it.each([
-    ["/org/projects/project/access-hub", "/org/access-hub"],
-    [
-      "/org/projects/project/access-hub/issuer-1?tab=machines#rules",
-      "/org/access-hub/issuer-1?tab=machines#rules",
-    ],
-    ["/org/projects/project/workload-identities", "/org/access-hub"],
-  ])("redirects the project URL %s", async (source, destination) => {
-    const { container } = render(
-      <MemoryRouter initialEntries={[source]}>
-        <Routes>
-          <Route
-            path="/:orgSlug/projects/:projectSlug/access-hub/*"
-            element={<AccessHubRedirect />}
-          />
-          <Route
-            path="/:orgSlug/projects/:projectSlug/workload-identities"
-            element={<AccessHubRedirect />}
-          />
-          <Route path="/:orgSlug/access-hub/*" element={<LocationPath />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await within(container).findByText(destination)).toBeTruthy();
   });
 });
 
