@@ -92,10 +92,10 @@ func (w windowOracle) check(row analytics.Row) error {
 	return nil
 }
 
-func extendedBench(ctx context.Context, conn clickhouse.Conn, f benchFixture, iterations, concurrency int) ([]result, error) {
+func extendedBench(ctx context.Context, conn clickhouse.Conn, f benchFixture, iterations, concurrency int, record func(result) error) error {
 	engine, err := analytics.NewEngine(nil, conn)
 	if err != nil {
-		return nil, fmt.Errorf("construct benchmark engine: %w", err)
+		return fmt.Errorf("construct benchmark engine: %w", err)
 	}
 	request := signals.Request{Selection: signals.Selection{SensorID: f.sensor.String(), SignalID: f.signal.String(), MinimumLevel: nil, Threshold: .5}, Trigger: "stream", RunID: "", GroupBy: nil, Filters: nil, Groups: 5, Points: 2000}
 	from := f.now.Add(-7 * 24 * time.Hour)
@@ -103,7 +103,7 @@ func extendedBench(ctx context.Context, conn clickhouse.Conn, f benchFixture, it
 	compileContext := signals.Context{OrganizationID: f.tenant.OrganizationID, ProjectID: f.tenant.ProjectID, From: from, To: f.now, Now: f.now, Step: "auto", RequestedAt: nil}
 	plan, err := signals.Compile(compileContext, request)
 	if err != nil {
-		return nil, fmt.Errorf("compile session benchmark: %w", err)
+		return fmt.Errorf("compile session benchmark: %w", err)
 	}
 	peer := request.Selection
 	if f.sensors > 1 {
@@ -133,14 +133,17 @@ func extendedBench(ctx context.Context, conn clickhouse.Conn, f benchFixture, it
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return err
+	}
+	if err := record(findings); err != nil {
+		return err
 	}
 	from = f.now.Add(-6 * time.Hour)
 	window.FromUnixNano = from.UnixNano()
 	compileContext.From = from
 	plan, err = signals.Compile(compileContext, request)
 	if err != nil {
-		return nil, fmt.Errorf("compile evidence benchmark: %w", err)
+		return fmt.Errorf("compile evidence benchmark: %w", err)
 	}
 	evidenceQuery := plan.Evidence(nil)
 	evidence, err := measure(ctx, conn, "6h-evidence-candidates", iterations, evidenceQuery, func(ctx context.Context) error {
@@ -167,13 +170,16 @@ func extendedBench(ctx context.Context, conn clickhouse.Conn, f benchFixture, it
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return err
+	}
+	if err := record(evidence); err != nil {
+		return err
 	}
 	custom := request
 	custom.Filters = []signals.Filter{{Dimension: signals.Dimension{Field: "", Attribute: "custom.cohort"}, Operator: "in", Values: []string{"cohort-0", "cohort-1"}}}
 	customPlan, err := signals.Compile(compileContext, custom)
 	if err != nil {
-		return nil, fmt.Errorf("compile custom cohort: %w", err)
+		return fmt.Errorf("compile custom cohort: %w", err)
 	}
 	filtered, err := measure(ctx, conn, "6h-arbitrary-attribute", iterations, customPlan.Summary(), func(ctx context.Context) error {
 		got, err := engine.SignalQuery(ctx, f.tenant, window, "minute", custom)
@@ -183,7 +189,10 @@ func extendedBench(ctx context.Context, conn clickhouse.Conn, f benchFixture, it
 		return f.oracle(from, f.now, true).check(got.Summary)
 	})
 	if err != nil {
-		return nil, err
+		return err
+	}
+	if err := record(filtered); err != nil {
+		return err
 	}
 	manual := request
 	manual.Trigger, manual.RunID = "manual", uuid.NewString()
@@ -192,12 +201,12 @@ func extendedBench(ctx context.Context, conn clickhouse.Conn, f benchFixture, it
  toDateTime64(?,9,'UTC') AS evaluation_requested_at, toDateTime64(?,9,'UTC') AS evaluated_at)
  FROM (SELECT * FROM sigint_readings_v2 FINAL WHERE organization_id=? AND project_id=toUUID(?) AND trigger_kind='stream' AND run_id=toUUID(?) AND sensor_id=toUUID(?) AND event_occurred_at>=? AND event_occurred_at<?)
  SETTINGS max_execution_time=5, max_rows_to_read=25000000, max_memory_usage=1000000000, do_not_merge_across_partitions_select_final=1`, manual.RunID, f.now, f.now, f.tenant.OrganizationID, f.tenant.ProjectID, uuid.Nil.String(), f.sensor.String(), from, f.now); err != nil {
-		return nil, fmt.Errorf("seed manual cohort: %w", err)
+		return fmt.Errorf("seed manual cohort: %w", err)
 	}
 	compileContext.RequestedAt = &f.now
 	manualPlan, err := signals.Compile(compileContext, manual)
 	if err != nil {
-		return nil, fmt.Errorf("compile manual cohort: %w", err)
+		return fmt.Errorf("compile manual cohort: %w", err)
 	}
 	manualResult, err := measure(ctx, conn, "6h-manual-partition", iterations, manualPlan.Summary(), func(ctx context.Context) error {
 		got, err := engine.SignalQuery(ctx, f.tenant, window, "minute", manual)
@@ -207,17 +216,23 @@ func extendedBench(ctx context.Context, conn clickhouse.Conn, f benchFixture, it
 		return f.oracle(from, f.now, false).check(got.Summary)
 	})
 	if err != nil {
-		return nil, err
+		return err
+	}
+	if err := record(manualResult); err != nil {
+		return err
 	}
 	concurrent, err := concurrentCharts(ctx, conn, engine, f, request, window, iterations, concurrency, false)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	if err := record(concurrent); err != nil {
+		return err
 	}
 	fresh, err := concurrentCharts(ctx, conn, engine, f, request, window, iterations, concurrency, true)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return []result{findings, evidence, filtered, manualResult, concurrent, fresh}, nil
+	return record(fresh)
 }
 
 func measure(ctx context.Context, conn clickhouse.Conn, name string, iterations int, query signals.Query, run func(context.Context) error) (result, error) {
@@ -242,11 +257,13 @@ func measure(ctx context.Context, conn clickhouse.Conn, name string, iterations 
 		}
 	}
 	times := make([]float64, 0, iterations)
-	queryID := ""
+	measurementTag := ""
 	for i := 0; i <= iterations; i++ {
-		queryID = fmt.Sprintf("sigint-extended-%s-%d", name, i)
+		measurementTag = fmt.Sprintf("sigint-extended-%s-%d", name, i)
 		begin := time.Now()
-		if err := run(clickhouse.Context(ctx, clickhouse.WithQueryID(queryID))); err != nil {
+		// One measurement makes several reads. A log tag groups diagnostics while
+		// each physical read keeps its own server-generated query identity.
+		if err := run(clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"log_comment": measurementTag}))); err != nil {
 			return m, fmt.Errorf("benchmark %s: %w", name, err)
 		}
 		elapsed := float64(time.Since(begin).Microseconds()) / 1000
@@ -258,17 +275,17 @@ func measure(ctx context.Context, conn clickhouse.Conn, name string, iterations 
 	}
 	slices.Sort(times)
 	m.P50MS, m.P95MS, m.OracleMatched = times[len(times)/2], times[(len(times)*95+99)/100-1], true
-	if err := readDiagnostics(ctx, conn, queryID, &m); err != nil {
+	if err := readDiagnostics(ctx, conn, measurementTag, &m); err != nil {
 		return m, err
 	}
 	return m, nil
 }
 
-func readDiagnostics(ctx context.Context, conn clickhouse.Conn, queryID string, m *result) error {
+func readDiagnostics(ctx context.Context, conn clickhouse.Conn, measurementTag string, m *result) error {
 	if err := conn.Exec(ctx, "SYSTEM FLUSH LOGS"); err != nil {
 		return fmt.Errorf("flush diagnostics: %w", err)
 	}
-	if err := conn.QueryRow(ctx, `SELECT sum(read_rows), sum(read_bytes), max(memory_usage), sum(ProfileEvents['SelectedMarks']) FROM system.query_log WHERE query_id=? AND type='QueryFinish'`, queryID).Scan(&m.ReadRows, &m.ReadBytes, &m.MemoryBytes, &m.SelectedMarks); err != nil {
+	if err := conn.QueryRow(ctx, `SELECT sum(read_rows), sum(read_bytes), max(memory_usage), sum(ProfileEvents['SelectedMarks']) FROM system.query_log WHERE log_comment=? AND type='QueryFinish'`, measurementTag).Scan(&m.ReadRows, &m.ReadBytes, &m.MemoryBytes, &m.SelectedMarks); err != nil {
 		return fmt.Errorf("read diagnostics: %w", err)
 	}
 	return nil
@@ -288,8 +305,8 @@ func concurrentCharts(ctx context.Context, conn clickhouse.Conn, engine *analyti
 		group.Go(func() error {
 			for i := range iterations {
 				begin := time.Now()
-				queryID := fmt.Sprintf("sigint-concurrent-%t-%d-%d", fresh, worker, i)
-				got, err := engine.SignalQuery(clickhouse.Context(workCtx, clickhouse.WithQueryID(queryID)), f.tenant, window, "minute", request)
+				measurementTag := fmt.Sprintf("sigint-concurrent-%t-%d-%d", fresh, worker, i)
+				got, err := engine.SignalQuery(clickhouse.Context(workCtx, clickhouse.WithSettings(clickhouse.Settings{"log_comment": measurementTag})), f.tenant, window, "minute", request)
 				if err != nil {
 					return fmt.Errorf("concurrent chart: %w", err)
 				}

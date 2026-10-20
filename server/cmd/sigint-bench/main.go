@@ -345,11 +345,13 @@ func run(parent context.Context, logger *slog.Logger) error {
 			return err
 		}
 	}
-	extra, err := extendedBench(ctx, conn, benchFixture{tenant: analytics.Tenant{OrganizationID: org, ProjectID: project.String()}, sensor: sensor, signal: signal, from: from, now: now, perDay: *perDay, days: *days, sensors: *sensors, sessionSize: *sessionSize}, *iterations, *concurrency)
+	err = extendedBench(ctx, conn, benchFixture{tenant: analytics.Tenant{OrganizationID: org, ProjectID: project.String()}, sensor: sensor, signal: signal, from: from, now: now, perDay: *perDay, days: *days, sensors: *sensors, sessionSize: *sessionSize}, *iterations, *concurrency, func(completed result) error {
+		r.Results = append(r.Results, completed)
+		return writeReport(context.WithoutCancel(ctx), *out, r)
+	})
 	if err != nil {
 		return err
 	}
-	r.Results = append(r.Results, extra...)
 	r.Complete = true
 	if err := writeReport(ctx, *out, r); err != nil {
 		return err
