@@ -122,65 +122,85 @@ func formatSkillValidationErrors(validationErrors []validationError) string {
 	return strings.Join(details, "; ")
 }
 
-func parseSkillManifest(content string) (parsedSkillManifest, error) {
+// readSkillFrontmatter checks SKILL.md content, locates its frontmatter block
+// and decodes it, returning the top-level mapping with the content's lines and
+// the index of the closing delimiter. With normalize, the content is NFC
+// normalized and every line loses its trailing whitespace before decoding, as
+// the stored manifest's canonical form requires; without it, the frontmatter
+// decodes from the author's exact text.
+func readSkillFrontmatter(content string, normalize bool) (*yaml.Node, []string, int, error) {
 	if content == "" {
-		return parsedSkillManifest{}, errors.New("parse skill manifest: content is empty")
+		return nil, nil, 0, errors.New("parse skill manifest: content is empty")
 	}
 	if len(content) > maxSkillContentBytes {
-		return parsedSkillManifest{}, fmt.Errorf("parse skill manifest: content exceeds %d bytes", maxSkillContentBytes)
+		return nil, nil, 0, fmt.Errorf("parse skill manifest: content exceeds %d bytes", maxSkillContentBytes)
 	}
 	if !utf8.ValidString(content) {
-		return parsedSkillManifest{}, errors.New("parse skill manifest: content is not valid UTF-8")
+		return nil, nil, 0, errors.New("parse skill manifest: content is not valid UTF-8")
 	}
 	if strings.IndexByte(content, 0) >= 0 {
-		return parsedSkillManifest{}, errors.New("parse skill manifest: content contains NUL")
+		return nil, nil, 0, errors.New("parse skill manifest: content contains NUL")
 	}
 
 	normalized := content
 	normalized = strings.TrimPrefix(normalized, "\ufeff")
 	normalized = strings.ReplaceAll(normalized, "\r\n", "\n")
 	normalized = strings.ReplaceAll(normalized, "\r", "\n")
-	normalized = norm.NFC.String(normalized)
-	lines := strings.Split(normalized, "\n")
-	for i := range lines {
-		lines[i] = strings.TrimRightFunc(lines[i], unicode.IsSpace)
+	if normalize {
+		normalized = norm.NFC.String(normalized)
 	}
-	if len(lines) == 0 || lines[0] != "---" {
-		return parsedSkillManifest{}, errors.New("parse skill manifest: missing opening frontmatter delimiter")
+	lines := strings.Split(normalized, "\n")
+	if normalize {
+		for i := range lines {
+			lines[i] = strings.TrimRightFunc(lines[i], unicode.IsSpace)
+		}
+	}
+	isDelimiter := func(line string) bool {
+		return strings.TrimRightFunc(line, unicode.IsSpace) == "---"
+	}
+	if len(lines) == 0 || !isDelimiter(lines[0]) {
+		return nil, nil, 0, errors.New("parse skill manifest: missing opening frontmatter delimiter")
 	}
 
 	closingLine := -1
 	for i := 1; i < len(lines); i++ {
-		if lines[i] == "---" {
+		if isDelimiter(lines[i]) {
 			closingLine = i
 			break
 		}
 	}
 	if closingLine < 0 {
-		return parsedSkillManifest{}, errors.New("parse skill manifest: missing closing frontmatter delimiter")
+		return nil, nil, 0, errors.New("parse skill manifest: missing closing frontmatter delimiter")
 	}
 
 	frontmatter := strings.Join(lines[1:closingLine], "\n") + "\n"
 	if err := preflightYAMLSource(frontmatter); err != nil {
-		return parsedSkillManifest{}, fmt.Errorf("preflight skill manifest frontmatter: %w", err)
+		return nil, nil, 0, fmt.Errorf("preflight skill manifest frontmatter: %w", err)
 	}
 	var document yaml.Node
 	decoder := yaml.NewDecoder(strings.NewReader(frontmatter))
 	if err := decoder.Decode(&document); err != nil {
-		return parsedSkillManifest{}, fmt.Errorf("parse skill manifest frontmatter: %w", err)
+		return nil, nil, 0, fmt.Errorf("parse skill manifest frontmatter: %w", err)
 	}
 	var extra yaml.Node
 	if err := decoder.Decode(&extra); err == nil {
-		return parsedSkillManifest{}, errors.New("parse skill manifest frontmatter: multiple YAML documents")
+		return nil, nil, 0, errors.New("parse skill manifest frontmatter: multiple YAML documents")
 	} else if !errors.Is(err, io.EOF) {
-		return parsedSkillManifest{}, fmt.Errorf("parse skill manifest frontmatter: %w", err)
+		return nil, nil, 0, fmt.Errorf("parse skill manifest frontmatter: %w", err)
 	}
 	if len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
-		return parsedSkillManifest{}, errors.New("parse skill manifest frontmatter: top level must be a mapping")
+		return nil, nil, 0, errors.New("parse skill manifest frontmatter: top level must be a mapping")
 	}
-	root := document.Content[0]
 	if err := validateYAMLTree(&document); err != nil {
-		return parsedSkillManifest{}, fmt.Errorf("parse skill manifest frontmatter: %w", err)
+		return nil, nil, 0, fmt.Errorf("parse skill manifest frontmatter: %w", err)
+	}
+	return document.Content[0], lines, closingLine, nil
+}
+
+func parseSkillManifest(content string) (parsedSkillManifest, error) {
+	root, lines, closingLine, err := readSkillFrontmatter(content, true)
+	if err != nil {
+		return parsedSkillManifest{}, err
 	}
 
 	fields := mappingFields(root)
@@ -800,73 +820,22 @@ func frontmatterFields(fields map[string]*yaml.Node) map[string]any {
 }
 
 // SkillFrontmatter parses SKILL.md content and returns its YAML frontmatter
-// as JSON-compatible values, every field the author wrote included. Strings
-// and keys keep the author's exact code points: unlike the manifest parse, it
+// as JSON-compatible values, every field the author wrote included. It reads
+// the frontmatter with the same checks as the manifest parse, but strings,
+// keys, timestamps and binary scalars keep the author's exact text: it
 // applies no NFC or trailing-whitespace normalization, so the values match
 // what a client parsing the served bytes reads. It skips canonicalization and
 // digests and applies no spec validation, so a manifest that fails spec
 // validation still yields its frontmatter; it fails only when the
 // frontmatter cannot be read.
 func SkillFrontmatter(content string) (map[string]any, error) {
-	if content == "" {
-		return nil, errors.New("parse skill frontmatter: content is empty")
+	root, _, _, err := readSkillFrontmatter(content, false)
+	if err != nil {
+		return nil, err
 	}
-	if len(content) > maxSkillContentBytes {
-		return nil, fmt.Errorf("parse skill frontmatter: content exceeds %d bytes", maxSkillContentBytes)
-	}
-	if !utf8.ValidString(content) {
-		return nil, errors.New("parse skill frontmatter: content is not valid UTF-8")
-	}
-	if strings.IndexByte(content, 0) >= 0 {
-		return nil, errors.New("parse skill frontmatter: content contains NUL")
-	}
-
-	source := strings.TrimPrefix(content, "\ufeff")
-	source = strings.ReplaceAll(source, "\r\n", "\n")
-	source = strings.ReplaceAll(source, "\r", "\n")
-	lines := strings.Split(source, "\n")
-	isDelimiter := func(line string) bool {
-		return strings.TrimRightFunc(line, unicode.IsSpace) == "---"
-	}
-	if !isDelimiter(lines[0]) {
-		return nil, errors.New("parse skill frontmatter: missing opening frontmatter delimiter")
-	}
-	closingLine := -1
-	for i := 1; i < len(lines); i++ {
-		if isDelimiter(lines[i]) {
-			closingLine = i
-			break
-		}
-	}
-	if closingLine < 0 {
-		return nil, errors.New("parse skill frontmatter: missing closing frontmatter delimiter")
-	}
-
-	frontmatter := strings.Join(lines[1:closingLine], "\n") + "\n"
-	if err := preflightYAMLSource(frontmatter); err != nil {
-		return nil, fmt.Errorf("preflight skill frontmatter: %w", err)
-	}
-	var document yaml.Node
-	decoder := yaml.NewDecoder(strings.NewReader(frontmatter))
-	if err := decoder.Decode(&document); err != nil {
-		return nil, fmt.Errorf("parse skill frontmatter: %w", err)
-	}
-	var extra yaml.Node
-	if err := decoder.Decode(&extra); err == nil {
-		return nil, errors.New("parse skill frontmatter: multiple YAML documents")
-	} else if !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("parse skill frontmatter: %w", err)
-	}
-	if len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
-		return nil, errors.New("parse skill frontmatter: top level must be a mapping")
-	}
-	if err := validateYAMLTree(&document); err != nil {
-		return nil, fmt.Errorf("parse skill frontmatter: %w", err)
-	}
-
-	value, ok := yamlJSONValueWith(document.Content[0], keepText).(map[string]any)
+	value, ok := yamlJSONValueWith(root, true).(map[string]any)
 	if !ok {
-		return nil, errors.New("parse skill frontmatter: top level must be a mapping")
+		return nil, errors.New("parse skill manifest frontmatter: top level must be a mapping")
 	}
 	return value, nil
 }
@@ -894,26 +863,29 @@ func metadataField(fields map[string]*yaml.Node) map[string]any {
 }
 
 func yamlJSONValue(node *yaml.Node) any {
-	return yamlJSONValueWith(node, norm.NFC.String)
+	return yamlJSONValueWith(node, false)
 }
 
-// keepText leaves text as the author wrote it.
-func keepText(s string) string { return s }
-
-// yamlJSONValueWith converts a YAML node to JSON-compatible values, passing
-// every key and string through text.
-func yamlJSONValueWith(node *yaml.Node, text func(string) string) any {
+// yamlJSONValueWith converts a YAML node to JSON-compatible values. With
+// authored, keys, strings, timestamps and binary scalars keep the author's
+// exact text; otherwise text is NFC normalized and timestamps and binary
+// scalars take their canonical form.
+func yamlJSONValueWith(node *yaml.Node, authored bool) any {
+	text := norm.NFC.String
+	if authored {
+		text = func(s string) string { return s }
+	}
 	switch node.Kind {
 	case yaml.MappingNode:
 		value := make(map[string]any, len(node.Content)/2)
 		for i := 0; i < len(node.Content); i += 2 {
-			value[text(node.Content[i].Value)] = yamlJSONValueWith(node.Content[i+1], text)
+			value[text(node.Content[i].Value)] = yamlJSONValueWith(node.Content[i+1], authored)
 		}
 		return value
 	case yaml.SequenceNode:
 		value := make([]any, len(node.Content))
 		for i, child := range node.Content {
-			value[i] = yamlJSONValueWith(child, text)
+			value[i] = yamlJSONValueWith(child, authored)
 		}
 		return value
 	case yaml.ScalarNode:
@@ -934,6 +906,9 @@ func yamlJSONValueWith(node *yaml.Node, text func(string) string) any {
 				return json.Number(value)
 			}
 		case "!!timestamp", "!!binary":
+			if authored {
+				return node.Value
+			}
 			if value, err := canonicalScalarValue(node); err == nil {
 				return value
 			}

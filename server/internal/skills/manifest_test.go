@@ -917,6 +917,17 @@ func TestSkillFrontmatterKeepsAuthoredCodePoints(t *testing.T) {
 	require.NotEqual(t, manifest.Frontmatter["description"], frontmatter["description"])
 }
 
+func TestSkillFrontmatterKeepsAuthoredScalarText(t *testing.T) {
+	t.Parallel()
+
+	content := "---\nname: dated\ndescription: Dated helper.\ncreated: 2024-01-01\nicon: !!binary aGVsbG8=\n---\n"
+
+	frontmatter, err := SkillFrontmatter(content)
+	require.NoError(t, err)
+	require.Equal(t, "2024-01-01", frontmatter["created"])
+	require.Equal(t, "aGVsbG8=", frontmatter["icon"])
+}
+
 func TestSkillFrontmatterRejectsUnreadableFrontmatter(t *testing.T) {
 	t.Parallel()
 
