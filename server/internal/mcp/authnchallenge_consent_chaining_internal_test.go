@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
@@ -146,7 +147,7 @@ func renderChainedCard(t *testing.T, check, message string, connected int) strin
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Client",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -186,7 +187,7 @@ func TestConsentTemplateRendersCachedChainedServiceConnected(t *testing.T) {
 	t.Parallel()
 
 	html := renderChainedCard(t, chainCheckConnected, "", 1)
-	require.Regexp(t, `<span class="text-xs text-default-success" data-card-status data-identity-chained data-chain-check="connected" >Connected through your identity provider`, html)
+	require.Regexp(t, `<span class="text-xs text-default-success" data-card-status data-identity-chained data-chain-check="connected" >Service connected through your identity provider`, html)
 	require.Contains(t, html, "1 of 1 connected")
 	require.Contains(t, html, "Use a separate sign-in instead", "the fallback stays available once connected")
 }

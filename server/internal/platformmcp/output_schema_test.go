@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -18,6 +19,7 @@ import (
 // derived from its Go shape, because it has its own MarshalJSON.
 var sampleWireValues = map[reflect.Type]any{
 	reflect.TypeFor[SubjectCount](): NewSubjectCount(25),
+	reflect.TypeFor[time.Time]():    time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC),
 }
 
 // A client keeps the output schema it fetched when it connected and validates

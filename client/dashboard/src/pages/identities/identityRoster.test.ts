@@ -49,34 +49,61 @@ describe("registeredAgentIdentity", () => {
 });
 
 describe("fetchRegisteredAgents", () => {
-  it("returns the org-scoped inventory and forwards the abort signal", async () => {
+  it("returns one server-decided page and forwards the abort signal", async () => {
     const client = new Gram();
-    const list = vi.spyOn(client.agents, "list").mockResolvedValue([agent]);
+    const list = page(client, { items: [agent], nextCursor: "next" });
     const signal = new AbortController().signal;
 
-    await expect(fetchRegisteredAgents(client, signal)).resolves.toEqual([
-      agent,
-    ]);
-    expect(list).toHaveBeenCalledExactlyOnceWith(undefined, undefined, {
-      signal,
-    });
+    await expect(
+      fetchRegisteredAgents(
+        client,
+        { cursor: "here", limit: 25, search: "  bot  ", sortOrder: "desc" },
+        signal,
+      ),
+    ).resolves.toEqual({ items: [agent], nextCursor: "next" });
+    // The search is trimmed but not otherwise interpreted: matching is the
+    // server's, so the browser must not narrow the page it asked for.
+    expect(list).toHaveBeenCalledExactlyOnceWith(
+      { cursor: "here", limit: 25, search: "bot", nameOrder: "desc" },
+      undefined,
+      { signal },
+    );
   });
 
-  it("allows callers to omit the abort signal", async () => {
+  it("asks for the first page when given no request", async () => {
     const client = new Gram();
-    const list = vi.spyOn(client.agents, "list").mockResolvedValue([]);
+    const list = page(client, { items: [] });
 
-    await expect(fetchRegisteredAgents(client)).resolves.toEqual([]);
-    expect(list).toHaveBeenCalledExactlyOnceWith(undefined, undefined, {
-      signal: undefined,
-    });
+    await expect(fetchRegisteredAgents(client)).resolves.toEqual({ items: [] });
+    expect(list).toHaveBeenCalledExactlyOnceWith(
+      {
+        cursor: undefined,
+        limit: undefined,
+        search: undefined,
+        nameOrder: undefined,
+      },
+      undefined,
+      { signal: undefined },
+    );
+  });
+
+  it("sends no search when the caller's query is only whitespace", async () => {
+    const client = new Gram();
+    const list = page(client, { items: [] });
+
+    await fetchRegisteredAgents(client, { search: "   " });
+    expect(list).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ search: undefined }),
+      undefined,
+      { signal: undefined },
+    );
   });
 
   it("treats the backend rollout gate's SDK 404 as an empty inventory", async () => {
     const client = new Gram();
     vi.spyOn(client.agents, "list").mockRejectedValue(httpError(404));
 
-    await expect(fetchRegisteredAgents(client)).resolves.toEqual([]);
+    await expect(fetchRegisteredAgents(client)).resolves.toEqual({ items: [] });
   });
 
   it.each([403, 500])("propagates genuine SDK %i failures", async (status) => {
@@ -97,6 +124,16 @@ describe("fetchRegisteredAgents", () => {
     await expect(fetchRegisteredAgents(client)).rejects.toBe(error);
   });
 });
+
+/** The SDK hands back a page object, not the array it used to return. */
+function page(
+  client: Gram,
+  result: { items: unknown[]; nextCursor?: string },
+): ReturnType<typeof vi.spyOn> {
+  return vi
+    .spyOn(client.agents, "list")
+    .mockResolvedValue({ result } as never) as ReturnType<typeof vi.spyOn>;
+}
 
 function httpError(status: number): GramError {
   return new GramError("Failed to list agents", {

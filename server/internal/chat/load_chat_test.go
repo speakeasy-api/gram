@@ -650,7 +650,6 @@ func TestLoadChat_ClickHouseCutover_AttachmentFinding(t *testing.T) {
 	finding.ChatMessageID = ""
 	finding.ContentPartID = parts[0].ID.String()
 	require.NoError(t, riskchrepo.New(ti.chConn).InsertRiskFindings(ctx, []riskchrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	payload := loadPayload(chatID.String())
 	payload.RiskOnly = true

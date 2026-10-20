@@ -56,6 +56,14 @@ type Client struct {
 	// withdrawSubject endpoint.
 	WithdrawSubjectDoer goahttp.Doer
 
+	// CreateDeviceJoinToken Doer is the HTTP client used to make requests to the
+	// createDeviceJoinToken endpoint.
+	CreateDeviceJoinTokenDoer goahttp.Doer
+
+	// RegisterDevice Doer is the HTTP client used to make requests to the
+	// registerDevice endpoint.
+	RegisterDeviceDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -77,21 +85,23 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListDoer:               doer,
-		ListPlatformsDoer:      doer,
-		GetCustomFlowsDoer:     doer,
-		ListTokenEndpointsDoer: doer,
-		RegisterIssuerDoer:     doer,
-		UpdateIssuerDoer:       doer,
-		WithdrawIssuerDoer:     doer,
-		AdmitSubjectDoer:       doer,
-		UpdateSubjectDoer:      doer,
-		WithdrawSubjectDoer:    doer,
-		RestoreResponseBody:    restoreBody,
-		scheme:                 scheme,
-		host:                   host,
-		decoder:                dec,
-		encoder:                enc,
+		ListDoer:                  doer,
+		ListPlatformsDoer:         doer,
+		GetCustomFlowsDoer:        doer,
+		ListTokenEndpointsDoer:    doer,
+		RegisterIssuerDoer:        doer,
+		UpdateIssuerDoer:          doer,
+		WithdrawIssuerDoer:        doer,
+		AdmitSubjectDoer:          doer,
+		UpdateSubjectDoer:         doer,
+		WithdrawSubjectDoer:       doer,
+		CreateDeviceJoinTokenDoer: doer,
+		RegisterDeviceDoer:        doer,
+		RestoreResponseBody:       restoreBody,
+		scheme:                    scheme,
+		host:                      host,
+		decoder:                   dec,
+		encoder:                   enc,
 	}
 }
 
@@ -330,6 +340,54 @@ func (c *Client) WithdrawSubject() goa.Endpoint {
 		resp, err := c.WithdrawSubjectDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "withdrawSubject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateDeviceJoinToken returns an endpoint that makes HTTP requests to the
+// workloadIdentities service createDeviceJoinToken server.
+func (c *Client) CreateDeviceJoinToken() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateDeviceJoinTokenRequest(c.encoder)
+		decodeResponse = DecodeCreateDeviceJoinTokenResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateDeviceJoinTokenRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateDeviceJoinTokenDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "createDeviceJoinToken", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RegisterDevice returns an endpoint that makes HTTP requests to the
+// workloadIdentities service registerDevice server.
+func (c *Client) RegisterDevice() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRegisterDeviceRequest(c.encoder)
+		decodeResponse = DecodeRegisterDeviceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRegisterDeviceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RegisterDeviceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "registerDevice", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -3,7 +3,6 @@ package proxy
 import (
 	"fmt"
 	"net/http"
-	"strings"
 )
 
 // IsDeniedPassThroughSource reports whether an inbound header may not be used
@@ -15,11 +14,12 @@ import (
 // without this it could carry that same cookie upstream under any name it
 // likes and walk straight around that decision.
 //
-// Authorization is deliberately absent: forwarding the caller's own upstream
-// credential is what pass-through identity is for.
+// Authorization is denied for the same reason: it may carry the credential
+// the caller authenticated to Speakeasy with. An upstream credential supplied
+// by the caller must arrive in a header of its own.
 func IsDeniedPassThroughSource(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "cookie", "set-cookie", "proxy-authorization":
+	switch headerKey(name) {
+	case "authorization", "cookie", "set-cookie", "proxy-authorization":
 		return true
 	default:
 		return false

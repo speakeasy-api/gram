@@ -366,6 +366,7 @@ type PostgresReader struct {
 	riskFindings              riskFindingsLister
 	riskFindingList           riskFindingListLister
 	chatMetadata              *ChatMetadataService
+	chatSearch                *ChatSearchService
 	organizationGateway       *OrganizationGatewayService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
@@ -403,6 +404,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskFindings:              nil,
 		riskFindingList:           nil,
 		chatMetadata:              nil,
+		chatSearch:                nil,
 		organizationGateway:       nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
@@ -607,6 +609,14 @@ func (r *PostgresReader) WithRiskFindingList(service *RiskFindingListService, bu
 func (r *PostgresReader) WithChatMetadata(service *ChatMetadataService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.chatMetadata = service
+	}
+	return r
+}
+
+// WithChatSearch attaches explicitly authorized transcript search and reads.
+func (r *PostgresReader) WithChatSearch(service *ChatSearchService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.chatSearch = service
 	}
 	return r
 }

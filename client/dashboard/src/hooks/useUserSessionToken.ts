@@ -8,9 +8,8 @@ import { useQuery } from "@tanstack/react-query";
  * exactly one of these:
  *
  * - `toolset` binds to the toolset's `/mcp/{slug}` surface.
- * - `mcpServer` binds to the server's user_session_issuer (the /x/mcp
- *   convention) — proxied MCP servers are mcp_servers-backed and carry no
- *   toolset.
+ * - `mcpServer` binds to the server's user_session_issuer — proxied MCP
+ *   servers are mcp_servers-backed and carry no toolset.
  */
 export type UserSessionTokenTarget =
   | { kind: "toolset"; id: string | undefined }
@@ -55,7 +54,7 @@ function mintRequestBody(
  * `Authorization: Bearer` on the target's MCP surface, so the runtime gateway
  * resolves the dashboard user's stored upstream credentials through the same
  * path a real MCP client would after an OAuth dance — for proxied MCP servers
- * it matches what /x/mcp/{slug}/token would emit.
+ * it matches what /mcp/{slug}/token would emit.
  *
  * Only issuer-gated targets get a token; the mint RPC 400s for the rest, so a
  * target with no `userSessionIssuerId` leaves `accessToken` undefined and lets

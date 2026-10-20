@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -47,7 +48,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
 		return err
 	}
@@ -55,8 +56,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 }
 
 // ServeAuthorize is the post-resolution entry point for the OAuth 2.1
-// authorize endpoint, shared by /mcp's HandleAuthorize (toolset-keyed)
-// and /x/mcp's mcp_endpoint-keyed route registration.
+// authorize endpoint, called by HandleAuthorize after slug resolution.
 func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	if s.redirectToAuthorizationServer(w, r, endpoint) {
 		return nil
@@ -210,7 +210,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)
-	challengeState := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+	challengeState := AuthnChallengeState{ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 		Browser:                  nil,
 		Federation:               nil,
 		ID:                       challengeID,
@@ -235,6 +235,12 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
 		FocusServer:     "",
+	}
+
+	if endpoint.servingSharedAuthorizationServer() != nil {
+		if err := bindConsentBrowser(w, &challengeState); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "bind consent browser").LogError(ctx, logger)
+		}
 	}
 
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {

@@ -164,6 +164,19 @@ describe("ConsentToolsApp", () => {
     expect(button.disabled).toBe(true);
   });
 
+  it("requires a page reload when configuration changes, even for deferred inventory", async () => {
+    connect.mockRejectedValue(
+      new StreamableHTTPError(412, "configuration changed"),
+    );
+    const { button } = renderApp({ inventoryDeferred: true });
+    await screen.findByText(
+      "This server’s configuration changed. Reload this page to review access.",
+    );
+    expect(screen.getByRole("button", { name: "Reload page" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(button.disabled).toBe(true);
+  });
+
   it("gives access with all tools when a chained service defers the inventory", async () => {
     connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
     const { button } = renderApp({ inventoryDeferred: true });

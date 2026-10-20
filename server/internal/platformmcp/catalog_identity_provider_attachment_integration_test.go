@@ -20,7 +20,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -361,7 +363,7 @@ func attachmentTestRegister(t *testing.T, service *CatalogIdentityProviderAttach
 	ctx := t.Context()
 	existing, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
-	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, metadata, existing, reuse, resource.Resource, resource, remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resource.ScopesSupported, Live: true, UseDiscovered: true}))
+	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, uuid.Nil, metadata, existing, reuse, resource.Resource, resource, remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resource.ScopesSupported, Live: true, UseDiscovered: true}))
 	require.NoError(t, commit.Preflight(ctx))
 	reg, err := commit.Register(ctx)
 	require.NoError(t, err)
@@ -503,4 +505,56 @@ func TestAttachmentRegistersDiscoveredScopesWithoutStoringThem(t *testing.T) {
 	clients := attachmentTestClients(t, conn, principal, project, usi)
 	require.Len(t, clients, 1)
 	require.Empty(t, clients[0].ClientScope)
+}
+
+// A retry that finds the registered issuer's client already bound records the
+// server's association only while the server still signs in through that
+// issuer; once it moved to another issuer the retry is a conflict.
+func TestExistingAttachmentAssociatesOnlyTheRegisteredServer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_existing")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(t, conn)
+	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
+	original := attachmentTestUserSessionIssuer(t, conn, project.ID)
+	serverID := attachmentTestMCPServer(t, conn, project.ID, original)
+	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, original, metadata, "client-a", resource.Resource, resource))
+	clients := attachmentTestClients(t, conn, principal, project, original)
+	require.Len(t, clients, 1)
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	registration := platformrepo.PlatformMcpCatalogRegistration{
+		McpServerID:         conv.ToNullUUID(serverID),
+		RemoteMcpServerID:   server.RemoteMcpServerID,
+		UserSessionIssuerID: conv.ToNullUUID(original),
+	}
+	associations := func() int {
+		rows, err := upstreamclientsrepo.New(conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: serverID, ProjectID: project.ID})
+		require.NoError(t, err)
+		return len(rows)
+	}
+
+	require.NoError(t, service.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, clients[0]))
+	require.Equal(t, 1, associations())
+
+	moved := attachmentTestUserSessionIssuer(t, conn, project.ID)
+	_, err = mcpserversrepo.New(conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		Name:                server.Name,
+		Slug:                server.Slug,
+		UserSessionIssuerID: conv.ToNullUUID(moved),
+		RemoteMcpServerID:   server.RemoteMcpServerID,
+		Visibility:          server.Visibility,
+		ID:                  serverID,
+		ProjectID:           project.ID,
+	})
+	require.NoError(t, err)
+	_, err = upstreamclientsrepo.New(conn).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{McpServerID: serverID, RemoteSessionClientID: clients[0].ClientID, ProjectID: project.ID})
+	require.NoError(t, err)
+
+	err = service.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, clients[0])
+	require.ErrorIs(t, err, ErrIdentityProviderAttachmentConflict)
+	require.Zero(t, associations(), "a retry must not associate the client of the issuer the server left")
 }
