@@ -154,7 +154,16 @@ func (r *RoleManager) GetRoleByIDTx(ctx context.Context, tx pgx.Tx, gramOrgID, i
 // assigned role IDs, the role IDs they hold through directory role mappings,
 // and the mappings those roles come from.
 func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.ListMembersResult, error) {
-	queries := repo.New(r.db)
+	// Both reads share one snapshot, so a concurrent directory sync or mapping
+	// change cannot leave directory_role_ids and directory_role_sources
+	// disagreeing.
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin member read").LogError(ctx, r.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := repo.New(tx)
 	rows, err := queries.ListAccessMembers(ctx, gramOrgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members").LogError(ctx, r.logger)
