@@ -566,7 +566,7 @@ describe("useMcpServerCandidates", () => {
     expect(hosted?.verbs).toEqual(["open"]);
   });
 
-  it("lists a canonical wrapper and each extra wrapper as separate servers", () => {
+  it("lists a toolset once, via its canonical wrapper, alongside other servers", () => {
     mocks.mcpServers = [
       { ...HOSTED_ROW, visibility: "private" },
       {
@@ -582,8 +582,6 @@ describe("useMcpServerCandidates", () => {
     const servers = byKind(result.current, "mcp_server");
 
     expect(servers.map((server) => server.id).sort()).toEqual([
-      "mcp:server-hosted",
-      "mcp:server-hosted-2",
       "mcp:server-slack-a1",
       "mcp:toolset-1",
     ]);

@@ -28,12 +28,20 @@ function mcpServerKind(server: McpServer): McpServerKind | undefined {
   return undefined;
 }
 
-/** Every server with a backend, each listed once under its own row. */
+/** Every server with a backend; a toolset lists once, via its canonical wrapper or else its first. */
 export function listedMcpServers(servers: McpServer[]): ListedMcpServer[] {
+  const listedToolsets = new Set(
+    servers.filter(isCanonicalHostedWrapper).map((s) => s.toolsetId),
+  );
   const listed: ListedMcpServer[] = [];
   for (const server of servers) {
     const kind = mcpServerKind(server);
-    if (kind !== undefined) listed.push({ server, kind });
+    if (kind === undefined) continue;
+    if (kind === "hosted" && !isCanonicalHostedWrapper(server)) {
+      if (listedToolsets.has(server.toolsetId)) continue;
+      listedToolsets.add(server.toolsetId);
+    }
+    listed.push({ server, kind });
   }
   return listed;
 }

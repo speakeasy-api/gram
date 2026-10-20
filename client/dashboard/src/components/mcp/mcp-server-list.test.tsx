@@ -149,18 +149,11 @@ describe("hosted wrappers", () => {
   const extra = (id: string, name: string) =>
     server({ id, name, slug: id, toolsetId: "toolset-1", toolset });
 
-  it("lists a canonical wrapper as its toolset and an extra wrapper as its own server", () => {
-    renderRows([HOSTED, extra("wrapper-2", "Support (staging)")]);
+  it("lists a toolset once, via its canonical wrapper, when it has extra wrappers", () => {
+    renderRows([extra("wrapper-2", "Support (staging)"), HOSTED]);
     expect(
-      screen
-        .getByRole("link", { name: "Open MCP server Hosted tools" })
-        .getAttribute("href"),
-    ).toBe("/mcp/hosted-tools");
-    expect(
-      screen
-        .getByRole("link", { name: "Open MCP server Support (staging)" })
-        .getAttribute("href"),
-    ).toBe("/mcp/x/wrapper-2");
+      screen.getAllByRole("link").map((link) => link.getAttribute("href")),
+    ).toEqual(["/mcp/hosted-tools"]);
   });
 
   it("opens a toolset's only, non-canonical wrapper on its server page", () => {
@@ -180,14 +173,14 @@ describe("hosted wrappers", () => {
     );
   });
 
-  it("lists two non-canonical wrappers of one toolset separately", () => {
+  it("lists only the first of a toolset's non-canonical wrappers", () => {
     renderRows([
       extra("wrapper-2", "Support A"),
       extra("wrapper-3", "Support B"),
     ]);
     expect(
       screen.getAllByRole("link").map((link) => link.getAttribute("href")),
-    ).toEqual(["/mcp/x/wrapper-2", "/mcp/x/wrapper-3"]);
+    ).toEqual(["/mcp/x/wrapper-2"]);
   });
 });
 
