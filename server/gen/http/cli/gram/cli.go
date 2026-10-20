@@ -29418,7 +29418,7 @@ func telemetryListHooksTracesUsage() {
 // templatesUsage displays the usage of the templates command and its
 // subcommands.
 func templatesUsage() {
-	fmt.Fprintln(os.Stderr, `Manages re-usable prompt templates and higher-order tools for a project.`)
+	fmt.Fprintln(os.Stderr, `Manages re-usable prompt templates for a project.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] templates COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-template: Create a new prompt template.`)
@@ -29453,7 +29453,7 @@ func templatesCreateTemplateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates create-template --body '{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"abc123\",\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"aaa\",\n      \"prompt\": \"abc123\",\n      \"tool_urns_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"tools_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates create-template --body '{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"abc123\",\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"name\": \"aaa\",\n      \"prompt\": \"abc123\",\n      \"tool_urns_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"tools_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func templatesUpdateTemplateUsage() {
@@ -29477,7 +29477,7 @@ func templatesUpdateTemplateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates update-template --body '{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"abc123\",\n      \"engine\": \"mustache\",\n      \"id\": \"abc123\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"tool_urns_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"tools_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates update-template --body '{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"abc123\",\n      \"engine\": \"mustache\",\n      \"id\": \"abc123\",\n      \"kind\": \"prompt\",\n      \"name\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"tool_urns_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"tools_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func templatesGetTemplateUsage() {
@@ -29601,7 +29601,7 @@ func templatesRenderTemplateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates render-template --body '{\n      \"arguments\": {\n         \"abc123\": \"abc123\"\n      },\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"prompt\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates render-template --body '{\n      \"arguments\": {\n         \"abc123\": \"abc123\"\n      },\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"prompt\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // tokenExchangeUsage displays the usage of the token-exchange command and its

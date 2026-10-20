@@ -164,11 +164,6 @@ import {
   KillswitchIndexRedirect,
   KillswitchRecordRedirect,
 } from "./pages/killswitch/KillswitchesRoot";
-import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
-import {
-  ToolBuilderNew,
-  ToolBuilderPage,
-} from "./pages/toolBuilder/ToolBuilder";
 
 const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
 const SetupTaskRedirect = React.lazy(
@@ -310,25 +305,6 @@ const ROUTE_STRUCTURE = {
     url: "integrations",
     icon: "package",
     component: Integrations,
-  },
-  customTools: {
-    title: "Custom Tools",
-    url: "custom-tools",
-    icon: "pencil-ruler",
-    component: CustomToolsRoot,
-    indexComponent: CustomTools,
-    subPages: {
-      toolBuilderNew: {
-        title: "Tool Builder",
-        url: "new",
-        component: ToolBuilderNew,
-      },
-      toolBuilder: {
-        title: "Tool Builder",
-        url: ":toolName",
-        component: ToolBuilderPage,
-      },
-    },
   },
   prompts: {
     title: "Prompts",
