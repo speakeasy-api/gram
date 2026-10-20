@@ -11,7 +11,7 @@ import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js"
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { MCPToolsetIcon } from "./MCPToolsetIcon";
-import { SpeakeasyMark } from "./TeamGatewayCard";
+import { SpeakeasyMark } from "./OrganizationGatewayCard";
 import { AlertTriangleIcon, Link2, Network } from "lucide-react";
 import { useExternalMcpOAuthConfigStatus } from "../sources/sources-hooks";
 
@@ -192,8 +192,8 @@ export function GatewayTableRow({
   );
 }
 
-/** The organization's Team Gateway: every server a person can reach. */
-export function TeamGatewayTableRow({
+/** The Organization Gateway: every server a person can reach. */
+export function OrganizationGatewayTableRow({
   url,
   isOff,
 }: {
@@ -203,11 +203,11 @@ export function TeamGatewayTableRow({
   const routes = useRoutes();
   return (
     <DotRow
-      href={routes.mcp.teamGateway.href()}
-      ariaLabel="Open Team Gateway"
+      href={routes.mcp.organizationGateway.href()}
+      ariaLabel="Open Organization Gateway"
       icon={<SpeakeasyMark className="h-5 w-5" />}
     >
-      <NameCell name="Team Gateway">
+      <NameCell name="Organization Gateway">
         {isOff && <Badge variant="warning">Off</Badge>}
       </NameCell>
       <td className={CELL}>

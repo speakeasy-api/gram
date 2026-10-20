@@ -34,17 +34,18 @@ export function OrganizationGatewaySwitch({
             checked ? setOn(true) : setConfirming(true)
           }
           disabled={isPending}
-          aria-label="Team Gateway"
+          aria-label="Organization Gateway"
         />
       </RequireScope>
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title="Turn off Team Gateway?"
+        title="Turn off Organization Gateway?"
         description={
           <>
             This removes your team&apos;s access to their servers through the
-            Team Gateway. Clients connected to it stop working right away.
+            Organization Gateway. Clients connected to it stop working right
+            away.
             <br />
             <br />
             Each MCP server keeps working at its own URL. You can turn the

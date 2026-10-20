@@ -583,7 +583,7 @@ html.chat-launching::view-transition-new(root) {
   }
 }
 
-/* The Team Gateway card's frame: the Speakeasy mark's border gradient
+/* The Organization Gateway card's frame: the Speakeasy mark's border gradient
    (SPEAKEASY_RAINBOW in components/icon-dither.tsx), static, with a faint,
    even, zero-offset halo so the card stays flat. */
 .speakeasy-rainbow-frame {

@@ -3,11 +3,11 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useOrganizationGateway } from "@gram/client/react-query/organizationGateway.js";
 
 /**
- * Whether the MCP Servers list offers the Team Gateway. Everyone sees it while
+ * Whether the MCP Servers list offers the Organization Gateway. Everyone sees it while
  * it is served. Organization admins also see it while it is turned off, so the
  * page they turned it off from stays the way back to turning it on.
  */
-export function useTeamGatewayEntry(): {
+export function useOrganizationGatewayEntry(): {
   show: boolean;
   isOff: boolean;
   url: string | undefined;

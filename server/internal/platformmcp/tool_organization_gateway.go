@@ -17,7 +17,7 @@ import (
 
 const getMyOrganizationGatewayName = "get_my_organization_gateway"
 
-const getMyOrganizationGatewayDescription = "Get your organization's Team Gateway: the one MCP URL that gives you every MCP server in your organization you are allowed to reach, across all projects, signed in with your organization account. " +
+const getMyOrganizationGatewayDescription = "Get the Organization Gateway: the one MCP URL that gives you every MCP server in your organization you are allowed to reach, across all projects, signed in with your organization account. " +
 	"Returns available=true with the url to add to an MCP client, or available=false with unavailable_reason and the next action. It names no servers: once connected, the gateway's list_servers tool lists the servers your access reaches by slug, prefixed with the project only when two projects share a slug. A connection that chooses Direct at sign-in lists each tool as server--tool instead. " +
 	"No token, credential, or other member's access is returned."
 
@@ -88,7 +88,7 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 	case orggateway.UnavailabilityMultipleOrganizationIssuers:
 		return unavailableOrganizationGateway(unavailable, "Ask an organization administrator to consolidate the organization-wide authorization servers into one."), nil
 	case orggateway.UnavailabilityTurnedOff:
-		return unavailableOrganizationGateway(unavailable, "An organization administrator turned the Team Gateway off. Ask them to turn it back on from the Team Gateway card on the MCP Servers page."), nil
+		return unavailableOrganizationGateway(unavailable, "An organization administrator turned the Organization Gateway off. Ask them to turn it back on from the Organization Gateway card on the MCP Servers page."), nil
 	case orggateway.UnavailabilityCustomDomainOnly:
 		return unavailableOrganizationGateway(unavailable, "Your organization only allows its MCP servers to be reached through its own custom domain, where the gateway is not offered. Connect to each MCP server's address on that domain."), nil
 	default:

@@ -24,8 +24,10 @@ interface PlatformInstrumentationSheetProps {
   initialPlatformId?: string | null;
 }
 
-// Instrumentation instructions for one agent platform at a time, opened from
-// a surface that has no platform in hand — so the sheet's first step is always
+// Instructions for one agent platform at a time. Step 1 is the picker: a
+// surface with no platform in hand opens there, and one that already has the
+// reader's pick (the Organization Gateway's agent list) passes
+// initialPlatformId to open on that platform's steps, with Back returning to
 // the picker. The setup card sections instead lay a single platform's steps
 // out inline with PlatformSetupFlow.
 export function PlatformInstrumentationSheet({

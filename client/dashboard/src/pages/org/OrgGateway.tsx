@@ -71,7 +71,7 @@ function GatewaySetting({
             <Network className="text-muted-foreground size-4" />
           </div>
           <div>
-            <Text variant="subheading">Team Gateway</Text>
+            <Text variant="subheading">Organization Gateway</Text>
             <Text small muted className="mt-1 max-w-3xl">
               Members add one URL to their AI client and sign in with their
               organization account. Turning it off stops it working for everyone

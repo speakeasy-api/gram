@@ -1,4 +1,4 @@
-import { SpeakeasyMark } from "@/components/mcp/TeamGatewayCard";
+import { SpeakeasyMark } from "@/components/mcp/OrganizationGatewayCard";
 import {
   GatewayNotServed,
   OrganizationGatewaySwitch,
@@ -19,18 +19,18 @@ import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 import { AgentPlatformPickerItem } from "@/pages/setup/components/agent-platform-picker-item";
 import { PlatformInstrumentationSheet } from "@/pages/setup/components/platform-instrumentation-sheet";
 import { useMemo, useState } from "react";
-import { teamGatewayInstallPlatforms } from "./team-gateway-install";
+import { organizationGatewayInstallPlatforms } from "./organization-gateway-install";
 
 /**
- * The Team Gateway: one MCP URL that gives each person every server they can
+ * The Organization Gateway: one MCP URL that gives each person every server they can
  * reach across the organization's projects. Opened from its card at the head
  * of the MCP Servers list.
  */
-export default function TeamGateway(): JSX.Element {
+export default function OrganizationGateway(): JSX.Element {
   const organization = useOrganization();
   return (
     <RequireScope scope="org:read" level="page">
-      <TeamGatewayContent
+      <OrganizationGatewayContent
         key={organization.id}
         organizationId={organization.id}
         organizationSlug={organization.slug}
@@ -39,7 +39,7 @@ export default function TeamGateway(): JSX.Element {
   );
 }
 
-function TeamGatewayContent({
+function OrganizationGatewayContent({
   organizationId,
   organizationSlug,
 }: {
@@ -62,7 +62,7 @@ function TeamGatewayContent({
           <span className="border-border bg-card flex size-9 shrink-0 items-center justify-center border">
             <SpeakeasyMark className="size-6" />
           </span>
-          Team Gateway
+          Organization Gateway
         </span>
       }
       description={
@@ -122,7 +122,7 @@ function GatewayBody({
       <Alert variant="error">
         <div className="flex flex-1 items-center justify-between gap-3">
           <AlertDescription>
-            Couldn&apos;t load the Team Gateway.
+            Couldn&apos;t load the Organization Gateway.
           </AlertDescription>
           <Button
             variant="secondary"
@@ -174,12 +174,12 @@ function GatewayBody({
         </div>
       </section>
 
-      <TeamGatewayInstall serverName={serverName} url={url} />
+      <OrganizationGatewayInstall serverName={serverName} url={url} />
     </div>
   );
 }
 
-function TeamGatewayInstall({
+function OrganizationGatewayInstall({
   serverName,
   url,
 }: {
@@ -187,7 +187,7 @@ function TeamGatewayInstall({
   url: string;
 }): JSX.Element {
   const platforms = useMemo(
-    () => teamGatewayInstallPlatforms(serverName, url),
+    () => organizationGatewayInstallPlatforms(serverName, url),
     [serverName, url],
   );
   const [openPlatformId, setOpenPlatformId] = useState<string | null>(null);

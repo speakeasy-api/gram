@@ -26,9 +26,9 @@ export type OrganizationGatewaySetting = {
 };
 
 /**
- * The Team Gateway's on/off state and the switch that changes it. The stored
+ * The Organization Gateway's on/off state and the switch that changes it. The stored
  * product feature turns the gateway off, so "on" is its inverse. Shared by the
- * Team Gateway page and the organization's Gateway settings page so both read
+ * Organization Gateway page and the organization's Gateway settings page so both read
  * and write the same thing the same way.
  */
 export function useOrganizationGatewaySetting({
@@ -55,13 +55,13 @@ export function useOrganizationGatewaySetting({
       if (!isCurrentOrganization()) return;
       toast.success(
         variables.request.setProductFeatureRequestBody.enabled
-          ? "Team Gateway turned off"
-          : "Team Gateway turned on",
+          ? "Organization Gateway turned off"
+          : "Organization Gateway turned on",
       );
     },
     onError: (error) => {
       if (!isCurrentOrganization()) return;
-      handleAPIError(error, "Failed to update the Team Gateway");
+      handleAPIError(error, "Failed to update the Organization Gateway");
     },
   });
 

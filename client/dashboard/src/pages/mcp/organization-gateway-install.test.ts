@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { platformSteps } from "@/pages/setup/setup-data";
-import { teamGatewayInstallPlatforms } from "./team-gateway-install";
+import { organizationGatewayInstallPlatforms } from "./organization-gateway-install";
 
 const URL = "https://app.example.com/mcp/gateway/acme";
 
-describe("teamGatewayInstallPlatforms", () => {
-  const platforms = teamGatewayInstallPlatforms("acme", URL);
+describe("organizationGatewayInstallPlatforms", () => {
+  const platforms = organizationGatewayInstallPlatforms("acme", URL);
   const byId = (id: string) => platforms.find((p) => p.id === id)!;
 
   it("follows the setup flow's agent order, then adds ChatGPT and others", () => {
@@ -44,15 +44,29 @@ describe("teamGatewayInstallPlatforms", () => {
     ]);
   });
 
-  it("puts the endpoint in every step that pastes it", () => {
-    const pasted = platforms.flatMap((p) =>
-      [
-        ...p.setupSteps,
-        ...(p.setupSteps[0]?.eligibility?.personalSteps ?? []),
-      ].flatMap((s) => s.fields ?? []),
+  it("puts the endpoint in every step that hands it over", () => {
+    const allSteps = platforms.flatMap((p) => [
+      ...p.setupSteps,
+      ...(p.setupSteps[0]?.eligibility?.personalSteps ?? []),
+    ]);
+    const fields = allSteps.flatMap((s) => s.fields ?? []);
+    expect(fields.length).toBeGreaterThan(0);
+    for (const field of fields) expect(field.value).toBe(URL);
+
+    // Commands and config carry it too; only the Codex login names the
+    // server instead of its URL.
+    const snippets = allSteps
+      .map((s) => s.code)
+      .filter((code): code is string => !!code && !code.includes("login"));
+    expect(snippets.length).toBe(3);
+    for (const code of snippets) expect(code).toContain(URL);
+
+    const cursorLink = new globalThis.URL(
+      byId("cursor").setupSteps[0]!.helpLink!.url,
     );
-    expect(pasted.length).toBeGreaterThan(0);
-    for (const field of pasted) expect(field.value).toBe(URL);
+    expect(JSON.parse(atob(cursorLink.searchParams.get("config")!))).toEqual({
+      url: URL,
+    });
   });
 
   it("signs Codex in after adding it", () => {

@@ -131,8 +131,8 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
-12a. **Team Gateway** — open **MCP** (`/<org>/projects/default/mcp`). The
-**Team Gateway** card leads the MCP Servers grid, because `acme-workforce` is
+12a. **Organization Gateway** — open **MCP** (`/<org>/projects/default/mcp`). The
+**Organization Gateway** card leads the MCP Servers grid, because `acme-workforce` is
 the organization's only organization-wide authorization server. Opening it
 shows the endpoint `<server>/mcp/gateway/<org>` with a copy button, where
 `<org>` is the organization's slug (`acme-demo` in the demo org, your own org's
