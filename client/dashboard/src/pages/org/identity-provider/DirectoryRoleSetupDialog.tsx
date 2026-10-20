@@ -159,8 +159,9 @@ export function DirectoryRoleSetupDialog({
 
             {rows.length === 0 ? (
               <Text small muted>
-                Every directory group and attribute value already has a role.
-                Change them in the table.
+                {preview.data.hiddenAttributeKeys.length > 0
+                  ? "Every directory group and every value that can be set up in bulk already has a role. Change them in the table."
+                  : "Every directory group and attribute value already has a role. Change them in the table."}
               </Text>
             ) : (
               <>

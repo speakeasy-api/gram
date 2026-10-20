@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { BellOff } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
@@ -11,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { pluralize } from "@/lib/format";
 import type { DirectoryReviewItem } from "@gram/client/models/components/directoryreviewitem.js";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -147,7 +149,7 @@ export function DirectoryReviewPanel({
       </div>
       {/* Indented under the header with a rule down the side, so the items
           read as entries in its list rather than as more headers. */}
-      <ul className="divide-border border-border my-2 mr-3 ml-4 divide-y border-l-2">
+      <ul className="divide-border border-border @container my-2 mr-3 ml-4 divide-y border-l-2">
         {items.map((item) => (
           <ReviewRow
             key={item.id}
@@ -192,10 +194,15 @@ function ReviewRow({
   const title = reviewItemTitle(item);
 
   return (
-    <li className="flex flex-wrap items-center gap-3 py-2 pr-1 pl-3">
-      {/* The text keeps a readable width; the controls wrap below it. */}
-      <div className="min-w-64 flex-1">
-        <Text className="truncate font-medium">{title}</Text>
+    <li className="grid grid-cols-1 items-center gap-3 py-2 pr-1 pl-3 @3xl:grid-cols-[minmax(0,1fr)_30rem]">
+      {/* Two columns: the text on the left and a fixed-width controls column
+          on the right, so every row lines up the same way; narrow panels
+          stack the two columns. The controls form two groups that never
+          split: the action (pick and map, or remove) and the dismissal
+          (leave unmapped, or keep). When space runs out the dismissal group
+          wraps onto its own line. */}
+      <div className="min-w-0">
+        <Text className="font-medium break-words">{title}</Text>
         <Text muted small>
           {reviewItemDetail(item, roleNames)}
         </Text>
@@ -205,10 +212,16 @@ function ReviewRow({
           </Text>
         )}
       </div>
-      {/* ml-auto keeps every row's controls on the right, including when
-          they wrap below the text. */}
       {missing ? (
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="destructive-primary"
+            size="sm"
+            disabled={disabled}
+            onClick={() => onDecide("approve")}
+          >
+            <Button.Text>Remove roles</Button.Text>
+          </Button>
           <Button
             variant="secondary"
             size="sm"
@@ -217,69 +230,77 @@ function ReviewRow({
           >
             <Button.Text>Keep roles</Button.Text>
           </Button>
-          <Button
-            variant="destructive-secondary"
-            size="sm"
-            disabled={disabled}
-            onClick={() => onDecide("approve")}
-          >
-            <Button.Text>Remove roles</Button.Text>
-          </Button>
         </div>
       ) : (
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          <Select
-            value={choice ? choiceValue(choice) : undefined}
-            onValueChange={(value) => setPicked(choiceFromValue(value))}
-            disabled={disabled}
-          >
-            <SelectTrigger className="w-56" aria-label={`Role for ${title}`}>
-              <SelectValue placeholder="Pick a role" />
-            </SelectTrigger>
-            <SelectContent>
-              {proposed?.kind === "create" && (
-                <SelectItem value={choiceValue(proposed)}>
-                  New role: {proposed.name}
-                </SelectItem>
-              )}
-              {roles.map((role) => (
-                <SelectItem
-                  key={role.principalUrn}
-                  value={`reuse:${role.principalUrn}`}
-                >
-                  {role.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={disabled || !choice}
-            onClick={() => onDecide("approve", choice)}
-          >
-            <Button.Text>Map</Button.Text>
-          </Button>
-          <Button
-            variant="tertiary"
-            size="sm"
-            disabled={disabled}
-            onClick={() => onDecide("dismiss")}
-          >
-            <Button.Text>Leave unmapped</Button.Text>
-          </Button>
-          {item.kind === "new_attribute_value" && (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex items-center gap-2">
+            <Select
+              value={choice ? choiceValue(choice) : undefined}
+              onValueChange={(value) => setPicked(choiceFromValue(value))}
+              disabled={disabled}
+            >
+              <SelectTrigger className="w-52" aria-label={`Role for ${title}`}>
+                <SelectValue placeholder="Pick a role" />
+              </SelectTrigger>
+              <SelectContent>
+                {proposed?.kind === "create" && (
+                  <SelectItem value={choiceValue(proposed)}>
+                    New role: {proposed.name}
+                  </SelectItem>
+                )}
+                {roles.map((role) => (
+                  <SelectItem
+                    key={role.principalUrn}
+                    value={`reuse:${role.principalUrn}`}
+                  >
+                    {role.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
-              variant="tertiary"
+              variant="primary"
+              size="sm"
+              disabled={disabled || !choice}
+              onClick={() => onDecide("approve", choice)}
+            >
+              <Button.Text>Map</Button.Text>
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
               size="sm"
               disabled={disabled}
-              onClick={() => onDecide("opt_out_key")}
+              onClick={() => onDecide("dismiss")}
             >
-              <Button.Text>
-                Stop asking about {item.item.source.attributeKey}
-              </Button.Text>
+              <Button.Text>Leave unmapped</Button.Text>
             </Button>
-          )}
+            {item.kind === "new_attribute_value" ? (
+              <SimpleTooltip
+                tooltip={`Stop asking about ${item.item.source.attributeKey}`}
+              >
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="w-8 px-0"
+                  disabled={disabled}
+                  onClick={() => onDecide("opt_out_key")}
+                >
+                  <Button.LeftIcon>
+                    <BellOff className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">
+                    Stop asking about {item.item.source.attributeKey}
+                  </Button.Text>
+                </Button>
+              </SimpleTooltip>
+            ) : (
+              // Holds the icon button's space so Map and Leave unmapped line
+              // up with rows that have it.
+              <span aria-hidden className="w-8" />
+            )}
+          </div>
         </div>
       )}
     </li>

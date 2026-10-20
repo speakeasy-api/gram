@@ -201,6 +201,9 @@ func TestService_ApplyDirectoryRoleSetup_RejectsMalformedItems(t *testing.T) {
 	source := &gen.DirectoryRoleSetupSource{SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID}
 	name := "Platform"
 	roleURN := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:role").String()
+	otherGroupID := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Platform Ops").String()
+	otherSource := &gen.DirectoryRoleSetupSource{SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &otherGroupID}
+	spaced, dashed := "Platform Ops", "platform-ops"
 
 	for label, items := range map[string][]*gen.ApplyDirectoryRoleSetupItem{
 		"duplicate source": {
@@ -212,6 +215,12 @@ func TestService_ApplyDirectoryRoleSetup_RejectsMalformedItems(t *testing.T) {
 		},
 		"role with neither field": {
 			{Source: source, Version: "v", Roles: []*gen.ApplyDirectoryRoleSetupRole{{}}},
+		},
+		// Different names that would become the same role are refused rather
+		// than silently merged.
+		"new role names colliding on a slug": {
+			{Source: source, Version: "v", Roles: []*gen.ApplyDirectoryRoleSetupRole{{CreateName: &spaced}}},
+			{Source: otherSource, Version: "v", Roles: []*gen.ApplyDirectoryRoleSetupRole{{CreateName: &dashed}}},
 		},
 	} {
 		_, err := ti.service.ApplyDirectoryRoleSetup(ctx, &gen.ApplyDirectoryRoleSetupPayload{Items: items})
@@ -228,6 +237,9 @@ func TestDirectoryRoleName(t *testing.T) {
 		"R&D (EMEA)":  "R D EMEA",
 		"  data_ops ": "data_ops",
 		"***":         fallbackDirectoryRoleName,
+		// Allowed characters, but no letter or digit to make a role from.
+		"-":   fallbackDirectoryRoleName,
+		"_ _": fallbackDirectoryRoleName,
 	} {
 		require.Equal(t, want, directoryRoleName(input), input)
 	}
