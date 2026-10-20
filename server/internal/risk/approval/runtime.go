@@ -191,7 +191,7 @@ func (r *Runtime) requestResultText(row repo.RiskPolicyApproval, status Status) 
 	return fmt.Sprintf(`Approval requested (status: %s). An approver has been asked. The request expires %s.
 Do not retry the blocked call yet. Start the watcher below and retry with exactly the same arguments only when it prints APPROVED.
 
-1. Save the request token, and nothing else, to %s with your file-writing tool. If you have none, run:
+1. Save the request token, and nothing else, to %s. With a file-writing tool, pass the full path: your home directory, not $HOME or ~, which such tools do not expand. If you have no such tool, run:
    umask 077 && printf '%%s' '%s' > "%s"
 2. Save the script at the end of this message as approval-watch.sh in your working directory.
 3. Start the watcher. Do not write your own poller: the watch URL only accepts the token as an "Authorization: Bearer apr_..." header, and the script sends it.

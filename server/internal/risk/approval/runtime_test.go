@@ -139,6 +139,7 @@ func TestRequestApprovalToolFilesRequestAndReturnsWatcher(t *testing.T) {
 	require.Contains(t, text, "timeout_ms: ")
 	require.Contains(t, text, `"Authorization: Bearer apr_..." header`)
 	require.Contains(t, text, "keep this turn open")
+	require.Contains(t, text, "not $HOME or ~")
 	require.Contains(t, text, `rm -f "$HOME/.speakeasy-approval-`)
 	// The steps are only in the text. Structured content would replace them
 	// in clients that show it to the model instead.
