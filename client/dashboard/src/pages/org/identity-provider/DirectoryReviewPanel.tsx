@@ -147,7 +147,7 @@ export function DirectoryReviewPanel({
       </div>
       {/* Indented under the header with a rule down the side, so the items
           read as entries in its list rather than as more headers. */}
-      <ul className="divide-border border-border my-2 mr-3 ml-4 divide-y border-l-2">
+      <ul className="divide-border border-border @container my-2 mr-3 ml-4 divide-y border-l-2">
         {items.map((item) => (
           <ReviewRow
             key={item.id}
@@ -192,9 +192,11 @@ function ReviewRow({
   const title = reviewItemTitle(item);
 
   return (
-    <li className="flex flex-wrap items-center gap-3 py-2 pr-1 pl-3">
-      {/* The text keeps a readable width; the controls wrap below it. */}
-      <div className="min-w-64 flex-1">
+    <li className="grid grid-cols-1 items-center gap-3 py-2 pr-1 pl-3 @3xl:grid-cols-[minmax(0,1fr)_28rem]">
+      {/* Two columns: the text on the left and a fixed-width controls column
+          on the right, so every row lines up the same way. Controls wrap
+          inside their own column; narrow panels stack the two columns. */}
+      <div className="min-w-0">
         <Text className="truncate font-medium">{title}</Text>
         <Text muted small>
           {reviewItemDetail(item, roleNames)}
@@ -205,10 +207,8 @@ function ReviewRow({
           </Text>
         )}
       </div>
-      {/* ml-auto keeps every row's controls on the right, including when
-          they wrap below the text. */}
       {missing ? (
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             variant="secondary"
             size="sm"
@@ -227,7 +227,7 @@ function ReviewRow({
           </Button>
         </div>
       ) : (
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Select
             value={choice ? choiceValue(choice) : undefined}
             onValueChange={(value) => setPicked(choiceFromValue(value))}
