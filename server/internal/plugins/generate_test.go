@@ -3469,7 +3469,7 @@ func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 		"`model: dashboard_managed`", "Do not require or invent a registration record",
 		"pending or incomplete registration", "must not be reported as already present or complete",
 		"Skip provider attachment for anonymous servers",
-		"inspection reports an authentication requirement and advertises a supported identity provider",
+		"inspection reports an authentication requirement and advertises a supported authorization server",
 		"`authentication: authentication_required`", "`oauth_discovery: available_dcr`", "`oauth_discovery: available_cimd`",
 		"`available` alone or `incomplete` does not establish support",
 		"list_projects", "find_mcp", "get_mcp", "inspect_mcp_candidate",

@@ -13,10 +13,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -376,7 +376,7 @@ func TestRecordReadIdempotentPerSession(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, again, "the same content in the same session counts once")
 
-	observations, err := repo.New(f.conn).ListMCPSkillObservations(ctx, repo.ListMCPSkillObservationsParams{ProjectID: f.projectID, Provider: mcpskills.ObservationProvider})
+	observations, err := testrepo.New(f.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{ProjectID: f.projectID, Provider: mcpskills.ObservationProvider})
 	require.NoError(t, err)
 	require.Len(t, observations, 1)
 
@@ -433,7 +433,7 @@ func TestRecordReadWithoutSessionCountsEveryRead(t *testing.T) {
 		require.True(t, written)
 	}
 
-	observations, err := repo.New(f.conn).ListMCPSkillObservations(ctx, repo.ListMCPSkillObservationsParams{ProjectID: f.projectID, Provider: mcpskills.ObservationProvider})
+	observations, err := testrepo.New(f.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{ProjectID: f.projectID, Provider: mcpskills.ObservationProvider})
 	require.NoError(t, err)
 	require.Len(t, observations, 2)
 	require.False(t, observations[0].IdempotencyKey.Valid)

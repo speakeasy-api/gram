@@ -54,7 +54,7 @@ type Entry struct {
 	// PluginID is the plugin whose distribution won the resolution.
 	PluginID uuid.UUID
 
-	// Name is the skill's normalized name, the final path segment of the URI
+	// Name is the skill's normalized name, the authority segment of the URI
 	// and the frontmatter name.
 	Name string
 

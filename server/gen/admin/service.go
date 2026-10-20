@@ -226,19 +226,25 @@ type Service interface {
 	// view, no auth scoping). Returns logging:disabled without reading telemetry
 	// when the organization's logs are off.
 	GetMcpServerToolCalls(context.Context, *GetMcpServerToolCallsPayload) (res *AdminMcpServerToolCalls, err error)
+	// Fleet-wide client health grids: which hook client (legacy curl or hooks
+	// binary version) each organization's new sessions use per day, inference hook
+	// traffic per Claude app, and device agent versions per day.
+	GetHookClients(context.Context, *GetHookClientsPayload) (res *AdminHookClientsResult, err error)
 	// Lists every live server across all organizations whose latest toolset
 	// version proxies an external MCP attachment on its project's active
 	// deployment, with the blockers that stop each one from migrating.
 	ListExternalMcpMigrationCandidates(context.Context, *ListExternalMcpMigrationCandidatesPayload) (res *AdminListExternalMcpMigrationCandidatesResult, err error)
-	// Runs the migration of each server inside a transaction that is rolled back,
-	// reporting what would happen without changing anything.
+	// Runs each server's migration or deletion inside a transaction that is rolled
+	// back, reporting what would happen without changing anything.
 	PreviewExternalMcpMigration(context.Context, *PreviewExternalMcpMigrationPayload) (res *AdminExternalMcpMigrationResult, err error)
 	// Switches each server in place from its external MCP attachment to a remote
 	// MCP source on the same sign-in provider, keeping its ID, address and
-	// everything that references it, and disables the old toolset. Servers run one
-	// at a time, each in its own transaction, and the run stops at the first
-	// failure. Never creates a sign-in provider or a client and never registers
-	// one with the upstream.
+	// everything that references it, and disables the old toolset. A candidate
+	// left with nothing to migrate is deleted instead, with its server, addresses
+	// and plugin entries, as the toolset delete API does. Servers run one at a
+	// time, each in its own transaction, and the run stops at the first failure.
+	// Never creates a sign-in provider or a client and never registers one with
+	// the upstream.
 	MigrateExternalMcpServers(context.Context, *MigrateExternalMcpServersPayload) (res *AdminExternalMcpMigrationResult, err error)
 	// Staff-only registry administration: Okta application names observed across
 	// synced tenants that plausibly belong to the entry, for confirmation in the
@@ -342,7 +348,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [91]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
+var MethodNames = [92]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -423,7 +429,21 @@ type AdminDashboardRedirect struct {
 	CacheControl string
 }
 
-// A live server backed by an external MCP attachment.
+// One (organization, day, version) cell of the device agent grid.
+type AdminDeviceAgentCell struct {
+	// The organization ID.
+	OrganizationID string
+	// The UTC day, as YYYY-MM-DD.
+	Day string
+	// The speakeasyd version, or empty for the organization-day total.
+	Version string
+	// Machines whose agent polled on this day, by the last version each reported
+	// that day.
+	Machines int64
+}
+
+// A toolset backed by an external MCP attachment, with what running it does:
+// migrate its server in place, or delete it.
 type AdminExternalMcpMigrationCandidate struct {
 	// The toolset behind the server.
 	ToolsetID string
@@ -456,26 +476,44 @@ type AdminExternalMcpMigrationCandidate struct {
 	// Tool calls over the last tool_call_window_days. Absent when telemetry is
 	// unavailable.
 	ToolCalls *int64
+	// What running the candidate does: migrate switches its server in place to a
+	// remote MCP server; delete removes the toolset because nothing is left to
+	// migrate, along with any server, addresses and plugin entries it still owns.
+	// A server already migrated in place is kept and keeps working.
+	Action string
+	// Why the candidate is deleted rather than migrated. Empty when it migrates.
+	DeleteReasons []string
 	// Why the server cannot be migrated. Empty when it can.
 	Blockers []string
+	// What migrating the server drops or cannot carry over. Warnings do not stop
+	// it.
+	Warnings []string
 }
 
 // What happened, or in a preview what would happen, to one server.
 type AdminExternalMcpMigrationOutcome struct {
 	// The candidate's toolset.
 	ToolsetID string
-	// migrated and previewed completed every step; failed left the server
+	// What the run did, or would do, with the candidate. Absent when it was not
+	// attempted.
+	Action *string
+	// migrated, deleted and previewed completed every step; deleted removed the
+	// toolset and any server it still owned, so mcp_server_id,
+	// remote_mcp_server_id and remote_url are absent; failed left the server
 	// unchanged; not_attempted follows an earlier failure.
 	MigrationStatus string
 	// Why the server failed or was not attempted.
 	Reason *string
-	// The server's /mcp/<slug> address, which does not change.
+	// The server's /mcp/<slug> address. Migrating keeps it; deleting a server the
+	// toolset still owns removes it.
 	McpSlug *string
 	// The server, which keeps its ID.
 	McpServerID *string
-	// The remote MCP source the server now proxies.
+	// The remote MCP source the server proxies once migrated. Absent when the
+	// server failed; a preview's source is rolled back.
 	RemoteMcpServerID *string
-	// The upstream URL the server now dials.
+	// The upstream URL the server dials once migrated. Absent when the server
+	// failed.
 	RemoteURL *string
 	// Each change, in order.
 	Actions []string
@@ -493,6 +531,71 @@ type AdminExternalMcpMigrationRequest struct {
 type AdminExternalMcpMigrationResult struct {
 	// One outcome per requested server, in request order.
 	Outcomes []*AdminExternalMcpMigrationOutcome
+}
+
+// An organization that appears in any of the fleet health grids.
+type AdminHookClientOrganization struct {
+	// The organization ID.
+	ID string
+	// The organization name. Absent when the organization no longer exists.
+	Name *string
+	// The organization slug. Absent when the organization no longer exists.
+	Slug *string
+}
+
+// One (organization, day, client) cell of the hook client grid. Sessions count
+// on the UTC day of their first hook.
+type AdminHookClientSessionCell struct {
+	// The organization ID.
+	OrganizationID string
+	// The UTC day, as YYYY-MM-DD.
+	Day string
+	// curl for the legacy curl hooks, a hooks binary version, binary for binary
+	// rows that record no version, or empty for the organization-day total.
+	Client string
+	// Machines that started a session on this day.
+	Machines int64
+	// Sessions started on this day.
+	Sessions int64
+	// Machines that sent any hook on this day, including sessions started earlier.
+	MachinesAll int64
+}
+
+// AdminHookClientsResult is the result type of the admin service
+// getHookClients method.
+type AdminHookClientsResult struct {
+	// Length of the window in days.
+	WindowDays int
+	// When the grids were read from ClickHouse.
+	QueriedAt string
+	// True when the grids came from the cache rather than a fresh ClickHouse read.
+	// Cached grids last 24 hours and refresh in the background once an hour old.
+	FromCache bool
+	// Every organization that appears in any grid.
+	Organizations []*AdminHookClientOrganization
+	// The hook client grid, new sessions only.
+	Sessions []*AdminHookClientSessionCell
+	// The inference hook traffic grid.
+	Inference []*AdminInferenceHookCell
+	// The device agent version grid. Empty for days before versions were recorded.
+	DeviceAgents []*AdminDeviceAgentCell
+}
+
+// One (organization, day, surface) cell of the inference hook grid.
+type AdminInferenceHookCell struct {
+	// The organization ID.
+	OrganizationID string
+	// The UTC day, as YYYY-MM-DD.
+	Day string
+	// The Claude app that sent the transcript, or empty for the organization-day
+	// total.
+	Surface string
+	// Distinct users.
+	Users int64
+	// Stored transcript messages.
+	Events int64
+	// Distinct sessions.
+	Sessions int64
 }
 
 // Current usage and configured state for one materialized platform-managed
@@ -1709,6 +1812,16 @@ type GetGlobalIssuerPayload struct {
 	AdminSessionToken *string
 }
 
+// GetHookClientsPayload is the payload type of the admin service
+// getHookClients method.
+type GetHookClientsPayload struct {
+	AdminSessionToken *string
+	// Window in days.
+	WindowDays int
+	// Skip the cache and read ClickHouse now.
+	Refresh bool
+}
+
 // GetInferenceKeysPayload is the payload type of the admin service
 // getInferenceKeys method.
 type GetInferenceKeysPayload struct {
@@ -2249,7 +2362,7 @@ type MeterUsageWindow struct {
 // migrateExternalMcpServers method.
 type MigrateExternalMcpServersPayload struct {
 	AdminSessionToken *string
-	// Servers to migrate, in order.
+	// Servers to migrate or delete, in order.
 	Servers []*AdminExternalMcpMigrationRequest
 }
 
@@ -2288,7 +2401,7 @@ type OpenOrganizationInDashboardPayload struct {
 // previewExternalMcpMigration method.
 type PreviewExternalMcpMigrationPayload struct {
 	AdminSessionToken *string
-	// Servers to migrate, in order.
+	// Servers to migrate or delete, in order.
 	Servers []*AdminExternalMcpMigrationRequest
 }
 

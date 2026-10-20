@@ -17,10 +17,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
-	mcpskillsrepo "github.com/speakeasy-api/gram/server/internal/mcp/mcpskills/repo"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func insertSkillObservation(t *testing.T, ti *testInstance, name, source, sourceLevel, rawSHA256 string, seenAt time.Time) {
@@ -188,7 +188,7 @@ func TestPendingSkillSessionVersionsAreProjectScopedAndExcludeIneligibleObservat
 	// The MCP read is born complete for both pipelines, so the project finders
 	// that fan out the metrics sync and the efficacy enqueue do not keep
 	// selecting the project for work that neither batch query would drain.
-	mcpRows, err := mcpskillsrepo.New(ti.conn).ListMCPSkillObservations(ctx, mcpskillsrepo.ListMCPSkillObservationsParams{
+	mcpRows, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
 		ProjectID: ti.projectID, Provider: mcpskills.ObservationProvider,
 	})
 	require.NoError(t, err)

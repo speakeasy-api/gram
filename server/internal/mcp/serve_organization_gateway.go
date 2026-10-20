@@ -263,6 +263,7 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, organizationSlug 
 		Name:                organization.Name,
 		// NULL serves Speakeasy's built-in gateway instructions.
 		Instructions:      pgtype.Text{String: "", Valid: false},
+		DiscoveryMode:     "progressive",
 		Visibility:        visibility.Private,
 		NetworkAccessMode: pgtype.Text{String: "", Valid: false},
 		CreatedAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
