@@ -8,6 +8,8 @@ requires-python = ">=3.14"
 # Without this, `uv sync` tries to build `gram` and fails.
 [tool.uv]
 package = false
+# eMudhra CA compromise: keep every workspace member on the patched trust bundle.
+constraint-dependencies = ["certifi>=2026.10.19"]
 
 [tool.uv.sources]
 gram-infra = { workspace = true }

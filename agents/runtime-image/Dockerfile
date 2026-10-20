@@ -39,13 +39,18 @@ RUN target=node_modules/playwright-core/lib/utilsBundle.js \
  && sed -i "s|const ws = exports.ws = require('./utilsBundleImpl').ws;|const ws = exports.ws = 'Bun' in globalThis ? require('ws') : require('./utilsBundleImpl').ws;|" "$target" \
  && grep -q "'Bun' in globalThis ? require('ws')" "$target"
 
-FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS lightpanda
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS lightpanda
 ARG TARGETARCH
 ARG LIGHTPANDA_VERSION=0.2.8
 ARG LIGHTPANDA_SHA256_AMD64=8e3a5e04cf508699990a78a0a8686ea3398912cd9891fda90513429b89230300
 ARG LIGHTPANDA_SHA256_ARM64=9f54f2cc31b0dadd867ba06ecce59f8aa59f7876394798e97882aea680b5ad19
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl \
+  && sed -i \
+    -e 's|^mozilla/emSign_ECC_Root_CA_-_G3.crt|!&|' \
+    -e 's|^mozilla/Comodo_AAA_Services_root.crt|!&|' \
+    /etc/ca-certificates.conf \
+  && update-ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 RUN case "${TARGETARCH:-amd64}" in \
       amd64) asset=lightpanda-x86_64-linux; sha=$LIGHTPANDA_SHA256_AMD64 ;; \
@@ -56,8 +61,11 @@ RUN case "${TARGETARCH:-amd64}" in \
  && echo "${sha}  /lightpanda" | sha256sum -c - \
  && chmod 0755 /lightpanda
 
-FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
 
+# Bookworm's CA package still trusts the affected roots. Apply the upstream
+# distrust workaround to both the bundle and hashed directory used by OpenSSL.
+# See docs/runbooks/emudhra-ca-update.md for removal criteria.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     bash \
@@ -68,6 +76,11 @@ RUN apt-get update \
     mount \
     procps \
     util-linux \
+  && sed -i \
+    -e 's|^mozilla/emSign_ECC_Root_CA_-_G3.crt|!&|' \
+    -e 's|^mozilla/Comodo_AAA_Services_root.crt|!&|' \
+    /etc/ca-certificates.conf \
+  && update-ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=runner-artifact /gram-assistant-runner /usr/local/bin/gram-assistant-runner
