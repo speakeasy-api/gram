@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -25,6 +26,18 @@ type HookClientsReader interface {
 // SetHookClients enables getHookClients. Nil leaves it unavailable.
 func (s *Service) SetHookClients(reader HookClientsReader) { s.hookClients = reader }
 
+// DeviceAgentVersionsReader reads the daily device agent version counts.
+// Implemented by deviceagentversions.Store.
+type DeviceAgentVersionsReader interface {
+	Read(ctx context.Context, windowDays int, now time.Time) ([]deviceagentversions.Row, error)
+}
+
+// SetDeviceAgentVersions adds the device agent grid to getHookClients. Nil
+// leaves that grid empty.
+func (s *Service) SetDeviceAgentVersions(reader DeviceAgentVersionsReader) {
+	s.deviceAgentVersions = reader
+}
+
 func (s *Service) GetHookClients(ctx context.Context, payload *gen.GetHookClientsPayload) (*gen.AdminHookClientsResult, error) {
 	if s.hookClients == nil {
 		return nil, oops.E(oops.CodeUnavailable, nil, "hook clients are unavailable")
@@ -36,6 +49,7 @@ func (s *Service) GetHookClients(ctx context.Context, payload *gen.GetHookClient
 	}
 	sessionRows := snapshot.Sessions
 	inferenceRows := snapshot.Inference
+	deviceAgentRows := snapshot.DeviceAgents
 
 	seen := map[string]struct{}{}
 	sessions := make([]*gen.AdminHookClientSessionCell, 0, len(sessionRows))
@@ -60,6 +74,17 @@ func (s *Service) GetHookClients(ctx context.Context, payload *gen.GetHookClient
 			Users:          clampCount(row.Users),
 			Events:         clampCount(row.Events),
 			Sessions:       clampCount(row.Sessions),
+		})
+	}
+
+	deviceAgents := make([]*gen.AdminDeviceAgentCell, 0, len(deviceAgentRows))
+	for _, row := range deviceAgentRows {
+		seen[row.OrganizationID] = struct{}{}
+		deviceAgents = append(deviceAgents, &gen.AdminDeviceAgentCell{
+			OrganizationID: row.OrganizationID,
+			Day:            row.Day,
+			Version:        row.Version,
+			Machines:       row.Machines,
 		})
 	}
 
@@ -93,6 +118,7 @@ func (s *Service) GetHookClients(ctx context.Context, payload *gen.GetHookClient
 		Organizations: organizations,
 		Sessions:      sessions,
 		Inference:     inference,
+		DeviceAgents:  deviceAgents,
 	}, nil
 }
 
@@ -106,6 +132,9 @@ type hookClientsSnapshot struct {
 	QueriedAt  time.Time                           `json:"queried_at"`
 	Sessions   []telemetry.HookClientSessionRow    `json:"sessions"`
 	Inference  []telemetry.InferenceHookTrafficRow `json:"inference"`
+	// DeviceAgents comes from Redis, not ClickHouse, but is cached with the
+	// rest so one read of the page is one consistent snapshot.
+	DeviceAgents []deviceagentversions.Row `json:"device_agents"`
 }
 
 func hookClientsCacheKey(windowDays int) string {
@@ -137,7 +166,13 @@ func (s *Service) hookClientsSnapshot(ctx context.Context, windowDays int, refre
 		return hookClientsSnapshot{}, false, s.hookClientsError(ctx, err, "read inference hook traffic")
 	}
 
-	snapshot := hookClientsSnapshot{WindowDays: windowDays, QueriedAt: queriedAt, Sessions: sessions, Inference: inference}
+	snapshot := hookClientsSnapshot{
+		WindowDays:   windowDays,
+		QueriedAt:    queriedAt,
+		Sessions:     sessions,
+		Inference:    inference,
+		DeviceAgents: s.readDeviceAgentVersions(ctx, windowDays, queriedAt),
+	}
 	// Two refreshes can overlap. Keep whichever read started later, so a slow
 	// read never replaces newer data or extends its TTL.
 	if existing, err := s.hookClientsCache.Get(ctx, hookClientsCacheKey(windowDays)); err == nil && existing.QueriedAt.After(queriedAt) {
@@ -147,6 +182,21 @@ func (s *Service) hookClientsSnapshot(ctx context.Context, windowDays int, refre
 		s.logger.WarnContext(ctx, "failed to cache hook clients", attr.SlogError(err))
 	}
 	return snapshot, false, nil
+}
+
+// readDeviceAgentVersions returns the device agent grid, or none when it is
+// not configured or Redis fails. The grid is additive, so a Redis fault never
+// hides the two ClickHouse grids.
+func (s *Service) readDeviceAgentVersions(ctx context.Context, windowDays int, now time.Time) []deviceagentversions.Row {
+	if s.deviceAgentVersions == nil {
+		return []deviceagentversions.Row{}
+	}
+	rows, err := s.deviceAgentVersions.Read(ctx, windowDays, now)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read device agent versions", attr.SlogError(err))
+		return []deviceagentversions.Row{}
+	}
+	return rows
 }
 
 // hookClientsError keeps a shareable error's code and logs server faults,
