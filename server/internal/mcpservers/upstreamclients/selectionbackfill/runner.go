@@ -32,8 +32,8 @@ const (
 	// the credential's issuer also binds; that client is chosen.
 	OutcomeClient Outcome = "client"
 
-	// OutcomeNoAuth is a pair whose server has no associated client and whose
-	// own issuer binds none; an explicit no-auth choice is recorded.
+	// OutcomeNoAuth is a pair whose server has no associated client; an
+	// explicit no-auth choice is recorded.
 	OutcomeNoAuth Outcome = "no_auth"
 
 	// OutcomeAmbiguous is a pair with several eligible clients. Only the
@@ -45,13 +45,6 @@ const (
 	// are none of them bound to the credential's issuer, so the credential
 	// cannot use any of them. The credential must reconnect.
 	OutcomeUnreachableClient Outcome = "unreachable_client"
-
-	// OutcomeUnassociated is a pair whose server has no associated client
-	// although its issuer binds some, or the credential's issuer binds a
-	// client a grant or the server's derived authorization server ties to it:
-	// the server association backfill left it unresolved, and an
-	// administrator must configure it first.
-	OutcomeUnassociated Outcome = "unassociated"
 )
 
 // Decided reports whether the outcome records or already has a choice.
@@ -75,8 +68,6 @@ func Classify(row ListUpstreamClientSelectionCoverageRow) Outcome {
 		return OutcomeAmbiguous
 	case row.AssociatedClients > 0:
 		return OutcomeUnreachableClient
-	case row.IssuerBoundClients > 0 || row.EvidenceClients > 0:
-		return OutcomeUnassociated
 	default:
 		return OutcomeNoAuth
 	}
