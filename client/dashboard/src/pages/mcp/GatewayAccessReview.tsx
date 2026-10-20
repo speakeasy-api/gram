@@ -29,28 +29,30 @@ export function GatewayAccessReview({
           no longer need, then approve enabling Organization Gateway.
         </Text>
       </div>
-      <MCPAssignments onReady={onReady} />
-      <label className="flex items-start gap-3 text-sm">
-        <Checkbox
-          checked={ready && acknowledged}
-          disabled={!ready || isPending}
-          onCheckedChange={(value) => setAcknowledged(value === true)}
-        />
-        I have reviewed MCP assignments across the organization and approve
-        making each person’s assigned servers available through Organization
-        Gateway.
-      </label>
-      <div className="flex gap-3">
-        <Button
-          disabled={!ready || !acknowledged || isPending}
-          onClick={onEnable}
-        >
-          {isPending ? "Enabling…" : "Enable Organization Gateway"}
-        </Button>
-        <Button variant="secondary" disabled={isPending} onClick={onCancel}>
-          Cancel
-        </Button>
+      <div className="border-border bg-card space-y-4 border p-4">
+        <label className="flex items-start gap-3 text-sm">
+          <Checkbox
+            checked={ready && acknowledged}
+            disabled={!ready || isPending}
+            onCheckedChange={(value) => setAcknowledged(value === true)}
+          />
+          I have reviewed MCP assignments across the organization and approve
+          making each person’s assigned servers available through Organization
+          Gateway.
+        </label>
+        <div className="flex gap-3">
+          <Button
+            disabled={!ready || !acknowledged || isPending}
+            onClick={onEnable}
+          >
+            {isPending ? "Enabling…" : "Enable Organization Gateway"}
+          </Button>
+          <Button variant="secondary" disabled={isPending} onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
       </div>
+      <MCPAssignments onReady={onReady} />
     </section>
   );
 }

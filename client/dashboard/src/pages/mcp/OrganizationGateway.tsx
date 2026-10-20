@@ -70,10 +70,9 @@ function OrganizationGatewayContent({
       }
       description={
         <span className="block max-w-2xl">
-          A single endpoint through which your team can access all of their
-          servers. Each person signs in once with their Speakeasy account and
-          gets every MCP server they have access to, across all projects. As
-          their access changes, so does what they see.
+          One unified MCP server containing every MCP server each person can
+          access across all projects. Each person signs in with their Speakeasy
+          account. As their access changes, so does what they can use.
         </span>
       }
       primaryAction={

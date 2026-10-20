@@ -142,7 +142,7 @@ instructions. The gateway response reports `available: true` with that URL.
 The old organization settings gateway URL redirects to this page.
 
 In **MCP Assignments**, confirm one row per role with stacked server icons under
-**MCP:CONNECT ACCESS**. Expand **Support Desk** to inspect unrestricted and
+**Connect**. Expand **Support Desk** to inspect unrestricted and
 read-only access; expand **Contractors** to see its blocked server after allowed
 servers, with red styling and a blocked icon badge. The MCP filter opens a
 searchable list directly. Click a role’s member avatars and select a person to

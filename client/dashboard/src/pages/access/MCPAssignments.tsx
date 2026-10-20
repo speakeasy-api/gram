@@ -1,3 +1,5 @@
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { IdentityAvatar } from "@/components/identity-avatar";
 import { Ban } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
@@ -334,7 +336,7 @@ function roleColumns(
     },
     {
       key: "servers",
-      header: "MCP:CONNECT ACCESS",
+      header: "Connect",
       width: "2fr",
       render: ({ servers }) => <RoleServerIcons servers={servers} />,
     },
@@ -432,11 +434,12 @@ function RoleAssignments({
         .includes(search.toLowerCase()),
   );
   return (
-    <div className="border-border bg-muted/40 border-b px-5 py-2">
+    <div className="border-border bg-muted/40 border-b">
       {servers.length >= 10 && !selectedServer && (
-        <div className="mb-2 max-w-sm">
-          <Page.Toolbar>
+        <div className="border-border border-b">
+          <Page.Toolbar className="border-0 p-0">
             <Page.Toolbar.Search
+              className="w-full"
               value={search}
               onChange={(value) => {
                 setSearch(value);
@@ -518,7 +521,7 @@ function RoleServerAssignment({
   return (
     <div
       className={cn(
-        "border-border flex flex-wrap items-center gap-3 border-b py-2 last:border-b-0",
+        "border-border flex flex-wrap items-center gap-3 border-b px-5 py-2 last:border-b-0",
         blocked && "bg-destructive/5 text-destructive",
       )}
     >
@@ -871,23 +874,36 @@ function UserAccess({
             onChange={setSearch}
             placeholder="Find a person by name or email…"
           />
-          {search.trim() &&
-            matchingMembers.slice(0, 20).map((member) => (
-              <Button
-                key={member.id}
-                variant="tertiary"
-                onClick={() => {
-                  setSelected(member);
-                  setSearch("");
-                  setServerSearch("");
-                  setServerLimit(10);
-                }}
-              >
-                <Button.Text>
-                  {member.name || member.email} · {member.email}
-                </Button.Text>
-              </Button>
-            ))}
+          {search.trim() && matchingMembers.length > 0 && (
+            <div className="divide-border border-border divide-y border">
+              {matchingMembers.slice(0, 20).map((member) => (
+                <Button
+                  key={member.id}
+                  aria-label={`${member.name || member.email} · ${member.email}`}
+                  variant="tertiary"
+                  className="h-auto w-full justify-start px-3 py-3 [&>span]:justify-start"
+                  onClick={() => {
+                    setSelected(member);
+                    setSearch("");
+                    setServerSearch("");
+                    setServerLimit(10);
+                  }}
+                >
+                  <Button.LeftIcon>
+                    <MemberIdentityAvatar member={member} />
+                  </Button.LeftIcon>
+                  <Button.Text className="min-w-0 text-left normal-case">
+                    <span className="block truncate font-medium">
+                      {member.name || member.email}
+                    </span>
+                    <span className="text-muted-foreground block truncate text-xs">
+                      {member.email}
+                    </span>
+                  </Button.Text>
+                </Button>
+              ))}
+            </div>
+          )}
           {search.trim() && matchingMembers.length === 0 && (
             <Text muted>No people match this search.</Text>
           )}
@@ -898,9 +914,17 @@ function UserAccess({
           )}
           {selected ? (
             <>
-              <Text className="font-medium">
-                {selected.name || selected.email}
-              </Text>
+              <div className="flex items-center gap-3 border-b border-border pb-4">
+                <MemberIdentityAvatar member={selected} />
+                <div className="min-w-0">
+                  <Text className="truncate font-medium">
+                    {selected.name || selected.email}
+                  </Text>
+                  <Text small muted className="truncate">
+                    {selected.email}
+                  </Text>
+                </div>
+              </div>
               <Text small muted>
                 {(roles.data?.roles ?? [])
                   .filter((role) =>
@@ -968,5 +992,24 @@ function UserAccess({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function MemberIdentityAvatar({
+  member,
+}: {
+  member: AccessMember;
+}): JSX.Element {
+  if (!member.photoUrl)
+    return (
+      <IdentityAvatar label={member.name || member.email} className="size-9" />
+    );
+  return (
+    <Avatar className="size-9 shrink-0">
+      <AvatarImage src={member.photoUrl} alt="" />
+      <AvatarFallback>
+        {(member.name || member.email).slice(0, 2).toUpperCase()}
+      </AvatarFallback>
+    </Avatar>
   );
 }
