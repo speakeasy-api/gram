@@ -118,6 +118,20 @@ type CreateDeviceJoinTokenRequestBody struct {
 	ExpiresInSeconds *int `form:"expires_in_seconds,omitempty" json:"expires_in_seconds,omitempty" xml:"expires_in_seconds,omitempty"`
 }
 
+// CreateDeviceInstallCommandRequestBody is the type of the
+// "workloadIdentities" service "createDeviceInstallCommand" endpoint HTTP
+// request body.
+type CreateDeviceInstallCommandRequestBody struct {
+	// The agent the enrolled device inherits its policy from.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// The project the device's hooks and telemetry are sent to. Must be a project
+	// in the caller's organization.
+	HooksProjectSlug *string `form:"hooks_project_slug,omitempty" json:"hooks_project_slug,omitempty" xml:"hooks_project_slug,omitempty"`
+	// How long the join token behind the command stays redeemable. Defaults to one
+	// hour.
+	ExpiresInSeconds *int `form:"expires_in_seconds,omitempty" json:"expires_in_seconds,omitempty" xml:"expires_in_seconds,omitempty"`
+}
+
 // RegisterDeviceRequestBody is the type of the "workloadIdentities" service
 // "registerDevice" endpoint HTTP request body.
 type RegisterDeviceRequestBody struct {
@@ -229,6 +243,24 @@ type CreateDeviceJoinTokenResponseBody struct {
 	Token string `form:"token" json:"token" xml:"token"`
 	// When the token stops being redeemable.
 	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+}
+
+// CreateDeviceInstallCommandResponseBody is the type of the
+// "workloadIdentities" service "createDeviceInstallCommand" endpoint HTTP
+// response body.
+type CreateDeviceInstallCommandResponseBody struct {
+	// Run on the device as the account that runs its AI tools: fetches the install
+	// script and runs it with sudo.
+	Command string `form:"command" json:"command" xml:"command"`
+	// The same install, saving the script first so it can be read before it runs.
+	DownloadCommand string `form:"download_command" json:"download_command" xml:"download_command"`
+	// When the install code in the commands stops working.
+	CodeExpiresAt string `form:"code_expires_at" json:"code_expires_at" xml:"code_expires_at"`
+	// The join token behind the command. Its status in listDeviceJoinTokens
+	// becomes redeemed once the device enrolls.
+	JoinTokenID string `form:"join_token_id" json:"join_token_id" xml:"join_token_id"`
+	// When the join token stops being redeemable.
+	TokenExpiresAt string `form:"token_expires_at" json:"token_expires_at" xml:"token_expires_at"`
 }
 
 // ListDeviceJoinTokensResponseBody is the type of the "workloadIdentities"
@@ -2345,6 +2377,196 @@ type CreateDeviceJoinTokenGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateDeviceInstallCommandUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "createDeviceInstallCommand" endpoint HTTP
+// response body for the "unauthorized" error.
+type CreateDeviceInstallCommandUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceInstallCommandForbiddenResponseBody is the type of the
+// "workloadIdentities" service "createDeviceInstallCommand" endpoint HTTP
+// response body for the "forbidden" error.
+type CreateDeviceInstallCommandForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceInstallCommandBadRequestResponseBody is the type of the
+// "workloadIdentities" service "createDeviceInstallCommand" endpoint HTTP
+// response body for the "bad_request" error.
+type CreateDeviceInstallCommandBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceInstallCommandNotFoundResponseBody is the type of the
+// "workloadIdentities" service "createDeviceInstallCommand" endpoint HTTP
+// response body for the "not_found" error.
+type CreateDeviceInstallCommandNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceInstallCommandConflictResponseBody is the type of the
+// "workloadIdentities" service "createDeviceInstallCommand" endpoint HTTP
+// response body for the "conflict" error.
+type CreateDeviceInstallCommandConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceInstallCommandUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "createDeviceInstallCommand" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CreateDeviceInstallCommandUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceInstallCommandInvalidResponseBody is the type of the
+// "workloadIdentities" service "createDeviceInstallCommand" endpoint HTTP
+// response body for the "invalid" error.
+type CreateDeviceInstallCommandInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceInstallCommandInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "createDeviceInstallCommand" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CreateDeviceInstallCommandInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceInstallCommandUnexpectedResponseBody is the type of the
+// "workloadIdentities" service "createDeviceInstallCommand" endpoint HTTP
+// response body for the "unexpected" error.
+type CreateDeviceInstallCommandUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceInstallCommandGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "createDeviceInstallCommand" endpoint HTTP
+// response body for the "gateway_error" error.
+type CreateDeviceInstallCommandGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListDeviceJoinTokensUnauthorizedResponseBody is the type of the
 // "workloadIdentities" service "listDeviceJoinTokens" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -3464,6 +3686,20 @@ func NewCreateDeviceJoinTokenResponseBody(res *workloadidentities.WorkloadDevice
 	body := &CreateDeviceJoinTokenResponseBody{
 		Token:     res.Token,
 		ExpiresAt: res.ExpiresAt,
+	}
+	return body
+}
+
+// NewCreateDeviceInstallCommandResponseBody builds the HTTP response body from
+// the result of the "createDeviceInstallCommand" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceInstallCommandResponseBody(res *workloadidentities.WorkloadDeviceInstallCommand) *CreateDeviceInstallCommandResponseBody {
+	body := &CreateDeviceInstallCommandResponseBody{
+		Command:         res.Command,
+		DownloadCommand: res.DownloadCommand,
+		CodeExpiresAt:   res.CodeExpiresAt,
+		JoinTokenID:     res.JoinTokenID,
+		TokenExpiresAt:  res.TokenExpiresAt,
 	}
 	return body
 }
@@ -5130,6 +5366,156 @@ func NewCreateDeviceJoinTokenGatewayErrorResponseBody(res *goa.ServiceError) *Cr
 	return body
 }
 
+// NewCreateDeviceInstallCommandUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "createDeviceInstallCommand" endpoint
+// of the "workloadIdentities" service.
+func NewCreateDeviceInstallCommandUnauthorizedResponseBody(res *goa.ServiceError) *CreateDeviceInstallCommandUnauthorizedResponseBody {
+	body := &CreateDeviceInstallCommandUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceInstallCommandForbiddenResponseBody builds the HTTP response
+// body from the result of the "createDeviceInstallCommand" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceInstallCommandForbiddenResponseBody(res *goa.ServiceError) *CreateDeviceInstallCommandForbiddenResponseBody {
+	body := &CreateDeviceInstallCommandForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceInstallCommandBadRequestResponseBody builds the HTTP response
+// body from the result of the "createDeviceInstallCommand" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceInstallCommandBadRequestResponseBody(res *goa.ServiceError) *CreateDeviceInstallCommandBadRequestResponseBody {
+	body := &CreateDeviceInstallCommandBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceInstallCommandNotFoundResponseBody builds the HTTP response
+// body from the result of the "createDeviceInstallCommand" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceInstallCommandNotFoundResponseBody(res *goa.ServiceError) *CreateDeviceInstallCommandNotFoundResponseBody {
+	body := &CreateDeviceInstallCommandNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceInstallCommandConflictResponseBody builds the HTTP response
+// body from the result of the "createDeviceInstallCommand" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceInstallCommandConflictResponseBody(res *goa.ServiceError) *CreateDeviceInstallCommandConflictResponseBody {
+	body := &CreateDeviceInstallCommandConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceInstallCommandUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "createDeviceInstallCommand" endpoint
+// of the "workloadIdentities" service.
+func NewCreateDeviceInstallCommandUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateDeviceInstallCommandUnsupportedMediaResponseBody {
+	body := &CreateDeviceInstallCommandUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceInstallCommandInvalidResponseBody builds the HTTP response
+// body from the result of the "createDeviceInstallCommand" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceInstallCommandInvalidResponseBody(res *goa.ServiceError) *CreateDeviceInstallCommandInvalidResponseBody {
+	body := &CreateDeviceInstallCommandInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceInstallCommandInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createDeviceInstallCommand" endpoint
+// of the "workloadIdentities" service.
+func NewCreateDeviceInstallCommandInvariantViolationResponseBody(res *goa.ServiceError) *CreateDeviceInstallCommandInvariantViolationResponseBody {
+	body := &CreateDeviceInstallCommandInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceInstallCommandUnexpectedResponseBody builds the HTTP response
+// body from the result of the "createDeviceInstallCommand" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceInstallCommandUnexpectedResponseBody(res *goa.ServiceError) *CreateDeviceInstallCommandUnexpectedResponseBody {
+	body := &CreateDeviceInstallCommandUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceInstallCommandGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "createDeviceInstallCommand" endpoint
+// of the "workloadIdentities" service.
+func NewCreateDeviceInstallCommandGatewayErrorResponseBody(res *goa.ServiceError) *CreateDeviceInstallCommandGatewayErrorResponseBody {
+	body := &CreateDeviceInstallCommandGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListDeviceJoinTokensUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "listDeviceJoinTokens" endpoint of the
 // "workloadIdentities" service.
@@ -5769,6 +6155,26 @@ func NewCreateDeviceJoinTokenPayload(body *CreateDeviceJoinTokenRequestBody, ses
 	return v
 }
 
+// NewCreateDeviceInstallCommandPayload builds a workloadIdentities service
+// createDeviceInstallCommand endpoint payload.
+func NewCreateDeviceInstallCommandPayload(body *CreateDeviceInstallCommandRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.CreateDeviceInstallCommandPayload {
+	v := &workloadidentities.CreateDeviceInstallCommandPayload{
+		AgentID:          *body.AgentID,
+		HooksProjectSlug: *body.HooksProjectSlug,
+	}
+	if body.ExpiresInSeconds != nil {
+		v.ExpiresInSeconds = *body.ExpiresInSeconds
+	}
+	if body.ExpiresInSeconds == nil {
+		v.ExpiresInSeconds = 3600
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListDeviceJoinTokensPayload builds a workloadIdentities service
 // listDeviceJoinTokens endpoint payload.
 func NewListDeviceJoinTokensPayload(agentID *string, cursor *string, limit int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListDeviceJoinTokensPayload {
@@ -5923,6 +6329,34 @@ func ValidateCreateDeviceJoinTokenRequestBody(body *CreateDeviceJoinTokenRequest
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.ExpiresInSeconds != nil {
+		if *body.ExpiresInSeconds < 60 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_in_seconds", *body.ExpiresInSeconds, 60, true))
+		}
+	}
+	if body.ExpiresInSeconds != nil {
+		if *body.ExpiresInSeconds > 86400 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_in_seconds", *body.ExpiresInSeconds, 86400, false))
+		}
+	}
+	return
+}
+
+// ValidateCreateDeviceInstallCommandRequestBody runs the validations defined
+// on CreateDeviceInstallCommandRequestBody
+func ValidateCreateDeviceInstallCommandRequestBody(body *CreateDeviceInstallCommandRequestBody) (err error) {
+	if body.AgentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
+	}
+	if body.HooksProjectSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hooks_project_slug", "body"))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.HooksProjectSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.hooks_project_slug", *body.HooksProjectSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.ExpiresInSeconds != nil {
 		if *body.ExpiresInSeconds < 60 {

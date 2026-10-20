@@ -15,6 +15,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"unicode/utf8"
@@ -36,8 +37,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -81,6 +84,13 @@ type Service struct {
 	// one join token, so one organization's replays never spend another's.
 	registerLimiter      *ratelimit.Limiter
 	registerTokenLimiter *ratelimit.Limiter
+
+	// deviceInstallCache holds the single-use install codes that stand for a
+	// join token until the install script is fetched.
+	deviceInstallCache cache.TypedCacheObject[deviceInstallRecord]
+
+	// features gates rollouts, such as the device install command.
+	features feature.Provider
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -95,6 +105,8 @@ func NewService(
 	auditLogger *audit.Logger,
 	sharedHosts authserver.Hosts,
 	limitStore ratelimit.Store,
+	cacheImpl cache.Cache,
+	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("workloadpolicy.api"))
 	return &Service{
@@ -111,6 +123,9 @@ func NewService(
 
 		registerLimiter:      ratelimit.New(limitStore, "workload-device-register", registerDeviceRate),
 		registerTokenLimiter: ratelimit.New(limitStore, "workload-device-register-token", registerDeviceTokenRate),
+
+		deviceInstallCache: cache.NewTypedObjectCache[deviceInstallRecord](logger.With(attr.SlogCacheNamespace("device_install")), cacheImpl, cache.SuffixNone),
+		features:           features,
 	}
 }
 
@@ -122,6 +137,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+
+	mux.Handle(http.MethodGet, deviceInstallScriptRoute, oops.ErrHandle(service.logger, service.handleDeviceInstallScript(mux)).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

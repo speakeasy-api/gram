@@ -2670,6 +2670,250 @@ func DecodeCreateDeviceJoinTokenResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildCreateDeviceInstallCommandRequest instantiates a HTTP request object
+// with method and path set to call the "workloadIdentities" service
+// "createDeviceInstallCommand" endpoint
+func (c *Client) BuildCreateDeviceInstallCommandRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateDeviceInstallCommandWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "createDeviceInstallCommand", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateDeviceInstallCommandRequest returns an encoder for requests sent
+// to the workloadIdentities createDeviceInstallCommand server.
+func EncodeCreateDeviceInstallCommandRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.CreateDeviceInstallCommandPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "createDeviceInstallCommand", "*workloadidentities.CreateDeviceInstallCommandPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreateDeviceInstallCommandRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("workloadIdentities", "createDeviceInstallCommand", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateDeviceInstallCommandResponse returns a decoder for responses
+// returned by the workloadIdentities createDeviceInstallCommand endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeCreateDeviceInstallCommandResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateDeviceInstallCommandResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateDeviceInstallCommandResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			err = ValidateCreateDeviceInstallCommandResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			res := NewCreateDeviceInstallCommandWorkloadDeviceInstallCommandOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateDeviceInstallCommandUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			err = ValidateCreateDeviceInstallCommandUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			return nil, NewCreateDeviceInstallCommandUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateDeviceInstallCommandForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			err = ValidateCreateDeviceInstallCommandForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			return nil, NewCreateDeviceInstallCommandForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateDeviceInstallCommandBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			err = ValidateCreateDeviceInstallCommandBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			return nil, NewCreateDeviceInstallCommandBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateDeviceInstallCommandNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			err = ValidateCreateDeviceInstallCommandNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			return nil, NewCreateDeviceInstallCommandNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateDeviceInstallCommandConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			err = ValidateCreateDeviceInstallCommandConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			return nil, NewCreateDeviceInstallCommandConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateDeviceInstallCommandUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			err = ValidateCreateDeviceInstallCommandUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			return nil, NewCreateDeviceInstallCommandUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateDeviceInstallCommandInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			err = ValidateCreateDeviceInstallCommandInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			return nil, NewCreateDeviceInstallCommandInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateDeviceInstallCommandInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceInstallCommand", err)
+				}
+				err = ValidateCreateDeviceInstallCommandInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceInstallCommand", err)
+				}
+				return nil, NewCreateDeviceInstallCommandInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateDeviceInstallCommandUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceInstallCommand", err)
+				}
+				err = ValidateCreateDeviceInstallCommandUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceInstallCommand", err)
+				}
+				return nil, NewCreateDeviceInstallCommandUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "createDeviceInstallCommand", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateDeviceInstallCommandGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			err = ValidateCreateDeviceInstallCommandGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceInstallCommand", err)
+			}
+			return nil, NewCreateDeviceInstallCommandGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "createDeviceInstallCommand", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListDeviceJoinTokensRequest instantiates a HTTP request object with
 // method and path set to call the "workloadIdentities" service
 // "listDeviceJoinTokens" endpoint
