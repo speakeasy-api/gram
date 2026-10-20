@@ -88,9 +88,8 @@ func TestListToolUsageTraces_ClassifiesMCPSkillLoadAsSkill(t *testing.T) {
 		"raw path":     {From: from, To: to, Query: &rawPathQuery, Limit: 10, Sort: "desc"},
 	}
 	for name, payload := range cases {
-		result := waitForToolUsageTraces(t, ctx, ti, payload, func(result *gen.ListToolUsageTracesResult) bool {
-			return len(result.Traces) == 2
-		})
+		result, err := ti.service.ListToolUsageTraces(ctx, payload)
+		require.NoError(t, err, name)
 		require.Len(t, result.Traces, 2, name)
 
 		byTarget := make(map[string]*gen.ToolUsageTraceSummary)
@@ -114,15 +113,14 @@ func TestListToolUsageTraces_ClassifiesMCPSkillLoadAsSkill(t *testing.T) {
 	}
 
 	// The dashboard splits a skill's channel on the event source.
-	viaMCP := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+	viaMCP, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
 		From:        from,
 		To:          to,
 		TargetTypes: []gen.ToolUsageTargetType{"skill"},
 		Filters:     []*gen.LogFilter{{Path: "gram.event.source", Operator: "not_eq", Values: []string{"hook"}}},
 		Limit:       10,
-	}, func(result *gen.ListToolUsageTracesResult) bool {
-		return len(result.Traces) == 1
 	})
+	require.NoError(t, err)
 	require.Len(t, viaMCP.Traces, 1)
 	require.Equal(t, "golang", viaMCP.Traces[0].TargetID)
 }

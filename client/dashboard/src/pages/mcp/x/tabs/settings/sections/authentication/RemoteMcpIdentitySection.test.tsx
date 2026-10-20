@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   clients: vi.fn(),
   siblings: vi.fn(),
   impact: vi.fn(),
+  associations: vi.fn(),
   issuers: vi.fn(),
   issuersByIds: vi.fn(),
   hostIssuers: vi.fn(),
@@ -124,6 +125,11 @@ vi.mock("@gram/client/react-query/serverIdentityImpact.js", () => ({
     _security: unknown,
     options: { enabled?: boolean },
   ) => mocks.impact(request, options),
+}));
+
+vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
+  invalidateAllServerClientAssociations: () => Promise.resolve(),
+  useServerClientAssociations: () => mocks.associations(),
 }));
 
 vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
@@ -500,6 +506,7 @@ const target: AuthTarget = {
 };
 
 beforeEach(() => {
+  mocks.associations.mockReturnValue({ data: { associations: [] } });
   mocks.impact.mockReturnValue({
     data: { servers: [], hiddenServerCount: 0 },
     isLoading: false,
@@ -653,7 +660,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     // One provider and a choice of how to register — no issuer, DCR or CIMD
     // wording while the provider offers only one automatic path.
-    expect(screen.getByLabelText("Identity provider")).toBeDefined();
+    expect(screen.getByLabelText("Authorization server")).toBeDefined();
     expect(
       screen
         .getByRole("radio", { name: /Auto-Configure/ })
@@ -792,7 +799,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     // The trigger renders under <PopoverTrigger asChild>, so the props Radix
     // clones onto it have to survive. aria-expanded flipping is the proof that
     // the click handler and state actually reached the button.
-    const trigger = screen.getByLabelText("Identity provider");
+    const trigger = screen.getByLabelText("Authorization server");
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
@@ -827,17 +834,17 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
-    fireEvent.click(screen.getByLabelText("Identity provider"));
+    fireEvent.click(screen.getByLabelText("Authorization server"));
 
     // Every tier is its own query, so the catalog cannot crowd out the
     // project's own provider, and a tier with more pages offers them.
     expect(screen.getByText("Own provider")).toBeDefined();
     expect(screen.getByText("Catalog 0")).toBeDefined();
-    fireEvent.click(screen.getByText("More platform providers"));
+    fireEvent.click(screen.getByText("More platform authorization servers"));
     expect(mocks.tierLoadMore).toHaveBeenCalledWith("platform");
 
     fireEvent.change(
-      screen.getByPlaceholderText("Search identity providers…"),
+      screen.getByPlaceholderText("Search authorization servers…"),
       { target: { value: "own" } },
     );
     await waitFor(() =>
@@ -861,7 +868,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     // own question, and a pick made now would look overwritten when the
     // discovered default lands.
     const trigger = screen.getByLabelText(
-      "Identity provider",
+      "Authorization server",
     ) as HTMLButtonElement;
     expect(trigger.textContent).toContain("Checking");
     expect(trigger.disabled).toBe(true);
@@ -924,7 +931,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
 
     expect(screen.queryByText("Will be created")).toBeNull();
-    fireEvent.click(screen.getByLabelText("Identity provider"));
+    fireEvent.click(screen.getByLabelText("Authorization server"));
     expect(screen.getByText("Known provider")).toBeDefined();
   });
 
@@ -942,7 +949,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     expect(screen.queryByText("Will be created")).toBeNull();
     expect(
-      screen.getByText(/Couldn.t load this server.s identity providers/),
+      screen.getByText(/Couldn.t load this server.s authorization servers/),
     ).toBeDefined();
   });
 
@@ -957,7 +964,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
 
     expect(
-      screen.getByText(/Couldn.t load this server.s identity providers/),
+      screen.getByText(/Couldn.t load this server.s authorization servers/),
     ).toBeDefined();
     expect(screen.queryByText(/Couldn.t reach the upstream/)).toBeNull();
   });
@@ -1179,7 +1186,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(save().disabled).toBe(true);
 
     // Opening the menu and choosing what is already chosen is not a change.
-    fireEvent.click(screen.getByLabelText("Identity provider"));
+    fireEvent.click(screen.getByLabelText("Authorization server"));
     // The trigger shows the name too, so the menu entry is the later match.
     await waitFor(() =>
       expect(screen.getAllByText("Example provider").length).toBeGreaterThan(1),
@@ -1346,6 +1353,52 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.queryByText("dashboard-client")).toBeNull();
   });
 
+  it("names the other servers a shared client signs in", () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          scope: [],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Example provider",
+              issuer: "https://id.example",
+              slug: "example",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://id.example/authorize",
+              tokenEndpoint: "https://id.example/token",
+            },
+          ],
+        },
+      },
+    });
+    mocks.associations.mockReturnValue({
+      data: {
+        associations: [{ remoteSessionClientId: "client-1", serverCount: 3 }],
+      },
+    });
+
+    renderIdentity();
+
+    expect(
+      screen.getByText(/This client also signs in 2 other MCP servers/),
+    ).toBeDefined();
+  });
+
   it("replaces a cleared client only after confirming the sign-out", async () => {
     mocks.clients.mockReturnValue({
       items: [
@@ -1473,7 +1526,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       isError: true,
       error: Object.assign(
         new Error(
-          "change it from the organization's identity provider settings",
+          "change it from the organization's authorization server settings",
         ),
         { statusCode: 409 },
       ),
@@ -1481,7 +1534,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
     swapClientWithImpact(null);
 
     expect(
-      screen.getByText(/change it from the organization's identity provider/),
+      screen.getByText(
+        /change it from the organization's authorization server/,
+      ),
     ).toBeDefined();
     expect(
       screen.queryByText(/Could not check which other servers share/),
@@ -2225,7 +2280,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const dialog = screen.getByRole("dialog");
-    expect(dialog.textContent).toContain("unlinks the identity provider");
+    expect(dialog.textContent).toContain("unlinks the authorization server");
     expect(dialog.textContent).toContain(
       "removes the static Authorization credential",
     );
@@ -2492,7 +2547,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.toastSuccess).not.toHaveBeenCalledWith("Identity removed");
   });
 
-  it("links shared-source guidance to identity provider management", () => {
+  it("links shared-source guidance to authorization server management", () => {
     mocks.siblings.mockReturnValue({
       data: {
         mcpServers: [
@@ -2508,7 +2563,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     expect(
       screen
-        .getByRole("link", { name: "Remote Identity Providers" })
+        .getByRole("link", { name: "Authorization Servers" })
         .getAttribute("href"),
     ).toBe("/remote-identity-providers");
   });
@@ -2557,7 +2612,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
       expect(
         screen.getByText(
-          "Not used for this connection. Sign-ins request read, set by the identity provider's override.",
+          "Not used for this connection. Sign-ins request read, set by the authorization server's override.",
         ),
       ).toBeDefined();
       expect(screen.queryByText("Requested at sign-in")).toBeNull();
@@ -2695,7 +2750,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       renderIdentity();
       expect(
         screen.getByText(
-          "Not used for this connection. Sign-ins request read, set by the identity provider's override.",
+          "Not used for this connection. Sign-ins request read, set by the authorization server's override.",
         ),
       ).toBeDefined();
       fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
@@ -3138,5 +3193,22 @@ describe("RemoteMcpIdentitySectionBody", () => {
         },
       });
     });
+  });
+});
+
+describe("identity chaining", () => {
+  it("leaves identity chaining to its own section, even for a sign-in that trusts an identity provider", () => {
+    mocks.userSessionIssuer.mockReturnValue({
+      data: {
+        id: "user-session-issuer-1",
+        projectId: "",
+        trustedRemoteSessionIssuerId: "okta-issuer",
+        trustedRemoteSessionClientId: "okta-client",
+      },
+    });
+    renderIdentity();
+    expect(screen.queryByText(/Enterprise Managed Authorization/)).toBeNull();
+    expect(screen.queryByText(/Identity chaining/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
   });
 });

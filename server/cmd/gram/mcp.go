@@ -63,7 +63,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 // mcpServerFlags accepts the same runtime configuration as `gram start` so the
@@ -79,8 +78,8 @@ func mcpServerFlags() []cli.Flag {
 	)
 }
 
-// newMCPCommand starts the public MCP and OAuth serving tier: the /mcp and
-// /x/mcp servers, their OAuth authorization surface and well-known metadata,
+// newMCPCommand starts the public MCP and OAuth serving tier: the /mcp
+// servers, their OAuth authorization surface and well-known metadata,
 // and the retired OAuth proxy tombstone. It deliberately duplicates the parts
 // of `gram start` it needs rather than sharing wiring, so the tier's
 // dependency graph stays small and explicit. It never constructs a Temporal
@@ -413,7 +412,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// containment still resolve through the same admission checks.
 	admission := networkingress.NewExpansionAdmission(productFeatures, false, c.Bool("network-ingress-enabled"))
 	metadata := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cacheImpl, authzEngine, auditLogger, admission.CheckExpansion)
-	runtime, err := buildMCPServerRuntime(mcpServerRuntimeDependencies{Logger: logger, DB: db, Encryption: enc, MCP: mcpService, Metadata: metadata})
+	runtime, err := buildMCPServerRuntime(mcpServerRuntimeDependencies{MCP: mcpService, Metadata: metadata})
 	if err != nil {
 		return fmt.Errorf("build MCP server runtime: %w", err)
 	}
@@ -424,9 +423,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	internalsessionissuers.AttachDiscovery(mux, db, logger)
 	mcp.Attach(mux, runtime.MCP, runtime.Metadata)
-	xmcp.Attach(mux, runtime.XMCP, runtime.Metadata)
 	mcp.AttachAuthenticationHost(authenticationHost, runtime.MCP)
-	xmcp.AttachAuthenticationHost(authenticationHost, runtime.XMCP)
 	usersessions.AttachRetiredProxy(mux, logger)
 
 	srv := &http.Server{

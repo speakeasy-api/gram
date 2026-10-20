@@ -516,13 +516,13 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 }
 
 // InsertTelemetryLogs inserts telemetry log records using a server-side async
-// insert (async_insert=1, wait_for_async_insert=0). The call is fire-and-forget
-// from CH's perspective: it acks once the rows are queued in CH's async insert
-// buffer, not once they are committed to disk.
+// insert (async_insert=1). The connection sets wait_for_async_insert: the
+// server connection sets 0, so the call is fire-and-forget and acks once the
+// rows are queued in CH's async insert buffer, not once they are committed.
+// The test connection sets 1, so tests read their own writes.
 func (q *Queries) InsertTelemetryLogs(ctx context.Context, args []InsertTelemetryLogParams) error {
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
-		"async_insert":          1,
-		"wait_for_async_insert": 0,
+		"async_insert": 1,
 	}))
 	return q.insertTelemetryLogsInto(ctx, "telemetry_logs", args)
 }

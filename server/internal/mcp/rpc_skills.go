@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -149,12 +150,15 @@ func marshalSkillRead(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID
 }
 
 // hostedSkillScope resolves the endpoint and caller a skills request is
-// answered for. The endpoint is the described toolset together with its
-// fronting server when the request came through one, so a plugin containing
-// either carries skills to it. The caller's delivery principals decide which
-// plugins are assigned to them; a caller who is not an authenticated member
-// of the owning organization, or one the endpoint never resolved a toolset
-// for, has none and so is served no skills.
+// answered for. The endpoint is the described toolset together with the
+// server serving it: the fronting server when the request came through one,
+// otherwise the single enabled server wrapping a legacy toolset. A plugin
+// containing either carries skills to it. Resolving that wrapper is best
+// effort: a failure is logged and the toolset alone is used. The caller's
+// delivery principals decide which plugins are assigned to them; a caller
+// who is not an authenticated member of the owning organization, or one the
+// endpoint never resolved a toolset for, has none and so is served no
+// skills.
 //
 // An API key is never a recipient. A legacy key carries its creator's user
 // id in the auth context, but the key is the actor, not that person: serving
@@ -162,11 +166,19 @@ func marshalSkillRead(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID
 // recording each read as the creator's activation, would be wrong on both
 // counts. The RBAC engine refuses the same identification (an API key is not
 // a user principal), so the skill scope follows it.
-func hostedSkillScope(ctx context.Context, db *pgxpool.Pool, payload *mcpInputs) (mcpskills.Scope, error) {
+func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs) (mcpskills.Scope, error) {
+	// The dispatcher leaves attribution to the handlers, and it must not turn
+	// an otherwise valid skills request into an error.
+	if payload.toolsetID.Valid {
+		if err := payload.resolveServingAttribution(ctx, logger, db, payload.toolsetID.UUID); err != nil {
+			logger.WarnContext(ctx, "failed to resolve skill serving attribution", attr.SlogError(err))
+		}
+	}
+
 	scope := mcpskills.Scope{
 		ProjectID:     payload.projectID,
 		ToolsetID:     payload.toolsetID.UUID,
-		MCPServerID:   payload.mcpServerID,
+		MCPServerID:   payload.servingServerID(),
 		PrincipalURNs: nil,
 	}
 	if !payload.toolsetID.Valid || !payload.authenticated || payload.userID == "" || payload.apiKeyID != "" {

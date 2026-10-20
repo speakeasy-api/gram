@@ -18,12 +18,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
-	mcpskillsrepo "github.com/speakeasy-api/gram/server/internal/mcp/mcpskills/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -74,6 +75,14 @@ func rawSHA256(content string) string {
 func servedSkill(t *testing.T, ctx context.Context, ti *testInstance, f *skillsFixture, name, principalURN string) (uuid.UUID, string) {
 	t.Helper()
 
+	return servedSkillVia(t, ctx, ti, f, name, principalURN, conv.ToNullUUID(f.toolsetID), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+}
+
+// servedSkillVia is servedSkill with the plugin containing the given toolset
+// or MCP server instead of the fixture toolset.
+func servedSkillVia(t *testing.T, ctx context.Context, ti *testInstance, f *skillsFixture, name, principalURN string, toolsetID, mcpServerID uuid.NullUUID) (uuid.UUID, string) {
+	t.Helper()
+
 	content := skillContent(name, "Serves "+name+".")
 	skillsQueries := skillsrepo.New(ti.conn)
 	skill, err := skillsQueries.CreateSkill(ctx, skillsrepo.CreateSkillParams{
@@ -95,7 +104,7 @@ func servedSkill(t *testing.T, ctx context.Context, ti *testInstance, f *skillsF
 	require.NoError(t, err)
 
 	_, err = pluginsQueries.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
-		PluginID: plugin.ID, ToolsetID: conv.ToNullUUID(f.toolsetID), McpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		PluginID: plugin.ID, ToolsetID: toolsetID, McpServerID: mcpServerID,
 		DisplayName: "toolset", Policy: "required", SortOrder: 0,
 	})
 	require.NoError(t, err)
@@ -264,6 +273,32 @@ func TestServePublic_Skills_ListServesAssignedPluginSkills(t *testing.T) {
 	require.NotContains(t, result, "nextCursor")
 }
 
+func TestServePublic_Skills_ListServesSkillsOfLegacyToolsetWrapper(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newSkillsFixture(t, ctx, ti)
+	wrapper, err := mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+		ID:         uuid.New(),
+		ProjectID:  f.projectID,
+		Name:       conv.ToPGText("wrapper-" + f.mcpSlug),
+		Slug:       conv.ToPGText("wrapper-" + f.mcpSlug),
+		ToolsetID:  conv.ToNullUUID(f.toolsetID),
+		Visibility: "public",
+	})
+	require.NoError(t, err)
+	_, content := servedSkillVia(t, ctx, ti, f, "wrapper-skill", urn.PrincipalWildcard, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, conv.ToNullUUID(wrapper.ID))
+
+	w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), "", nil)
+	require.NoError(t, err)
+	result := requireRPCResult(t, w)
+
+	var skills []wireSkill
+	require.NoError(t, json.Unmarshal(result["skills"], &skills))
+	require.Len(t, skills, 1, "a plugin containing the toolset's only wrapper carries skills to the legacy route")
+	requireWireSkill(t, skills[0], "wrapper-skill", content)
+}
+
 func TestServePublic_Skills_ListAcceptsEmptyCursorAndRejectsUnknownOne(t *testing.T) {
 	t.Parallel()
 
@@ -332,7 +367,7 @@ func TestServePublic_Skills_ReadServesMarkdownAndRecordsOneActivationPerSession(
 		require.Equal(t, rawSHA256(content), rawSHA256(contents[0].Text), "the served bytes are the ones the digest covers")
 	}
 
-	observations, err := mcpskillsrepo.New(ti.conn).ListMCPSkillObservations(ctx, mcpskillsrepo.ListMCPSkillObservationsParams{
+	observations, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
 		ProjectID: f.projectID, Provider: mcpskills.ObservationProvider,
 	})
 	require.NoError(t, err)
@@ -384,7 +419,7 @@ func TestServePublic_Skills_ReadUnknownURIIsInvalidParams(t *testing.T) {
 	require.NoError(t, err)
 	requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
 
-	observations, err := mcpskillsrepo.New(ti.conn).ListMCPSkillObservations(ctx, mcpskillsrepo.ListMCPSkillObservationsParams{
+	observations, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
 		ProjectID: f.projectID, Provider: mcpskills.ObservationProvider,
 	})
 	require.NoError(t, err)
@@ -451,7 +486,7 @@ func TestServePublic_Skills_APIKeyCallerIsServedNothing(t *testing.T) {
 	require.NoError(t, err)
 	requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
 
-	observations, err := mcpskillsrepo.New(ti.conn).ListMCPSkillObservations(ctx, mcpskillsrepo.ListMCPSkillObservationsParams{
+	observations, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
 		ProjectID: f.projectID, Provider: mcpskills.ObservationProvider,
 	})
 	require.NoError(t, err)
@@ -487,7 +522,7 @@ func TestServePublic_Skills_FlagOffAnswersMethodNotFound(t *testing.T) {
 	require.NoError(t, err)
 	requireRPCErrorCode(t, w, oops.MCPCodeResourceNotFound)
 
-	observations, err := mcpskillsrepo.New(ti.conn).ListMCPSkillObservations(ctx, mcpskillsrepo.ListMCPSkillObservationsParams{
+	observations, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
 		ProjectID: f.projectID, Provider: mcpskills.ObservationProvider,
 	})
 	require.NoError(t, err)

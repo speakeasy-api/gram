@@ -42,15 +42,7 @@ func handleSkillResourceRead(
 	uri string,
 	now time.Time,
 ) (json.RawMessage, error) {
-	// The dispatcher leaves attribution to resources/read handlers, and it
-	// must not turn an otherwise valid read into an error.
-	if payload.toolsetID.Valid {
-		if err := payload.resolveServingAttribution(ctx, logger, db, payload.toolsetID.UUID); err != nil {
-			logger.WarnContext(ctx, "failed to resolve skill serving attribution", attr.SlogError(err))
-		}
-	}
-
-	scope, err := hostedSkillScope(ctx, db, payload)
+	scope, err := hostedSkillScope(ctx, logger, db, payload)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve skill recipient").LogError(ctx, logger)
 	}

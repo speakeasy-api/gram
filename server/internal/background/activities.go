@@ -99,6 +99,8 @@ type Publishers struct {
 	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	LLMAnalysis             gcp.Publisher[*riskv1.LLMAnalysis]
+	ToolCallAnalysis        gcp.Publisher[*riskv1.ToolCallAnalysis]
+	AccountIdentityAnalysis gcp.Publisher[*riskv1.AccountIdentityAnalysis]
 	RiskFindings            gcp.Publisher[*riskv1.Finding]
 	MeterReadings           gcp.Publisher[*meteringv1.MeterReading]
 	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
@@ -282,13 +284,12 @@ func NewActivities(
 		publishers.PromptPolicyAnalysis,
 		publishers.CustomRulesAnalysis,
 		publishers.LLMAnalysis,
-		publishers.RiskFindings,
+		publishers.ToolCallAnalysis,
+		publishers.AccountIdentityAnalysis,
 		customRuleScanner,
 		celEng,
 		builtinPresets,
-		&shadowMCPPolicyBypassChecker{
-			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
-		},
+		NewShadowMCPPolicyBypassChecker(logger, db),
 		riskRecorder,
 		llmAnalyzerEnabled,
 	)

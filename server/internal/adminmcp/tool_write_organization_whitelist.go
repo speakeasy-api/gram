@@ -200,7 +200,7 @@ func (w *organizationWhitelistWriter) execution(authority writeAuthority) Propos
 }
 
 func (w *organizationWhitelistWriter) registerPrepare(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{Name: "prepare_set_organization_whitelist", Title: "Prepare Organization Whitelist Change", Description: "Prepare changing the dashboard demo-access whitelist for one exact canonical organization ID without any trial record, regardless of tier or lifecycle state. Does not change account type, subscriptions, trial records or disabled state, revoke credentials or stop running work. Whitelisting suppresses base-tier access-paused billing notifications. Returns a stored before/after preview and private same-staff browser approval URL; does not make the change. Requires admin:write."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareOrganizationWhitelistInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	addProposalTool(server, &mcp.Tool{Name: "prepare_set_organization_whitelist", Title: "Prepare Organization Whitelist Change", Description: "Prepare changing the dashboard demo-access whitelist for one exact canonical organization ID without any trial record, regardless of tier or lifecycle state. Does not change account type, subscriptions, trial records or disabled state, revoke credentials or stop running work. Whitelisting suppresses base-tier access-paused billing notifications. Returns a stored before/after preview and private same-staff browser approval URL; does not make the change. Requires admin:write."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareOrganizationWhitelistInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := w.prepare(ctx, input)
 		return nil, out, err
 	})

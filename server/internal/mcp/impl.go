@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
@@ -188,6 +189,7 @@ type Service struct {
 	vectorToolStore        *rag.ToolsetVectorStore
 	assistantTokens        *assistanttokens.Manager
 	principalCredentials   *principalcredential.Issuer
+	deviceAgentTokens      *deviceagenttoken.Issuer
 	sessions               *sessions.Manager
 	consentBindings        ConsentBindingService
 	identityResolver       IdentityResolver
@@ -238,8 +240,8 @@ type Service struct {
 	// remoteSessionRecheck sweeps idle grants with no refresh token; runs only where StartRemoteSessionRecheck is called.
 	remoteSessionRecheck *remoteSessionRecheck
 	// remoteProxyManager builds configured remotemcp proxies wired with the
-	// MCP-aware interceptor stack. Only consulted by ServeMCPEndpoint's
-	// remote-backed branch; may be nil in non-HTTP contexts (e.g. the
+	// MCP-aware interceptor stack. Used by the endpoint dispatcher's
+	// remote-backed branch, the consent transport and meta servers; may be nil in non-HTTP contexts (e.g. the
 	// Temporal worker, which constructs *Service for its programmatic
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
@@ -567,6 +569,7 @@ func NewService(
 		vectorToolStore:        vectorToolStore,
 		assistantTokens:        assistantTokens,
 		principalCredentials:   principalCredentials,
+		deviceAgentTokens:      deviceagenttoken.New(callerAssertions, db),
 		sessions:               sessions,
 		chatSessionsManager:    chatSessionsManager,
 		enc:                    enc,
@@ -748,6 +751,7 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.MCPErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", deviceagenttoken.TokenPathPattern, oops.ErrHandle(service.logger, service.HandleDeviceAgentToken).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback/{clientID}", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
@@ -804,9 +808,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 
 // HandleRemoteLoginCallback is the chi handler at
 // `GET /mcp/remote_login_callback` (plus the legacy per-slug variant). Thin
-// passthrough to remotesessions.ChallengeManager so /x/mcp can reuse the
-// same handler via the public method instead of reaching into the
-// unexported manager field.
+// passthrough to remotesessions.ChallengeManager.
 func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
 	if err := s.validateRemoteLoginBrowser(r); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "invalid remote login browser binding")
@@ -1078,7 +1080,7 @@ const publicMCPNotFoundMessage = "mcp server not found"
 // first — a slug bound to a custom-domain request resolves only against
 // that domain; a slug arriving on the platform domain resolves only
 // against (custom_domain_id IS NULL) endpoints. On a hit, dispatch
-// matches /x/mcp: issuer-gated mcp_servers run the JWT gate before
+// runs issuer-gated mcp_servers through the JWT gate before
 // backend dispatch, then RemoteMcpServerID-backed rows proxy via
 // remotemcp and ToolsetID-backed rows delegate to ServeToolsetResolved.
 //
@@ -1210,8 +1212,8 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset, wrapperID uuid.Nul
 //
 // mcpSlug and mcpRouteBase are used to build the WWW-Authenticate
 // resource_metadata URL. mcpRouteBase is the route segment that sits
-// between the well-known prefix and the slug — "mcp" for /mcp/{slug} or
-// "x/mcp" for /x/mcp/{slug}, no leading or trailing slashes.
+// between the well-known prefix and the slug — "mcp" for /mcp/{slug}, no
+// leading or trailing slashes.
 //
 // extraUpstreamTokens are the upstream remote-session access tokens
 // collected by a caller-side issuer gate, keyed by remote_session_issuer_id.
@@ -1276,11 +1278,8 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	runInToolsetGate := cfg.runInToolsetGate
 	callerAlreadyGated := cfg.callerGated
 	if runInToolsetGate {
-		// Pass mcpRouteBase (the surface the request arrived under) rather
-		// than letting the constructor default to "mcp": when called from
-		// /x/mcp the WWW-Authenticate URL, issuer URL, and consent action
-		// all need to match the caller's surface, not the toolset's
-		// canonical /mcp surface.
+		// The WWW-Authenticate URL, issuer URL, and consent action follow
+		// the surface the request arrived under.
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcpRouteBase)
 		newCtx, authentication, gateToolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
 		if err != nil {
@@ -1288,7 +1287,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		}
 		ctx = newCtx
 		pendingIssuerGate = authentication
-		callerToolSelection = gateToolSelection
+		if gateToolSelection != nil {
+			callerToolSelection = gateToolSelection.Selection
+		}
 	}
 
 	isHostedToolsCall := req.Method == mcpversions.MethodToolsCall && cfg.mcpServerID != nil

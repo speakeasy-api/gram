@@ -252,7 +252,7 @@ func (w *trialWriter) execution(authority writeAuthority) ProposalExecution {
 }
 
 func (w *trialWriter) registerPrepare(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{Name: "prepare_extend_organization_trial", Title: "Prepare Organization Trial Extension", Description: "Prepare an exact, single-organization extension of a running enterprise trial by 1 to 365 calendar days, added to the current end date. Cannot shorten, start, re-arm or convert a trial. Returns a server-stored before/after preview and a private staff approval URL. Does not make the change. Requires admin:write."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareTrialExtensionInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	addProposalTool(server, &mcp.Tool{Name: "prepare_extend_organization_trial", Title: "Prepare Organization Trial Extension", Description: "Prepare an exact, single-organization extension of a running enterprise trial by 1 to 365 calendar days, added to the current end date. Cannot shorten, start, re-arm or convert a trial. Returns a server-stored before/after preview and a private staff approval URL. Does not make the change. Requires admin:write."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareTrialExtensionInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := w.prepare(ctx, input)
 		return nil, out, err
 	})
