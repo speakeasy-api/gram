@@ -337,23 +337,69 @@ func TestApplyRequestHeadersRemoteAuthorizationOverrideShadowsRequiredPassThroug
 	require.Equal(t, []string{"Bearer upstream-token"}, remoteReq.Header.Values("Authorization"))
 }
 
-// Forwarding the caller's own upstream credential is what pass-through
-// identity is for, so Authorization is an allowed source.
-func TestApplyRequestHeadersRemoteForwardsAuthorizationPassThrough(t *testing.T) {
+// The caller's Authorization is their Speakeasy credential, so an optional row
+// reading it is not sent, and the client's own copy cannot stand in for it.
+func TestApplyRequestHeadersRemoteDropsOptionalAuthorizationSource(t *testing.T) {
 	t.Parallel()
 
 	userReq, remoteReq := newRemotePolicyRequests(t)
-	userReq.Header.Set("Authorization", "Bearer caller-upstream")
+	userReq.Header.Set("Authorization", "Bearer synthetic-speakeasy-token")
+	userReq.Header.Set("X-Upstream-Token", "client-supplied")
 	p := &Proxy{
 		Logger: testenv.NewLogger(t),
 		Headers: []ConfiguredHeader{
-			{Name: "Authorization", StaticValue: "", ValueFromRequestHeader: "Authorization", IsRequired: true},
-			{Name: "X-Upstream-Token", StaticValue: "", ValueFromRequestHeader: "authorization", IsRequired: true},
+			{Name: "Authorization", StaticValue: "", ValueFromRequestHeader: "Authorization", IsRequired: false},
+			{Name: "X-Upstream-Token", StaticValue: "", ValueFromRequestHeader: "authorization", IsRequired: false},
 		},
 	}
 	require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
-	require.Equal(t, []string{"Bearer caller-upstream"}, remoteReq.Header.Values("Authorization"))
-	require.Equal(t, []string{"Bearer caller-upstream"}, remoteReq.Header.Values("X-Upstream-Token"))
+	require.Empty(t, remoteReq.Header.Values("Authorization"))
+	require.Empty(t, remoteReq.Header.Values("X-Upstream-Token"))
+}
+
+func TestApplyRequestHeadersRemoteRejectsRequiredAuthorizationSource(t *testing.T) {
+	t.Parallel()
+
+	userReq, remoteReq := newRemotePolicyRequests(t)
+	userReq.Header.Set("Authorization", "Bearer synthetic-speakeasy-token")
+	p := &Proxy{
+		Logger: testenv.NewLogger(t),
+		Headers: []ConfiguredHeader{
+			{Name: "X-Upstream-Token", StaticValue: "", ValueFromRequestHeader: "Authorization", IsRequired: true},
+		},
+	}
+	err := p.applyRequestHeaders(t.Context(), userReq, remoteReq)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
+	require.Contains(t, shareable.Error(), `"X-Upstream-Token"`)
+	require.Contains(t, shareable.Error(), "Speakeasy credential")
+	require.NotContains(t, shareable.Error(), "synthetic-speakeasy-token")
+	require.Empty(t, remoteReq.Header.Values("X-Upstream-Token"))
+}
+
+// The tunneled policy resolves the same configured rows, so the caller's
+// Speakeasy credential cannot reach a tunneled upstream either.
+func TestApplyRequestHeadersTunneledRefusesAuthorizationSource(t *testing.T) {
+	t.Parallel()
+
+	userReq, remoteReq := newRemotePolicyRequests(t)
+	userReq.Header.Set("Authorization", "Bearer synthetic-speakeasy-token")
+	p := &Proxy{
+		Logger:       testenv.NewLogger(t),
+		HeaderPolicy: HeaderPolicyTunneled,
+		Headers: []ConfiguredHeader{
+			{Name: "X-Upstream-Token", StaticValue: "", ValueFromRequestHeader: "Authorization", IsRequired: false},
+		},
+	}
+	require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+	require.Empty(t, remoteReq.Header.Values("X-Upstream-Token"))
+	require.Empty(t, remoteReq.Header.Values("Authorization"))
+
+	p.Headers[0].IsRequired = true
+	err := p.applyRequestHeaders(t.Context(), userReq, httptest.NewRequest(http.MethodPost, "https://upstream.example/mcp", nil))
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "synthetic-speakeasy-token")
 }
 
 func TestApplyRequestHeadersRemoteAllowsAuthorizationFromSeparateSource(t *testing.T) {
@@ -529,7 +575,8 @@ func TestCheckRemoteHeader(t *testing.T) {
 		{name: "static cookie", header: ConfiguredHeader{Name: "Cookie", StaticValue: "a=b"}, wantErr: nil},
 		{name: "static authorization", header: ConfiguredHeader{Name: "Authorization", StaticValue: "Bearer x"}, wantErr: nil},
 		{name: "static gram key", header: ConfiguredHeader{Name: "Gram-Key", StaticValue: "operator"}, wantErr: nil},
-		{name: "authorization source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "Authorization"}, wantErr: nil},
+		{name: "authorization source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "Authorization"}, wantErr: ErrAuthorizationSource},
+		{name: "padded lowercase authorization source", header: ConfiguredHeader{Name: "Authorization", ValueFromRequestHeader: " authorization "}, wantErr: ErrAuthorizationSource},
 		{name: "gram key source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "Gram-Key"}, wantErr: ErrProtectedSource},
 		{name: "mixed case gram source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "gRaM-cHaT-sEsSiOn"}, wantErr: ErrProtectedSource},
 		{name: "speakeasy-ai key source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "Speakeasy-AI-Key"}, wantErr: ErrProtectedSource},
@@ -561,23 +608,23 @@ func TestCheckRemoteHeader(t *testing.T) {
 	}
 }
 
-// A resolved upstream token owns Authorization only: a custom header reading
-// the caller's Authorization still forwards it beside the override.
-func TestApplyRequestHeadersRemoteOverrideLeavesCustomPassThrough(t *testing.T) {
+// A resolved upstream token owns Authorization only; it does not make the
+// caller's Speakeasy credential safe to send under a custom name.
+func TestApplyRequestHeadersRemoteOverrideDoesNotLeakCallerAuthorization(t *testing.T) {
 	t.Parallel()
 
 	userReq, remoteReq := newRemotePolicyRequests(t)
-	userReq.Header.Set("Authorization", "Bearer caller-upstream")
+	userReq.Header.Set("Authorization", "Bearer synthetic-speakeasy-token")
 	p := &Proxy{
 		Logger:                testenv.NewLogger(t),
 		AuthorizationOverride: "upstream-token",
 		Headers: []ConfiguredHeader{
-			{Name: "X-Upstream-Token", StaticValue: "", ValueFromRequestHeader: "Authorization", IsRequired: true},
+			{Name: "X-Upstream-Token", StaticValue: "", ValueFromRequestHeader: "Authorization", IsRequired: false},
 		},
 	}
 	require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
 	require.Equal(t, []string{"Bearer upstream-token"}, remoteReq.Header.Values("Authorization"))
-	require.Equal(t, []string{"Bearer caller-upstream"}, remoteReq.Header.Values("X-Upstream-Token"))
+	require.Empty(t, remoteReq.Header.Values("X-Upstream-Token"))
 }
 
 // A sent configured header replaces every client spelling of its name, so an
