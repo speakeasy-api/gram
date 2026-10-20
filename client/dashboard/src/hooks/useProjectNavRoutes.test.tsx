@@ -101,7 +101,6 @@ beforeEach(() => {
   };
   testState.featureFlags = {
     [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
-    [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
   };
@@ -220,11 +219,10 @@ describe("useProjectNavRoutes", () => {
   });
 
   it.each(["loading", "missing", "error"] as const)(
-    "preserves opt-in and opt-out navigation while flags are %s",
+    "keeps standard navigation while rollout flags are %s",
     (status) => {
       testState.featureFlags = {
         [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
-        [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
       };
@@ -259,7 +257,6 @@ describe("useProjectNavRoutes", () => {
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
       [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
-      [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
       [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },
       [FEATURE_FLAGS.explore]: { status: "enabled" },
     };
@@ -270,7 +267,7 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.assistants);
     expect(navRoutes).toContain(routes.watchdog);
     expect(navRoutes).toContain(routes.explore);
-    expect(navRoutes).not.toContain(routes.deployments);
+    expect(navRoutes).toContain(routes.deployments);
     expect(navRoutes).toContain(routes.riskEvents);
   });
 

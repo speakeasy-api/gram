@@ -1,6 +1,5 @@
 export const FEATURE_FLAGS = {
   budgets: "gram-budgets",
-  deploymentsPage: "gram-deployments-page",
   deviceAgent: "gram-device-agent",
   deviceIntegrations: "gram-device-integrations",
   // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
