@@ -1420,8 +1420,9 @@ var MemberModel = Type("AccessMember", func() {
 		Format(FormatDateTime)
 	})
 	// Directory profile, from the org's synced identity provider. Every field
-	// is absent when no directory is connected, when the member has no profile
-	// in it, or when the provider does not report that attribute.
+	// except in_directory is absent when no directory is connected, when the
+	// member has no profile in it, or when the provider does not report that
+	// attribute. listMembers sets in_directory to false in those cases.
 	Attribute("department", String, "Department name as reported by the identity provider.")
 	Attribute("groups", ArrayOf(String), "Names of the directory groups the member belongs to.")
 	Attribute("directory_groups", ArrayOf(MemberDirectoryGroupModel), "The directory groups the member belongs to, by stable ID. Prefer this to groups when matching a member to a group, since two groups can share a name.")
