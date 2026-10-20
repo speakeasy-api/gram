@@ -1226,7 +1226,7 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 	return out, nil
 }
 
-// loadAssistantMcpServers loads attachments from both tables, one row per server.
+// loadAssistantMcpServers loads the assistants' attached MCP servers.
 func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantMCPServerRow, error) {
 	out := map[uuid.UUID][]assistantMCPServerRow{}
 	if len(assistantIDs) == 0 {
@@ -1239,10 +1239,8 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 	if err != nil {
 		return nil, fmt.Errorf("load assistant mcp servers: %w", err)
 	}
-	seen := map[[2]uuid.UUID]int{}
 	for _, row := range rows {
-		key := [2]uuid.UUID{row.AssistantID, row.McpServerID}
-		item := assistantMCPServerRow{
+		out[row.AssistantID] = append(out[row.AssistantID], assistantMCPServerRow{
 			MCPServerID:            row.McpServerID,
 			ServerSlug:             row.ServerSlug,
 			ToolsetSlug:            row.ToolsetSlug,
@@ -1251,16 +1249,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
 			EnvironmentID:          row.EnvironmentID,
 			EnvironmentSlug:        row.EnvironmentSlug,
-		}
-		// The legacy row of a twin keeps its environment, as the old toolset arm did.
-		if i, dup := seen[key]; dup {
-			if row.Legacy {
-				out[row.AssistantID][i] = item
-			}
-			continue
-		}
-		seen[key] = len(out[row.AssistantID])
-		out[row.AssistantID] = append(out[row.AssistantID], item)
+		})
 	}
 	return out, nil
 }

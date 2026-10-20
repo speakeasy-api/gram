@@ -895,7 +895,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		backend.toolsetID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		exists, err := s.repo.WithTx(tx).HasRoleDeliveryMembership(ctx, repo.HasRoleDeliveryMembershipParams{
 			PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
-			ToolsetID: legacyToolsetID, McpServerID: backend.mcpServerID, LegacyToolsetID: legacyToolsetID, PreserveRemoval: false,
+			McpServerID: backend.mcpServerID, LegacyToolsetID: legacyToolsetID, PreserveRemoval: false,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check plugin server identity").LogError(ctx, s.logger)
@@ -3292,9 +3292,6 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	}
 
 	for _, m := range mcpRows {
-		if m.WrapperCount > 1 {
-			return nil, oops.E(oops.CodeUnexpected, nil, "ambiguous toolset MCP serving wrapper").LogError(ctx, s.logger)
-		}
 		pb := ensurePlugin(m.PluginID, m.PluginName, m.PluginSlug, m.PluginDescription)
 
 		mcpURL, isUnproxied, err := remoteServerURL(s.serverURL, m)
@@ -3572,10 +3569,7 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, wrappers map[uuid.U
 func canonicalWrapperIDs(ctx context.Context, q *repo.Queries, projectID uuid.UUID, servers ...repo.PluginServer) (map[uuid.UUID]bool, error) {
 	ids := make([]uuid.UUID, 0, len(servers))
 	for _, srv := range servers {
-		switch {
-		case srv.ToolsetID.Valid:
-			ids = append(ids, srv.ToolsetID.UUID)
-		case srv.McpServerID.Valid:
+		if srv.McpServerID.Valid {
 			ids = append(ids, srv.McpServerID.UUID)
 		}
 	}
@@ -3617,10 +3611,10 @@ func pluginServerToGen(s repo.PluginServer, wrappers map[uuid.UUID]bool) *gen.Pl
 		id := s.MetaMcpServerID.UUID.String()
 		result.MetaMcpServerID = &id
 	}
-	// A hosted entry reports both ids under either key; a canonical wrapper shares its toolset's id.
-	if hosted := conv.Ternary(s.ToolsetID.Valid, s.ToolsetID, s.McpServerID); hosted.Valid && wrappers[hosted.UUID] {
-		toolsetID, mcpServerID := hosted.UUID.String(), hosted.UUID.String()
-		result.ToolsetID, result.McpServerID = &toolsetID, &mcpServerID
+	// A hosted entry reports both ids; a canonical wrapper shares its toolset's id.
+	if s.McpServerID.Valid && wrappers[s.McpServerID.UUID] {
+		toolsetID := s.McpServerID.UUID.String()
+		result.ToolsetID = &toolsetID
 	}
 	return result
 }
