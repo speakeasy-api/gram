@@ -1,65 +1,67 @@
--- name: GetServedSkillRecipient :one
--- The authenticated caller as a recipient of served skills: their email, read
--- only while they are a live user holding an active membership in the enabled
--- organization that owns the endpoint. Delivery principals are resolved from
--- the row, so a user removed from the organization, or deleted, whose session
--- or token still validates is no row and so no recipient. The membership
--- predicate is the one IsOrganizationMember applies at login.
-SELECT u.email
-FROM users u
-WHERE u.id = @user_id
-  AND u.deleted_at IS NULL
-  AND u.workos_deleted_at IS NULL
-  AND EXISTS (
-    SELECT 1
-    FROM organization_user_relationships our
-    JOIN organization_metadata om
-      ON om.id = our.organization_id
-      AND om.disabled_at IS NULL
-    WHERE our.organization_id = @organization_id
-      AND our.user_id = u.id
-      AND our.deleted_at IS NULL
-  );
+-- name: IsServedSkillRecipient :one
+-- Whether the authenticated caller may receive served skills: a live user
+-- holding an active membership in the enabled organization that owns the
+-- endpoint. A user removed from the organization, or deleted, whose session or
+-- token still validates is not a recipient. The membership predicate is the
+-- one IsOrganizationMember applies at login.
+SELECT EXISTS (
+  SELECT 1
+  FROM users u
+  JOIN organization_user_relationships our
+    ON our.user_id = u.id
+    AND our.organization_id = @organization_id
+    AND our.deleted_at IS NULL
+  JOIN organization_metadata om
+    ON om.id = our.organization_id
+    AND om.disabled_at IS NULL
+  WHERE u.id = @user_id
+    AND u.deleted_at IS NULL
+    AND u.workos_deleted_at IS NULL
+) AS recipient;
 
--- name: ListServedSkillsForEndpoint :many
--- The skills a hosted toolset endpoint serves over MCP to one caller, one row
--- per skill name, ordered by name. A candidate is an active plugin-channel
--- distribution whose plugin belongs to the endpoint's project, is not deleted,
--- contains the endpoint's backend (the toolset itself, or the mcp_servers row
--- fronting it when the caller passes one), and is assigned to at least one of
--- the caller's principal URNs. The skill must not be archived. Each candidate
--- carries the distribution's resolved version: the pin when one is set,
--- otherwise the latest valid version under the same ordering as
--- GetLatestValidSkillVersion.
+-- name: ListServedSkillsForTarget :many
+-- The skills an MCP surface serves over the Skills extension, one row per
+-- skill name, ordered by name. A candidate is a live mcp_skill_links row in
+-- the surface's organization that names the surface: an mcp_server link to
+-- any of @mcp_server_ids (the surface's own server, plus the member servers a
+-- gateway inherits), a meta_mcp_server link to @meta_mcp_server_id, or a link
+-- of the row-less kind @row_less_target_kind (such as the organization
+-- gateway). The skill must not be archived. Each candidate carries the link's
+-- resolved version: the pin when one is set, otherwise the latest valid
+-- version under the same ordering as GetLatestValidSkillVersion.
 --
--- A skill carried by several matching plugins has several candidates, and the
--- query keeps one: a pinned candidate beats one that tracks the latest
--- version, and between pins the newest resolved version (by effective time,
--- then version id) wins; the plugin id breaks a tie between two
--- distributions of the same version. pinned_versions counts the distinct
--- versions the skill is pinned to across its candidates, so a caller can tell
--- when pins disagree. The limit counts skills, not candidates, so a skill
--- carried by many plugins never crowds out a later skill by name. An empty
--- principal list matches nothing.
+-- The organization, not one project, bounds the read because a gateway spans
+-- every project in it; each link's project is pinned to its skill's by
+-- foreign key.
+--
+-- A skill linked several times has several candidates, and the query keeps
+-- one: a pinned candidate beats one that tracks the latest version, and
+-- between pins the newest resolved version (by effective time, then version
+-- id) wins; the link id breaks a tie between two links of the same version.
+-- pinned_versions counts the distinct versions the skill is pinned to across
+-- its candidates, so a caller can tell when pins disagree. The limit counts
+-- skills, not candidates, so a skill linked many times never crowds out a
+-- later skill by name.
 WITH candidates AS (
   SELECT
       sk.id AS skill_id,
+      sk.project_id,
       sk.name AS skill_name,
-      p.id AS plugin_id,
-      (sd.pinned_version_id IS NOT NULL)::boolean AS pinned,
+      l.id AS link_id,
+      (l.pinned_version_id IS NOT NULL)::boolean AS pinned,
       resolved.id AS version_id,
       resolved.content,
       resolved.raw_sha256,
       resolved.effective_at
-  FROM skill_distributions sd
-  JOIN skills sk
-    ON sk.id = sd.skill_id
-    AND sk.project_id = sd.project_id
-    AND sk.archived_at IS NULL
-  JOIN plugins p
-    ON p.id = sd.plugin_id
-    AND p.project_id = sd.project_id
+  FROM mcp_skill_links l
+  JOIN projects p
+    ON p.id = l.project_id
+    AND p.organization_id = l.organization_id
     AND p.deleted IS FALSE
+  JOIN skills sk
+    ON sk.id = l.skill_id
+    AND sk.project_id = l.project_id
+    AND sk.archived_at IS NULL
   JOIN LATERAL (
     SELECT
       sv.id,
@@ -68,39 +70,29 @@ WITH candidates AS (
       COALESCE(sv.promoted_at, sv.created_at)::timestamptz AS effective_at
     FROM skill_versions sv
     LEFT JOIN skill_version_origins svo
-      ON svo.project_id = sd.project_id
+      ON svo.project_id = l.project_id
       AND svo.skill_id = sv.skill_id
       AND svo.skill_version_id = sv.id
-    WHERE sv.skill_id = sd.skill_id
+    WHERE sv.skill_id = l.skill_id
       AND sv.spec_valid IS TRUE
-      AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+      AND (l.pinned_version_id IS NULL OR sv.id = l.pinned_version_id)
     ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
     LIMIT 1
   ) resolved ON TRUE
-  WHERE sd.project_id = @project_id
-    AND sd.channel = 'plugin'
-    AND sd.assistant_id IS NULL
-    AND sd.revoked_at IS NULL
+  WHERE l.organization_id = @organization_id
+    AND l.deleted IS FALSE
     AND (sqlc.narg(skill_name)::text IS NULL OR sk.name = sqlc.narg(skill_name)::text)
-    AND EXISTS (
-      SELECT 1
-      FROM plugin_servers ps
-      WHERE ps.plugin_id = p.id
-        AND ps.deleted IS FALSE
-        AND (
-          ps.toolset_id = @toolset_id::uuid
-          OR (
-            sqlc.narg(mcp_server_id)::uuid IS NOT NULL
-            AND ps.mcp_server_id = sqlc.narg(mcp_server_id)::uuid
-          )
-        )
-    )
-    AND EXISTS (
-      SELECT 1
-      FROM plugin_assignments pa
-      WHERE pa.plugin_id = p.id
-        AND pa.organization_id = p.organization_id
-        AND pa.principal_urn = ANY(@principal_urns::text[])
+    AND (
+      (l.target_kind = 'mcp_server' AND l.mcp_server_id = ANY(@mcp_server_ids::uuid[]))
+      OR (
+        l.target_kind = 'meta_mcp_server'
+        AND sqlc.narg(meta_mcp_server_id)::uuid IS NOT NULL
+        AND l.meta_mcp_server_id = sqlc.narg(meta_mcp_server_id)::uuid
+      )
+      OR (
+        sqlc.narg(row_less_target_kind)::text IS NOT NULL
+        AND l.target_kind = sqlc.narg(row_less_target_kind)::text
+      )
     )
 ),
 pins AS (
@@ -111,8 +103,9 @@ pins AS (
 )
 SELECT DISTINCT ON (c.skill_name)
     c.skill_id,
+    c.project_id,
     c.skill_name,
-    c.plugin_id,
+    c.link_id,
     c.pinned,
     c.version_id,
     c.content,
@@ -121,8 +114,45 @@ SELECT DISTINCT ON (c.skill_name)
     COALESCE(pins.pinned_versions, 0)::int AS pinned_versions
 FROM candidates c
 LEFT JOIN pins ON pins.skill_name = c.skill_name
-ORDER BY c.skill_name ASC, c.pinned DESC, c.effective_at DESC, c.version_id DESC, c.plugin_id ASC
+ORDER BY c.skill_name ASC, c.pinned DESC, c.effective_at DESC, c.version_id DESC, c.link_id ASC
 LIMIT @row_limit;
+
+-- name: CreateMCPSkillLink :one
+-- Links a skill to the MCP surface that serves it. The caller validates that
+-- the id columns fit target_kind; the foreign keys keep the skill, its pinned
+-- version and any stored target inside the link's project.
+INSERT INTO mcp_skill_links (
+    organization_id
+  , project_id
+  , skill_id
+  , pinned_version_id
+  , target_kind
+  , mcp_server_id
+  , meta_mcp_server_id
+  , created_by_user_id
+)
+VALUES (
+    @organization_id
+  , @project_id
+  , @skill_id
+  , sqlc.narg(pinned_version_id)
+  , @target_kind
+  , sqlc.narg(mcp_server_id)
+  , sqlc.narg(meta_mcp_server_id)
+  , @created_by_user_id
+)
+RETURNING *;
+
+-- name: DeleteMCPSkillLink :execrows
+-- Soft-deletes one live link, so the surface stops serving the skill through
+-- it.
+UPDATE mcp_skill_links
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND id = @id
+  AND deleted IS FALSE;
 
 -- name: InsertMCPSkillObservation :execrows
 -- Records one resources/read of a served skill as an activation. The server

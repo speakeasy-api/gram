@@ -48,11 +48,16 @@ type Entry struct {
 	// SkillID is the skill the entry serves.
 	SkillID uuid.UUID
 
+	// ProjectID is the project that owns the skill. A gateway serves skills
+	// from every project in its organization, so it can differ from the
+	// endpoint's.
+	ProjectID uuid.UUID
+
 	// VersionID is the resolved skill version whose content is served.
 	VersionID uuid.UUID
 
-	// PluginID is the plugin whose distribution won the resolution.
-	PluginID uuid.UUID
+	// LinkID is the mcp_skill_links row that won the resolution.
+	LinkID uuid.UUID
 
 	// Name is the skill's normalized name, the final path segment of the URI
 	// and the frontmatter name.
@@ -69,7 +74,7 @@ type Entry struct {
 	// Frontmatter is the parsed YAML frontmatter of Content.
 	Frontmatter map[string]any
 
-	// Pinned reports whether the winning distribution pins this version
+	// Pinned reports whether the winning link pins this version
 	// rather than tracking the skill's latest valid version.
 	Pinned bool
 }
