@@ -156,10 +156,12 @@ DELETE FROM directory_review_org_states WHERE organization_id = @organization_id
 DELETE FROM directory_review_attribute_opt_outs WHERE organization_id = @organization_id;
 
 -- Starts directory review now: groups created before this are offered in
--- bulk setup, groups created after it are raised for review.
+-- bulk setup, groups created after it are raised for review. Review emails
+-- are off: the seeded items are recreated on every reseed, so they would
+-- otherwise email the organization's admins each day.
 -- name: RolesInsertDirectoryReviewOrgState :exec
-INSERT INTO directory_review_org_states (organization_id, baseline_at)
-VALUES (@organization_id::text, clock_timestamp());
+INSERT INTO directory_review_org_states (organization_id, baseline_at, emails_disabled_at)
+VALUES (@organization_id::text, clock_timestamp(), clock_timestamp());
 
 -- A group first seen after review started.
 -- name: RolesInsertNewDirectoryGroup :exec

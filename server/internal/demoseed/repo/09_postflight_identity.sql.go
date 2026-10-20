@@ -288,6 +288,18 @@ func (q *Queries) PostflightIDDeletedGroupMappings(ctx context.Context, orgID st
 	return count, err
 }
 
+const postflightIDDirectoryReviewEmailsEnabled = `-- name: PostflightIDDirectoryReviewEmailsEnabled :one
+SELECT count(*) FROM directory_review_org_states
+WHERE organization_id = $1::text AND emails_disabled_at IS NULL
+`
+
+func (q *Queries) PostflightIDDirectoryReviewEmailsEnabled(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDDirectoryReviewEmailsEnabled, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDDirectoryRoleMappings = `-- name: PostflightIDDirectoryRoleMappings :one
 SELECT count(*) FROM directory_role_mappings
 WHERE organization_id = $1::text AND deleted IS FALSE
