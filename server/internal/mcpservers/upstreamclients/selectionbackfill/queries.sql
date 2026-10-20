@@ -91,10 +91,11 @@ SELECT r.id AS mcp_server_id,
              )
            END
        )::boolean AS selected,
-       -- A client choice that is no longer usable. It is never replaced by
-       -- another client, so only a reconnection resolves it. An unusable
-       -- no-auth choice is not one: RecordUpstreamClientSelections replaces it
-       -- once a client is decided, so it is classified like a missing choice.
+       -- Any client choice, usable or not. A client choice is never replaced
+       -- by another client, so one that is not also selected is resolved only
+       -- by a reconnection. A no-auth choice is not one: when unusable,
+       -- RecordUpstreamClientSelections replaces it once a client is decided,
+       -- so it is classified like a missing choice.
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel
