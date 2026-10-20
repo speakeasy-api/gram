@@ -99,32 +99,13 @@ func (e *Engine) SignalQuery(ctx context.Context, tenant Tenant, window Window, 
 		return nil, signalFailure(err)
 	}
 	if plan.Request.Trigger == "manual" {
-		cohort, err := runSignalPlan(ctx, e.ch, signalquery.Query{
-			SQL: `SELECT uniqExact(evaluation_requested_at) AS request_times, min(evaluation_requested_at) AS requested_at
- FROM sigint_readings_v2 WHERE organization_id = ? AND project_id = toUUID(?) AND trigger_kind = 'manual' AND run_id = toUUID(?)
- LIMIT 1 SETTINGS max_execution_time = 5, timeout_before_checking_execution_speed = 0, max_rows_to_read = 25000000, max_memory_usage = 1000000000`,
-			Args: []any{tenant.OrganizationID, tenant.ProjectID, plan.Request.RunID},
-		})
+		scope, err := e.signalManualContext(ctx, plan.Context, plan.Request.RunID)
 		if err != nil {
 			return nil, err
 		}
-		if len(cohort) == 1 && cohort[0]["request_times"] == int64(1) {
-			stamp, ok := cohort[0]["requested_at"].(string)
-			if !ok {
-				return nil, fmt.Errorf("manual run has no request timestamp")
-			}
-			at, err := time.Parse(time.RFC3339Nano, stamp)
-			if err != nil {
-				return nil, fmt.Errorf("parse manual request timestamp: %w", err)
-			}
-			context := plan.Context
-			context.RequestedAt = &at
-			plan, err = signalquery.Compile(context, plan.Request)
-			if err != nil {
-				return nil, signalFailure(err)
-			}
-		} else if len(cohort) == 1 && cohort[0]["request_times"] != int64(0) {
-			return nil, newError(ErrUnsatisfiable, signalquery.Dataset, "run_id", "", "the manual run contains inconsistent request timestamps")
+		plan, err = signalquery.Compile(scope, plan.Request)
+		if err != nil {
+			return nil, signalFailure(err)
 		}
 	}
 	top, err := runSignalPlan(ctx, e.ch, plan.Groups)
@@ -133,7 +114,7 @@ func (e *Engine) SignalQuery(ctx context.Context, tenant Tenant, window Window, 
 	}
 	result := &SignalResult{
 		Metadata: SignalMetadata{
-			Selection: plan.Request.Selection, Trigger: plan.Request.Trigger, RunID: request.RunID,
+			Selection: plan.Request.Selection, Trigger: plan.Request.Trigger, RunID: plan.Request.RunID,
 			Step: plan.Context.Step, PhysicalResolution: "canonical", TimeAxis: "event_occurred_at", Unit: "original_message",
 			Population: "answered original-message readings that measured the selected signal or ordered level",
 			Coverage:   "unknown", QueriedAt: plan.Context.Now.Format(time.RFC3339Nano), Snapshot: "live", Exact: true,
@@ -220,6 +201,41 @@ func (e *Engine) SignalQuery(ctx context.Context, tenant Tenant, window Window, 
 	return result, nil
 }
 
+// signalManualContext pins a whole run to its one immutable request timestamp
+// before any canonical read can prune request-time partitions.
+func (e *Engine) signalManualContext(ctx context.Context, scope signalquery.Context, runID string) (signalquery.Context, error) {
+	cohort, err := runSignalPlan(ctx, e.ch, signalquery.Query{
+		SQL: `SELECT uniqExact(evaluation_requested_at) AS request_times, min(evaluation_requested_at) AS requested_at
+ FROM sigint_readings_v2 WHERE organization_id = ? AND project_id = toUUID(?) AND trigger_kind = 'manual' AND run_id = toUUID(?)
+ LIMIT 1 SETTINGS max_execution_time = 5, timeout_before_checking_execution_speed = 0, max_rows_to_read = 25000000, max_bytes_to_read = 4000000000, max_memory_usage = 1000000000`,
+		Args: []any{scope.OrganizationID, scope.ProjectID, runID},
+	})
+	if err != nil {
+		return scope, err
+	}
+	if len(cohort) != 1 {
+		return scope, fmt.Errorf("manual run has no request timestamp summary")
+	}
+	if cohort[0]["request_times"] == int64(0) {
+		// An absent run has an empty, expired canonical population.
+		scope.RequestedAt = new(time.Unix(0, 0).UTC())
+		return scope, nil
+	}
+	if cohort[0]["request_times"] != int64(1) {
+		return scope, newError(ErrUnsatisfiable, signalquery.Dataset, "run_id", "", "the manual run contains inconsistent request timestamps")
+	}
+	stamp, ok := cohort[0]["requested_at"].(string)
+	if !ok {
+		return scope, fmt.Errorf("manual run has no request timestamp")
+	}
+	at, err := time.Parse(time.RFC3339Nano, stamp)
+	if err != nil {
+		return scope, fmt.Errorf("parse manual request timestamp: %w", err)
+	}
+	scope.RequestedAt = &at
+	return scope, nil
+}
+
 func runSignalPlan(ctx context.Context, conn Querier, query signalquery.Query) ([]Row, error) {
 	plan := Plan{Dataset: signalquery.Dataset, Name: "signals.canonical_final", SQL: query.SQL, Args: query.Args, Columns: nil}
 	rows, err := plan.Run(ctx, conn)
@@ -231,6 +247,9 @@ func runSignalPlan(ctx context.Context, conn Querier, query signalquery.Query) (
 
 func signalFailure(err error) error {
 	if invalid, ok := errors.AsType[*signalquery.Error](err); ok {
+		if invalid.LimitExceeded {
+			return newError(ErrLimitExceeded, signalquery.Dataset, invalid.Field, "", invalid.Message)
+		}
 		return newError(ErrUnsatisfiable, signalquery.Dataset, invalid.Field, "", invalid.Message)
 	}
 	if exception, ok := errors.AsType[*clickhouse.Exception](err); ok {

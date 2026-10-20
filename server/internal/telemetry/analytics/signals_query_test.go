@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -130,9 +131,10 @@ func TestSignalScopeRetentionAndModeRules(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, stream.Summary["answered"], "nanosecond boundaries and request-time expiry must be honored")
 	require.EqualValues(t, 0, stream.Summary["matched_messages"])
-	request.Trigger, request.RunID = "manual", run.String()
+	request.Trigger, request.RunID = "manual", strings.ToUpper(run.String())
 	manualResult, err := engine.SignalQuery(t.Context(), tenant, window, "hour", request)
 	require.NoError(t, err)
+	require.Equal(t, run.String(), manualResult.Metadata.RunID)
 	require.EqualValues(t, 1, manualResult.Summary["matched_messages"], "exclusive mode uses the selected signal, not its probability")
 	request.Trigger, request.RunID = "stream", ""
 	request.Selection = signalquery.Selection{SensorID: orderedSensor.String(), MinimumLevel: new(1), Threshold: 0.6}
@@ -143,4 +145,21 @@ func TestSignalScopeRetentionAndModeRules(t *testing.T) {
 	historicalResult, err := engine.SignalQuery(t.Context(), tenant, Window{FromUnixNano: historical.EventOccurredAt.Add(-time.Minute).UnixNano(), ToUnixNano: historical.EventOccurredAt.Add(time.Minute).UnixNano()}, "minute", request)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, historicalResult.Summary["matched_messages"], "retention is not an event-age cutoff")
+}
+
+func TestSignalBudgetRefusalsRetainTheirErrorCode(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	ctx := signalquery.Context{OrganizationID: "example-org", ProjectID: uuid.NewString(), From: now.Add(-6 * time.Hour), To: now, Now: now, Step: "minute"}
+	selection := signalquery.Selection{SensorID: uuid.NewString(), SignalID: uuid.NewString(), Threshold: 0.5}
+	for _, request := range []signalquery.Request{
+		{Selection: selection, Points: 1},
+		{Selection: selection, Groups: signalquery.MaxGroups + 1},
+		{Selection: selection, Filters: []signalquery.Filter{{Dimension: signalquery.Dimension{Attribute: "department"}, Operator: "equals", Values: []string{strings.Repeat("x", signalquery.MaxSelectorBytes)}}}},
+	} {
+		_, err := signalquery.Compile(ctx, request)
+		var invalid *Error
+		require.ErrorAs(t, signalFailure(err), &invalid)
+		require.Equal(t, ErrLimitExceeded, invalid.Code)
+	}
 }

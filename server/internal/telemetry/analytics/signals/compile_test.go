@@ -39,6 +39,8 @@ func TestSignalLabelsAndIdentityAreBound(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, plan.Groups.SQL, key)
 	require.Contains(t, plan.Groups.Args, key)
+	require.NotContains(t, plan.Groups.SQL, "Engineering' OR 1=1")
+	require.Contains(t, plan.Groups.Args, "Engineering' OR 1=1")
 	require.Contains(t, plan.Groups.SQL, "FINAL WHERE organization_id = ? AND project_id = toUUID(?)")
 	require.Contains(t, plan.Groups.SQL, "trigger_kind = ? AND run_id = toUUID(?) AND sensor_id = toUUID(?)")
 	require.Len(t, plan.Groups.Args, strings.Count(plan.Groups.SQL, "?"))
@@ -82,4 +84,19 @@ func TestAutomaticResolutionReportsAnImpossiblePointBudget(t *testing.T) {
 	require.ErrorAs(t, err, &invalid)
 	require.Equal(t, "points", invalid.Field)
 	require.Contains(t, invalid.Message, "fewer groups")
+	require.True(t, invalid.LimitExceeded)
+}
+
+func TestManualValuesRequireResolvedRequestTime(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	ctx := Context{OrganizationID: "example-org", ProjectID: uuid.NewString(), From: now.Add(-time.Hour), To: now, Now: now}
+	scope := Scope{SensorID: uuid.NewString(), Trigger: "manual", RunID: uuid.NewString()}
+	_, err := CompileValues(ctx, scope, "attribute", "department", 10)
+	require.ErrorContains(t, err, "request timestamp")
+	ctx.RequestedAt = &now
+	query, err := CompileValues(ctx, scope, "attribute", "department", 10)
+	require.NoError(t, err)
+	require.Contains(t, query.SQL, "evaluation_requested_at = fromUnixTimestamp64Nano(?)")
+	require.Contains(t, query.Args, now.UnixNano())
 }

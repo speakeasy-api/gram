@@ -147,6 +147,9 @@ type Plan struct {
 
 // Error describes an actionable validation or cost refusal.
 type Error struct {
+	// LimitExceeded distinguishes a workload budget refusal from invalid semantics.
+	LimitExceeded bool
+
 	// Field identifies the input to correct.
 	Field string
 

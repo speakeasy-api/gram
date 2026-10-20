@@ -107,7 +107,7 @@ func run(parent context.Context, logger *slog.Logger) error {
 		clickhousecontainer.WithInitScripts("clickhouse/schema.sql"),
 		testcontainers.WithConfigModifier(func(config *dockercontainer.Config) { config.Hostname = "sigint-benchmark" }),
 		testcontainers.WithWaitStrategy(wait.ForExec([]string{"clickhouse-client", "--host", "sigint-benchmark", "--user", "benchmark", "--password", "benchmark", "--query", "SELECT 1"})),
-		testenv.WithPublishedPortWait("9000/tcp"), testenv.WithoutPublishedPorts())
+		testenv.WithPublishedPortWait("9000/tcp"), testenv.WithLoopbackPorts())
 	if err != nil {
 		return fmt.Errorf("start isolated engine: %w", err)
 	}
@@ -310,12 +310,36 @@ func run(parent context.Context, logger *slog.Logger) error {
 	if err := os.MkdirAll(filepath.Dir(*out), 0700); err != nil {
 		return fmt.Errorf("create benchmark report directory: %w", err)
 	}
-	if err := os.WriteFile(*out, append(data, '\n'), 0600); err != nil {
+	if err := writeReportData(ctx, *out, append(data, '\n')); err != nil {
 		return fmt.Errorf("write benchmark report: %w", err)
 	}
 	fmt.Printf("ClickHouse %s: %d logical readings, report %s\n", r.Version, total, *out)
 	for _, measurement := range r.Results {
 		fmt.Printf("%s: cold %.1fms, warm p50 %.1fms/p95 %.1fms, rows %d, oracle %t, refusal %s\n", measurement.Name, measurement.ColdMS, measurement.P50MS, measurement.P95MS, measurement.ReadRows, measurement.OracleMatched, measurement.Refusal)
+	}
+	return nil
+}
+
+// writeReportData replaces the report atomically without following a preexisting
+// destination symlink. Each checkpoint is a complete, owner-readable file.
+func writeReportData(ctx context.Context, path string, data []byte) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("report context: %w", err)
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), ".sigint-report-*")
+	if err != nil {
+		return fmt.Errorf("create report checkpoint: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return os.Remove(file.Name()) })
+	defer o11y.NoLogDefer(file.Close)
+	if _, err := file.Write(data); err != nil {
+		return fmt.Errorf("write report checkpoint: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close report checkpoint: %w", err)
+	}
+	if err := os.Rename(file.Name(), path); err != nil {
+		return fmt.Errorf("replace report checkpoint: %w", err)
 	}
 	return nil
 }

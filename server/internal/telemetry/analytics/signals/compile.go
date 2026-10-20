@@ -121,7 +121,7 @@ func predicate(selection Selection) (probability, population string, args []any)
 // Series compiles complete time series for groups selected across the full window.
 func (p *Plan) Series(keys []string) (Query, error) {
 	if len(keys) == 0 || len(keys) > p.Request.Groups {
-		return Query{}, &Error{Field: "groups", Message: "select at least one group within the group budget"}
+		return Query{}, &Error{Field: "groups", Message: "select at least one group within the group budget", LimitExceeded: true}
 	}
 	step := bucket(p.Context.Step)
 	q := sql.Select(step+" AS time_bucket", "group_key").Columns(measures...).
@@ -148,7 +148,8 @@ func build(builder squirrel.SelectBuilder, bounded bool) (Query, error) {
 }
 
 func validateScope(ctx *Context, request *Request) error {
-	invalid := func(field, message string) error { return &Error{Field: field, Message: message} }
+	invalid := func(field, message string) error { return &Error{Field: field, Message: message, LimitExceeded: false} }
+	limit := func(field, message string) error { return &Error{Field: field, Message: message, LimitExceeded: true} }
 	if _, err := uuid.Parse(ctx.ProjectID); err != nil || ctx.OrganizationID == "" {
 		return invalid("project", "an authorized organization and project are required")
 	}
@@ -177,7 +178,7 @@ func validateScope(ctx *Context, request *Request) error {
 		return invalid("trigger", "choose stream or manual")
 	}
 	if len(request.GroupBy) > 3 || len(request.Filters) > MaxFilters {
-		return invalid("dimensions", "use at most three groupings and twenty filters")
+		return limit("dimensions", "use at most three groupings and twenty filters")
 	}
 	seen := map[Dimension]bool{}
 	selectorBytes := 0
@@ -202,7 +203,10 @@ func validateScope(ctx *Context, request *Request) error {
 				return invalid("filters.values", "presence filters take no values")
 			}
 		case "equals", "in":
-			if len(filter.Values) == 0 || len(filter.Values) > MaxValues || filter.Operator == "equals" && len(filter.Values) != 1 {
+			if len(filter.Values) > MaxValues {
+				return limit("filters.values", "use at most 100 inclusion values")
+			}
+			if len(filter.Values) == 0 || filter.Operator == "equals" && len(filter.Values) != 1 {
 				return invalid("filters.values", "equals takes one value; in takes 1–100")
 			}
 		default:
@@ -210,7 +214,7 @@ func validateScope(ctx *Context, request *Request) error {
 		}
 	}
 	if selectorBytes > MaxSelectorBytes {
-		return invalid("filters", "attribute selectors exceed the 64 KiB query budget")
+		return limit("filters", "attribute selectors exceed the 64 KiB query budget")
 	}
 	if request.Groups == 0 {
 		request.Groups = DefaultGroups
@@ -219,7 +223,7 @@ func validateScope(ctx *Context, request *Request) error {
 		request.Points = DefaultPoints
 	}
 	if request.Groups < 1 || request.Groups > MaxGroups || request.Points < 1 || request.Points > MaxPoints {
-		return invalid("budget", "use 1–20 groups and 1–10000 total points")
+		return limit("budget", "use 1–20 groups and 1–10000 total points")
 	}
 	groups := request.Groups
 	if len(request.GroupBy) == 0 {
@@ -233,14 +237,14 @@ func validateScope(ctx *Context, request *Request) error {
 			}
 		}
 		if ctx.Step == "" || ctx.Step == "auto" {
-			return invalid("points", "no supported interval fits the point budget; use fewer groups or a larger point budget")
+			return limit("points", "no supported interval fits the point budget; use fewer groups or a larger point budget")
 		}
 	}
 	if bucket(ctx.Step) == "" {
 		return invalid("grain", "choose auto, minute, hour, day, week or calendar month")
 	}
 	if BucketCount(ctx.From, ctx.To, ctx.Step)*groups > request.Points {
-		return invalid("points", "the complete series exceeds the point budget; use auto, fewer groups or a shorter window")
+		return limit("points", "the complete series exceeds the point budget; use auto, fewer groups or a shorter window")
 	}
 	ctx.From, ctx.To, ctx.Now = ctx.From.UTC(), ctx.To.UTC(), ctx.Now.UTC()
 	return nil
@@ -249,13 +253,13 @@ func validateScope(ctx *Context, request *Request) error {
 func validateSelection(selection Selection) error {
 	if selection.MinimumLevel != nil {
 		if selection.SignalID != "" || *selection.MinimumLevel < 0 || *selection.MinimumLevel > 9 {
-			return &Error{Field: "selection.minimum_level", Message: "choose one zero-based ordered level (0–9), without signal_id"}
+			return &Error{Field: "selection.minimum_level", Message: "choose one zero-based ordered level (0–9), without signal_id", LimitExceeded: false}
 		}
 	} else if id, err := uuid.Parse(selection.SignalID); err != nil || id == uuid.Nil {
-		return &Error{Field: "selection.signal_id", Message: "name a signal or choose an ordered minimum_level"}
+		return &Error{Field: "selection.signal_id", Message: "name a signal or choose an ordered minimum_level", LimitExceeded: false}
 	}
 	if math.IsNaN(selection.Threshold) || math.IsInf(selection.Threshold, 0) || selection.Threshold <= 0 || selection.Threshold > 1 {
-		return &Error{Field: "selection.threshold", Message: "choose an explicit probability threshold greater than zero and at most one"}
+		return &Error{Field: "selection.threshold", Message: "choose an explicit probability threshold greater than zero and at most one", LimitExceeded: false}
 	}
 	return nil
 }
@@ -275,16 +279,30 @@ func canonicalSource(ctx Context, request Request) squirrel.SelectBuilder {
 	return source
 }
 
-// CompileValues discovers keys or values from winning snapshots, including absence.
-func CompileValues(ctx Context, scope Scope, name, attribute string, limit int) (Query, error) {
+// NormalizeScope validates discovery scope before any manual-run metadata read.
+func NormalizeScope(ctx Context, scope Scope) (Context, Scope, error) {
 	request := Request{Selection: Selection{SensorID: scope.SensorID, SignalID: "", MinimumLevel: nil, Threshold: 0}, Trigger: scope.Trigger, RunID: scope.RunID, GroupBy: nil, Filters: nil, Groups: 1, Points: MaxPoints}
 	ctx.Step = "auto"
 	if err := validateScope(&ctx, &request); err != nil {
+		return ctx, scope, err
+	}
+	scope.Trigger, scope.RunID = request.Trigger, request.RunID
+	return ctx, scope, nil
+}
+
+// CompileValues discovers keys or values from winning snapshots, including absence.
+func CompileValues(ctx Context, scope Scope, name, attribute string, limit int) (Query, error) {
+	ctx, scope, err := NormalizeScope(ctx, scope)
+	if err != nil {
 		return Query{}, err
 	}
-	if limit < 1 || limit > 200 {
-		return Query{}, &Error{Field: "limit", Message: "choose 1–200 values"}
+	if scope.Trigger == "manual" && ctx.RequestedAt == nil {
+		return Query{}, &Error{Field: "run_id", Message: "resolve the manual run's request timestamp before value discovery", LimitExceeded: false}
 	}
+	if limit < 1 || limit > 200 {
+		return Query{}, &Error{Field: "limit", Message: "choose 1–200 values", LimitExceeded: true}
+	}
+	request := Request{Selection: Selection{SensorID: scope.SensorID, SignalID: "", MinimumLevel: nil, Threshold: 0}, Trigger: scope.Trigger, RunID: scope.RunID, GroupBy: nil, Filters: nil, Groups: 1, Points: MaxPoints}
 	q := sql.Select().FromSelect(canonicalSource(ctx, request), "winners")
 	if name == "attribute_keys" && attribute == "" {
 		q = q.Column("arrayJoin(mapKeys(attributes)) AS value").Column("toUInt8(1) AS present")
@@ -293,10 +311,10 @@ func CompileValues(ctx Context, scope Scope, name, attribute string, limit int) 
 		if name == "attribute" {
 			d = Dimension{Field: "", Attribute: attribute}
 		} else if attribute != "" {
-			return Query{}, &Error{Field: "attribute", Message: "attribute keys require dimension=attribute"}
+			return Query{}, &Error{Field: "attribute", Message: "attribute keys require dimension=attribute", LimitExceeded: false}
 		}
 		if !validDimension(d) {
-			return Query{}, &Error{Field: "dimension", Message: "choose a system dimension, attribute_keys, or attribute with an exact key"}
+			return Query{}, &Error{Field: "dimension", Message: "choose a system dimension, attribute_keys, or attribute with an exact key", LimitExceeded: false}
 		}
 		expr, args := dimension(d)
 		q = q.Column("tupleElement("+expr+", 2) AS value", args...).Column("tupleElement("+expr+", 1) AS present", args...)
