@@ -5181,6 +5181,20 @@ func (q *Queries) SeedTrialDemotionAuditFixture(ctx context.Context, organizatio
 	return err
 }
 
+const seedTrialStartAuditFixture = `-- name: SeedTrialStartAuditFixture :one
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES ($1, 'system', 'user', 'organization:enterprise_trial_started', $1, 'organization')
+RETURNING id::text
+`
+
+// Test-only fixture: records an admin-started trial generation.
+func (q *Queries) SeedTrialStartAuditFixture(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, seedTrialStartAuditFixture, organizationID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const seedUnrelatedAuditHistoryFixture = `-- name: SeedUnrelatedAuditHistoryFixture :exec
 INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
 SELECT $1, 'user:<USER_ID>', 'user', 'unrelated:' || n, 'subject:<SUBJECT_ID>', 'subject', jsonb_build_object('key_type', $2::text)
