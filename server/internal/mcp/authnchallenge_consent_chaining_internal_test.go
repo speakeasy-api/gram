@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
@@ -152,7 +153,7 @@ func renderChainedCard(t *testing.T, check, message string, connected int) strin
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Client",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",

@@ -21,6 +21,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -147,7 +148,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
-	slug, mcpRouteBase string,
+	slug string, mcpRouteBase mcproute.Base,
 ) error {
 	ctx := r.Context()
 
@@ -556,16 +557,16 @@ func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
 // mcpRouteBase propagates into the resolved endpoint's
 // URL building on both the primary and fallback paths.
 //
-// mcpRouteBase "mcp/gateway" resolves slug as an organization slug to that
+// mcpRouteBase mcproute.OrganizationGateway resolves slug as an organization slug to that
 // organization's gateway instead.
-func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string) (*ResolvedMcpEndpoint, error) {
+func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug string, mcpRouteBase mcproute.Base) (*ResolvedMcpEndpoint, error) {
 	return s.loadResolvedMcpEndpointBySlug(ctx, logger, slug, mcpRouteBase, mcpmetrics.LegacyFallbackOAuth)
 }
 
 // loadResolvedMcpEndpointBySlug is LoadResolvedMcpEndpointBySlug with the
 // entry point its legacy fallback is attributed to.
-func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string, fallbackEntryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
-	if mcpRouteBase == organizationGatewayRouteBase {
+func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug string, mcpRouteBase mcproute.Base, fallbackEntryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
+	if mcpRouteBase == mcproute.OrganizationGateway {
 		gateway, err := s.loadOrganizationGateway(ctx, slug)
 		if err != nil {
 			return nil, err
@@ -578,7 +579,7 @@ func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 		if metaServer != nil {
 			// Meta-backed endpoints expose OAuth handlers only on the
 			// canonical /mcp surface, and only when issuer-gated.
-			if mcpRouteBase != "mcp" || !metaServer.UserSessionIssuerID.Valid {
+			if mcpRouteBase != mcproute.MCP || !metaServer.UserSessionIssuerID.Valid {
 				return nil, oops.E(oops.CodeNotFound, nil, "not found")
 			}
 			return s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, mcpRouteBase)
@@ -615,7 +616,7 @@ func (s *Service) BuildResolvedMcpEndpointForServer(
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
-	mcpRouteBase string,
+	mcpRouteBase mcproute.Base,
 ) (*ResolvedMcpEndpoint, error) {
 	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, mcpEndpoint.ProjectID)
 	switch {
@@ -1012,7 +1013,7 @@ func (s *Service) BuildResolvedMcpEndpointForMetaServer(
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
 	metaServer *metamcprepo.MetaMcpServer,
-	mcpRouteBase string,
+	mcpRouteBase mcproute.Base,
 ) (*ResolvedMcpEndpoint, error) {
 	resolved := NewResolvedMcpEndpointFromMetaMcpServer(mcpEndpoint, metaServer, metaServer.OrganizationID, mcpRouteBase)
 	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {

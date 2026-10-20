@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -219,7 +220,7 @@ func TestHandleIDPCallback_McpServerMismatchRejected(t *testing.T) {
 			McpSlug:        slug,
 			CustomDomainID: uuid.NullUUID{},
 			McpServerID:    uuid.NullUUID{UUID: uuid.New(), Valid: true},
-			RouteBase:      "mcp",
+			RouteBase:      mcproute.MCP,
 		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",

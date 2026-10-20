@@ -2111,3 +2111,15 @@ WHERE starts_with(datname, @prefix::text);
 -- Test-only fixture: records one participant snapshot on a captured message.
 INSERT INTO chat_message_participants (project_id, chat_id, message_id, provider, provider_user_id, user_id)
 VALUES (@project_id, @chat_id, @message_id, @provider, @provider_user_id, sqlc.narg(user_id));
+
+-- name: InsertToolsetKeyedMcpMetadataFixture :one
+-- Plants a row under the toolset key, as pods from before the server-key writers wrote.
+INSERT INTO mcp_metadata (toolset_id, project_id, instructions, header_display_names, default_environment_id, external_documentation_url)
+VALUES (@toolset_id, @project_id, @instructions, COALESCE(sqlc.narg('header_display_names')::jsonb, '{}'::jsonb), @default_environment_id, sqlc.narg('external_documentation_url'))
+RETURNING id;
+
+-- name: InsertToolsetKeyedPluginServerFixture :one
+-- Plants a plugin entry under the toolset key, as pods from before the server-key writers wrote.
+INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order, deleted_at)
+VALUES (@plugin_id, @toolset_id, @display_name, @policy, @sort_order, sqlc.narg('deleted_at'))
+RETURNING *;

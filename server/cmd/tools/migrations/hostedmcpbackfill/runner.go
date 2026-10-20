@@ -25,6 +25,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -34,6 +35,7 @@ const ActorComponent = "hosted-mcp-wrapper-backfill"
 const (
 	phaseWrappers   = "wrappers"
 	phaseDependents = "dependents"
+	phaseOrphans    = "orphans"
 )
 
 // defaultPageSize bounds each candidate page; rows are processed one transaction at a time regardless.
@@ -70,6 +72,13 @@ const (
 	// OutcomeBlockedUnattachable is an assistant attachment the assistants reader does not dial (toolset MCP off or no mcp slug).
 	OutcomeBlockedUnattachable Outcome = "blocked_unattachable"
 	OutcomeOrphaned            Outcome = "orphaned"
+
+	OutcomeWouldDelete Outcome = "would_delete"
+	OutcomeDeleted     Outcome = "deleted"
+	// OutcomeBlockedDistributed is an orphan plugin member a platform distribution references.
+	OutcomeBlockedDistributed Outcome = "blocked_distributed"
+	// OutcomeBlockedForeignConfig is orphan metadata with an env config in another project, which the delete would cascade to.
+	OutcomeBlockedForeignConfig Outcome = "blocked_foreign_config"
 )
 
 // Options controls one run.
@@ -92,7 +101,13 @@ type Options struct {
 	// MoveDependents re-keys toolset-keyed dependents onto the canonical wrapper instead of syncing wrappers.
 	MoveDependents bool
 
-	// Journal receives each dependent move before and after its commit; required to apply MoveDependents.
+	// CleanupOrphans removes toolset-keyed dependents whose toolset or project is deleted.
+	CleanupOrphans bool
+
+	// Publication enqueues a plugin publication request when the cleanup removes a member of a live project.
+	Publication plugins.PublicationRequests
+
+	// Journal receives each dependent write before and after its commit; required to apply MoveDependents or CleanupOrphans.
 	Journal Journal
 
 	// LockTimeout bounds each dependent move's lock waits; 0 selects defaultLockTimeout.
@@ -131,7 +146,13 @@ type RowReport struct {
 	DomainsToReconcile []uuid.UUID `json:"domains_to_reconcile,omitempty"`
 
 	// CollapsedTwin is the server-keyed row a dependent move removed, as rollback needs it.
-	CollapsedTwin *CollapsedTwin `json:"collapsed_twin,omitempty"`
+	CollapsedTwin *RowImage `json:"collapsed_twin,omitempty"`
+
+	// Removed names the orphan a -cleanup-orphans run deleted; row images go to the journal only.
+	Removed *RowImage `json:"removed,omitempty"`
+
+	// PublicationRequested reports a plugin publication request enqueued with an applied cleanup.
+	PublicationRequested bool `json:"publication_requested,omitempty"`
 }
 
 // Report summarizes a run.
@@ -180,7 +201,7 @@ func NewRunner(pool *pgxpool.Pool, options Options) *Runner {
 func (r *Runner) Run(ctx context.Context) (Report, error) {
 	report := Report{
 		Mode:                  conv.Ternary(r.options.Apply, "apply", "dry-run"),
-		Phase:                 conv.Ternary(r.options.MoveDependents, phaseDependents, phaseWrappers),
+		Phase:                 phaseWrappers,
 		Scanned:               0,
 		Toolsets:              0,
 		Outcomes:              map[Outcome]int{},
@@ -189,8 +210,15 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 		LastCursor:            r.options.Cursor,
 		Rows:                  nil,
 	}
-	if r.options.MoveDependents {
-		return r.runDependents(ctx, report)
+	switch {
+	case r.options.MoveDependents && r.options.CleanupOrphans:
+		return report, errors.New("the dependent move and the orphan cleanup are separate phases")
+	case r.options.MoveDependents:
+		report.Phase = phaseDependents
+		return r.runDependents(ctx, report, r.moveOne)
+	case r.options.CleanupOrphans:
+		report.Phase = phaseOrphans
+		return r.runDependents(ctx, report, r.cleanupOne)
 	}
 	after := r.options.Cursor
 	for {
@@ -254,7 +282,7 @@ func loadCanonical(ctx context.Context, tx pgx.Tx, toolset toolsetsrepo.Toolset)
 func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsetsRow) (RowReport, error) {
 	row := RowReport{
 		ToolsetID: candidate.ID, Table: "", RowID: nil, ProjectID: candidate.ProjectID, McpSlug: "", CustomDomainID: nil, Outcome: "", Reason: "",
-		Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil,
+		Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false,
 	}
 
 	tx, err := r.pool.Begin(ctx)

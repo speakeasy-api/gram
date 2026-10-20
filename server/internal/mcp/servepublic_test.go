@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -491,8 +492,12 @@ func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 	require.NoError(t, err)
 
 	instructions := "You have tools for searching the Test Hub. Use them wisely."
-	_, err = metadataRepo.UpsertMetadata(ctx, metadata_repo.UpsertMetadataParams{
-		ToolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
+	_, err = testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
+		ID: toolset.ID, ProjectID: toolset.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "public",
+	})
+	require.NoError(t, err)
+	_, err = metadataRepo.UpsertMetadataByMcpServerID(ctx, metadata_repo.UpsertMetadataByMcpServerIDParams{
+		McpServerID:              uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
 		LogoID:                   uuid.NullUUID{Valid: false},

@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -46,13 +47,7 @@ import (
 // The parameter is named mcpSlug, as on every other MCP route, because the
 // organization slug is this gateway's slug: the OAuth handlers it shares
 // with stored endpoints read it under that name.
-const OrganizationGatewayRoute = "/" + organizationGatewayRouteBase + "/{mcpSlug}"
-
-// organizationGatewayRouteBase is the ResolvedMcpEndpoint.RouteBase of an
-// organization gateway. URLs built from the endpoint (its resource, its OAuth
-// handlers, its consent page) land under it, and slug-based re-resolution
-// recognizes it.
-const organizationGatewayRouteBase = orggateway.RouteBase
+const OrganizationGatewayRoute = "/" + string(mcproute.OrganizationGateway) + "/{mcpSlug}"
 
 // organizationGatewayNamespace derives the synthetic meta-server id an
 // organization gateway reports. There is no meta_mcp_servers row behind it,
@@ -67,7 +62,7 @@ func organizationGatewayID(organizationID string) uuid.UUID {
 // IsOrganizationGateway reports whether the endpoint is an organization
 // gateway rather than a stored server or gateway.
 func (e *ResolvedMcpEndpoint) IsOrganizationGateway() bool {
-	return e.RouteBase == organizationGatewayRouteBase
+	return e.RouteBase == mcproute.OrganizationGateway
 }
 
 // organizationGateway is a resolved organization gateway: the synthetic rows
@@ -119,7 +114,7 @@ func (s *Service) shadowedEndpointHandler(name string, serve func(http.ResponseW
 			rctx = chi.NewRouteContext()
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 		}
-		if _, err := s.loadResolvedMcpEndpointBySlug(r.Context(), s.logger, shadowedEndpointSlug, "mcp", mcpmetrics.LegacyFallbackOrgGatewayProbe); err == nil {
+		if _, err := s.loadResolvedMcpEndpointBySlug(r.Context(), s.logger, shadowedEndpointSlug, mcproute.MCP, mcpmetrics.LegacyFallbackOrgGatewayProbe); err == nil {
 			rctx.URLParams.Add("mcpSlug", shadowedEndpointSlug)
 			endpointRoute.ServeHTTP(w, r)
 			return
@@ -184,7 +179,7 @@ func (s *Service) shadowedEndpointRoutes() []shadowedEndpointRoute {
 func attachOrganizationGateway(mux goahttp.Muxer, service *Service) {
 	o11y.AttachHandler(mux, http.MethodPost, OrganizationGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway).ServeHTTP)
 	for _, route := range service.shadowedEndpointRoutes() {
-		o11y.AttachHandler(mux, http.MethodPost, "/"+organizationGatewayRouteBase+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
+		o11y.AttachHandler(mux, http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
 	}
 	for _, route := range service.organizationGatewayOAuthRoutes() {
 		o11y.AttachHandler(mux, route.method, route.path, oops.ErrHandle(service.logger, service.withOrganizationGateway(route.serve)).ServeHTTP)
@@ -197,7 +192,7 @@ func attachOrganizationGateway(mux goahttp.Muxer, service *Service) {
 // authorization server.
 func attachOrganizationGatewayAuthenticationHost(host *AuthenticationHost, service *Service) {
 	for _, route := range service.shadowedEndpointRoutes() {
-		host.Handle(http.MethodPost, "/"+organizationGatewayRouteBase+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
+		host.Handle(http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
 	}
 	for _, route := range service.organizationGatewayOAuthRoutes() {
 		if route.onAuthenticationHost {
@@ -276,7 +271,7 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, organizationSlug 
 		Slug:      organization.Slug,
 	}
 
-	resolved := NewResolvedMcpEndpointFromMetaMcpServer(endpoint, metaServer, organization.ID, organizationGatewayRouteBase)
+	resolved := NewResolvedMcpEndpointFromMetaMcpServer(endpoint, metaServer, organization.ID, mcproute.OrganizationGateway)
 	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
 		return nil, err
 	}

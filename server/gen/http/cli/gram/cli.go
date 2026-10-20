@@ -530,8 +530,16 @@ func ParseEndpoint(
 		agentsRevokeSessionBodyFlag         = agentsRevokeSessionFlags.String("body", "REQUIRED", "")
 		agentsRevokeSessionSessionTokenFlag = agentsRevokeSessionFlags.String("session-token", "", "")
 
-		agentsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
-		agentsListSessionTokenFlag = agentsListFlags.String("session-token", "", "")
+		agentsListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
+		agentsListCursorFlag           = agentsListFlags.String("cursor", "", "")
+		agentsListLimitFlag            = agentsListFlags.String("limit", "50", "")
+		agentsListSearchFlag           = agentsListFlags.String("search", "", "")
+		agentsListNameOrderFlag        = agentsListFlags.String("name-order", "asc", "")
+		agentsListLifecycleFlag        = agentsListFlags.String("lifecycle", "", "")
+		agentsListOwnerUserIdsFlag     = agentsListFlags.String("owner-user-ids", "", "")
+		agentsListRegisteredAfterFlag  = agentsListFlags.String("registered-after", "", "")
+		agentsListRegisteredBeforeFlag = agentsListFlags.String("registered-before", "", "")
+		agentsListSessionTokenFlag     = agentsListFlags.String("session-token", "", "")
 
 		agentsCreateFlags            = flag.NewFlagSet("create", flag.ExitOnError)
 		agentsCreateBodyFlag         = agentsCreateFlags.String("body", "REQUIRED", "")
@@ -9712,7 +9720,7 @@ func ParseEndpoint(
 				data, err = agentsc.BuildRevokeSessionPayload(*agentsRevokeSessionBodyFlag, *agentsRevokeSessionSessionTokenFlag)
 			case "list":
 				endpoint = c.List()
-				data, err = agentsc.BuildListPayload(*agentsListSessionTokenFlag)
+				data, err = agentsc.BuildListPayload(*agentsListCursorFlag, *agentsListLimitFlag, *agentsListSearchFlag, *agentsListNameOrderFlag, *agentsListLifecycleFlag, *agentsListOwnerUserIdsFlag, *agentsListRegisteredAfterFlag, *agentsListRegisteredBeforeFlag, *agentsListSessionTokenFlag)
 			case "create":
 				endpoint = c.Create()
 				data, err = agentsc.BuildCreatePayload(*agentsCreateBodyFlag, *agentsCreateSessionTokenFlag)
@@ -14005,6 +14013,14 @@ func agentsRevokeSessionUsage() {
 func agentsListUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] agents list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -name-order STRING")
+	fmt.Fprint(os.Stderr, " -lifecycle JSON")
+	fmt.Fprint(os.Stderr, " -owner-user-ids JSON")
+	fmt.Fprint(os.Stderr, " -registered-after STRING")
+	fmt.Fprint(os.Stderr, " -registered-before STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -14013,11 +14029,19 @@ func agentsListUsage() {
 	fmt.Fprintln(os.Stderr, `List implements list.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -name-order STRING: `)
+	fmt.Fprintln(os.Stderr, `    -lifecycle JSON: `)
+	fmt.Fprintln(os.Stderr, `    -owner-user-ids JSON: `)
+	fmt.Fprintln(os.Stderr, `    -registered-after STRING: `)
+	fmt.Fprintln(os.Stderr, `    -registered-before STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list --cursor \"abc123\" --limit 2 --search \"abc123\" --name-order \"desc\" --lifecycle '[\n      \"suspended\"\n   ]' --owner-user-ids '[\n      \"abc123\"\n   ]' --registered-after \"1970-01-01T00:00:01Z\" --registered-before \"1970-01-01T00:00:01Z\" --session-token \"abc123\"")
 }
 
 func agentsCreateUsage() {
@@ -34222,7 +34246,7 @@ func workloadIdentitiesUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] workload-identities COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list: Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.`)
-	fmt.Fprintln(os.Stderr, `    list-platforms: List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `    list-platforms: List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    get-custom-flows: Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    list-token-endpoints: List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    register-issuer: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
@@ -34269,7 +34293,7 @@ func workloadIdentitiesListPlatformsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
