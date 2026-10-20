@@ -440,7 +440,7 @@ function resolveSkillByName(skills: Skill[], requestedName: string): Skill {
   );
 }
 
-export function buildAssistantTools(deps: ToolDeps) {
+function buildAssistantTools(deps: ToolDeps) {
   const { sdk, draft, organizationId } = deps;
 
   // Live mirror of the assistant — `draft` is closure-captured by streamText
@@ -1786,9 +1786,6 @@ export function buildAssistantTools(deps: ToolDeps) {
                     ) ??
                     environments.find(
                       (env) => env.slug === draft.assistantEnv?.slug,
-                    ) ??
-                    environments.find(
-                      (env) => env.name === envNameFor(a.name),
                     ));
               const populatedNames = new Set(
                 selected?.entries
@@ -2546,6 +2543,8 @@ export function buildAssistantTools(deps: ToolDeps) {
     finish_onboarding,
   };
 }
+
+export const assistantToolsTestUtils = { buildAssistantTools };
 
 type OnboardingTools = ReturnType<typeof buildAssistantTools>;
 export type OnboardingToolName = keyof OnboardingTools;

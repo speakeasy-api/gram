@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildAssistantTools } from "./useOnboardingTools";
+import { assistantToolsTestUtils } from "./useOnboardingTools";
 
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: vi.fn() }));
 vi.mock("@/elements", () => ({ defineFrontendTool: (tool: unknown) => tool }));
+
+const { buildAssistantTools } = assistantToolsTestUtils;
 
 const projectKey = "GOOGLE_CHAT_PROJECT_NUMBER";
 const accountKey = "GOOGLE_CHAT_SERVICE_ACCOUNT_JSON";
@@ -14,6 +16,7 @@ const populated = [projectKey, accountKey].map((name) => ({
 function fixture(
   entries: { name: string; value: string }[] | undefined,
   resume = false,
+  trustedEnvironment = true,
 ) {
   const assistant = {
     id: "assistant",
@@ -39,7 +42,7 @@ function fixture(
     environments: {
       list: vi.fn().mockResolvedValue({
         environments: [
-          { id: "other", slug: "other", entries: populated },
+          { id: "other", slug: "other", name: "Test", entries: populated },
           ...(entries === undefined
             ? []
             : [{ id: "selected", slug: "selected", entries }]),
@@ -57,7 +60,9 @@ function fixture(
   const draft = {
     assistantId: assistant.id,
     assistant,
-    assistantEnv: { id: "other", slug: "other" },
+    assistantEnv: trustedEnvironment
+      ? { id: "other", slug: "other" }
+      : undefined,
     invalidateAll: vi.fn(),
   };
   const tools = buildAssistantTools({
@@ -144,4 +149,29 @@ it("checks the stored environment on resume, not a populated override", async ()
   expect((await run("other")).ok).toBe(false);
   expect(sdk.triggers.resume).not.toHaveBeenCalled();
   expect(sdk.triggers.create).not.toHaveBeenCalled();
+});
+
+it("does not guess a populated same-name environment without a trusted reference", async () => {
+  const { sdk, run } = fixture(undefined, false, false);
+  sdk.environments.list.mockResolvedValue({
+    environments: [
+      {
+        id: "unrelated",
+        slug: "unrelated",
+        name: "Test env",
+        entries: populated,
+      },
+    ],
+  });
+  const result = await run("");
+  expect(result.ok).toBe(false);
+  for (const write of [
+    sdk.assistants.create,
+    sdk.assistants.update,
+    sdk.environments.create,
+    sdk.environments.updateBySlug,
+    sdk.triggers.create,
+    sdk.triggers.resume,
+  ])
+    expect(write).not.toHaveBeenCalled();
 });
