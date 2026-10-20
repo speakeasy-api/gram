@@ -67,6 +67,62 @@ const PLANNED: PickerEntry[] = [
   },
 ];
 
+/** The custom flow, which needs nothing from the catalog to work. */
+const CUSTOM_ENTRY: PickerEntry = {
+  key: CUSTOM_PLATFORM_KEY,
+  displayName: "Anything else",
+  description:
+    "Federate any OIDC issuer by entering its URLs yourself — a CI provider, a cluster, your own identity service.",
+  Icon: KeyRound,
+};
+
+/** One selectable tile in the picker. */
+function PlatformTile({
+  entry,
+  chosen,
+  disabled,
+  onSelect,
+}: {
+  entry: PickerEntry;
+  chosen: boolean;
+  disabled: boolean;
+  onSelect: (key: string) => void;
+}): JSX.Element {
+  return (
+    <li>
+      <label
+        className={cn(
+          "border-border flex h-full items-start gap-3 border p-3",
+          // The radio itself is hidden, so the tile has to carry the
+          // focus ring or keyboard focus lands nowhere visible.
+          "has-[input:focus-visible]:ring-ring/40 has-[input:focus-visible]:ring-1",
+          disabled ? "cursor-default" : "cursor-pointer",
+          chosen
+            ? "border-foreground bg-accent/40"
+            : !disabled && "hover:bg-muted/40",
+          disabled && !chosen && "opacity-60",
+        )}
+      >
+        <input
+          type="radio"
+          name="workload-platform"
+          className="sr-only"
+          checked={chosen}
+          disabled={disabled}
+          onChange={() => onSelect(entry.key)}
+        />
+        <PlatformMark entry={entry} />
+        <span className="min-w-0 flex-1">
+          <span className="block">{entry.displayName}</span>
+          <Text muted small className="block">
+            {entry.description}
+          </Text>
+        </span>
+      </label>
+    </li>
+  );
+}
+
 /**
  * The platforms this flow can federate a token from: the catalog entries the
  * server ships a guided setup for. An entry without one is left out rather
@@ -101,22 +157,31 @@ export function WorkloadPlatformPicker({
         description: entry.description,
         icon: entry.icon,
       })),
-    {
-      key: CUSTOM_PLATFORM_KEY,
-      displayName: "Anything else",
-      description:
-        "Federate any OIDC issuer by entering its URLs yourself — a CI provider, a cluster, your own identity service.",
-      Icon: KeyRound,
-    },
+    CUSTOM_ENTRY,
   ];
 
+  // A catalog outage hides the catalog platforms, and nothing more: the custom
+  // flow asks the operator for the URLs, so it still works and is offered.
   if (isError) {
     return (
-      <div role="alert" className="space-y-3">
-        <Text>Could not load the platforms Speakeasy can federate from.</Text>
+      <div className="space-y-3">
+        <div role="alert">
+          <Text>
+            The platforms Speakeasy ships a setup for could not be loaded. You
+            can still federate an issuer by entering its URLs yourself.
+          </Text>
+        </div>
         <Button variant="secondary" onClick={onRetry}>
           Try again
         </Button>
+        <ul className="grid gap-3 sm:grid-cols-2">
+          <PlatformTile
+            entry={CUSTOM_ENTRY}
+            chosen={CUSTOM_ENTRY.key === selectedKey}
+            disabled={disabled}
+            onSelect={onSelect}
+          />
+        </ul>
       </div>
     );
   }
@@ -152,42 +217,15 @@ export function WorkloadPlatformPicker({
     <div className="space-y-3">
       <p className="text-eyebrow">Platform</p>
       <ul className="grid gap-3 sm:grid-cols-2">
-        {available.map((entry) => {
-          const chosen = entry.key === selectedKey;
-          return (
-            <li key={entry.key}>
-              <label
-                className={cn(
-                  "border-border flex h-full items-start gap-3 border p-3",
-                  // The radio itself is hidden, so the tile has to carry the
-                  // focus ring or keyboard focus lands nowhere visible.
-                  "has-[input:focus-visible]:ring-ring/40 has-[input:focus-visible]:ring-1",
-                  disabled ? "cursor-default" : "cursor-pointer",
-                  chosen
-                    ? "border-foreground bg-accent/40"
-                    : !disabled && "hover:bg-muted/40",
-                  disabled && !chosen && "opacity-60",
-                )}
-              >
-                <input
-                  type="radio"
-                  name="workload-platform"
-                  className="sr-only"
-                  checked={chosen}
-                  disabled={disabled}
-                  onChange={() => onSelect(entry.key)}
-                />
-                <PlatformMark entry={entry} />
-                <span className="min-w-0 flex-1">
-                  <span className="block">{entry.displayName}</span>
-                  <Text muted small className="block">
-                    {entry.description}
-                  </Text>
-                </span>
-              </label>
-            </li>
-          );
-        })}
+        {available.map((entry) => (
+          <PlatformTile
+            key={entry.key}
+            entry={entry}
+            chosen={entry.key === selectedKey}
+            disabled={disabled}
+            onSelect={onSelect}
+          />
+        ))}
         {soon.map((entry) => (
           <li key={entry.key}>
             <div

@@ -25,8 +25,10 @@ type Service interface {
 	// workload:read.
 	List(context.Context, *ListPayload) (res *WorkloadIdentityPolicy, err error)
 	// List the platforms the catalog offers to trust without looking anything up,
-	// each with the guided setup that connects it. The same for every
-	// organization. Requires workload:read.
+	// each with the policy that trusting it writes: the issuer and signing keys it
+	// is recognised by, the values the operator supplies, and the access rule it
+	// produces. How the setup is explained belongs to the dashboard. The same for
+	// every organization. Requires workload:read.
 	ListPlatforms(context.Context, *ListPlatformsPayload) (res *WorkloadPlatformCatalog, err error)
 	// Get the forms for trusting a platform the catalog does not list and allowing
 	// its workloads: registering and editing a trusted platform, and allowing and

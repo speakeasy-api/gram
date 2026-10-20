@@ -42,7 +42,15 @@ export function VariableField({
         value={value}
         placeholder={variable.placeholder}
         aria-invalid={problem !== null}
-        aria-describedby={problem !== null ? `${id}-error` : undefined}
+        // Only one of the two is ever on screen, so each case points at its
+        // own id rather than naming a box that is not rendered.
+        aria-describedby={
+          problem !== null
+            ? `${id}-error`
+            : variable.help !== undefined
+              ? `${id}-help`
+              : undefined
+        }
         onChange={onChange}
       />
       {problem !== null ? (
@@ -51,7 +59,7 @@ export function VariableField({
         </Text>
       ) : (
         variable.help !== undefined && (
-          <Text muted small>
+          <Text id={`${id}-help`} muted small>
             {variable.help}
           </Text>
         )
@@ -83,10 +91,13 @@ export function TextField({
         id={id}
         value={value}
         placeholder={placeholder}
+        // Without this the help reads as loose text beside the field and a
+        // screen reader announces the label alone.
+        aria-describedby={help !== undefined ? `${id}-help` : undefined}
         onChange={onChange}
       />
       {help !== undefined && (
-        <Text muted small>
+        <Text id={`${id}-help`} muted small>
           {help}
         </Text>
       )}

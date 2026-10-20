@@ -1078,9 +1078,12 @@ export function ProvisionWizard({
           return (
             <WizardFooter
               note={
-                platform === undefined
+                // The custom flow has no catalog entry, so a chosen platform
+                // can still leave `platform` undefined. Asking the key keeps
+                // the note from telling the reader to choose again.
+                platformKey === null
                   ? "Choose the platform whose tokens this agent will present."
-                  : `${platform.displayName} issues the tokens; the next step sets it up.`
+                  : `${platform?.displayName ?? "Your platform"} issues the tokens; the next step sets it up.`
               }
               onBack={() => setStep(1)}
               primary={

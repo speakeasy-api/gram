@@ -50,7 +50,7 @@ var _ = Service("workloadIdentities", func() {
 	})
 
 	Method("listPlatforms", func() {
-		Description("List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.")
+		Description("List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.")
 
 		Payload(func() {
 			security.SessionPayload()
