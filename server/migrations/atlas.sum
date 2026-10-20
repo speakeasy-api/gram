@@ -1,4 +1,4 @@
-h1:z0A+9How/p+uyGvhsSIWAXvMgECN9AxBkBnkBW4vKaA=
+h1:Jby6sTyNPxY2GOPisCoo7iyU+yJnSkX8WP/TRaUByJI=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -482,4 +482,4 @@ h1:z0A+9How/p+uyGvhsSIWAXvMgECN9AxBkBnkBW4vKaA=
 20261020114240_mcp-server-remote-session-clients.sql h1:yLvDIk+i1gdJzKHwIaqfCYY3AH0XsunSueFBRL/7cQQ=
 20261020132943_retire-higher-order-tools.sql h1:hGtiVL680sq7WgUZmFYXY2fvN3PJzyVBilZHnl3eRCw=
 20261020135218_credential-upstream-client-selections.sql h1:SiBc0M0HySAbFrVP5P8qcz8WctLYJclUZbr1jnR0Yzo=
-20261020154911_assistant_kit_runtime_authority.sql h1:H8E0Z01QekK7IFkfzU2jfxMCQ5aa2KcO10YVqlwyfnw=
+20261020161723_assistant_kit_runtime_authority.sql h1:9AWWfrVB+axZHN69WUNOGTxUNeTsCDHQ9h2/hyZwxsQ=

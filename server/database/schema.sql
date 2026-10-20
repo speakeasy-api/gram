@@ -15067,9 +15067,12 @@ CREATE TABLE IF NOT EXISTS assistant_kit_sessions (
   acp_session_id TEXT NOT NULL CHECK (acp_session_id <> ''),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT assistant_kit_sessions_pkey PRIMARY KEY (id),
-  CONSTRAINT assistant_kit_sessions_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id) ON DELETE SET NULL,
-  CONSTRAINT assistant_kit_sessions_runtime_id_fkey FOREIGN KEY (project_id, runtime_id) REFERENCES assistant_runtimes (project_id, id) ON DELETE SET NULL,
-  CONSTRAINT assistant_kit_sessions_assistant_thread_id_fkey FOREIGN KEY (project_id, assistant_thread_id) REFERENCES assistant_threads (project_id, id) ON DELETE SET NULL
+  CONSTRAINT assistant_kit_sessions_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_kit_sessions_assistant_id_tenant_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id),
+  CONSTRAINT assistant_kit_sessions_runtime_id_fkey FOREIGN KEY (runtime_id) REFERENCES assistant_runtimes (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_kit_sessions_runtime_id_tenant_fkey FOREIGN KEY (project_id, runtime_id) REFERENCES assistant_runtimes (project_id, id),
+  CONSTRAINT assistant_kit_sessions_assistant_thread_id_fkey FOREIGN KEY (assistant_thread_id) REFERENCES assistant_threads (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_kit_sessions_assistant_thread_id_tenant_fkey FOREIGN KEY (project_id, assistant_thread_id) REFERENCES assistant_threads (project_id, id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_kit_sessions_runtime_thread_key
   ON assistant_kit_sessions (runtime_id, assistant_thread_id);
@@ -15093,8 +15096,10 @@ CREATE TABLE IF NOT EXISTS assistant_kit_gateway_credentials (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT assistant_kit_gateway_credentials_pkey PRIMARY KEY (id),
-  CONSTRAINT assistant_kit_gateway_credentials_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id) ON DELETE SET NULL,
-  CONSTRAINT assistant_kit_gateway_credentials_runtime_id_fkey FOREIGN KEY (project_id, runtime_id) REFERENCES assistant_runtimes (project_id, id) ON DELETE SET NULL
+  CONSTRAINT assistant_kit_gateway_credentials_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_kit_gateway_credentials_assistant_id_tenant_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id),
+  CONSTRAINT assistant_kit_gateway_credentials_runtime_id_fkey FOREIGN KEY (runtime_id) REFERENCES assistant_runtimes (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_kit_gateway_credentials_runtime_id_tenant_fkey FOREIGN KEY (project_id, runtime_id) REFERENCES assistant_runtimes (project_id, id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_kit_gateway_credentials_runtime_key
   ON assistant_kit_gateway_credentials (runtime_id);
@@ -15119,10 +15124,14 @@ CREATE TABLE IF NOT EXISTS assistant_kit_interrupt_requests (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   acknowledged_at timestamptz,
   PRIMARY KEY (id),
-  CONSTRAINT assistant_kit_interrupt_requests_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id) ON DELETE SET NULL,
-  CONSTRAINT assistant_kit_interrupt_requests_runtime_id_fkey FOREIGN KEY (project_id, runtime_id) REFERENCES assistant_runtimes (project_id, id) ON DELETE SET NULL,
-  CONSTRAINT assistant_kit_interrupt_requests_assistant_thread_id_fkey FOREIGN KEY (project_id, assistant_thread_id) REFERENCES assistant_threads (project_id, id) ON DELETE SET NULL,
-  CONSTRAINT assistant_kit_interrupt_requests_event_id_fkey FOREIGN KEY (project_id, event_id) REFERENCES assistant_thread_events (project_id, id) ON DELETE SET NULL
+  CONSTRAINT assistant_kit_interrupt_requests_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_kit_interrupt_requests_assistant_id_tenant_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id),
+  CONSTRAINT assistant_kit_interrupt_requests_runtime_id_fkey FOREIGN KEY (runtime_id) REFERENCES assistant_runtimes (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_kit_interrupt_requests_runtime_id_tenant_fkey FOREIGN KEY (project_id, runtime_id) REFERENCES assistant_runtimes (project_id, id),
+  CONSTRAINT assistant_kit_interrupt_requests_assistant_thread_id_fkey FOREIGN KEY (assistant_thread_id) REFERENCES assistant_threads (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_kit_interrupt_requests_assistant_thread_id_tenant_fkey FOREIGN KEY (project_id, assistant_thread_id) REFERENCES assistant_threads (project_id, id),
+  CONSTRAINT assistant_kit_interrupt_requests_event_id_fkey FOREIGN KEY (event_id) REFERENCES assistant_thread_events (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_kit_interrupt_requests_event_id_tenant_fkey FOREIGN KEY (project_id, event_id) REFERENCES assistant_thread_events (project_id, id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_kit_interrupt_requests_attempt_key
   ON assistant_kit_interrupt_requests (project_id, runtime_id, event_id, attempt);
