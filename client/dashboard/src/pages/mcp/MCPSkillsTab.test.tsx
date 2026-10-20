@@ -209,8 +209,11 @@ describe("MCPSkillsTab", () => {
 
   it("reads each skill's last load over MCP from the skill", () => {
     renderTab();
-    expect(screen.getByText("Never")).toBeDefined();
-    expect(screen.getAllByText(/ago/).length).toBeGreaterThan(0);
+    const row = (name: string) =>
+      screen.getByRole("link", { name }).closest("tr")?.textContent ?? "";
+    expect(row("Skill 1")).toMatch(/5 minutes ago/);
+    expect(row("Skill 1")).not.toMatch(/Never/);
+    expect(row("Skill 2")).toMatch(/Never/);
   });
 
   it("hides add and remove from readers who can't change the server", () => {
@@ -277,6 +280,15 @@ describe("MCPSkillsTabRoute", () => {
     expect(screen.getByTestId("navigate").textContent).toBe(
       "/mcp/toolset-a/overview",
     );
+    expect(state.links).not.toHaveBeenCalled();
+  });
+
+  it("walls readers without skill read on this project", () => {
+    state.grants = [
+      { scope: "skill:read", selectors: [{ resourceId: "project-b" }] },
+    ];
+    renderTab(<MCPSkillsTabRoute toolset={toolset} />);
+    expect(screen.getByText("Access restricted")).toBeDefined();
     expect(state.links).not.toHaveBeenCalled();
   });
 

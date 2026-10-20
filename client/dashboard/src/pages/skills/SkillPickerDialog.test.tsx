@@ -238,6 +238,11 @@ describe("MCP link skill picker", () => {
   it("does not load the collection without project skill read", () => {
     state.grants = [grant("skill:read", "skill-a")];
     render(linkPicker());
+    expect(state.skillsQuery).toHaveBeenCalledWith(
+      { limit: 200, gramProject: "project-a", gramSession: "session-a" },
+      undefined,
+      { throwOnError: false, enabled: false },
+    );
     expect(screen.queryByRole("checkbox")).toBeNull();
   });
 });

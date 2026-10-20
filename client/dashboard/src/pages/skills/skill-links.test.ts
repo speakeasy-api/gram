@@ -51,6 +51,14 @@ describe("skillLinkTargetKey", () => {
     ).not.toBe(
       skillLinkTargetKey({ kind: "meta_mcp_server", metaMcpServerId: "a" }),
     );
+    expect(
+      skillLinkTargetKey({ kind: "mcp_server", mcpServerId: "a" }),
+    ).not.toBe(skillLinkTargetKey({ kind: "mcp_server", mcpServerId: "b" }));
+    expect(
+      skillLinkTargetKey({ kind: "meta_mcp_server", metaMcpServerId: "a" }),
+    ).not.toBe(
+      skillLinkTargetKey({ kind: "meta_mcp_server", metaMcpServerId: "b" }),
+    );
   });
 });
 

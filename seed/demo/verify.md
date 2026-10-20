@@ -563,6 +563,23 @@ that URL.
     - Select Direct in Inspect and apply/reconnect, then restore the gateway default to Progressive. Confirm the explicit Direct connection stays Direct while a connection using the gateway default follows Progressive.
     - Connect a client to the organization gateway (`<server>/mcp/gateway/<org>`), choose Direct under Configuration on the consent page, and confirm tools/list shows `server--tool` names from every project you can reach. Reconnect: Direct is pre-selected. A connection that keeps the default lists the Progressive tools.
 
+32. **Skills served over MCP** (needs the `skills-over-mcp` flag on for the
+    organization)
+    - Open **MCP → Acme Support Tools → Skills**. It lists Support Refunds and
+      Triage Incident, each with a Latest badge and a "Last loaded over MCP"
+      value. As a writer, **Add skill** opens a picker without those two and
+      each row has a remove button.
+    - Open **MCP → Acme Agent Gateway → Skills**. It lists Triage Incident and
+      Runbook.
+    - Open **Skills → Runbook → Usage**. "Served over MCP" lists Acme Agent
+      Gateway (opens the gateway's Skills tab) and Organization gateway, and
+      there is no **Add to organization gateway** button. Support Refunds
+      lists only Acme Support Tools and offers the button to project writers.
+    - In the read-only demo org no add or remove control shows. With the flag
+      off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
+      returns to the server or gateway overview, and the skill page has no
+      "Served over MCP" section.
+
 ## On failure
 
 Fix the seed (see rules in `PAGES.md`), then re-run the target that owns
