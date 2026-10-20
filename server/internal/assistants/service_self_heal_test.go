@@ -181,6 +181,8 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 	for i := 1; i < len(after); i++ {
 		require.True(t, before[i].OriginalMessageID.Valid)
 		require.Equal(t, before[i].OriginalMessageID, after[i].OriginalMessageID)
+		require.Equal(t, chat.CaptureSynthetic, before[i].CaptureKind.String)
+		require.Equal(t, chat.CaptureSynthetic, after[i].CaptureKind.String)
 	}
 }
 

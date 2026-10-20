@@ -25,6 +25,7 @@ func TestConversationLineageIsPreserved(t *testing.T) {
 	t.Parallel()
 	m := message()
 	m.SetCaptureKind("original")
+	m.SetOriginalMessageId("original-message")
 	row := storedMessage(m)
 	row.Generation, row.Seq = 3, 57
 	event := (&conversationInput{message: m, stored: row}).Event()
@@ -32,7 +33,7 @@ func TestConversationLineageIsPreserved(t *testing.T) {
 	require.EqualValues(t, 3, context.GetGeneration())
 	require.EqualValues(t, 57, context.GetSequence())
 	require.Equal(t, "original", context.GetCaptureKind())
-	context.SetOriginalMessageId("original-message")
+	require.Equal(t, "original-message", context.GetOriginalMessageId())
 	outcomeContext := outcomeEvent(event.Subject).GetConversationMessage()
 	require.EqualValues(t, 3, outcomeContext.GetGeneration())
 	require.EqualValues(t, 57, outcomeContext.GetSequence())
