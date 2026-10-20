@@ -75,7 +75,7 @@ func (db *kitBindingDB) QueryRow(_ context.Context, query string, _ ...any) pgx.
 			return kitBindingRow{values: kitBindingValues(*db.domain)}
 		}
 		return kitBindingRow{err: pgx.ErrNoRows}
-	case strings.Contains(query, "-- name: GetUserSessionIssuerByID"):
+	case strings.Contains(query, "-- name: GetKitUserSessionIssuerByID"):
 		if db.organization == "other-org" {
 			return kitBindingRow{err: pgx.ErrNoRows}
 		}
@@ -93,7 +93,7 @@ func kitBindingURL(t *testing.T, raw string) *url.URL {
 
 func TestKitMCPAuthoritativeBinding(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"valid", "wrong-issuer-id", "wrong-issuer-url", "foreign-origin", "ungated", "disabled", "meta-private-network", "meta-invalid-network", "meta-dual-network", "private-network", "invalid-network", "dual-network", "public-tunnel", "foreign-project", "foreign-issuer-tenant", "shared", "wrong-shared-pin", "auth-host", "local-relay", "escaped-path", "legacy", "legacy-disabled", "custom-domain", "inactive-domain"} {
+	for _, scenario := range []string{"valid", "platform-host-case", "custom-host-case", "wrong-issuer-id", "wrong-issuer-url", "foreign-origin", "ungated", "disabled", "meta-private-network", "meta-invalid-network", "meta-dual-network", "private-network", "invalid-network", "dual-network", "public-tunnel", "foreign-project", "foreign-issuer-tenant", "shared", "wrong-shared-pin", "auth-host", "local-relay", "escaped-path", "legacy", "legacy-disabled", "custom-domain", "inactive-domain"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			project, issuer, serverID := uuid.New(), uuid.New(), uuid.New()
@@ -111,6 +111,15 @@ func TestKitMCPAuthoritativeBinding(t *testing.T) {
 			good := false
 			switch scenario {
 			case "valid":
+				good = true
+			case "platform-host-case":
+				resource = kitBindingURL(t, "https://API.EXAMPLE.COM/mcp/attached")
+				expected = resource
+				good = true
+			case "custom-host-case":
+				resource = kitBindingURL(t, "https://MCP.CUSTOMER.EXAMPLE/mcp/attached")
+				expected = resource
+				db.domain = &customdomainsrepo.CustomDomain{ID: uuid.New(), OrganizationID: request.OrganizationID, Domain: "mcp.customer.example", Verified: true, Activated: true}
 				good = true
 			case "wrong-issuer-id":
 				request.UserSessionIssuerID = uuid.New()

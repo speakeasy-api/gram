@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const MaxMessageBytes = 8 << 20
@@ -130,7 +131,13 @@ func Dial(ctx context.Context, endpoint, token string, hc *guardian.HTTPClient, 
 		return nil, nil, errors.New("missing ACP initialize result")
 	}
 	if err := c.attach(ctx, ""); err != nil {
-		cancel()
+		// Initialize already allocated server-side connection state. Caller
+		// cancellation must not prevent bounded cleanup of that connection.
+		cleanup, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer stop()
+		if closeErr := c.CloseTransport(cleanup); closeErr != nil {
+			return nil, nil, errors.Join(err, fmt.Errorf("close unattached ACP connection: %w", closeErr))
+		}
 		return nil, nil, err
 	}
 	return c, msg.Result, nil

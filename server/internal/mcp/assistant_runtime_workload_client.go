@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -38,6 +39,13 @@ func (s *Service) ProvisionAssistantRuntimeWorkloadClient(ctx context.Context, r
 		return ProvisionedAssistantWorkloadClient{}, fmt.Errorf("begin assistant workload client transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	runtime, err := usersessions_repo.New(tx).GetAssistantWorkloadRuntime(ctx, runtimeID)
+	if err != nil {
+		return ProvisionedAssistantWorkloadClient{}, fmt.Errorf("resolve runtime for lifecycle fence: %w", err)
+	}
+	if err := assistantrepo.New(tx).AcquireAssistantAdvisoryLock(ctx, runtime.AssistantID.String()); err != nil {
+		return ProvisionedAssistantWorkloadClient{}, fmt.Errorf("acquire runtime lifecycle fence: %w", err)
+	}
 	result, err := s.provisionAssistantRuntimeWorkloadClientLocked(ctx, tx, runtimeID, c)
 	if err != nil {
 		return ProvisionedAssistantWorkloadClient{}, err

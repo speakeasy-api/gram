@@ -13,6 +13,9 @@ import (
 
 // BindKitSession resolves Kit's existing provider attribution to the control
 // plane's chat. The guest does not receive or persist a control-plane chat ID.
+// The native key authorizes a runtime generation, not an individual invocation.
+// Session attribution selects only a persisted binding inside that authority;
+// it neither grants cross-runtime access nor asserts per-turn isolation.
 func (m *Manager) BindKitSession(ctx context.Context, providerID uuid.UUID) (context.Context, error) {
 	identity, ok := ctx.Value(inferenceContextKey{}).(assistantidentity.Identity)
 	runtimeID, hasRuntime := ctx.Value(inferenceRuntimeContextKey{}).(uuid.UUID)

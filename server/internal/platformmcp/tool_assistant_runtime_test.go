@@ -135,6 +135,20 @@ func TestAssistantRuntimeToolContract(t *testing.T) {
 	for _, field := range []string{"project_id", "assistant_id", "runtime_version", "expected_runtime_version", "confirmed"} {
 		require.Contains(t, string(a.InputSchema), field)
 	}
-	require.Contains(t, a.Description, "project:write")
+	require.Contains(t, a.Description, "assistant:write")
+	require.Contains(t, a.Description, "organization administrator")
+	require.NotContains(t, a.Description, "project:write")
 	require.Contains(t, a.Description, "not authorization")
+}
+
+func TestAssistantRuntimePermissionDescription(t *testing.T) {
+	t.Parallel()
+	result, ok := assistantRuntimeToolResult(oops.C(oops.CodeForbidden))
+	require.True(t, ok)
+	require.True(t, result.IsError)
+	content, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, content.Text, "assistant:write")
+	require.Contains(t, content.Text, "organization administrator")
+	require.NotContains(t, content.Text, "project:write")
 }

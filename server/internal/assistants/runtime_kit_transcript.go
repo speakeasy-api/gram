@@ -168,6 +168,7 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 		return out, err
 	case "state_update":
 		out.ForegroundState, out.StopReason = u.State, u.StopReason
+		terminalMessage := false
 		if u.State == "idle" && u.StopReason != "" && u.MessageID != "" {
 			id := KitTranscriptMessageID(b, "agent_message", u.MessageID)
 			changed, err := p.writer.ProjectMessage(ctx, b.ProjectID, id, func(ctx context.Context, tx pgx.Tx) error { return p.guard(ctx, tx, b) }, func(old *chatrepo.ChatMessage) (chat.MessageWrite, bool, error) {
@@ -176,6 +177,7 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 					var write chat.MessageWrite
 					return write, false, nil
 				}
+				terminalMessage = true
 				terminal := u
 				terminal.SessionUpdate = "agent_message"
 				terminal.Content = nil
@@ -190,7 +192,7 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 
 		// This marks only the dashboard foreground turn. Never use it as a snapshot fence.
 		err := p.guarded(ctx, b, func(_ pgx.Tx) error {
-			if u.State == "idle" {
+			if terminalMessage {
 				var frame chat.TurnFrame
 				frame.Kind = chat.TurnFrameDone
 				_, _ = p.stream.Publish(ctx, b.ChatID, frame)

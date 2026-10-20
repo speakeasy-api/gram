@@ -26,6 +26,7 @@ func TestTransport(t *testing.T) {
 	var mu sync.Mutex
 	streams := map[string]chan string{}
 	var canceled, deleted, prompts atomic.Int32
+	promptReceived := make(chan struct{})
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/acp/v2" || r.Header.Get("Authorization") != "Bearer test-secret" {
 			t.Error("bad endpoint/auth")
@@ -70,6 +71,7 @@ func TestTransport(t *testing.T) {
 				result = `{}`
 			case "session/prompt":
 				prompts.Add(1)
+				close(promptReceived)
 				return
 			}
 			ch <- fmt.Sprintf("id: ignored\ndata: {\ndata: \"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", m.ID, result)
@@ -139,10 +141,20 @@ func TestTransport(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
-	short, stop := context.WithTimeout(ctx, 30*time.Millisecond)
+	promptCtx, stop := context.WithCancel(ctx)
 	defer stop()
-	_, err = c.Call(short, "session/prompt", json.RawMessage(`{"sessionId":"s1","prompt":[]}`), "s1")
-	if !errors.Is(err, context.DeadlineExceeded) {
+	callDone := make(chan error, 1)
+	go func() {
+		_, callErr := c.Call(promptCtx, "session/prompt", json.RawMessage(`{"sessionId":"s1","prompt":[]}`), "s1")
+		callDone <- callErr
+	}()
+	select {
+	case <-promptReceived:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	stop()
+	if err := <-callDone; !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 	if prompts.Load() != 1 || canceled.Load() != 0 {
@@ -383,5 +395,56 @@ func TestTransportFailurePreservesSanitizedCause(t *testing.T) {
 	wrapped := &TransportError{cause: secretCause}
 	if !errors.Is(wrapped, secretCause) || strings.Contains(wrapped.Error(), secretCause.Error()) {
 		t.Fatal("cause must be accessible without leaking into error text")
+	}
+}
+
+func TestDialClosesConnectionWhenStreamAttachFails(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"rejected stream", "canceled setup", "failed cleanup"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var initialized, deleted atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodPost:
+					initialized.Add(1)
+					w.Header().Set("Acp-Connection-Id", "allocated-connection")
+					_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+				case http.MethodGet:
+					if mode == "canceled setup" {
+						cancel()
+						<-r.Context().Done()
+						return
+					}
+					w.WriteHeader(http.StatusServiceUnavailable)
+				case http.MethodDelete:
+					deleted.Add(1)
+					if r.Header.Get("Acp-Connection-Id") != "allocated-connection" || r.Header.Get("Authorization") != "Bearer fixture-token" {
+						t.Error("cleanup must target the authenticated initialized connection")
+					}
+					if mode == "failed cleanup" {
+						w.WriteHeader(http.StatusServiceUnavailable)
+						return
+					}
+					w.WriteHeader(http.StatusAccepted)
+				}
+			}))
+			defer server.Close()
+			client, _, err := Dial(ctx, server.URL+"/acp/v2", "fixture-token", testHTTPClient(t), struct{}{})
+			if err == nil || client != nil {
+				t.Fatal("failed stream attachment accepted")
+			}
+			if mode == "canceled setup" && !errors.Is(err, context.Canceled) {
+				t.Fatalf("setup cancellation lost: %v", err)
+			}
+			if mode == "failed cleanup" && (!strings.Contains(err.Error(), "ACP event stream rejected") || !strings.Contains(err.Error(), "close unattached ACP connection")) {
+				t.Fatalf("cleanup must preserve both errors: %v", err)
+			}
+			if initialized.Load() != 1 || deleted.Load() != 1 {
+				t.Fatalf("initializations=%d deletions=%d", initialized.Load(), deleted.Load())
+			}
+		})
 	}
 }

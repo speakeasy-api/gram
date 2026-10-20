@@ -37,6 +37,9 @@ func (r *kitTranscriptReducer) Apply(n kitacp.Notification) (kitacp.Notification
 	if err := json.Unmarshal(envelope.Update, &update); err != nil {
 		return n, fmt.Errorf("decode kit reducer update: %w", err)
 	}
+	if update.SessionUpdate == "user_message" {
+		delete(r.lastMessage, envelope.SessionID)
+	}
 	// Foreground terminal reasons belong only to the last assistant message
 	// observed in this session's current turn. Idle without a reason is not success.
 	if update.SessionUpdate == "state_update" && update.State == "idle" {

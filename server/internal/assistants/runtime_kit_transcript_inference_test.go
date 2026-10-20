@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -107,6 +108,13 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	require.True(t, bound)
 	require.Equal(t, chatID, boundChat)
 	require.True(t, assistanttokens.InferenceTranscriptOwned(ctx))
+	for _, state := range []string{"failed", "expired", "stopped"} {
+		require.NoError(t, queries.SetAssistantRuntimeStateForTest(t.Context(), assistantrepo.SetAssistantRuntimeStateForTestParams{ProjectID: project, RuntimeID: runtime, State: state, UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}))
+		_, err = manager.BindKitSession(ctx, uuid.NewSHA1(uuid.NameSpaceDNS, []byte(sessionID)))
+		require.Error(t, err, "non-live runtime %s must not bind session attribution", state)
+	}
+	require.NoError(t, queries.SetAssistantRuntimeStateForTest(t.Context(), assistantrepo.SetAssistantRuntimeStateForTestParams{ProjectID: project, RuntimeID: runtime, State: "active", UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}))
+
 	// The trusted context bypasses both ingress and response persistence while
 	// leaving chat identity available to telemetry; nil dependencies prove neither
 	// branch can accidentally reach the canonical writer.
@@ -127,7 +135,10 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	credential = issue()
 	binding, err := tokenrepo.New(db).ReadKitAPIKeyBinding(t.Context(), credential.ID)
 	require.NoError(t, err)
-	err = testrepo.New(db).ExpireAssistantInferenceCredentialForTest(t.Context(), testrepo.ExpireAssistantInferenceCredentialForTestParams{ProjectID: project, ID: binding.ID})
+	require.NoError(t, testrepo.New(db).ExpireAssistantInferenceCredentialForTest(t.Context(), testrepo.ExpireAssistantInferenceCredentialForTestParams{OrganizationID: "other-org", ProjectID: project, ID: binding.ID}))
+	_, err = authorize(credential)
+	require.NoError(t, err, "another organization cannot expire the native key")
+	err = testrepo.New(db).ExpireAssistantInferenceCredentialForTest(t.Context(), testrepo.ExpireAssistantInferenceCredentialForTestParams{OrganizationID: "org-test", ProjectID: project, ID: binding.ID})
 	require.NoError(t, err)
 	_, err = authorize(credential)
 	require.Error(t, err, "persisted expiry is enforced")

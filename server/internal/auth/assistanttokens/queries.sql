@@ -19,7 +19,7 @@ JOIN api_keys k ON k.id = c.api_key_id AND k.project_id = c.project_id
 JOIN assistant_runtimes r ON r.id = c.runtime_id AND r.project_id = c.project_id AND r.assistant_id = c.assistant_id
 JOIN assistants a ON a.id = c.assistant_id AND a.project_id = c.project_id
 WHERE c.api_key_id = @api_key_id AND c.revoked_at IS NULL AND NOT k.deleted AND (k.expires_at IS NULL OR k.expires_at > clock_timestamp())
-AND NOT r.deleted AND NOT r.ended AND NOT a.deleted AND a.status = 'active';
+AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active';
 
 -- name: RevokeInferenceCredential :exec
 WITH revoked AS (
@@ -45,7 +45,7 @@ JOIN assistant_threads t ON t.id = s.assistant_thread_id AND t.project_id = s.pr
 JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
 WHERE s.runtime_id = @runtime_id AND s.project_id = @project_id AND s.assistant_id = @assistant_id
   AND r.runtime_version = 3 AND a.runtime_version = 3
-  AND NOT r.deleted AND NOT r.ended AND NOT a.deleted AND a.status = 'active'
+  AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active'
   AND NOT t.deleted AND NOT c.deleted;
 
 -- name: IssueKitAPIKeyBinding :one
@@ -56,7 +56,7 @@ SELECT @api_key_id, @project_id, @assistant_id, r.id, @identity_json
 FROM assistant_runtimes r JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
 AND r.runtime_version = 3 AND a.runtime_version = 3
-AND NOT r.deleted AND NOT r.ended AND NOT a.deleted AND a.status = 'active'
+AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active'
 RETURNING id;
 
 -- name: IsManagedKitAPIKey :one

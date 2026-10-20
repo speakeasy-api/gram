@@ -27,6 +27,9 @@ func validateKitMCPBinding(ctx context.Context, db toolsetsrepo.DBTX, request as
 	if resourceURL == nil || issuerURL == nil || resourceURL.Scheme != "https" || resourceURL.Host == "" || resourceURL.User != nil || resourceURL.RawQuery != "" || resourceURL.Fragment != "" || resourceURL.RawPath != "" {
 		return errors.New("kit MCP requires an exact HTTPS resource address")
 	}
+	canonicalResource := *resourceURL
+	canonicalResource.Host = strings.ToLower(canonicalResource.Host)
+	resourceURL = &canonicalResource
 	slug := strings.TrimPrefix(resourceURL.Path, "/mcp/")
 	if !strings.HasPrefix(resourceURL.Path, "/mcp/") || slug == "" || strings.Contains(slug, "/") {
 		return errors.New("kit MCP requires an attached /mcp/<slug> resource")
@@ -81,7 +84,7 @@ func validateKitMCPBinding(ctx context.Context, db toolsetsrepo.DBTX, request as
 		boundIssuer = server.UserSessionIssuerID
 	case errors.Is(err, pgx.ErrNoRows):
 		// Match the public route's legacy toolset fallback without crossing domains.
-		toolset, err := toolsetsrepo.New(db).GetToolsetByMcpSlugAndProjectAndCustomDomain(ctx, toolsetsrepo.GetToolsetByMcpSlugAndProjectAndCustomDomainParams{CustomDomainID: domainID, McpSlug: pgtype.Text{String: slug, Valid: true}, ProjectID: request.ProjectID})
+		toolset, err := toolsetsrepo.New(db).GetToolsetByMcpSlugAndProjectAndCustomDomain(ctx, toolsetsrepo.GetToolsetByMcpSlugAndProjectAndCustomDomainParams{OrganizationID: request.OrganizationID, CustomDomainID: domainID, McpSlug: pgtype.Text{String: slug, Valid: true}, ProjectID: request.ProjectID})
 		if err != nil {
 			return fmt.Errorf("resolve Kit MCP toolset: %w", err)
 		}
@@ -98,7 +101,7 @@ func validateKitMCPBinding(ctx context.Context, db toolsetsrepo.DBTX, request as
 	if !boundIssuer.Valid || boundIssuer.UUID != request.UserSessionIssuerID {
 		return errors.New("kit MCP resource does not use the configured user-session issuer")
 	}
-	row, err := usersessionsrepo.New(db).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{ID: boundIssuer.UUID, ProjectID: request.ProjectID, OrganizationID: request.OrganizationID})
+	row, err := usersessionsrepo.New(db).GetKitUserSessionIssuerByID(ctx, usersessionsrepo.GetKitUserSessionIssuerByIDParams{ID: boundIssuer.UUID, ProjectID: request.ProjectID, OrganizationID: request.OrganizationID})
 	if err != nil {
 		return fmt.Errorf("resolve Kit MCP issuer: %w", err)
 	}
@@ -107,17 +110,17 @@ func validateKitMCPBinding(ctx context.Context, db toolsetsrepo.DBTX, request as
 }
 
 func kitMCPPlatformOrigin(origin string, hosts authserver.Hosts, localOrigin *url.URL) bool {
-	if origin == strings.TrimSuffix(hosts.ServerURL, "/") {
+	if strings.EqualFold(origin, strings.TrimSuffix(hosts.ServerURL, "/")) {
 		return true
 	}
 	for _, value := range hosts.PlatformHosts {
-		if origin == strings.TrimSuffix(value, "/") {
+		if strings.EqualFold(origin, strings.TrimSuffix(value, "/")) {
 			return true
 		}
 	}
 	// Local runners use the explicitly configured host-gateway/relay address.
 	// It is not an extra production authority or a shared authorization host.
-	return localOrigin != nil && origin == localOrigin.Scheme+"://"+localOrigin.Host
+	return localOrigin != nil && strings.EqualFold(origin, localOrigin.Scheme+"://"+localOrigin.Host)
 }
 
 func validateKitMCPIssuerURL(resourceURL, expected *url.URL, issuer usersessionsrepo.UserSessionIssuer, hosts authserver.Hosts, customDomain bool) error {
@@ -130,10 +133,11 @@ func validateKitMCPIssuerURL(resourceURL, expected *url.URL, issuer usersessions
 		}
 	} else if issuer.AuthorizationServerMode != string(authserver.ModeEndpoint) {
 		return errors.New("kit MCP issuer mode is unsupported")
-	} else if issuer.UseAuthenticationHost && !customDomain && hosts.AuthenticationHostBaseURL != "" && resourceURL.Scheme+"://"+resourceURL.Host == strings.TrimSuffix(hosts.ServerURL, "/") {
+	} else if issuer.UseAuthenticationHost && !customDomain && hosts.AuthenticationHostBaseURL != "" && strings.EqualFold(resourceURL.Scheme+"://"+resourceURL.Host, strings.TrimSuffix(hosts.ServerURL, "/")) {
 		actual = strings.TrimSuffix(hosts.AuthenticationHostBaseURL, "/") + resourceURL.Path
 	}
-	if expected == nil || expected.String() != actual {
+	actualURL, err := url.Parse(actual)
+	if expected == nil || err != nil || !strings.EqualFold(expected.Host, actualURL.Host) || expected.Scheme != actualURL.Scheme || expected.RequestURI() != actualURL.RequestURI() || expected.User != nil || expected.Fragment != "" {
 		return errors.New("kit MCP expected issuer URL does not match the resource's authoritative issuer")
 	}
 	return nil

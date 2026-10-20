@@ -16,6 +16,10 @@ import (
 )
 
 // The test store models the durable row independently from stale caller records.
+// Provider tests use an explicit transaction identity; database publication and
+// locking are exercised separately with real Postgres lifecycle transactions.
+type kitGKEFixtureTransaction struct{ pgx.Tx }
+
 type kitGKEAuthorityTestStore struct {
 	mu   sync.Mutex
 	rows map[uuid.UUID][]byte
@@ -32,7 +36,10 @@ func (s *kitGKEAuthorityTestStore) Load(_ context.Context, _ pgx.Tx, r assistant
 	}
 	return append([]byte(nil), r.BackendMetadataJSON...), nil
 }
-func (s *kitGKEAuthorityTestStore) Save(_ context.Context, _ pgx.Tx, r assistantRuntimeRecord, expected, next []byte) error {
+func (s *kitGKEAuthorityTestStore) Save(_ context.Context, tx pgx.Tx, r assistantRuntimeRecord, expected, next []byte) error {
+	if tx == nil || tx != r.LifecycleTx {
+		return fmt.Errorf("fake Kit GKE authority requires the lifecycle transaction")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.rows[r.ID]
@@ -69,11 +76,14 @@ func TestKitGKEAuthorityIgnoresConfigMap(t *testing.T) {
 	require.Equal(t, "checkpointing", state.Phase)
 	_, err = k.saveAuthority(t.Context(), handle, state)
 	require.ErrorContains(t, err, "authority changed")
+	configMapActions := 0
 	for _, action := range client.Actions() {
 		if action.GetResource().Resource == "configmaps" {
+			configMapActions++
 			require.Equal(t, "create", action.GetVerb())
 		}
 	}
+	require.Equal(t, 1, configMapActions)
 }
 func TestKitGKEAuthorityEnvelopeDoesNotNestMetadata(t *testing.T) {
 	t.Parallel()
@@ -128,4 +138,12 @@ func TestKitGKEAuthorityFailedClosePermanentlyFencesCheckpoint(t *testing.T) {
 	}
 	_, err = k.Ensure(t.Context(), r)
 	require.ErrorContains(t, err, "not safely restorable")
+}
+
+func TestKitGKEFakeAuthorityRequiresLifecycleTransaction(t *testing.T) {
+	t.Parallel()
+	store := newKitGKEAuthorityTestStore()
+	r := assistantRuntimeRecord{ID: uuid.New(), BackendMetadataJSON: []byte(`{}`), LifecycleTx: &kitGKEFixtureTransaction{Tx: nil}}
+	require.ErrorContains(t, store.Save(t.Context(), nil, r, []byte(`{}`), []byte(`{}`)), "requires the lifecycle transaction")
+	require.NoError(t, store.Save(t.Context(), r.LifecycleTx, r, []byte(`{}`), []byte(`{}`)))
 }

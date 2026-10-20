@@ -15,6 +15,7 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -228,7 +229,7 @@ func (s *ServiceCore) kitPersistedMCP(ctx context.Context, db assistantrepo.DBTX
 	if err != nil {
 		return nil, uuid.Nil, fmt.Errorf("get persisted assistant session issuer: %w", err)
 	}
-	if issuer.ResolvedOrganizationID != assistant.OrganizationID || (issuer.UserSessionIssuer.ProjectID.Valid && issuer.UserSessionIssuer.ProjectID.UUID != assistant.ProjectID) {
+	if !authserver.IssuerInSharedMode(issuer.UserSessionIssuer) || issuer.ResolvedOrganizationID != assistant.OrganizationID || (issuer.UserSessionIssuer.ProjectID.Valid && issuer.UserSessionIssuer.ProjectID.UUID != assistant.ProjectID) {
 		return nil, uuid.Nil, errKitMCPIneligible
 	}
 	return s.serverURL.JoinPath("mcp", selected.EndpointSlug), server.UserSessionIssuerID.UUID, nil

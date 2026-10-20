@@ -115,6 +115,14 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	notification := func(update string) kitacp.Notification {
 		return kitacp.Notification{SessionID: b.SessionID, Method: "session/update", Params: json.RawMessage(`{"sessionId":"session","update":` + update + `}`)}
 	}
+	malformedID := uuid.New()
+	changed, err := writer.ProjectMessage(t.Context(), project, malformedID, func(ctx context.Context, tx pgx.Tx) error { return projector.guard(ctx, tx, b) }, func(*chatrepo.ChatMessage) (chat.MessageWrite, bool, error) {
+		write := chat.MessageWrite{Params: chatrepo.CreateChatMessageParams{ID: malformedID, ProjectID: project, ChatID: chatID, Role: "assistant"}}
+		write.Params.Source.String = "kit" // Valid deliberately false.
+		return write, true, nil
+	})
+	require.ErrorContains(t, err, "invalid projection ownership")
+	require.False(t, changed)
 	beforeOmitted, err := testrepo.New(db).CountPublishOutboxRows(t.Context())
 	require.NoError(t, err)
 	omitted, err := projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"agent_message","messageId":"omitted","stopReason":"end_turn"}`))
@@ -195,6 +203,12 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 		require.NoError(t, riskrepo.New(db).MarkMessagesRiskAnalyzed(t.Context(), riskrepo.MarkMessagesRiskAnalyzedParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, MessageIds: []uuid.UUID{row.ID}}))
 	}
 
+	redisClient, err := assistantsInfra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	stream := chat.NewTurnStream(redisClient)
+	projector.stream = stream
+	anchor, err := stream.Publish(t.Context(), chatID, chat.TurnFrame{Kind: chat.TurnFrameText, Text: "before"})
+	require.NoError(t, err)
 	// Idle alone is not an authoritative completion reason, and terminal output
 	// without a matching message must not create an empty canonical row.
 	result, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"state_update","state":"idle","messageId":"reply"}`))
@@ -203,6 +217,14 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	result, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"state_update","state":"idle","messageId":"no-output","stopReason":"end_turn"}`))
 	require.NoError(t, err)
 	require.False(t, result.Changed)
+	_, err = stream.Publish(t.Context(), chatID, chat.TurnFrame{Kind: chat.TurnFrameText, Text: "still-open"})
+	require.NoError(t, err)
+	frames, err := stream.Subscribe(t.Context(), chatID, anchor)
+	require.NoError(t, err)
+	frame := <-frames
+	require.Equal(t, chat.TurnFrameText, frame.Kind, "ambiguous idle and no-output terminal must not close the stream")
+	require.Equal(t, "still-open", frame.Text)
+	projector.stream = nil
 	// Replaying a content event without terminal metadata cannot erase it.
 	_, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"agent_message","messageId":"reply","content":[{"type":"text","text":"two"}]}`))
 	require.NoError(t, err)

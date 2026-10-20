@@ -34,7 +34,7 @@ func TestWakeRuntimeAuthority(t *testing.T) {
 	for _, tc := range []struct {
 		name                                                                                  string
 		user, noSession, legacySession, wrongProject, retired, wrongAssistant, missingSession bool
-		infraSession, infraRuntime                                                            bool
+		wrongClient, infraSession, infraRuntime                                               bool
 		wantError                                                                             bool
 		wantQueries                                                                           int
 	}{
@@ -45,6 +45,7 @@ func TestWakeRuntimeAuthority(t *testing.T) {
 		{name: "legacy OAuth workload", legacySession: true, wantQueries: 1},
 		{name: "live runtime", wantQueries: 2},
 		{name: "ended or revoked runtime", retired: true, wantError: true, wantQueries: 2},
+		{name: "another client", wrongClient: true, wantError: true, wantQueries: 2},
 		{name: "another assistant", wrongAssistant: true, wantError: true, wantQueries: 2},
 		{name: "another project", wrongProject: true, wantError: true},
 		{name: "missing persisted session", missingSession: true, wantError: true, wantQueries: 1},
@@ -105,6 +106,9 @@ func TestWakeRuntimeAuthority(t *testing.T) {
 						*wakeScanDestination[uuid.UUID](t, dest[1]) = uuid.New()
 					}
 					*wakeScanDestination[uuid.UUID](t, dest[2]) = clientID
+					if tc.wrongClient {
+						*wakeScanDestination[uuid.UUID](t, dest[2]) = uuid.New()
+					}
 					return nil
 				})
 			}}

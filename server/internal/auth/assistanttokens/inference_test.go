@@ -46,7 +46,7 @@ func TestInferenceCredentialStorageFencing(t *testing.T) {
 		now := pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}
 		require.NoError(t, runtimes.CreateAssistantRuntime(ctx, assistantsrepo.CreateAssistantRuntimeParams{
 			ID: id, AssistantThreadID: uuid.Nil, AssistantID: f.assistantID, ProjectID: f.projectID,
-			Backend: "local", BackendMetadataJson: []byte(`{}`), State: "running",
+			Backend: "local", BackendMetadataJson: []byte(`{}`), State: "active",
 			WarmUntil: now, LastHeartbeatAt: now, UpdatedAt: now, EndedAt: pgtype.Timestamptz{}, DeletedAt: pgtype.Timestamptz{},
 		}))
 		require.NoError(t, chatrepo.New(f.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: id, ProjectID: f.projectID, RuntimeVersion: 3}))

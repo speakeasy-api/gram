@@ -32,6 +32,9 @@ func TestKitProductionTurnFailureDoesNotReplaceCanonicalAuthority(t *testing.T) 
 			require.Equal(t, []uuid.UUID{thread}, admitted.ThreadIDs)
 			before, err := q.GetAssistantRuntimeV2(t.Context(), assistantrepo.GetAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant})
 			require.NoError(t, err)
+			key := kitRuntimeSessionKey{ProjectID: project, AssistantID: assistant, RuntimeID: before.ID, ThreadID: thread}
+			_, err = core.StoreKitRuntimeSession(t.Context(), key, "canonical-session")
+			require.NoError(t, err)
 			_, err = core.ProcessThreadEvents(t.Context(), project, thread)
 			require.ErrorIs(t, err, failure)
 			require.Zero(t, stops.Load())
@@ -39,6 +42,11 @@ func TestKitProductionTurnFailureDoesNotReplaceCanonicalAuthority(t *testing.T) 
 			require.NoError(t, err)
 			require.False(t, after.Ended)
 			require.False(t, after.Deleted)
+			retained, found, err := core.LoadKitRuntimeSession(t.Context(), key)
+			require.NoError(t, err)
+			require.True(t, found)
+			require.Equal(t, "canonical-session", retained.SessionID)
+
 		})
 	}
 }

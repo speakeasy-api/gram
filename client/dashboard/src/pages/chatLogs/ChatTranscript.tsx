@@ -978,9 +978,17 @@ const ToolGroupView = memo(function ToolGroupView({
     () => group.rows.filter((r) => toolRowFlagged(r, ctx)).length,
     [group.rows, ctx],
   );
-  const failedCount = group.rows.filter(
-    (row) => toolResultStatus(row) === "error",
-  ).length;
+  const statuses = group.rows.map(toolResultStatus);
+  const failedCount = statuses.filter((status) => status === "error").length;
+  // Failure takes precedence, but a successful result must not hide active work.
+  const status =
+    failedCount > 0
+      ? "error"
+      : statuses.includes("running")
+        ? "running"
+        : statuses.includes("pending")
+          ? "pending"
+          : "complete";
   const forceOpen = flaggedCount > 0 || activeRowId != null;
   const count = group.rows.length;
   const title =
@@ -998,7 +1006,7 @@ const ToolGroupView = memo(function ToolGroupView({
       <ToolUIGroup
         key={forceOpen ? "pinned-open" : "collapsible"}
         title={failedCount > 0 ? `${title} · ${failedCount} failed` : title}
-        status={failedCount > 0 ? "error" : "complete"}
+        status={status}
         defaultExpanded={forceOpen}
       >
         <div className="divide-border divide-y">

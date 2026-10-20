@@ -61,7 +61,7 @@ func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.Fak
 		},
 	})
 	require.NoError(t, err)
-	r := assistantRuntimeRecord{ID: uuid.New(), AssistantID: uuid.New(), ProjectID: uuid.New(), RuntimeVersion: 3, Backend: runtimeBackendGKE, BackendMetadataJSON: []byte("{}")}
+	r := assistantRuntimeRecord{LifecycleTx: &kitGKEFixtureTransaction{Tx: nil}, ID: uuid.New(), AssistantID: uuid.New(), ProjectID: uuid.New(), RuntimeVersion: 3, Backend: runtimeBackendGKE, BackendMetadataJSON: []byte("{}")}
 	client.PrependReactor("create", "*", func(action ktesting.Action) (bool, runtime.Object, error) {
 		a, ok := action.(ktesting.CreateAction)
 		require.True(t, ok)

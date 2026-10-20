@@ -106,6 +106,13 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 	if err = k.config.Fence(ctx, r); err != nil {
 		return fmt.Errorf("fence Kit GKE authority before reap: %w", err)
 	}
+	// Publish revocation and retirement before external teardown. Retrying a
+	// failed delete must not restore the credentials of a surviving process.
+	state.Phase = "retired"
+	authority, err = k.saveAuthority(ctx, authority, state)
+	if err != nil {
+		return err
+	}
 	for i, s := range steps {
 		if !exists[i] {
 			continue
@@ -115,12 +122,6 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 		}
 	}
 	if !stoppedOnly || r.Retired {
-		// Persist permanent retirement before deleting the last restore point.
-		state.Phase = "retired"
-		authority, err = k.saveAuthority(ctx, authority, state)
-		if err != nil {
-			return err
-		}
 		_, _, err = k.gcRetiredCheckpoints(ctx, state, authority)
 		return err
 	}

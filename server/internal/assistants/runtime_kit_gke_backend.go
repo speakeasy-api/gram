@@ -54,10 +54,13 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	if config.GKE.Dynamic == nil || config.GKE.Namespace == "" || config.GKE.ServerURL == nil || config.Bootstrap == nil || config.Protocol == nil || config.Fence == nil || config.AuthorityStore == nil {
 		return nil, fmt.Errorf("kit GKE requires dynamic client, namespace, server URL, bootstrap, fence, authority store and ACP protocol")
 	}
-	if config.GKE.ServerURL.Scheme != "https" || config.GKE.ServerURL.Host == "" {
+	if config.GKE.ServerURL.Scheme != "https" || config.GKE.ServerURL.Host == "" || config.GKE.ServerURL.User != nil {
 		return nil, fmt.Errorf("kit GKE requires an HTTPS management URL")
 	}
 	p := config.Provision
+	if p.AllowInsecureHTTP {
+		return nil, fmt.Errorf("kit GKE requires HTTPS inference without insecure overrides")
+	}
 	if p.GuestPort == 0 {
 		if config.GKE.GuestPort < 0 || config.GKE.GuestPort > 65535 {
 			return nil, fmt.Errorf("invalid kit GKE port")
@@ -272,6 +275,11 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	// resume point must revoke them. Durable readiness failures deliberately keep
 	// the same credentials: retry authenticates the same owned process, not a
 	// replacement process with revoked startup files.
+	createdResources := []struct {
+		gvr  schema.GroupVersionResource
+		name string
+		uid  types.UID
+	}{}
 	resumable := false
 	defer func() {
 		if ensureErr != nil && !resumable {
@@ -280,6 +288,11 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 			defer cancel()
 			if err := k.config.Fence(fenceCtx, r); err != nil {
 				ensureErr = errors.Join(ensureErr, fmt.Errorf("fence failed Kit cold admission: %w", err))
+			}
+			for _, created := range slices.Backward(createdResources) {
+				if err := k.deleteOwned(fenceCtx, created.gvr, created.name, created.uid); err != nil {
+					ensureErr = errors.Join(ensureErr, err)
+				}
 			}
 		}
 	}()
@@ -331,6 +344,13 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("create Kit GKE %s (partial resources require reconciliation): %w", step.obj.GetKind(), e)
 		}
 		*step.uid = created.GetUID()
+		if *step.uid != "" {
+			createdResources = append(createdResources, struct {
+				gvr  schema.GroupVersionResource
+				name string
+				uid  types.UID
+			}{gvr: step.gvr, name: created.GetName(), uid: *step.uid})
+		}
 		if *step.uid == "" {
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("kit GKE create returned no authoritative UID")
 		}
@@ -427,6 +447,16 @@ func (k *KitGKERuntimeBackend) waitPod(ctx context.Context, r assistantRuntimeRe
 			p := &pods.Items[0]
 			if err := k.checkObject(r, p, m.PodUID); err != nil {
 				return nil, kitGKEAdmissionTerminalError{err}
+			}
+			statuses, _, _ := unstructured.NestedSlice(p.Object, "status", "containerStatuses")
+			for _, raw := range statuses {
+				status, ok := raw.(map[string]any)
+				if !ok {
+					continue
+				}
+				if restarts, ok := status["restartCount"].(int64); ok && restarts > 0 {
+					return nil, kitGKEAdmissionTerminalError{fmt.Errorf("kit GKE process restarted outside admission")}
+				}
 			}
 			phase, _, _ := unstructured.NestedString(p.Object, "status", "phase")
 			ip, _, _ := unstructured.NestedString(p.Object, "status", "podIP")

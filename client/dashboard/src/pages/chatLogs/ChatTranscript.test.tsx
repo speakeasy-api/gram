@@ -129,6 +129,54 @@ describe("Kit tool result status", () => {
     expect(screen.queryByRole("img", { name: "Tool complete" })).toBeNull();
   });
 
+  it.each([
+    ["pending", "pending"],
+    ["in_progress", "running"],
+  ])("does not show completion for a collapsed %s group", (state, label) => {
+    show(result(patch(state)), true);
+    const header = screen.getByRole("button", { name: /Executed 1 tools/ });
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      within(header).getByRole("img", { name: `Tool ${label}` }),
+    ).toBeTruthy();
+    expect(
+      within(header).queryByRole("img", { name: "Tool complete" }),
+    ).toBeNull();
+  });
+
+  it.each([
+    [["completed", "pending"], "pending"],
+    [["completed", "pending", "in_progress"], "running"],
+    [["in_progress", "failed"], "error"],
+    [["completed", "completed"], "complete"],
+  ])("derives mixed group status for %j", (states, label) => {
+    const rows = buildTranscript(
+      states.map((state, index) => ({
+        ...result(patch(state).replace('"call"', `"call-${index}"`)),
+        id: `result-${index}`,
+        toolCallId: `call-${index}`,
+        seq: index,
+      })),
+    ).filter((row) => row.kind === "tool");
+    render(
+      <ChatTranscript
+        items={[{ type: "toolGroup", id: "group", rows }]}
+        ctx={{ dimNonRisk: false }}
+        pagination={pagination}
+      />,
+    );
+    const header = screen.getByRole("button", { name: /Executed/ });
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      within(header).getByRole("img", { name: `Tool ${label}` }),
+    ).toBeTruthy();
+    if (label !== "complete") {
+      expect(
+        within(header).queryByRole("img", { name: "Tool complete" }),
+      ).toBeNull();
+    }
+  });
+
   it.each(["completed", "in_progress", "pending"])(
     "renders the %s Kit state",
     (status) => {

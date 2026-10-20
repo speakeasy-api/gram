@@ -106,12 +106,14 @@ func TestKitLocalSwitchChecksStoppedContainerAuthority(t *testing.T) {
 			r.State = runtimeStateStopped
 			engine.info.Running = running
 			result, err := k.PrepareRuntimeSwitch(t.Context(), a, []assistantRuntimeRecord{r}, 2)
-			if running {
+			require.ErrorIs(t, err, errRuntimeSwitchUnavailable)
+			require.False(t, result.Settled)
+			for _, state := range []string{runtimeStateStopped, runtimeStateFailed} {
+				r.State = state
+				engine.info.Running = false
+				result, err = k.PrepareRuntimeSwitch(t.Context(), a, []assistantRuntimeRecord{r}, 2)
 				require.ErrorIs(t, err, errRuntimeSwitchUnavailable)
-				require.False(t, result.Settled)
-			} else {
-				require.NoError(t, err)
-				require.True(t, result.Settled)
+				require.False(t, result.Settled, "process exit does not settle session history")
 			}
 			engine.info.Labels["gram.ai/assistant-id"] = uuid.NewString()
 			_, err = k.PrepareRuntimeSwitch(t.Context(), a, []assistantRuntimeRecord{r}, 2)

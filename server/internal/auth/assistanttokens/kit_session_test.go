@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -22,5 +23,7 @@ func TestBindKitSessionRequiresRuntimeAuthority(t *testing.T) {
 	t.Parallel()
 	ctx := context.WithValue(t.Context(), inferenceContextKey{}, assistantidentity.Identity{ProjectID: uuid.New(), AssistantID: uuid.New()})
 	_, err := new(Manager).BindKitSession(ctx, uuid.New())
-	require.Error(t, err)
+	var forbidden *oops.ShareableError
+	require.ErrorAs(t, err, &forbidden)
+	require.Equal(t, oops.CodeForbidden, forbidden.Code)
 }

@@ -37,6 +37,10 @@ KIT_IMAGE=localhost/kit-control-plane mise run docker:build -- slim --load \
   --tag localhost/kit-control-plane:2c4a35e
 ```
 
+Use an explicit non-`latest` image tag or a digest. Untagged images and `:latest`
+are rejected. Tags can still move: use a digest when immutable code selection is
+required. An existing container must match the locally resolved image ID.
+
 Return to the Speakeasy checkout for the following steps. Keep credentials and
 concrete tenant identifiers in ignored local configuration, never committed
 files or command output.
@@ -118,8 +122,9 @@ its approved additive-upsert contract. The image pin in this guide is unchanged;
 it is not evidence that this API has been verified in that image.
 
 - Supply initial servers during session creation or cold restore.
-- On a resident reconnect, omit `mcpServers` or send `[]` to retain the resident
-  configuration. A nonempty list is rejected; reconnect cannot update it.
+- Through the assistant adapter, omit `mcpServers` on a resident reconnect to
+  retain the resident configuration. Explicit lists, including `[]`, are rejected;
+  reconnect cannot reconcile the desired server set.
 - Use `_kit/session/update_mcp` to add a new client-owned server name or update
   only an existing client-owned name. Omitted names are retained, and `[]` is a
   no-op. Host/plugin name collisions are rejected and built-ins are protected.
@@ -249,7 +254,11 @@ This covers foreground settlement, not detached background-work retirement.
 
 Before switching away from Kit or removing its configuration, settle and retire
 the runtime through the supported lifecycle. Foreground `idle` is not sufficient
-proof of settlement. Removing `GRAM_ASSISTANT_KIT_IMAGE` does not retire an
+proof of settlement. A crashed, stopped, or missing source process cannot certify
+settlement of its recorded sessions; switching fails closed even when the database
+row is stopped or failed. Do not delete session bindings to bypass this check.
+Recover and settle the source through a supported lifecycle before retrying.
+Removing `GRAM_ASSISTANT_KIT_IMAGE` does not retire an
 existing runtime's authority. See the
 [adapter lifecycle contract](../design/kit-assistant-adapter.md#settlement-and-retirement)
 when implementing or diagnosing this boundary.

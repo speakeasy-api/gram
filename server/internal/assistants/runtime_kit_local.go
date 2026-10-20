@@ -108,6 +108,9 @@ func newKitLocalRuntimeBackend(config KitLocalRuntimeConfig, engine kitLocalEngi
 	if config.Environment != "local" || config.Image == "" || len(config.Command) == 0 || config.Command[0] == "" || config.Args == nil || config.GuestPort < 1 || config.GuestPort > 65535 || config.ServerURL == nil || config.ServerURL.Hostname() == "" || config.CompatibilityGeneration == "" || !config.HomeOwnedByRuntimeUser || config.Bootstrap == nil || config.Protocol == nil || config.Ready == nil || engine == nil {
 		return nil, fmt.Errorf("kit local requires local environment, image/command/args/port, server URL, generation, UID1000 HOME image contract, bootstrap, ACP protocol and authenticated readiness")
 	}
+	if !kitGKEExplicitImage(config.Image) {
+		return nil, fmt.Errorf("kit local requires an explicit non-latest image tag or digest")
+	}
 	if value, ok := config.Env["HOME"]; ok && value != "/home/kit" {
 		return nil, fmt.Errorf("kit local HOME must be /home/kit")
 	}

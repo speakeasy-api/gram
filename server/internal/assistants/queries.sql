@@ -2020,8 +2020,6 @@ INSERT INTO assistant_kit_interrupt_requests
 SELECT e.project_id, e.assistant_id, r.id, e.assistant_thread_id, e.id, e.attempts
 FROM assistant_thread_events e
 JOIN assistant_runtimes r ON r.project_id=e.project_id AND r.assistant_id=e.assistant_id
-JOIN assistant_kit_sessions s ON s.project_id=r.project_id AND s.assistant_id=r.assistant_id
-  AND s.runtime_id=r.id AND s.assistant_thread_id=e.assistant_thread_id
 WHERE e.project_id=sqlc.arg(project_id)::uuid AND e.assistant_id=sqlc.arg(assistant_id)::uuid
   AND e.assistant_thread_id=sqlc.arg(thread_id)::uuid AND r.id=sqlc.arg(runtime_id)::uuid
   AND e.deleted IS FALSE AND e.status='processing' AND e.attempts > 0

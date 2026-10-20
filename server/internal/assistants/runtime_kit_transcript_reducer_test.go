@@ -100,3 +100,26 @@ func TestKitTranscriptReducerTerminalReasonCorrelation(t *testing.T) {
 	terminal = apply("session", `{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}`)
 	require.Empty(t, terminal.MessageID, "idle without a reason must still end correlation")
 }
+
+func TestKitTranscriptReducerUserTurnClearsTerminalCorrelation(t *testing.T) {
+	t.Parallel()
+	reducer := newKitTranscriptReducer()
+	for _, update := range []string{
+		`{"sessionUpdate":"agent_message","messageId":"old","content":[{"type":"text","text":"answer"}]}`,
+		`{"sessionUpdate":"user_message","messageId":"new-user","content":[]}`,
+	} {
+		_, err := reducer.Apply(kitacp.Notification{SessionID: "session", Method: "session/update", Params: json.RawMessage(`{"sessionId":"session","update":` + update + `}`)})
+		require.NoError(t, err)
+	}
+	terminal, err := reducer.Apply(kitacp.Notification{SessionID: "session", Method: "session/update", Params: json.RawMessage(`{"sessionId":"session","update":{"sessionUpdate":"state_update","state":"idle","stopReason":"cancelled"}}`)})
+	require.NoError(t, err)
+	require.NotContains(t, string(terminal.Params), "messageId")
+}
+
+func TestKitPromptEchoRequiresAcknowledgedMessageID(t *testing.T) {
+	t.Parallel()
+	pending := &kitacp.Notification{Params: json.RawMessage(`{"update":{"sessionUpdate":"user_message","messageId":"echo"}}`)}
+	require.Error(t, validateKitPromptEcho(pending, "different"))
+	require.NoError(t, validateKitPromptEcho(pending, "echo"))
+	require.NoError(t, validateKitPromptEcho(nil, "echo"))
+}

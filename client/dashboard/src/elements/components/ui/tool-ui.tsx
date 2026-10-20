@@ -1231,7 +1231,7 @@ interface ToolUIGroupProps {
   /** Optional icon */
   icon?: React.ReactNode;
   /** Overall status of the group */
-  status?: "running" | "complete" | "error";
+  status?: "pending" | "running" | "complete" | "error";
   /** Whether the group starts expanded */
   defaultExpanded?: boolean;
   /** Render without the group header, showing children directly. */

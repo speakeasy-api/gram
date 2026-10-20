@@ -51,7 +51,7 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 		}
 		return false, nil
 	}
-	if write.Params.ProjectID != projectID || write.Params.ID != messageID || write.Params.Source.String != "kit" {
+	if write.Params.ProjectID != projectID || write.Params.ID != messageID || (!write.Params.Source.Valid || write.Params.Source.String != "kit") {
 		return false, fmt.Errorf("invalid projection ownership")
 	}
 	if exists && (row.Source.String != "kit" || row.ChatID != write.Params.ChatID || row.Role != write.Params.Role) {

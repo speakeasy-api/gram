@@ -74,3 +74,16 @@ func (p *KitRuntimeProtocol) acknowledgeKitInterrupt(ctx context.Context, r assi
 	}
 	return nil
 }
+
+// Before submitting a prompt, a pending stop needs no remote cancellation:
+// startup is drained and this event has not started inference.
+func (p *KitRuntimeProtocol) cancelKitTurnBeforePrompt(ctx context.Context, r assistantRuntimeRecord, req runTurnRequest) (bool, error) {
+	pending, err := p.kitInterruptPending(ctx, r, req)
+	if err != nil || !pending {
+		return false, err
+	}
+	if err := p.acknowledgeKitInterrupt(ctx, r, req, "cancelled"); err != nil {
+		return false, err
+	}
+	return true, nil
+}

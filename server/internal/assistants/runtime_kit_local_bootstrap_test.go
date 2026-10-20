@@ -250,3 +250,46 @@ func TestKitLocalExactImageGatewaySmoke(t *testing.T) {
 	require.Zero(t, stats.Rejected, "all provider requests must carry native authentication")
 	require.Zero(t, stats.Unexpected, "session lifecycle must not call unexpected provider endpoints")
 }
+
+func TestKitLocalBootstrapRejectsTrailingJSONAndHumanIdentity(t *testing.T) {
+	t.Parallel()
+	k, _, runtime, _ := kitLocalFixture(t)
+	bootstrap, err := k.config.Bootstrap(t.Context(), runtime)
+	require.NoError(t, err)
+	base := string(bootstrap.InferenceJSON)
+	for name, raw := range map[string]string{
+		"second object":      base + `{}`,
+		"second scalar":      base + `true`,
+		"trailing garbage":   base + `invalid`,
+		"email":              strings.Replace(base, `"email":null`, `"email":"fixture@example.invalid"`, 1),
+		"empty email":        strings.Replace(base, `"email":null`, `"email":""`, 1),
+		"organization":       strings.Replace(base, `"organization_id":null`, `"organization_id":"fixture-org"`, 1),
+		"empty organization": strings.Replace(base, `"organization_id":null`, `"organization_id":""`, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			bad := bootstrap
+			bad.InferenceJSON = []byte(raw)
+			require.Error(t, validateKitBootstrap(bad))
+		})
+	}
+	bootstrap.InferenceJSON = []byte(base + " \n\t")
+	require.NoError(t, validateKitBootstrap(bootstrap), "trailing JSON whitespace is valid")
+}
+
+func TestKitLocalRequiresExplicitImage(t *testing.T) {
+	t.Parallel()
+	k, engine, _, _ := kitLocalFixture(t)
+	for _, image := range []string{"kit", "registry.example/kit", "registry.example:5000/kit", "kit:latest", "kit:LATEST", "kit:latest@sha256:" + strings.Repeat("a", 64)} {
+		config := k.config
+		config.Image = image
+		_, err := newKitLocalRuntimeBackend(config, engine)
+		require.Error(t, err, image)
+	}
+	for _, image := range []string{"registry.example:5000/kit:0.2.17", "kit@sha256:" + strings.Repeat("a", 64)} {
+		config := k.config
+		config.Image = image
+		_, err := newKitLocalRuntimeBackend(config, engine)
+		require.NoError(t, err, image)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"slices"
 	"strconv"
@@ -52,6 +53,12 @@ func kitInferenceOrigin(raw []byte) (string, error) {
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&credential); err != nil {
 		return "", fmt.Errorf("invalid Kit provider credential JSON")
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return "", fmt.Errorf("invalid trailing Kit provider credential JSON")
+	}
+	if credential.Email != nil || credential.OrganizationID != nil {
+		return "", fmt.Errorf("kit provider credentials must contain only workload identity")
 	}
 	validKey := false
 	for _, prefix := range []string{"gram_live_", "gram_test_", "gram_local_"} {

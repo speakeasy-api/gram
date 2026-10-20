@@ -646,7 +646,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 			// existing workload sessions can belong to ordinary OAuth clients.
 			// Either assistant binding marker requires the complete live binding;
 			// missing, revoked or retired bindings must still fail closed.
-			if client.AssistantRuntimeID.Valid || client.AssistantTriggerWorkloadBindingID.Valid {
+			if strings.HasPrefix(client.ClientID, assistantWorkloadClientPrefix) || client.AssistantRuntimeID.Valid || client.AssistantTriggerWorkloadBindingID.Valid {
 				identity, bindingErr := s.loadAssistantWorkloadClientIdentity(ctx, endpoint, row.UserSessionClientID.UUID)
 				if bindingErr != nil && !errors.Is(bindingErr, pgx.ErrNoRows) && !errors.Is(bindingErr, assistantidentity.ErrInvalidIdentity) {
 					return ctx, nil, nil, false, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, bindingErr)

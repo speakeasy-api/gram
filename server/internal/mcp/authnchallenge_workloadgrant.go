@@ -561,7 +561,10 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, grant workloadGrantIssuance) error {
 	minted, err := s.mintWorkloadGrantSession(ctx, logger, grant)
 	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, err)
+		if _, ok := errors.AsType[*workloadGrantError](err); ok {
+			return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, err)
+		}
+		return err
 	}
 
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {

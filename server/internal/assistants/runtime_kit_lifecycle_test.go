@@ -107,6 +107,7 @@ func TestKitLifecycleCheckpointAdmissionFence(t *testing.T) {
 			require.Equal(t, runtimeStateActive, row.State)
 			require.False(t, row.Ended)
 			require.False(t, row.Deleted)
+			require.Equal(t, !stopped, row.WarmUntil.Valid)
 			require.JSONEq(t, `{"test":true}`, string(row.BackendMetadataJson))
 		})
 	}

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
@@ -151,6 +152,8 @@ func TestKitCLIOptInAndProviderValidation(t *testing.T) {
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "local environment")
 	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke"})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "ingress-cidr")
+	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-root-trigger-id": uuid.NewString()})
+	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "local-only")
 }
 
 func TestPrivateIngressRegistersAssistantRuntimeFlags(t *testing.T) {

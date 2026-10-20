@@ -70,6 +70,9 @@ func TestVersionedRuntimeSwitchProductionKit(t *testing.T) {
 	k, provisionClient, row, _ := kitGKEBackendFixture(t)
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gkeSandboxClaimGVR: "SandboxClaimList"})
 	k.config.GKE.Dynamic = client
+	client.PrependReactor("create", "selfsubjectaccessreviews", func(ktesting.Action) (bool, runtime.Object, error) {
+		return true, &unstructured.Unstructured{Object: map[string]any{"apiVersion": "authorization.k8s.io/v1", "kind": "SelfSubjectAccessReview", "status": map[string]any{"allowed": true}}}, nil
+	})
 	// Exercise the concrete backend's control-plane readiness without creating a
 	// guest. The fake API supplies the same namespaced list response as GKE.
 	client.PrependReactor("list", "sandboxclaims", func(ktesting.Action) (bool, runtime.Object, error) {

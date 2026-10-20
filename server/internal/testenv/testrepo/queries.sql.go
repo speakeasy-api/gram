@@ -1328,16 +1328,17 @@ func (q *Queries) EnablePreparationFixtureCIMD(ctx context.Context, arg EnablePr
 
 const expireAssistantInferenceCredentialForTest = `-- name: ExpireAssistantInferenceCredentialForTest :exec
 UPDATE api_keys SET expires_at = clock_timestamp() - interval '1 hour'
-WHERE id IN (SELECT c.api_key_id FROM assistant_inference_credentials c WHERE c.project_id = $1 AND c.id = $2)
+WHERE organization_id = $1 AND id IN (SELECT c.api_key_id FROM assistant_inference_credentials c WHERE c.project_id = $2 AND c.id = $3)
 `
 
 type ExpireAssistantInferenceCredentialForTestParams struct {
-	ProjectID uuid.UUID
-	ID        uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
 }
 
 func (q *Queries) ExpireAssistantInferenceCredentialForTest(ctx context.Context, arg ExpireAssistantInferenceCredentialForTestParams) error {
-	_, err := q.db.Exec(ctx, expireAssistantInferenceCredentialForTest, arg.ProjectID, arg.ID)
+	_, err := q.db.Exec(ctx, expireAssistantInferenceCredentialForTest, arg.OrganizationID, arg.ProjectID, arg.ID)
 	return err
 }
 

@@ -42,7 +42,7 @@ JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_i
 WHERE c.id = $1 AND c.deleted IS FALSE
   AND c.assistant_trigger_workload_binding_id IS NULL AND c.assistant_runtime_id IS NULL
   AND r.id = $2 AND r.runtime_version = 3 AND a.runtime_version = 3
-  AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
   AND c.organization_id = $3
   AND (c.project_id = $4 OR c.project_id IS NULL)
   AND tb.organization_id = $3 AND tb.project_id = $4
@@ -76,6 +76,23 @@ func (q *Queries) BindAssistantWorkloadClient(ctx context.Context, arg BindAssis
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const clearAssistantWorkloadClientMarkersForTest = `-- name: ClearAssistantWorkloadClientMarkersForTest :exec
+UPDATE user_session_clients
+SET assistant_runtime_id = NULL, assistant_trigger_workload_binding_id = NULL
+WHERE id = $1 AND organization_id = $2
+`
+
+type ClearAssistantWorkloadClientMarkersForTestParams struct {
+	ClientID       uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Test fixture: simulate ON DELETE SET NULL cleanup of both binding references.
+func (q *Queries) ClearAssistantWorkloadClientMarkersForTest(ctx context.Context, arg ClearAssistantWorkloadClientMarkersForTestParams) error {
+	_, err := q.db.Exec(ctx, clearAssistantWorkloadClientMarkersForTest, arg.ClientID, arg.OrganizationID)
+	return err
 }
 
 const clearUserSessionClientAuthMethod = `-- name: ClearUserSessionClientAuthMethod :one
@@ -1546,6 +1563,7 @@ WHERE s.jti = $1 AND s.subject_urn = $2
   AND s.deleted IS FALSE AND s.expires_at > clock_timestamp() AND c.deleted IS FALSE
   AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
   AND a.deleted IS FALSE AND a.status = 'active' AND a.organization_id = $3
+  AND t.definition_slug <> 'wake' AND t.target_kind = 'assistant' AND t.target_ref = a.id::text
 `
 
 type GetAssistantRuntimeForWorkloadSessionParams struct {
@@ -1637,7 +1655,8 @@ SELECT r.id, r.assistant_id, r.project_id, a.organization_id
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 WHERE r.id = $1 AND r.runtime_version = 3 AND a.runtime_version = 3
-  AND r.deleted IS FALSE AND r.ended IS FALSE AND a.deleted IS FALSE AND a.status = 'active'
+  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
+  AND a.deleted IS FALSE AND a.status = 'active'
 `
 
 type GetAssistantWorkloadRuntimeRow struct {
@@ -1656,6 +1675,47 @@ func (q *Queries) GetAssistantWorkloadRuntime(ctx context.Context, runtimeID uui
 		&i.AssistantID,
 		&i.ProjectID,
 		&i.OrganizationID,
+	)
+	return i, err
+}
+
+const getKitUserSessionIssuerByID = `-- name: GetKitUserSessionIssuerByID :one
+SELECT issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.authorization_server_mode, issuer.pinned_issuer_url, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+FROM user_session_issuers issuer
+LEFT JOIN projects project ON project.id = issuer.project_id
+WHERE issuer.id = $1 AND issuer.deleted IS FALSE
+  AND ((issuer.project_id = $2::uuid AND project.organization_id = $3::text)
+    OR (issuer.project_id IS NULL AND issuer.organization_id = $3::text))
+`
+
+type GetKitUserSessionIssuerByIDParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetKitUserSessionIssuerByID(ctx context.Context, arg GetKitUserSessionIssuerByIDParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getKitUserSessionIssuerByID, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.UseAuthenticationHost,
+		&i.AuthorizationServerMode,
+		&i.PinnedIssuerUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }

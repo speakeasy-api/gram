@@ -14,8 +14,6 @@ import (
 func TestKitInterruptMailboxCrossInstance(t *testing.T) {
 	t.Parallel()
 	core, db, key, _ := kitSessionFixture(t)
-	_, err := core.StoreKitRuntimeSession(t.Context(), key, "owned-session")
-	require.NoError(t, err)
 	event, err := assistantrepo.New(db).ClaimNextPendingEvent(t.Context(), assistantrepo.ClaimNextPendingEventParams{
 		ProjectID: key.ProjectID, ThreadID: key.ThreadID, PendingStatus: eventStatusPending, ProcessingStatus: eventStatusProcessing,
 	})
@@ -44,8 +42,10 @@ func TestKitInterruptMailboxCrossInstance(t *testing.T) {
 		t.Fatal("wrong attempt acknowledged request")
 	default:
 	}
-	// Model the owner after cancellation terminal + authoritative settlement + flush.
-	require.NoError(t, worker.acknowledgeKitInterrupt(ctx, r, req, "cancelled"))
+	// No session exists yet: the processing owner must observe stop before prompt.
+	stopped, err := worker.cancelKitTurnBeforePrompt(ctx, r, req)
+	require.NoError(t, err)
+	require.True(t, stopped)
 	got := <-done
 	require.NoError(t, got.err)
 	require.True(t, got.interrupted)

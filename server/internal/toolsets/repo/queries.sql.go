@@ -961,17 +961,24 @@ func (q *Queries) GetToolsetByMcpSlugAndProject(ctx context.Context, arg GetTool
 const getToolsetByMcpSlugAndProjectAndCustomDomain = `-- name: GetToolsetByMcpSlugAndProjectAndCustomDomain :one
 SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted FROM toolsets
 WHERE mcp_slug = $1 AND project_id = $2
-  AND custom_domain_id IS NOT DISTINCT FROM $3 AND deleted IS FALSE
+  AND organization_id = $3
+  AND custom_domain_id IS NOT DISTINCT FROM $4 AND deleted IS FALSE
 `
 
 type GetToolsetByMcpSlugAndProjectAndCustomDomainParams struct {
 	McpSlug        pgtype.Text
 	ProjectID      uuid.UUID
+	OrganizationID string
 	CustomDomainID uuid.NullUUID
 }
 
 func (q *Queries) GetToolsetByMcpSlugAndProjectAndCustomDomain(ctx context.Context, arg GetToolsetByMcpSlugAndProjectAndCustomDomainParams) (Toolset, error) {
-	row := q.db.QueryRow(ctx, getToolsetByMcpSlugAndProjectAndCustomDomain, arg.McpSlug, arg.ProjectID, arg.CustomDomainID)
+	row := q.db.QueryRow(ctx, getToolsetByMcpSlugAndProjectAndCustomDomain,
+		arg.McpSlug,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.CustomDomainID,
+	)
 	var i Toolset
 	err := row.Scan(
 		&i.ID,

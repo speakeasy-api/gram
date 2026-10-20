@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -22,6 +23,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+// The immutable client ID retains its classification after foreign-key cleanup.
+const assistantWorkloadClientPrefix = "assistant-runtime-"
 
 // ProvisionAssistantWorkloadClientParams selects an existing independent identity
 // and an explicit authentication method. There is no default method. Secret is
@@ -76,6 +80,9 @@ func (s *Service) provisionAssistantWorkloadClient(ctx context.Context, p Provis
 		return ProvisionedAssistantWorkloadClient{}, fmt.Errorf("begin assistant workload client transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := assistantrepo.New(tx).AcquireAssistantAdvisoryLock(ctx, p.AssistantID.String()); err != nil {
+		return ProvisionedAssistantWorkloadClient{}, fmt.Errorf("acquire runtime lifecycle fence: %w", err)
+	}
 	result, err := s.provisionAssistantWorkloadClientLocked(ctx, tx, p, actor)
 	if err != nil {
 		return ProvisionedAssistantWorkloadClient{}, err
@@ -112,7 +119,7 @@ func (s *Service) provisionAssistantWorkloadClientLocked(ctx context.Context, tx
 	q := usersessions_repo.New(tx)
 	var noSecretExpiry pgtype.Timestamptz
 	row, err := q.CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID: p.UserSessionIssuerID, ClientID: uuid.NewString(), ClientSecretHash: hash,
+		UserSessionIssuerID: p.UserSessionIssuerID, ClientID: assistantWorkloadClientPrefix + uuid.NewString(), ClientSecretHash: hash,
 		ClientName: "Assistant workload", RedirectUris: []string{}, TokenEndpointAuthMethod: p.AuthMethod,
 		ClientSecretExpiresAt: noSecretExpiry, ClientJwks: inline, ClientJwksUri: conv.ToPGTextEmpty(p.JWKSURI),
 	})

@@ -268,6 +268,11 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if err := flushKitNotifications(work, flush); err != nil {
 		return err
 	}
+	// A processing event owns cancellation even before session/new returns.
+	// Startup replay is flushed, and no prompt has yet been submitted.
+	if stopped, err := p.cancelKitTurnBeforePrompt(work, r, req); err != nil || stopped {
+		return err
+	}
 	echoMu.Lock()
 	awaitingEcho = req.CanonicalUserMessageID != uuid.Nil
 	echoMu.Unlock()
@@ -281,38 +286,41 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if json.Unmarshal(raw, &ack) != nil || ack.MessageID == "" {
 		return errors.New("invalid Kit prompt acknowledgement")
 	}
-	if req.CanonicalUserMessageID != uuid.Nil {
-		if req.EventID == uuid.Nil {
-			return errors.New("kit echo correlation requires event identity")
-		}
-		echoMu.RLock()
-		existing, known := binding.UserEchoes[ack.MessageID]
-		echoMu.RUnlock()
-		if known && existing != req.CanonicalUserMessageID {
-			return errors.New("conflicting Kit user message acknowledgement")
-		}
-		echo := kitProtocolUserEcho{RuntimeID: r.ID, SessionID: session.SessionID, ACPMessageID: ack.MessageID, MessageID: req.CanonicalUserMessageID}
-		if err := p.storeUserEcho(work, key, req.EventID, echo); err != nil {
-			return fmt.Errorf("kit protocol operation: %w", err)
-		}
+	if err := func() error {
 		echoMu.Lock()
-		binding.UserEchoes[ack.MessageID] = req.CanonicalUserMessageID
-		echoMu.Unlock()
-	}
-	echoMu.Lock()
-	awaitingEcho = false
-	if pendingEcho != nil {
-		canonical, applyErr := reducer.Apply(*pendingEcho)
-		if applyErr == nil {
-			_, applyErr = p.config.Projector.Handle(work, binding, canonical)
+		defer echoMu.Unlock()
+		if err := validateKitPromptEcho(pendingEcho, ack.MessageID); err != nil {
+			return err
 		}
-		pendingEcho = nil
-		if applyErr != nil {
-			echoMu.Unlock()
-			return applyErr
+		if req.CanonicalUserMessageID != uuid.Nil {
+			if req.EventID == uuid.Nil {
+				return errors.New("kit echo correlation requires event identity")
+			}
+			existing, known := binding.UserEchoes[ack.MessageID]
+			if known && existing != req.CanonicalUserMessageID {
+				return errors.New("conflicting Kit user message acknowledgement")
+			}
+			echo := kitProtocolUserEcho{RuntimeID: r.ID, SessionID: session.SessionID, ACPMessageID: ack.MessageID, MessageID: req.CanonicalUserMessageID}
+			if err := p.storeUserEcho(work, key, req.EventID, echo); err != nil {
+				return fmt.Errorf("kit protocol operation: %w", err)
+			}
+			binding.UserEchoes[ack.MessageID] = req.CanonicalUserMessageID
 		}
+		awaitingEcho = false
+		if pendingEcho != nil {
+			canonical, err := reducer.Apply(*pendingEcho)
+			if err != nil {
+				return err
+			}
+			if _, err := p.config.Projector.Handle(work, binding, canonical); err != nil {
+				return err
+			}
+			pendingEcho = nil
+		}
+		return nil
+	}(); err != nil {
+		return err
 	}
-	echoMu.Unlock()
 	// Echo correlation must be ready before completing startup.
 	// No cancellation is sent until this flush completes.
 	if err := flushKitNotifications(work, flush); err != nil {
@@ -654,4 +662,20 @@ func kitProtocolModelOption(raw json.RawMessage, model string) (selection, curre
 		return "", "", fmt.Errorf("persisted assistant model is not uniquely offered by the Kit Speakeasy catalog (model_configs=%d speakeasy_options=%d matches=%d)", configs, offered, matches)
 	}
 	return selection, current, nil
+}
+
+// Validate before persisting correlation or projecting the withheld user frame.
+func validateKitPromptEcho(pending *kitacp.Notification, acknowledgedID string) error {
+	if pending == nil {
+		return nil
+	}
+	var envelope struct {
+		Update struct {
+			MessageID string `json:"messageId"`
+		} `json:"update"`
+	}
+	if json.Unmarshal(pending.Params, &envelope) != nil || envelope.Update.MessageID != acknowledgedID {
+		return errors.New("kit prompt echo does not match acknowledgement")
+	}
+	return nil
 }

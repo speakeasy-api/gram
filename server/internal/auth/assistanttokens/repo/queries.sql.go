@@ -160,7 +160,7 @@ SELECT $1, $2, $3, r.id, $4
 FROM assistant_runtimes r JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 WHERE r.id = $5 AND r.project_id = $2 AND r.assistant_id = $3
 AND r.runtime_version = 3 AND a.runtime_version = 3
-AND NOT r.deleted AND NOT r.ended AND NOT a.deleted AND a.status = 'active'
+AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active'
 RETURNING id
 `
 
@@ -196,7 +196,7 @@ JOIN assistant_threads t ON t.id = s.assistant_thread_id AND t.project_id = s.pr
 JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
 WHERE s.runtime_id = $1 AND s.project_id = $2 AND s.assistant_id = $3
   AND r.runtime_version = 3 AND a.runtime_version = 3
-  AND NOT r.deleted AND NOT r.ended AND NOT a.deleted AND a.status = 'active'
+  AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active'
   AND NOT t.deleted AND NOT c.deleted
 `
 
@@ -239,7 +239,7 @@ JOIN api_keys k ON k.id = c.api_key_id AND k.project_id = c.project_id
 JOIN assistant_runtimes r ON r.id = c.runtime_id AND r.project_id = c.project_id AND r.assistant_id = c.assistant_id
 JOIN assistants a ON a.id = c.assistant_id AND a.project_id = c.project_id
 WHERE c.api_key_id = $1 AND c.revoked_at IS NULL AND NOT k.deleted AND (k.expires_at IS NULL OR k.expires_at > clock_timestamp())
-AND NOT r.deleted AND NOT r.ended AND NOT a.deleted AND a.status = 'active'
+AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active'
 `
 
 func (q *Queries) ReadKitAPIKeyBinding(ctx context.Context, apiKeyID uuid.UUID) (AssistantInferenceCredential, error) {

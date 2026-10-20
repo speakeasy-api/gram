@@ -2381,7 +2381,7 @@ JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_i
 WHERE c.id = @client_id AND c.deleted IS FALSE
   AND c.assistant_trigger_workload_binding_id IS NULL AND c.assistant_runtime_id IS NULL
   AND r.id = @runtime_id AND r.runtime_version = 3 AND a.runtime_version = 3
-  AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
   AND c.organization_id = @organization_id
   AND (c.project_id = @project_id OR c.project_id IS NULL)
   AND tb.organization_id = @organization_id AND tb.project_id = @project_id
@@ -2418,7 +2418,8 @@ SELECT r.id, r.assistant_id, r.project_id, a.organization_id
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 WHERE r.id = @runtime_id AND r.runtime_version = 3 AND a.runtime_version = 3
-  AND r.deleted IS FALSE AND r.ended IS FALSE AND a.deleted IS FALSE AND a.status = 'active';
+  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
+  AND a.deleted IS FALSE AND a.status = 'active';
 
 -- name: ListAssistantWorkloadRuntimeRoots :many
 SELECT tb.original_trigger_id AS trigger_id
@@ -2457,7 +2458,8 @@ WHERE s.jti = @jti AND s.subject_urn = @subject_urn
   AND s.organization_id = @organization_id AND r.project_id = @project_id
   AND s.deleted IS FALSE AND s.expires_at > clock_timestamp() AND c.deleted IS FALSE
   AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
-  AND a.deleted IS FALSE AND a.status = 'active' AND a.organization_id = @organization_id;
+  AND a.deleted IS FALSE AND a.status = 'active' AND a.organization_id = @organization_id
+  AND t.definition_slug <> 'wake' AND t.target_kind = 'assistant' AND t.target_ref = a.id::text;
 
 -- name: LockUserSessionConsentClient :one
 -- Serializes remembered approval, automatic code issuance and withdrawal.
@@ -2549,3 +2551,17 @@ SELECT COUNT(*) FROM user_session_consent_resources
 WHERE project_id = @project_id::uuid
   AND user_session_consent_id = ANY(@consent_ids::uuid[])
   AND deleted IS FALSE;
+
+-- name: GetKitUserSessionIssuerByID :one
+SELECT issuer.*
+FROM user_session_issuers issuer
+LEFT JOIN projects project ON project.id = issuer.project_id
+WHERE issuer.id = @id AND issuer.deleted IS FALSE
+  AND ((issuer.project_id = @project_id::uuid AND project.organization_id = @organization_id::text)
+    OR (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text));
+
+-- name: ClearAssistantWorkloadClientMarkersForTest :exec
+-- Test fixture: simulate ON DELETE SET NULL cleanup of both binding references.
+UPDATE user_session_clients
+SET assistant_runtime_id = NULL, assistant_trigger_workload_binding_id = NULL
+WHERE id = @client_id AND organization_id = @organization_id;

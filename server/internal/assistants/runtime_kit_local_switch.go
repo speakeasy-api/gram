@@ -62,13 +62,9 @@ func (k *KitLocalRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assis
 		if err != nil {
 			return result, fmt.Errorf("%w: inspect kit switch source: %w", errRuntimeSwitchUnavailable, err)
 		}
-		// DB stopped/failed is not evidence on its own: inspect the bound engine
-		// resource. Files in an actually stopped/absent local guest cannot execute;
-		// no host-side wake worker is owned by this backend. DB pending work is
-		// independently checked by the caller under its shared admission lock.
-		if row.State != runtimeStateActive && (!exists || !info.Running) {
-			continue
-		}
+		// A stopped or missing process cannot certify settlement of its durable
+		// session bindings. Never equate a crash with completed background work.
+		// Without a live authoritative coordinator, switching must fail closed.
 		if !exists || !info.Running {
 			return result, errRuntimeSwitchUnavailable
 		}
