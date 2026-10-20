@@ -1982,8 +1982,8 @@ type GetHookClientsResponseBody struct {
 	WindowDays int `form:"window_days" json:"window_days" xml:"window_days"`
 	// When the grids were read from ClickHouse.
 	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
-	// True when the grids came from the one-hour cache rather than a fresh
-	// ClickHouse read.
+	// True when the grids came from the cache rather than a fresh ClickHouse read.
+	// Cached grids last 24 hours and refresh in the background once an hour old.
 	FromCache bool `form:"from_cache" json:"from_cache" xml:"from_cache"`
 	// Every organization that appears in any grid.
 	Organizations []*AdminHookClientOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`

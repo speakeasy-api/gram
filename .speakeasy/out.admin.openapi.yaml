@@ -719,12 +719,12 @@ paths:
             minimum: 1
             type: integer
         - allowEmptyValue: true
-          description: Skip the one-hour cache and read ClickHouse now.
+          description: Skip the cache and read ClickHouse now.
           in: query
           name: refresh
           schema:
             default: false
-            description: Skip the one-hour cache and read ClickHouse now.
+            description: Skip the cache and read ClickHouse now.
             type: boolean
       responses:
         "200":
@@ -8205,7 +8205,7 @@ components:
           description: The device agent version grid. Empty for days before versions were recorded.
         from_cache:
           type: boolean
-          description: True when the grids came from the one-hour cache rather than a fresh ClickHouse read.
+          description: True when the grids came from the cache rather than a fresh ClickHouse read. Cached grids last 24 hours and refresh in the background once an hour old.
         inference:
           type: array
           items:

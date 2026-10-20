@@ -579,8 +579,8 @@ type AdminHookClientsResult struct {
 	WindowDays int
 	// When the grids were read from ClickHouse.
 	QueriedAt string
-	// True when the grids came from the one-hour cache rather than a fresh
-	// ClickHouse read.
+	// True when the grids came from the cache rather than a fresh ClickHouse read.
+	// Cached grids last 24 hours and refresh in the background once an hour old.
 	FromCache bool
 	// Every organization that appears in any grid.
 	Organizations []*AdminHookClientOrganization
@@ -1897,7 +1897,7 @@ type GetHookClientsPayload struct {
 	AdminSessionToken *string
 	// Window in days.
 	WindowDays int
-	// Skip the one-hour cache and read ClickHouse now.
+	// Skip the cache and read ClickHouse now.
 	Refresh bool
 }
 

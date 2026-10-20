@@ -6,8 +6,7 @@ const (
 	// FlagGramMCPCatalog temporarily selects the Speakeasy MCP catalog per organization.
 	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
 
-	FlagClickhouseToolMetrics Flag = "clickhouse-tool-metrics"
-	FlagAssistants            Flag = "assistants"
+	FlagAssistants Flag = "assistants"
 	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
 	// based") risk policy MVP. While set, only opted-in organizations can
 	// create or update nl-type risk policies and have them enforced. The
@@ -39,7 +38,6 @@ const (
 	// Removed once device-level matching is GA.
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
 
-	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	// FlagRiskFindingsClickHouseCutover means the organization is on the ClickHouse findings path:
 	// batch judges run in the analysis handlers, and finding reads and webhooks use ClickHouse.
 	// Server-side org-group targeting fails closed to the Postgres path.
