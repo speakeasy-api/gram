@@ -30,7 +30,7 @@ claims, verification and rotation.
 
 | Piece       | Code                                          | Responsibility                                                                                                                     |
 | ----------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Agent       | `tunnel/agent`, `tunnel/cmd/tunnel-agent`     | Customer-side process. Dials the gateway and proxies substream HTTP to one pinned local MCP URL.                                   |
+| Agent       | `tunnel/agent`, `tunnel/cmd/tunnel-agent`     | Customer-side process. Dials the gateway and serves substream HTTP from one pinned local MCP URL or stdio MCP server command.      |
 | Gateway     | `tunnel/gateway`, `tunnel/cmd/tunnel-gateway` | Accepts agent WebSockets on the public listener, owns yamux sessions, and forwards requests by tunnel ID on the internal listener. |
 | MCP serve   | `server/internal/mcp/serveendpoint.go`        | Resolves the tunnel route, injects `X-Gram-Tunnel-Id`, and runs the remote MCP proxy path.                                         |
 | Management  | `server/internal/tunneledmcp`                 | Goa service backed by Postgres plus Redis connection metadata.                                                                     |
@@ -46,12 +46,66 @@ MCP client
   -> gram-server selects one gateway by client affinity or random fallback
   -> gram-server proxies to gateway with X-Gram-Tunnel-Id
   -> gateway opens yamux substream to a live agent
-  -> agent proxies to TUNNEL_LOCAL_MCP_URL
+  -> agent proxies to TUNNEL_LOCAL_MCP_URL, or bridges to TUNNEL_LOCAL_MCP_COMMAND
   -> customer MCP server
 ```
 
 The caller never supplies the tunnel ID. Speakeasy derives it from the project-scoped
 MCP server row and overwrites any inbound tunnel header before forwarding.
+
+## Stdio MCP Servers
+
+Set `TUNNEL_LOCAL_MCP_COMMAND` instead of `TUNNEL_LOCAL_MCP_URL` to serve an
+MCP server that speaks the stdio transport. Stdio mode needs a Unix agent,
+such as the published Linux image, because shutdown relies on process groups.
+The agent runs the command with `/bin/sh -c` and bridges Streamable HTTP onto
+it:
+
+- Each MCP session gets its own server process, started by `initialize` and
+  addressed by an agent-minted `Mcp-Session-Id`. A server that exits before
+  answering `initialize` gets HTTP 502.
+- Messages are relayed verbatim. Server-initiated requests and notifications go
+  to the session's GET stream when one is open, otherwise to an open POST
+  stream, otherwise to a bounded backlog drained by the next GET stream.
+- DELETE, `TUNNEL_STDIO_IDLE_TIMEOUT` (default `30m`), and agent shutdown stop
+  the process: stdin closes, then SIGTERM, then SIGKILL to its process group.
+  The idle timer counts client requests and server messages that reach an
+  open stream. Server messages held in the backlog, and an open GET stream
+  with nothing on it, do not keep a session alive. A session that is shutting
+  down answers 404.
+- `TUNNEL_STDIO_MAX_SESSIONS` (default `16`) caps concurrent processes. An
+  `initialize` past the cap stops the session that has gone longest without a
+  request, provided that is over two minutes and none of its requests is in
+  flight; its client gets 404 on its next request and starts a new session.
+  When no session qualifies, the `initialize` gets HTTP 503.
+- A single message over 32 MiB in either direction is refused; from the server
+  it ends the session. A stream whose client falls 64 MiB behind, or accepts
+  nothing for 30 seconds, is cut off rather than stalling the session.
+- A client that gives up on a request does not end the session; its message
+  is still delivered. A server that accepts no stdin for two minutes while a
+  message is being written to it is stopped, so a stuck server cannot hold a
+  session slot.
+- The server's stderr is logged line by line, truncated to 8 KiB a line and
+  capped at 120 lines a minute; the number of lines left out is logged.
+- The agent answers a server's `ping` sent before `initialize` completes, since
+  the client has no way to answer it yet.
+- The process inherits the agent's environment minus every `TUNNEL_*`
+  variable, so credentials for the server go in the agent's environment. On
+  Linux the agent also marks itself non-dumpable, so a server running as the
+  same user cannot read the agent's environment, `TUNNEL_KEY` included,
+  through `/proc`. Treat this as defense in depth: for a hard boundary, run
+  the server as a different user.
+- As PID 1 in a container, the agent reaps exited processes from a server's
+  process group, but not other orphans. Run it under an init such as `tini`
+  or `docker run --init`.
+- Processes outlive gateway reconnects, but sessions are local to one agent.
+  Run a single agent replica per stdio tunnel.
+
+Only MCP traffic at the root path is served. OAuth back-channel paths return
+404, so a stdio tunnel cannot back an OAuth issuer.
+
+The published image contains no language runtimes. To run a Node or Python
+server, build on top of it and add the runtime the command needs.
 
 ## OAuth Back-Channel Requests
 
@@ -94,6 +148,16 @@ run the agent against any local MCP server with the one-time key it issues:
 TUNNEL_GATEWAY_URL=ws://localhost:8090/connect \
 TUNNEL_KEY=<one-time tunnel key> \
 TUNNEL_LOCAL_MCP_URL=<local MCP server url> \
+TUNNEL_SERVICE_VERSION=dev \
+go run ./tunnel/cmd/tunnel-agent
+```
+
+For a stdio server, swap the URL for a command:
+
+```bash
+TUNNEL_GATEWAY_URL=ws://localhost:8090/connect \
+TUNNEL_KEY=<one-time tunnel key> \
+TUNNEL_LOCAL_MCP_COMMAND='npx -y @modelcontextprotocol/server-everything' \
 TUNNEL_SERVICE_VERSION=dev \
 go run ./tunnel/cmd/tunnel-agent
 ```

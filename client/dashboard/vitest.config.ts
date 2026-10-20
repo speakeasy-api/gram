@@ -16,6 +16,7 @@ export default defineConfig({
     __GRAM_SERVER_URL__: JSON.stringify(""),
     __GRAM_GIT_SHA__: JSON.stringify(""),
     __GRAM_API_URL__: JSON.stringify(""),
+    __GRAM_TUNNEL_AGENT_VERSION__: JSON.stringify("0.0.0-test"),
     __GRAM_DEV_WORKTREE__: JSON.stringify(""),
     __GRAM_DEV_BRANCH__: JSON.stringify(""),
     __GRAM_DEV_BRANCH_EVENT__: JSON.stringify(""),
