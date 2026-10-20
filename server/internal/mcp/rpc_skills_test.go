@@ -22,20 +22,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// skillsFixture is one public hosted toolset in the test user's project with
-// the Skills extension flag on for the owning organization, plus the ids a
-// test needs to distribute skills to it.
+// skillsFixture is one public hosted toolset in the test user's project,
+// wrapped by one enabled MCP server, with the Skills extension flag on for the
+// owning organization, plus the ids a test needs to link skills to it.
 type skillsFixture struct {
 	authCtx        *contextvalues.AuthContext
 	projectID      uuid.UUID
 	organizationID string
 	toolsetID      uuid.UUID
+	serverID       uuid.UUID
 	mcpSlug        string
 }
 
@@ -55,8 +54,26 @@ func newSkillsFixture(t *testing.T, ctx context.Context, ti *testInstance) *skil
 		projectID:      *authCtx.ProjectID,
 		organizationID: authCtx.ActiveOrganizationID,
 		toolsetID:      toolset.ID,
+		serverID:       createToolsetWrapper(t, ctx, ti, *authCtx.ProjectID, toolset.ID, slug),
 		mcpSlug:        toolset.McpSlug.String,
 	}
+}
+
+// createToolsetWrapper adds an enabled MCP server wrapping the toolset, the
+// server a request to the toolset's hosted route is attributed to.
+func createToolsetWrapper(t *testing.T, ctx context.Context, ti *testInstance, projectID, toolsetID uuid.UUID, slug string) uuid.UUID {
+	t.Helper()
+
+	server, err := mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+		ID:         uuid.New(),
+		ProjectID:  projectID,
+		Name:       conv.ToPGText("wrapper-" + slug),
+		Slug:       conv.ToPGText("wrapper-" + slug),
+		ToolsetID:  conv.ToNullUUID(toolsetID),
+		Visibility: "public",
+	})
+	require.NoError(t, err)
+	return server.ID
 }
 
 func skillContent(name, description string) string {
@@ -68,18 +85,16 @@ func rawSHA256(content string) string {
 	return hex.EncodeToString(digest[:])
 }
 
-// servedSkill distributes one skill with one spec-valid version through a
-// plugin that contains the fixture toolset and is assigned to principalURN.
-// It returns the skill's id and the served content.
-func servedSkill(t *testing.T, ctx context.Context, ti *testInstance, f *skillsFixture, name, principalURN string) (uuid.UUID, string) {
+// servedSkill links one skill with one spec-valid version to the fixture's
+// server. It returns the skill's id and the served content.
+func servedSkill(t *testing.T, ctx context.Context, ti *testInstance, f *skillsFixture, name string) (uuid.UUID, string) {
 	t.Helper()
 
-	return servedSkillVia(t, ctx, ti, f, name, principalURN, conv.ToNullUUID(f.toolsetID), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	return servedSkillOn(t, ctx, ti, f, name, f.serverID)
 }
 
-// servedSkillVia is servedSkill with the plugin containing the given toolset
-// or MCP server instead of the fixture toolset.
-func servedSkillVia(t *testing.T, ctx context.Context, ti *testInstance, f *skillsFixture, name, principalURN string, toolsetID, mcpServerID uuid.NullUUID) (uuid.UUID, string) {
+// servedSkillOn is servedSkill with the skill linked to the given server.
+func servedSkillOn(t *testing.T, ctx context.Context, ti *testInstance, f *skillsFixture, name string, serverID uuid.UUID) (uuid.UUID, string) {
 	t.Helper()
 
 	content := skillContent(name, "Serves "+name+".")
@@ -96,27 +111,13 @@ func servedSkillVia(t *testing.T, ctx context.Context, ti *testInstance, f *skil
 	})
 	require.NoError(t, err)
 
-	pluginsQueries := pluginsrepo.New(ti.conn)
-	plugin, err := pluginsQueries.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
-		OrganizationID: f.organizationID, ProjectID: f.projectID, Name: name + "-plugin", Slug: name + "-plugin", Description: pgtype.Text{},
-	})
-	require.NoError(t, err)
-
-	_, err = pluginsQueries.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
-		PluginID: plugin.ID, ToolsetID: toolsetID, McpServerID: mcpServerID,
-		DisplayName: "toolset", Policy: "required", SortOrder: 0,
-	})
-	require.NoError(t, err)
-
-	_, err = pluginsQueries.AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
-		OrganizationID: f.organizationID, PrincipalUrn: principalURN, InstallMode: "default", PluginID: plugin.ID,
-	})
-	require.NoError(t, err)
-
-	_, err = skillsQueries.CreateSkillDistribution(ctx, skillsrepo.CreateSkillDistributionParams{
-		ProjectID: f.projectID, SkillID: skill.ID, PluginID: conv.ToNullUUID(plugin.ID),
-		AssistantID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PinnedVersionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Channel: "plugin", CreatedByUserID: f.authCtx.UserID,
+	_, err = mcpskills.CreateLink(ctx, ti.conn, mcpskills.NewLink{
+		OrganizationID:  f.organizationID,
+		ProjectID:       f.projectID,
+		SkillID:         skill.ID,
+		PinnedVersionID: nil,
+		Target:          mcpskills.MCPServerTarget(serverID),
+		CreatedByUserID: f.authCtx.UserID,
 	})
 	require.NoError(t, err)
 
@@ -251,13 +252,15 @@ func TestServePublic_Skills_DiscoverAdvertisesExtension(t *testing.T) {
 	requireSkillsCapability(t, result["capabilities"])
 }
 
-func TestServePublic_Skills_ListServesAssignedPluginSkills(t *testing.T) {
+func TestServePublic_Skills_ListServesLinkedSkills(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
-	_, assignedContent := servedSkill(t, ctx, ti, f, "assigned-skill", urn.PrincipalWildcard)
-	servedSkill(t, ctx, ti, f, "unassigned-skill", urn.NewPrincipal(urn.PrincipalTypeEmail, "someone-else@example.test").String())
+	_, linkedContent := servedSkill(t, ctx, ti, f, "linked-skill")
+	otherToolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), f.authCtx, "other-"+f.mcpSlug)
+	otherServer := createToolsetWrapper(t, ctx, ti, f.projectID, otherToolset.ID, "other-"+f.mcpSlug)
+	servedSkillOn(t, ctx, ti, f, "elsewhere-skill", otherServer)
 
 	w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), "", nil)
 	require.NoError(t, err)
@@ -267,35 +270,26 @@ func TestServePublic_Skills_ListServesAssignedPluginSkills(t *testing.T) {
 
 	var skills []wireSkill
 	require.NoError(t, json.Unmarshal(result["skills"], &skills))
-	require.Len(t, skills, 1, "only the skill carried by an assigned plugin is served")
-	requireWireSkill(t, skills[0], "assigned-skill", assignedContent)
+	require.Len(t, skills, 1, "only the skill linked to the endpoint's server is served")
+	requireWireSkill(t, skills[0], "linked-skill", linkedContent)
 	require.NotContains(t, result, "nextCursor")
 }
 
-func TestServePublic_Skills_ListServesSkillsOfLegacyToolsetWrapper(t *testing.T) {
+func TestServePublic_Skills_ToolsetWithoutServerServesNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
-	wrapper, err := mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
-		ID:         uuid.New(),
-		ProjectID:  f.projectID,
-		Name:       conv.ToPGText("wrapper-" + f.mcpSlug),
-		Slug:       conv.ToPGText("wrapper-" + f.mcpSlug),
-		ToolsetID:  conv.ToNullUUID(f.toolsetID),
-		Visibility: "public",
-	})
-	require.NoError(t, err)
-	_, content := servedSkillVia(t, ctx, ti, f, "wrapper-skill", urn.PrincipalWildcard, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, conv.ToNullUUID(wrapper.ID))
+	servedSkill(t, ctx, ti, f, "unreachable-skill")
+	bare := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), f.authCtx, "bare-"+f.mcpSlug)
 
-	w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), "", nil)
+	w, err := servePublicHTTP(t, ctx, ti, bare.McpSlug.String, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), "", nil)
 	require.NoError(t, err)
-	result := requireRPCResult(t, w)
+	require.JSONEq(t, `[]`, string(requireRPCResult(t, w)["skills"]), "skills are linked to servers, so a toolset no server wraps serves none")
 
-	var skills []wireSkill
-	require.NoError(t, json.Unmarshal(result["skills"], &skills))
-	require.Len(t, skills, 1, "a plugin containing the toolset's only wrapper carries skills to the legacy route")
-	requireWireSkill(t, skills[0], "wrapper-skill", content)
+	w, err = servePublicHTTP(t, ctx, ti, bare.McpSlug.String, makeMetaRPCBody(t, mcpversions.MethodSkillsGet, map[string]any{"uri": mcpskills.SkillURI("unreachable-skill")}), "", nil)
+	require.NoError(t, err)
+	requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
 }
 
 func TestServePublic_Skills_ListAcceptsEmptyCursorAndRejectsUnknownOne(t *testing.T) {
@@ -319,7 +313,7 @@ func TestServePublic_Skills_GetByURI(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
-	_, content := servedSkill(t, ctx, ti, f, "get-skill", urn.PrincipalWildcard)
+	_, content := servedSkill(t, ctx, ti, f, "get-skill")
 
 	w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsGet, map[string]any{"uri": mcpskills.SkillURI("get-skill")}), "", nil)
 	require.NoError(t, err)
@@ -341,7 +335,7 @@ func TestServePublic_Skills_ReadServesMarkdownAndRecordsOneActivationPerSession(
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
-	skillID, content := servedSkill(t, ctx, ti, f, "read-skill", urn.PrincipalWildcard)
+	skillID, content := servedSkill(t, ctx, ti, f, "read-skill")
 	uri := mcpskills.SkillURI("read-skill")
 	body := makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": uri})
 	sessionA := "skills-session-" + uuid.NewString()[:8]
@@ -387,7 +381,7 @@ func TestServePublic_Skills_ReadUnknownURIIsInvalidParams(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
-	servedSkill(t, ctx, ti, f, "other-skill", urn.PrincipalWildcard)
+	servedSkill(t, ctx, ti, f, "other-skill")
 
 	w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": mcpskills.SkillURI("missing-skill")}), "", nil)
 	require.NoError(t, err)
@@ -405,7 +399,7 @@ func TestServePublic_Skills_AnonymousCallerIsServedNothing(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
-	servedSkill(t, ctx, ti, f, "members-only", urn.PrincipalWildcard)
+	servedSkill(t, ctx, ti, f, "members-only")
 	uri := mcpskills.SkillURI("members-only")
 
 	// The public toolset answers without credentials; a request context
@@ -434,9 +428,9 @@ func TestServePublic_Skills_APIKeyCallerIsServedNothing(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
-	// Assigned to everyone: the plugin would reach any caller whose
-	// principals were resolved at all.
-	servedSkill(t, ctx, ti, f, "keyed-out", urn.PrincipalWildcard)
+	// Linked to the endpoint: it reaches any live member of the
+	// organization.
+	servedSkill(t, ctx, ti, f, "keyed-out")
 	uri := mcpskills.SkillURI("keyed-out")
 
 	// A project API key created by the test user. The key authenticates and
@@ -450,7 +444,7 @@ func TestServePublic_Skills_APIKeyCallerIsServedNothing(t *testing.T) {
 
 	w, err = servePublicHTTP(t, keyed, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), apiKey, nil)
 	require.NoError(t, err)
-	require.JSONEq(t, `[]`, string(requireRPCResult(t, w)["skills"]), "an API key is not served its creator's assignments")
+	require.JSONEq(t, `[]`, string(requireRPCResult(t, w)["skills"]), "an API key is not served its creator's skills")
 
 	w, err = servePublicHTTP(t, keyed, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsGet, map[string]any{"uri": uri}), apiKey, nil)
 	require.NoError(t, err)
@@ -480,7 +474,7 @@ func TestServePublic_Skills_FlagOffAnswersMethodNotFound(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
-	servedSkill(t, ctx, ti, f, "gated-skill", urn.PrincipalWildcard)
+	servedSkill(t, ctx, ti, f, "gated-skill")
 	ti.features.SetFlag(feature.FlagSkillsOverMCP, f.organizationID, false)
 	uri := mcpskills.SkillURI("gated-skill")
 
@@ -508,7 +502,7 @@ func TestServePublic_Skills_ResourcesListExcludesSkills(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
-	servedSkill(t, ctx, ti, f, "listed-skill", urn.PrincipalWildcard)
+	servedSkill(t, ctx, ti, f, "listed-skill")
 
 	w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodResourcesList, map[string]any{}), "", nil)
 	require.NoError(t, err)
