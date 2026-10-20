@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/tunnel/identity"
 )
 
 const (
@@ -126,7 +127,7 @@ const tunnelHeaderPrefix = "x-gram-tunnel-"
 // Authorization is not listed: the copy already drops it, and a configured
 // header may forward the caller's own upstream credential from it.
 func IsProtectedInboundHeader(name string) bool {
-	if mcpauthz.ReservedHeader(name) {
+	if identity.ReservedHeader(name) {
 		return true
 	}
 	key := headerKey(name)
@@ -174,7 +175,7 @@ func IsProtectedInboundHeader(name string) bool {
 // header it does not recognize, and the upstream validates them against the
 // body; stripping one would make a conforming request fail upstream.
 func isSkippedRequestHeader(name string) bool {
-	if mcpauthz.ReservedHeader(name) {
+	if identity.ReservedHeader(name) {
 		return true
 	}
 	switch strings.ToLower(name) {
@@ -214,7 +215,7 @@ func isSkippedRequestHeader(name string) bool {
 // hop-by-hop handling itself, but Content-Length is recomputed by the
 // ResponseWriter, and Transfer-Encoding would double-encode.
 func isSkippedResponseHeader(name string) bool {
-	if mcpauthz.ReservedHeader(name) {
+	if identity.ReservedHeader(name) {
 		return true
 	}
 	// The CORS middleware owns the browser-facing policy. An upstream's own
@@ -347,6 +348,12 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 	if p.AuthorizationOverride != "" {
 		remoteReq.Header.Set("Authorization", "Bearer "+p.AuthorizationOverride)
 	}
+	// The credential attests the routed bearer only. A mismatch means a caller
+	// replaced one without the other, and signing it would vouch for a token
+	// it does not describe.
+	if cred := p.UpstreamCredential; cred != nil && (p.AuthorizationOverride == "" || identity.TokenSHA256(p.AuthorizationOverride) != cred.TokenSHA256) {
+		return oops.E(oops.CodeUnexpected, nil, "upstream credential does not match the forwarded bearer").LogError(ctx, p.Logger)
+	}
 
 	// The caller's User-Agent is forwarded as is; only a missing one gets ours.
 	if remoteReq.Header.Get("User-Agent") == "" {
@@ -360,12 +367,12 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 	remoteReq.Header.Del("Accept-Encoding")
 	mcpauthz.Strip(remoteReq.Header)
 	if p.CallerAssertion != nil {
-		assertion, err := p.CallerAssertion(ctx)
+		assertion, err := p.CallerAssertion(ctx, p.UpstreamCredential)
 		if err != nil {
 			return oops.E(oops.CodeUnauthorized, err, "could not establish tunnel caller identity").LogWarn(ctx, p.Logger)
 		}
 		if assertion != "" {
-			remoteReq.Header.Set(mcpauthz.Header, assertion)
+			remoteReq.Header.Set(identity.Header, assertion)
 		}
 	}
 
@@ -376,7 +383,7 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 // [HeaderPolicyTunneled].
 func (p *Proxy) applyTunneledConfiguredHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
 	for _, h := range p.Headers {
-		if mcpauthz.ReservedHeader(h.Name) || mcpauthz.ReservedHeader(h.ValueFromRequestHeader) {
+		if identity.ReservedHeader(h.Name) || identity.ReservedHeader(h.ValueFromRequestHeader) {
 			continue
 		}
 		// A configured header must not set or delete a standard MCP request
@@ -453,7 +460,7 @@ func clearRemoteDestination(header http.Header, stored string) {
 // client's standard MCP request headers, which configuration never sets or
 // clears: an intermediary must forward the latter untouched.
 func isUnownedHeader(name string) bool {
-	return mcpauthz.ReservedHeader(name) || httpheaders.IsStandardMCPRequestHeader(strings.ReplaceAll(name, "_", "-"))
+	return identity.ReservedHeader(name) || httpheaders.IsStandardMCPRequestHeader(strings.ReplaceAll(name, "_", "-"))
 }
 
 // CheckRemoteHeader validates a configured header against

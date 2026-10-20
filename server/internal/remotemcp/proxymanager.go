@@ -390,6 +390,7 @@ func (f *ProxyManager) BuildTarget(
 		Headers:                     headers,
 		HeaderPolicy:                options.headerPolicy,
 		AuthorizationOverride:       upstreamAuth,
+		UpstreamCredential:          nil,
 		CallerAssertion:             nil,
 		UpstreamResponseRetryer:     nil,
 		UpstreamResponseInterceptor: nil,

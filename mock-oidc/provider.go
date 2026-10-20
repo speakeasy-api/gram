@@ -60,7 +60,8 @@ type refreshTokenEntry struct {
 }
 
 const (
-	codeTTL         = 60 * time.Second
+	codeTTL = 60 * time.Second
+	// tokenTTL is the default access token lifetime.
 	tokenTTL        = time.Hour
 	refreshTokenTTL = 24 * time.Hour
 )
@@ -205,7 +206,11 @@ func (p *Provider) MintAccessToken(user User, scope string) (string, time.Time, 
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	expires := time.Now().Add(tokenTTL)
+	ttl, err := p.cfg.AccessTokenLifetime()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	expires := time.Now().Add(ttl)
 	p.mu.Lock()
 	p.accessTokens[tok] = &tokenEntry{
 		subject:   user.Subject(),

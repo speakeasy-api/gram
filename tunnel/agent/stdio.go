@@ -78,6 +78,14 @@ const (
 	rpcCodeInvalidRequest = -32600
 	rpcCodeServerError    = -32000
 	rpcCodeSessionMissing = -32001
+	// rpcCodeUnauthorized answers a request whose caller identity or upstream
+	// credential the agent refuses in credentials mode.
+	rpcCodeUnauthorized = -32003
+
+	// stdioGroupExitConfirm is how long session cleanup waits, after the
+	// shutdown sequence, for the process group to disappear before removing
+	// its credentials anyway.
+	stdioGroupExitConfirm = 2 * time.Second
 )
 
 var (
@@ -96,6 +104,8 @@ type stdioBridge struct {
 	idleTimeout time.Duration
 	keepalive   time.Duration
 	logger      *slog.Logger
+	// creds is nil unless credentials mode is on.
+	creds *credentialBroker
 
 	// evictIdleAfter, responseWriteTimeout and stdinStallTimeout default to
 	// their stdio* constants; tests shorten them.
@@ -108,7 +118,20 @@ type stdioBridge struct {
 	closed   bool
 }
 
-func newStdioBridge(command string, maxSessions int, idleTimeout time.Duration, logger *slog.Logger) *stdioBridge {
+// credentialBroker is credentials mode's shared state.
+type credentialBroker struct {
+	verifier *assertionVerifier
+	store    credentialStore
+	maxAge   time.Duration
+	// expiryGrace is how long a session outlives its token's expiry.
+	expiryGrace time.Duration
+	now         func() time.Time
+	// cleanups tracks session storage removal so shutdown can finish it
+	// before releasing the instance directory.
+	cleanups sync.WaitGroup
+}
+
+func newStdioBridge(command string, maxSessions int, idleTimeout time.Duration, creds *credentialBroker, logger *slog.Logger) *stdioBridge {
 	if maxSessions <= 0 {
 		maxSessions = defaultStdioMaxSessions
 	}
@@ -122,6 +145,7 @@ func newStdioBridge(command string, maxSessions int, idleTimeout time.Duration, 
 		idleTimeout: idleTimeout,
 		keepalive:   stdioSSEKeepalive,
 		logger:      logger,
+		creds:       creds,
 
 		evictIdleAfter:       stdioEvictIdleAfter,
 		responseWriteTimeout: stdioResponseWriteTimeout,
@@ -180,15 +204,35 @@ func (b *stdioBridge) handlePost(w *responseWriter, r *http.Request) {
 		return
 	}
 
+	var assertion callerAssertion
+	if b.creds != nil {
+		var ok bool
+		if assertion, ok = b.authenticate(w, r); !ok {
+			return
+		}
+	}
+
 	sid := r.Header.Get(headerMCPSessionID)
 	if sid == "" {
-		b.handleInitialize(w, r, msgs, batch)
+		b.handleInitialize(w, r, msgs, batch, assertion)
 		return
 	}
-	sess := b.session(sid)
+	sess := b.ownedSession(w, sid, assertion)
 	if sess == nil {
-		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
 		return
+	}
+	var cred admittedCredential
+	if b.creds != nil {
+		var ok bool
+		if cred, ok = b.admitSessionCredential(w, r, sess, assertion, msgs); !ok {
+			return
+		}
+	}
+	forward := func(ctx context.Context) error {
+		if b.creds != nil {
+			return sess.sendCredentialed(ctx, msgs, cred)
+		}
+		return sess.send(ctx, msgs)
 	}
 	release, ok := sess.acquire()
 	if !ok {
@@ -199,8 +243,8 @@ func (b *stdioBridge) handlePost(w *responseWriter, r *http.Request) {
 
 	requests := requestMessages(msgs)
 	if len(requests) == 0 {
-		if err := sess.send(r.Context(), msgs); err != nil {
-			writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
+		if err := forward(r.Context()); err != nil {
+			writeForwardError(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusAccepted)
@@ -219,8 +263,8 @@ func (b *stdioBridge) handlePost(w *responseWriter, r *http.Request) {
 	}
 	defer sess.closeStream(stream)
 
-	if err := sess.send(r.Context(), msgs); err != nil {
-		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
+	if err := forward(r.Context()); err != nil {
+		writeForwardError(w, err)
 		return
 	}
 
@@ -254,17 +298,35 @@ func (b *stdioBridge) handlePost(w *responseWriter, r *http.Request) {
 	_ = w.writeJSON(responses, batch)
 }
 
-func (b *stdioBridge) handleInitialize(w *responseWriter, r *http.Request, msgs []rpcMessage, batch bool) {
+func (b *stdioBridge) handleInitialize(w *responseWriter, r *http.Request, msgs []rpcMessage, batch bool, assertion callerAssertion) {
 	if batch || len(msgs) != 1 || msgs[0].method != "initialize" || msgs[0].id == "" {
 		writeRPCError(w, http.StatusBadRequest, nil, rpcCodeInvalidRequest, "Bad Request: Mcp-Session-Id header is required")
 		return
 	}
 
+	var cred *admittedCredential
+	if b.creds != nil {
+		admitted, err := admitCredential(r.Header, assertion, b.creds.now())
+		if err != nil {
+			b.logger.Warn("tunnel stdio initialize refused: upstream credential not admitted", slog.String("reason", err.Error()))
+			writeUnauthorized(w)
+			return
+		}
+		if !assertion.permits(msgs[0].method) {
+			writeRPCError(w, http.StatusForbidden, msgs[0].rawID, rpcCodeUnauthorized, "method not permitted")
+			return
+		}
+		cred = &admitted
+	}
+
 	exited := func() {
 		writeRPCError(w, http.StatusBadGateway, msgs[0].rawID, rpcCodeServerError, "MCP server exited during initialize")
 	}
-	sess, err := b.start(r.Context())
+	sess, err := b.start(r.Context(), cred, assertion.principal)
 	switch {
+	case errors.Is(err, errCredentialExpired):
+		writeUnauthorized(w)
+		return
 	case errors.Is(err, errStdioAtCapacity):
 		w.Header().Set("Retry-After", "5")
 		writeRPCError(w, http.StatusServiceUnavailable, msgs[0].rawID, rpcCodeServerError, "MCP server is at capacity")
@@ -275,6 +337,9 @@ func (b *stdioBridge) handleInitialize(w *responseWriter, r *http.Request, msgs 
 		b.logger.Warn("tunnel stdio server failed to start", slog.Any("error", err))
 		writeRPCError(w, http.StatusBadGateway, msgs[0].rawID, rpcCodeServerError, "MCP server failed to start")
 		return
+	}
+	if cred != nil {
+		b.logger.Info("tunnel stdio session credential admitted", slog.String("stdio_session", logSessionID(sess.id)))
 	}
 	release, ok := sess.acquire()
 	if !ok {
@@ -342,14 +407,20 @@ func (b *stdioBridge) handleInitialize(w *responseWriter, r *http.Request, msgs 
 }
 
 func (b *stdioBridge) handleGet(w *responseWriter, r *http.Request) {
+	var assertion callerAssertion
+	if b.creds != nil {
+		var ok bool
+		if assertion, ok = b.authenticate(w, r); !ok {
+			return
+		}
+	}
 	sid := r.Header.Get(headerMCPSessionID)
 	if sid == "" {
 		writeRPCError(w, http.StatusBadRequest, nil, rpcCodeInvalidRequest, "Bad Request: Mcp-Session-Id header is required")
 		return
 	}
-	sess := b.session(sid)
+	sess := b.ownedSession(w, sid, assertion)
 	if sess == nil {
-		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
 		return
 	}
 	// Not acquire: an idle GET stream must not keep a session alive.
@@ -378,19 +449,114 @@ func (b *stdioBridge) handleGet(w *responseWriter, r *http.Request) {
 }
 
 func (b *stdioBridge) handleDelete(w *responseWriter, r *http.Request) {
+	var assertion callerAssertion
+	if b.creds != nil {
+		var ok bool
+		if assertion, ok = b.authenticate(w, r); !ok {
+			return
+		}
+	}
 	sid := r.Header.Get(headerMCPSessionID)
 	if sid == "" {
 		writeRPCError(w, http.StatusBadRequest, nil, rpcCodeInvalidRequest, "Bad Request: Mcp-Session-Id header is required")
 		return
 	}
-	sess := b.session(sid)
+	sess := b.ownedSession(w, sid, assertion)
 	if sess == nil {
-		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
 		return
 	}
 	sess.logger.Info("tunnel stdio session terminated by client")
-	sess.close()
+	sess.terminate()
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// authenticate verifies the caller assertion, answering 401 when it fails.
+// Nothing about any session is touched before it succeeds.
+func (b *stdioBridge) authenticate(w http.ResponseWriter, r *http.Request) (callerAssertion, bool) {
+	assertion, err := b.creds.verifier.verify(r.Context(), r.Header)
+	if err != nil {
+		b.logger.Warn("tunnel stdio request refused: caller assertion not verified", slog.String("reason", assertionFailureReason(err)))
+		writeUnauthorized(w)
+		return callerAssertion{}, false
+	}
+	return assertion, true
+}
+
+// ownedSession finds the session the caller owns. Another principal's
+// session answers exactly like an unknown one and is left untouched.
+func (b *stdioBridge) ownedSession(w http.ResponseWriter, sid string, assertion callerAssertion) *stdioSession {
+	sess := b.session(sid)
+	if sess == nil || (b.creds != nil && (sess.cred == nil || sess.cred.principal != assertion.principal)) {
+		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
+		return nil
+	}
+	return sess
+}
+
+// admitSessionCredential admits a POST to the caller's own session. The
+// principal is proven, so a missing or invalid credential ends the session:
+// the user's upstream access is gone. A credential from another grant
+// context also ends it, so the client starts over with a fresh server. An
+// expired token from the session's own grant is only refused: it is a stale
+// request, not a lost credential, and the session's deadline still applies.
+func (b *stdioBridge) admitSessionCredential(w http.ResponseWriter, r *http.Request, sess *stdioSession, assertion callerAssertion, msgs []rpcMessage) (admittedCredential, bool) {
+	cred, err := admitCredential(r.Header, assertion, b.creds.now())
+	if errors.Is(err, errCredentialExpired) && cred.context == sess.cred.context {
+		writeUnauthorized(w)
+		return cred, false
+	}
+	// Stop admission before anything that can block, such as logging or
+	// writing the response, so no other request slips in meanwhile.
+	if err != nil && !errors.Is(err, errCredentialExpired) {
+		sess.beginTerminate()
+		sess.logger.Info("tunnel stdio session credential no longer admitted; stopping server", slog.String("reason", err.Error()))
+		writeUnauthorized(w)
+		return cred, false
+	}
+	if cred.context != sess.cred.context {
+		sess.beginTerminate()
+		sess.logger.Info("tunnel stdio session credential changed grant; stopping server")
+		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
+		return cred, false
+	}
+	for _, msg := range msgs {
+		if msg.method == "" && assertion.principal.consent {
+			writeRPCError(w, http.StatusForbidden, msg.rawID, rpcCodeUnauthorized, "method not permitted")
+			return cred, false
+		}
+		if msg.method != "" && !assertion.permits(msg.method) {
+			writeRPCError(w, http.StatusForbidden, msg.rawID, rpcCodeUnauthorized, "method not permitted")
+			return cred, false
+		}
+	}
+	return cred, true
+}
+
+func assertionFailureReason(err error) string {
+	switch {
+	case errors.Is(err, errAssertionMissing):
+		return "missing"
+	case errors.Is(err, errVerificationKeys):
+		return "verification keys unavailable"
+	case errors.Is(err, errUnknownAssertKey):
+		return "unknown signing key"
+	default:
+		return "invalid"
+	}
+}
+
+func writeUnauthorized(w http.ResponseWriter) {
+	writeRPCError(w, http.StatusUnauthorized, nil, rpcCodeUnauthorized, "unauthorized")
+}
+
+// writeForwardError answers a request that could not be forwarded.
+func writeForwardError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, errCredentialExpired):
+		writeUnauthorized(w)
+	default:
+		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
+	}
 }
 
 // session finds a live session. A closing one is treated as gone, so its
@@ -410,21 +576,25 @@ func (b *stdioBridge) remove(id string) {
 	delete(b.sessions, id)
 }
 
-// start launches a session's server. At capacity it evicts the session idle
-// longest, waiting for its server to stop so the process count stays capped.
-func (b *stdioBridge) start(ctx context.Context) (*stdioSession, error) {
+// start launches a session's server. In credentials mode cred is the
+// admitted credential: its token is written before the server starts, so a
+// server that reads it during startup finds it. At capacity it evicts the
+// session idle longest, waiting for its server to stop so the process count
+// stays capped.
+func (b *stdioBridge) start(ctx context.Context, cred *admittedCredential, owner principal) (*stdioSession, error) {
 	id, err := newStdioSessionID()
 	if err != nil {
 		return nil, err
 	}
 	for {
-		sess, freeing, evicted, err := b.startOrEvict(id)
+		sess, freeing, evicted, err := b.startOrEvict(id, cred, owner)
 		if sess != nil || err != nil {
 			return sess, err
 		}
 		if evicted {
 			freeing.logger.Info("tunnel stdio session evicted for a new session; stopping server")
-			freeing.close()
+			// Waits for any admitted write, so it runs apart from this wait.
+			go freeing.terminate()
 		}
 		select {
 		case <-freeing.done:
@@ -440,7 +610,7 @@ func (b *stdioBridge) start(ctx context.Context) (*stdioSession, error) {
 // session whose slot will free for the caller to wait on: one already
 // closing, else the session idle longest, if idle past evictIdleAfter, which
 // it claims for the caller to stop.
-func (b *stdioBridge) startOrEvict(id string) (sess, freeing *stdioSession, evicted bool, err error) {
+func (b *stdioBridge) startOrEvict(id string, cred *admittedCredential, owner principal) (sess, freeing *stdioSession, evicted bool, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
@@ -466,16 +636,63 @@ func (b *stdioBridge) startOrEvict(id string) (sess, freeing *stdioSession, evic
 		return nil, idlest, true, nil
 	}
 
-	sess, err = startStdioSession(id, b.command, b.env, b.stdinStallTimeout, b.logger.With(slog.String("stdio_session", logSessionID(id))))
+	logger := b.logger.With(slog.String("stdio_session", logSessionID(id)))
+	if b.creds == nil {
+		sess, err = startStdioSession(id, b.command, b.env, b.stdinStallTimeout, nil, logger)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		b.sessions[id] = sess
+		go func() {
+			<-sess.done
+			b.remove(id)
+		}()
+		return sess, nil, false, nil
+	}
+
+	dir, err := b.creds.store.createSession()
 	if err != nil {
+		return nil, nil, false, fmt.Errorf("create session credentials: %w", err)
+	}
+	creds := newSessionCredentials(owner, cred.context, dir, b.creds.maxAge, b.creds.expiryGrace, b.creds.now)
+	sess, err = startCredentialedSession(id, b.command, credentialChildEnv(b.env, dir.tokenPath(), dir.homePath()), b.stdinStallTimeout, creds, *cred, logger)
+	if err != nil {
+		if rerr := dir.remove(); rerr != nil {
+			logger.Warn("tunnel stdio session credentials could not be removed", slog.Any("error", rerr))
+		}
 		return nil, nil, false, err
 	}
 	b.sessions[id] = sess
+	b.creds.cleanups.Go(func() {
+		<-sess.terminated
+		sess.confirmGroupExit()
+		sess.removeCredentials()
+	})
 	go func() {
 		<-sess.done
 		b.remove(id)
 	}()
 	return sess, nil, false, nil
+}
+
+// startCredentialedSession publishes the first token, then starts the server.
+func startCredentialedSession(id, command string, env []string, stdinStall time.Duration, creds *sessionCredentials, cred admittedCredential, logger *slog.Logger) (*stdioSession, error) {
+	now := creds.now()
+	if cred.expired(now) {
+		return nil, errCredentialExpired
+	}
+	if err := creds.dir.writeToken(cred.token); err != nil {
+		return nil, fmt.Errorf("write session token: %w", err)
+	}
+	sess, err := startStdioSession(id, command, env, stdinStall, creds, logger)
+	if err != nil {
+		return nil, err
+	}
+	// Nothing else can reach the session yet, and the expiry callback takes
+	// the gate before reading this state, so it is set without the gate.
+	creds.generation = 1
+	creds.timer = time.AfterFunc(creds.deadline(cred, now), func() { sess.expireCredential(1) })
+	return sess, nil
 }
 
 func (b *stdioBridge) reap(ctx context.Context) {
@@ -497,7 +714,12 @@ func (b *stdioBridge) reap(ctx context.Context) {
 			b.mu.Unlock()
 			for _, sess := range idle {
 				sess.logger.Info("tunnel stdio session idle; stopping server")
-				sess.close()
+				if sess.cred == nil {
+					sess.close()
+				} else {
+					// Waits for any admitted write, so it must not block the reaper.
+					go sess.terminate()
+				}
 			}
 		}
 	}
@@ -520,8 +742,24 @@ func (b *stdioBridge) Close() {
 		select {
 		case <-sess.done:
 		case <-deadline:
+			b.closeCredentials()
 			return
 		}
+	}
+	b.closeCredentials()
+}
+
+// closeCredentials waits for every session's credentials to be removed, then
+// releases this agent's storage. A removal waits for the session's process
+// group to stop, or for the bounded attempt to stop it to fail, and for any
+// admitted publisher to finish.
+func (b *stdioBridge) closeCredentials() {
+	if b.creds == nil {
+		return
+	}
+	b.creds.cleanups.Wait()
+	if err := b.creds.store.Close(); err != nil {
+		b.logger.Warn("tunnel credentials storage could not be removed", slog.Any("error", err))
 	}
 }
 
@@ -531,12 +769,18 @@ type stdioSession struct {
 	stdin  *os.File
 	logger *slog.Logger
 
+	// cred is nil unless credentials mode is on.
+	cred *sessionCredentials
+
 	// stdinStall bounds how long a stdin write may make no progress.
 	stdinStall time.Duration
 
 	// closing is set first thing when the session starts to close. Nothing
 	// is admitted once it is set.
 	closing atomic.Bool
+
+	// groupAlive reports whether any of the server's process group is left.
+	groupAlive func(wait time.Duration) bool
 
 	// A channel so a waiting writer can give up on cancellation.
 	writeSem chan struct{}
@@ -560,10 +804,14 @@ type stdioSession struct {
 	lastActive   time.Time
 }
 
-func startStdioSession(id, command string, env []string, stdinStall time.Duration, logger *slog.Logger) (*stdioSession, error) {
+// creds is the session's credential state in credentials mode, set before
+// any of the session's goroutines start; nil otherwise. In credentials mode
+// the server's stderr is counted instead of logged: it can carry the token.
+func startStdioSession(id, command string, env []string, stdinStall time.Duration, creds *sessionCredentials, logger *slog.Logger) (*stdioSession, error) {
+	quietStderr := creds != nil
 	cmd := shellCommand(command)
 	cmd.Env = env
-	configureProcessGroup(cmd)
+	configureProcessGroup(cmd, quietStderr)
 
 	// The agent keeps an *os.File for stdin so writes can take deadlines.
 	stdinR, stdinW, err := os.Pipe()
@@ -598,7 +846,9 @@ func startStdioSession(id, command string, env []string, stdinStall time.Duratio
 		stdin:        stdinW,
 		logger:       logger.With(slog.Int("pid", cmd.Process.Pid)),
 		stdinStall:   stdinStall,
+		cred:         creds,
 		closing:      atomic.Bool{},
+		groupAlive:   nil,
 		writeSem:     make(chan struct{}, 1),
 		exited:       make(chan struct{}),
 		terminated:   make(chan struct{}),
@@ -616,12 +866,17 @@ func startStdioSession(id, command string, env []string, stdinStall time.Duratio
 		lastActive:   time.Now(),
 	}
 
+	s.groupAlive = s.awaitGroupExit
 	stdoutDone := make(chan struct{})
 	go func() {
 		defer close(stdoutDone)
 		s.readStdout(stdoutR)
 	}()
-	go s.logStderr(stderrR)
+	if quietStderr {
+		go s.countStderr(stderrR)
+	} else {
+		go s.logStderr(stderrR)
+	}
 	go s.answerPings()
 	go func() {
 		err := cmd.Wait()
@@ -1001,6 +1256,37 @@ func (s *stdioSession) logStderr(r io.Reader) {
 			reportSuppressed()
 			return
 		}
+	}
+}
+
+// countStderr drains the server's stderr and logs only its size.
+func (s *stdioSession) countStderr(r io.Reader) {
+	var bytesRead, lines int
+	buf := make([]byte, 32<<10)
+	for {
+		n, err := r.Read(buf)
+		bytesRead += n
+		lines += bytes.Count(buf[:n], []byte{'\n'})
+		if err != nil {
+			break
+		}
+	}
+	if bytesRead > 0 {
+		s.logger.Info("tunnel stdio server wrote to stderr; not logged in credentials mode", slog.Int("bytes", bytesRead), slog.Int("lines", lines))
+	}
+}
+
+// confirmGroupExit waits briefly for the process group to be gone after the
+// shutdown sequence, killing it again if needed. Credentials are removed
+// afterwards regardless: a process that cannot be stopped must not keep a
+// token file forever.
+func (s *stdioSession) confirmGroupExit() {
+	if !s.groupAlive(stdioGroupExitConfirm) {
+		return
+	}
+	killProcessGroup(s.cmd)
+	if s.groupAlive(stdioKillWait) {
+		s.logger.Warn("tunnel stdio server process group survived shutdown; removing its credentials anyway")
 	}
 }
 

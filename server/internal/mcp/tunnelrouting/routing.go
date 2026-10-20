@@ -208,6 +208,7 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 			RemoteURL:             gatewayURL,
 			Headers:               Headers(tunnelID, forwardToken, clientAffinityKey),
 			AuthorizationOverride: "",
+			UpstreamCredential:    nil,
 		}, nil
 	}
 }

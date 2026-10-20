@@ -432,7 +432,7 @@ func (s *Service) serveConsentProxiedMCP(
 			OrganizationID:     endpoint.OrganizationID,
 			MCPServer:          serverRow,
 			ResourceIdentifier: endpoint.UpstreamResource,
-			UpstreamAuth:       upstreamToken.Token,
+			Upstream:           routedUpstreamBearer(upstreamToken),
 			WWWAuthenticate:    "",
 			Selection:          nil,
 		})

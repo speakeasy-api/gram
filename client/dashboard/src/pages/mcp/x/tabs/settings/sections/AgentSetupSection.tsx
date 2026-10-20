@@ -27,6 +27,8 @@ export function AgentSetupSection({
           <TunneledMcpSetupTabs
             serverName={tunneledMcpServer.name}
             keyPrefix={tunneledMcpServer.keyPrefix}
+            tunneledMcpServerId={tunneledMcpServer.id}
+            resourceIdentifier={tunneledMcpServer.resourceIdentifier}
           />
         </SettingsSection.Body>
       </SettingsSection.Panel>

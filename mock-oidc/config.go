@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -34,6 +35,25 @@ type OAuthClient struct {
 type ProviderConfig struct {
 	Users        []User        `yaml:"users"`
 	OAuthClients []OAuthClient `yaml:"oauth_clients"`
+
+	// AccessTokenTTL overrides how long issued access tokens live, for
+	// exercising refresh and expiry promptly. Empty keeps one hour.
+	AccessTokenTTL string `yaml:"access_token_ttl,omitempty"`
+}
+
+// AccessTokenLifetime is the configured access token lifetime.
+func (c *Config) AccessTokenLifetime() (time.Duration, error) {
+	if c.Provider.AccessTokenTTL == "" {
+		return tokenTTL, nil
+	}
+	ttl, err := time.ParseDuration(c.Provider.AccessTokenTTL)
+	if err != nil {
+		return 0, fmt.Errorf("access_token_ttl %q must be a positive duration such as 2m: %w", c.Provider.AccessTokenTTL, err)
+	}
+	if ttl <= 0 {
+		return 0, fmt.Errorf("access_token_ttl %q must be a positive duration such as 2m", c.Provider.AccessTokenTTL)
+	}
+	return ttl, nil
 }
 
 type Config struct {
@@ -74,6 +94,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if len(cfg.Provider.OAuthClients) == 0 {
 		return nil, fmt.Errorf("config has no oauth_clients")
+	}
+	if _, err := cfg.AccessTokenLifetime(); err != nil {
+		return nil, err
 	}
 
 	return &cfg, nil

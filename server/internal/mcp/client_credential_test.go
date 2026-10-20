@@ -12,18 +12,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/identity"
 )
 
 // selfClientMisconfiguredDescription is the text an MCP client sees when
@@ -146,6 +149,15 @@ func newSelfClientEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	slug := "endpoint-" + uuid.NewString()
 	mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstreamURL, slug, "private", issuerID)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockidp.MockUserID, mcpServer.ID.String())
+	attachSelfClient(t, ctx, ti, authCtx, issuerID)
+
+	return selfClientEndpoint{slug: slug, token: mintSelfClientMemberBearer(t, ti, issuerID, slug)}
+}
+
+// attachSelfClient attaches a self client to issuerID and stamps the
+// project's servers with the issuer it routes by, returning the client.
+func attachSelfClient(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, issuerID uuid.UUID) uuid.UUID {
+	t.Helper()
 
 	client := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuerID)
 	fixtures := testrepo.New(ti.conn)
@@ -169,6 +181,14 @@ func newSelfClientEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	// a self credential routes by it.
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{issuerID}))
 
+	return client.ID
+}
+
+// mintSelfClientMemberBearer mints and persists a user-session bearer for the
+// mock member on the issuer-gated endpoint slug.
+func mintSelfClientMemberBearer(t *testing.T, ti *testInstance, issuerID uuid.UUID, slug string) string {
+	t.Helper()
+
 	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:  urn.NewUserSubject(mockidp.MockUserID),
 		Audience: urn.NewUserSessionIssuer(issuerID).String(),
@@ -178,7 +198,7 @@ func newSelfClientEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	require.NoError(t, err)
 	persistTestUserSession(t, ti, issuerID, urn.NewUserSubject(mockidp.MockUserID), jti)
 
-	return selfClientEndpoint{slug: slug, token: token}
+	return token
 }
 
 func toolsCallBody(t *testing.T) []byte {
@@ -328,4 +348,67 @@ func TestServePublic_SelfClientRenewalOutageAsksForRetry(t *testing.T) {
 	require.NotEmpty(t, w.Header().Get("Retry-After"))
 	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 	require.Equal(t, []string{"Bearer revoked-token"}, gate.authorizations())
+}
+
+func TestPrivateTunnelSelfClientAssertionFollowsReplacementCredential(t *testing.T) {
+	t.Parallel()
+
+	issuer, key := callerIssuerForTest(t)
+	ctx, ti := newTestMCPServiceWithCallerAssertions(t, issuer)
+	source := &scriptedClientCredentials{tokens: []string{"revoked-token", "fresh-token"}, forgettable: true}
+	ti.clientCredentials.use(source)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	slug := "self-tunnel-" + uuid.NewString()
+	serverID, tunnelID := createPrivateTunneledServer(t, ctx, ti, *authCtx.ProjectID, issuerID, slug, "")
+	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: *authCtx.ProjectID, McpServerID: conv.ToNullUUID(serverID), Slug: slug,
+	})
+	require.NoError(t, err)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockidp.MockUserID, serverID.String())
+	clientID := attachSelfClient(t, ctx, ti, authCtx, issuerID)
+
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "test-agent", backendSessionID: "backend-session", mu: sync.Mutex{}}
+	var forwardedMu sync.Mutex
+	var forwarded []http.Header
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		forwardedMu.Lock()
+		forwarded = append(forwarded, r.Header.Clone())
+		forwardedMu.Unlock()
+		if r.Header.Get("Authorization") != "Bearer fresh-token" {
+			w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		gateway.ServeHTTP(w, r)
+	}))
+	t.Cleanup(upstream.Close)
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), upstream.URL, time.Hour))
+
+	resp, err := servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), mintSelfClientMemberBearer(t, ti, issuerID, slug), nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, "initialize: %s", resp.Body.String())
+
+	forwardedMu.Lock()
+	defer forwardedMu.Unlock()
+	require.Len(t, forwarded, 2)
+	for i, token := range []string{"revoked-token", "fresh-token"} {
+		header := forwarded[i]
+		require.Equal(t, "Bearer "+token, header.Get("Authorization"))
+		assertion, err := jwt.Parse(header.Get(identity.Header), func(*jwt.Token) (any, error) { return key, nil }, jwt.WithValidMethods([]string{"RS256"}))
+		require.NoError(t, err)
+		claims, ok := assertion.Claims.(jwt.MapClaims)
+		require.True(t, ok)
+		require.Equal(t, serverID.String(), claims[identity.ClaimMCPServerID])
+		cred := upstreamCredentialClaim(t, claims)
+		require.Equal(t, identity.OwnerSelf, cred["owner"])
+		require.Equal(t, clientID.String(), cred["client_id"])
+		require.Equal(t, identity.TokenSHA256(token), cred["token_sha256"])
+		require.Contains(t, cred, "token_expires_at")
+		require.NotContains(t, cred, "grant_id")
+		require.NotContains(t, cred, "grant_generation")
+	}
 }

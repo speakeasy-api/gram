@@ -177,6 +177,8 @@ function CreateTunneledMcpForm() {
           <TunneledMcpSetupTabs
             tunnelKey={created.tunnelKey}
             serverName={created.tunneledMcpServer.name}
+            tunneledMcpServerId={created.tunneledMcpServer.id}
+            resourceIdentifier={created.tunneledMcpServer.resourceIdentifier}
           />
 
           <Stack direction="horizontal" gap={2}>

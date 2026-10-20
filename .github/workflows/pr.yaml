@@ -2728,8 +2728,19 @@ jobs:
       - name: Restore Go module cache
         uses: $/.github/workflows/composite/go-mod-cache
 
+      # The stdio credential tests are Linux-only and need /dev/shm on tmpfs;
+      # they fail rather than skip when it is missing.
       - name: Test
-        run: mise run test:tunnel
+        run: mise run test:tunnel -race -count=1 ./tunnel/...
+
+      # Switching to another user needs root; the job itself runs unprivileged.
+      - name: Test credential paths against another user
+        run: |
+          mise exec -- go test -c -race -o "$RUNNER_TEMP/tunnel-agent.test" ./tunnel/agent
+          sudo TUNNEL_TEST_REQUIRE_OTHER_USER=1 "$RUNNER_TEMP/tunnel-agent.test" -test.v -test.run 'TestCredentialTokenPathCannotBeRedirectedByAnotherUser'
+
+      - name: Vet for Windows
+        run: GOOS=windows mise exec -- go vet ./tunnel/...
 
   tunnel-agent:
     name: Tunnel agent

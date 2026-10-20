@@ -22,7 +22,7 @@ func TestStdioServerCannotReadAgentEnvironment(t *testing.T) {
 	t.Parallel()
 	probe := filepath.Join(t.TempDir(), "probe")
 	_, a := newStdioTestServerWithCommand(t, `if cat /proc/$PPID/environ >/dev/null 2>&1; then echo readable; else echo protected; fi >'`+probe+`'; read ignored`, 0)
-	_, err := a.stdio.start(t.Context())
+	_, err := a.stdio.start(t.Context(), nil, principal{})
 	require.NoError(t, err)
 
 	var result []byte
@@ -49,7 +49,7 @@ func TestStdioBridgeReapsReparentedGroupMembers(t *testing.T) {
 
 	// Closing stdin ends the shell; its sleep is reparented to this process.
 	_, a := newStdioTestServerWithCommand(t, "sleep 300 & read ignored", 0)
-	sess, err := a.stdio.start(t.Context())
+	sess, err := a.stdio.start(t.Context(), nil, principal{})
 	require.NoError(t, err)
 	pgid := sess.cmd.Process.Pid
 

@@ -216,6 +216,15 @@ func PtrToPGTimestamptz(t *time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: *t, Valid: true, InfinityModifier: pgtype.Finite}
 }
 
+// PtrFromPGTimestamptz converts a pgtype.Timestamptz to a *time.Time. If the
+// value is not valid, it returns nil.
+func PtrFromPGTimestamptz(t pgtype.Timestamptz) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+	return new(t.Time)
+}
+
 // FromPGTimestamptz converts a pgtype.Timestamptz to an RFC3339 UTC string. If
 // the value is not valid, it returns an empty string.
 func FromPGTimestamptz(t pgtype.Timestamptz) string {
