@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router";
 
 import { Button } from "@/components/ui/Button";
+import { InsightsConfig } from "@/components/insights-dock";
 import { FormPage } from "@/components/page-templates";
 import { useRoutes } from "@/routes";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
@@ -46,6 +47,9 @@ export default function NewAgentIdentity(): JSX.Element {
         </Button>
       }
     >
+      {/* The dock floats over the bottom of the content, which on this page
+          is the wizard's own footer and its Continue button. */}
+      <InsightsConfig hideTrigger />
       <ProvisionWizard onDone={done} onBusy={setBusy} />
     </FormPage>
   );

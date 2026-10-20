@@ -126,13 +126,6 @@ import {
   RemoteIdentityProvidersPage,
   RemoteIdentityProvidersRoot,
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
-import {
-  WorkloadIssuersPage,
-  WorkloadIssuersRoot,
-} from "./pages/workload-identities/WorkloadIssuers";
-import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
-import { CatalogPlatformPage } from "./pages/workload-identities/setup/CatalogPlatformPage";
-import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
@@ -726,21 +719,6 @@ const ROUTE_STRUCTURE = {
         },
       },
     },
-  },
-
-  // Legacy project-scoped URLs for the Access Hub and the Workload Identities
-  // page redirect to the organization-level Access Hub.
-  legacyWorkloadIdentities: {
-    title: "Workload Identities",
-    url: "workload-identities",
-    legacyRedirect: true,
-    component: AccessHubRedirect,
-  },
-  legacyAccessHub: {
-    title: "Access Hub",
-    url: "access-hub/*",
-    legacyRedirect: true,
-    component: AccessHubRedirect,
   },
 
   // Kept as a redirect only: agents live under Identities now. Links minted
@@ -1533,28 +1511,6 @@ const ORG_ROUTE_STRUCTURE = {
           keys: { title: "Keys", url: "keys" },
           settings: { title: "Settings", url: "settings" },
         },
-      },
-    },
-  },
-  // The trust policy is configured for the organization as a whole, so the
-  // Access Hub names no project.
-  workloadIssuers: {
-    title: "Access Hub",
-    url: "access-hub",
-    icon: "cpu",
-    stage: "preview",
-    component: WorkloadIssuersRoot,
-    indexComponent: WorkloadIssuersPage,
-    subPages: {
-      issuerDetail: {
-        title: "Trusted Platform",
-        url: ":issuerId",
-        component: WorkloadIssuerDetailPage,
-      },
-      catalogPlatform: {
-        title: "Catalog Platform",
-        url: "catalog/:platformKey",
-        component: CatalogPlatformPage,
       },
     },
   },

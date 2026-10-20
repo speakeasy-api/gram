@@ -1,7 +1,7 @@
 import type { WorkloadTokenEndpoint } from "@gram/client/models/components/workloadtokenendpoint.js";
 import { useWorkloadTokenEndpoints } from "@gram/client/react-query/workloadTokenEndpoints.js";
 import { useState } from "react";
-import type { ComputedValueKey } from "./definition";
+import type { ComputedValueKey } from "./workloadCatalog";
 
 /** The issuers that serve a token endpoint, under one owner. */
 export interface TokenEndpointGroup {

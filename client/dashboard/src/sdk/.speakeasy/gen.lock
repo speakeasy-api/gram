@@ -2040,10 +2040,8 @@ trackedFiles:
   src/models/components/workloadidentitypolicy.ts: {}
   src/models/components/workloadissuer.ts: {}
   src/models/components/workloadplatform.ts: {}
-  src/models/components/workloadplatformblock.ts: {}
   src/models/components/workloadplatformcatalog.ts: {}
   src/models/components/workloadplatformconstant.ts: {}
-  src/models/components/workloadplatformstep.ts: {}
   src/models/components/workloadplatformsubject.ts: {}
   src/models/components/workloadplatformvariable.ts: {}
   src/models/components/workloadtokenendpoint.ts: {}

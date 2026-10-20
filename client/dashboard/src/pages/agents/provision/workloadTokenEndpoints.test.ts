@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { groupTokenEndpoints } from "./setupValues";
+import { groupTokenEndpoints } from "./workloadTokenEndpoints";
 
 function endpoint(
   id: string,

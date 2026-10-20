@@ -22,7 +22,11 @@ const mocks = vi.hoisted(() => ({
   mcpServers: vi.fn(),
   toolsets: vi.fn(),
   fetch: vi.fn(),
+  platforms: vi.fn(),
+  registerIssuer: vi.fn(),
+  admitSubject: vi.fn(),
   projectId: "project_one",
+  canFederate: true,
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -52,6 +56,42 @@ vi.mock("@/contexts/Sdk", () => ({
   // The server list links out to a server's settings, and routes read the
   // slugs to build that href.
   useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
+}));
+// The credential step offers workload identity, which reads the catalog the
+// server ships and the caller's permission to trust a platform.
+vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
+  useWorkloadPlatforms: () => ({
+    data: { platforms: mocks.platforms() },
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasAllScopes: () => mocks.canFederate,
+    hasAnyScope: () => mocks.canFederate,
+    isLoading: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
+  useWorkloadIdentities: () => ({ data: { issuers: [], admissions: [] } }),
+  invalidateAllWorkloadIdentities: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
+  useWorkloadTokenEndpoints: () => ({
+    data: { items: [] },
+    isPending: false,
+    isError: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/registerWorkloadIssuer.js", () => ({
+  useRegisterWorkloadIssuerMutation: () => ({
+    mutateAsync: mocks.registerIssuer,
+  }),
+}));
+vi.mock("@gram/client/react-query/admitWorkloadSubject.js", () => ({
+  useAdmitWorkloadSubjectMutation: () => ({ mutateAsync: mocks.admitSubject }),
 }));
 vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
   useListMcpServersForOrg: (_r: unknown, _s: unknown, options: object) =>
@@ -121,6 +161,10 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.projectId = "project_one";
+  mocks.canFederate = true;
+  mocks.platforms.mockReturnValue([]);
+  mocks.registerIssuer.mockResolvedValue({});
+  mocks.admitSubject.mockResolvedValue({});
   vi.stubGlobal("fetch", mocks.fetch);
   mocks.mcpServers.mockResolvedValue({
     mcpServers: [
@@ -234,6 +278,94 @@ describe("Provisioning a new agent", () => {
       keys: [{ id: "key_new", lastAccessedAt: new Date(Date.now() + 60_000) }],
     });
     expect(await screen.findByText("Connected")).toBeTruthy();
+  });
+});
+
+const platform = {
+  key: "claude-tag",
+  displayName: "Claude Tag",
+  description: "Tokens issued by the platform itself.",
+  icon: "",
+  enabled: true,
+  issuer: { value: "https://issuer.example", visibility: "hidden" },
+  jwksUri: { value: "https://issuer.example/jwks", visibility: "hidden" },
+  variables: [
+    {
+      key: "org_id",
+      tier: "rule",
+      label: "Anthropic organization ID",
+      help: "",
+      placeholder: "",
+      pattern: "[A-Za-z0-9-]+",
+      patternMessage: "",
+    },
+  ],
+  subject: {
+    template: "spiffe://example/org/{org_id}/agent/",
+    wildcard: true,
+  },
+};
+
+async function reachPlatformSetup() {
+  mocks.platforms.mockReturnValue([platform]);
+  setup();
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Release Bot" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  fireEvent.click(await screen.findByRole("radio", { name: /Workload/ }));
+  fireEvent.click(await screen.findByRole("radio", { name: /Claude Tag/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  // The platform's own steps are steps of this wizard, so its first one is
+  // simply the next screen.
+  return screen.findByRole("heading", {
+    name: "Your Anthropic organization",
+  });
+}
+
+describe("Federating a platform's own tokens", () => {
+  it("keeps the credential to API keys without permission to trust a platform", () => {
+    mocks.canFederate = false;
+    mocks.platforms.mockReturnValue([platform]);
+    setup();
+
+    expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
+  });
+
+  it("creates the agent, trusts the platform and admits the subject to it", async () => {
+    await reachPlatformSetup();
+
+    fireEvent.change(screen.getByLabelText("Anthropic organization ID"), {
+      target: { value: "org-123" },
+    });
+    // Saving asked only for the agent, which this wizard answers, so it is
+    // not a step of its own: it joined the step that collects.
+    expect(
+      screen.queryByRole("heading", { name: "Save the access rule" }),
+    ).toBeNull();
+    expect(screen.queryByLabelText("Agent")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Connect Claude Tag" }));
+
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    // Nothing is created until the setup's own create step runs, and then the
+    // agent comes first: the access rule names it.
+    expect(mocks.createAgent).toHaveBeenCalledTimes(1);
+    expect(mocks.createKey).not.toHaveBeenCalled();
+    expect(
+      mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
+    ).toEqual({
+      issuer: "https://issuer.example",
+      subject: "spiffe://example/org/org-123/agent/*",
+      matchKind: "wildcard",
+      agentId: "agent_new",
+      tags: [],
+    });
+    expect(
+      mocks.registerIssuer.mock.calls[0]?.[0]?.request
+        ?.registerWorkloadIssuerForm?.issuer,
+    ).toBe("https://issuer.example");
   });
 });
 

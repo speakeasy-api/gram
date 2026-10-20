@@ -7,6 +7,7 @@ import {
   AgentLifecycle,
   RenameAgentButton,
 } from "@/pages/agents/agent-admin";
+import { AgentFederatedAccess } from "@/pages/agents/AgentFederatedAccess";
 import { AgentGatewayInstall } from "@/pages/agents/AgentGatewayInstall";
 import { ManagedAgentSessions } from "@/pages/agents/ManagedAgentSessions";
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
@@ -119,6 +120,9 @@ export function AgentIdentityProfile({
             variant="bare"
             onCreate={() => setIssuing(true)}
           />
+          {/* A federated platform is the other way in, so it belongs beside
+              the keys rather than on a surface of its own. */}
+          <AgentFederatedAccess agent={agent} />
         </IdentitySection>
       );
     default:

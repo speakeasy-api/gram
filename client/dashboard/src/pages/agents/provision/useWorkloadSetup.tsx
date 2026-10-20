@@ -1,0 +1,237 @@
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
+import { useAdmitWorkloadSubjectMutation } from "@gram/client/react-query/admitWorkloadSubject.js";
+import { useRegisterWorkloadIssuerMutation } from "@gram/client/react-query/registerWorkloadIssuer.js";
+import {
+  invalidateAllWorkloadIdentities,
+  useWorkloadIdentities,
+} from "@gram/client/react-query/workloadIdentities.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState, type ReactNode } from "react";
+import { claudeTagSetupInstructions } from "./ClaudeTagSetupInstructions";
+import {
+  customSetupInstructions,
+  CUSTOM_PLATFORM_KEY,
+} from "./CustomSetupInstructions";
+import { ComputedStatus } from "./SetupFields";
+import type { SetupContext, SetupStep } from "./setupInstructions";
+import {
+  connectedIssuer,
+  duplicateRuleMessage,
+  existingRule,
+  type CatalogEntry,
+  type VariableValues,
+} from "./workloadCatalog";
+import { useSetupValues } from "./workloadTokenEndpoints";
+
+/**
+ * The state behind a platform's guided setup, run for the agent this wizard
+ * is provisioning.
+ *
+ * Each of the platform's steps becomes a step of this wizard, so there is a
+ * single stepper and a single Back and Continue throughout. The state lives
+ * here rather than in a step because every step is a separate render, and
+ * what one collects the next reads.
+ */
+
+export interface WorkloadSetup {
+  /** The platform's steps, each of which is a step of the wizard. */
+  steps: SetupStep[];
+  /**
+   * What the platform demands before any of this works, shown as a disclosure
+   * on its first step. Null when it demands nothing.
+   */
+  requirements: ReactNode | null;
+  /** One step's body, with the wizard's own answers already filled in. */
+  render: (step: SetupStep) => ReactNode;
+  /** Whether a step has everything it asks for. */
+  complete: (step: SetupStep) => boolean;
+  /** Trusts the platform and admits the subject; false if either failed. */
+  connect: () => Promise<boolean>;
+  connecting: boolean;
+  /** Whether the values collected so far make a rule that can be saved. */
+  canConnect: boolean;
+  /** Why connecting failed, or null. */
+  error: string | null;
+  /** What the reader has typed, for the summary rail to name. */
+  values: Record<string, string>;
+}
+
+export function useWorkloadSetup({
+  entry,
+  platformKey,
+  agentName,
+  ensureAgent,
+  onConnected,
+  onValueChange,
+}: {
+  /** The catalog's policy for the platform, absent for a custom one. */
+  entry: CatalogEntry | undefined;
+  /** The chosen platform, which may be the custom one. Null until chosen. */
+  platformKey: string | null;
+  /** The agent the access rule will name, by the name the wizard holds. */
+  agentName: string;
+  /** Creates the agent if it does not exist yet, and returns its id. */
+  ensureAgent: () => Promise<string>;
+  /** The platform is trusted and the rule saved, against this agent. */
+  onConnected: (agentID: string) => void;
+  /** A value was typed, so the rail can mark what just changed. */
+  onValueChange?: (key: string) => void;
+}): WorkloadSetup {
+  const queryClient = useQueryClient();
+  const identities = useWorkloadIdentities({});
+  const issuers = identities.data?.issuers ?? [];
+  const admissions = identities.data?.admissions ?? [];
+
+  const [values, setValues] = useState<VariableValues>({});
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const setupValues = useSetupValues();
+
+  // Set once this flow has trusted the platform, so a retry after a later
+  // failure does not try to trust it a second time.
+  const [trusted, setTrusted] = useState(false);
+  // The rule this flow saved, which the refetched list then holds; it is not
+  // a duplicate of itself.
+  const [admittedSubject, setAdmittedSubject] = useState<string | null>(null);
+
+  const registerIssuer = useRegisterWorkloadIssuerMutation();
+  const admitSubject = useAdmitWorkloadSubjectMutation();
+
+  // One catalog platform ships instructions today, plus the custom flow for
+  // everything the catalog does not know. A second one makes this a lookup.
+  const setup =
+    platformKey === CUSTOM_PLATFORM_KEY
+      ? customSetupInstructions()
+      : entry?.key === "claude-tag"
+        ? claudeTagSetupInstructions(entry)
+        : undefined;
+
+  const connection = setup?.connection(values) ?? null;
+  const platformName = entry?.displayName ?? "this platform";
+
+  const isTrusted =
+    connection !== null &&
+    (trusted || connectedIssuer(connection.issuer, issuers) !== undefined);
+  const conflicting =
+    connection === null || connection.subject === admittedSubject
+      ? undefined
+      : existingRule(connection.issuer, admissions, connection);
+  const ruleConflict =
+    conflicting === undefined
+      ? null
+      : duplicateRuleMessage(entry, platformName, conflicting.agentName);
+
+  /**
+   * Create the agent, trust the platform, and admit the subject against it.
+   * The agent comes first because the access rule names it: a rule saved
+   * without one is refused at the token endpoint.
+   */
+  const connect = async (): Promise<boolean> => {
+    if (connection === null || connecting) return false;
+    setConnecting(true);
+    setError(null);
+    // Registering the issuer conflicts on a duplicate name, admitting the rule
+    // on a duplicate rule; only the second means the values are taken.
+    let admitting = false;
+    try {
+      const agentID = await ensureAgent();
+      if (!isTrusted) {
+        await registerIssuer.mutateAsync({
+          request: {
+            registerWorkloadIssuerForm: {
+              name: connection.name,
+              description: connection.description,
+              issuer: connection.issuer,
+              jwksUri: connection.jwksUri,
+              tags: [],
+            },
+          },
+        });
+        setTrusted(true);
+      }
+      admitting = true;
+      await admitSubject.mutateAsync({
+        request: {
+          admitWorkloadSubjectForm: {
+            issuer: connection.issuer,
+            subject: connection.subject,
+            matchKind: connection.matchKind,
+            agentId: agentID,
+            tags: [],
+          },
+        },
+      });
+      setAdmittedSubject(connection.subject);
+      onConnected(agentID);
+      return true;
+    } catch (failure) {
+      setError(connectFailureMessage(entry, platformName, failure, admitting));
+      return false;
+    } finally {
+      // Refetched on failure too: the platform may have been trusted before
+      // the access rule was refused, and a retry must then only add the rule.
+      await invalidateAllWorkloadIdentities(queryClient, {
+        refetchType: "all",
+      });
+      setConnecting(false);
+    }
+  };
+
+  const context: SetupContext = {
+    values,
+    setValue: (key: string, value: string) => {
+      setValues((current) => ({ ...current, [key]: value }));
+      onValueChange?.(key);
+    },
+    agentName,
+    computed: setupValues.values ?? {},
+    // Folded away when it has nothing to say, which is almost always. When it
+    // does, the values above it are blank and this is the reason, so it is
+    // shown where that can be read rather than behind a disclosure.
+    issuerPicker:
+      setupValues.unavailableReason !== null ? (
+        <ComputedStatus setupValues={setupValues} />
+      ) : (
+        <details className="pt-2">
+          <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm">
+            Advanced
+          </summary>
+          <div className="bg-muted/40 border-muted-foreground/30 mt-2 border p-4">
+            <ComputedStatus setupValues={setupValues} />
+          </div>
+        </details>
+      ),
+    ruleConflict,
+  };
+
+  return {
+    steps: setup?.steps ?? [],
+    requirements: setup?.requirements ?? null,
+    render: (step) => <div className="space-y-4">{step.body(context)}</div>,
+    complete: (step) => step.complete?.(context) ?? true,
+    connect,
+    connecting,
+    canConnect: connection !== null,
+    error,
+    values,
+  };
+}
+
+/**
+ * What to tell the operator when connecting fails. A conflict while admitting
+ * the rule means it was added since the list loaded, for instance in another
+ * tab.
+ */
+function connectFailureMessage(
+  entry: CatalogEntry | undefined,
+  platformName: string,
+  error: unknown,
+  admitting: boolean,
+): string {
+  if (admitting && error instanceof ServiceError && error.statusCode === 409) {
+    return duplicateRuleMessage(entry, platformName);
+  }
+  return error instanceof Error
+    ? error.message
+    : `Failed to set up ${platformName}`;
+}

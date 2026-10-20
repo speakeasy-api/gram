@@ -113197,11 +113197,6 @@ components:
         key:
           type: string
           description: Identifies the entry permanently.
-        steps:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkloadPlatformStep'
-          description: The guided setup. Empty for a platform without one, which is listed as coming soon and cannot be opened.
         subject:
           $ref: '#/components/schemas/WorkloadPlatformSubject'
         variables:
@@ -113209,7 +113204,7 @@ components:
           items:
             $ref: '#/components/schemas/WorkloadPlatformVariable'
           description: What the operator supplies.
-      description: A platform the catalog offers to trust, with what the operator supplies and the guided setup that connects it.
+      description: A platform the catalog offers to trust, with what the operator supplies to connect it. How the setup is explained belongs to the dashboard, not to this policy.
       required:
         - key
         - display_name
@@ -113220,68 +113215,6 @@ components:
         - jwks_uri
         - variables
         - subject
-        - steps
-    WorkloadPlatformBlock:
-      type: object
-      properties:
-        alt:
-          type: string
-          description: An image's alternative text.
-        caption:
-          type: string
-          description: Shown under an image.
-        help:
-          type: string
-          description: Shown under a computed value or checklist item.
-        href:
-          type: string
-          description: A link's https target.
-        label:
-          type: string
-          description: A link's or computed value's label, or the console field or control a checklist item names.
-        markdown:
-          type: string
-          description: A text block's Markdown, or what a checklist item without a value asks the operator to do. Raw HTML in it must not be rendered.
-        src:
-          type: string
-          description: An image's path on the dashboard's origin.
-        type:
-          type: string
-          description: The kind of content.
-          enum:
-            - text
-            - image
-            - link
-            - field
-            - subject_rule
-            - agent_picker
-            - tags
-            - computed_status
-            - computed
-            - checklist_item
-        value:
-          type: string
-          description: The value a computed block or checklist item shows.
-          enum:
-            - ""
-            - token_endpoint
-            - issuer_url
-            - mcp_host
-        variable:
-          type: string
-          description: The variable key a field collects.
-      description: One piece of a guided setup step. Which fields are set depends on type; the rest are empty.
-      required:
-        - type
-        - markdown
-        - src
-        - alt
-        - caption
-        - href
-        - label
-        - variable
-        - value
-        - help
     WorkloadPlatformCatalog:
       type: object
       properties:
@@ -113309,33 +113242,6 @@ components:
       required:
         - value
         - visibility
-    WorkloadPlatformStep:
-      type: object
-      properties:
-        blocks:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkloadPlatformBlock'
-          description: Rendered in order.
-        id:
-          type: string
-          description: Stable within the platform; used in the dashboard URL.
-        phase:
-          type: string
-          description: collect steps gather values, the create step writes the rows, connect steps describe the platform's side.
-          enum:
-            - collect
-            - create
-            - connect
-        title:
-          type: string
-          description: Heads the step.
-      description: One screen of a guided setup.
-      required:
-        - id
-        - title
-        - phase
-        - blocks
     WorkloadPlatformSubject:
       type: object
       properties:

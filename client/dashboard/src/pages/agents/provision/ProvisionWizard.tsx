@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -21,6 +20,11 @@ import { agentGatewayURL, mintInstallCommand } from "./gateway";
 import { StepProvision } from "./StepProvision";
 import { StepServers, type ServerSelection } from "./StepServers";
 import { StepVerify, type VerifyState } from "./StepVerify";
+import { StepWorkload, WorkloadPlatformPicker } from "./StepWorkload";
+import { useWorkloadSetup } from "./useWorkloadSetup";
+import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
+import { useCatalogEntries } from "./workloadCatalog";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useServerInventory } from "./useServerInventory";
 import {
   WizardFooter,
@@ -40,13 +44,17 @@ import {
  * half-made agent behind.
  */
 
+/** Each step's name, and the one or two words it shrinks to in a full row. */
 const STEPS = [
-  "Name & scope",
-  "Server selection",
-  "Credential",
-  "Provision",
-  "Verify",
+  { label: "Name & scope", short: "Name" },
+  { label: "Server selection", short: "Servers" },
+  { label: "Credential", short: "Credential" },
+  { label: "Provision", short: "Provision" },
+  { label: "Verify", short: "Verify" },
 ];
+
+/** How the agent proves who it is. */
+type Credential = "api-key" | "workload";
 
 /** Keys live 90 days unless the agent page rotates them sooner. */
 const KEY_LIFETIME_DAYS = 90;
@@ -80,6 +88,12 @@ export function ProvisionWizard({
   const { user } = useSession();
   const queryClient = useQueryClient();
   const inventory = useServerInventory();
+  const catalog = useCatalogEntries();
+  // Trusting a platform and admitting a subject are both writes against the
+  // organization's workload identities, so the choice is offered only to
+  // someone who could carry it out.
+  const { hasAllScopes } = useRBAC();
+  const canFederate = hasAllScopes(["workload:write"]);
 
   // Provisioning an agent that already exists: its name and scope are settled,
   // so the flow is only about which servers this key reaches and how the key
@@ -96,6 +110,8 @@ export function ProvisionWizard({
   const [selected, setSelected] = useState<ServerSelection[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [provisioning, setProvisioning] = useState(false);
+  const [credential, setCredential] = useState<Credential>("api-key");
+  const [platformKey, setPlatformKey] = useState<string | null>(null);
 
   // What provisioning produced. The secret is held only while this page is
   // open; nothing writes it to storage or to the query cache.
@@ -147,6 +163,7 @@ export function ProvisionWizard({
     : organization.name;
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
+  const platform = catalog.entries.find((entry) => entry.key === platformKey);
 
   // The verify step reads the key itself: a key with an access time is a
   // runtime that reached the gateway and was admitted.
@@ -191,6 +208,82 @@ export function ProvisionWizard({
   };
 
   /**
+   * The agent this flow provisions, created on first use. Both credentials
+   * need it and neither creates it until the choices before it are made, so
+   * it is created once here and reused — a retry after a later failure must
+   * not leave a second agent behind.
+   */
+  const ensureAgent = async (): Promise<string> => {
+    // An agent that exists keeps its stored ceiling: this flow provisions
+    // against it rather than rewriting what it may ever be delegated.
+    if (agent) return agent.id;
+    if (agentID) return agentID;
+    const draft: AgentPolicyDraft = {
+      "mcp:connect": selected.map((entry) => ({
+        resourceKind: "mcp" as const,
+        resourceId: entry.server.resourceId,
+        projectId: entry.server.projectId,
+      })),
+    };
+    const created = await sdk.agents.create({
+      createAgentForm: {
+        name: name.trim(),
+        ...(scopedProjectID ? { projectId: scopedProjectID } : {}),
+        policyGrants: agentPolicyGrantsFromDraft(draft),
+      },
+    });
+    setAgentID(created.id);
+    void invalidateAgentPolicy(
+      queryClient,
+      organization.id,
+      user.id,
+      created.id,
+    );
+    void queryClient.invalidateQueries({
+      queryKey: ["managed-agents", organization.id],
+    });
+    return created.id;
+  };
+
+  // What the reader last decided, marked on the rail. The rail is a growing
+  // block of text, and without this it looks the same before and after a
+  // click: the mark is how a glance confirms the choice landed.
+  const [highlight, setHighlight] = useState<string | null>(null);
+
+  const workload = useWorkloadSetup({
+    entry: credential === "workload" ? platform : undefined,
+    platformKey: credential === "workload" ? platformKey : null,
+    agentName: name.trim(),
+    ensureAgent,
+    onConnected: setAgentID,
+    onValueChange: (key) =>
+      setHighlight(
+        key === "org_id"
+          ? "Anthropic organization"
+          : key === "name"
+            ? "Platform"
+            : key === "issuer"
+              ? "Issuer"
+              : null,
+      ),
+  });
+  // A platform's own setup steps are steps of this wizard, not a wizard of
+  // their own: one stepper, one Back and one Continue throughout.
+  const stepNames =
+    credential === "workload" && workload.steps.length > 0
+      ? [
+          ...STEPS.slice(0, 3),
+          ...workload.steps.map((entry) => ({
+            label: entry.title,
+            short: entry.short,
+          })),
+        ]
+      : STEPS;
+  /** The platform setup step on screen, when one is. */
+  const workloadStep =
+    credential === "workload" ? workload.steps[step - 3] : undefined;
+
+  /**
    * Create the agent, discover what it may delegate, issue its first key, and
    * mint the setup command. Each step depends on the one before it, so a
    * failure stops here and says which part did not happen.
@@ -200,36 +293,7 @@ export function ProvisionWizard({
     setProvisioning(true);
     setError(null);
     try {
-      const draft: AgentPolicyDraft = {
-        "mcp:connect": selected.map((entry) => ({
-          resourceKind: "mcp" as const,
-          resourceId: entry.server.resourceId,
-          projectId: entry.server.projectId,
-        })),
-      };
-      // An agent that exists keeps its stored ceiling: this flow issues a key
-      // against it rather than rewriting what the agent may ever be delegated.
-      const target =
-        agent ??
-        (await sdk.agents.create({
-          createAgentForm: {
-            name: name.trim(),
-            ...(scopedProjectID ? { projectId: scopedProjectID } : {}),
-            policyGrants: agentPolicyGrantsFromDraft(draft),
-          },
-        }));
-      setAgentID(target.id);
-      if (!agent) {
-        void invalidateAgentPolicy(
-          queryClient,
-          organization.id,
-          user.id,
-          target.id,
-        );
-        void queryClient.invalidateQueries({
-          queryKey: ["managed-agents", organization.id],
-        });
-      }
+      const target = { id: await ensureAgent() };
 
       const controller = new AbortController();
       const delegable = await discoverKeyServerGrants(
@@ -309,7 +373,7 @@ export function ProvisionWizard({
   const summary = (
     <WizardSummary
       step={step + 1}
-      stepCount={STEPS.length}
+      stepCount={stepNames.length}
       name={name}
       rows={[
         { label: "Owner", value: user.displayName || user.email },
@@ -321,8 +385,53 @@ export function ProvisionWizard({
           label: "Grants",
           value: <code className="text-xs">mcp:connect</code>,
         },
-        { label: "Credential", value: "API key" },
+        {
+          label: "Credential",
+          value: credential === "api-key" ? "API key" : "Workload identity",
+        },
+        // The platform, and what it was pinned to, are decisions like the
+        // others: they belong on the rail rather than only on the step that
+        // asked for them, which is two screens back by the time they matter.
+        ...(credential === "workload" && platformKey !== null
+          ? [
+              {
+                label: "Platform",
+                value:
+                  platformKey === CUSTOM_PLATFORM_KEY
+                    ? (workload.values["name"]?.trim() ?? "") || "Custom"
+                    : (platform?.displayName ?? "Custom"),
+              },
+            ]
+          : []),
+        ...(credential === "workload" &&
+        (workload.values["org_id"] ?? "").trim() !== ""
+          ? [
+              {
+                label: "Anthropic organization",
+                value: (
+                  <code className="text-xs">
+                    {workload.values["org_id"]?.trim()}
+                  </code>
+                ),
+              },
+            ]
+          : []),
+        ...(credential === "workload" &&
+        platformKey === CUSTOM_PLATFORM_KEY &&
+        (workload.values["issuer"] ?? "").trim() !== ""
+          ? [
+              {
+                label: "Issuer",
+                value: (
+                  <code className="text-xs break-all">
+                    {workload.values["issuer"]?.trim()}
+                  </code>
+                ),
+              },
+            ]
+          : []),
       ]}
+      highlight={highlight}
       servers={selected.map((entry) => ({
         id: entry.server.id,
         name: entry.server.name,
@@ -332,6 +441,18 @@ export function ProvisionWizard({
   );
 
   const body = () => {
+    // Past the credential step, a federated agent is following its platform's
+    // own setup, one of its steps per wizard step.
+    if (workloadStep !== undefined) {
+      return (
+        <StepWorkload
+          step={workloadStep}
+          setup={workload}
+          first={workloadStep === workload.steps[0]}
+          platformName={platform?.displayName ?? "this platform"}
+        />
+      );
+    }
     switch (step) {
       case 0:
         return (
@@ -345,7 +466,10 @@ export function ProvisionWizard({
               <Input
                 id="agent-name"
                 value={name}
-                onChange={setName}
+                onChange={(next) => {
+                  setName(next);
+                  setHighlight("Name");
+                }}
                 placeholder="Release Bot"
                 maxLength={120}
                 // An existing agent's name and scope are its own; this flow
@@ -422,7 +546,17 @@ export function ProvisionWizard({
             isError={inventory.isError}
             onRetry={inventory.refetch}
             selected={selected}
-            onChange={setSelected}
+            onChange={(next) => {
+              setSelected(next);
+              // The one just added, or the last one left when removing.
+              const added = next.find(
+                (entry) =>
+                  !selected.some((old) => old.server.id === entry.server.id),
+              );
+              setHighlight(
+                added === undefined ? null : `server:${added.server.id}`,
+              );
+            }}
           />
         );
       case 2:
@@ -433,8 +567,11 @@ export function ProvisionWizard({
               description="How the agent proves who it is when it connects."
             />
             <RadioCardGroup
-              value="api-key"
-              onValueChange={() => undefined}
+              value={credential}
+              onValueChange={(next) => {
+                setCredential(next as Credential);
+                setHighlight("Credential");
+              }}
               className="sm:grid-cols-2"
             >
               <RadioCard value="api-key" title="API key" className="p-3">
@@ -448,16 +585,11 @@ export function ProvisionWizard({
               </RadioCard>
               <RadioCard
                 value="workload"
-                disabled
+                // Offered only to someone who could carry it out: it trusts a
+                // platform and admits a subject for the whole organization.
+                disabled={!canFederate}
                 className="p-3"
-                title={
-                  <span className="flex items-center gap-2">
-                    Workload identity
-                    <Badge variant="neutral" size="sm">
-                      Not yet available
-                    </Badge>
-                  </span>
-                }
+                title="Workload identity"
               >
                 <Text muted small>
                   Federate a token the platform already issues — GitHub Actions,
@@ -466,8 +598,26 @@ export function ProvisionWizard({
                 <span className="text-muted-foreground mt-1 block font-mono text-xs">
                   Short-lived tokens · no refresh token
                 </span>
+                {!canFederate && (
+                  <Text muted small className="mt-1 block">
+                    Needs permission to manage workload identities.
+                  </Text>
+                )}
               </RadioCard>
             </RadioCardGroup>
+            {credential === "workload" && (
+              <WorkloadPlatformPicker
+                entries={catalog.entries}
+                isPending={catalog.isPending}
+                isError={catalog.isError}
+                onRetry={catalog.refetch}
+                selectedKey={platformKey}
+                onSelect={(key) => {
+                  setPlatformKey(key);
+                  setHighlight("Platform");
+                }}
+              />
+            )}
           </div>
         );
       case 3:
@@ -507,8 +657,66 @@ export function ProvisionWizard({
         : null;
 
   const footer = () => {
+    if (workloadStep !== undefined) {
+      const last = step - 3 === workload.steps.length - 1;
+      const ready = workload.complete(workloadStep);
+      return (
+        <WizardFooter
+          note={
+            workloadStep.phase === "create"
+              ? "Trusting a platform and allowing its access are recorded in the organization audit log."
+              : workloadStep.phase === "connect"
+                ? `Nothing here changes Speakeasy; these are ${platform?.displayName ?? "the platform"}'s own settings.`
+                : "Nothing is created until the connect step."
+          }
+          onBack={() => setStep(step - 1)}
+          primary={
+            workloadStep.phase === "create" ? (
+              <Button
+                disabled={workload.connecting || !workload.canConnect || !ready}
+                onClick={() => {
+                  void workload.connect().then((connected) => {
+                    if (connected) setStep(step + 1);
+                  });
+                }}
+              >
+                {workload.connecting
+                  ? "Connecting…"
+                  : `Connect ${platform?.displayName ?? "platform"}`}
+              </Button>
+            ) : last ? (
+              <Button onClick={() => onDone(agentID ?? undefined)}>Done</Button>
+            ) : (
+              <Button disabled={!ready} onClick={() => setStep(step + 1)}>
+                Continue
+              </Button>
+            )
+          }
+        />
+      );
+    }
     switch (step) {
       case 2:
+        if (credential === "workload") {
+          return (
+            <WizardFooter
+              note={
+                platform === undefined
+                  ? "Choose the platform whose tokens this agent will present."
+                  : `${platform.displayName} issues the tokens; the next step sets it up.`
+              }
+              onBack={() => setStep(1)}
+              primary={
+                <Button
+                  disabled={workload.steps.length === 0}
+                  onClick={() => setStep(3)}
+                >
+                  Continue
+                </Button>
+              }
+            />
+          );
+        }
         return (
           <WizardFooter
             note={
@@ -582,7 +790,7 @@ export function ProvisionWizard({
   return (
     <div className="space-y-6">
       <WizardStepper
-        steps={STEPS}
+        steps={stepNames}
         current={step}
         // While creating, only a step already completed is a destination: the
         // ones ahead are built from choices not yet made. Provisioning an
@@ -592,7 +800,11 @@ export function ProvisionWizard({
         // Verify watches a key being used, so it has nothing to watch until
         // one is issued. Without this an existing agent could jump straight
         // to it and finish the flow having provisioned nothing.
-        onJump={(next) => setStep(secret ? next : Math.min(next, 3))}
+        onJump={(next) =>
+          setStep(
+            secret || credential === "workload" ? next : Math.min(next, 3),
+          )
+        }
       />
       {error && (
         <p
@@ -604,6 +816,10 @@ export function ProvisionWizard({
       )}
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-16">
         <div>{body()}</div>
+        {/* The cell stretches to the row's height on purpose: a sticky child
+            can only travel inside its own containing block, so a cell shrunk
+            to the rail's height gives it nowhere to go and it scrolls away
+            with the page. */}
         <div className="lg:order-last">{summary}</div>
       </div>
       {footer()}
