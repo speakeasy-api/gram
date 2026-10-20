@@ -19,7 +19,7 @@ func listPlatformsPayload() *gen.ListPlatformsPayload {
 	}
 }
 
-func TestListPlatforms_ReturnsTheCatalogWithItsSetup(t *testing.T) {
+func TestListPlatforms_ReturnsTheCatalogPolicy(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
@@ -36,8 +36,7 @@ func TestListPlatforms_ReturnsTheCatalogWithItsSetup(t *testing.T) {
 	require.Equal(t, "https://identity.anthropic.com/agents", claudeTag.Issuer.Value)
 	require.Equal(t, "hidden", claudeTag.Issuer.Visibility)
 	require.True(t, claudeTag.Subject.Wildcard)
-	require.NotEmpty(t, claudeTag.Steps)
-	require.Equal(t, "collect", claudeTag.Steps[0].Phase)
+	require.Equal(t, "org_id", claudeTag.Variables[0].Key)
 }
 
 func TestListPlatforms_RequiresWorkloadRead(t *testing.T) {

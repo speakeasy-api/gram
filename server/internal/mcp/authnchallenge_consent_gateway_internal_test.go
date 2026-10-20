@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 )
 
 func gatewayTestMember(slug, name string, issuer uuid.UUID, projectID uuid.UUID) metaMember {
@@ -232,7 +234,7 @@ func gatewayTemplateData(view *gatewayConsentView, cards []remoteSessionCard) co
 	return consentTemplateData{
 		ClientName:         "Example Client",
 		MCPSlug:            "acme",
-		MCPRouteBase:       "mcp/gateway",
+		MCPRouteBase:       mcproute.OrganizationGateway,
 		State:              "state-id",
 		CSRFToken:          "csrf",
 		SubjectDisplay:     "user@example.com",

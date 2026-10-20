@@ -54,6 +54,10 @@ export type McpServer = {
    */
   environmentId?: string | undefined;
   /**
+   * Whether any endpoint routes to this server, including one on a custom domain that is not live yet. Absent when it could not be read.
+   */
+  hasEndpoint?: boolean | undefined;
+  /**
    * The ID of the MCP server
    */
   id: string;
@@ -142,6 +146,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         z.transform(v => new Date(v)),
       ),
       environment_id: z.optional(z.string()),
+      has_endpoint: z.optional(z.boolean()),
       id: z.string(),
       name: z.optional(z.string()),
       network_access_mode: McpServerNetworkAccessMode$inboundSchema,
@@ -167,6 +172,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       return remap$(v, {
         "created_at": "createdAt",
         "environment_id": "environmentId",
+        "has_endpoint": "hasEndpoint",
         "network_access_mode": "networkAccessMode",
         "platform_endpoint_slug": "platformEndpointSlug",
         "primary_endpoint_id": "primaryEndpointId",

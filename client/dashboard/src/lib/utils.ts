@@ -222,7 +222,7 @@ export function capitalize(str: string): string {
 
 /**
  * Turn a URL slug into a Title Case display string, e.g.
- * "custom-tools" -> "Custom Tools". Intended for the static (literal) segments
+ * "risk-policies" -> "Risk Policies". Intended for the static (literal) segments
  * of a route path — not for dynamic slug params like toolset or user
  * identifiers, which should keep their original casing.
  */

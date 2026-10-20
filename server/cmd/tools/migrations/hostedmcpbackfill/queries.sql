@@ -242,6 +242,92 @@ INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, environment_
 SELECT moved.id, moved.assistant_id, @mcp_server_id::uuid, moved.environment_id, moved.project_id, moved.created_at
 FROM moved;
 
+-- name: LockOrphanToolset :one
+-- FOR SHARE OF p holds off a concurrent project delete or restore until commit.
+SELECT t.id, t.project_id, t.organization_id, t.name, t.slug, t.mcp_slug, t.deleted, p.deleted AS project_deleted
+FROM toolsets AS t
+JOIN projects AS p ON p.id = t.project_id AND p.organization_id = t.organization_id
+WHERE t.id = @id AND t.project_id = @project_id
+FOR NO KEY UPDATE OF t FOR SHARE OF p;
+
+-- name: CanonicalWrapperLive :one
+SELECT EXISTS (
+  SELECT 1
+  FROM mcp_servers AS ms
+  WHERE ms.id = @toolset_id::uuid
+    AND ms.project_id = @project_id
+    AND ms.toolset_id = @toolset_id::uuid
+    AND ms.deleted IS FALSE
+);
+
+-- name: LockOrphanMetadata :one
+SELECT sqlc.embed(m), to_jsonb(m)::jsonb AS row_json
+FROM mcp_metadata AS m
+WHERE m.id = @id AND m.project_id = @project_id AND m.toolset_id = @toolset_id::uuid
+FOR UPDATE OF m;
+
+-- name: LockMetadataEnvironmentConfigs :many
+SELECT *
+FROM mcp_environment_configs
+WHERE mcp_metadata_id = @mcp_metadata_id AND project_id = @project_id
+ORDER BY variable_name
+FOR UPDATE;
+
+-- name: MetadataHasForeignEnvironmentConfig :one
+-- The cascade would remove these too, so a config outside the project blocks the delete.
+SELECT EXISTS (
+  SELECT 1
+  FROM mcp_environment_configs
+  WHERE mcp_metadata_id = @mcp_metadata_id AND project_id <> @project_id
+);
+
+-- name: DeleteOrphanMetadata :execrows
+-- Cascades to the row's mcp_environment_configs, which the journal records.
+DELETE FROM mcp_metadata
+WHERE id = @id AND project_id = @project_id AND toolset_id = @toolset_id::uuid;
+
+-- name: LockOrphanPluginServer :one
+SELECT
+  ps.id,
+  ps.plugin_id,
+  pl.name AS plugin_name,
+  pl.slug AS plugin_slug,
+  to_jsonb(ps)::jsonb AS row_json,
+  EXISTS (
+    SELECT 1
+    FROM platform_mcp_distributions AS d
+    WHERE d.project_id = pl.project_id AND d.plugin_server_id = ps.id
+  ) AS distributed
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.id = @id
+  AND pl.project_id = @project_id
+  AND ps.toolset_id = @toolset_id::uuid
+  AND ps.deleted IS FALSE
+FOR UPDATE OF ps;
+
+-- name: SoftDeleteOrphanPluginServer :one
+-- deleted_at as text round-trips exactly, so a restore can match only this tool's delete.
+UPDATE plugin_servers AS ps
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM plugins AS pl
+WHERE ps.id = @id
+  AND pl.id = ps.plugin_id
+  AND pl.project_id = @project_id
+  AND ps.toolset_id = @toolset_id::uuid
+  AND ps.deleted IS FALSE
+RETURNING ps.deleted_at::text AS deleted_at;
+
+-- name: LockOrphanAssistantToolset :one
+SELECT a.id, a.assistant_id, to_jsonb(a)::jsonb AS row_json
+FROM assistant_toolsets AS a
+WHERE a.id = @id AND a.project_id = @project_id AND a.toolset_id = @toolset_id::uuid
+FOR UPDATE OF a;
+
+-- name: DeleteOrphanAssistantToolset :execrows
+DELETE FROM assistant_toolsets
+WHERE id = @id AND project_id = @project_id AND toolset_id = @toolset_id::uuid;
+
 -- TEST FIXTURE ONLY: every query below is for package tests and may create impossible states.
 
 -- name: SeedOrganizationFixture :exec
@@ -399,6 +485,19 @@ INSERT INTO mcp_environment_configs
 SELECT (c).* FROM jsonb_populate_recordset(NULL::mcp_environment_configs, @rows_json::jsonb) AS c
 WHERE c.project_id = @project_id::uuid
 ON CONFLICT (id) DO NOTHING;
+
+-- name: RestoreProjectFixture :exec
+UPDATE projects SET deleted_at = NULL
+WHERE id = @id AND organization_id = @organization_id;
+
+-- name: SeedPluginGithubConnectionFixture :exec
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name)
+VALUES (@project_id, 1, 'owner', 'repo');
+
+-- name: BumpPluginServerDeletedAtFixture :exec
+UPDATE plugin_servers AS ps SET deleted_at = ps.deleted_at + interval '1 second'
+FROM plugins AS pl
+WHERE ps.id = @id AND pl.id = ps.plugin_id AND pl.project_id = @project_id;
 
 -- name: CountOutboxFixture :one
 SELECT count(*)

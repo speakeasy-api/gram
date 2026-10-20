@@ -252,12 +252,6 @@ type Step struct {
 	Blocks []Block `yaml:"blocks"`
 }
 
-// Setup is an entry's guided setup.
-type Setup struct {
-	// Steps run in order: collect steps, the create step, then connect steps.
-	Steps []Step `yaml:"steps"`
-}
-
 // Platform is one catalog entry.
 type Platform struct {
 	// Key identifies the entry permanently: it is written onto the rows the
@@ -288,10 +282,6 @@ type Platform struct {
 
 	// Subject is the access rule the entry produces.
 	Subject Subject `yaml:"subject"`
-
-	// Setup is the guided setup. Without one, the entry is listed as coming
-	// soon and cannot be opened.
-	Setup *Setup `yaml:"setup"`
 }
 
 // Source provides the catalog. Files are the only source today; a staff-edited
@@ -430,12 +420,6 @@ func validate(p Platform) error {
 	if err := validateSubject(p.Subject, variables); err != nil {
 		return err
 	}
-
-	if p.Setup != nil {
-		if err := validateSetup(*p.Setup, variables); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -542,57 +526,6 @@ func validateSubject(s Subject, variables map[string]Variable) error {
 	return nil
 }
 
-func validateSetup(setup Setup, variables map[string]Variable) error {
-	if len(setup.Steps) == 0 {
-		return errors.New("setup has no steps")
-	}
-
-	order := map[Phase]int{PhaseCollect: 0, PhaseCreate: 1, PhaseConnect: 2}
-	ids := make(map[string]bool, len(setup.Steps))
-	creates := 0
-	last := 0
-	for _, step := range setup.Steps {
-		rank, ok := order[step.Phase]
-		if !ok {
-			return fmt.Errorf("step %q: unknown phase %q", step.ID, step.Phase)
-		}
-		if rank < last {
-			return fmt.Errorf("step %q: steps must run collect, then create, then connect", step.ID)
-		}
-		last = rank
-		if step.Phase == PhaseCreate {
-			creates++
-		}
-		if !keyPattern.MatchString(step.ID) {
-			return fmt.Errorf("step id %q must be lowercase words joined by hyphens", step.ID)
-		}
-		if ids[step.ID] {
-			return fmt.Errorf("step id %q is used twice", step.ID)
-		}
-		ids[step.ID] = true
-		if strings.TrimSpace(step.Title) == "" {
-			return fmt.Errorf("step %q: title is required", step.ID)
-		}
-		for i, block := range step.Blocks {
-			if err := validateBlock(block, platformBlocks, variables); err != nil {
-				return fmt.Errorf("step %q block %d: %w", step.ID, i+1, err)
-			}
-			// Refused rather than ignored, so a form control's setting written
-			// into a platform cannot look like it took effect.
-			if block.Field != "" || block.Placeholder != "" || block.Multiline || block.ReadOnly || block.Format != "" {
-				return fmt.Errorf("step %q block %d: field, placeholder, multiline, read_only and format belong to custom flows", step.ID, i+1)
-			}
-		}
-	}
-	if creates != 1 {
-		return fmt.Errorf("setup must have exactly one create step, found %d", creates)
-	}
-	return nil
-}
-
-// validateBlock checks one block against the rules every context shares, after
-// refusing a type the context does not allow. variables are the keys a field
-// block may collect.
 func validateBlock(b Block, allowed []BlockType, variables map[string]Variable) error {
 	known := slices.Contains(platformBlocks, b.Type) || slices.Contains(customFlowBlocks, b.Type)
 	if known && !slices.Contains(allowed, b.Type) {

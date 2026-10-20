@@ -10,7 +10,12 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
-import { Loader2 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
+import { Loader2, TriangleAlert } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -20,8 +25,9 @@ export interface ServerPickerOption {
   icon: ReactNode;
   slug?: string;
   kindLabel: string;
+  // On a disabled row: a warning icon whose tooltip is the description.
   badge?: string;
-  // Shown under the row when it is disabled; read to screen readers otherwise.
+  // Shown under a disabled row without a badge; read to screen readers otherwise.
   description: string;
   disabled: boolean;
 }
@@ -306,7 +312,7 @@ export function ServerPickerSheet({
                             <span
                               id={`${option.value}-description`}
                               className={
-                                option.disabled
+                                option.disabled && !option.badge
                                   ? "text-muted-foreground text-xs"
                                   : "sr-only"
                               }
@@ -322,11 +328,28 @@ export function ServerPickerSheet({
                               </span>
                             )}
                           </span>
-                          {option.badge && (
-                            <Badge variant="warning">
-                              <Badge.Text>{option.badge}</Badge.Text>
-                            </Badge>
-                          )}
+                          {option.badge &&
+                            (option.disabled ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span
+                                    role="img"
+                                    aria-label={option.badge}
+                                    tabIndex={0}
+                                    className="text-destructive shrink-0"
+                                  >
+                                    <TriangleAlert className="size-4" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="left">
+                                  {option.description}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <Badge variant="warning">
+                                <Badge.Text>{option.badge}</Badge.Text>
+                              </Badge>
+                            ))}
                           <Checkbox
                             aria-label={option.label}
                             aria-describedby={`${option.value}-description`}

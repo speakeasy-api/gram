@@ -1115,13 +1115,14 @@ func (q *Queries) ListAccessMemberDirectoryRoleSources(ctx context.Context, orga
 }
 
 const listAccessMembers = `-- name: ListAccessMembers :many
+WITH members AS (
 SELECT
   users.id,
   users.display_name,
   users.email,
   users.photo_url,
-  COALESCE(organization_roles.id::text, global_roles.id::text, '')::text AS role_id,
-  COALESCE(ora.created_at, our.created_at)::timestamptz AS joined_at,
+  COALESCE(direct_roles.role_ids, '{}'::text[])::text[] AS role_ids,
+  COALESCE(direct_roles.joined_at, our.created_at)::timestamptz AS joined_at,
   -- The member's identity-provider profile, when the directory has synced one.
   -- A member with no directory row, or one whose provider does not report the
   -- attribute, comes back as an empty string.
@@ -1207,42 +1208,91 @@ LEFT JOIN LATERAL (
       )
     )
 ) mapped_roles ON TRUE
-LEFT JOIN organization_role_assignments AS ora
-  ON ora.organization_id = our.organization_id
-  AND ora.workos_user_id = users.workos_id
-  AND ora.deleted_at IS NULL
-LEFT JOIN organization_roles
-  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
-  AND organization_roles.organization_id = our.organization_id
-  AND organization_roles.deleted IS FALSE
-  AND organization_roles.workos_deleted IS FALSE
-LEFT JOIN global_roles
-  ON ora.role_urn = 'role:global:' || global_roles.id::text
-  AND global_roles.deleted IS FALSE
-  AND global_roles.workos_deleted IS FALSE
-WHERE our.organization_id = $1
+LEFT JOIN LATERAL (
+  SELECT
+    ARRAY_AGG(DISTINCT COALESCE(organization_roles.id::text, global_roles.id::text))
+      FILTER (WHERE COALESCE(organization_roles.id, global_roles.id) IS NOT NULL) AS role_ids,
+    MIN(ora.created_at) AS joined_at
+  FROM organization_role_assignments AS ora
+  LEFT JOIN organization_roles
+    ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+    AND organization_roles.organization_id = our.organization_id
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  LEFT JOIN global_roles
+    ON ora.role_urn = 'role:global:' || global_roles.id::text
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+  WHERE ora.organization_id = our.organization_id
+    AND ora.workos_user_id = users.workos_id
+    AND ora.deleted_at IS NULL
+) direct_roles ON TRUE
+WHERE our.organization_id = $2
   AND our.deleted IS FALSE
   AND users.deleted_at IS NULL
-ORDER BY users.email, users.id
+), matched AS (
+  SELECT members.id, members.display_name, members.email, members.photo_url, members.role_ids, members.joined_at, members.department, members.group_names, members.group_ids, members.group_id_names, members.in_directory, members.directory_role_ids,
+    ($3::text <> '' AND
+      LOWER(BTRIM(REGEXP_REPLACE(email, '[[:space:]]+', ' ', 'g'))) = $3) AS exact_email_match
+  FROM members
+  WHERE ($4::text = '' OR $4 = ANY(role_ids || directory_role_ids))
+    AND (
+      $3::text = ''
+      OR STRPOS(LOWER(BTRIM(REGEXP_REPLACE(display_name, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      OR STRPOS(LOWER(BTRIM(REGEXP_REPLACE(email, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      OR EXISTS (
+        SELECT 1 FROM organization_roles AS role
+        WHERE role.organization_id = $2
+          AND role.id::text = ANY(role_ids || directory_role_ids)
+          AND STRPOS(LOWER(BTRIM(REGEXP_REPLACE(role.workos_name, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      )
+      OR EXISTS (
+        SELECT 1 FROM global_roles AS role
+        WHERE role.id::text = ANY(role_ids || directory_role_ids)
+          AND STRPOS(LOWER(BTRIM(REGEXP_REPLACE(role.workos_name, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      )
+    )
+)
+SELECT matched.id, matched.display_name, matched.email, matched.photo_url, matched.role_ids, matched.joined_at, matched.department, matched.group_names, matched.group_ids, matched.group_id_names, matched.in_directory, matched.directory_role_ids, matched.exact_email_match,
+  COUNT(*) OVER () AS total_matches,
+  COUNT(*) FILTER (WHERE exact_email_match) OVER () AS exact_email_matches
+FROM matched
+ORDER BY exact_email_match DESC, email, id
+LIMIT NULLIF($1::int, 0)
 `
 
-type ListAccessMembersRow struct {
-	ID               string
-	DisplayName      string
-	Email            string
-	PhotoUrl         pgtype.Text
-	RoleID           string
-	JoinedAt         pgtype.Timestamptz
-	Department       string
-	GroupNames       []string
-	GroupIds         []uuid.UUID
-	GroupIDNames     []string
-	InDirectory      bool
-	DirectoryRoleIds []string
+type ListAccessMembersParams struct {
+	LimitValue     int32
+	OrganizationID string
+	QueryText      string
+	RoleID         string
 }
 
-func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) ([]ListAccessMembersRow, error) {
-	rows, err := q.db.Query(ctx, listAccessMembers, organizationID)
+type ListAccessMembersRow struct {
+	ID                string
+	DisplayName       string
+	Email             string
+	PhotoUrl          pgtype.Text
+	RoleIds           []string
+	JoinedAt          pgtype.Timestamptz
+	Department        string
+	GroupNames        []string
+	GroupIds          []uuid.UUID
+	GroupIDNames      []string
+	InDirectory       bool
+	DirectoryRoleIds  []string
+	ExactEmailMatch   pgtype.Bool
+	TotalMatches      int64
+	ExactEmailMatches int64
+}
+
+func (q *Queries) ListAccessMembers(ctx context.Context, arg ListAccessMembersParams) ([]ListAccessMembersRow, error) {
+	rows, err := q.db.Query(ctx, listAccessMembers,
+		arg.LimitValue,
+		arg.OrganizationID,
+		arg.QueryText,
+		arg.RoleID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1255,7 +1305,7 @@ func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) 
 			&i.DisplayName,
 			&i.Email,
 			&i.PhotoUrl,
-			&i.RoleID,
+			&i.RoleIds,
 			&i.JoinedAt,
 			&i.Department,
 			&i.GroupNames,
@@ -1263,6 +1313,9 @@ func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) 
 			&i.GroupIDNames,
 			&i.InDirectory,
 			&i.DirectoryRoleIds,
+			&i.ExactEmailMatch,
+			&i.TotalMatches,
+			&i.ExactEmailMatches,
 		); err != nil {
 			return nil, err
 		}

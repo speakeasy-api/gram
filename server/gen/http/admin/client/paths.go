@@ -466,3 +466,18 @@ func SetStripeSubscriptionAdminPath() string {
 func ListCustomerUsageAdminPath() string {
 	return "/admin/organizations.customerUsage"
 }
+
+// ListUpstreamOAuthMigrationOrganizationsAdminPath returns the URL path to the admin service listUpstreamOAuthMigrationOrganizations HTTP endpoint.
+func ListUpstreamOAuthMigrationOrganizationsAdminPath() string {
+	return "/admin/upstreamOAuthMigration.organizations"
+}
+
+// GetUpstreamOAuthMigrationStatusAdminPath returns the URL path to the admin service getUpstreamOAuthMigrationStatus HTTP endpoint.
+func GetUpstreamOAuthMigrationStatusAdminPath() string {
+	return "/admin/upstreamOAuthMigration.status"
+}
+
+// RunUpstreamOAuthMigrationAdminPath returns the URL path to the admin service runUpstreamOAuthMigration HTTP endpoint.
+func RunUpstreamOAuthMigrationAdminPath() string {
+	return "/admin/upstreamOAuthMigration.run"
+}

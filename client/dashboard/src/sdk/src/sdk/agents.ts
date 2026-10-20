@@ -53,6 +53,7 @@ import {
 } from "../models/operations/listagentpolicygrants.js";
 import {
   ListAgentsRequest,
+  ListAgentsResponse,
   ListAgentsSecurity,
 } from "../models/operations/listagents.js";
 import {
@@ -183,8 +184,8 @@ export class Agents extends ClientSDK {
     request?: ListAgentsRequest | undefined,
     security?: ListAgentsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<Array<ManagedAgent>> {
-    return unwrapAsync(agentsList(
+  ): Promise<PageIterator<ListAgentsResponse, { cursor: string }>> {
+    return unwrapResultIterator(agentsList(
       this,
       request,
       security,

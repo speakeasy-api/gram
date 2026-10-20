@@ -937,7 +937,6 @@ func TestUpdateMcpServer_EnableAlreadyAttachedIsIdempotent(t *testing.T) {
 	// server was briefly enabled, or by an admin API call).
 	_, err = pluginsQueries.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
 		PluginID:    defaultPlugin.ID,
-		ToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID: uuid.NullUUID{UUID: uuid.MustParse(created.ID), Valid: true},
 		DisplayName: "Already Attached Server",
 		Policy:      "required",

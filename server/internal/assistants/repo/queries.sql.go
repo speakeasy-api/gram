@@ -527,6 +527,7 @@ type ClearAssistantToolsetsParams struct {
 	ProjectID   uuid.UUID
 }
 
+// Clears legacy toolset-keyed rows left behind.
 func (q *Queries) ClearAssistantToolsets(ctx context.Context, arg ClearAssistantToolsetsParams) error {
 	_, err := q.db.Exec(ctx, clearAssistantToolsets, arg.AssistantID, arg.ProjectID)
 	return err
@@ -545,6 +546,7 @@ type ClearAssistantToolsetsForServersParams struct {
 	McpServerIds []uuid.UUID
 }
 
+// Clears legacy toolset-keyed rows left behind.
 func (q *Queries) ClearAssistantToolsetsForServers(ctx context.Context, arg ClearAssistantToolsetsForServersParams) error {
 	_, err := q.db.Exec(ctx, clearAssistantToolsetsForServers, arg.AssistantID, arg.ProjectID, arg.McpServerIds)
 	return err
@@ -2107,9 +2109,6 @@ WHERE ms.project_id = $1
   AND ms.id = ANY($2::UUID[])
   AND ms.toolset_id = ms.id
   AND ms.deleted IS FALSE
-  AND ms.visibility <> 'disabled'
-  AND t.mcp_enabled IS TRUE
-  AND t.mcp_slug IS NOT NULL
   AND t.deleted IS FALSE
 `
 
@@ -2118,7 +2117,7 @@ type ListCanonicalWrapperIDsParams struct {
 	ToolsetIds []uuid.UUID
 }
 
-// Dialable toolsets with a live canonical wrapper (same id): the attachments the dependent move re-keys.
+// Writer-only: of the given toolsets, those with a live canonical wrapper (same id); hosted attachments are stored under it.
 func (q *Queries) ListCanonicalWrapperIDs(ctx context.Context, arg ListCanonicalWrapperIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listCanonicalWrapperIDs, arg.ProjectID, arg.ToolsetIds)
 	if err != nil {
@@ -2905,6 +2904,7 @@ type LoadAssistantToolsetsRow struct {
 	EnvironmentSlug        pgtype.Text
 }
 
+// Test-only: no production code writes legacy assistant_toolsets rows.
 func (q *Queries) LoadAssistantToolsets(ctx context.Context, arg LoadAssistantToolsetsParams) ([]LoadAssistantToolsetsRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantToolsets, arg.AssistantIds, arg.ProjectID)
 	if err != nil {
