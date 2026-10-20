@@ -90,6 +90,10 @@ type ToolUsageSectionStatus = {
   clients: ToolUsageSectionState;
 };
 
+// The server caps the targets ranking at this many rows
+// (server/internal/telemetry/impl.go); a shorter answer is the whole set.
+const TOOL_USAGE_TARGET_LIMIT = 200;
+
 export function InsightsToolsContent(): JSX.Element {
   const { projectSlug } = useSlugs();
 
@@ -226,47 +230,98 @@ export function InsightsToolsContent(): JSX.Element {
     throwOnError: false,
   });
 
-  // The hook-reported share of each skill's loads; the rest came over MCP.
-  // Only asked where skills are served over MCP, and only when skills are in
-  // the selection, since otherwise there is no skill card to split.
+  // Skill loads split by channel: the hook-reported share, the rest came over
+  // MCP. Only asked where skills are served over MCP, and only when skills are
+  // in the selection, since otherwise there is no skill card to split.
   const skillsOverMcpEnabled = useSkillsOverMcpEnabled();
   const splitSkillChannels =
     skillsOverMcpEnabled && selectedHookTypes.includes("skill");
-  const skillHookTargetsQuery = useQuery({
-    queryKey: ["tool-usage-targets", "skill-hook-loads", ...sharedQueryKey],
+  const skillPayload = useMemo(
+    () => ({ ...summaryPayload, targetTypes: ["skill" as const] }),
+    [summaryPayload],
+  );
+  const skillHookPayload = useMemo(
+    () => ({
+      ...skillPayload,
+      filters: [...(skillPayload.filters ?? []), loadedViaLogFilter("hook")],
+    }),
+    [skillPayload],
+  );
+  const skillTotalsQuery = useQuery({
+    queryKey: ["tool-usage-totals", "skill-loads", ...sharedQueryKey],
     queryFn: () =>
       unwrapAsync(
-        telemetryGetToolUsageTargets(client, {
-          getToolUsageSummaryPayload: {
-            ...summaryPayload,
-            targetTypes: ["skill"],
-            filters: [loadedViaLogFilter("hook")],
-          },
+        telemetryGetToolUsageTotals(client, {
+          getToolUsageSummaryPayload: skillPayload,
         }),
       ),
     enabled: !roleFilterPending && splitSkillChannels,
     throwOnError: false,
   });
-  const skillChannels: SkillChannelCounts | undefined = useMemo(
-    () =>
-      splitSkillChannels
-        ? {
-            pending: skillHookTargetsQuery.isPending,
-            error: skillHookTargetsQuery.isError,
-            hookCounts: new Map(
-              (skillHookTargetsQuery.data?.targets ?? [])
-                .filter((target) => target.targetType === "skill")
-                .map((target) => [target.targetId, Number(target.eventCount)]),
-            ),
-          }
-        : undefined,
-    [
-      splitSkillChannels,
-      skillHookTargetsQuery.isPending,
-      skillHookTargetsQuery.isError,
-      skillHookTargetsQuery.data,
-    ],
-  );
+  const skillHookTotalsQuery = useQuery({
+    queryKey: ["tool-usage-totals", "skill-hook-loads", ...sharedQueryKey],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetToolUsageTotals(client, {
+          getToolUsageSummaryPayload: skillHookPayload,
+        }),
+      ),
+    enabled: !roleFilterPending && splitSkillChannels,
+    throwOnError: false,
+  });
+  const skillHookTargetsQuery = useQuery({
+    queryKey: ["tool-usage-targets", "skill-hook-loads", ...sharedQueryKey],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetToolUsageTargets(client, {
+          getToolUsageSummaryPayload: skillHookPayload,
+        }),
+      ),
+    enabled: !roleFilterPending && splitSkillChannels,
+    throwOnError: false,
+  });
+  const skillChannels: SkillChannelCounts | undefined = useMemo(() => {
+    if (!splitSkillChannels) return undefined;
+    const hookTargets = (skillHookTargetsQuery.data?.targets ?? []).filter(
+      (target) => target.targetType === "skill",
+    );
+    return {
+      total: {
+        pending: skillTotalsQuery.isPending,
+        error: skillTotalsQuery.isError,
+        value: Number(skillTotalsQuery.data?.totals.eventCount ?? 0),
+      },
+      hookTotal: {
+        pending: skillHookTotalsQuery.isPending,
+        error: skillHookTotalsQuery.isError,
+        value: Number(skillHookTotalsQuery.data?.totals.eventCount ?? 0),
+      },
+      hookBySkill: {
+        pending: skillHookTargetsQuery.isPending,
+        error: skillHookTargetsQuery.isError,
+        counts: new Map(
+          hookTargets.map((target) => [
+            target.targetId,
+            Number(target.eventCount),
+          ]),
+        ),
+        complete:
+          (skillHookTargetsQuery.data?.targets.length ?? 0) <
+          TOOL_USAGE_TARGET_LIMIT,
+      },
+    };
+  }, [
+    splitSkillChannels,
+    skillTotalsQuery.isPending,
+    skillTotalsQuery.isError,
+    skillTotalsQuery.data,
+    skillHookTotalsQuery.isPending,
+    skillHookTotalsQuery.isError,
+    skillHookTotalsQuery.data,
+    skillHookTargetsQuery.isPending,
+    skillHookTargetsQuery.isError,
+    skillHookTargetsQuery.data,
+  ]);
 
   // Assemble the sections that have resolved into the summary shape the panels
   // already consume. Undefined until totals lands (which gates the shell);
@@ -321,6 +376,8 @@ export function InsightsToolsContent(): JSX.Element {
   const { refetch: refetchTargetTimeSeries } = targetTimeSeriesQuery;
   const { refetch: refetchClients } = clientsQuery;
   const { refetch: refetchTargetToolBreakdown } = targetToolBreakdownQuery;
+  const { refetch: refetchSkillTotals } = skillTotalsQuery;
+  const { refetch: refetchSkillHookTotals } = skillHookTotalsQuery;
   const { refetch: refetchSkillHookTargets } = skillHookTargetsQuery;
 
   const isAnyFetching =
@@ -330,6 +387,8 @@ export function InsightsToolsContent(): JSX.Element {
     targetTimeSeriesQuery.isFetching ||
     clientsQuery.isFetching ||
     targetToolBreakdownQuery.isFetching ||
+    skillTotalsQuery.isFetching ||
+    skillHookTotalsQuery.isFetching ||
     skillHookTargetsQuery.isFetching;
 
   const { data: filterOptionsData } = useQuery({
@@ -388,7 +447,13 @@ export function InsightsToolsContent(): JSX.Element {
     void refetchTargetTimeSeries();
     void refetchClients();
     void refetchTargetToolBreakdown();
-    void refetchSkillHookTargets();
+    // refetch() ignores `enabled`, so the skill reads are only asked for where
+    // their queries are on.
+    if (splitSkillChannels) {
+      void refetchSkillTotals();
+      void refetchSkillHookTotals();
+      void refetchSkillHookTargets();
+    }
   }, [
     refetchTotals,
     refetchTargets,
@@ -396,6 +461,9 @@ export function InsightsToolsContent(): JSX.Element {
     refetchTargetTimeSeries,
     refetchClients,
     refetchTargetToolBreakdown,
+    splitSkillChannels,
+    refetchSkillTotals,
+    refetchSkillHookTotals,
     refetchSkillHookTargets,
   ]);
 

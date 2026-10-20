@@ -5,6 +5,7 @@ import {
   loadedViaLogFilter,
   selectedLoadedVia,
   skillLoadChannel,
+  splitLoads,
   splitSkillLoads,
   withLoadedVia,
 } from "./skillLoadChannel";
@@ -80,14 +81,27 @@ describe("loaded via filters", () => {
   });
 });
 
-describe("splitSkillLoads", () => {
+describe("splitLoads", () => {
   it("counts what hooks did not report as MCP", () => {
-    const { bySkill, totals } = splitSkillLoads(
-      [
-        { targetId: "release-checklist", eventCount: 96 },
-        { targetId: "company-glossary", eventCount: 71 },
-      ],
+    expect(splitLoads(167, 18)).toEqual({ total: 167, mcp: 149, hook: 18 });
+  });
+
+  it("never reports more hook loads than total loads", () => {
+    expect(splitLoads(3, 5)).toEqual({ total: 3, mcp: 0, hook: 3 });
+  });
+});
+
+describe("splitSkillLoads", () => {
+  const skills = [
+    { targetId: "release-checklist", eventCount: 96 },
+    { targetId: "company-glossary", eventCount: 71 },
+  ];
+
+  it("reads a skill missing from a complete hook ranking as all MCP", () => {
+    const bySkill = splitSkillLoads(
+      skills,
       new Map([["release-checklist", 18]]),
+      true,
     );
 
     expect(bySkill.get("release-checklist")).toEqual({
@@ -100,14 +114,20 @@ describe("splitSkillLoads", () => {
       mcp: 71,
       hook: 0,
     });
-    expect(totals).toEqual({ total: 167, mcp: 149, hook: 18 });
   });
 
-  it("never reports more hook loads than total loads", () => {
-    const { bySkill } = splitSkillLoads(
-      [{ targetId: "a", eventCount: 3 }],
-      new Map([["a", 5]]),
+  it("leaves a skill unsplit when the hook ranking was cut off", () => {
+    const bySkill = splitSkillLoads(
+      skills,
+      new Map([["release-checklist", 18]]),
+      false,
     );
-    expect(bySkill.get("a")).toEqual({ total: 3, mcp: 0, hook: 3 });
+
+    expect(bySkill.get("release-checklist")).toEqual({
+      total: 96,
+      mcp: 78,
+      hook: 18,
+    });
+    expect(bySkill.has("company-glossary")).toBe(false);
   });
 });

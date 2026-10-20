@@ -89,25 +89,31 @@ export function withLoadedVia(
 export type SkillLoadSplit = { total: number; mcp: number; hook: number };
 
 /**
- * Splits each skill's load count into MCP and hook parts, given the hook-only
- * count per skill from a second, hook-filtered read. Whatever a hook did not
- * report came in over MCP; the clamp absorbs the two reads disagreeing at a
- * window edge.
+ * Splits a load count into MCP and hook parts, given the hook-only count from a
+ * second, hook-filtered read. Whatever a hook did not report came in over MCP;
+ * the clamp absorbs the two reads disagreeing at a window edge.
+ */
+export function splitLoads(total: number, hook: number): SkillLoadSplit {
+  const clamped = Math.min(Math.max(hook, 0), total);
+  return { total, mcp: total - clamped, hook: clamped };
+}
+
+/**
+ * Splits each skill's load count using the hook-only count per skill. The
+ * hook-only read is itself a capped ranking, so a skill missing from it had no
+ * hook loads only when that ranking is `complete`; otherwise its split is
+ * unknown and the skill is left out rather than counted as all MCP.
  */
 export function splitSkillLoads(
   skills: Array<{ targetId: string; eventCount: number }>,
   hookCounts: ReadonlyMap<string, number>,
-): { bySkill: Map<string, SkillLoadSplit>; totals: SkillLoadSplit } {
+  complete: boolean,
+): Map<string, SkillLoadSplit> {
   const bySkill = new Map<string, SkillLoadSplit>();
-  const totals: SkillLoadSplit = { total: 0, mcp: 0, hook: 0 };
   for (const skill of skills) {
-    const total = skill.eventCount;
-    const hook = Math.min(hookCounts.get(skill.targetId) ?? 0, total);
-    const split = { total, mcp: total - hook, hook };
-    bySkill.set(skill.targetId, split);
-    totals.total += split.total;
-    totals.mcp += split.mcp;
-    totals.hook += split.hook;
+    const hook = hookCounts.get(skill.targetId);
+    if (hook === undefined && !complete) continue;
+    bySkill.set(skill.targetId, splitLoads(skill.eventCount, hook ?? 0));
   }
-  return { bySkill, totals };
+  return bySkill;
 }

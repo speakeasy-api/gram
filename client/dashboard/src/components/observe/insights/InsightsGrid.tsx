@@ -19,6 +19,7 @@ import {
 } from "@/components/observe/observeDeepLink";
 import {
   SKILL_LOAD_CHANNEL_LABELS,
+  splitLoads,
   splitSkillLoads,
   type SkillLoadChannel,
 } from "@/components/observe/skillLoadChannel";
@@ -37,12 +38,22 @@ import { useEffect, useMemo, useState } from "react";
 type SectionState = { pending: boolean; error: boolean };
 
 /**
- * The hook-reported share of each skill's loads, keyed by skill name. Present
- * only where skills are served over MCP; without it the skill card stays a
- * single total, as it was before skills could arrive any other way.
+ * Skill load counts split by channel. Present only where skills are served over
+ * MCP; without it the skill card stays a single total, as it was before skills
+ * could arrive any other way.
+ *
+ * The KPI reads skill-scoped totals, not the target ranking: that ranking is
+ * capped across every target type, so busy servers can push skills out of it.
+ * `hookBySkill` is the hook-only ranking; `complete` says it was not cut off,
+ * so a skill missing from it had no hook loads.
  */
-export type SkillChannelCounts = SectionState & {
-  hookCounts: ReadonlyMap<string, number>;
+export type SkillChannelCounts = {
+  total: SectionState & { value: number };
+  hookTotal: SectionState & { value: number };
+  hookBySkill: SectionState & {
+    counts: ReadonlyMap<string, number>;
+    complete: boolean;
+  };
 };
 
 // The MCP part is the stronger fill: it is the served path these cards exist to
@@ -272,26 +283,31 @@ export function InsightsGrid({
       }),
     }));
 
-  // The split is a refinement of the totals: until the hook-only read lands,
-  // or if it fails, the cards fall back to the single total rather than
-  // blanking what the primary read already answered.
-  const skillLoadTotal = skills.reduce(
-    (sum, target) => sum + Number(target.eventCount),
-    0,
-  );
-  const skillSplit =
-    skillChannels && !skillChannels.pending && !skillChannels.error
+  // The split is a refinement of the totals: until the hook-only reads land,
+  // or if they fail, the cards fall back to the single total rather than
+  // blanking what the primary reads already answered.
+  const sectionReady = (section: SectionState) =>
+    !section.pending && !section.error;
+  const skillTotalSplit =
+    skillChannels &&
+    sectionReady(skillChannels.total) &&
+    sectionReady(skillChannels.hookTotal)
+      ? splitLoads(skillChannels.total.value, skillChannels.hookTotal.value)
+      : undefined;
+  const skillSplitBySkill =
+    skillChannels && sectionReady(skillChannels.hookBySkill)
       ? splitSkillLoads(
           skills.map((target) => ({
             targetId: target.targetId,
             eventCount: Number(target.eventCount),
           })),
-          skillChannels.hookCounts,
+          skillChannels.hookBySkill.counts,
+          skillChannels.hookBySkill.complete,
         )
       : undefined;
 
   const skillRows: RankedRow[] = skills.map((target) => {
-    const split = skillSplit?.bySkill.get(target.targetId);
+    const split = skillSplitBySkill?.get(target.targetId);
     return {
       id: `skill:${target.targetId}`,
       label: target.targetLabel,
@@ -409,15 +425,15 @@ export function InsightsGrid({
           <InsightCard
             title="Skill loads"
             href={logsLink({ targetTypes: ["skill"] })}
-            loading={status.targets.pending}
-            error={status.targets.error}
+            loading={skillChannels.total.pending}
+            error={skillChannels.total.error}
           >
             <MetricSpark
-              value={skillLoadTotal.toLocaleString()}
+              value={skillChannels.total.value.toLocaleString()}
               series={[]}
               caption={
-                skillSplit
-                  ? `${skillSplit.totals.mcp.toLocaleString()} over MCP · ${skillSplit.totals.hook.toLocaleString()} from hooks`
+                skillTotalSplit
+                  ? `${skillTotalSplit.mcp.toLocaleString()} over MCP · ${skillTotalSplit.hook.toLocaleString()} from hooks`
                   : undefined
               }
             />
@@ -497,7 +513,7 @@ export function InsightsGrid({
           loading={status.targets.pending}
           error={status.targets.error}
         >
-          {skillSplit && skillRows.length > 0 && (
+          {skillRows.some((row) => row.segments) && (
             <div className="text-muted-foreground -mt-1 flex items-center gap-3 text-xs">
               {(["mcp", "hook"] as const).map((channel) => {
                 const swatch = (
