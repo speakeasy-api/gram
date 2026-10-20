@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -398,8 +399,12 @@ func TestApplyRequestHeadersTunneledRefusesAuthorizationSource(t *testing.T) {
 
 	p.Headers[0].IsRequired = true
 	err := p.applyRequestHeaders(t.Context(), userReq, httptest.NewRequest(http.MethodPost, "https://upstream.example/mcp", nil))
-	require.Error(t, err)
-	require.NotContains(t, err.Error(), "synthetic-speakeasy-token")
+	message := requireBadRequest(t, err)
+	require.NotContains(t, message, "synthetic-speakeasy-token")
+	cause := errors.Unwrap(err)
+	require.Error(t, cause)
+	require.Contains(t, cause.Error(), `"X-Upstream-Token"`)
+	require.NotContains(t, cause.Error(), "synthetic-speakeasy-token")
 }
 
 func TestApplyRequestHeadersRemoteAllowsAuthorizationFromSeparateSource(t *testing.T) {
