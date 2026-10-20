@@ -25,9 +25,14 @@ type stubHookClientsReader struct {
 	err        error
 	reads      *atomic.Int32
 	inferReads *atomic.Int32
+	// gate, when set, holds every Sessions read until it is closed.
+	gate <-chan struct{}
 }
 
 func (s stubHookClientsReader) Sessions(context.Context, int) ([]telemetry.HookClientSessionRow, error) {
+	if s.gate != nil {
+		<-s.gate
+	}
 	if s.reads != nil {
 		s.reads.Add(1)
 	}
@@ -69,6 +74,7 @@ func TestGetHookClients_LabelsOrganizationsFromBothGrids(t *testing.T) {
 		err:        nil,
 		reads:      nil,
 		inferReads: nil,
+		gate:       nil,
 		sessions: []telemetry.HookClientSessionRow{
 			{OrganizationID: knownID, Day: "2026-10-18", Client: "", Machines: 3, Sessions: 5, MachinesAll: 4},
 			{OrganizationID: knownID, Day: "2026-10-18", Client: "curl", Machines: 1, Sessions: 2, MachinesAll: 2},
@@ -109,6 +115,7 @@ func TestGetHookClients_PreservesReaderErrorCode(t *testing.T) {
 		err:        oops.E(oops.CodeInvalid, nil, "bad window"),
 		reads:      nil,
 		inferReads: nil,
+		gate:       nil,
 	}
 
 	_, err := svc.GetHookClients(ctx, &gen.GetHookClientsPayload{AdminSessionToken: nil, WindowDays: 15, Refresh: true})
@@ -130,6 +137,7 @@ func TestGetHookClients_ServesFromCacheUntilRefresh(t *testing.T) {
 		err:        nil,
 		reads:      reads,
 		inferReads: inferReads,
+		gate:       nil,
 	}
 	// A window no other test uses, so the shared cache starts empty for it.
 	const window = 7
@@ -171,6 +179,7 @@ func TestGetHookClients_IncludesDeviceAgentsAndSurvivesRedisFailure(t *testing.T
 		err:        nil,
 		reads:      nil,
 		inferReads: nil,
+		gate:       nil,
 	}
 	agentOrg := "org_" + uuid.NewString()
 	svc.SetDeviceAgentVersions(stubDeviceAgentVersions{
@@ -201,12 +210,15 @@ func TestGetHookClients_ServesStaleCopyAndRefreshesInBackground(t *testing.T) {
 
 	ctx, svc, _ := newTestAdminService(t)
 	reads := &atomic.Int32{}
+	inferReads := &atomic.Int32{}
+	gate := make(chan struct{})
 	svc.hookClients = stubHookClientsReader{
 		sessions:   []telemetry.HookClientSessionRow{},
 		inference:  []telemetry.InferenceHookTrafficRow{},
 		err:        nil,
 		reads:      reads,
-		inferReads: nil,
+		inferReads: inferReads,
+		gate:       gate,
 	}
 	// A window no other test uses, so the shared cache holds only this copy.
 	const window = 9
@@ -219,15 +231,47 @@ func TestGetHookClients_ServesStaleCopyAndRefreshesInBackground(t *testing.T) {
 		DeviceAgents: []deviceagentversions.Row{},
 	}))
 
+	// The background read is blocked, so this returns only because the
+	// refresh is detached from the request.
 	result, err := svc.GetHookClients(ctx, &gen.GetHookClientsPayload{AdminSessionToken: nil, WindowDays: window, Refresh: false})
 	require.NoError(t, err)
 	require.True(t, result.FromCache)
 	require.Equal(t, stale.Format(time.RFC3339), result.QueriedAt)
+	require.Equal(t, int32(0), reads.Load())
 
-	// The background read replaces the stale copy without the caller waiting.
+	close(gate)
 	require.Eventually(t, func() bool {
 		cached, err := svc.hookClientsCache.Get(ctx, hookClientsCacheKey(window))
 		return err == nil && cached.QueriedAt.After(stale)
 	}, 10*time.Second, 50*time.Millisecond)
 	require.Equal(t, int32(1), reads.Load())
+	require.Equal(t, int32(1), inferReads.Load())
+}
+
+func TestPublishHookClientsSnapshot_NeverReplacesNewerRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, _ := newTestAdminService(t)
+	const window = 11
+	newer := time.Now().UTC().Truncate(time.Second)
+	snapshot := func(at time.Time) hookClientsSnapshot {
+		return hookClientsSnapshot{
+			WindowDays:   window,
+			QueriedAt:    at,
+			Sessions:     []telemetry.HookClientSessionRow{},
+			Inference:    []telemetry.InferenceHookTrafficRow{},
+			DeviceAgents: []deviceagentversions.Row{},
+		}
+	}
+
+	require.NoError(t, svc.publishHookClientsSnapshot(ctx, snapshot(newer)))
+	require.NoError(t, svc.publishHookClientsSnapshot(ctx, snapshot(newer.Add(-time.Minute))))
+	cached, err := svc.hookClientsCache.Get(ctx, hookClientsCacheKey(window))
+	require.NoError(t, err)
+	require.True(t, cached.QueriedAt.Equal(newer))
+
+	require.NoError(t, svc.publishHookClientsSnapshot(ctx, snapshot(newer.Add(time.Minute))))
+	cached, err = svc.hookClientsCache.Get(ctx, hookClientsCacheKey(window))
+	require.NoError(t, err)
+	require.True(t, cached.QueriedAt.Equal(newer.Add(time.Minute)))
 }

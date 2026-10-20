@@ -207,15 +207,44 @@ func (s *Service) readHookClientsSnapshot(ctx context.Context, windowDays int) (
 		Inference:    inference,
 		DeviceAgents: s.readDeviceAgentVersions(ctx, windowDays, queriedAt),
 	}
-	// Two refreshes can overlap. Keep whichever read started later, so a slow
-	// read never replaces newer data or extends its TTL.
-	if existing, err := s.hookClientsCache.Get(ctx, hookClientsCacheKey(windowDays)); err == nil && existing.QueriedAt.After(queriedAt) {
-		return snapshot, nil
-	}
-	if err := s.hookClientsCache.Store(ctx, snapshot); err != nil {
+	if err := s.publishHookClientsSnapshot(ctx, snapshot); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache hook clients", attr.SlogError(err))
 	}
 	return snapshot, nil
+}
+
+const hookClientsPublishAttempts = 3
+
+// publishHookClientsSnapshot caches snapshot unless the cache already holds a
+// read that started later. A background refresh and a Refresh click can
+// overlap, so the check and the write go through compare-and-swap: a slow,
+// older read can never replace newer data or reset its TTL.
+func (s *Service) publishHookClientsSnapshot(ctx context.Context, snapshot hookClientsSnapshot) error {
+	key := hookClientsCacheKey(snapshot.WindowDays)
+	for range hookClientsPublishAttempts {
+		existing, err := s.hookClientsCache.Get(ctx, key)
+		if err != nil {
+			stored, err := s.hookClientsCache.StoreIfAbsent(ctx, snapshot)
+			if err != nil {
+				return fmt.Errorf("store hook clients snapshot: %w", err)
+			}
+			if stored {
+				return nil
+			}
+			continue
+		}
+		if !snapshot.QueriedAt.After(existing.QueriedAt) {
+			return nil
+		}
+		swapped, err := s.hookClientsCache.CompareAndSwap(ctx, existing, snapshot)
+		if err != nil {
+			return fmt.Errorf("swap hook clients snapshot: %w", err)
+		}
+		if swapped {
+			return nil
+		}
+	}
+	return fmt.Errorf("publish hook clients snapshot: still contended after %d attempts", hookClientsPublishAttempts)
 }
 
 // readDeviceAgentVersions returns the device agent grid, or none when it is
