@@ -376,3 +376,23 @@ func createProjectContextID(t *testing.T, ctx context.Context, ti *testInstance)
 	_, projectID := createProjectContext(t, ctx, ti)
 	return projectID
 }
+
+func TestSkillLinkGatewayWritableWithProjectMCPWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, _ := newLinkTestService(t)
+	created := createSkill(t, ctx, ti, "gateway-write", "Valid.")
+	gatewayID := createLinkGateway(t, ctx, ti, "write-gateway")
+
+	gatewayWriter := authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String()),
+		authz.NewGrant(authz.ScopeMCPWrite, ti.projectID.String()),
+	)
+	gatewayLink, err := ti.service.Link(gatewayWriter, &gen.LinkPayload{ID: created.Skill.ID, TargetKind: "meta_mcp_server", MetaMcpServerID: new(gatewayID.String())})
+	require.NoError(t, err, "project mcp write, which the gateway write APIs check, is enough to link a gateway")
+	require.NoError(t, ti.service.Unlink(gatewayWriter, &gen.UnlinkPayload{LinkID: gatewayLink.ID}))
+
+	skillOnly := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String()))
+	_, err = ti.service.Link(skillOnly, &gen.LinkPayload{ID: created.Skill.ID, TargetKind: "meta_mcp_server", MetaMcpServerID: new(gatewayID.String())})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}

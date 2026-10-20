@@ -134,8 +134,8 @@ func parseLinkTarget(kind string, mcpServerID, metaMCPServerID *string) (skillli
 
 // requireLinkTargetWrite resolves a link target in the caller's project and
 // checks that the caller may change what it serves: mcp:write on a stored MCP
-// server, and project write for a gateway or the organization gateway, which
-// span servers. It returns the target's display name, nil for the
+// server, project-level mcp:write for a gateway (the check the gateway write
+// APIs make), and project write for the organization gateway. It returns the target's display name, nil for the
 // organization gateway.
 func (s *Service) requireLinkTargetWrite(ctx context.Context, authCtx *contextvalues.AuthContext, logger *slog.Logger, target skilllink.Target) (*string, error) {
 	queries := mcpskillsrepo.New(s.db)
@@ -165,7 +165,7 @@ func (s *Service) requireLinkTargetWrite(ctx context.Context, authCtx *contextva
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve gateway for skill link").LogError(ctx, logger)
 		}
-		if err := s.requireProjectWrite(ctx, projectID); err != nil {
+		if err := s.requireProjectMCPWrite(ctx, projectID); err != nil {
 			return nil, err
 		}
 		return &server.Name, nil
@@ -185,7 +185,15 @@ func (s *Service) requireStoredLinkTargetWrite(ctx context.Context, projectID uu
 	if link.TargetKind == string(skilllink.TargetMCPServer) && link.McpServerID.Valid {
 		return s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, mcpGrantResourceID(link.McpServerID.UUID, toolsetID), projectID.String()))
 	}
+	if link.TargetKind == string(skilllink.TargetMetaMCPServer) {
+		return s.requireProjectMCPWrite(ctx, projectID)
+	}
 	return s.requireProjectWrite(ctx, projectID)
+}
+
+// requireProjectMCPWrite matches the check the gateway write APIs make.
+func (s *Service) requireProjectMCPWrite(ctx context.Context, projectID uuid.UUID) error {
+	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil})
 }
 
 func (s *Service) requireProjectWrite(ctx context.Context, projectID uuid.UUID) error {
