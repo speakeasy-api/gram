@@ -167,6 +167,7 @@ func networkIngressNextAction(output GetNetworkIngressOutput) string {
 
 const getNetworkIngressDescription = "Read the organization's private network (Tailscale) ingress: whether private networking is switched on for the organization, whether an ingress is configured and enabled, its latest observed status and private DNS name, and the single next_action that stands between the organization and private MCP access. " +
 	"ready_for_private_access is required before any MCP can use dual or private_only network access; it is not proof that a tailnet client can connect. " +
+	"For wait_for_ingress, wait and call this tool again. Present setup_url only for configure_ingress_in_dashboard, add_credentials_in_dashboard, enable_ingress_in_dashboard, or repair_ingress_in_dashboard; request_private_networking and contact_support_for_unsupported_provider require Speakeasy support instead. " +
 	"An unsupported provider is never ready: contact_support_for_unsupported_provider means contact Speakeasy support, not attempt dashboard setup or repair. " +
 	"Creating, enabling, repairing, or supplying credentials for the ingress happens only in the dashboard at setup_url, because it requires Tailscale OAuth client credentials. Never returns credentials or provider resources."
 
