@@ -529,6 +529,7 @@ function ToolsetPanel({
         updatePromptTemplateForm: {
           ...tool,
           ...updates,
+          kind: "prompt",
         },
       });
       await invalidateTemplate(queryClient, [{ name: tool.name }]);

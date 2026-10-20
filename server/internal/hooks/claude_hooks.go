@@ -22,6 +22,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -241,10 +242,25 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
-	if hasPluginAuth {
+	if token := pluginDeviceAgentToken(payload.DeviceAgentToken); token != "" {
+		// A headless device is never downgraded to the OTEL-buffered path: its
+		// events have no human session to be attributed to, and its relay
+		// handles a refusal (exchange again, or apply its fail policy).
+		authedCtx, err := s.authorizeWorkloadPluginRequest(ctx, token, projectSlugHint)
+		if err != nil {
+			outcome = hookMetricOutcomeUnauthorized
+			authLogger.WarnContext(ctx, "device-agent token refused on claude hook",
+				attr.SlogEvent("claude_hook_workload_denied"),
+				attr.SlogError(err),
+			)
+			return nil, workloadHookAuthError(err)
+		}
+		ctx = authedCtx
+		logger = s.withAuthContext(ctx, logger)
+	} else if hasPluginAuth {
 		// Auth is optional. Returning a 401 on failure deadlocks the client:
 		// send_hook.sh maps any non-2xx to "block all tool calls", but
 		// recovering (e.g. `gram login`) requires Bash, which the hook just
@@ -323,35 +339,41 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		return makeHookResult(payload.HookEventName), nil
 	}
 
-	// Route to appropriate handler based on hook type
-	var (
-		result *gen.ClaudeHookResult
-	)
+	result, postureOutcome, err := s.decideClaudeHookWithinBudget(ctx, logger, start, hookEvent, payload.HookEventName)
+	if postureOutcome != "" {
+		outcome = postureOutcome
+	}
+	return result, err
+}
+
+// dispatchClaudeHookEvent routes a normalized Claude hook event to its handler.
+// It runs off the request goroutine, so it recovers a handler panic and
+// returns errHandlerPanicked.
+func (s *Service) dispatchClaudeHookEvent(ctx context.Context, logger *slog.Logger, hookEvent any, hookEventName string) (res *gen.ClaudeHookResult, err error) {
+	defer recoverDetachedPanic(ctx, logger, &err)
 	switch ev := hookEvent.(type) {
 	case *hookevents.SessionStart:
-		result, err = s.handleSessionStart(ctx, ev)
+		return s.handleSessionStart(ctx, ev)
 	case *hookevents.ConfigChange:
-		result, err = s.handleConfigChange(ctx, ev)
+		return s.handleConfigChange(ctx, ev)
 	case *hookevents.BeforeToolUse:
-		result, err = s.handlePreToolUse(ctx, ev)
+		return s.handlePreToolUse(ctx, ev)
 	case *hookevents.AfterToolUse:
-		result, err = s.handlePostToolUse(ctx, ev)
+		return s.handlePostToolUse(ctx, ev)
 	case *hookevents.AfterToolUseFailure:
-		result, err = s.handlePostToolUseFailure(ctx, ev)
+		return s.handlePostToolUseFailure(ctx, ev)
 	case *hookevents.UserPromptSubmit:
-		result, err = s.handleUserPromptSubmit(ctx, ev)
+		return s.handleUserPromptSubmit(ctx, ev)
 	case *hookevents.Stop:
-		result, err = s.handleStop(ctx, ev)
+		return s.handleStop(ctx, ev)
 	case *hookevents.SessionEnd:
-		result, err = s.handleSessionEnd(ctx, ev)
+		return s.handleSessionEnd(ctx, ev)
 	case *hookevents.Notification:
-		result, err = s.handleNotification(ctx, ev)
+		return s.handleNotification(ctx, ev)
 	default:
-		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
-		result = makeHookResult(payload.HookEventName)
+		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", hookEventName))
+		return makeHookResult(hookEventName), nil
 	}
-
-	return result, err
 }
 
 func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (any, error) {
@@ -686,9 +708,6 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 		}
 		return ctx, fmt.Errorf("authorize hook api key: %w", err)
 	}
-	if err := s.requireAgentHooksIngest(ctx); err != nil {
-		return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
-	}
 	projectScheme := &security.APIKeyScheme{
 		Name:           constants.ProjectSlugSecuritySchema,
 		Scopes:         []string{},
@@ -701,7 +720,55 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 		}
 		return ctx, fmt.Errorf("authorize hook project slug: %w", err)
 	}
+	// The hooks grant may be bounded to one project, so it is checked only
+	// once the project slug has resolved.
+	if err := s.requireAgentHooksIngest(ctx); err != nil {
+		return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
+	}
 	return ctx, nil
+}
+
+// pluginDeviceAgentToken returns the device-agent token a plugin-driven request
+// presented as `Authorization: Bearer`, or "" when it presented none.
+func pluginDeviceAgentToken(authorization *string) string {
+	scheme, token, ok := strings.Cut(strings.TrimSpace(conv.PtrValOr(authorization, "")), " ")
+	token = strings.TrimSpace(token)
+	if !ok || !strings.EqualFold(scheme, "Bearer") || !deviceagenttoken.IsToken(token) {
+		return ""
+	}
+	return token
+}
+
+// authorizeWorkloadPluginRequest admits a device-agent token on the claude and
+// ingest endpoints and binds the request's Gram-Project, like the other hooks
+// methods. Admission refusals are CodeUnauthorized, grant refusals CodeForbidden.
+func (s *Service) authorizeWorkloadPluginRequest(ctx context.Context, token, projectSlug string) (context.Context, error) {
+	if s.deviceAgentTokens == nil {
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
+	}
+	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	if err != nil {
+		return ctx, fmt.Errorf("admit device-agent token: %w", err)
+	}
+	projectScheme := &security.APIKeyScheme{
+		Name:           constants.ProjectSlugSecuritySchema,
+		Scopes:         []string{},
+		RequiredScopes: []string{"hooks"},
+	}
+	authorized, err := s.authorizeWorkloadProject(admitted, projectSlug, projectScheme)
+	if err != nil {
+		return ctx, err
+	}
+	return authorized, nil
+}
+
+// workloadHookAuthError keeps a workload refusal's own code (401 to exchange
+// again, 403 for a grant the device lacks), and treats anything else as 401.
+func workloadHookAuthError(err error) error {
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+		return oops.E(shareable.Code, err, "device-agent token refused")
+	}
+	return oops.E(oops.CodeUnauthorized, err, "device-agent token refused")
 }
 
 func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
@@ -1406,7 +1473,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	serverPrefix string,
 	detail string,
 ) (uuid.UUID, uuid.UUID, bool) {
-	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
+	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) || isVerdictSuperseded(ctx) {
 		return uuid.Nil, uuid.Nil, false
 	}
 
@@ -1502,7 +1569,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 // gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
 // trace will surface as blocked regardless of which row arrives first.
 func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
-	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) {
+	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) || isVerdictSuperseded(ctx) {
 		return
 	}
 

@@ -23,15 +23,12 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
-
-// RouteBase is the URL path prefix organization gateways are served under,
-// followed by the organization's slug.
-const RouteBase = "mcp/gateway"
 
 // issuerProbe bounds the issuer lookup. The gateway is offered only when the
 // organization owns exactly one issuer, so two rows are enough to tell one
@@ -128,5 +125,5 @@ func Resolve(ctx context.Context, issuers IssuerLister, organizationID string) (
 
 // URL is the organization gateway's MCP URL under baseURL.
 func URL(baseURL *url.URL, organizationSlug string) string {
-	return baseURL.JoinPath(RouteBase, organizationSlug).String()
+	return baseURL.JoinPath(mcproute.OrganizationGateway.String(), organizationSlug).String()
 }

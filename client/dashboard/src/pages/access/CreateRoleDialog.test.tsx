@@ -1,6 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 
@@ -8,7 +14,7 @@ import { CreateRoleDialog } from "./CreateRoleDialog";
 import type { Role } from "@gram/client/models/components/role.js";
 
 const mocks = vi.hoisted(() => ({
-  agents: vi.fn(() => ({ data: [] })),
+  list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
   scimEnabled: false,
@@ -40,7 +46,10 @@ vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
 }));
 vi.mock("@gram/client/react-query/agents.js", () => ({
-  useAgents: mocks.agents,
+  queryKeyAgents: () => ["agents"],
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({ agents: { list: mocks.list } }),
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: () => ({ data: { members: mocks.members } }),
@@ -138,21 +147,25 @@ const role: Role = {
   updatedAt: new Date(),
 };
 function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
-  return render(
-    <MemoryRouter>
-      <QueryClientProvider client={new QueryClient()}>
-        <TooltipProvider>
-          <CreateRoleDialog
-            open
-            onOpenChange={vi.fn<(open: boolean) => void>()}
-            editingRole={editingRole}
-            confirmAssignmentFor={confirmAssignmentFor}
-            presentation="page"
-          />
-        </TooltipProvider>
-      </QueryClientProvider>
-    </MemoryRouter>,
-  );
+  const client = new QueryClient();
+  return {
+    client,
+    ...render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <TooltipProvider>
+            <CreateRoleDialog
+              open
+              onOpenChange={vi.fn<(open: boolean) => void>()}
+              editingRole={editingRole}
+              confirmAssignmentFor={confirmAssignmentFor}
+              presentation="page"
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    ),
+  };
 }
 // Radix tabs switch on mouse down, not click.
 function openPlatformTab() {
@@ -163,6 +176,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.scimEnabled = false;
   mocks.members = [];
+  // agents.list is paginated: it resolves to pages, which the dialog drains.
+  mocks.list.mockResolvedValue([{ result: { items: [] } }]);
   mocks.mappings = { groups: [], attributes: [], mappings: [] };
 });
 it("labels the permissions section as a section rather than an action", () => {
@@ -214,11 +229,39 @@ describe("role assignment confirmation", () => {
 });
 
 describe("agent assignment", () => {
-  it("requests agents and shows the picker", () => {
+  it("reads every agent page and shows the picker", async () => {
+    // Two pages: a picker that drained only the first would still look
+    // healthy with one, and dropping an agent from it is silent.
+    mocks.list.mockResolvedValue([
+      {
+        result: {
+          items: [
+            { id: "agent_first", name: "First agent", lifecycle: "active" },
+          ],
+        },
+      },
+      {
+        result: {
+          items: [
+            { id: "agent_second", name: "Second agent", lifecycle: "active" },
+          ],
+        },
+      },
+    ]);
     renderEditor();
-    expect(mocks.agents).toHaveBeenLastCalledWith(undefined, undefined, {
-      throwOnError: false,
-    });
+    await waitFor(() => expect(mocks.list).toHaveBeenCalled());
+    fireEvent.click(screen.getByText("Assign Agents"));
+    expect(await screen.findByText("First agent")).toBeTruthy();
+    expect(screen.getByText("Second agent")).toBeTruthy();
+  });
+
+  it("shows the empty state when the organization has no agents", async () => {
+    const { client } = renderEditor();
+    await waitFor(() => expect(mocks.list).toHaveBeenCalled());
+    // The picker renders this same message while the query is still in
+    // flight, so an assertion made now would pass without the fetch
+    // resolving at all. Wait for the empty page to land first.
+    await waitFor(() => expect(client.isFetching()).toBe(0));
     fireEvent.click(screen.getByText("Assign Agents"));
     expect(
       screen.getByText("No agents in this organization yet."),

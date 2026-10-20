@@ -131,14 +131,15 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
-12a. **Organization gateway** — after seeding, open **MCP**
-(`/<org>/projects/default/mcp`). **Connect all servers** is absent and
-`organizations.getGateway` reports `available: false`. Open **Settings → Org
-Gateway**, review **MCP Assignments**, acknowledge the completed access review,
-and enable the gateway. Return to **MCP**: **Connect all servers** opens
-**Connect all your servers at once** with the URL `<server>/mcp/gateway/<org>`
-and a copy button. The gateway response now reports `available: true` with that
-URL. The seeded organization has one organization-wide authorization server.
+12a. **Organization Gateway** — after seeding, open **MCP**
+(`/<org>/projects/default/mcp`). The **Organization Gateway** card leads the
+unfiltered grid and table with an **Off** badge for organization admins.
+`organizations.getGateway` reports `available: false`. Open the card and use
+the gateway switch to start the assignment review. Acknowledge the completed
+review and select **Enable Organization Gateway**. The same page then shows
+the endpoint `<server>/mcp/gateway/<org>` with a copy button and client install
+instructions. The gateway response reports `available: true` with that URL.
+The old organization settings gateway URL redirects to this page.
 
 In **MCP Assignments**, confirm one row per role with stacked server icons under
 **MCP:CONNECT ACCESS**. Expand **Support Desk** to inspect unrestricted and

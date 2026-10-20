@@ -93,7 +93,7 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 	case orggateway.UnavailabilityMultipleOrganizationIssuers:
 		return unavailableOrganizationGateway(unavailable, "Ask an organization administrator to consolidate the organization-wide authorization servers into one."), nil
 	case orggateway.UnavailabilityTurnedOff:
-		return unavailableOrganizationGateway(unavailable, "Org Gateway is disabled by default. Ask an organization administrator to review MCP Assignments and enable it on the Org Gateway page."), nil
+		return unavailableOrganizationGateway(unavailable, "Organization Gateway is off by default. Ask an organization administrator to open the Organization Gateway card on the MCP Servers page, review MCP Assignments, and enable it."), nil
 	case orggateway.UnavailabilityCustomDomainOnly:
 		return unavailableOrganizationGateway(unavailable, "Your organization only allows its MCP servers to be reached through its own custom domain, where the gateway is not offered. Connect to each MCP server's address on that domain."), nil
 	default:

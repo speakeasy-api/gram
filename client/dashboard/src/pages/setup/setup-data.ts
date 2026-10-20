@@ -467,7 +467,7 @@ speakeasy-hooks install --provider=opencode --dir=. --project={{GRAM_PROJECT_SLU
   },
 ];
 
-function toAgentPlatform(
+export function toAgentPlatform(
   id: AgentProviderId,
   setupSteps: AgentPlatform["setupSteps"],
   available = true,

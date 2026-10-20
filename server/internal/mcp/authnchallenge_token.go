@@ -32,7 +32,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
@@ -121,9 +123,15 @@ type mintSessionParams struct {
 	Replayable             bool
 	Policy                 sessionIssuancePolicy
 	// SignInID links the session to the sign-in that authorized it.
-	SignInID      uuid.NullUUID
+	SignInID uuid.NullUUID
+	// CredentialID continues an existing credential, as refresh rotation does;
+	// unset starts a new one.
+	CredentialID  uuid.NullUUID
 	Subject       urn.SessionSubject
 	ToolSelection []byte
+	// UpstreamClientPicks is the consent page's upstream client pick per MCP
+	// server, recorded as a new credential's choices.
+	UpstreamClientPicks map[uuid.UUID]uuid.UUID
 }
 
 type mintedSession struct {
@@ -185,7 +193,7 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
 		return err
 	}
@@ -562,8 +570,10 @@ func (s *Service) handleTokenJWTBearerGrant(
 		Replayable:             false,
 		Policy:                 sessionIssuancePolicyResourceScoped,
 		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Subject:                result.Subject,
 		ToolSelection:          nil,
+		UpstreamClientPicks:    nil,
 	}, logger)
 	if err != nil {
 		return err
@@ -827,6 +837,16 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		return oops.E(oops.CodeUnexpected, err, "select session issuance policy").LogError(ctx, logger)
 	}
 
+	// The session row and its upstream client choices commit together, so a
+	// failed choice write never leaves a live credential without them.
+	if admissionTx == nil {
+		admissionTx, err = s.db.Begin(ctx)
+		if err != nil {
+			return oops.E(oops.CodeUnavailable, err, "begin session issuance")
+		}
+		admissionQueries = usersessions_repo.New(admissionTx)
+	}
+
 	// Consume only after retryable preflight work. Exactly one exchange wins,
 	// and the consumed value must be the immutable grant we just validated.
 	if err := consumeGrant(); err != nil {
@@ -844,8 +864,10 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		Replayable:             false,
 		Policy:                 policy,
 		SignInID:               grantSignInID(grant),
+		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Subject:                subject,
 		ToolSelection:          toolSelection,
+		UpstreamClientPicks:    grant.UpstreamClientPicks,
 	}, logger)
 	if err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
@@ -863,10 +885,8 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		}
 		return err
 	}
-	if admissionTx != nil {
-		if err := admissionTx.Commit(ctx); err != nil {
-			return oops.E(oops.CodeUnavailable, err, "commit session admission")
-		}
+	if err := admissionTx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnavailable, err, "commit session issuance")
 	}
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
@@ -1300,8 +1320,10 @@ func (s *Service) rotateRefreshToken(
 		Replayable:             true,
 		Policy:                 policy,
 		SignInID:               oldSession.SignInID,
+		CredentialID:           uuid.NullUUID{UUID: sessionCredentialID(oldSession), Valid: true},
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
+		UpstreamClientPicks:    nil,
 	}, logger)
 	if err != nil {
 		return true, err
@@ -1779,9 +1801,11 @@ func (s *Service) mintSession(
 		DelegatedGrantsVersion: params.DelegatedGrantsVersion,
 		ToolSelection:          params.ToolSelection,
 		SignInID:               params.SignInID,
+		CredentialID:           params.CredentialID,
 		AuthorizationExpiresAt: params.AuthorizationExpiresAt,
 		DesiredSessionDuration: params.DesiredSessionDuration,
 		Replayable:             params.Replayable,
+		UpstreamClientPicks:    params.UpstreamClientPicks,
 	}, logger)
 }
 
@@ -1836,6 +1860,11 @@ type sessionIssuance struct {
 	// SignInID links the session to the sign-in that authorized it.
 	SignInID uuid.NullUUID
 
+	// CredentialID is the credential a rotated session continues. Unset
+	// starts a new credential, identified by the new row's own id, whose
+	// upstream client choices are recorded at issuance.
+	CredentialID uuid.NullUUID
+
 	// AuthorizationExpiresAt carries a rotated authorization's deadline
 	// forward. Nil starts a new authorization.
 	AuthorizationExpiresAt *time.Time
@@ -1847,6 +1876,10 @@ type sessionIssuance struct {
 	// Replayable requests a stable high-entropy JTI that can be reused when
 	// re-signing for another origin.
 	Replayable bool
+
+	// UpstreamClientPicks is the consent page's upstream client pick per MCP
+	// server, recorded with a new credential's choices.
+	UpstreamClientPicks map[uuid.UUID]uuid.UUID
 }
 
 // issueSession mints the access token of an issuance and persists its session
@@ -1957,6 +1990,7 @@ func (s *Service) issueSession(
 		Resource:               conv.ToPGTextEmpty(issuance.Resource),
 		SignInID:               issuance.SignInID,
 		SignInUserID:           signInUserID(issuance),
+		CredentialID:           issuance.CredentialID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1966,6 +2000,25 @@ func (s *Service) issueSession(
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
+	}
+	// A rotated session keeps the choices its credential already has.
+	if !issuance.CredentialID.Valid {
+		pickedServers := make([]uuid.UUID, 0, len(issuance.UpstreamClientPicks))
+		pickedClients := make([]uuid.UUID, 0, len(issuance.UpstreamClientPicks))
+		for serverID, clientID := range issuance.UpstreamClientPicks {
+			pickedServers = append(pickedServers, serverID)
+			pickedClients = append(pickedClients, clientID)
+		}
+		if _, err := queries.RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
+			UserSessionIssuerID: issuance.UserSessionIssuerID,
+			CredentialKind:      upstreamclients.CredentialKindUserSession,
+			CredentialID:        session.ID,
+			Source:              upstreamclients.SelectionSourceIssuance,
+			PickedMcpServerIds:  pickedServers,
+			PickedClientIds:     pickedClients,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, logger)
+		}
 	}
 
 	response := tokenResponse{
@@ -2063,6 +2116,15 @@ func (s *Service) authorizationCodeIssuancePolicy(endpoint *ResolvedMcpEndpoint)
 		return sessionIssuancePolicyIssuerScoped, "", nil
 	}
 	return sessionIssuancePolicyResourceBound, resource, nil
+}
+
+// sessionCredentialID is the credential a session row belongs to. A row
+// minted before credential identities were recorded is its own credential.
+func sessionCredentialID(session usersessions_repo.UserSession) uuid.UUID {
+	if session.CredentialID.Valid {
+		return session.CredentialID.UUID
+	}
+	return session.ID
 }
 
 // grantSignInID is the sign-in an authorization code links its session to.
