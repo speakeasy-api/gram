@@ -202,9 +202,10 @@ Do not retry the blocked call yet. Start the watcher below and retry with exactl
    Then you can end your turn. The watcher prints a line only when the status changes, so its last line wakes you. If the Monitor times out first, start it again with the same command.
    In Codex, OpenClaw and other agents, run the same command in a background terminal and keep this turn open: wait on its output until it exits. Do not end your turn while it runs, because nothing wakes you when it finishes.
 4. When it prints APPROVED, retry the blocked call with exactly the same arguments. On DENIED, EXPIRED, WATCH FAILED or WATCH TIMEOUT, do not retry; tell the user.
+5. Once the watcher has exited, delete the token file and the script: rm -f "%s" approval-watch.sh
 
 approval-watch.sh:
-%s`, status, expires, tokenFile, row.Token, tokenFile, command, id, monitorTimeoutMs(checks), watchScript)
+%s`, status, expires, tokenFile, row.Token, tokenFile, command, id, monitorTimeoutMs(checks), tokenFile, watchScript)
 }
 
 // monitorTimeoutMs covers the watcher's run plus a minute, capped at an hour,
