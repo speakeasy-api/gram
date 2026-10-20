@@ -112,15 +112,10 @@ func ContentChanged(ctx context.Context, tx pgx.Tx, org string, projectID, tools
 			return nil, err
 		}
 		for _, candidate := range candidates {
-			if candidate.LegacyToolsetID != target && (candidate.BackendKind != "toolset" || candidate.ID != toolsetID) {
+			if candidate.BackendKind != "mcp_server" || candidate.LegacyToolsetID != target {
 				continue
 			}
-			direct, wrapper := target, uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-			if candidate.BackendKind == "mcp_server" {
-				direct = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-				wrapper = uuid.NullUUID{UUID: candidate.ID, Valid: true}
-			}
-			if _, err := Eligible(ctx, tx, org, projectID, direct, wrapper, guard); err != nil {
+			if _, err := Eligible(ctx, tx, org, projectID, candidate.ID, guard); err != nil {
 				return nil, err
 			}
 		}
