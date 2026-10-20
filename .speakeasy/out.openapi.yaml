@@ -8376,6 +8376,80 @@ paths:
       operationId: listAgents
       parameters:
         - allowEmptyValue: true
+          description: Cursor for the next page of agents.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of agents.
+            type: string
+        - allowEmptyValue: true
+          description: The number of agents to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The number of agents to return per page.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Case-insensitive substring match on the agent name.
+          in: query
+          name: search
+          schema:
+            description: Case-insensitive substring match on the agent name.
+            type: string
+        - allowEmptyValue: true
+          description: Name order for the page.
+          in: query
+          name: name_order
+          schema:
+            default: asc
+            description: Name order for the page.
+            enum:
+              - asc
+              - desc
+            type: string
+        - allowEmptyValue: true
+          description: Keep only agents in these lifecycle states.
+          in: query
+          name: lifecycle
+          schema:
+            description: Keep only agents in these lifecycle states.
+            items:
+              enum:
+                - active
+                - suspended
+                - revoked
+              type: string
+            type: array
+        - allowEmptyValue: true
+          description: Keep only agents owned by these users.
+          in: query
+          name: owner_user_ids
+          schema:
+            description: Keep only agents owned by these users.
+            items:
+              type: string
+            type: array
+        - allowEmptyValue: true
+          description: Keep only agents registered at or after this moment.
+          in: query
+          name: registered_after
+          schema:
+            description: Keep only agents registered at or after this moment.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Keep only agents registered before this moment.
+          in: query
+          name: registered_before
+          schema:
+            description: Keep only agents registered before this moment.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -8387,9 +8461,7 @@ paths:
           content:
             application/json:
               schema:
-                items:
-                  $ref: '#/components/schemas/ManagedAgent'
-                type: array
+                $ref: '#/components/schemas/ListAgentsResult'
           description: OK response.
         "400":
           content:
@@ -8452,6 +8524,14 @@ paths:
       tags:
         - agents
       x-speakeasy-name-override: list
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
       x-speakeasy-react-hook:
         name: Agents
   /rpc/agents.listDelegableGrants:
@@ -53389,6 +53469,107 @@ paths:
       tags:
         - remoteSessions
       x-speakeasy-name-override: detachBinding
+  /rpc/remoteSessions.detachServerClientAssociation:
+    post:
+      description: 'Remove one MCP server''s association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer''s client binding and is refused here with a conflict: turn off User Identity on the server instead. Requires mcp:write on the server.'
+      operationId: detachServerClientAssociation
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetachServerClientAssociationRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: detachServerClientAssociation remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: detachServerClientAssociation
+      x-speakeasy-react-hook:
+        name: DetachServerClientAssociation
   /rpc/remoteSessions.getServerIdentityImpact:
     get:
       description: Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
@@ -53788,6 +53969,114 @@ paths:
       tags:
         - remoteSessions
       x-speakeasy-name-override: listBindings
+  /rpc/remoteSessions.listServerClientAssociations:
+    get:
+      description: 'List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Associations are recorded ahead of the serving path that will read them; until then the server keeps signing in through its user session issuer''s bindings. Requires mcp:read on the server.'
+      operationId: listServerClientAssociations
+      parameters:
+        - allowEmptyValue: true
+          description: The MCP server.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The MCP server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListServerClientAssociationsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listServerClientAssociations remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: listServerClientAssociations
+      x-speakeasy-react-hook:
+        name: ServerClientAssociations
   /rpc/remoteSessions.revoke:
     post:
       description: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.
@@ -79848,7 +80137,7 @@ paths:
         name: WorkloadIdentities
   /rpc/workloadIdentities.listPlatforms:
     get:
-      description: List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.
+      description: 'List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.'
       operationId: listWorkloadPlatforms
       parameters:
         - allowEmptyValue: true
@@ -81879,6 +82168,33 @@ components:
           format: uuid
       required:
         - agent_id
+    AgentMCPServer:
+      type: object
+      properties:
+        audience:
+          type: string
+          description: The exact `aud` the identity assertion must carry for token_endpoint. Present exactly when token_endpoint is.
+        name:
+          type: string
+          description: 'Stable key the agent writes the server under in each tool''s MCP configuration: `speakeasy-` followed by the server''s slug, using only lowercase letters, digits and `-`. Unique within the response; a second server with the same name gets a numeric suffix such as `speakeasy-linear-2`.'
+          pattern: ^speakeasy-[a-z0-9-]+$
+        resource:
+          type: string
+          description: Resource indicator (RFC 8707) to send with the grant. Present only when token_endpoint mints sessions for this one server; absent when it mints one session for every server of its issuer.
+        token_endpoint:
+          type: string
+          description: Token endpoint where a workload exchanges an identity assertion (RFC 7523 JWT bearer grant) for a session that reaches this server. Absent when the server's authorization server offers no workload grant, so the server cannot be reached without a person.
+        tools:
+          type: array
+          items:
+            type: string
+          description: Stable IDs of the managed tools this server applies to. Absent or empty means every managed tool.
+        url:
+          type: string
+          description: The server's streamable-HTTP URL.
+      required:
+        - name
+        - url
     AgentMarketplace:
       type: object
       properties:
@@ -86028,7 +86344,6 @@ components:
           description: The kind of prompt the template is used for
           enum:
             - prompt
-            - higher_order_tool
         name:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
@@ -87763,6 +88078,20 @@ components:
         - principal_id
         - user_session_issuer_id
         - id
+    DetachServerClientAssociationRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server.
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The associated remote session client.
+          format: uuid
+      required:
+        - mcp_server_id
+        - remote_session_client_id
     DeviceAgentConfiguration:
       type: object
       properties:
@@ -90872,12 +91201,17 @@ components:
           $ref: '#/components/schemas/DeviceAgentConfiguration'
         etag:
           type: string
-          description: Opaque revision identifier covering the marketplace, plugin, remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
+          description: Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
         marketplaces:
           type: array
           items:
             $ref: '#/components/schemas/AgentMarketplace'
           description: Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
+        mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentMCPServer'
+          description: 'Speakeasy-hosted MCP servers the agent registers directly in each managed tool''s configuration, authorized by the device''s own mcp:connect credential. Populated only when the caller polls as an agent (an agent API key, or a workload acting for its assigned agent), from the MCP servers in the plugins assigned to that agent; always empty for people, who reach these servers through their plugins. Always present: an empty list tells the agent to remove the entries it wrote earlier.'
         organization_gateway_url:
           type: string
           description: URL of the active organization's gateway. Absent when the organization gateway is unavailable.
@@ -90893,6 +91227,7 @@ components:
         - etag
         - marketplaces
         - plugins
+        - mcp_servers
     GetProjectMetricsSummaryPayload:
       type: object
       properties:
@@ -93601,6 +93936,20 @@ components:
           description: The member attributes available to target conditions, in editor display order.
       required:
         - attributes
+    ListAgentsResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagedAgent'
+          description: The agents in this page.
+        next_cursor:
+          type: string
+          description: Cursor for the next page; absent when exhausted.
+      description: A page of managed agents, ordered by name.
+      required:
+        - items
     ListAiScanTargetsResult:
       type: object
       properties:
@@ -94974,6 +95323,16 @@ components:
           description: The scopes available in access control.
       required:
         - scopes
+    ListServerClientAssociationsResult:
+      type: object
+      properties:
+        associations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServerClientAssociation'
+          description: The server's associated upstream OAuth clients, oldest first.
+      required:
+        - associations
     ListServerHeadersResult:
       type: object
       properties:
@@ -96411,6 +96770,9 @@ components:
           type: string
           description: The ID of the environment associated with the server
           format: uuid
+        has_endpoint:
+          type: boolean
+          description: Whether any endpoint routes to this server, including one on a custom domain that is not live yet. Absent when it could not be read.
         id:
           type: string
           description: The ID of the MCP server
@@ -96525,6 +96887,9 @@ components:
     McpServerToolsetSummary:
       type: object
       properties:
+        description:
+          type: string
+          description: The toolset's description, if any
         external_mcp_proxy_only:
           type: boolean
           description: Whether every configured tool is an external MCP proxy tool, so the real tool count is unknown until a user signs in
@@ -101646,7 +102011,6 @@ components:
           description: The kind of prompt the template is used for
           enum:
             - prompt
-            - higher_order_tool
         prompt:
           type: string
           description: The template content to render
@@ -104870,6 +105234,54 @@ components:
       required:
         - chat_id
         - accepted
+    ServerClientAssociation:
+      type: object
+      properties:
+        associated_at:
+          type: string
+          description: When the association was recorded.
+          format: date-time
+        client_id:
+          type: string
+          description: The provider-issued client_id.
+        issuer_name:
+          type: string
+          description: Display name of the remote session issuer, if set.
+        issuer_slug:
+          type: string
+          description: Slug of the remote session issuer.
+        issuer_url:
+          type: string
+          description: The remote session issuer's issuer identifier.
+        remote_session_client_id:
+          type: string
+          description: The associated remote session client.
+          format: uuid
+        remote_session_issuer_id:
+          type: string
+          description: 'The client''s remote session issuer: the upstream authorization server it signs in with.'
+          format: uuid
+        scope:
+          type: string
+          description: Who owns the client.
+          enum:
+            - project
+            - organization
+            - global
+        server_count:
+          type: integer
+          description: How many live MCP servers are associated with this client, including this one.
+          format: int64
+      description: One upstream OAuth client an MCP server is associated with. Client secrets are never returned.
+      required:
+        - remote_session_client_id
+        - client_id
+        - remote_session_issuer_id
+        - issuer_slug
+        - issuer_url
+        - scope
+        - server_count
+        - associated_at
     ServerIdentityClientConfiguration:
       type: object
       properties:
@@ -111693,7 +112105,6 @@ components:
           description: The kind of prompt the template is used for
           enum:
             - prompt
-            - higher_order_tool
         name:
           type: string
           description: The name of the prompt template. Will be updated via variation
@@ -114317,11 +114728,6 @@ components:
         key:
           type: string
           description: Identifies the entry permanently.
-        steps:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkloadPlatformStep'
-          description: The guided setup. Empty for a platform without one, which is listed as coming soon and cannot be opened.
         subject:
           $ref: '#/components/schemas/WorkloadPlatformSubject'
         variables:
@@ -114329,7 +114735,7 @@ components:
           items:
             $ref: '#/components/schemas/WorkloadPlatformVariable'
           description: What the operator supplies.
-      description: A platform the catalog offers to trust, with what the operator supplies and the guided setup that connects it.
+      description: A platform the catalog offers to trust, with what the operator supplies to connect it. How the setup is explained belongs to the dashboard, not to this policy.
       required:
         - key
         - display_name
@@ -114340,68 +114746,6 @@ components:
         - jwks_uri
         - variables
         - subject
-        - steps
-    WorkloadPlatformBlock:
-      type: object
-      properties:
-        alt:
-          type: string
-          description: An image's alternative text.
-        caption:
-          type: string
-          description: Shown under an image.
-        help:
-          type: string
-          description: Shown under a computed value or checklist item.
-        href:
-          type: string
-          description: A link's https target.
-        label:
-          type: string
-          description: A link's or computed value's label, or the console field or control a checklist item names.
-        markdown:
-          type: string
-          description: A text block's Markdown, or what a checklist item without a value asks the operator to do. Raw HTML in it must not be rendered.
-        src:
-          type: string
-          description: An image's path on the dashboard's origin.
-        type:
-          type: string
-          description: The kind of content.
-          enum:
-            - text
-            - image
-            - link
-            - field
-            - subject_rule
-            - agent_picker
-            - tags
-            - computed_status
-            - computed
-            - checklist_item
-        value:
-          type: string
-          description: The value a computed block or checklist item shows.
-          enum:
-            - ""
-            - token_endpoint
-            - issuer_url
-            - mcp_host
-        variable:
-          type: string
-          description: The variable key a field collects.
-      description: One piece of a guided setup step. Which fields are set depends on type; the rest are empty.
-      required:
-        - type
-        - markdown
-        - src
-        - alt
-        - caption
-        - href
-        - label
-        - variable
-        - value
-        - help
     WorkloadPlatformCatalog:
       type: object
       properties:
@@ -114429,33 +114773,6 @@ components:
       required:
         - value
         - visibility
-    WorkloadPlatformStep:
-      type: object
-      properties:
-        blocks:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkloadPlatformBlock'
-          description: Rendered in order.
-        id:
-          type: string
-          description: Stable within the platform; used in the dashboard URL.
-        phase:
-          type: string
-          description: collect steps gather values, the create step writes the rows, connect steps describe the platform's side.
-          enum:
-            - collect
-            - create
-            - connect
-        title:
-          type: string
-          description: Heads the step.
-      description: One screen of a guided setup.
-      required:
-        - id
-        - title
-        - phase
-        - blocks
     WorkloadPlatformSubject:
       type: object
       properties:
@@ -114812,7 +115129,7 @@ tags:
   - name: telemetry
     description: Fetch telemetry data for tools in Speakeasy.
   - name: templates
-    description: Manages re-usable prompt templates and higher-order tools for a project.
+    description: Manages re-usable prompt templates for a project.
   - name: tokenExchange
     description: 'Device-agent token exchange: trade an org-scoped install credential (an API key with the ''agent'' scope) plus a vouched user email for a long-lived, per-user API key scoped for the device agent.'
   - name: tools

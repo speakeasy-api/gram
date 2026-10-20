@@ -580,9 +580,11 @@ trackedFiles:
   src/funcs/remoteSessionsCommitServerIdentityConfiguration.ts: {}
   src/funcs/remoteSessionsCount.ts: {}
   src/funcs/remoteSessionsDetachBinding.ts: {}
+  src/funcs/remoteSessionsDetachServerClientAssociation.ts: {}
   src/funcs/remoteSessionsGetServerIdentityImpact.ts: {}
   src/funcs/remoteSessionsList.ts: {}
   src/funcs/remoteSessionsListBindings.ts: {}
+  src/funcs/remoteSessionsListServerClientAssociations.ts: {}
   src/funcs/remoteSessionsRevoke.ts: {}
   src/funcs/resourcesList.ts: {}
   src/funcs/riskBlocksGet.ts: {}
@@ -879,6 +881,7 @@ trackedFiles:
   src/models/components/agentdelegatedpolicy.ts: {}
   src/models/components/agentidform.ts: {}
   src/models/components/agentmarketplace.ts: {}
+  src/models/components/agentmcpserver.ts: {}
   src/models/components/agentownerassignmentform.ts: {}
   src/models/components/agentownerprofile.ts: {}
   src/models/components/agentpermissions.ts: {}
@@ -1081,6 +1084,7 @@ trackedFiles:
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
   src/models/components/destination.ts: {}
   src/models/components/detachbindingrequestbody.ts: {}
+  src/models/components/detachserverclientassociationrequestbody.ts: {}
   src/models/components/deviceagentconfiguration.ts: {}
   src/models/components/deviceintegrationconfig.ts: {}
   src/models/components/deviceintegrationcoverage.ts: {}
@@ -1314,6 +1318,7 @@ trackedFiles:
   src/models/components/launchercontext.ts: {}
   src/models/components/launcherjudgment.ts: {}
   src/models/components/listactorattributesresult.ts: {}
+  src/models/components/listagentsresult.ts: {}
   src/models/components/listaidetectionsresult.ts: {}
   src/models/components/listaidetectionusersresult.ts: {}
   src/models/components/listaiintegrationschedulesresult.ts: {}
@@ -1411,6 +1416,7 @@ trackedFiles:
   src/models/components/listrolesresult.ts: {}
   src/models/components/listrootmcpserversresponsebody.ts: {}
   src/models/components/listscopesresult.ts: {}
+  src/models/components/listserverclientassociationsresult.ts: {}
   src/models/components/listserverheadersresult.ts: {}
   src/models/components/listserversresult.ts: {}
   src/models/components/listsessionlinksresult.ts: {}
@@ -1753,6 +1759,7 @@ trackedFiles:
   src/models/components/sendmessageattachment.ts: {}
   src/models/components/sendmessagerequestbody.ts: {}
   src/models/components/sendmessageresult.ts: {}
+  src/models/components/serverclientassociation.ts: {}
   src/models/components/serveridentityclientconfiguration.ts: {}
   src/models/components/serveridentityimpactresult.ts: {}
   src/models/components/serveridentityimpactserver.ts: {}
@@ -2068,10 +2075,8 @@ trackedFiles:
   src/models/components/workloadidentitypolicy.ts: {}
   src/models/components/workloadissuer.ts: {}
   src/models/components/workloadplatform.ts: {}
-  src/models/components/workloadplatformblock.ts: {}
   src/models/components/workloadplatformcatalog.ts: {}
   src/models/components/workloadplatformconstant.ts: {}
-  src/models/components/workloadplatformstep.ts: {}
   src/models/components/workloadplatformsubject.ts: {}
   src/models/components/workloadplatformvariable.ts: {}
   src/models/components/workloadtokenendpoint.ts: {}
@@ -2260,6 +2265,7 @@ trackedFiles:
   src/models/operations/detachbinding.ts: {}
   src/models/operations/detachorganizationremotesessionclientkeyset.ts: {}
   src/models/operations/detachremotesessionclientkeyset.ts: {}
+  src/models/operations/detachserverclientassociation.ts: {}
   src/models/operations/detachusersessionissuer.ts: {}
   src/models/operations/disableadminopenrouterkey.ts: {}
   src/models/operations/disablewebhooks.ts: {}
@@ -2574,6 +2580,7 @@ trackedFiles:
   src/models/operations/listroles.ts: {}
   src/models/operations/listrootmcpservers.ts: {}
   src/models/operations/listscopes.ts: {}
+  src/models/operations/listserverclientassociations.ts: {}
   src/models/operations/listservernameoverrides.ts: {}
   src/models/operations/listsessionquarantines.ts: {}
   src/models/operations/listsessions.ts: {}
@@ -3122,6 +3129,7 @@ trackedFiles:
   src/react-query/deploymentLogs.ts: {}
   src/react-query/detachOrganizationRemoteSessionClientKeySet.ts: {}
   src/react-query/detachRemoteSessionClientKeySet.ts: {}
+  src/react-query/detachServerClientAssociation.ts: {}
   src/react-query/detachUserSessionIssuer.ts: {}
   src/react-query/deviceAgentConfiguration.core.ts: {}
   src/react-query/deviceAgentConfiguration.ts: {}
@@ -3792,6 +3800,8 @@ trackedFiles:
   src/react-query/serveImage.ts: {}
   src/react-query/serveOpenAPIv3.core.ts: {}
   src/react-query/serveOpenAPIv3.ts: {}
+  src/react-query/serverClientAssociations.core.ts: {}
+  src/react-query/serverClientAssociations.ts: {}
   src/react-query/serverIdentityImpact.core.ts: {}
   src/react-query/serverIdentityImpact.ts: {}
   src/react-query/sessionInfo.core.ts: {}
@@ -5438,7 +5448,7 @@ examples:
   createTemplate:
     speakeasy-default-create-template:
       requestBody:
-        application/json: {"engine": "mustache", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>"}
+        application/json: {"engine": "mustache", "kind": "prompt", "name": "<value>", "prompt": "<value>"}
       responses:
         "200":
           application/json: {"template": {"canonical_name": "<value>", "created_at": "2024-07-17T03:17:12.882Z", "description": "immense extent aboard strident", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": [], "updated_at": "2024-01-27T21:04:32.774Z"}}
@@ -6295,6 +6305,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  detachServerClientAssociation:
+    speakeasy-default-detach-server-client-association:
+      requestBody:
+        application/json: {"mcp_server_id": "f68bc275-7fdd-40e5-bf22-221e46318f4f", "remote_session_client_id": "7736a6db-5343-499c-a718-41a6ce5f9823"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   detachServerFromCollection:
     speakeasy-default-detach-server-from-collection:
       requestBody:
@@ -6835,7 +6854,7 @@ examples:
           Gram-Device-Environment: "ephemeral"
       responses:
         "200":
-          application/json: {"etag": "<value>", "marketplaces": [], "plugins": []}
+          application/json: {"etag": "<value>", "marketplaces": [], "mcp_servers": [], "plugins": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8897,9 +8916,14 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listAgents:
     speakeasy-default-list-agents:
+      parameters:
+        query:
+          limit: 50
+          sort_order: "asc"
+          name_order: "asc"
       responses:
         "200":
-          application/json: [{"created_at": "2025-07-13T11:18:49.503Z", "id": "cc0734d8-9269-4221-a313-a6aa6ca11e63", "lifecycle": "active", "name": "<value>", "owner_user_id": "<id>", "permissions": {"authorize": true, "read": true, "transfer": true, "write": false}, "updated_at": "2025-05-03T03:30:57.286Z"}]
+          application/json: {"items": [{"created_at": "2026-04-07T04:18:32.790Z", "id": "c0734d89-2692-4213-813a-6aa6ca11e63b", "lifecycle": "suspended", "name": "<value>", "owner_user_id": "<id>", "permissions": {"authorize": true, "read": true, "transfer": false, "write": true}, "updated_at": "2026-06-22T07:22:36.166Z"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -10090,6 +10114,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listServerClientAssociations:
+    speakeasy-default-list-server-client-associations:
+      parameters:
+        query:
+          mcp_server_id: "9fe4eeb2-ab23-422d-8b3c-8f84188e6522"
+      responses:
+        "200":
+          application/json: {"associations": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listServerNameOverrides:
     speakeasy-default-list-server-name-overrides:
       responses:
@@ -11375,7 +11411,7 @@ examples:
   renderTemplate:
     speakeasy-default-render-template:
       requestBody:
-        application/json: {"arguments": {"key": "<value>"}, "engine": "mustache", "kind": "higher_order_tool", "prompt": "<value>"}
+        application/json: {"arguments": {"key": "<value>"}, "engine": "mustache", "kind": "prompt", "prompt": "<value>"}
       responses:
         "200":
           application/json: {"prompt": "<value>"}

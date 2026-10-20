@@ -108,5 +108,5 @@ func TestOrganizationGatewayUnavailableWhenTurnedOff(t *testing.T) {
 	require.False(t, output.Available)
 	require.Empty(t, output.URL)
 	require.Equal(t, "turned_off", output.UnavailableReason)
-	require.Contains(t, output.NextAction, "turn it on")
+	require.Contains(t, output.NextAction, "turn it back on")
 }

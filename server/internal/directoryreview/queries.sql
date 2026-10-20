@@ -110,8 +110,11 @@ RETURNING id, organization_id, kind, directory_group_id, attribute_key, attribut
 -- A mapped attribute value no live directory user carries. The event handler
 -- calls this when an event has just taken the value from its last holder,
 -- with allow_recurrence set, so a value that returned and went again gets a
--- new occurrence. The sweep cannot tell when a value went, so it only opens
--- the first occurrence.
+-- new occurrence. The sweep cannot date a value removed from a live user, but
+-- it can date a deleted holder: like a deleted group, a holder deleted after
+-- the latest item means the value went again, such as when a whole directory
+-- is deleted and no per-user event runs. An occurrence an admin already kept
+-- is never reopened, since its holders were deleted before it was raised.
 INSERT INTO directory_review_items (organization_id, kind, attribute_key, attribute_value, occurrence, state)
 SELECT
   src.organization_id,
@@ -132,7 +135,7 @@ FROM (
 JOIN directory_review_org_states AS st
   ON st.organization_id = src.organization_id
 LEFT JOIN LATERAL (
-  SELECT i.occurrence
+  SELECT i.occurrence, i.created_at
   FROM directory_review_items AS i
   WHERE i.organization_id = src.organization_id
     AND i.kind = 'source_missing'
@@ -149,7 +152,18 @@ WHERE NOT EXISTS (
       AND du.workos_deleted IS FALSE
       AND du.attributes ->> src.attribute_key = src.attribute_value
   )
-  AND (latest.occurrence IS NULL OR sqlc.arg(allow_recurrence)::boolean)
+  AND (
+    latest.occurrence IS NULL
+    OR sqlc.arg(allow_recurrence)::boolean
+    OR EXISTS (
+      SELECT 1
+      FROM directory_users AS gone
+      WHERE gone.organization_id = src.organization_id
+        AND (gone.deleted OR gone.workos_deleted)
+        AND gone.attributes ->> src.attribute_key = src.attribute_value
+        AND GREATEST(gone.workos_deleted_at, gone.deleted_at) > latest.created_at
+    )
+  )
 ON CONFLICT DO NOTHING
 RETURNING id, organization_id, kind, directory_group_id, attribute_key, attribute_value, occurrence, state;
 

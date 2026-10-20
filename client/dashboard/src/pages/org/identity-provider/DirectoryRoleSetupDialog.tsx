@@ -19,6 +19,7 @@ import type { Role } from "@gram/client/models/components/role.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useApplyDirectoryRoleSetupMutation } from "@gram/client/react-query/applyDirectoryRoleSetup.js";
 import { useDirectoryRoleSetupPreview } from "@gram/client/react-query/directoryRoleSetupPreview.js";
+import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 
 import {
   choiceFromValue,
@@ -79,9 +80,12 @@ export function DirectoryRoleSetupDialog({
     onError: (error) => {
       if (error instanceof GramError && error.statusCode === 409) {
         // Someone changed a source or its roles since the preview. Show the
-        // current proposals; the admin reviews them and applies again.
+        // current proposals; the admin reviews them and applies again. The
+        // role list is refreshed too, so a role created meanwhile is
+        // selectable.
         setChanged(true);
         void preview.refetch();
+        void invalidateAllRoles(queryClient);
       }
     },
   });

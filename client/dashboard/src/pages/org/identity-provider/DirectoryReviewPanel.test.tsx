@@ -190,6 +190,45 @@ describe("DirectoryReviewPanel", () => {
     });
   });
 
+  it("follows a refetched proposal instead of resubmitting a stale new role", () => {
+    // Two sources proposed the same new role. Mapping the first created it,
+    // so the refetch proposes reusing it for the second.
+    mocks.items = [newValue];
+    const { rerender } = renderPanel();
+    const sales = {
+      id: "role-sales",
+      name: "Sales",
+      principalUrn: "role:sales",
+      grants: [],
+    } as unknown as Role;
+    mocks.items = [
+      {
+        ...newValue,
+        item: {
+          ...newValue.item,
+          proposedRoles: [
+            {
+              roleAction: "reuse",
+              roleId: "role-sales",
+              roleUrn: "role:sales",
+              roleName: "Sales",
+              currentGrants: [],
+            },
+          ],
+          version: "v2b",
+        },
+      },
+    ];
+    rerender(<DirectoryReviewPanel roles={[...roles, sales]} rolesLoaded />);
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    expect(requestOf(0)).toEqual({
+      id: "item-value",
+      decision: "approve",
+      version: "v2b",
+      roles: [{ roleUrn: "role:sales" }],
+    });
+  });
+
   it("leaves a new source unmapped or stops asking about its key", () => {
     renderPanel();
     fireEvent.click(
