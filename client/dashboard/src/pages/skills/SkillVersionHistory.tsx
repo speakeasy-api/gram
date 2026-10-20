@@ -258,7 +258,7 @@ function versionColumns({
               </Badge>
             )}
           </div>
-          {showServedDigest && (
+          {showServedDigest && version.specValid && (
             <SkillServedDigest
               rawSha256={version.rawSha256}
               className="max-w-full"

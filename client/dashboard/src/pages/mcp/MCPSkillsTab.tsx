@@ -52,7 +52,12 @@ import { Link, Navigate } from "react-router";
 import { toast } from "sonner";
 import { mcpDetailTabHref } from "./MCPDetailsRouting";
 
-type SkillsTabToolset = { id: string; slug: string; name: string };
+type SkillsTabToolset = {
+  id: string;
+  slug: string;
+  name: string;
+  mcpEnabled?: boolean | undefined;
+};
 
 /**
  * The server a Skills tab lists skills for. A hosted server is a toolset,
@@ -60,7 +65,12 @@ type SkillsTabToolset = { id: string; slug: string; name: string };
  * server is one mcp_servers row, which plugins include by that row's id.
  */
 export type SkillsTabServer =
-  | { kind: "hosted"; toolsetId: string; name: string }
+  | {
+      kind: "hosted";
+      toolsetId: string;
+      name: string;
+      mcpEnabled?: boolean | undefined;
+    }
   | { kind: "remote"; mcpServerId: string; name: string };
 
 /**
@@ -134,7 +144,12 @@ export function MCPSkillsTab({
 }): JSX.Element {
   return (
     <ServedSkillsSection
-      server={{ kind: "hosted", toolsetId: toolset.id, name: toolset.name }}
+      server={{
+        kind: "hosted",
+        toolsetId: toolset.id,
+        name: toolset.name,
+        mcpEnabled: toolset.mcpEnabled,
+      }}
     />
   );
 }
@@ -176,9 +191,14 @@ export function ServedSkillsSection({
   const isServerIndexLoading =
     needsServerIndex && !serversQuery.data && serversQuery.isLoading;
   const toolsetId = server.kind === "hosted" ? server.toolsetId : "";
+  const toolsetMcpEnabled =
+    server.kind === "hosted" ? server.mcpEnabled : undefined;
   const hostedIndex = useMemo(
-    () => hostedServerIndex(serversQuery.data?.mcpServers, [toolsetId]),
-    [serversQuery.data?.mcpServers, toolsetId],
+    () =>
+      hostedServerIndex(serversQuery.data?.mcpServers, [
+        { id: toolsetId, mcpEnabled: toolsetMcpEnabled },
+      ]),
+    [serversQuery.data?.mcpServers, toolsetId, toolsetMcpEnabled],
   );
   const mcpServerId = server.kind === "remote" ? server.mcpServerId : "";
   const servingPlugins = useMemo(

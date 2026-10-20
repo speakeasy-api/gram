@@ -24,16 +24,22 @@ export type ServingPlugin = {
 };
 
 /**
- * Maps each hosted mcp_servers id to the toolset it fronts. A plugin may
- * include a hosted server under its toolset id or under any mcp_servers row
- * fronting that toolset, and the backend serves skills through every such
- * row, so the dashboard must resolve the row to its toolset the same way.
+ * Maps each mcp_servers id the caller can see to the toolset it fronts. A
+ * plugin may include a hosted server under its toolset id or under any
+ * mcp_servers row fronting that toolset, and the backend serves skills
+ * through every such row, so the dashboard must resolve the row to its
+ * toolset the same way. A listed id that serves no skills maps to null: a
+ * remote server, or a toolset's canonical wrapper while the toolset has MCP
+ * turned off.
  */
-export type HostedServerIndex = ReadonlyMap<string, string>;
+export type HostedServerIndex = ReadonlyMap<string, string | null>;
+
+/** A toolset as the index needs it; MCP counts as on unless it is false. */
+export type IndexedToolset = { id: string; mcpEnabled?: boolean | undefined };
 
 /**
  * Builds the index from the project's MCP server list, where each hosted
- * server names its toolset, plus the toolset ids themselves, since a toolset's
+ * server names its toolset, plus the toolsets themselves, since a toolset's
  * canonical wrapper shares its id. Without the server list only canonical
  * wrappers resolve, which is what a reader without MCP read can see.
  */
@@ -41,14 +47,25 @@ export function hostedServerIndex(
   mcpServers:
     | ReadonlyArray<{ id: string; toolsetId?: string | undefined }>
     | undefined,
-  toolsetIds?: Iterable<string>,
-): Map<string, string> {
-  const index = new Map<string, string>();
-  for (const toolsetId of toolsetIds ?? []) {
-    index.set(toolsetId, toolsetId);
+  toolsets?: Iterable<IndexedToolset>,
+): Map<string, string | null> {
+  const index = new Map<string, string | null>();
+  const mcpOff = new Set<string>();
+  for (const toolset of toolsets ?? []) {
+    if (toolset.mcpEnabled === false) mcpOff.add(toolset.id);
+    index.set(toolset.id, toolset.id);
   }
   for (const server of mcpServers ?? []) {
-    if (server.toolsetId) index.set(server.id, server.toolsetId);
+    index.set(server.id, server.toolsetId ?? null);
+  }
+  // The canonical endpoint answers only while the toolset has MCP on; other
+  // wrappers of the toolset keep serving, so the toolset stays reachable
+  // while one of them exists.
+  for (const toolsetId of mcpOff) {
+    const hasOtherWrapper = [...index].some(
+      ([id, target]) => target === toolsetId && id !== toolsetId,
+    );
+    if (!hasOtherWrapper) index.set(toolsetId, null);
   }
   return index;
 }
@@ -76,9 +93,14 @@ export function hostedPluginServerToolsetId(
   server: Pick<ServingPluginServer, "toolsetId" | "mcpServerId">,
   index?: HostedServerIndex,
 ): string | undefined {
-  if (server.toolsetId) return server.toolsetId;
+  if (server.toolsetId) {
+    return index?.get(server.toolsetId) === null ? undefined : server.toolsetId;
+  }
   if (!server.mcpServerId) return undefined;
-  return index?.get(server.mcpServerId) ?? server.mcpServerId;
+  if (index?.has(server.mcpServerId)) {
+    return index.get(server.mcpServerId) ?? undefined;
+  }
+  return server.mcpServerId;
 }
 
 /** Whether a plugin server is the hosted MCP server with this toolset id. */
@@ -118,11 +140,13 @@ export function pluginServesMcpServer(
 
 /**
  * The plugin servers that serve skills over MCP, split by what the index can
- * prove. A server carrying a toolset id is hosted. One carrying only an
- * mcp_servers id is hosted when the index resolves that id to a toolset; an
- * id the index does not know is unresolved, not remote: the server list is
- * filtered by the caller's grants, so the row may be a hosted wrapper the
- * caller cannot view. Without an index every such server is unresolved.
+ * prove. A server carrying a toolset id is hosted unless the index shows that
+ * toolset with MCP off and no other wrapper. One carrying only an mcp_servers
+ * id is hosted when the index resolves that id to a toolset, and dropped when
+ * the index lists it as serving nothing (a remote server, say); an id the
+ * index does not know is unresolved, not remote: the server list is filtered
+ * by the caller's grants, so the row may be a hosted wrapper the caller
+ * cannot view. Without an index every such server is unresolved.
  */
 export type HostedPluginServers<T> = {
   /** Servers known to be hosted, in plugin order. */
@@ -138,10 +162,10 @@ export function hostedPluginServers<T extends ServingPluginServer>(
   const result: HostedPluginServers<T> = { servers: [], unresolved: [] };
   for (const server of servers ?? []) {
     if (server.toolsetId) {
-      result.servers.push(server);
+      if (index?.get(server.toolsetId) !== null) result.servers.push(server);
     } else if (server.mcpServerId) {
-      if (index?.has(server.mcpServerId)) result.servers.push(server);
-      else result.unresolved.push(server);
+      if (!index?.has(server.mcpServerId)) result.unresolved.push(server);
+      else if (index.get(server.mcpServerId)) result.servers.push(server);
     }
   }
   return result;
