@@ -203,6 +203,7 @@ func TestService_ListDirectoryRoleMappings_ReportsMissingSources(t *testing.T) {
 
 	deleteMappingDirectoryGroup(t, ctx, ti.conn, workosGroupID)
 	_, err = directoryrepo.New(ti.conn).DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
+		OrganizationID:        orgID,
 		WorkosDeletedAt:       conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosLastEventID:     conv.ToPGText("event_delete_" + workosDirectoryUserID),
 		WorkosDirectoryUserID: workosDirectoryUserID,
