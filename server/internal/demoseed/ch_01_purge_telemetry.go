@@ -798,13 +798,13 @@ func (s *seeder) chMCPSkillLoadRows() []chTelemetryRow {
 		// starts calling tools.
 		at := s.chatTS(i).Add(20*time.Second + time.Duration(hash64("mcpsklt", i)%40)*time.Second)
 		ts := at.UnixNano()
-		// The server serves a skill's latest promoted version, so runbook
-		// loads after its v2 was promoted (3 days ago) served v2.
+		// Recent runbook loads served v2, on the same cutoff as the runbook
+		// activations in seedSkills.
 		versionID := s.skillVersionID(pos)
 		content := skillsManual[pos-1].content
-		if pos == 3 && at.After(s.now.Add(-3*24*time.Hour)) {
+		if pos == 3 && s.chatDayOff(i) <= 4 {
 			versionID = s.skillsRunbookV2()
-			content += skillRunbookV2Addition
+			content = skillContentRunbookV2
 		}
 		digest := sha256.Sum256([]byte(content))
 		cidx := s.chClientIdx(i)
