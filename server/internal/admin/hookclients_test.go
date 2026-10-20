@@ -195,3 +195,39 @@ func TestGetHookClients_IncludesDeviceAgentsAndSurvivesRedisFailure(t *testing.T
 	require.NoError(t, err)
 	require.Empty(t, result.DeviceAgents)
 }
+
+func TestGetHookClients_ServesStaleCopyAndRefreshesInBackground(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, _ := newTestAdminService(t)
+	reads := &atomic.Int32{}
+	svc.hookClients = stubHookClientsReader{
+		sessions:   []telemetry.HookClientSessionRow{},
+		inference:  []telemetry.InferenceHookTrafficRow{},
+		err:        nil,
+		reads:      reads,
+		inferReads: nil,
+	}
+	// A window no other test uses, so the shared cache holds only this copy.
+	const window = 9
+	stale := time.Now().UTC().Add(-2 * hookClientsStaleAfter).Truncate(time.Second)
+	require.NoError(t, svc.hookClientsCache.Store(ctx, hookClientsSnapshot{
+		WindowDays:   window,
+		QueriedAt:    stale,
+		Sessions:     []telemetry.HookClientSessionRow{},
+		Inference:    []telemetry.InferenceHookTrafficRow{},
+		DeviceAgents: []deviceagentversions.Row{},
+	}))
+
+	result, err := svc.GetHookClients(ctx, &gen.GetHookClientsPayload{AdminSessionToken: nil, WindowDays: window, Refresh: false})
+	require.NoError(t, err)
+	require.True(t, result.FromCache)
+	require.Equal(t, stale.Format(time.RFC3339), result.QueriedAt)
+
+	// The background read replaces the stale copy without the caller waiting.
+	require.Eventually(t, func() bool {
+		cached, err := svc.hookClientsCache.Get(ctx, hookClientsCacheKey(window))
+		return err == nil && cached.QueriedAt.After(stale)
+	}, 10*time.Second, 50*time.Millisecond)
+	require.Equal(t, int32(1), reads.Load())
+}

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -112,9 +113,12 @@ type Service struct {
 	hookClients     HookClientsReader
 	// deviceAgentVersions feeds the device agent grid on the same page.
 	deviceAgentVersions DeviceAgentVersionsReader
-	// hookClientsCache keeps the fleet-wide grids for an hour, since each
+	// hookClientsCache keeps the fleet-wide grids for a day, since each
 	// read scans weeks of telemetry.
 	hookClientsCache cache.TypedCacheObject[hookClientsSnapshot]
+	// hookClientsRefreshing holds the windows with a background refresh in
+	// flight on this replica.
+	hookClientsRefreshing *sync.Map
 
 	// externalMCPMigrator lists and migrates external-MCP-backed servers. Nil
 	// leaves those methods unavailable.
@@ -272,12 +276,13 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:               trialNotifier,
-		billing:             billing,
-		supportCoverage:     supportCoverage,
-		mcpServerHealth:     mcpServerHealth,
-		hookClients:         nil,
-		deviceAgentVersions: nil,
+		trial:                 trialNotifier,
+		billing:               billing,
+		supportCoverage:       supportCoverage,
+		mcpServerHealth:       mcpServerHealth,
+		hookClients:           nil,
+		deviceAgentVersions:   nil,
+		hookClientsRefreshing: &sync.Map{},
 		hookClientsCache: cache.NewTypedObjectCache[hookClientsSnapshot](
 			logger.With(attr.SlogCacheNamespace("admin_hook_clients")),
 			adminCache,

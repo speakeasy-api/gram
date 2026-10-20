@@ -122,7 +122,15 @@ func (s *Service) GetHookClients(ctx context.Context, payload *gen.GetHookClient
 	}, nil
 }
 
-const hookClientsCacheTTL = time.Hour
+// hookClientsCacheTTL keeps a snapshot for a day so the page loads from cache.
+// A snapshot older than hookClientsStaleAfter is still served at once, and a
+// background read replaces it, so data stays fresh without anyone waiting on
+// ClickHouse.
+const (
+	hookClientsCacheTTL      = 24 * time.Hour
+	hookClientsStaleAfter    = time.Hour
+	hookClientsRefreshBudget = 5 * time.Minute
+)
 
 // hookClientsSnapshot is one ClickHouse read of both grids. Organization names
 // are not cached: they come from Postgres on every request, so a rename shows
@@ -146,24 +154,50 @@ func (h hookClientsSnapshot) CacheKey() string { return hookClientsCacheKey(h.Wi
 func (h hookClientsSnapshot) TTL() time.Duration { return hookClientsCacheTTL }
 
 // hookClientsSnapshot returns the cached grids for the window, or reads
-// ClickHouse when there is no cached copy or refresh is set. A cache failure
-// never fails the request: it only costs a fresh read.
+// ClickHouse when there is no cached copy or refresh is set. A stale copy is
+// returned at once and refreshed in the background. A cache failure never
+// fails the request: it only costs a fresh read.
 func (s *Service) hookClientsSnapshot(ctx context.Context, windowDays int, refresh bool) (hookClientsSnapshot, bool, error) {
 	if !refresh {
 		cached, err := s.hookClientsCache.Get(ctx, hookClientsCacheKey(windowDays))
 		if err == nil {
+			if time.Since(cached.QueriedAt) > hookClientsStaleAfter {
+				s.refreshHookClientsInBackground(ctx, windowDays)
+			}
 			return cached, true, nil
 		}
 	}
+	snapshot, err := s.readHookClientsSnapshot(ctx, windowDays)
+	return snapshot, false, err
+}
 
+// refreshHookClientsInBackground re-reads the grids without holding up the
+// request. Only one background read per window runs at a time on this
+// replica, so a burst of page loads triggers a single ClickHouse scan.
+func (s *Service) refreshHookClientsInBackground(ctx context.Context, windowDays int) {
+	if _, running := s.hookClientsRefreshing.LoadOrStore(windowDays, struct{}{}); running {
+		return
+	}
+	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), hookClientsRefreshBudget)
+	go func() {
+		defer cancel()
+		defer s.hookClientsRefreshing.Delete(windowDays)
+		if _, err := s.readHookClientsSnapshot(refreshCtx, windowDays); err != nil {
+			s.logger.WarnContext(refreshCtx, "failed to refresh hook clients in background", attr.SlogError(err))
+		}
+	}()
+}
+
+// readHookClientsSnapshot reads the grids and caches them.
+func (s *Service) readHookClientsSnapshot(ctx context.Context, windowDays int) (hookClientsSnapshot, error) {
 	queriedAt := time.Now().UTC()
 	sessions, err := s.hookClients.Sessions(ctx, windowDays)
 	if err != nil {
-		return hookClientsSnapshot{}, false, s.hookClientsError(ctx, err, "read hook client sessions")
+		return hookClientsSnapshot{}, s.hookClientsError(ctx, err, "read hook client sessions")
 	}
 	inference, err := s.hookClients.InferenceTraffic(ctx, windowDays)
 	if err != nil {
-		return hookClientsSnapshot{}, false, s.hookClientsError(ctx, err, "read inference hook traffic")
+		return hookClientsSnapshot{}, s.hookClientsError(ctx, err, "read inference hook traffic")
 	}
 
 	snapshot := hookClientsSnapshot{
@@ -176,12 +210,12 @@ func (s *Service) hookClientsSnapshot(ctx context.Context, windowDays int, refre
 	// Two refreshes can overlap. Keep whichever read started later, so a slow
 	// read never replaces newer data or extends its TTL.
 	if existing, err := s.hookClientsCache.Get(ctx, hookClientsCacheKey(windowDays)); err == nil && existing.QueriedAt.After(queriedAt) {
-		return snapshot, false, nil
+		return snapshot, nil
 	}
 	if err := s.hookClientsCache.Store(ctx, snapshot); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache hook clients", attr.SlogError(err))
 	}
-	return snapshot, false, nil
+	return snapshot, nil
 }
 
 // readDeviceAgentVersions returns the device agent grid, or none when it is
