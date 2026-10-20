@@ -146,6 +146,19 @@ BASE=${RELEASES_BASE}/v$VERSION
 curl -fSL -o speakeasyd "$BASE/speakeasyd_\${VERSION}_linux_amd64" && \\
 curl -fSL -o speakeasy  "$BASE/speakeasy_\${VERSION}_linux_amd64"`;
 }
+// macInstall downloads and installs the pkg. Like linuxDownload, with a
+// resolved version the snippet uses no shell variables, so it also runs in
+// fish.
+function macInstall(version: string | null) {
+  version = inlinableVersion(version);
+  if (version) {
+    return `curl -fSL -o speakeasy-agent.pkg ${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.pkg && \\
+sudo installer -pkg speakeasy-agent.pkg -target /`;
+  }
+  return `${bashVersionAssign(version)}
+curl -fSL -o speakeasy-agent.pkg "${RELEASES_BASE}/v\${VERSION}/speakeasy-agent_\${VERSION}.pkg" && \\
+sudo installer -pkg speakeasy-agent.pkg -target /`;
+}
 function psVersionAssign(version: string | null) {
   version = inlinableVersion(version);
   return version
@@ -1009,9 +1022,13 @@ function MacInstallStep() {
           (see the identity step next) for a deterministic first start.
           Personal/PoC enrolls via OAuth instead — nothing to provision first.
         </StepNote>
-        <CodeBlock language="bash">{`${bashVersionAssign(version)}
-curl -fSL -o speakeasy-agent.pkg "${RELEASES_BASE}/v\${VERSION}/speakeasy-agent_\${VERSION}.pkg"
-sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
+        {!inlinableVersion(version) && (
+          <StepNote>
+            Uses bash syntax: in fish or another shell, run <code>bash</code>{" "}
+            first.
+          </StepNote>
+        )}
+        <CodeBlock language="bash">{macInstall(version)}</CodeBlock>
       </div>
       <OrDivider />
       <div className="flex flex-col gap-2">
@@ -1052,18 +1069,17 @@ sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
 // Speakeasy SDK generator's own `speakeasy` on a dev machine, and pointing
 // PATH at the pkg's staging copy would serve a stale binary after the first
 // auto-update. Reach it by its per-user seed path instead — every macOS CLI
-// invocation in this file does.
+// invocation in this file does. The commands set no shell variables, so they
+// also run in fish.
 function MacVerifyStep() {
   return (
     <div className="flex flex-col gap-2">
       <StepNote>
         Run these in the enrolled user's own login session, not as root.
       </StepNote>
-      <CodeBlock language="bash">{`AGENT_CLI="$HOME/Library/Application Support/Speakeasy/bin/speakeasy"
-
-pkgutil --pkg-info com.speakeasy.agent.pkg
+      <CodeBlock language="bash">{`pkgutil --pkg-info com.speakeasy.agent.pkg
 launchctl print "gui/$(id -u)/com.speakeasy.daemon"
-"$AGENT_CLI" status`}</CodeBlock>
+"$HOME/Library/Application Support/Speakeasy/bin/speakeasy" status`}</CodeBlock>
     </div>
   );
 }
