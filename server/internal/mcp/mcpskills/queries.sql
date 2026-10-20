@@ -231,3 +231,166 @@ FROM skill_observations
 WHERE project_id = @project_id
   AND provider = @provider::text
 ORDER BY seen_at ASC, id ASC;
+
+-- name: GetLinkableMCPServer :one
+-- A live MCP server in the caller's project that a skill can be linked to,
+-- with the name a link view shows and the toolset its grants are keyed on.
+SELECT
+    ms.id,
+    ms.project_id,
+    ms.toolset_id,
+    COALESCE(ms.name, t.name, ms.slug, ms.id::text)::text AS name
+FROM mcp_servers ms
+JOIN projects p
+  ON p.id = ms.project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+LEFT JOIN toolsets t
+  ON t.id = ms.toolset_id
+  AND t.project_id = ms.project_id
+  AND t.deleted IS FALSE
+WHERE ms.project_id = @project_id
+  AND ms.id = @id
+  AND ms.deleted IS FALSE;
+
+-- name: GetLinkableMetaMCPServer :one
+-- A live meta MCP gateway in the caller's project that a skill can be linked
+-- to.
+SELECT
+    mm.id,
+    mm.project_id,
+    mm.name
+FROM meta_mcp_servers mm
+WHERE mm.organization_id = @organization_id
+  AND mm.project_id = @project_id
+  AND mm.id = @id
+  AND mm.deleted IS FALSE;
+
+-- name: GetLiveMCPSkillLinkForTarget :one
+-- The live link of one skill to one target, if any. Row-less targets match on
+-- their kind with both id columns NULL, as the unique index treats them.
+SELECT *
+FROM mcp_skill_links
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND skill_id = @skill_id
+  AND target_kind = @target_kind
+  AND mcp_server_id IS NOT DISTINCT FROM sqlc.narg(mcp_server_id)::uuid
+  AND meta_mcp_server_id IS NOT DISTINCT FROM sqlc.narg(meta_mcp_server_id)::uuid
+  AND deleted IS FALSE;
+
+-- name: UpsertMCPSkillLink :one
+-- Links a skill to a target, or updates the pin of the live link that
+-- already joins them, so repeating the same request is idempotent. updated_at
+-- moves only when the pin changes. The caller validates that the id columns
+-- fit target_kind; the foreign keys keep the skill, its pinned version and any
+-- stored target inside the link's project.
+INSERT INTO mcp_skill_links (
+    organization_id
+  , project_id
+  , skill_id
+  , pinned_version_id
+  , target_kind
+  , mcp_server_id
+  , meta_mcp_server_id
+  , created_by_user_id
+)
+VALUES (
+    @organization_id
+  , @project_id
+  , @skill_id
+  , sqlc.narg(pinned_version_id)
+  , @target_kind
+  , sqlc.narg(mcp_server_id)
+  , sqlc.narg(meta_mcp_server_id)
+  , @created_by_user_id
+)
+ON CONFLICT (project_id, skill_id, target_kind, mcp_server_id, meta_mcp_server_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    pinned_version_id = EXCLUDED.pinned_version_id,
+    updated_at = CASE
+      WHEN mcp_skill_links.pinned_version_id IS DISTINCT FROM EXCLUDED.pinned_version_id THEN clock_timestamp()
+      ELSE mcp_skill_links.updated_at
+    END
+RETURNING *;
+
+-- name: GetMCPSkillLink :one
+-- One live link in the caller's project with the names a link view shows.
+-- The skill and target are joined without liveness filters so a link to an
+-- archived skill or a removed target can still be inspected and removed.
+SELECT
+    sqlc.embed(l),
+    s.name AS skill_name,
+    s.display_name AS skill_display_name,
+    ms.toolset_id AS mcp_server_toolset_id,
+    ms.name AS mcp_server_name,
+    ms.slug AS mcp_server_slug,
+    t.name AS toolset_name,
+    mm.name AS meta_mcp_server_name
+FROM mcp_skill_links l
+JOIN skills s
+  ON s.project_id = l.project_id
+  AND s.id = l.skill_id
+LEFT JOIN mcp_servers ms
+  ON ms.project_id = l.project_id
+  AND ms.id = l.mcp_server_id
+LEFT JOIN toolsets t
+  ON t.project_id = ms.project_id
+  AND t.id = ms.toolset_id
+LEFT JOIN meta_mcp_servers mm
+  ON mm.project_id = l.project_id
+  AND mm.id = l.meta_mcp_server_id
+WHERE l.organization_id = @organization_id
+  AND l.project_id = @project_id
+  AND l.id = @id
+  AND l.deleted IS FALSE;
+
+-- name: ListMCPSkillLinks :many
+-- A page of the caller's project's live links, oldest first, with the names
+-- a link view shows. Links of archived skills and links whose stored target
+-- was removed are left out, since neither serves anything. Every filter is
+-- optional.
+SELECT
+    sqlc.embed(l),
+    s.name AS skill_name,
+    s.display_name AS skill_display_name,
+    ms.toolset_id AS mcp_server_toolset_id,
+    ms.name AS mcp_server_name,
+    ms.slug AS mcp_server_slug,
+    t.name AS toolset_name,
+    mm.name AS meta_mcp_server_name
+FROM mcp_skill_links l
+JOIN skills s
+  ON s.project_id = l.project_id
+  AND s.id = l.skill_id
+  AND s.archived_at IS NULL
+LEFT JOIN mcp_servers ms
+  ON ms.project_id = l.project_id
+  AND ms.id = l.mcp_server_id
+  AND ms.deleted IS FALSE
+LEFT JOIN toolsets t
+  ON t.project_id = ms.project_id
+  AND t.id = ms.toolset_id
+  AND t.deleted IS FALSE
+LEFT JOIN meta_mcp_servers mm
+  ON mm.project_id = l.project_id
+  AND mm.id = l.meta_mcp_server_id
+  AND mm.deleted IS FALSE
+WHERE l.organization_id = @organization_id
+  AND l.project_id = @project_id
+  AND l.deleted IS FALSE
+  AND (l.mcp_server_id IS NULL OR ms.id IS NOT NULL)
+  AND (l.meta_mcp_server_id IS NULL OR mm.id IS NOT NULL)
+  AND (sqlc.narg(skill_id)::uuid IS NULL OR l.skill_id = sqlc.narg(skill_id)::uuid)
+  AND (sqlc.narg(mcp_server_id)::uuid IS NULL OR l.mcp_server_id = sqlc.narg(mcp_server_id)::uuid)
+  AND (sqlc.narg(meta_mcp_server_id)::uuid IS NULL OR l.meta_mcp_server_id = sqlc.narg(meta_mcp_server_id)::uuid)
+  AND (sqlc.narg(target_kind)::text IS NULL OR l.target_kind = sqlc.narg(target_kind)::text)
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (l.created_at, l.id) > (
+      sqlc.narg(cursor_created_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY l.created_at ASC, l.id ASC
+LIMIT @page_limit;

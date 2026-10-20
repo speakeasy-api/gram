@@ -32,25 +32,12 @@ func CreateLink(ctx context.Context, db database.DBTX, link NewLink) (uuid.UUID,
 		return uuid.Nil, err
 	}
 
-	pinned := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if link.PinnedVersionID != nil {
-		pinned = uuid.NullUUID{UUID: *link.PinnedVersionID, Valid: true}
-	}
-	mcpServerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	metaMCPServerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	switch link.Target.Kind {
-	case TargetMCPServer:
-		mcpServerID = uuid.NullUUID{UUID: link.Target.ID, Valid: true}
-	case TargetMetaMCPServer:
-		metaMCPServerID = uuid.NullUUID{UUID: link.Target.ID, Valid: true}
-	case TargetOrganizationGateway:
-	}
-
+	mcpServerID, metaMCPServerID := link.Target.Columns()
 	row, err := repo.New(db).CreateMCPSkillLink(ctx, repo.CreateMCPSkillLinkParams{
 		OrganizationID:  link.OrganizationID,
 		ProjectID:       link.ProjectID,
 		SkillID:         link.SkillID,
-		PinnedVersionID: pinned,
+		PinnedVersionID: link.pinned(),
 		TargetKind:      string(link.Target.Kind),
 		McpServerID:     mcpServerID,
 		MetaMcpServerID: metaMCPServerID,
@@ -60,6 +47,39 @@ func CreateLink(ctx context.Context, db database.DBTX, link NewLink) (uuid.UUID,
 		return uuid.Nil, fmt.Errorf("create skill link: %w", err)
 	}
 	return row.ID, nil
+}
+
+// UpsertLink links a skill to an MCP surface, or updates the pin of the live
+// link that already joins them, and returns the live link. Repeating the same
+// request leaves the link unchanged. Like [CreateLink], it validates the
+// target and relies on the foreign keys to keep the target in the project.
+func UpsertLink(ctx context.Context, db database.DBTX, link NewLink) (repo.McpSkillLink, error) {
+	if err := link.Target.Validate(); err != nil {
+		return repo.McpSkillLink{}, err
+	}
+
+	mcpServerID, metaMCPServerID := link.Target.Columns()
+	row, err := repo.New(db).UpsertMCPSkillLink(ctx, repo.UpsertMCPSkillLinkParams{
+		OrganizationID:  link.OrganizationID,
+		ProjectID:       link.ProjectID,
+		SkillID:         link.SkillID,
+		PinnedVersionID: link.pinned(),
+		TargetKind:      string(link.Target.Kind),
+		McpServerID:     mcpServerID,
+		MetaMcpServerID: metaMCPServerID,
+		CreatedByUserID: link.CreatedByUserID,
+	})
+	if err != nil {
+		return repo.McpSkillLink{}, fmt.Errorf("upsert skill link: %w", err)
+	}
+	return row, nil
+}
+
+func (link NewLink) pinned() uuid.NullUUID {
+	if link.PinnedVersionID == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: *link.PinnedVersionID, Valid: true}
 }
 
 // DeleteLink unlinks a skill from its surface, scoped to the caller's
