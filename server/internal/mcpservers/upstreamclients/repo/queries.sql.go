@@ -291,6 +291,246 @@ func (q *Queries) DetachMCPServerRemoteSessionClient(ctx context.Context, arg De
 	return result.RowsAffected(), nil
 }
 
+const getAuthClientSelection = `-- name: GetAuthClientSelection :one
+SELECT sel.no_auth,
+       sel.auth_client_id,
+       m.name AS server_name,
+       (m.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled,
+       ac.id AS client_id,
+       ac.client_type,
+       ac.enabled AS client_enabled,
+       ac.deleted AS client_deleted,
+       ac.remote_session_client_id AS registration_id,
+       reg.remote_session_issuer_id AS registration_issuer_id,
+       (
+         reg.id IS NOT NULL
+         AND reg.deleted IS FALSE
+         AND rsi.id IS NOT NULL
+         AND rsi.deleted IS FALSE
+       )::boolean AS registration_live,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_remote_session_clients AS a
+         WHERE a.mcp_server_id = sel.mcp_server_id
+           AND a.remote_session_client_id = ac.remote_session_client_id
+           AND a.organization_id = sel.organization_id
+           AND a.deleted IS FALSE
+       )::boolean AS registration_attached,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS link
+         WHERE link.mcp_server_id = sel.mcp_server_id
+           AND link.auth_client_id = ac.id
+           AND link.organization_id = sel.organization_id
+           AND link.deleted IS FALSE
+       )::boolean AS associated,
+       m.requires_upstream_auth,
+       (
+         EXISTS (
+           SELECT 1
+           FROM mcp_server_auth_clients AS link
+           JOIN mcp_auth_clients AS other
+             ON other.id = link.auth_client_id
+            AND other.organization_id = link.organization_id
+            AND other.deleted IS FALSE
+           WHERE link.mcp_server_id = sel.mcp_server_id
+             AND link.organization_id = sel.organization_id
+             AND link.deleted IS FALSE
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM mcp_server_remote_session_clients AS a
+           WHERE a.mcp_server_id = sel.mcp_server_id
+             AND a.organization_id = sel.organization_id
+             AND a.deleted IS FALSE
+         )
+       )::boolean AS server_has_clients,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS link
+         JOIN mcp_auth_clients AS other
+           ON other.id = link.auth_client_id
+          AND other.organization_id = link.organization_id
+          AND other.deleted IS FALSE
+          AND other.client_type IN ('static_credential', 'pass_through')
+         WHERE link.mcp_server_id = sel.mcp_server_id
+           AND link.organization_id = sel.organization_id
+           AND link.deleted IS FALSE
+       )::boolean AS server_has_header_clients,
+       (
+         EXISTS (
+           SELECT 1
+           FROM mcp_server_auth_clients AS link
+           JOIN mcp_auth_clients AS other
+             ON other.id = link.auth_client_id
+            AND other.organization_id = link.organization_id
+            AND other.deleted IS FALSE
+            AND other.client_type NOT IN ('static_credential', 'pass_through')
+           WHERE link.mcp_server_id = sel.mcp_server_id
+             AND link.organization_id = sel.organization_id
+             AND link.deleted IS FALSE
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM mcp_server_remote_session_clients AS a
+           WHERE a.mcp_server_id = sel.mcp_server_id
+             AND a.organization_id = sel.organization_id
+             AND a.deleted IS FALSE
+         )
+       )::boolean AS server_has_oauth_clients,
+       EXISTS (
+         SELECT 1
+         FROM mcp_auth_client_headers AS c
+         WHERE c.auth_client_id = ac.id
+           AND c.organization_id = sel.organization_id
+           AND c.deleted IS FALSE
+           AND NOT EXISTS (
+             SELECT 1
+             FROM remote_mcp_server_headers AS h
+             WHERE h.remote_mcp_server_id = m.remote_mcp_server_id
+               AND h.deleted IS FALSE
+               AND h.name = c.name
+               AND h.value IS NOT DISTINCT FROM c.value
+               AND h.value_from_request_header IS NOT DISTINCT FROM c.value_from_request_header
+           )
+       )::boolean AS headers_stale,
+       EXISTS (
+         SELECT 1
+         FROM remote_mcp_server_headers AS h
+         WHERE h.remote_mcp_server_id = m.remote_mcp_server_id
+           AND h.deleted IS FALSE
+           AND (lower(h.name) = 'authorization' OR h.value_from_request_header IS NOT NULL OR h.is_secret)
+           -- An OAuth client's bearer replaces the server's Authorization.
+           AND NOT (lower(h.name) = 'authorization' AND ac.client_type IN ('remote_session', 'service_account'))
+           AND NOT EXISTS (
+             SELECT 1
+             FROM mcp_auth_client_headers AS c
+             WHERE c.auth_client_id = ac.id
+               AND c.organization_id = sel.organization_id
+               AND c.deleted IS FALSE
+               AND lower(c.name) = lower(h.name)
+           )
+       )::boolean AS credential_headers_uncovered,
+       EXISTS (
+         SELECT 1
+         FROM mcp_auth_client_headers AS c
+         WHERE c.auth_client_id = ac.id
+           AND c.organization_id = sel.organization_id
+           AND c.deleted IS FALSE
+           AND c.is_required
+           AND lower(btrim(c.value_from_request_header)) = 'authorization'
+       )::boolean AS requires_inbound_authorization,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS link
+         JOIN mcp_auth_clients AS e
+           ON e.id = link.auth_client_id
+          AND e.organization_id = link.organization_id
+          AND e.client_type = 'ema'
+          AND e.enabled IS TRUE
+          AND e.deleted IS FALSE
+         JOIN mcp_auth_client_emas AS x
+           ON x.auth_client_id = e.id
+          AND x.deleted IS FALSE
+         WHERE link.mcp_server_id = sel.mcp_server_id
+           AND link.organization_id = sel.organization_id
+           AND link.deleted IS FALSE
+           AND e.remote_session_client_id = ac.remote_session_client_id
+       )::boolean AS registration_has_ema
+FROM upstream_client_selections AS sel
+JOIN mcp_servers AS m
+  ON m.id = sel.mcp_server_id
+ AND m.project_id = sel.project_id
+ AND m.deleted IS FALSE
+LEFT JOIN mcp_auth_clients AS ac
+  ON ac.id = sel.auth_client_id
+ AND ac.organization_id = sel.organization_id
+ AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
+LEFT JOIN remote_session_clients AS reg
+  ON reg.id = ac.remote_session_client_id
+LEFT JOIN remote_session_issuers AS rsi
+  ON rsi.id = reg.remote_session_issuer_id
+WHERE sel.credential_kind = $1::text
+  AND sel.credential_id = $2::uuid
+  AND sel.mcp_server_id = $3::uuid
+  AND sel.organization_id = $4::text
+  AND sel.deleted IS FALSE
+`
+
+type GetAuthClientSelectionParams struct {
+	CredentialKind string
+	CredentialID   uuid.UUID
+	McpServerID    uuid.UUID
+	OrganizationID string
+}
+
+type GetAuthClientSelectionRow struct {
+	NoAuth                       bool
+	AuthClientID                 uuid.NullUUID
+	ServerName                   pgtype.Text
+	Tunneled                     bool
+	ClientID                     uuid.NullUUID
+	ClientType                   pgtype.Text
+	ClientEnabled                pgtype.Bool
+	ClientDeleted                pgtype.Bool
+	RegistrationID               uuid.NullUUID
+	RegistrationIssuerID         uuid.NullUUID
+	RegistrationLive             bool
+	RegistrationAttached         bool
+	Associated                   bool
+	RequiresUpstreamAuth         pgtype.Bool
+	ServerHasClients             bool
+	ServerHasHeaderClients       bool
+	ServerHasOauthClients        bool
+	HeadersStale                 bool
+	CredentialHeadersUncovered   bool
+	RequiresInboundAuthorization bool
+	RegistrationHasEma           bool
+}
+
+// One credential's choice for one MCP server, read the way the typed auth
+// client resolver reads it: the auth client the choice names, whether that
+// client is still usable for the server, and what the server says about
+// needing upstream authentication. A client outside the server's tenant reads
+// as absent, never as another tenant's client.
+// Admin edits still write only the legacy tables, so the typed rows are
+// checked against them: an OAuth client's registration must still be attached
+// to the server, header copies must still match the server's headers, and the
+// server's credential headers must be carried by the chosen client.
+func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientSelectionParams) (GetAuthClientSelectionRow, error) {
+	row := q.db.QueryRow(ctx, getAuthClientSelection,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.McpServerID,
+		arg.OrganizationID,
+	)
+	var i GetAuthClientSelectionRow
+	err := row.Scan(
+		&i.NoAuth,
+		&i.AuthClientID,
+		&i.ServerName,
+		&i.Tunneled,
+		&i.ClientID,
+		&i.ClientType,
+		&i.ClientEnabled,
+		&i.ClientDeleted,
+		&i.RegistrationID,
+		&i.RegistrationIssuerID,
+		&i.RegistrationLive,
+		&i.RegistrationAttached,
+		&i.Associated,
+		&i.RequiresUpstreamAuth,
+		&i.ServerHasClients,
+		&i.ServerHasHeaderClients,
+		&i.ServerHasOauthClients,
+		&i.HeadersStale,
+		&i.CredentialHeadersUncovered,
+		&i.RequiresInboundAuthorization,
+		&i.RegistrationHasEma,
+	)
+	return i, err
+}
+
 const isSoleConsumerBinding = `-- name: IsSoleConsumerBinding :one
 SELECT EXISTS (
   SELECT 1
@@ -342,6 +582,60 @@ func (q *Queries) IsSoleConsumerBinding(ctx context.Context, arg IsSoleConsumerB
 	var sole_consumer bool
 	err := row.Scan(&sole_consumer)
 	return sole_consumer, err
+}
+
+const listAuthClientHeaders = `-- name: ListAuthClientHeaders :many
+SELECT h.name, h.is_required, h.is_secret, h.value, h.value_from_request_header
+FROM mcp_auth_client_headers AS h
+JOIN mcp_auth_clients AS ac
+  ON ac.id = h.auth_client_id
+ AND ac.organization_id = h.organization_id
+ AND ac.deleted IS FALSE
+WHERE h.auth_client_id = $1::uuid
+  AND h.organization_id = $2::text
+  AND h.deleted IS FALSE
+ORDER BY h.name, h.id
+`
+
+type ListAuthClientHeadersParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+type ListAuthClientHeadersRow struct {
+	Name                   string
+	IsRequired             bool
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+}
+
+// A live auth client's own headers, for the proxy to send after the server's
+// non-credential headers. Values stay as stored; secret ones are encrypted.
+func (q *Queries) ListAuthClientHeaders(ctx context.Context, arg ListAuthClientHeadersParams) ([]ListAuthClientHeadersRow, error) {
+	rows, err := q.db.Query(ctx, listAuthClientHeaders, arg.AuthClientID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthClientHeadersRow
+	for rows.Next() {
+		var i ListAuthClientHeadersRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.IsRequired,
+			&i.IsSecret,
+			&i.Value,
+			&i.ValueFromRequestHeader,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listMCPServerRemoteSessionClients = `-- name: ListMCPServerRemoteSessionClients :many

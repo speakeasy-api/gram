@@ -100,6 +100,14 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 	case selected && !choice.noAuth():
 		backendIssuerID = choice.remoteSessionIssuerID
 	}
+	// A typed auth client is authoritative: its own material or none, never
+	// identity chaining or another client in its place.
+	if authentication.authClient != nil {
+		if choice.noAuth() {
+			return none, nil
+		}
+		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
+	}
 	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, backendIssuerID, authentication.chosenClient)
 	switch {
 	case !chainable && selected && choice.noAuth():

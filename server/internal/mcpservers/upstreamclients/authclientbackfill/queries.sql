@@ -1490,3 +1490,33 @@ VALUES (@project_id, @organization_id, @resource_identifier, @metadata_url, sqlc
 -- name: SoftDeleteIssuerOfClientFixture :exec
 UPDATE remote_session_issuers SET deleted_at = clock_timestamp()
 WHERE id = (SELECT remote_session_issuer_id FROM remote_session_clients WHERE remote_session_clients.id = @client_id);
+
+-- name: SeedUpstreamSelectionFixture :exec
+INSERT INTO upstream_client_selections (project_id, organization_id, credential_kind, credential_id, mcp_server_id, no_auth, source, auth_client_id, auth_client_attachment_scope)
+VALUES (
+    @project_id, @organization_id, 'user_session', @credential_id, @mcp_server_id, @no_auth, 'issuance',
+    sqlc.narg('auth_client_id'),
+    (SELECT ac.attachment_scope FROM mcp_auth_clients AS ac WHERE ac.id = sqlc.narg('auth_client_id'))
+);
+
+-- name: SeedServerAuthClientLinkFixture :exec
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+VALUES (
+    @project_id, @organization_id, @mcp_server_id, @auth_client_id,
+    (SELECT ac.attachment_scope FROM mcp_auth_clients AS ac WHERE ac.id = @auth_client_id),
+    'admin'
+);
+
+-- name: SetAuthClientEnabledFixture :exec
+UPDATE mcp_auth_clients SET enabled = @enabled WHERE id = @id;
+
+-- name: SeedAuthClientHeaderFixture :exec
+INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, is_required, is_secret, value, value_from_request_header)
+VALUES (@auth_client_id, @organization_id, @name, @is_required, @is_secret, sqlc.narg('value'), sqlc.narg('value_from_request_header'));
+
+-- name: SeedAuthClientEMAFixture :exec
+INSERT INTO mcp_auth_client_emas (auth_client_id, organization_id, remote_session_client_id, remote_session_issuer_id, resource)
+SELECT ac.id, ac.organization_id, ac.remote_session_client_id, c.remote_session_issuer_id, @resource::text
+FROM mcp_auth_clients AS ac
+JOIN remote_session_clients AS c ON c.id = ac.remote_session_client_id
+WHERE ac.id = @auth_client_id::uuid;

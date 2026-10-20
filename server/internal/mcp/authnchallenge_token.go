@@ -1396,6 +1396,14 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	if endpoint.MetaMcpServerID.Valid {
 		return false
 	}
+	// Where the auth client resolver serves the organization, a choice it
+	// cannot use sends the session to reconnect rather than refreshing into
+	// the same rejection.
+	if reconnect, decided, err := s.refreshNeedsAuthClientReconnect(ctx, endpoint, jti); err != nil {
+		logger.WarnContext(ctx, "resolve auth client before refresh", attr.SlogError(err))
+	} else if decided {
+		return reconnect
+	}
 	user := subject.Kind == urn.SessionSubjectKindUser
 	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
 	tunneled, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
