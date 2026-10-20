@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -15,9 +16,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 func directoryInventorySupportContext(t *testing.T, ctx context.Context, ti *testInstance) context.Context {
@@ -303,7 +306,7 @@ func TestDirectoryRoleInventoryDecode(t *testing.T) {
 
 func TestDirectoryRoleSupportCommandAuthentication(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"valid", "wrong organization", "expired", "ordinary session", "revoked staff", "unknown token"} {
+	for _, scenario := range []string{"valid", "wrong organization", "expired", "ordinary session", "revoked staff", "unknown token", "signed out everywhere"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestAccessService(t)
@@ -315,7 +318,18 @@ func TestDirectoryRoleSupportCommandAuthentication(t *testing.T) {
 			suffix := cache.Suffix(ac.ActiveOrganizationID)
 			store := cache.NewTypedObjectCache[sessions.Session](logger, cache.NewRedisCacheAdapter(redisClient), suffix)
 			now := time.Now()
-			session := sessions.Session{SessionID: "support-token", UserID: ac.UserID, ActiveOrganizationID: ac.ActiveOrganizationID, SupportOrganizationID: ac.ActiveOrganizationID, SupportExpiresAt: now.Add(time.Hour)}
+			operatorID := ac.UserID
+			if scenario == "signed out everywhere" {
+				// Every test signs in as the same user and Redis is shared,
+				// so signing out everywhere uses an operator of its own.
+				operatorID = "support-operator-" + uuid.NewString()
+				_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+					ID: operatorID, Email: operatorID + "@example.com", DisplayName: "Support operator", PhotoUrl: conv.PtrToPGText(nil), Admin: true,
+				})
+				require.NoError(t, err)
+				require.NoError(t, testrepo.New(ti.conn).SetUserPlatformAdminFixture(ctx, testrepo.SetUserPlatformAdminFixtureParams{ID: operatorID, Admin: true}))
+			}
+			session := sessions.Session{SessionID: "support-token-" + uuid.NewString(), UserID: operatorID, ActiveOrganizationID: ac.ActiveOrganizationID, SupportOrganizationID: ac.ActiveOrganizationID, SupportExpiresAt: now.Add(time.Hour)}
 			if scenario == "ordinary session" {
 				session.SupportOrganizationID = ""
 			}
@@ -324,6 +338,11 @@ func TestDirectoryRoleSupportCommandAuthentication(t *testing.T) {
 			}
 			require.NoError(t, store.Store(ctx, session))
 			manager := sessions.NewManager(logger, testenv.NewTracerProvider(t), ti.conn, redisClient, suffix, nil, nil, nil)
+			require.NoError(t, manager.StoreSessionIssuedAt(ctx, session, now.Add(-time.Minute)))
+			if scenario == "signed out everywhere" {
+				// The user signed out everywhere after this session was issued.
+				require.NoError(t, manager.RaiseUserEpoch(ctx, operatorID, now))
+			}
 			target, token := ac.ActiveOrganizationID, session.SessionID
 			if scenario == "wrong organization" {
 				target = "other-org"
@@ -336,7 +355,7 @@ func TestDirectoryRoleSupportCommandAuthentication(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, contextvalues.IsSupportSession(authenticated))
 				resolved := testAccessAuthContext(t, authenticated)
-				require.Equal(t, ac.UserID, resolved.UserID)
+				require.Equal(t, operatorID, resolved.UserID)
 				require.Equal(t, ac.ActiveOrganizationID, resolved.ActiveOrganizationID)
 			} else {
 				require.Error(t, err)

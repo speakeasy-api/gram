@@ -20,6 +20,11 @@ func (s *Manager) AuthenticateSupportCommand(ctx context.Context, token, organiz
 	if err != nil {
 		return ctx, fmt.Errorf("read support command session: %w", err)
 	}
+	// As in Authenticate: a session issued before its user signed out
+	// everywhere is no longer valid, even within its support window.
+	if err := s.checkValidAfter(ctx, session); err != nil {
+		return ctx, err
+	}
 	user, err := s.userRepo.GetUser(ctx, session.UserID)
 	if err != nil {
 		return ctx, fmt.Errorf("read support command operator: %w", err)
