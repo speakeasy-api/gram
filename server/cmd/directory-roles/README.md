@@ -111,8 +111,10 @@ leaves the decision to an administrator:
   any mapping. If the direct row was an independent assignment, cutover does not
   remove it; if it came from the group rule, the member loses it. Confirm which.
 - `covered_role_urns`: an inventoried role held directly and also reached
-  through a mapping. Access is kept either way, but an independent assignment
-  will now follow directory group membership instead.
+  through a mapping. Access is kept either way. If the direct row was an
+  independent assignment, cutover leaves it in place, so the member keeps the
+  role even after leaving the group. If it came from the group rule, only the
+  mapping remains and the role follows group membership. Confirm which.
 - `default_role_change`: set when `target_default_role_slug` differs from the
   current default and the member holds the current default directly. WorkOS may
   move them to the target default when it recomputes the membership; an explicit

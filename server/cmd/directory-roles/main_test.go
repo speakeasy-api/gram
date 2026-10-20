@@ -61,6 +61,8 @@ func TestDirectoryRolesConnectionSafety(t *testing.T) {
 		{"unverified database", "postgres://db.example.com/example?sslmode=require", "localhost:6379", "", false},
 		{"database downgrade", "postgres://db.example.com/example?sslmode=prefer", "localhost:6379", "", false},
 		{"remote fallback", "host=localhost,db.example.com dbname=example sslmode=disable", "localhost:6379", "", false},
+		{"verified fallback to another host", "host=db.example.com,db2.example.com dbname=example sslmode=verify-full", "", "rediss://cache.example.com:6379", false},
+		{"verified fallback to another port", "host=db.example.com,db.example.com port=5432,5433 dbname=example sslmode=verify-full", "", "rediss://cache.example.com:6379", false},
 		{"plaintext Redis address", "postgres://localhost/example?sslmode=disable", "cache.example.com:6379", "", false},
 		{"plaintext Redis URL", "postgres://localhost/example?sslmode=disable", "", "redis://cache.example.com:6379", false},
 	} {

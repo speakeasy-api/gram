@@ -129,7 +129,12 @@ func parseConnections(databaseURL, redisAddress, redisPassword, redisURL string)
 	if !localHost(databaseConfig.ConnConfig.Host) && !verifiedTLS(databaseConfig.ConnConfig.TLSConfig) {
 		return nil, nil, errors.New("remote PostgreSQL requires sslmode=verify-full")
 	}
+	// A fallback may only retry the same server, for example with different
+	// TLS settings, so an outage can never redirect writes to another host.
 	for _, fallback := range databaseConfig.ConnConfig.Fallbacks {
+		if fallback.Host != databaseConfig.ConnConfig.Host || fallback.Port != databaseConfig.ConnConfig.Port {
+			return nil, nil, errors.New("PostgreSQL must name a single host; fallbacks to other hosts are not allowed")
+		}
 		if !localHost(fallback.Host) && !verifiedTLS(fallback.TLSConfig) {
 			return nil, nil, errors.New("remote PostgreSQL cannot fall back to unverified or plaintext connections")
 		}
