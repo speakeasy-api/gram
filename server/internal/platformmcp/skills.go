@@ -144,8 +144,9 @@ type SkillSummary struct {
 	VersionCount    int64    `json:"version_count"`
 	HasValidVersion bool     `json:"has_valid_version"`
 	UpdatedAt       string   `json:"updated_at"`
-	// LastLoadedOverMcpAt is set only on list and get, and only when an agent
-	// has loaded the skill over a hosted MCP server.
+	// LastLoadedOverMcpAt is when an agent last loaded the skill over a hosted
+	// MCP server. Absent when it never has, or when the response was built
+	// from a skill write that does not compute it.
 	LastLoadedOverMcpAt *string `json:"last_loaded_over_mcp_at,omitempty"`
 }
 

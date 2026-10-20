@@ -422,6 +422,43 @@ func TestSkillDistributionListPaginates(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+func TestSkillReportsLastLoadOverMCPWithoutDistribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "mcp-linked-skill", "Served over MCP without a plugin.")
+	skillID, err := uuid.Parse(created.Skill.ID)
+	require.NoError(t, err)
+	versionID, err := uuid.Parse(created.Version.ID)
+	require.NoError(t, err)
+
+	seenAt := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+	written, err := mcpskills.NewResolver(testenv.NewLogger(t), ti.conn).RecordRead(ctx, mcpskills.Read{
+		ProjectID: ti.projectID,
+		Entry: mcpskills.Entry{
+			SkillID: skillID, VersionID: versionID, PluginID: uuid.Nil,
+			Name: created.Skill.Name, Content: created.Version.Content, RawSHA256: created.Version.RawSha256,
+			Frontmatter: nil, Pinned: false,
+		},
+		UserID: ti.authContext.UserID, SessionID: "mcp-session-linked", SeenAt: seenAt,
+	})
+	require.NoError(t, err)
+	require.True(t, written)
+
+	distributions, err := ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{SkillID: &created.Skill.ID, Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Empty(t, distributions.Distributions)
+
+	want := seenAt.Format(time.RFC3339)
+	listed, err := ti.service.List(ctx, &gen.ListPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Skills, 1)
+	require.Equal(t, &want, listed.Skills[0].LastLoadedOverMcpAt)
+	details, err := ti.service.Get(ctx, &gen.GetPayload{ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, &want, details.Skill.LastLoadedOverMcpAt)
+}
+
 func TestSkillDistributionReportsLastLoadOverMCP(t *testing.T) {
 	t.Parallel()
 
@@ -437,8 +474,7 @@ func TestSkillDistributionReportsLastLoadOverMCP(t *testing.T) {
 		return &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(pluginID.String()), PinnedVersionID: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}
 	}
 
-	// The skill's own list and get report the same per-skill value, so a skill
-	// with no plugin distribution can still be observed.
+	// The skill's own list and get report the same per-skill value.
 	requireSkillLoad := func(want *string) {
 		t.Helper()
 		listedSkills, err := ti.service.List(ctx, &gen.ListPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
