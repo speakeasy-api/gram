@@ -164,7 +164,13 @@ vi.mock("./AgentKeyServers", () => ({
     );
   },
 }));
-function KeyPage({ agent }: { agent: ManagedAgent }) {
+function KeyPage({
+  agent,
+  federated,
+}: {
+  agent: ManagedAgent;
+  federated?: boolean | "unknown";
+}) {
   const [creation, setCreation] = useState(false);
   const [busy, setBusy] = useState(false);
   return (
@@ -176,6 +182,7 @@ function KeyPage({ agent }: { agent: ManagedAgent }) {
       )}
       <AgentAPIKeys
         agent={agent}
+        federated={federated}
         creation={creation}
         onCreate={() => setCreation(true)}
         onDone={() => setCreation(false)}
@@ -999,4 +1006,28 @@ describe("Agent API keys", () => {
       expect(mocks.create).toHaveBeenCalledTimes(1);
     },
   );
+});
+
+describe("the empty state, while the credential is unknown", () => {
+  it("says only that no key is issued", async () => {
+    mocks.list.mockResolvedValue({ keys: [] });
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <TooltipProvider>
+          <KeyPage agent={agent} federated="unknown" />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("No key issued.")).toBeTruthy();
+    // Neither of the settled answers: one tells a federated agent it cannot
+    // authenticate, the other says a platform signs it in. Until the
+    // admissions read lands, both are guesses.
+    expect(screen.queryByText(/cannot authenticate/)).toBeNull();
+    expect(screen.queryByText(/platform's own tokens/)).toBeNull();
+  });
 });

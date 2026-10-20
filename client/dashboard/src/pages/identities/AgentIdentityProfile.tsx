@@ -47,7 +47,15 @@ export function AgentIdentityProfile({
   // and the guess is the one that tells a federated agent it cannot
   // authenticate until a key is issued.
   const credentialKnown = !admissions.isPending && !admissions.isError;
-  const federated = credentialKnown && admissions.admissions.length > 0;
+  // A wildcard rule the platform has not turned on admits nothing, so it is
+  // not a way in: counting it would tell an agent that holds only a dormant
+  // rule that it is already signed in and needs no key.
+  const federated =
+    credentialKnown &&
+    admissions.admissions.some(
+      (admission) =>
+        admission.matchKind !== "wildcard" || admission.wildcardActive,
+    );
   const issuing = params.get("credential") === "new";
   const setIssuing = (open: boolean) => {
     const next = new URLSearchParams(params);
