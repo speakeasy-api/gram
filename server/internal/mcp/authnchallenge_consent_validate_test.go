@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"io"
@@ -320,7 +321,7 @@ func mintFirstPartyConsentState(t *testing.T, ctx context.Context, ti *testInsta
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       orgID,
 		ProjectID:            projectID,
-		RouteBase:            "mcp",
+		RouteBase:            mcproute.MCP,
 		Slug:                 slug,
 		ToolsetID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UpstreamResource:     "",

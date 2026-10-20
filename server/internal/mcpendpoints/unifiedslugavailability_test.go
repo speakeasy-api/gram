@@ -19,6 +19,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -250,7 +251,7 @@ func TestHasPluginMembershipForMCPServer_LegacyToolsetWrapper(t *testing.T) {
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	_, err = pluginsQueries.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+	_, err = testrepo.New(ti.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
 		PluginID: plugin.ID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		DisplayName: "Legacy wrapper", Policy: "required",
 	})
@@ -285,7 +286,7 @@ func TestHasPluginMembershipForMCPServer_CanonicalWrapperOwnsLegacyMembership(t 
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	_, err = pluginsQueries.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+	_, err = testrepo.New(ti.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
 		PluginID: plugin.ID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		DisplayName: "Legacy wrapper", Policy: "required",
 	})

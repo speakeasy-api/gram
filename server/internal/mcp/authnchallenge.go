@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -110,11 +111,10 @@ type EndpointRef struct {
 	// Path of a toolset-backed endpoint.
 	McpSlug string `json:"mcp_slug"`
 
-	// RouteBase is the URL path prefix the challenge was minted under
-	// (e.g. "mcp"). Empty value is treated as "mcp" by callers for
-	// backward compatibility with states minted before this field was
-	// added.
-	RouteBase string `json:"route_base,omitempty"`
+	// RouteBase is the URL path prefix the challenge was minted under. Read
+	// it through Resolve: empty means mcproute.MCP for states minted before
+	// the field existed, and an unserved value fails the flow closed.
+	RouteBase mcproute.Base `json:"route_base,omitempty"`
 
 	// SharedAuthorizationServer marks a challenge or code minted by the
 	// issuer's shared authorization server. BaseURL and Authority then
@@ -286,7 +286,11 @@ type UserSessionGrant struct {
 	SignInID *uuid.UUID `json:"sign_in_id,omitempty"`
 	// GatewayPolicy is cached only in the versioned gateway grant namespace.
 	GatewayPolicy *toolfilter.SessionPolicy `json:"gateway_policy,omitempty"`
-	CreatedAt     time.Time                 `json:"created_at"`
+	// UpstreamClientPicks is the upstream OAuth client the subject chose on
+	// the consent page for each MCP server offering several, keyed by server.
+	// The credential this grant mints records it as its choice.
+	UpstreamClientPicks map[uuid.UUID]uuid.UUID `json:"upstream_client_picks,omitempty"`
+	CreatedAt           time.Time               `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
@@ -1006,7 +1010,7 @@ func (s *Service) authenticateIssuerGate(
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		host = requestContext.Host
 	}
-	mcpURL := host + "/" + endpoint.RouteBase + "/" + endpoint.Slug
+	mcpURL := host + "/" + endpoint.RouteBase.String() + "/" + endpoint.Slug
 	surface := mcpmetrics.SurfaceHosting
 	if endpoint.MetaMcpServerID.Valid {
 		surface = mcpmetrics.SurfaceMeta
