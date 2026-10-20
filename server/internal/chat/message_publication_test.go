@@ -217,6 +217,8 @@ func TestConversationEventDepartmentResolution(t *testing.T) {
 		{name: "other organization", actor: "actor", email: "actor@example.test", profiles: []profile{{user: "actor", email: "actor@example.test", attributes: `{"department_name":"engineering"}`, otherOrg: true}}},
 		{name: "deleted profile", actor: "actor", email: "actor@example.test", profiles: []profile{{user: "actor", email: "actor@example.test", attributes: `{"department_name":"engineering"}`, deleted: true}}},
 		{name: "null value", actor: "actor", profiles: []profile{{user: "actor", attributes: `{"department_name":null}`}}},
+		{name: "unknown department", actor: "actor", profiles: []profile{{user: "actor", attributes: `{"department_name":" Unknown "}`}}},
+		{name: "unset department", actor: "actor", profiles: []profile{{user: "actor", attributes: `{"department_name":"<unset>"}`}}},
 		{name: "non-string value", actor: "actor", profiles: []profile{{user: "actor", attributes: `{"department_name":42}`}}},
 		{name: "missing profile", actor: "actor"},
 	} {
@@ -242,10 +244,12 @@ func TestConversationEventDepartmentResolution(t *testing.T) {
 				})
 				require.NoError(t, err)
 				if p.deleted {
-					_, err = directory.DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
+					deleted, err := directory.DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
+						OrganizationID:        orgID,
 						WorkosDirectoryUserID: externalID, WorkosDeletedAt: conv.ToPGTimestamptz(syncedAt.Add(time.Hour)),
 					})
 					require.NoError(t, err)
+					require.EqualValues(t, 1, deleted)
 				}
 			}
 			writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)

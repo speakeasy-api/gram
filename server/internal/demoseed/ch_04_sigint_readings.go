@@ -185,8 +185,11 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		}
 	}
 	if n%11 != 0 {
-		providers := [4]string{"bedrock", "openai", "anthropic", "openrouter"}
-		attributes["model_provider"] = providers[n%4]
+		providers := [3]string{"bedrock", "anthropic", "openrouter"}
+		if n%2 != 0 {
+			providers = [3]string{"openai", "azure", "openrouter"}
+		}
+		attributes["model_provider"] = providers[(n/2)%len(providers)]
 	}
 	sourceTime := s.now.UTC().AddDate(0, 0, -n).Add(-time.Hour)
 	request := readings.Context{TriggerKind: readings.TriggerStream, RunID: uuid.Nil, RequestedAt: sourceTime.Add(time.Second)}

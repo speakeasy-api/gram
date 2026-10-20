@@ -274,8 +274,9 @@ actor's active directory profile within the message's organization: the latest
 linked profile wins, with an unambiguous observed-email fallback. Billing
 allocation never supplies an actor or department. Blank/unknown values are
 omitted. Imports record the directory state known at ingestion, not an inferred
-historical department. Evaluation preserves these attributes across retries and
-outcomes without re-enrichment. They describe the source message, independently
+historical department. Evaluation carries these attributes through retries and
+outcomes without re-enrichment, except when the oversized-outcome safeguard
+drops attributes to meet the transport budget. They describe the source message, independently
 of the classifier's model/provider metadata.
 Completion responses supply the reported serving provider; first-party imports
 name their known service. Hook account-provider metadata alone does not establish

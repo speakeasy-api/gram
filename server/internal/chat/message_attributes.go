@@ -6,15 +6,15 @@ import "strings"
 // classifier metadata on a sensor reading. Unknown facts stay absent.
 func messageAttributes(model, provider, department string) map[string]string {
 	var attributes map[string]string
-	model = knownModelValue(model)
+	model = knownMessageAttribute(model)
 	setReadingAttribute(&attributes, "model_name", model)
 	setReadingAttribute(&attributes, "model_family", messageModelFamily(model))
 	setReadingAttribute(&attributes, "model_provider", messageModelProvider(provider))
-	setReadingAttribute(&attributes, "department", strings.TrimSpace(department))
+	setReadingAttribute(&attributes, "department", knownMessageAttribute(department))
 	return attributes
 }
 
-func knownModelValue(value string) string {
+func knownMessageAttribute(value string) string {
 	value = strings.TrimSpace(value)
 	switch strings.ToLower(value) {
 	case "", "unknown", "<unset>":
@@ -79,7 +79,7 @@ func messageModelFamily(model string) string {
 // messageModelProvider normalizes reported serving-provider aliases. A model
 // family is never evidence that its vendor actually served the request.
 func messageModelProvider(provider string) string {
-	provider = strings.ToLower(knownModelValue(provider))
+	provider = strings.ToLower(knownMessageAttribute(provider))
 	switch provider {
 	case "amazon bedrock", "aws bedrock", "amazon-bedrock", "aws-bedrock":
 		return "bedrock"
