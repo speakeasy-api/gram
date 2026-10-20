@@ -9,8 +9,8 @@ import (
 
 const (
 	// skillURIPrefix is the scheme and authority separator of every served
-	// skill URI. SEP-2640 recommends the skill:// scheme and places the skill
-	// name in the authority component.
+	// skill URI. SEP-2640 recommends the skill:// scheme; Speakeasy puts the
+	// project slug in the authority and the skill name in the path.
 	skillURIPrefix = "skill://"
 
 	// skillFileName is the one file a served skill consists of. Speakeasy
