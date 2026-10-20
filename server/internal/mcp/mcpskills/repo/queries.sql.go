@@ -263,7 +263,6 @@ LEFT JOIN meta_mcp_servers mm
 WHERE l.organization_id = $1
   AND l.project_id = $2
   AND l.id = $3
-  AND l.deleted IS FALSE
 `
 
 type GetMCPSkillLinkParams struct {
@@ -283,9 +282,11 @@ type GetMCPSkillLinkRow struct {
 	MetaMcpServerName  pgtype.Text
 }
 
-// One live link in the caller's project with the names a link view shows.
-// The skill and target are joined without liveness filters so a link to an
-// archived skill or a removed target can still be inspected and removed.
+// One link in the caller's project, live or removed, with the names a link
+// view shows. A removed link is returned so an unlink can authorize against
+// the link's skill and target before answering a repeat as a no-op. The skill
+// and target are joined without liveness filters so a link to an archived
+// skill or a removed target can still be inspected and removed.
 func (q *Queries) GetMCPSkillLink(ctx context.Context, arg GetMCPSkillLinkParams) (GetMCPSkillLinkRow, error) {
 	row := q.db.QueryRow(ctx, getMCPSkillLink, arg.OrganizationID, arg.ProjectID, arg.ID)
 	var i GetMCPSkillLinkRow

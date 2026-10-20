@@ -2,96 +2,63 @@ package mcpskills
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills/skilllink"
 )
 
+// The link vocabulary lives in package skilllink so writers outside the
+// resolver can use it without an import cycle. These aliases keep it
+// addressable from mcpskills, where the resolver reads it.
+
+// TargetKind names the kind of MCP surface a skill is linked to.
+type TargetKind = skilllink.TargetKind
+
+// Target is the MCP surface a skill is linked to and served by.
+type Target = skilllink.Target
+
 // NewLink describes a skill to link to the MCP surface that will serve it.
-type NewLink struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	SkillID        uuid.UUID
+type NewLink = skilllink.NewLink
 
-	// PinnedVersionID pins the served version; nil serves the skill's latest
-	// valid version.
-	PinnedVersionID *uuid.UUID
+const (
+	TargetMCPServer           = skilllink.TargetMCPServer
+	TargetMetaMCPServer       = skilllink.TargetMetaMCPServer
+	TargetOrganizationGateway = skilllink.TargetOrganizationGateway
+)
 
-	Target          Target
-	CreatedByUserID string
+// ErrInvalidTarget reports a target whose id does not fit its kind.
+var ErrInvalidTarget = skilllink.ErrInvalidTarget
+
+// MCPServerTarget names a stored MCP server.
+func MCPServerTarget(id uuid.UUID) Target { return skilllink.MCPServerTarget(id) }
+
+// MetaMCPServerTarget names a stored meta MCP gateway.
+func MetaMCPServerTarget(id uuid.UUID) Target { return skilllink.MetaMCPServerTarget(id) }
+
+// OrganizationGatewayTarget names the organization gateway.
+func OrganizationGatewayTarget() Target { return skilllink.OrganizationGatewayTarget() }
+
+// TargetOf reads the target back from a link's stored columns.
+func TargetOf(kind string, mcpServerID, metaMCPServerID uuid.NullUUID) Target {
+	return skilllink.TargetOf(kind, mcpServerID, metaMCPServerID)
 }
 
-// CreateLink links a skill to an MCP surface and returns the link's id. The
-// target must be valid for its kind; a stored target must belong to the
-// link's project, which the foreign keys enforce.
+// CreateLink links a skill to an MCP surface and returns the link's id.
 func CreateLink(ctx context.Context, db database.DBTX, link NewLink) (uuid.UUID, error) {
-	if err := link.Target.Validate(); err != nil {
-		return uuid.Nil, err
-	}
-
-	mcpServerID, metaMCPServerID := link.Target.Columns()
-	row, err := repo.New(db).CreateMCPSkillLink(ctx, repo.CreateMCPSkillLinkParams{
-		OrganizationID:  link.OrganizationID,
-		ProjectID:       link.ProjectID,
-		SkillID:         link.SkillID,
-		PinnedVersionID: link.pinned(),
-		TargetKind:      string(link.Target.Kind),
-		McpServerID:     mcpServerID,
-		MetaMcpServerID: metaMCPServerID,
-		CreatedByUserID: link.CreatedByUserID,
-	})
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("create skill link: %w", err)
-	}
-	return row.ID, nil
+	return skilllink.CreateLink(ctx, db, link) //nolint:wrapcheck // thin alias of the skilllink writer
 }
 
 // UpsertLink links a skill to an MCP surface, or updates the pin of the live
-// link that already joins them, and returns the live link. Repeating the same
-// request leaves the link unchanged. Like [CreateLink], it validates the
-// target and relies on the foreign keys to keep the target in the project.
+// link that already joins them.
 func UpsertLink(ctx context.Context, db database.DBTX, link NewLink) (repo.McpSkillLink, error) {
-	if err := link.Target.Validate(); err != nil {
-		return repo.McpSkillLink{}, err
-	}
-
-	mcpServerID, metaMCPServerID := link.Target.Columns()
-	row, err := repo.New(db).UpsertMCPSkillLink(ctx, repo.UpsertMCPSkillLinkParams{
-		OrganizationID:  link.OrganizationID,
-		ProjectID:       link.ProjectID,
-		SkillID:         link.SkillID,
-		PinnedVersionID: link.pinned(),
-		TargetKind:      string(link.Target.Kind),
-		McpServerID:     mcpServerID,
-		MetaMcpServerID: metaMCPServerID,
-		CreatedByUserID: link.CreatedByUserID,
-	})
-	if err != nil {
-		return repo.McpSkillLink{}, fmt.Errorf("upsert skill link: %w", err)
-	}
-	return row, nil
-}
-
-func (link NewLink) pinned() uuid.NullUUID {
-	if link.PinnedVersionID == nil {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	}
-	return uuid.NullUUID{UUID: *link.PinnedVersionID, Valid: true}
+	return skilllink.UpsertLink(ctx, db, link) //nolint:wrapcheck // thin alias of the skilllink writer
 }
 
 // DeleteLink unlinks a skill from its surface, scoped to the caller's
-// organization and project. It reports whether a live link was removed.
+// organization and project.
 func DeleteLink(ctx context.Context, db database.DBTX, organizationID string, projectID, linkID uuid.UUID) (bool, error) {
-	removed, err := repo.New(db).DeleteMCPSkillLink(ctx, repo.DeleteMCPSkillLinkParams{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		ID:             linkID,
-	})
-	if err != nil {
-		return false, fmt.Errorf("delete skill link: %w", err)
-	}
-	return removed > 0, nil
+	return skilllink.DeleteLink(ctx, db, organizationID, projectID, linkID) //nolint:wrapcheck // thin alias of the skilllink writer
 }

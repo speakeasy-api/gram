@@ -315,9 +315,11 @@ DO UPDATE SET
 RETURNING *;
 
 -- name: GetMCPSkillLink :one
--- One live link in the caller's project with the names a link view shows.
--- The skill and target are joined without liveness filters so a link to an
--- archived skill or a removed target can still be inspected and removed.
+-- One link in the caller's project, live or removed, with the names a link
+-- view shows. A removed link is returned so an unlink can authorize against
+-- the link's skill and target before answering a repeat as a no-op. The skill
+-- and target are joined without liveness filters so a link to an archived
+-- skill or a removed target can still be inspected and removed.
 SELECT
     sqlc.embed(l),
     s.name AS skill_name,
@@ -342,8 +344,7 @@ LEFT JOIN meta_mcp_servers mm
   AND mm.id = l.meta_mcp_server_id
 WHERE l.organization_id = @organization_id
   AND l.project_id = @project_id
-  AND l.id = @id
-  AND l.deleted IS FALSE;
+  AND l.id = @id;
 
 -- name: ListMCPSkillLinks :many
 -- A page of the caller's project's live links, oldest first, with the names

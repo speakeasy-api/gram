@@ -1,4 +1,4 @@
-package mcpskills
+package skilllink
 
 import (
 	"errors"
