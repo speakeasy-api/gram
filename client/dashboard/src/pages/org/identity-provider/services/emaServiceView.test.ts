@@ -81,6 +81,7 @@ describe("providerView", () => {
 describe("unsupported providers", () => {
   it.each([
     { kind: "future_provider" },
+    { kind: "future_provider", unavailableReason: "not_trusted_by_endpoint" },
     { kind: "external", unavailableReason: "future_reason" },
     { kind: "speakeasy", unavailableReason: "future_reason" },
   ])("keeps availability unknown without inventing a fix: %j", (unknown) => {
@@ -96,6 +97,7 @@ describe("unsupported providers", () => {
     expect(provider.unavailable).toContain("Unknown availability");
     expect(provider.fix).toBeUndefined();
     expect(provider.issuerUrl).toBeUndefined();
+    expect(provider.unusedBySignIn).toBe(false);
     if (unknown.kind === "future_provider") {
       expect(provider.name).toBe("Unknown identity provider");
       expect(provider.key).not.toBe("external-default");

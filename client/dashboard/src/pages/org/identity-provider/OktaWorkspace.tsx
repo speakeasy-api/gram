@@ -28,9 +28,8 @@ import {
 
 export function OktaProviderCard(): JSX.Element {
   const { query, connection } = useOktaConnection();
-  if (connection != null && connection.provider !== "okta")
-    return <UnknownConnectionProvider />;
-  const connected = isConnected(connection);
+  const unknownProvider = connection != null && connection.provider !== "okta";
+  const connected = !unknownProvider && isConnected(connection);
   const unknownStatus =
     connection != null && !connected && connection.status !== "revoked";
   const status = enumPresentation(CONNECTION_STATUS, connection?.status ?? "", {
@@ -49,7 +48,7 @@ export function OktaProviderCard(): JSX.Element {
       <div className="flex flex-wrap items-center gap-3">
         <Icon name="plug" className="h-5 w-5" />
         <Heading variant="h3">Okta</Heading>
-        {!query.isPending && query.data !== undefined && (
+        {!unknownProvider && !query.isPending && query.data !== undefined && (
           <Badge variant={status.variant}>{statusLabel}</Badge>
         )}
       </div>
@@ -57,7 +56,9 @@ export function OktaProviderCard(): JSX.Element {
         Sync applications from Okta and set up Enterprise Managed Auth for your
         AI agents.
       </Text>
-      {query.isPending ? (
+      {unknownProvider ? (
+        <UnknownConnectionProvider />
+      ) : query.isPending ? (
         <SkeletonParagraph />
       ) : (
         <>
@@ -113,9 +114,8 @@ export function OktaWorkspace(): JSX.Element {
   );
   const navigate = useNavigate();
   const { query, connection } = useOktaConnection();
-  if (connection != null && connection.provider !== "okta")
-    return <UnknownConnectionProvider />;
-  const connected = isConnected(connection);
+  const unknownProvider = connection != null && connection.provider !== "okta";
+  const connected = !unknownProvider && isConnected(connection);
   const unknownStatus =
     connection != null && !connected && connection.status !== "revoked";
   return (
@@ -135,7 +135,9 @@ export function OktaWorkspace(): JSX.Element {
           </Text>
         )}
       </div>
-      {query.isPending ? (
+      {unknownProvider ? (
+        <UnknownConnectionProvider />
+      ) : query.isPending ? (
         <div className="flex flex-col gap-8">
           <SkeletonParagraph />
           <SkeletonParagraph />

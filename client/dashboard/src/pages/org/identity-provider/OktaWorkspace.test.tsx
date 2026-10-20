@@ -94,6 +94,13 @@ describe("Okta workspace", () => {
       ).toBeTruthy();
       expect(screen.queryByRole("tab")).toBeNull();
       expect(screen.queryByText(/Okta content:/)).toBeNull();
+      expect(screen.queryByText(/Leverage your Okta connection/)).toBeNull();
+      expect(screen.getByRole("region", { name: "Okta" })).toBeTruthy();
+      expect(
+        screen
+          .getByRole("link", { name: "All identity providers" })
+          .getAttribute("href"),
+      ).toBe("/example/identity?tab=identity-providers");
     },
   );
 
@@ -112,6 +119,11 @@ describe("Okta workspace", () => {
       screen.getByText(/managing this unsupported identity provider/),
     ).toBeTruthy();
     expect(screen.queryByRole("link", { name: /Okta/ })).toBeNull();
+    expect(
+      screen.getByRole("article", { name: "Okta identity provider" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Okta" })).toBeTruthy();
+    expect(screen.queryByText("Not connected")).toBeNull();
   });
 
   it.each([

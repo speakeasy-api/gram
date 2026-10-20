@@ -204,7 +204,7 @@ describe("Gateway instructions", () => {
   });
 
   it.each([undefined, "", "Original"])(
-    "edits the actual instructions and saves without a mode (saved: %s)",
+    "edits instructions without changing discovery mode (saved: %s)",
     (instructions) => {
       render(
         <GatewayInstructionsSection

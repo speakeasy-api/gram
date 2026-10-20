@@ -116,6 +116,7 @@ export function providerView(
   if (!supportsProvider(provider)) {
     return {
       ...base,
+      unusedBySignIn: false,
       name:
         provider.kind === "speakeasy"
           ? "Speakeasy"

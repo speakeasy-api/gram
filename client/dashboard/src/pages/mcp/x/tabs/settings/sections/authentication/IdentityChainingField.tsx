@@ -33,6 +33,7 @@ import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { isKnownEnumValue } from "@/lib/enum";
 import { mapWithConcurrency } from "@/lib/bounded-concurrency";
 import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
 import { formatRelativeTime } from "@/lib/dates";
@@ -56,7 +57,10 @@ import {
   oktaViewHref,
 } from "@/pages/org/identity-provider/tabs";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import type { IdentityChainingPreparation } from "@gram/client/models/components/identitychainingpreparation.js";
+import {
+  IdentityChainingPreparationState,
+  type IdentityChainingPreparation,
+} from "@gram/client/models/components/identitychainingpreparation.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -340,6 +344,9 @@ export function IdentityChainingField({
       });
     },
   });
+  const knownState =
+    read.data != null &&
+    isKnownEnumValue(IdentityChainingPreparationState, read.data.state);
   const staleTargets = staleIssuerIds.map((remoteSessionIssuerId) => ({
     userSessionIssuerId: userSessionIssuer.id,
     remoteSessionIssuerId,
@@ -379,6 +386,10 @@ export function IdentityChainingField({
           {
             target: staleTarget,
             generation: data.generation,
+            knownState: isKnownEnumValue(
+              IdentityChainingPreparationState,
+              data.state,
+            ),
             clientLabel:
               linkable.find((client) => client.id === data.clientId)
                 ?.clientId ?? data.externalClientId,
@@ -562,6 +573,7 @@ export function IdentityChainingField({
       !selected ||
       !target ||
       !read.data ||
+      !knownState ||
       !scopesValid ||
       !grantDeclaration ||
       publicClient ||
@@ -588,7 +600,8 @@ export function IdentityChainingField({
     prepare.mutate(prepareRequest);
   };
   const disable = () => {
-    if (!target || !read.data) return;
+    if (!target || !read.data || !knownState || !chainingUnlinkable(read.data))
+      return;
     setPrepareOutcome(null);
     unlink.mutate(
       {
@@ -612,6 +625,7 @@ export function IdentityChainingField({
   const shownState = read.data ? displayedChainingState(read.data) : null;
   const canUnlink = chainingUnlinkable(read.data);
   const enableBlocked =
+    !knownState ||
     !supportedProviders ||
     noneUsable ||
     publicClient ||
@@ -649,6 +663,7 @@ export function IdentityChainingField({
         gramProject={gramProject}
         target={binding.target}
         generation={binding.generation}
+        knownState={binding.knownState}
         clientLabel={binding.clientLabel}
         unchecked={unchecked(binding.target.remoteSessionIssuerId)}
         vendor={vendor}
@@ -758,8 +773,10 @@ export function IdentityChainingField({
                 <Button
                   variant="secondary"
                   size="sm"
-                  disabled={pending}
-                  onClick={() => setConfirmDisable(true)}
+                  disabled={pending || !knownState}
+                  onClick={() => {
+                    if (knownState) setConfirmDisable(true);
+                  }}
                 >
                   Turn off
                 </Button>
@@ -1147,7 +1164,7 @@ export function IdentityChainingField({
             </Button>
             <Button
               variant="destructive-primary"
-              disabled={unlink.isPending}
+              disabled={unlink.isPending || !knownState || !canUnlink}
               onClick={disable}
             >
               {unlink.isPending ? "Turning off…" : "Turn off"}
@@ -1281,6 +1298,7 @@ function StaleBinding({
   gramProject,
   target,
   generation,
+  knownState,
   clientLabel,
   unchecked,
   vendor,
@@ -1293,6 +1311,7 @@ function StaleBinding({
     resource: string;
   };
   generation: number;
+  knownState: boolean;
   clientLabel: string | undefined;
   /** Its authorization server couldn't be checked, so it may still be current. */
   unchecked: boolean;
@@ -1319,11 +1338,21 @@ function StaleBinding({
       <Alert variant="warning" alignTop>
         <div className="flex flex-col items-start gap-2">
           <Text small className="block">
-            Enterprise Managed Authorization is still on for client{" "}
-            {clientLabel ?? "an earlier client"}.{" "}
-            {unchecked
-              ? "Speakeasy couldn’t check that client’s authorization server. You can still turn it off."
-              : "This server no longer uses that client’s authorization server. Turn it off before you replace or remove the client."}
+            {knownState ? (
+              <>
+                Enterprise Managed Authorization is still on for client{" "}
+                {clientLabel ?? "an earlier client"}.{" "}
+                {unchecked
+                  ? "Speakeasy couldn’t check that client’s authorization server. You can still turn it off."
+                  : "This server no longer uses that client’s authorization server. Turn it off before you replace or remove the client."}
+              </>
+            ) : (
+              <>
+                Enterprise Managed Authorization has an unknown state for client{" "}
+                {clientLabel ?? "an earlier client"}. Refresh the page before
+                changing this setup.
+              </>
+            )}
           </Text>
           <RequireScope
             scope="project:write"
@@ -1333,8 +1362,10 @@ function StaleBinding({
             <Button
               variant="secondary"
               size="sm"
-              disabled={unlink.isPending}
-              onClick={() => setConfirming(true)}
+              disabled={unlink.isPending || !knownState}
+              onClick={() => {
+                if (knownState) setConfirming(true);
+              }}
             >
               Turn off
             </Button>
@@ -1349,10 +1380,12 @@ function StaleBinding({
         confirmLabel="Turn off"
         pendingLabel="Turning off…"
         isPending={unlink.isPending}
+        confirmDisabled={!knownState}
         error={
           unlink.error ? <ApiErrorAlert error={unlink.error} /> : undefined
         }
-        onConfirm={() =>
+        onConfirm={() => {
+          if (!knownState) return;
           unlink.mutate({
             request: {
               gramProject,
@@ -1361,8 +1394,8 @@ function StaleBinding({
                 expectedGeneration: generation,
               },
             },
-          })
-        }
+          });
+        }}
       />
     </>
   );

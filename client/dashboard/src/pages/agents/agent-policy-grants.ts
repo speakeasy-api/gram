@@ -418,8 +418,8 @@ export interface AgentPolicyDiff {
 
 /**
  * What to send to reach `next` from the stored ceiling. Grant identity is the
- * scope and selector together, so a changed permission is a removal and an
- * addition rather than an update.
+ * effect, scope, and selector together, so a changed permission is a removal
+ * and an addition rather than an update.
  */
 export function diffAgentPolicyGrants(
   stored: AgentPolicyGrant[],

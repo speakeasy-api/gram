@@ -579,6 +579,54 @@ describe("identity chaining vouched for by Speakeasy", () => {
         /Refresh the page to check for an update before changing this setup/,
       ),
     ).toBeTruthy();
+    expect(enableButton().disabled).toBe(true);
+    const disable = screen.getByRole("button", {
+      name: "Turn off",
+    }) as HTMLButtonElement;
+    expect(disable.disabled).toBe(true);
+    fireEvent.click(enableButton());
+    fireEvent.click(disable);
+    expect(state.prepare).not.toHaveBeenCalled();
+    expect(state.unlink).not.toHaveBeenCalled();
+  });
+  it("blocks an unknown state with no binding from turning on", () => {
+    read.data = {
+      ...unlinked,
+      state: "future_state",
+      emaProviders: providersOf(speakeasy),
+    };
+    render(speakeasyField());
+    expect(enableButton().disabled).toBe(true);
+    fireEvent.click(enableButton());
+    expect(state.prepare).not.toHaveBeenCalled();
+  });
+
+  it("keeps an unknown provider visible alongside a usable provider despite a known unused reason", () => {
+    read.data = {
+      ...bound("first"),
+      emaProviders: providersOf(speakeasy, {
+        kind: "future_provider",
+        unavailableReason: "not_trusted_by_endpoint",
+      }),
+    };
+    render(speakeasyField());
+    expect(screen.getByText("Unknown identity provider")).toBeTruthy();
+    expect(screen.getByText(/Unknown availability/)).toBeTruthy();
+  });
+
+  it("blocks a pending turn-off confirmation when a refetch reports an unknown state", () => {
+    read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
+    const rendered = render(speakeasyField());
+    fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
+    read.data = { ...read.data, state: "future_state" };
+    rendered.rerender(speakeasyField());
+    const confirmation = within(screen.getByRole("dialog")).getByRole(
+      "button",
+      { name: "Turn off" },
+    ) as HTMLButtonElement;
+    expect(confirmation.disabled).toBe(true);
+    fireEvent.click(confirmation);
+    expect(state.unlink).not.toHaveBeenCalled();
   });
   const chain = () => screen.getByRole("list", { name: "How people get in" });
   const vouchers = () =>
@@ -1238,6 +1286,71 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
   });
+
+  it.each([false, true])(
+    "blocks an unknown stale binding (confirmation already open: %s)",
+    (confirmFirst) => {
+      prmMock.value = {
+        metadata: { authorizationServers: ["https://tracker.example.com"] },
+      };
+      issuerNames.items = [
+        {
+          id: "tracker",
+          name: "Tracker",
+          issuer: "https://tracker.example.com",
+        },
+        { id: "wiki", name: "Wiki", issuer: "https://wiki.example.com" },
+      ];
+      staleRead.byIssuer = {
+        wiki: {
+          ...bound("wiki-client"),
+          state: confirmFirst ? "ready" : "future_state",
+          generation: 4,
+        },
+      };
+      const element = () => (
+        <IdentityChainingField
+          userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
+          providers={{ external: false }}
+          linkedClients={
+            [
+              {
+                id: "wiki-client",
+                clientId: "wiki-client",
+                remoteSessionIssuerId: "wiki",
+              },
+              {
+                id: "tracker-client",
+                clientId: "tracker-client",
+                remoteSessionIssuerId: "tracker",
+              },
+            ] as RemoteSessionClient[]
+          }
+          resource="https://example.com/mcp"
+          onlyWhenOn
+        />
+      );
+      const rendered = render(element());
+      if (confirmFirst) {
+        fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
+        staleRead.byIssuer.wiki = {
+          ...staleRead.byIssuer.wiki,
+          state: "future_state",
+        };
+        rendered.rerender(element());
+      }
+      expect(
+        screen.getByText(/unknown state for client wiki-client/),
+      ).toBeTruthy();
+      for (const button of screen.getAllByRole("button", {
+        name: "Turn off",
+      })) {
+        expect((button as HTMLButtonElement).disabled).toBe(true);
+        fireEvent.click(button);
+      }
+      expect(state.unlink).not.toHaveBeenCalled();
+    },
+  );
 
   it("shows a failed read when only an on binding should show", () => {
     read.data = undefined as unknown as Record<string, unknown>;

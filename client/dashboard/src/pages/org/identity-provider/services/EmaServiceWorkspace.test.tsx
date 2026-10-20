@@ -1044,6 +1044,40 @@ describe("one service", () => {
 });
 
 describe("unsupported enabled identity providers", () => {
+  it("keeps known missing-provider warnings without offering removal in a mixed unsupported list", () => {
+    const missing = view({
+      key: "external-missing",
+      kind: "external",
+      name: "Missing provider",
+      remoteSessionIssuerId: "missing",
+    });
+    const unsupported = view({
+      key: "unknown-future-provider",
+      kind: "future_provider" as ProviderView["kind"],
+      name: "Unknown identity provider",
+      usable: false,
+      unavailable:
+        "Unknown availability. Refresh the page to check for an update.",
+    });
+    mocks.rows = [
+      { ...linear, isDefault: false, providers: [missing, unsupported] },
+    ];
+    show();
+    const rows = within(
+      screen.getByRole("list", { name: "Enabled identity providers" }),
+    );
+    expect(rows.getByText("No longer available.")).toBeTruthy();
+    expect(rows.getByText(/Unknown availability/)).toBeTruthy();
+    expect(rows.queryByText(/Uncheck it to save/)).toBeNull();
+    expect(editButton().disabled).toBe(true);
+    const restore = screen.getByRole("button", {
+      name: "Use default",
+    }) as HTMLButtonElement;
+    expect(restore.disabled).toBe(true);
+    fireEvent.click(editButton());
+    fireEvent.click(restore);
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
   it.each([
     {
       key: "unknown-future-provider",

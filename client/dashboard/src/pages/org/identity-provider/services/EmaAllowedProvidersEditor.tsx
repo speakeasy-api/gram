@@ -123,12 +123,16 @@ export function EmaAllowedProvidersEditor({
   // Judged on every render, so a draft started before the candidates loaded
   // is checked against them once they have. An entry that is only paused or
   // disabled stays valid and gets a readiness note instead.
-  const available = (entry: ProviderCandidate): boolean =>
-    !candidatesReady ||
-    (candidates.some((c) => c.key === entry.key) &&
-      (entry.kind === "speakeasy" ||
-        current.find((p) => p.key === entry.key)?.unavailableReason !==
-          "deleted"));
+  const available = (entry: ProviderCandidate): boolean | undefined => {
+    const provider = current.find((p) => p.key === entry.key);
+    if (provider && !supportsProvider(provider)) return undefined;
+    return (
+      !candidatesReady ||
+      (candidates.some((c) => c.key === entry.key) &&
+        (entry.kind === "speakeasy" ||
+          provider?.unavailableReason !== "deleted"))
+    );
+  };
   const readiness = (key: string): string | undefined => {
     if (key === "speakeasy" && speakeasyRecreated)
       return canEdit
@@ -367,6 +371,7 @@ export function EmaAllowedProvidersEditor({
                           <EntryNote
                             available={available(row)}
                             readiness={on ? readiness(row.key) : undefined}
+                            canEdit
                           />
                         </span>
                       </li>
@@ -388,8 +393,9 @@ export function EmaAllowedProvidersEditor({
                       >
                         {accepted && (
                           <EntryNote
-                            available={!supportsEditing || available(row)}
+                            available={available(row)}
                             readiness={readiness(row.key)}
+                            canEdit={canEdit && supportsEditing}
                           />
                         )}
                       </AcceptedRow>
@@ -566,14 +572,16 @@ function AcceptedRow({
 function EntryNote({
   available,
   readiness,
+  canEdit,
 }: {
-  available: boolean;
+  available: boolean | undefined;
   readiness: string | undefined;
+  canEdit: boolean;
 }): JSX.Element | null {
-  if (!available)
+  if (available === false)
     return (
       <Text as="span" small className="text-default-warning">
-        No longer available. Uncheck it to save.
+        No longer available.{canEdit ? " Uncheck it to save." : ""}
       </Text>
     );
   if (!readiness) return null;

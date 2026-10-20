@@ -5,6 +5,7 @@ import {
   formatScaledUsd,
   formatSpendUsd,
   sumSelectedCost,
+  UnsupportedSpendBreakdownError,
   validateSpendBreakdown,
   type SpendBreakdownData,
   type SpendProduct,
@@ -37,7 +38,39 @@ describe("metered spend precision", () => {
         products: [{ ...storage, costUsd: "1" }],
       };
       data[field] = unrecognized("future_value");
-      expect(() => validateSpendBreakdown(data)).toThrow("Refresh the page");
+      expect(() => validateSpendBreakdown(data)).toThrow(
+        UnsupportedSpendBreakdownError,
+      );
+    },
+  );
+
+  it.each([
+    { id: unrecognized("future_product") },
+    { id: unrecognized("__proto__") },
+    { id: unrecognized("constructor") },
+    { unit: unrecognized("future_unit") },
+  ])(
+    "rejects the entire response for unsupported product settings %j",
+    (settings) => {
+      const day = new Date("2026-09-19T00:00:00Z");
+      const data: SpendBreakdownData = {
+        availability: "available",
+        currency: "USD",
+        pricingBasis: "current_payg_list_price",
+        queriedAt: day,
+        window: { from: day, to: day },
+        billingCycles: [],
+        totalCostUsd: "3",
+        products: [
+          { ...storage, costUsd: "1" },
+          { ...storage, id: "mcp_egress", unit: "bytes", costUsd: "2" },
+        ],
+      };
+      expect(validateSpendBreakdown(data)).toBe(data);
+      data.products[1] = { ...data.products[1]!, ...settings };
+      expect(() => validateSpendBreakdown(data)).toThrow(
+        UnsupportedSpendBreakdownError,
+      );
     },
   );
 
