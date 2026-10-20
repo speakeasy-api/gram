@@ -224,6 +224,18 @@ SET remote_session_issuer_id = @remote_session_issuer_id::uuid
 WHERE id = @mcp_server_id::uuid
   AND project_id = @project_id::uuid;
 
+-- One server's upstream OAuth client association. The app records it when
+-- User Identity is configured on the server, or when the server is the only
+-- consumer of its user session issuer; the seed writes it directly.
+-- name: ServersInsertServerClientAssociation :exec
+INSERT INTO mcp_server_remote_session_clients
+  (id, project_id, organization_id, mcp_server_id, remote_session_client_id,
+   client_attachment_scope)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
+       c.id, c.attachment_scope
+FROM remote_session_clients AS c
+WHERE c.id = @remote_session_client_id::uuid;
+
 -- Linear's protected resource, read recently, with a scope pin for the server's scope panel.
 -- name: ServersUpsertLinearProtectedResource :exec
 INSERT INTO remote_protected_resources
@@ -344,9 +356,9 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
   (@tracker_id::uuid, @project_id::uuid, 'Acme Tracker', 'acme-tracker',
-   NULL, @remote_tracker_id::uuid, @issuer_workforce_id::uuid, 'private'),
+   NULL, @remote_tracker_id::uuid, @issuer_workforce_id::uuid, 'disabled'),
   (@wiki_id::uuid, @project_id::uuid, 'Acme Wiki', 'acme-wiki',
-   NULL, @remote_wiki_id::uuid, @issuer_workforce_id::uuid, 'private');
+   NULL, @remote_wiki_id::uuid, @issuer_workforce_id::uuid, 'disabled');
 
 -- Each service's authorization server accepts ID-JAGs from a confidential client.
 -- name: ServersInsertEMAVendorIssuers :exec

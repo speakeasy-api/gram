@@ -8,12 +8,15 @@
 // linked to the member servers it passes in. Any live member of the
 // surface's organization who reaches the surface receives its skills. Each
 // link resolves to its pinned version or else the skill's latest valid
-// version, and when several links carry the same skill name the resolver
-// keeps exactly one version: a pin beats a link that tracks the latest
-// version, and between two different pins the newer version wins.
+// version, and when several links carry the same skill the resolver keeps
+// exactly one version: a pin beats a link that tracks the latest version, and
+// between two different pins the newer version wins. Skills from different
+// projects that share a name are separate skills and are all served.
 //
 // Every served skill is a single SKILL.md file addressed as
-// skill://<name>/SKILL.md; the package produces the SEP-2640 entry shape for
+// skill://<project-slug>/<name>/SKILL.md; the project slug keeps same-named
+// skills apart, and the final path segment is the frontmatter name SEP-2640
+// requires. The package produces the SEP-2640 entry shape for
 // it, and the MCP surfaces decide when the extension is advertised and how
 // its methods are dispatched.
 package mcpskills

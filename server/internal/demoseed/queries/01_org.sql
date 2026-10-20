@@ -24,8 +24,8 @@ SELECT EXISTS (
 -- (Logs page and other EnterpriseGate features). Demo identity is carried by
 -- the fixed org id (constants.DemoOrganizationID) — NOT by account type, which
 -- the auth callback overwrites anyway.
-INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted)
-VALUES (@org_id::text, @org_name::text, @org_slug::text, 'enterprise', TRUE)
+INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted, scim_enabled)
+VALUES (@org_id::text, @org_name::text, @org_slug::text, 'enterprise', TRUE, TRUE)
 ON CONFLICT (id) DO UPDATE
   -- whitelisted is repaired, not just set on insert: a developer who logged
   -- in before seeding already has this row, created un-whitelisted by the
@@ -33,7 +33,8 @@ ON CONFLICT (id) DO UPDATE
   -- gate.
   SET name = EXCLUDED.name, slug = EXCLUDED.slug,
       gram_account_type = EXCLUDED.gram_account_type,
-      whitelisted = EXCLUDED.whitelisted;
+      whitelisted = EXCLUDED.whitelisted,
+      scim_enabled = EXCLUDED.scim_enabled;
 
 -- name: OrgUpsertOnboarding :exec
 INSERT INTO organization_onboarding (organization_id, preset, mdm_vendor, mdm_vendor_name)

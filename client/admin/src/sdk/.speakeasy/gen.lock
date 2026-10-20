@@ -54,6 +54,7 @@ trackedFiles:
   src/funcs/adminGetGlobalIssuer.ts: {}
   src/funcs/adminGetGlobalIssuerDuplicatePreflight.ts: {}
   src/funcs/adminGetGlobalIssuerMigratePreflight.ts: {}
+  src/funcs/adminGetHookClients.ts: {}
   src/funcs/adminGetInferenceKeys.ts: {}
   src/funcs/adminGetInferenceSpendHistory.ts: {}
   src/funcs/adminGetMcpServerToolCalls.ts: {}
@@ -143,10 +144,15 @@ trackedFiles:
   src/models/components/admincustomerusage.ts: {}
   src/models/components/admincustomerusageproductcost.ts: {}
   src/models/components/admincustomerusageresponse.ts: {}
+  src/models/components/admindeviceagentcell.ts: {}
   src/models/components/adminexternalmcpmigrationcandidate.ts: {}
   src/models/components/adminexternalmcpmigrationoutcome.ts: {}
   src/models/components/adminexternalmcpmigrationrequest.ts: {}
   src/models/components/adminexternalmcpmigrationresult.ts: {}
+  src/models/components/adminhookclientorganization.ts: {}
+  src/models/components/adminhookclientsessioncell.ts: {}
+  src/models/components/adminhookclientsresult.ts: {}
+  src/models/components/admininferencehookcell.ts: {}
   src/models/components/admininferencekey.ts: {}
   src/models/components/admininferencekeycause.ts: {}
   src/models/components/admininferencekeylimit.ts: {}
@@ -300,6 +306,7 @@ trackedFiles:
   src/models/operations/admingetglobalissuer.ts: {}
   src/models/operations/admingetglobalissuerduplicatepreflight.ts: {}
   src/models/operations/admingetglobalissuermigratepreflight.ts: {}
+  src/models/operations/admingethookclients.ts: {}
   src/models/operations/admingetinferencekeys.ts: {}
   src/models/operations/admingetinferencespendhistory.ts: {}
   src/models/operations/admingetmcpservertoolcalls.ts: {}
@@ -353,6 +360,8 @@ trackedFiles:
   src/react-query/adminGetGlobalIssuerDuplicatePreflight.ts: {}
   src/react-query/adminGetGlobalIssuerMigratePreflight.core.ts: {}
   src/react-query/adminGetGlobalIssuerMigratePreflight.ts: {}
+  src/react-query/adminGetHookClients.core.ts: {}
+  src/react-query/adminGetHookClients.ts: {}
   src/react-query/adminGetInferenceKeys.core.ts: {}
   src/react-query/adminGetInferenceKeys.ts: {}
   src/react-query/adminGetInferenceSpendHistory.core.ts: {}
@@ -810,6 +819,19 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminGetHookClients:
+    speakeasy-default-admin-get-hook-clients:
+      parameters:
+        query:
+          window_days: 15
+          refresh: false
+      responses:
+        "200":
+          application/json: {"device_agents": [{"day": "2026-01-27", "machines": 773425, "organization_id": "<id>", "version": "<value>"}], "from_cache": false, "inference": [{"day": "2026-04-27", "events": 100846, "organization_id": "<id>", "sessions": 784612, "surface": "<value>", "users": 471482}], "organizations": [], "queried_at": "2026-05-11T11:31:26.857Z", "sessions": [], "window_days": 708711}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminGetInferenceKeys:
     speakeasy-default-admin-get-inference-keys:
       parameters:

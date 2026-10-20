@@ -352,6 +352,22 @@ func (q *Queries) PostflightIDInertUpstreamSessions(ctx context.Context, remoteS
 	return count, err
 }
 
+const postflightIDInfraGroupMappedRoles = `-- name: PostflightIDInfraGroupMappedRoles :one
+SELECT count(DISTINCT drm.role_urn) FROM directory_role_mappings drm
+JOIN directory_groups dg ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+WHERE drm.organization_id = $1::text AND drm.deleted IS FALSE
+  AND dg.name = 'Infra'
+  AND dg.deleted IS FALSE AND dg.workos_deleted IS FALSE
+`
+
+func (q *Queries) PostflightIDInfraGroupMappedRoles(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDInfraGroupMappedRoles, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDInvalidSubjectRules = `-- name: PostflightIDInvalidSubjectRules :one
 WITH rules AS (
   SELECT 'admission' AS source, a.subject, a.match_kind, i.allow_wildcard_admission
@@ -733,6 +749,18 @@ type PostflightIDSelfClientsParams struct {
 // Exactly one self client in the tenant.
 func (q *Queries) PostflightIDSelfClients(ctx context.Context, arg PostflightIDSelfClientsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDSelfClients, arg.ProjectID, arg.OrgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDServerClientAssociations = `-- name: PostflightIDServerClientAssociations :one
+SELECT count(*) FROM mcp_server_remote_session_clients
+WHERE project_id = $1::uuid AND deleted IS FALSE
+`
+
+func (q *Queries) PostflightIDServerClientAssociations(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDServerClientAssociations, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

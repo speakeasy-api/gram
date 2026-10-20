@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -37,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -69,6 +72,7 @@ type Service struct {
 	authz              *authz.Engine
 	audit              *audit.Logger
 	cache              cache.Cache
+	ahpUploadLimiter   *ratelimit.Limiter
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
@@ -104,6 +108,16 @@ type Service struct {
 	// relative to the attribute_metrics_summaries MV cutoff. Defaults to
 	// time.Now via NewService; access through now() for nil-safety.
 	nowFunc func() time.Time
+	// claudeBudget bounds how long the legacy /rpc/hooks.claude endpoint waits
+	// for a verdict before it answers from the org's fail-open posture.
+	claudeBudget time.Duration
+	// claudeDrains tracks legacy Claude handlers and posture reads that can
+	// outlive the response, so tests can await them deterministically.
+	claudeDrains sync.WaitGroup
+
+	// deviceAgentTokens authenticates headless devices that present a
+	// device-agent token instead of an agent API key. Nil refuses them.
+	deviceAgentTokens *deviceagenttoken.Issuer
 }
 
 // now returns the current time via the injected clock, falling back to
@@ -261,6 +275,7 @@ func NewService(
 	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord],
 	sessionsMgr *sessions.Manager,
 	cacheAdapter cache.Cache,
+	uploadLimitStore ratelimit.Store,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	authz *authz.Engine,
@@ -280,6 +295,7 @@ func NewService(
 	orgHosts *orghost.Resolver,
 	jwtSecret string,
 	riskRecorder *metering.RiskRecorder,
+	deviceAgentTokens *deviceagenttoken.Issuer,
 ) *Service {
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
@@ -293,6 +309,7 @@ func NewService(
 		authz:              authz,
 		audit:              auditLogger,
 		cache:              cacheAdapter,
+		ahpUploadLimiter:   ratelimit.New(uploadLimitStore, "ahp-upload", ratelimit.Rate{Tokens: ahpUploadBurst, Interval: ahpUploadTTL, Burst: ahpUploadBurst}, ratelimit.WithMetrics(meterProvider)),
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
@@ -312,38 +329,127 @@ func NewService(
 		orgHostCache:       newOrgDefaultHostCache(),
 		jwtSecret:          jwtSecret,
 		nowFunc:            time.Now,
+		claudeBudget:       legacyClaudeHookDecisionBudget,
+		claudeDrains:       sync.WaitGroup{},
+		deviceAgentTokens:  deviceAgentTokens,
 	}
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	// A refused device-agent token is the better answer than a missing key
+	// for a device that sent no key.
+	if key == "" && schema.Name == constants.KeySecurityScheme {
+		if err := deviceagenttoken.AuthFailure(ctx); err != nil {
+			return ctx, fmt.Errorf("device-agent token refused: %w", err)
+		}
+	}
+	// A workload admitted by its token and refused at its project reaches the
+	// key requirement with its admission still on the context. A key cannot
+	// authorize on top of that admission, so the workload's refusal stands.
+	if schema.Name == constants.KeySecurityScheme && deviceagenttoken.IsWorkloadActor(ctx) {
+		if err := deviceagenttoken.AuthFailure(ctx); err != nil {
+			return ctx, fmt.Errorf("device-agent token refused: %w", err)
+		}
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+	if schema.Name == constants.ProjectSlugSecuritySchema && deviceagenttoken.IsWorkloadActor(ctx) {
+		return s.authorizeWorkloadProject(ctx, key, schema)
+	}
+
 	ctx, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize hooks api key: %w", err)
 	}
-	if schema.Name != constants.KeySecurityScheme || !isAgentActor(ctx) {
+	if !isAgentActor(ctx) {
 		return ctx, nil
 	}
 
-	// Agent-principal keys may only reach the ingestion methods.
+	switch schema.Name {
+	case constants.KeySecurityScheme:
+		// Agent-principal keys may only reach the ingestion methods.
+		switch method, _ := ctx.Value(goa.MethodKey).(string); method {
+		case "cursor", "codex", "logs", "metrics":
+		default:
+			return ctx, oops.C(oops.CodeForbidden)
+		}
+	case constants.ProjectSlugSecuritySchema:
+		// Every method an agent key reaches pairs the key with this scheme, so
+		// the project-scoped hooks check runs here, once the project resolves.
+		if err := s.requireAgentHooksIngest(ctx); err != nil {
+			return ctx, err
+		}
+	}
+	return ctx, nil
+}
+
+// JWTAuth admits a device-agent token on the ingestion methods; the project step
+// that follows binds the request. Without a token the context passes to the API
+// key scheme.
+func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
+	if token == "" {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if !deviceagenttoken.IsToken(token) {
+		// A bearer is presented but is not a device-agent token.
+		deviceagenttoken.MarkInvalidToken(ctx)
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if s.deviceAgentTokens == nil {
+		refusal := oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
+		return deviceagenttoken.WithAuthFailure(ctx, refusal), refusal
+	}
 	switch method, _ := ctx.Value(goa.MethodKey).(string); method {
 	case "cursor", "codex", "logs", "metrics":
 	default:
 		return ctx, oops.C(oops.CodeForbidden)
 	}
-	if err := s.requireAgentHooksIngest(ctx); err != nil {
-		return ctx, err
+
+	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	if err != nil {
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
-	return ctx, nil
+	return admitted, nil
+}
+
+// authorizeWorkloadProject binds a workload's hooks to the Gram-Project named;
+// requireAgentHooksIngest decides whether it may send there.
+func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	if _, ok := deviceagenttoken.AssignedAgentFromContext(ctx); !ok {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	// Refused here rather than left to project resolution, which would bind
+	// an organization's only project when none is named.
+	if strings.TrimSpace(key) == "" {
+		err := oops.E(oops.CodeForbidden, nil, "hooks must name the project they are sent to")
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+
+	authorized, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		err = fmt.Errorf("authorize workload hooks project: %w", err)
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	// The workload stays the actor; attribution, spend and session scoping read
+	// the agent it acts for through deviceagenttoken.EffectiveAgent.
+	if err := s.requireAgentHooksIngest(authorized); err != nil {
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	return authorized, nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, nil),
-	)
+	server := srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, nil)
+	// Only these methods accept device-agent tokens.
+	server.Cursor = deviceagenttoken.BearerChallenge(server.Cursor)
+	server.Codex = deviceagenttoken.BearerChallenge(server.Codex)
+	server.Logs = deviceagenttoken.BearerChallenge(server.Logs)
+	server.Metrics = deviceagenttoken.BearerChallenge(server.Metrics)
+	server.Claude = deviceagenttoken.BearerChallenge(server.Claude)
+	server.Ingest = deviceagenttoken.BearerChallenge(server.Ingest)
+	srv.Mount(mux, server)
 	AttachServerNames(mux, service)
 }
 

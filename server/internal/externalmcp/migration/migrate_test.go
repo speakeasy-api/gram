@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -100,9 +101,14 @@ func TestRunSwitchesServerInPlace(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, migrationsBefore+1, migrationsAfter)
 
-	candidates, err := ti.migrator.ListCandidates(ctx)
-	require.NoError(t, err)
-	require.Empty(t, candidates)
+	// The disabled toolset is listed again, to be deleted once the switch is
+	// confirmed; deleting it leaves the server alone.
+	leftover := findCandidate(t, ctx, ti, server)
+	require.Equal(t, migration.ActionDelete, leftover.Action)
+	require.True(t, containsSubstring(leftover.DeleteReasons, "already migrated"), "delete reasons %q", leftover.DeleteReasons)
+	deleted := migrate(t, ctx, ti, false, server)
+	require.Equal(t, migration.StatusDeleted, deleted[0].Status, deleted[0].Reason)
+	require.Equal(t, switched, readServer(t, ctx, ti, server))
 }
 
 func TestRunDialsTheRecordedSessionResource(t *testing.T) {
@@ -163,6 +169,60 @@ func TestRunCopiesHeaders(t *testing.T) {
 	require.NotEqual(t, "stored-value", headers[1].Value.String)
 }
 
+func TestRunMigratesServersWithoutUpstreamSignIn(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		opts    serverOptions
+		warning string
+	}{
+		{name: "no sign-in provider", opts: serverOptions{slug: "no-issuer", remoteURL: "https://mcp.example.com/mcp", noIssuer: true}},
+		{name: "sign-in provider without an upstream client", opts: serverOptions{slug: "no-client", remoteURL: "https://mcp.example.com/mcp", noClient: true}},
+		{name: "headers users send", opts: serverOptions{slug: "user-headers", remoteURL: "https://mcp.example.com/mcp", noIssuer: true, headers: []byte(`[{"name":"X-Api-Key"}]`)}},
+		{name: "per-tool definitions", opts: serverOptions{slug: "per-tool", remoteURL: "https://mcp.example.com/mcp", noIssuer: true, perTool: true, headers: []byte(`[{"name":"X-Api-Key"}]`)}},
+		{name: "other tools", opts: serverOptions{slug: "other-tools", remoteURL: "https://mcp.example.com/mcp", otherTool: true}, warning: "which are dropped"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMigrator(t)
+			server := seedServer(t, ctx, ti, tc.opts)
+			before := countIssuersAndClients(t, ctx, ti)
+
+			outcomes := migrate(t, ctx, ti, false, server)
+			require.Equal(t, migration.StatusMigrated, outcomes[0].Status, outcomes[0].Reason)
+			if tc.warning != "" {
+				require.True(t, containsSubstring(outcomes[0].Warnings, tc.warning), "warnings %q do not mention %q", outcomes[0].Warnings, tc.warning)
+			} else {
+				require.False(t, containsSubstring(outcomes[0].Warnings, "dropped"), "warnings %q", outcomes[0].Warnings)
+			}
+
+			// The server keeps whatever sign-in provider it had and gains no
+			// upstream issuer, and nothing is created to sign in with.
+			switched := readServer(t, ctx, ti, server)
+			require.False(t, switched.ToolsetID.Valid)
+			require.Equal(t, conv.ToNullUUID(outcomes[0].RemoteMcpServerID), switched.RemoteMcpServerID)
+			require.Equal(t, server.toolset.UserSessionIssuerID, switched.UserSessionIssuerID)
+			if !tc.opts.otherTool {
+				require.False(t, switched.RemoteSessionIssuerID.Valid)
+			}
+			require.Equal(t, before, countIssuersAndClients(t, ctx, ti))
+
+			// Declared headers carry over as pass-throughs, whichever kind of
+			// definition declared them.
+			if tc.opts.headers != nil {
+				headers, err := repo.New(ti.conn).ListRemoteHeadersFixture(ctx, outcomes[0].RemoteMcpServerID)
+				require.NoError(t, err)
+				require.Len(t, headers, 1)
+				require.Equal(t, "X-Api-Key", headers[0].Name)
+				require.True(t, headers[0].ValueFromRequestHeader.Valid)
+			}
+		})
+	}
+}
+
 func TestListCandidatesBlocksIneligibleServers(t *testing.T) {
 	t.Parallel()
 
@@ -171,14 +231,6 @@ func TestListCandidatesBlocksIneligibleServers(t *testing.T) {
 		blocker string
 		seed    func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer
 	}{
-		{name: "no issuer", blocker: "no sign-in provider", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
-			t.Helper()
-			return seedServer(t, ctx, ti, serverOptions{slug: "no-issuer", remoteURL: "https://mcp.example.com/mcp", noIssuer: true})
-		}},
-		{name: "user headers without OAuth", blocker: "send their own credentials", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
-			t.Helper()
-			return seedServer(t, ctx, ti, serverOptions{slug: "user-headers", remoteURL: "https://mcp.example.com/mcp", headers: []byte(`[{"name":"X-Api-Key"}]`)})
-		}},
 		{name: "no server row", blocker: "no server row", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
 			t.Helper()
 			return seedServer(t, ctx, ti, serverOptions{slug: "legacy-only", remoteURL: "https://mcp.example.com/mcp", noWrapper: true})
@@ -217,6 +269,12 @@ func TestListCandidatesBlocksIneligibleServers(t *testing.T) {
 			t.Helper()
 			server := seedServer(t, ctx, ti, serverOptions{slug: "shared-a", remoteURL: "https://mcp.example.com/mcp"})
 			seedServer(t, ctx, ti, serverOptions{slug: "shared-b", remoteURL: "https://mcp.example.com/mcp", sharedIssuer: &server})
+			return server
+		}},
+		{name: "issuer shared with an enabled toolset", blocker: "another enabled toolset", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
+			t.Helper()
+			server := seedServer(t, ctx, ti, serverOptions{slug: "toolset-a", remoteURL: "https://mcp.example.com/mcp"})
+			seedServer(t, ctx, ti, serverOptions{slug: "toolset-b", remoteURL: "https://mcp.example.com/mcp", sharedIssuer: &server, noWrapper: true})
 			return server
 		}},
 	}
@@ -268,7 +326,7 @@ func TestRunStopsAtFirstFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMigrator(t)
-	blocked := seedServer(t, ctx, ti, serverOptions{slug: "blocked", remoteURL: "https://mcp.example.com/mcp", noIssuer: true})
+	blocked := seedServer(t, ctx, ti, serverOptions{slug: "blocked", remoteURL: "https://mcp.example.com/mcp", noWrapper: true})
 	ready := seedServer(t, ctx, ti, serverOptions{slug: "ready", remoteURL: "https://mcp.example.com/mcp"})
 
 	outcomes := migrate(t, ctx, ti, false, blocked, ready)
@@ -284,4 +342,76 @@ func containsSubstring(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func findCandidate(t *testing.T, ctx context.Context, ti *testInstance, server fixtureServer) migration.Candidate {
+	t.Helper()
+	candidates, err := ti.migrator.ListCandidates(ctx)
+	require.NoError(t, err)
+	for _, candidate := range candidates {
+		if candidate.Row.ToolsetID == server.toolset.ID {
+			return candidate
+		}
+	}
+	require.FailNow(t, "candidate not listed", "toolset %s", server.toolset.Slug)
+	return migration.Candidate{}
+}
+
+func TestRunDeletesToolsetsLeftWithNothingToMigrate(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		reason string
+		seed   func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer
+	}{
+		{name: "attachment retired from the active deployment", reason: "no longer on the project's active deployment", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
+			t.Helper()
+			server := seedServer(t, ctx, ti, serverOptions{slug: "retired", remoteURL: "https://mcp.example.com/mcp"})
+			_, err := repo.New(ti.conn).SeedCompletedDeploymentFixture(ctx, repo.SeedCompletedDeploymentFixtureParams{
+				ProjectID: ti.projectID, OrganizationID: ti.organizationID, IdempotencyKey: uuid.NewString(),
+			})
+			require.NoError(t, err)
+			return server
+		}},
+		{name: "MCP off with no server row", reason: "nothing serves it", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
+			t.Helper()
+			return seedServer(t, ctx, ti, serverOptions{slug: "unserved", remoteURL: "https://mcp.example.com/mcp", mcpOff: true, noWrapper: true})
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMigrator(t)
+			server := tc.seed(t, ctx, ti)
+
+			candidate := findCandidate(t, ctx, ti, server)
+			require.Equal(t, migration.ActionDelete, candidate.Action)
+			require.True(t, containsSubstring(candidate.DeleteReasons, tc.reason), "delete reasons %q do not mention %q", candidate.DeleteReasons, tc.reason)
+			require.Empty(t, candidate.Blockers)
+
+			// A preview deletes nothing.
+			previewed := migrate(t, ctx, ti, true, server)
+			require.Equal(t, migration.StatusPreviewed, previewed[0].Status, previewed[0].Reason)
+			require.Equal(t, migration.ActionDelete, previewed[0].Action)
+			state, err := repo.New(ti.conn).GetToolsetStateFixture(ctx, server.toolset.ID)
+			require.NoError(t, err)
+			require.False(t, state.Deleted)
+
+			outcomes := migrate(t, ctx, ti, false, server)
+			require.Equal(t, migration.StatusDeleted, outcomes[0].Status, outcomes[0].Reason)
+			require.True(t, containsSubstring(outcomes[0].Actions, "Delete the toolset"), "actions %q", outcomes[0].Actions)
+			state, err = repo.New(ti.conn).GetToolsetStateFixture(ctx, server.toolset.ID)
+			require.NoError(t, err)
+			require.True(t, state.Deleted)
+
+			// The toolset's server and its address go with it.
+			_, err = mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: server.toolset.ID, ProjectID: ti.projectID})
+			require.ErrorIs(t, err, pgx.ErrNoRows)
+			endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: ti.projectID, McpServerID: server.toolset.ID})
+			require.NoError(t, err)
+			require.Empty(t, endpoints)
+		})
+	}
 }

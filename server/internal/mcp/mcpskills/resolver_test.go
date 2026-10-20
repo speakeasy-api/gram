@@ -12,10 +12,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -23,7 +23,7 @@ func TestResolverListServesLinkedSkill(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newFixture(t)
-	skillID, versionID, linkID := servedSkill(t, ctx, f, "git-workflow")
+	skillID, versionID, _ := servedSkill(t, ctx, f, "git-workflow")
 	content := skillContent("git-workflow", "Serves git-workflow.")
 
 	entries, err := f.resolver.List(ctx, f.scope())
@@ -34,12 +34,11 @@ func TestResolverListServesLinkedSkill(t *testing.T) {
 	require.Equal(t, skillID, entry.SkillID)
 	require.Equal(t, f.projectID, entry.ProjectID)
 	require.Equal(t, versionID, entry.VersionID)
-	require.Equal(t, linkID, entry.LinkID)
+	require.Equal(t, f.projectSlug, entry.ProjectSlug)
 	require.Equal(t, "git-workflow", entry.Name)
 	require.Equal(t, content, entry.Content)
 	require.Equal(t, rawSHA256(content), entry.RawSHA256)
-	require.False(t, entry.Pinned)
-	require.Equal(t, "skill://git-workflow/SKILL.md", entry.URI())
+	require.Equal(t, "skill://"+f.projectSlug+"/git-workflow/SKILL.md", entry.URI())
 	require.Equal(t, "sha256:"+rawSHA256(content), entry.Digest())
 	require.Equal(t, len(content), entry.Size())
 	require.Equal(t, map[string]any{"name": "git-workflow", "description": "Serves git-workflow."}, entry.Frontmatter)
@@ -270,22 +269,35 @@ func TestResolverListGatewayInheritsMemberServers(t *testing.T) {
 	}
 }
 
-func TestResolverListSameNameAcrossProjectsServesOne(t *testing.T) {
+func TestResolverListSameNameAcrossProjectsServesEach(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newFixture(t)
-	otherProjectID := createProject(t, ctx, f, "other-"+uuid.NewString()[:8])
+	otherSlug := "other-" + uuid.NewString()[:8]
+	otherProjectID := createProject(t, ctx, f, otherSlug)
 	firstID := createSkill(t, ctx, f, f.projectID, "shared-name")
-	addVersion(t, ctx, f, f.projectID, firstID, skillContent("shared-name", "First project."))
-	link(t, ctx, f, f.projectID, firstID, mcpskills.OrganizationGatewayTarget(), nil)
+	first := addVersion(t, ctx, f, f.projectID, firstID, skillContent("shared-name", "First project."))
+	link(t, ctx, f, f.projectID, firstID, mcpskills.OrganizationGatewayTarget(), &first)
 	secondID := createSkill(t, ctx, f, otherProjectID, "shared-name")
 	second := addVersion(t, ctx, f, otherProjectID, secondID, skillContent("shared-name", "Second project."))
 	link(t, ctx, f, otherProjectID, secondID, mcpskills.OrganizationGatewayTarget(), nil)
 
-	entries, err := f.resolver.List(ctx, f.scopeFor(mcpskills.OrganizationGatewayTarget()))
+	scope := f.scopeFor(mcpskills.OrganizationGatewayTarget())
+	entries, err := f.resolver.List(ctx, scope)
 	require.NoError(t, err)
-	require.Len(t, entries, 1, "one URI serves one skill")
-	require.Equal(t, second, entries[0].VersionID, "the newest version wins")
+	require.Len(t, entries, 2, "skills that share a name in different projects are both served")
+	require.Equal(t, []uuid.UUID{firstID, secondID}, []uuid.UUID{entries[0].SkillID, entries[1].SkillID}, "sorted by project slug")
+	require.Equal(t, first, entries[0].VersionID, "a pin on one project's skill does not decide the other's")
+	require.Equal(t, second, entries[1].VersionID)
+	require.Equal(t, f.uri("shared-name"), entries[0].URI())
+	require.Equal(t, mcpskills.SkillURI(otherSlug, "shared-name"), entries[1].URI())
+
+	entry, err := f.resolver.Get(ctx, scope, mcpskills.SkillURI(otherSlug, "shared-name"))
+	require.NoError(t, err)
+	require.Equal(t, secondID, entry.SkillID)
+
+	_, err = f.resolver.Get(ctx, scope, "skill://shared-name/SKILL.md")
+	require.ErrorIs(t, err, mcpskills.ErrSkillNotFound, "a URI without its project never resolves")
 }
 
 func TestResolverListLatestTracksNewestValidVersion(t *testing.T) {
@@ -299,7 +311,6 @@ func TestResolverListLatestTracksNewestValidVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	require.Equal(t, second, entries[0].VersionID)
-	require.False(t, entries[0].Pinned)
 }
 
 func TestResolverListPinnedVersionBeatsLatest(t *testing.T) {
@@ -309,16 +320,14 @@ func TestResolverListPinnedVersionBeatsLatest(t *testing.T) {
 	gatewayID := createMetaServer(t, ctx, f, "gateway")
 	skillID, first, _ := servedSkill(t, ctx, f, "pinned")
 	addVersion(t, ctx, f, f.projectID, skillID, skillContent("pinned", "Second version."))
-	pinningLink := link(t, ctx, f, f.projectID, skillID, mcpskills.MetaMCPServerTarget(gatewayID), &first)
+	link(t, ctx, f, f.projectID, skillID, mcpskills.MetaMCPServerTarget(gatewayID), &first)
 
 	scope := f.scopeFor(mcpskills.MetaMCPServerTarget(gatewayID))
 	scope.MemberMCPServerIDs = []uuid.UUID{f.serverID}
 	entries, err := f.resolver.List(ctx, scope)
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
-	require.Equal(t, first, entries[0].VersionID)
-	require.Equal(t, pinningLink, entries[0].LinkID)
-	require.True(t, entries[0].Pinned)
+	require.Equal(t, first, entries[0].VersionID, "the pin beats the newer version the server link tracks")
 }
 
 func TestResolverListConflictingPinsServeNewestAndWarn(t *testing.T) {
@@ -341,7 +350,6 @@ func TestResolverListConflictingPinsServeNewestAndWarn(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	require.Equal(t, second, entries[0].VersionID)
-	require.True(t, entries[0].Pinned)
 	require.Contains(t, logs.String(), "level=WARN")
 	require.Contains(t, logs.String(), "pinned to different versions")
 	require.Contains(t, logs.String(), "gram.mcp.skill.pin_conflict_count=1")
@@ -395,7 +403,7 @@ func TestResolverListPaddedFrontmatterNameExcluded(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, entries, "an entry whose frontmatter name differs from its URI is never served")
 
-	_, err = f.resolver.Get(ctx, f.scope(), mcpskills.SkillURI("padded"))
+	_, err = f.resolver.Get(ctx, f.scope(), f.uri("padded"))
 	require.ErrorIs(t, err, mcpskills.ErrSkillNotFound)
 }
 
@@ -427,19 +435,22 @@ func TestResolverGet(t *testing.T) {
 	skillID, versionID, _ := servedSkill(t, ctx, f, "fetched")
 	_, _, _ = servedSkill(t, ctx, f, "other")
 
-	entry, err := f.resolver.Get(ctx, f.scope(), "skill://fetched/SKILL.md")
+	entry, err := f.resolver.Get(ctx, f.scope(), f.uri("fetched"))
 	require.NoError(t, err)
 	require.Equal(t, skillID, entry.SkillID)
 	require.Equal(t, versionID, entry.VersionID)
 	require.Equal(t, "fetched", entry.Frontmatter["name"])
 
-	_, err = f.resolver.Get(ctx, f.scope(), "skill://missing/SKILL.md")
+	_, err = f.resolver.Get(ctx, f.scope(), f.uri("missing"))
 	require.ErrorIs(t, err, mcpskills.ErrSkillNotFound)
 
-	_, err = f.resolver.Get(ctx, f.scope(), "skill://fetched/references/notes.md")
+	_, err = f.resolver.Get(ctx, f.scope(), mcpskills.SkillURI("another-project", "fetched"))
+	require.ErrorIs(t, err, mcpskills.ErrSkillNotFound, "the project segment must match the skill's project")
+
+	_, err = f.resolver.Get(ctx, f.scope(), "skill://"+f.projectSlug+"/fetched/references/notes.md")
 	require.ErrorIs(t, err, mcpskills.ErrSkillNotFound)
 
-	_, err = f.resolver.Get(ctx, f.scopeFor(mcpskills.OrganizationGatewayTarget()), "skill://fetched/SKILL.md")
+	_, err = f.resolver.Get(ctx, f.scopeFor(mcpskills.OrganizationGatewayTarget()), f.uri("fetched"))
 	require.ErrorIs(t, err, mcpskills.ErrSkillNotFound, "a skill not linked to the surface cannot be fetched by URI either")
 }
 
@@ -448,7 +459,7 @@ func TestRecordReadIdempotentPerSession(t *testing.T) {
 
 	ctx, f := newFixture(t)
 	skillID, versionID, _ := servedSkill(t, ctx, f, "observed")
-	entry, err := f.resolver.Get(ctx, f.scope(), mcpskills.SkillURI("observed"))
+	entry, err := f.resolver.Get(ctx, f.scope(), f.uri("observed"))
 	require.NoError(t, err)
 	seenAt := time.Now().UTC().Truncate(time.Microsecond)
 	read := mcpskills.Read{Entry: *entry, UserID: testUserID, SessionID: "mcp-session-1", SeenAt: seenAt}
@@ -461,7 +472,7 @@ func TestRecordReadIdempotentPerSession(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, again, "the same content in the same session counts once")
 
-	observations, err := repo.New(f.conn).ListMCPSkillObservations(ctx, repo.ListMCPSkillObservationsParams{ProjectID: f.projectID, Provider: mcpskills.ObservationProvider})
+	observations, err := testrepo.New(f.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{ProjectID: f.projectID, Provider: mcpskills.ObservationProvider})
 	require.NoError(t, err)
 	require.Len(t, observations, 1)
 
@@ -473,7 +484,7 @@ func TestRecordReadIdempotentPerSession(t *testing.T) {
 	require.Equal(t, "observed", row.SkillName)
 	require.Equal(t, "mcp", row.Source.String)
 	require.Equal(t, "mcp", row.SourceLevel.String)
-	require.Equal(t, "skill://observed/SKILL.md", row.SourcePath.String)
+	require.Equal(t, f.uri("observed"), row.SourcePath.String)
 	require.Equal(t, entry.RawSHA256, row.RawSha256.String)
 	require.True(t, seenAt.Equal(row.SeenAt.Time))
 	require.Equal(t, conv.ToNullUUID(skillID), row.SkillID)
@@ -507,18 +518,19 @@ func TestRecordReadLandsInSkillProject(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newFixture(t)
-	otherProjectID := createProject(t, ctx, f, "other-"+uuid.NewString()[:8])
+	otherSlug := "other-" + uuid.NewString()[:8]
+	otherProjectID := createProject(t, ctx, f, otherSlug)
 	skillID := createSkill(t, ctx, f, otherProjectID, "org-read")
 	addVersion(t, ctx, f, otherProjectID, skillID, skillContent("org-read", "Read through the organization gateway."))
 	link(t, ctx, f, otherProjectID, skillID, mcpskills.OrganizationGatewayTarget(), nil)
 
-	entry, err := f.resolver.Get(ctx, f.scopeFor(mcpskills.OrganizationGatewayTarget()), mcpskills.SkillURI("org-read"))
+	entry, err := f.resolver.Get(ctx, f.scopeFor(mcpskills.OrganizationGatewayTarget()), mcpskills.SkillURI(otherSlug, "org-read"))
 	require.NoError(t, err)
 	written, err := f.resolver.RecordRead(ctx, mcpskills.Read{Entry: *entry, UserID: testUserID, SessionID: "s", SeenAt: time.Now()})
 	require.NoError(t, err)
 	require.True(t, written)
 
-	observations, err := repo.New(f.conn).ListMCPSkillObservations(ctx, repo.ListMCPSkillObservationsParams{ProjectID: otherProjectID, Provider: mcpskills.ObservationProvider})
+	observations, err := testrepo.New(f.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{ProjectID: otherProjectID, Provider: mcpskills.ObservationProvider})
 	require.NoError(t, err)
 	require.Len(t, observations, 1, "a gateway read is recorded in the project that owns the skill")
 }
@@ -528,7 +540,7 @@ func TestRecordReadWithoutSessionCountsEveryRead(t *testing.T) {
 
 	ctx, f := newFixture(t)
 	_, _, _ = servedSkill(t, ctx, f, "sessionless")
-	entry, err := f.resolver.Get(ctx, f.scope(), mcpskills.SkillURI("sessionless"))
+	entry, err := f.resolver.Get(ctx, f.scope(), f.uri("sessionless"))
 	require.NoError(t, err)
 	read := mcpskills.Read{Entry: *entry, UserID: "", SessionID: "", SeenAt: time.Now()}
 
@@ -538,7 +550,7 @@ func TestRecordReadWithoutSessionCountsEveryRead(t *testing.T) {
 		require.True(t, written)
 	}
 
-	observations, err := repo.New(f.conn).ListMCPSkillObservations(ctx, repo.ListMCPSkillObservationsParams{ProjectID: f.projectID, Provider: mcpskills.ObservationProvider})
+	observations, err := testrepo.New(f.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{ProjectID: f.projectID, Provider: mcpskills.ObservationProvider})
 	require.NoError(t, err)
 	require.Len(t, observations, 2)
 	require.False(t, observations[0].IdempotencyKey.Valid)
@@ -551,7 +563,7 @@ func TestRecordReadRejectsUnknownVersion(t *testing.T) {
 
 	ctx, f := newFixture(t)
 	_, _, _ = servedSkill(t, ctx, f, "mismatched")
-	entry, err := f.resolver.Get(ctx, f.scope(), mcpskills.SkillURI("mismatched"))
+	entry, err := f.resolver.Get(ctx, f.scope(), f.uri("mismatched"))
 	require.NoError(t, err)
 	entry.VersionID = uuid.New()
 
@@ -580,7 +592,7 @@ func TestResolverRequiresLiveMembership(t *testing.T) {
 
 	scope := f.scope()
 	scope.UserID = ""
-	_, err := f.resolver.Get(ctx, scope, mcpskills.SkillURI("for-members"))
+	_, err := f.resolver.Get(ctx, scope, f.uri("for-members"))
 	require.ErrorIs(t, err, mcpskills.ErrSkillNotFound)
 
 	// A user who exists but was never a member: a valid credential for the
@@ -657,7 +669,7 @@ func TestResolverListCapCountsSkillsNotLinks(t *testing.T) {
 	require.Contains(t, logs.String(), "exceeds its cap")
 
 	// Get is unaffected by the cap: it names one skill.
-	entry, err := resolver.Get(ctx, scope, mcpskills.SkillURI("gamma"))
+	entry, err := resolver.Get(ctx, scope, f.uri("gamma"))
 	require.NoError(t, err)
 	require.Equal(t, "gamma", entry.Name)
 }

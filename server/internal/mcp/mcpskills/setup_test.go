@@ -51,6 +51,7 @@ type fixture struct {
 	conn           *pgxpool.Pool
 	organizationID string
 	projectID      uuid.UUID
+	projectSlug    string
 	serverID       uuid.UUID
 	resolver       *mcpskills.Resolver
 }
@@ -77,13 +78,19 @@ func newFixture(t *testing.T) (context.Context, *fixture) {
 		conn:           conn,
 		organizationID: organizationID,
 		projectID:      uuid.Nil,
+		projectSlug:    "mcpskills-" + uuid.NewString()[:8],
 		serverID:       uuid.Nil,
 		resolver:       mcpskills.NewResolver(testenv.NewLogger(t), conn),
 	}
-	f.projectID = createProject(t, ctx, f, "mcpskills-"+uuid.NewString()[:8])
+	f.projectID = createProject(t, ctx, f, f.projectSlug)
 	f.serverID = createServer(t, ctx, f, f.projectID, "served")
 	addMember(t, ctx, f, testUserID, testUserEmail)
 	return ctx, f
+}
+
+// uri is the URI the fixture's project serves the named skill at.
+func (f *fixture) uri(name string) string {
+	return mcpskills.SkillURI(f.projectSlug, name)
 }
 
 func createProject(t *testing.T, ctx context.Context, f *fixture, slug string) uuid.UUID {

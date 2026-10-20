@@ -13,6 +13,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const checkDirectoryRoleInventoryOperator = `-- name: CheckDirectoryRoleInventoryOperator :one
+SELECT id FROM users
+WHERE id = $1 AND admin IS TRUE AND deleted_at IS NULL
+FOR SHARE
+`
+
+func (q *Queries) CheckDirectoryRoleInventoryOperator(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, checkDirectoryRoleInventoryOperator, id)
+	var id_2 string
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const createOrganizationRoleWithRequests = `-- name: CreateOrganizationRoleWithRequests :one
 WITH created AS (
 INSERT INTO organization_roles (
@@ -500,6 +513,19 @@ func (q *Queries) GetActiveOrganizationRoleBySlug(ctx context.Context, arg GetAc
 	return i, err
 }
 
+const getDirectoryRoleInventoryOrganization = `-- name: GetDirectoryRoleInventoryOrganization :one
+SELECT workos_id FROM organization_metadata
+WHERE id = $1 AND disabled_at IS NULL
+FOR SHARE
+`
+
+func (q *Queries) GetDirectoryRoleInventoryOrganization(ctx context.Context, id string) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getDirectoryRoleInventoryOrganization, id)
+	var workos_id pgtype.Text
+	err := row.Scan(&workos_id)
+	return workos_id, err
+}
+
 const getDirectoryRoleMapping = `-- name: GetDirectoryRoleMapping :one
 SELECT id, source_kind, directory_group_id, attribute_key, attribute_value, role_urn
 FROM directory_role_mappings
@@ -536,6 +562,32 @@ func (q *Queries) GetDirectoryRoleMapping(ctx context.Context, arg GetDirectoryR
 	return i, err
 }
 
+const getDirectoryRoleMappingGroupSource = `-- name: GetDirectoryRoleMappingGroupSource :one
+SELECT name, deleted, workos_deleted
+FROM directory_groups
+WHERE id = $1
+  AND organization_id = $2
+FOR SHARE
+`
+
+type GetDirectoryRoleMappingGroupSourceParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetDirectoryRoleMappingGroupSourceRow struct {
+	Name          string
+	Deleted       bool
+	WorkosDeleted bool
+}
+
+func (q *Queries) GetDirectoryRoleMappingGroupSource(ctx context.Context, arg GetDirectoryRoleMappingGroupSourceParams) (GetDirectoryRoleMappingGroupSourceRow, error) {
+	row := q.db.QueryRow(ctx, getDirectoryRoleMappingGroupSource, arg.ID, arg.OrganizationID)
+	var i GetDirectoryRoleMappingGroupSourceRow
+	err := row.Scan(&i.Name, &i.Deleted, &i.WorkosDeleted)
+	return i, err
+}
+
 const getGlobalRoleBySlug = `-- name: GetGlobalRoleBySlug :one
 SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 FROM global_roles
@@ -561,43 +613,6 @@ func (q *Queries) GetGlobalRoleBySlug(ctx context.Context, workosSlug string) (G
 		&i.Deleted,
 	)
 	return i, err
-}
-
-const getLiveDirectoryRoleMappingRoleForSource = `-- name: GetLiveDirectoryRoleMappingRoleForSource :one
-SELECT role_urn
-FROM directory_role_mappings
-WHERE organization_id = $1
-  AND deleted IS FALSE
-  AND (
-    ($2::uuid IS NOT NULL AND directory_group_id = $2::uuid)
-    OR (
-      $3::text IS NOT NULL
-      AND attribute_key = $3::text
-      AND attribute_value = $4::text
-    )
-  )
-FOR UPDATE
-`
-
-type GetLiveDirectoryRoleMappingRoleForSourceParams struct {
-	OrganizationID   string
-	DirectoryGroupID uuid.NullUUID
-	AttributeKey     pgtype.Text
-	AttributeValue   pgtype.Text
-}
-
-// The role a group or attribute value is mapped to now, locked so a
-// concurrent set cannot slip between this read and the upsert.
-func (q *Queries) GetLiveDirectoryRoleMappingRoleForSource(ctx context.Context, arg GetLiveDirectoryRoleMappingRoleForSourceParams) (string, error) {
-	row := q.db.QueryRow(ctx, getLiveDirectoryRoleMappingRoleForSource,
-		arg.OrganizationID,
-		arg.DirectoryGroupID,
-		arg.AttributeKey,
-		arg.AttributeValue,
-	)
-	var role_urn string
-	err := row.Scan(&role_urn)
-	return role_urn, err
 }
 
 const getOrganizationRoleAssignmentByWorkosUser = `-- name: GetOrganizationRoleAssignmentByWorkosUser :one
@@ -874,6 +889,96 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 	return items, nil
 }
 
+const insertDirectoryAttributeRoleMapping = `-- name: InsertDirectoryAttributeRoleMapping :one
+INSERT INTO directory_role_mappings (
+  organization_id,
+  source_kind,
+  attribute_key,
+  attribute_value,
+  role_urn
+)
+VALUES (
+  $1,
+  'attribute',
+  $2,
+  $3,
+  $4
+)
+RETURNING id, role_urn, created_at, updated_at
+`
+
+type InsertDirectoryAttributeRoleMappingParams struct {
+	OrganizationID string
+	AttributeKey   pgtype.Text
+	AttributeValue pgtype.Text
+	RoleUrn        string
+}
+
+type InsertDirectoryAttributeRoleMappingRow struct {
+	ID        uuid.UUID
+	RoleUrn   string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) InsertDirectoryAttributeRoleMapping(ctx context.Context, arg InsertDirectoryAttributeRoleMappingParams) (InsertDirectoryAttributeRoleMappingRow, error) {
+	row := q.db.QueryRow(ctx, insertDirectoryAttributeRoleMapping,
+		arg.OrganizationID,
+		arg.AttributeKey,
+		arg.AttributeValue,
+		arg.RoleUrn,
+	)
+	var i InsertDirectoryAttributeRoleMappingRow
+	err := row.Scan(
+		&i.ID,
+		&i.RoleUrn,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertDirectoryGroupRoleMapping = `-- name: InsertDirectoryGroupRoleMapping :one
+INSERT INTO directory_role_mappings (
+  organization_id,
+  source_kind,
+  directory_group_id,
+  role_urn
+)
+VALUES (
+  $1,
+  'group',
+  $2,
+  $3
+)
+RETURNING id, role_urn, created_at, updated_at
+`
+
+type InsertDirectoryGroupRoleMappingParams struct {
+	OrganizationID   string
+	DirectoryGroupID uuid.NullUUID
+	RoleUrn          string
+}
+
+type InsertDirectoryGroupRoleMappingRow struct {
+	ID        uuid.UUID
+	RoleUrn   string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) InsertDirectoryGroupRoleMapping(ctx context.Context, arg InsertDirectoryGroupRoleMappingParams) (InsertDirectoryGroupRoleMappingRow, error) {
+	row := q.db.QueryRow(ctx, insertDirectoryGroupRoleMapping, arg.OrganizationID, arg.DirectoryGroupID, arg.RoleUrn)
+	var i InsertDirectoryGroupRoleMappingRow
+	err := row.Scan(
+		&i.ID,
+		&i.RoleUrn,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertPrincipalGrantIfAbsent = `-- name: InsertPrincipalGrantIfAbsent :execrows
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
@@ -903,13 +1008,14 @@ func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPr
 }
 
 const listAccessMembers = `-- name: ListAccessMembers :many
+WITH members AS (
 SELECT
   users.id,
   users.display_name,
   users.email,
   users.photo_url,
-  COALESCE(organization_roles.id::text, global_roles.id::text, '')::text AS role_id,
-  COALESCE(ora.created_at, our.created_at)::timestamptz AS joined_at,
+  COALESCE(direct_roles.role_ids, '{}'::text[])::text[] AS role_ids,
+  COALESCE(direct_roles.joined_at, our.created_at)::timestamptz AS joined_at,
   -- The member's identity-provider profile, when the directory has synced one.
   -- A member with no directory row, or one whose provider does not report the
   -- attribute, comes back as an empty string.
@@ -987,39 +1093,88 @@ LEFT JOIN LATERAL (
       )
     )
 ) mapped_roles ON TRUE
-LEFT JOIN organization_role_assignments AS ora
-  ON ora.organization_id = our.organization_id
-  AND ora.workos_user_id = users.workos_id
-  AND ora.deleted_at IS NULL
-LEFT JOIN organization_roles
-  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
-  AND organization_roles.organization_id = our.organization_id
-  AND organization_roles.deleted IS FALSE
-  AND organization_roles.workos_deleted IS FALSE
-LEFT JOIN global_roles
-  ON ora.role_urn = 'role:global:' || global_roles.id::text
-  AND global_roles.deleted IS FALSE
-  AND global_roles.workos_deleted IS FALSE
-WHERE our.organization_id = $1
+LEFT JOIN LATERAL (
+  SELECT
+    ARRAY_AGG(DISTINCT COALESCE(organization_roles.id::text, global_roles.id::text))
+      FILTER (WHERE COALESCE(organization_roles.id, global_roles.id) IS NOT NULL) AS role_ids,
+    MIN(ora.created_at) AS joined_at
+  FROM organization_role_assignments AS ora
+  LEFT JOIN organization_roles
+    ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+    AND organization_roles.organization_id = our.organization_id
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  LEFT JOIN global_roles
+    ON ora.role_urn = 'role:global:' || global_roles.id::text
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+  WHERE ora.organization_id = our.organization_id
+    AND ora.workos_user_id = users.workos_id
+    AND ora.deleted_at IS NULL
+) direct_roles ON TRUE
+WHERE our.organization_id = $2
   AND our.deleted IS FALSE
   AND users.deleted_at IS NULL
-ORDER BY users.email, users.id
+), matched AS (
+  SELECT members.id, members.display_name, members.email, members.photo_url, members.role_ids, members.joined_at, members.department, members.group_names, members.directory_role_ids,
+    ($3::text <> '' AND
+      LOWER(BTRIM(REGEXP_REPLACE(email, '[[:space:]]+', ' ', 'g'))) = $3) AS exact_email_match
+  FROM members
+  WHERE ($4::text = '' OR $4 = ANY(role_ids || directory_role_ids))
+    AND (
+      $3::text = ''
+      OR STRPOS(LOWER(BTRIM(REGEXP_REPLACE(display_name, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      OR STRPOS(LOWER(BTRIM(REGEXP_REPLACE(email, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      OR EXISTS (
+        SELECT 1 FROM organization_roles AS role
+        WHERE role.organization_id = $2
+          AND role.id::text = ANY(role_ids || directory_role_ids)
+          AND STRPOS(LOWER(BTRIM(REGEXP_REPLACE(role.workos_name, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      )
+      OR EXISTS (
+        SELECT 1 FROM global_roles AS role
+        WHERE role.id::text = ANY(role_ids || directory_role_ids)
+          AND STRPOS(LOWER(BTRIM(REGEXP_REPLACE(role.workos_name, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      )
+    )
+)
+SELECT matched.id, matched.display_name, matched.email, matched.photo_url, matched.role_ids, matched.joined_at, matched.department, matched.group_names, matched.directory_role_ids, matched.exact_email_match,
+  COUNT(*) OVER () AS total_matches,
+  COUNT(*) FILTER (WHERE exact_email_match) OVER () AS exact_email_matches
+FROM matched
+ORDER BY exact_email_match DESC, email, id
+LIMIT NULLIF($1::int, 0)
 `
 
-type ListAccessMembersRow struct {
-	ID               string
-	DisplayName      string
-	Email            string
-	PhotoUrl         pgtype.Text
-	RoleID           string
-	JoinedAt         pgtype.Timestamptz
-	Department       string
-	GroupNames       []string
-	DirectoryRoleIds []string
+type ListAccessMembersParams struct {
+	LimitValue     int32
+	OrganizationID string
+	QueryText      string
+	RoleID         string
 }
 
-func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) ([]ListAccessMembersRow, error) {
-	rows, err := q.db.Query(ctx, listAccessMembers, organizationID)
+type ListAccessMembersRow struct {
+	ID                string
+	DisplayName       string
+	Email             string
+	PhotoUrl          pgtype.Text
+	RoleIds           []string
+	JoinedAt          pgtype.Timestamptz
+	Department        string
+	GroupNames        []string
+	DirectoryRoleIds  []string
+	ExactEmailMatch   pgtype.Bool
+	TotalMatches      int64
+	ExactEmailMatches int64
+}
+
+func (q *Queries) ListAccessMembers(ctx context.Context, arg ListAccessMembersParams) ([]ListAccessMembersRow, error) {
+	rows, err := q.db.Query(ctx, listAccessMembers,
+		arg.LimitValue,
+		arg.OrganizationID,
+		arg.QueryText,
+		arg.RoleID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1032,11 +1187,14 @@ func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) 
 			&i.DisplayName,
 			&i.Email,
 			&i.PhotoUrl,
-			&i.RoleID,
+			&i.RoleIds,
 			&i.JoinedAt,
 			&i.Department,
 			&i.GroupNames,
 			&i.DirectoryRoleIds,
+			&i.ExactEmailMatch,
+			&i.TotalMatches,
+			&i.ExactEmailMatches,
 		); err != nil {
 			return nil, err
 		}
@@ -1816,6 +1974,115 @@ func (q *Queries) ListDirectoryMappedRoleMemberCounts(ctx context.Context, arg L
 	return items, nil
 }
 
+const listDirectoryRoleInventoryGroups = `-- name: ListDirectoryRoleInventoryGroups :many
+SELECT id, workos_directory_group_id
+FROM directory_groups
+WHERE organization_id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_directory_group_id = ANY($2::text[])
+ORDER BY id
+`
+
+type ListDirectoryRoleInventoryGroupsParams struct {
+	OrganizationID string
+	WorkosGroupIds []string
+}
+
+type ListDirectoryRoleInventoryGroupsRow struct {
+	ID                     uuid.UUID
+	WorkosDirectoryGroupID string
+}
+
+func (q *Queries) ListDirectoryRoleInventoryGroups(ctx context.Context, arg ListDirectoryRoleInventoryGroupsParams) ([]ListDirectoryRoleInventoryGroupsRow, error) {
+	rows, err := q.db.Query(ctx, listDirectoryRoleInventoryGroups, arg.OrganizationID, arg.WorkosGroupIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectoryRoleInventoryGroupsRow
+	for rows.Next() {
+		var i ListDirectoryRoleInventoryGroupsRow
+		if err := rows.Scan(&i.ID, &i.WorkosDirectoryGroupID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryRoleInventoryMembers = `-- name: ListDirectoryRoleInventoryMembers :many
+SELECT u.id
+FROM organization_user_relationships AS m
+JOIN users AS u ON u.id = m.user_id AND u.deleted_at IS NULL
+WHERE m.organization_id = $1 AND m.deleted IS FALSE
+ORDER BY u.id
+`
+
+func (q *Queries) ListDirectoryRoleInventoryMembers(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDirectoryRoleInventoryMembers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryRoleInventoryRoles = `-- name: ListDirectoryRoleInventoryRoles :many
+SELECT workos_slug::text AS role_slug, ('role:organization:' || id::text)::text AS role_urn
+FROM organization_roles
+WHERE organization_id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_slug = ANY($2::text[])
+UNION ALL
+SELECT workos_slug::text AS role_slug, ('role:global:' || id::text)::text AS role_urn
+FROM global_roles
+WHERE deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_slug = ANY($2::text[])
+ORDER BY role_slug, role_urn
+`
+
+type ListDirectoryRoleInventoryRolesParams struct {
+	OrganizationID string
+	RoleSlugs      []string
+}
+
+type ListDirectoryRoleInventoryRolesRow struct {
+	RoleSlug string
+	RoleUrn  string
+}
+
+func (q *Queries) ListDirectoryRoleInventoryRoles(ctx context.Context, arg ListDirectoryRoleInventoryRolesParams) ([]ListDirectoryRoleInventoryRolesRow, error) {
+	rows, err := q.db.Query(ctx, listDirectoryRoleInventoryRoles, arg.OrganizationID, arg.RoleSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectoryRoleInventoryRolesRow
+	for rows.Next() {
+		var i ListDirectoryRoleInventoryRolesRow
+		if err := rows.Scan(&i.RoleSlug, &i.RoleUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDirectoryRoleMappings = `-- name: ListDirectoryRoleMappings :many
 SELECT
   drm.id,
@@ -1908,6 +2175,116 @@ func (q *Queries) ListGlobalRoles(ctx context.Context) ([]GlobalRole, error) {
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveDirectoryMappingRoles = `-- name: ListLiveDirectoryMappingRoles :many
+WITH live_global_roles AS (
+  SELECT ('role:global:' || id::text)::text AS role_urn
+  FROM global_roles
+  WHERE ('role:global:' || id::text) = ANY($1::text[])
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  ORDER BY id
+  FOR SHARE
+), live_organization_roles AS (
+  SELECT ('role:organization:' || id::text)::text AS role_urn
+  FROM organization_roles
+  WHERE organization_id = $2
+    AND ('role:organization:' || id::text) = ANY($1::text[])
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  ORDER BY id
+  FOR SHARE
+)
+SELECT role_urn FROM live_global_roles
+UNION ALL
+SELECT role_urn FROM live_organization_roles
+`
+
+type ListLiveDirectoryMappingRolesParams struct {
+	RoleUrns       []string
+	OrganizationID string
+}
+
+func (q *Queries) ListLiveDirectoryMappingRoles(ctx context.Context, arg ListLiveDirectoryMappingRolesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listLiveDirectoryMappingRoles, arg.RoleUrns, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var role_urn string
+		if err := rows.Scan(&role_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, role_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveDirectoryRoleMappingsForSource = `-- name: ListLiveDirectoryRoleMappingsForSource :many
+SELECT id, role_urn, created_at, updated_at
+FROM directory_role_mappings
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND (
+    ($2::uuid IS NOT NULL AND directory_group_id = $2::uuid)
+    OR (
+      $3::text IS NOT NULL
+      AND attribute_key = $3::text
+      AND attribute_value = $4::text
+    )
+  )
+ORDER BY role_urn
+FOR UPDATE
+`
+
+type ListLiveDirectoryRoleMappingsForSourceParams struct {
+	OrganizationID   string
+	DirectoryGroupID uuid.NullUUID
+	AttributeKey     pgtype.Text
+	AttributeValue   pgtype.Text
+}
+
+type ListLiveDirectoryRoleMappingsForSourceRow struct {
+	ID        uuid.UUID
+	RoleUrn   string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListLiveDirectoryRoleMappingsForSource(ctx context.Context, arg ListLiveDirectoryRoleMappingsForSourceParams) ([]ListLiveDirectoryRoleMappingsForSourceRow, error) {
+	rows, err := q.db.Query(ctx, listLiveDirectoryRoleMappingsForSource,
+		arg.OrganizationID,
+		arg.DirectoryGroupID,
+		arg.AttributeKey,
+		arg.AttributeValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLiveDirectoryRoleMappingsForSourceRow
+	for rows.Next() {
+		var i ListLiveDirectoryRoleMappingsForSourceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RoleUrn,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -3219,106 +3596,6 @@ func (q *Queries) UpsertAgentRoleAssignment(ctx context.Context, arg UpsertAgent
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const upsertDirectoryAttributeRoleMapping = `-- name: UpsertDirectoryAttributeRoleMapping :one
-INSERT INTO directory_role_mappings (
-  organization_id,
-  source_kind,
-  attribute_key,
-  attribute_value,
-  role_urn
-)
-VALUES (
-  $1,
-  'attribute',
-  $2,
-  $3,
-  $4
-)
-ON CONFLICT (organization_id, attribute_key, attribute_value)
-  WHERE deleted IS FALSE AND attribute_key IS NOT NULL
-DO UPDATE SET
-  role_urn = EXCLUDED.role_urn,
-  updated_at = clock_timestamp()
-RETURNING id, role_urn, created_at, updated_at
-`
-
-type UpsertDirectoryAttributeRoleMappingParams struct {
-	OrganizationID string
-	AttributeKey   pgtype.Text
-	AttributeValue pgtype.Text
-	RoleUrn        string
-}
-
-type UpsertDirectoryAttributeRoleMappingRow struct {
-	ID        uuid.UUID
-	RoleUrn   string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-}
-
-func (q *Queries) UpsertDirectoryAttributeRoleMapping(ctx context.Context, arg UpsertDirectoryAttributeRoleMappingParams) (UpsertDirectoryAttributeRoleMappingRow, error) {
-	row := q.db.QueryRow(ctx, upsertDirectoryAttributeRoleMapping,
-		arg.OrganizationID,
-		arg.AttributeKey,
-		arg.AttributeValue,
-		arg.RoleUrn,
-	)
-	var i UpsertDirectoryAttributeRoleMappingRow
-	err := row.Scan(
-		&i.ID,
-		&i.RoleUrn,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const upsertDirectoryGroupRoleMapping = `-- name: UpsertDirectoryGroupRoleMapping :one
-INSERT INTO directory_role_mappings (
-  organization_id,
-  source_kind,
-  directory_group_id,
-  role_urn
-)
-VALUES (
-  $1,
-  'group',
-  $2,
-  $3
-)
-ON CONFLICT (organization_id, directory_group_id)
-  WHERE deleted IS FALSE AND directory_group_id IS NOT NULL
-DO UPDATE SET
-  role_urn = EXCLUDED.role_urn,
-  updated_at = clock_timestamp()
-RETURNING id, role_urn, created_at, updated_at
-`
-
-type UpsertDirectoryGroupRoleMappingParams struct {
-	OrganizationID   string
-	DirectoryGroupID uuid.NullUUID
-	RoleUrn          string
-}
-
-type UpsertDirectoryGroupRoleMappingRow struct {
-	ID        uuid.UUID
-	RoleUrn   string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-}
-
-func (q *Queries) UpsertDirectoryGroupRoleMapping(ctx context.Context, arg UpsertDirectoryGroupRoleMappingParams) (UpsertDirectoryGroupRoleMappingRow, error) {
-	row := q.db.QueryRow(ctx, upsertDirectoryGroupRoleMapping, arg.OrganizationID, arg.DirectoryGroupID, arg.RoleUrn)
-	var i UpsertDirectoryGroupRoleMappingRow
-	err := row.Scan(
-		&i.ID,
-		&i.RoleUrn,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const upsertGlobalRoleWithRequests = `-- name: UpsertGlobalRoleWithRequests :one

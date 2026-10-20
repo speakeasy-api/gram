@@ -82,6 +82,23 @@ function StatusBadge({
   if (outcome?.migrationStatus === "not_attempted") {
     return <Badge variant="outline">Not attempted</Badge>;
   }
+  if (candidate.action === "delete") {
+    return (
+      <div className="grid gap-1">
+        <Badge
+          variant="outline"
+          className="border-destructive/40 text-destructive"
+        >
+          Delete
+        </Badge>
+        <ul className="text-xs text-muted-foreground">
+          {candidate.deleteReasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
   if (!isReady(candidate)) {
     return (
       <div className="grid gap-1">
@@ -89,6 +106,23 @@ function StatusBadge({
         <ul className="text-xs text-muted-foreground">
           {candidate.blockers.map((blocker) => (
             <li key={blocker}>{blocker}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  if (candidate.warnings.length > 0) {
+    return (
+      <div className="grid gap-1">
+        <Badge
+          variant="outline"
+          className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+        >
+          Ready with warnings
+        </Badge>
+        <ul className="text-xs text-muted-foreground">
+          {candidate.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
           ))}
         </ul>
       </div>
@@ -155,8 +189,14 @@ function OutcomeBadge({ outcome }: { outcome: Outcome }): JSX.Element {
   switch (outcome.migrationStatus) {
     case "migrated":
       return <Badge>Migrated</Badge>;
+    case "deleted":
+      return <Badge>Deleted</Badge>;
     case "previewed":
-      return <Badge variant="secondary">Ready</Badge>;
+      return (
+        <Badge variant="secondary">
+          {outcome.action === "delete" ? "Will delete" : "Will migrate"}
+        </Badge>
+      );
     case "failed":
       return <Badge variant="destructive">Failed</Badge>;
     case "not_attempted":
@@ -166,13 +206,26 @@ function OutcomeBadge({ outcome }: { outcome: Outcome }): JSX.Element {
 
 type Server = { toolsetId: string };
 
+function countLabel(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+// runLabel names what a run does, such as "Migrate 3 servers and delete 2".
+function runLabel(migrating: number, deleting: number): string {
+  if (deleting === 0) return `Migrate ${countLabel(migrating, "server")}`;
+  if (migrating === 0) return `Delete ${countLabel(deleting, "server")}`;
+  return `Migrate ${countLabel(migrating, "server")} and delete ${countLabel(deleting, "server")}`;
+}
+
 function MigrateDialog({
   servers,
+  deleting,
   names,
   onClose,
   onDone,
 }: {
   servers: Server[];
+  deleting: number;
   names: Map<string, string>;
   onClose: () => void;
   onDone: (outcomes: Outcome[]) => void;
@@ -212,20 +265,19 @@ function MigrateDialog({
       const run = await adminMigrateExternalMcpServers({ servers });
       setResult(run.outcomes);
       onDone(run.outcomes);
-      const migrated = run.outcomes.filter(
-        (o) => o.migrationStatus === "migrated",
+      const completed = run.outcomes.filter(
+        (o) =>
+          o.migrationStatus === "migrated" || o.migrationStatus === "deleted",
       ).length;
-      if (migrated === run.outcomes.length) {
-        toast.success(
-          `Migrated ${migrated} server${migrated === 1 ? "" : "s"}`,
-        );
+      if (completed === run.outcomes.length) {
+        toast.success(`Finished ${countLabel(completed, "server")}`);
       } else {
         toast.error(
-          `Migrated ${migrated} of ${run.outcomes.length}; the run stopped at a failure`,
+          `Finished ${completed} of ${run.outcomes.length}; the run stopped at a failure`,
         );
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Migration failed");
+      setError(e instanceof Error ? e.message : "The run failed");
     } finally {
       busy.current = false;
       setPending(false);
@@ -245,20 +297,20 @@ function MigrateDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {done
-              ? "Migration results"
-              : `Migrate ${servers.length} server${servers.length === 1 ? "" : "s"}`}
+            {done ? "Results" : runLabel(servers.length - deleting, deleting)}
           </DialogTitle>
           <DialogDescription>
-            Each server switches in place to a remote MCP server on its own
-            sign-in provider and keeps its ID and address. Servers run one at a
-            time and the run stops at the first failure.
+            A migrated server switches in place to a remote MCP server on its
+            own sign-in provider and keeps its ID and address. A deleted one
+            loses its toolset and any server, addresses and plugin entries it
+            still owns; a server already migrated stays intact. Servers run one
+            at a time and the run stops at the first failure.
           </DialogDescription>
         </DialogHeader>
         {preview.isFetching && (
           <p role="status">Checking each server without changing anything…</p>
         )}
-        {pending && <p role="status">Migrating…</p>}
+        {pending && <p role="status">Running…</p>}
         {preview.error && (
           <p role="alert" className="text-destructive">
             {preview.error.message}
@@ -299,8 +351,7 @@ function MigrateDialog({
                 disabled={!canMigrate}
                 onClick={() => void migrate()}
               >
-                Migrate {servers.length} server
-                {servers.length === 1 ? "" : "s"}
+                {runLabel(servers.length - deleting, deleting)}
               </Button>
             </>
           )}
@@ -428,8 +479,10 @@ export function ExternalMcpMigration(): JSX.Element {
       header: "Upstream",
       meta: { cellClassName: "max-w-80" },
       cell: ({ row }) => {
-        const { remoteUrl, replacementUrl } = row.original;
-        if (!remoteUrl) return <span>Several URLs</span>;
+        const { action, remoteUrl, replacementUrl } = row.original;
+        if (!remoteUrl) {
+          return <span>{action === "delete" ? "—" : "Several URLs"}</span>;
+        }
         return (
           <div className="break-all">
             {remoteUrl}
@@ -480,7 +533,12 @@ export function ExternalMcpMigration(): JSX.Element {
   });
 
   const selected = table.getSelectedRowModel().rows.map((row) => row.original);
+  const selectedDeletes = selected.filter((c) => c.action === "delete").length;
   const ready = candidates.filter(isReady).length;
+  const toMigrate = candidates.filter(
+    (c) => isReady(c) && c.action === "migrate",
+  ).length;
+  const toDelete = candidates.filter((c) => c.action === "delete").length;
 
   const openMigrate = () => {
     setDialogServers(selected.map((c) => ({ toolsetId: c.toolsetId })));
@@ -498,10 +556,12 @@ export function ExternalMcpMigration(): JSX.Element {
       <div>
         <h1 className="text-2xl font-semibold">External MCP migration</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Servers still backed by an external MCP attachment. Migrating one
-          switches it in place to a remote MCP server on its own sign-in
+          Toolsets still backed by an external MCP attachment. Migrating one
+          switches its server in place to a remote MCP server on its own sign-in
           provider, so it keeps its ID, address, plugins and access grants, and
-          disables the old toolset. No sign-in provider or client is created.
+          disables the old toolset. No sign-in provider or client is created. A
+          toolset left with nothing to migrate, including one already migrated,
+          is deleted instead.
         </p>
       </div>
 
@@ -561,7 +621,21 @@ export function ExternalMcpMigration(): JSX.Element {
             <DropdownMenuItem onSelect={() => select(() => true)}>
               All ready ({ready})
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => select((c) => c.toolCalls === 0)}>
+            <DropdownMenuItem
+              onSelect={() => select((c) => c.action === "migrate")}
+            >
+              Ready to migrate ({toMigrate})
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => select((c) => c.action === "delete")}
+            >
+              To delete ({toDelete})
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() =>
+                select((c) => c.action === "migrate" && c.toolCalls === 0)
+              }
+            >
               Ready with no recent calls
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -585,7 +659,9 @@ export function ExternalMcpMigration(): JSX.Element {
           disabled={selected.length === 0 || selected.length > MAX_PER_RUN}
           onClick={openMigrate}
         >
-          Migrate{selected.length > 0 ? ` ${selected.length}` : ""}
+          {selected.length > 0
+            ? runLabel(selected.length - selectedDeletes, selectedDeletes)
+            : "Migrate"}
         </Button>
       </div>
 
@@ -629,6 +705,13 @@ export function ExternalMcpMigration(): JSX.Element {
       {dialogServers && (
         <MigrateDialog
           servers={dialogServers}
+          deleting={
+            dialogServers.filter(
+              (s) =>
+                all.find((c) => c.toolsetId === s.toolsetId)?.action ===
+                "delete",
+            ).length
+          }
           names={names}
           onClose={() => setDialogServers(undefined)}
           onDone={recordRun}
