@@ -161,8 +161,8 @@ func TestPendingSkillSessionVersionsAreProjectScopedAndExcludeIneligibleObservat
 	resolver := mcpskills.NewResolver(testenv.NewLogger(t), ti.conn)
 	written, err := resolver.RecordRead(ctx, mcpskills.Read{
 		Entry: mcpskills.Entry{
-			SkillID: version.SkillID, ProjectID: ti.projectID, VersionID: version.SkillVersionID, LinkID: uuid.Nil,
-			Name: "mapped-skill", Content: content, RawSHA256: contentSHA256(content), Frontmatter: nil, Pinned: false,
+			SkillID: version.SkillID, ProjectID: ti.projectID, VersionID: version.SkillVersionID, ProjectSlug: "mapped",
+			Name: "mapped-skill", Content: content, RawSHA256: contentSHA256(content), Frontmatter: nil,
 		},
 		UserID: ti.authContext.UserID, SessionID: "mcp-session-1", SeenAt: seenAt.Add(time.Minute),
 	})

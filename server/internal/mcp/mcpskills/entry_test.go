@@ -18,26 +18,25 @@ func TestEntryWireMatchesSpecShape(t *testing.T) {
 	content := "---\nname: git-workflow\ndescription: Follow this team's Git conventions for branching and commits\nlicense: Apache-2.0\n---\n\n# Git workflow\n"
 	digest := sha256.Sum256([]byte(content))
 	entry := mcpskills.Entry{
-		SkillID:   uuid.New(),
-		VersionID: uuid.New(),
-		ProjectID: uuid.New(),
-		LinkID:    uuid.New(),
-		Name:      "git-workflow",
-		Content:   content,
-		RawSHA256: hex.EncodeToString(digest[:]),
+		SkillID:     uuid.New(),
+		VersionID:   uuid.New(),
+		ProjectID:   uuid.New(),
+		ProjectSlug: "default",
+		Name:        "git-workflow",
+		Content:     content,
+		RawSHA256:   hex.EncodeToString(digest[:]),
 		Frontmatter: map[string]any{
 			"name":        "git-workflow",
 			"description": "Follow this team's Git conventions for branching and commits",
 			"license":     "Apache-2.0",
 		},
-		Pinned: false,
 	}
 
 	encoded, err := json.Marshal(entry.Wire())
 	require.NoError(t, err)
 
 	expected := `{
-	  "uri": "skill://git-workflow/SKILL.md",
+	  "uri": "skill://default/git-workflow/SKILL.md",
 	  "frontmatter": {
 	    "name": "git-workflow",
 	    "description": "Follow this team's Git conventions for branching and commits",
@@ -45,7 +44,7 @@ func TestEntryWireMatchesSpecShape(t *testing.T) {
 	  },
 	  "resources": [
 	    {
-	      "uri": "skill://git-workflow/SKILL.md",
+	      "uri": "skill://default/git-workflow/SKILL.md",
 	      "digest": "sha256:` + hex.EncodeToString(digest[:]) + `",
 	      "size": ` + jsonInt(len(content)) + `
 	    }
@@ -58,7 +57,7 @@ func TestEntryDigestIsLowercaseHex(t *testing.T) {
 	t.Parallel()
 
 	entry := mcpskills.Entry{
-		SkillID: uuid.Nil, ProjectID: uuid.Nil, VersionID: uuid.Nil, LinkID: uuid.Nil, Name: "x", Content: "", Frontmatter: nil, Pinned: false,
+		SkillID: uuid.Nil, ProjectID: uuid.Nil, VersionID: uuid.Nil, ProjectSlug: "p", Name: "x", Content: "", Frontmatter: nil,
 		RawSHA256: "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789",
 	}
 	require.Equal(t, "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", entry.Digest())
@@ -68,7 +67,7 @@ func TestEntrySizeCountsBytes(t *testing.T) {
 	t.Parallel()
 
 	entry := mcpskills.Entry{
-		SkillID: uuid.Nil, ProjectID: uuid.Nil, VersionID: uuid.Nil, LinkID: uuid.Nil, Name: "x", Content: "héllo", RawSHA256: "", Frontmatter: nil, Pinned: false,
+		SkillID: uuid.Nil, ProjectID: uuid.Nil, VersionID: uuid.Nil, ProjectSlug: "p", Name: "x", Content: "héllo", RawSHA256: "", Frontmatter: nil,
 	}
 	require.Equal(t, 6, entry.Size())
 	require.Equal(t, 6, entry.Wire().Resources[0].Size)
@@ -86,8 +85,8 @@ func TestEntryCheckFrontmatterName(t *testing.T) {
 	t.Parallel()
 
 	base := mcpskills.Entry{
-		SkillID: uuid.New(), ProjectID: uuid.New(), VersionID: uuid.New(), LinkID: uuid.New(),
-		Name: "refunds", Content: "", RawSHA256: "", Frontmatter: nil, Pinned: false,
+		SkillID: uuid.New(), ProjectID: uuid.New(), VersionID: uuid.New(), ProjectSlug: "p",
+		Name: "refunds", Content: "", RawSHA256: "", Frontmatter: nil,
 	}
 
 	exact := base
