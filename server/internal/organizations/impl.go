@@ -1581,7 +1581,7 @@ var (
 	errInvitationOrganizationDisabled = errors.New("invitation organization is disabled")
 )
 
-func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID string) (orgrepo.OrganizationMetadatum, orgrepo.OrganizationInvitation, bool, error) {
+func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID string, requireSSO func(orgrepo.OrganizationMetadatum) bool) (orgrepo.OrganizationMetadatum, orgrepo.OrganizationInvitation, bool, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("begin invite acceptance transaction: %w", err)
@@ -1597,6 +1597,9 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 	// invitation was listed gains no member.
 	if org.DisabledAt.Valid {
 		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, errInvitationOrganizationDisabled
+	}
+	if requireSSO != nil && requireSSO(org) {
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, ErrInvitationRequiresSSO
 	}
 
 	acceptedInvite, err := repo.AcceptInvitation(ctx, inviteID)
@@ -1675,9 +1678,10 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 // acceptInvitation makes the user a member of the invitation's organization
 // and runs everything that follows an acceptance: the trial an eligible
 // invitation arms, the WorkOS membership, and the notifications. Only the
-// acceptance itself can fail.
-func (s *Service) acceptInvitation(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID, inviteeEmail string) error {
-	org, acceptedInvite, trialArmed, err := s.acceptInvitationTx(ctx, inviteID, organizationID, gramUserID, workosUserID)
+// acceptance itself can fail. A non-nil requireSSO is checked under the
+// organization lock and refuses the acceptance with ErrInvitationRequiresSSO.
+func (s *Service) acceptInvitation(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID, inviteeEmail string, requireSSO func(orgrepo.OrganizationMetadatum) bool) error {
+	org, acceptedInvite, trialArmed, err := s.acceptInvitationTx(ctx, inviteID, organizationID, gramUserID, workosUserID, requireSSO)
 	if err != nil {
 		return err
 	}
@@ -1892,7 +1896,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	)
 	span.AddEvent("invite.callback.user_provisioned", trace.WithAttributes(attr.UserID(gramUserID)))
 
-	if err := s.acceptInvitation(ctx, invite.ID, invite.OrganizationID, gramUserID, idpUser.Sub, inviteeEmail); err != nil {
+	if err := s.acceptInvitation(ctx, invite.ID, invite.OrganizationID, gramUserID, idpUser.Sub, inviteeEmail, nil); err != nil {
 		if errors.Is(err, errInvitationAcceptanceRace) {
 			s.logger.WarnContext(ctx, "invite callback: invite was revoked or expired before acceptance")
 			span.AddEvent("invite.callback.acceptance_race_lost")

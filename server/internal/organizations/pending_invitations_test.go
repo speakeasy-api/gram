@@ -129,6 +129,32 @@ func TestAcceptPendingInvitationForUser_SSOCoveredEmailRequiresSSOSignIn(t *test
 	require.Equal(t, "accepted", storedInvite.State)
 }
 
+func TestAcceptInvitation_RechecksSSOUnderOrganizationLock(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx := requireAuthContext(t, ctx)
+	_, invite := seedInviteCallbackInvite(t, ctx, ti, "platform-mcp-sso-race", authCtx.ActiveOrganizationID, authCtx.UserID, authz.SystemRoleMember)
+	seedInviteeUser(t, ctx, ti)
+
+	// The policy sees the organization read under the lock, so SSO turned on
+	// after the invitation was listed still refuses the join.
+	var lockedOrgID string
+	err := ti.service.AcceptInvitationForTest(ctx, invite.ID, authCtx.ActiveOrganizationID, "user_01INVITEE", "user_01INVITEE", "invitee@example.test", func(org orgrepo.OrganizationMetadatum) bool {
+		lockedOrgID = org.ID
+		return true
+	})
+	require.ErrorIs(t, err, organizations.ErrInvitationRequiresSSO)
+	require.Equal(t, authCtx.ActiveOrganizationID, lockedOrgID)
+
+	storedInvite, err := orgrepo.New(ti.conn).GetInvitationByID(ctx, invite.ID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", storedInvite.State)
+	member, err := orgrepo.New(ti.conn).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{UserID: "user_01INVITEE", OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.False(t, member)
+}
+
 func TestInviteCallback_DisabledOrganizationGainsNoMember(t *testing.T) {
 	t.Parallel()
 

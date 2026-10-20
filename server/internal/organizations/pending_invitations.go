@@ -48,10 +48,16 @@ func (s *Service) PendingInvitationsForEmail(ctx context.Context, email, ssoWork
 			ID:               row.ID.String(),
 			OrganizationID:   row.OrganizationID,
 			OrganizationName: row.OrganizationName,
-			RequiresSSO:      row.SsoEnabled && emailOnVerifiedDomain(email, row.VerifiedDomains) && (ssoWorkOSOrganizationID == "" || row.OrganizationWorkosID.String != ssoWorkOSOrganizationID),
+			RequiresSSO:      invitationRequiresSSO(email, ssoWorkOSOrganizationID, row.SsoEnabled, row.VerifiedDomains, row.OrganizationWorkosID.String),
 		})
 	}
 	return invitations, nil
+}
+
+// invitationRequiresSSO reports whether an organization's SSO covers email
+// and the sign-in did not go through that organization's SSO.
+func invitationRequiresSSO(email, ssoWorkOSOrganizationID string, ssoEnabled bool, verifiedDomains []string, orgWorkOSID string) bool {
+	return ssoEnabled && emailOnVerifiedDomain(email, verifiedDomains) && (ssoWorkOSOrganizationID == "" || orgWorkOSID != ssoWorkOSOrganizationID)
 }
 
 func emailOnVerifiedDomain(email string, verified []string) bool {
@@ -96,7 +102,12 @@ func (s *Service) AcceptPendingInvitationForUser(ctx context.Context, userID, ve
 		return empty, ErrInvitationRequiresSSO
 	}
 
-	if err := s.acceptInvitation(ctx, uuid.MustParse(invitation.ID), invitation.OrganizationID, userID, user.WorkosID.String, email); err != nil {
+	// Checked again under the organization lock, so SSO enabled or a domain
+	// verified after the listing above still applies.
+	requireSSO := func(org orgrepo.OrganizationMetadatum) bool {
+		return invitationRequiresSSO(email, ssoWorkOSOrganizationID, org.SsoEnabled.Bool, org.VerifiedDomains, org.WorkosID.String)
+	}
+	if err := s.acceptInvitation(ctx, uuid.MustParse(invitation.ID), invitation.OrganizationID, userID, user.WorkosID.String, email, requireSSO); err != nil {
 		return empty, fmt.Errorf("accept invitation: %w", err)
 	}
 
