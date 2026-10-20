@@ -9425,6 +9425,9 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   -- NULL is the expand-phase representation of public_only. Allowed values are
   -- validated in application code so adding a mode does not require a migration.
   network_access_mode TEXT,
+  -- Whether the upstream needs authentication: true needs it, false needs none,
+  -- NULL is undecided.
+  requires_upstream_auth boolean,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -9462,6 +9465,8 @@ COMMENT ON COLUMN mcp_servers.created_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.updated_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.deleted IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.requires_upstream_auth IS 'Whether the upstream needs authentication: true needs it, false explicitly needs none, NULL is undecided.
+@access: confidential';
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
 ON mcp_servers (project_id)
@@ -9633,6 +9638,202 @@ ON upstream_client_selections (mcp_server_id);
 
 CREATE INDEX IF NOT EXISTS upstream_client_selections_project_id_idx
 ON upstream_client_selections (project_id);
+
+-- Typed auth clients: the ways an MCP server can authenticate to its upstream
+-- (RFC: Multiple Upstream Credentials for MCP Servers). One row per client,
+-- shared across servers through mcp_server_auth_clients. OAuth-backed types
+-- reference their registration here; EMA detail lives in
+-- mcp_auth_client_emas. A pass_through client forwards only the request
+-- headers it names. Nothing reads these yet; the existing outbound
+-- configuration stays authoritative until cutover.
+CREATE TABLE IF NOT EXISTS mcp_auth_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- NULL for a client shared across the organization's projects.
+  project_id uuid,
+  -- Project or organization owner, for scope-checked foreign keys.
+  attachment_scope TEXT GENERATED ALWAYS AS (
+    CASE WHEN project_id IS NOT NULL THEN 'project:' || project_id::text
+         ELSE 'organization:' || organization_id END
+  ) STORED,
+  -- remote_session, service_account, static_credential, pass_through or ema;
+  -- validated in application code.
+  client_type TEXT NOT NULL CHECK (client_type <> ''),
+  -- backfill (created from existing configuration) or admin; validated in
+  -- application code.
+  source TEXT NOT NULL CHECK (source <> ''),
+  name TEXT NOT NULL CHECK (name <> ''),
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  -- NULL for clients the backfill created from existing configuration.
+  created_by_user_id TEXT,
+  -- The OAuth registration behind remote_session, service_account and ema
+  -- clients; NULL for static_credential and pass_through.
+  remote_session_client_id uuid,
+  -- The registration's attachment_scope, copied by the writer and pinned to
+  -- the registration by a composite foreign key.
+  client_attachment_scope TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_auth_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_auth_clients_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_auth_clients_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_auth_clients_client_scope_fkey FOREIGN KEY (remote_session_client_id, client_attachment_scope) REFERENCES remote_session_clients (id, attachment_scope) ON DELETE CASCADE,
+  -- A registration, when named, is in the client's project or organization,
+  -- or platform-global. Which types need one is validated in application code.
+  CONSTRAINT mcp_auth_clients_registration_check CHECK (
+    (remote_session_client_id IS NULL) = (client_attachment_scope IS NULL)
+    AND (client_attachment_scope IS NULL
+         OR client_attachment_scope IN (attachment_scope, 'organization:' || organization_id, 'global'))
+  )
+);
+
+COMMENT ON COLUMN mcp_auth_clients.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.client_type IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.source IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.name IS '@access: opaque-confidential';
+COMMENT ON COLUMN mcp_auth_clients.enabled IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.client_attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.deleted IS '@access: confidential';
+
+-- FK target for mcp_server_auth_clients.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_attachment_scope_key
+ON mcp_auth_clients (id, attachment_scope);
+
+-- FK target for mcp_auth_client_headers.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_organization_key
+ON mcp_auth_clients (id, organization_id);
+
+-- FK target for mcp_auth_client_emas, pinning its type, registration and
+-- organization.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_type_registration_key
+ON mcp_auth_clients (id, client_type, remote_session_client_id, organization_id);
+
+-- One live backfilled client per organization, registration and type, so
+-- the backfill finds rather than duplicates; a platform-global registration
+-- gets one per organization. Admin-created clients may share a registration.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_remote_session_registration_key
+ON mcp_auth_clients (organization_id, remote_session_client_id)
+WHERE client_type = 'remote_session' AND source = 'backfill' AND deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_service_account_registration_key
+ON mcp_auth_clients (organization_id, remote_session_client_id)
+WHERE client_type = 'service_account' AND source = 'backfill' AND deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_auth_clients_registration_idx
+ON mcp_auth_clients (organization_id, remote_session_client_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_auth_clients_organization_id_idx
+ON mcp_auth_clients (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_auth_clients_project_id_idx
+ON mcp_auth_clients (project_id)
+WHERE deleted IS FALSE;
+
+-- Headers an auth client sends upstream, same shape as remote_mcp_server_headers.
+CREATE TABLE IF NOT EXISTS mcp_auth_client_headers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  auth_client_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  description TEXT,
+  is_required BOOLEAN NOT NULL DEFAULT FALSE,
+  is_secret BOOLEAN NOT NULL DEFAULT FALSE,
+  value TEXT,
+  value_from_request_header TEXT CHECK (value_from_request_header IS NULL OR value_from_request_header <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_auth_client_headers_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_auth_client_headers_auth_client_fkey FOREIGN KEY (auth_client_id, organization_id) REFERENCES mcp_auth_clients (id, organization_id) ON DELETE CASCADE,
+  CONSTRAINT mcp_auth_client_headers_value_source_check CHECK ((value IS NULL) != (value_from_request_header IS NULL))
+);
+
+COMMENT ON COLUMN mcp_auth_client_headers.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_headers.auth_client_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_headers.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_headers.name IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_headers.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_auth_client_headers.is_required IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_headers.is_secret IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_headers.value IS '@access: secret-restricted';
+COMMENT ON COLUMN mcp_auth_client_headers.value_from_request_header IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_headers.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_headers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_headers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_headers.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_client_headers_auth_client_id_name_key
+ON mcp_auth_client_headers (auth_client_id, name)
+WHERE deleted IS FALSE;
+
+-- Which auth clients each MCP server offers. Many-to-many: a shared client can
+-- serve several servers, and a server can offer several clients.
+CREATE TABLE IF NOT EXISTS mcp_server_auth_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  auth_client_id uuid NOT NULL,
+  -- The auth client's attachment_scope, copied by the writer and pinned to the
+  -- client by a composite foreign key.
+  client_attachment_scope TEXT NOT NULL,
+  -- backfill (derived from existing configuration, retired when that goes
+  -- away) or admin; validated in application code.
+  source TEXT NOT NULL CHECK (source <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_server_auth_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_server_auth_clients_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_server_auth_clients_mcp_server_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_server_auth_clients_auth_client_scope_fkey FOREIGN KEY (auth_client_id, client_attachment_scope) REFERENCES mcp_auth_clients (id, attachment_scope) ON DELETE CASCADE,
+  -- The client belongs to the server's project or organization.
+  CONSTRAINT mcp_server_auth_clients_client_scope_check CHECK (
+    client_attachment_scope IN ('project:' || project_id::text, 'organization:' || organization_id)
+  )
+);
+
+COMMENT ON COLUMN mcp_server_auth_clients.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_auth_clients.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_auth_clients.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_auth_clients.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_auth_clients.auth_client_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_auth_clients.client_attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_auth_clients.source IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_auth_clients.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_auth_clients.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_auth_clients.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_auth_clients.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_auth_clients_server_client_key
+ON mcp_server_auth_clients (mcp_server_id, auth_client_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_server_auth_clients_auth_client_idx
+ON mcp_server_auth_clients (auth_client_id);
+
+CREATE INDEX IF NOT EXISTS mcp_server_auth_clients_project_id_idx
+ON mcp_server_auth_clients (project_id);
 
 -- Meta MCP servers expose an explicitly managed set of MCP servers through a
 -- dedicated runtime. This identity remains separate from mcp_servers so
@@ -13939,6 +14140,49 @@ CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_op
 -- Purpose-specific downstream registrations; interactive attachments remain separate.
 -- Application transactions retain tombstone generations and reject stale completion.
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_id_issuer_key ON remote_session_clients (id, remote_session_issuer_id);
+
+-- Enterprise Managed Authorization detail for an ema auth client: an identity
+-- provider vouches for the person and the upstream's authorization server
+-- redeems the ID-JAG. The vouching order stays in remote_session_ema_providers.
+-- Defined after remote_session_clients_id_issuer_key, which it references.
+CREATE TABLE IF NOT EXISTS mcp_auth_client_emas (
+  auth_client_id uuid NOT NULL,
+  client_type TEXT NOT NULL DEFAULT 'ema' CHECK (client_type = 'ema'),
+  -- The base row's organization and registration, copied and pinned to it by
+  -- the auth client foreign key, so the issuer below must be that
+  -- registration's issuer.
+  organization_id TEXT NOT NULL,
+  remote_session_client_id uuid NOT NULL,
+  remote_session_issuer_id uuid NOT NULL,
+  resource TEXT NOT NULL CHECK (resource <> ''),
+  requested_scopes TEXT[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  -- Set together with the base row's, so a retired client frees its key.
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_auth_client_emas_pkey PRIMARY KEY (auth_client_id),
+  CONSTRAINT mcp_auth_client_emas_auth_client_fkey FOREIGN KEY (auth_client_id, client_type, remote_session_client_id, organization_id) REFERENCES mcp_auth_clients (id, client_type, remote_session_client_id, organization_id) ON DELETE CASCADE,
+  CONSTRAINT mcp_auth_client_emas_client_issuer_fkey FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN mcp_auth_client_emas.auth_client_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_emas.client_type IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_emas.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_emas.remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_emas.remote_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_emas.resource IS '@access: restricted';
+COMMENT ON COLUMN mcp_auth_client_emas.requested_scopes IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_auth_client_emas.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_emas.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_emas.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_emas.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_client_emas_upstream_key
+ON mcp_auth_client_emas (organization_id, remote_session_issuer_id, remote_session_client_id, resource)
+WHERE deleted IS FALSE;
 
 -- One Okta agent-to-resource connection per identity provider connection x
 -- upstream resource (the resource indicator at a remote authorization
