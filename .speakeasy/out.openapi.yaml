@@ -52828,6 +52828,107 @@ paths:
       tags:
         - remoteSessions
       x-speakeasy-name-override: detachBinding
+  /rpc/remoteSessions.detachServerClientAssociation:
+    post:
+      description: 'Remove one MCP server''s association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer''s client binding and is refused here with a conflict: turn off User Identity on the server instead. Requires mcp:write on the server.'
+      operationId: detachServerClientAssociation
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetachServerClientAssociationRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: detachServerClientAssociation remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: detachServerClientAssociation
+      x-speakeasy-react-hook:
+        name: DetachServerClientAssociation
   /rpc/remoteSessions.getServerIdentityImpact:
     get:
       description: Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
@@ -53227,6 +53328,114 @@ paths:
       tags:
         - remoteSessions
       x-speakeasy-name-override: listBindings
+  /rpc/remoteSessions.listServerClientAssociations:
+    get:
+      description: 'List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Associations are recorded ahead of the serving path that will read them; until then the server keeps signing in through its user session issuer''s bindings. Requires mcp:read on the server.'
+      operationId: listServerClientAssociations
+      parameters:
+        - allowEmptyValue: true
+          description: The MCP server.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The MCP server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListServerClientAssociationsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listServerClientAssociations remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: listServerClientAssociations
+      x-speakeasy-react-hook:
+        name: ServerClientAssociations
   /rpc/remoteSessions.revoke:
     post:
       description: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.
@@ -87083,6 +87292,20 @@ components:
         - principal_id
         - user_session_issuer_id
         - id
+    DetachServerClientAssociationRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server.
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The associated remote session client.
+          format: uuid
+      required:
+        - mcp_server_id
+        - remote_session_client_id
     DeviceAgentConfiguration:
       type: object
       properties:
@@ -94103,6 +94326,16 @@ components:
           description: The scopes available in access control.
       required:
         - scopes
+    ListServerClientAssociationsResult:
+      type: object
+      properties:
+        associations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServerClientAssociation'
+          description: The server's associated upstream OAuth clients, oldest first.
+      required:
+        - associations
     ListServerHeadersResult:
       type: object
       properties:
@@ -103940,6 +104173,54 @@ components:
       required:
         - chat_id
         - accepted
+    ServerClientAssociation:
+      type: object
+      properties:
+        associated_at:
+          type: string
+          description: When the association was recorded.
+          format: date-time
+        client_id:
+          type: string
+          description: The provider-issued client_id.
+        issuer_name:
+          type: string
+          description: Display name of the remote session issuer, if set.
+        issuer_slug:
+          type: string
+          description: Slug of the remote session issuer.
+        issuer_url:
+          type: string
+          description: The remote session issuer's issuer identifier.
+        remote_session_client_id:
+          type: string
+          description: The associated remote session client.
+          format: uuid
+        remote_session_issuer_id:
+          type: string
+          description: 'The client''s remote session issuer: the upstream authorization server it signs in with.'
+          format: uuid
+        scope:
+          type: string
+          description: Who owns the client.
+          enum:
+            - project
+            - organization
+            - global
+        server_count:
+          type: integer
+          description: How many live MCP servers are associated with this client, including this one.
+          format: int64
+      description: One upstream OAuth client an MCP server is associated with. Client secrets are never returned.
+      required:
+        - remote_session_client_id
+        - client_id
+        - remote_session_issuer_id
+        - issuer_slug
+        - issuer_url
+        - scope
+        - server_count
+        - associated_at
     ServerIdentityClientConfiguration:
       type: object
       properties:

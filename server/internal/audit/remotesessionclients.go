@@ -182,10 +182,11 @@ type LogRemoteSessionClientDetachMcpServerEvent struct {
 	McpServerName          string
 }
 
-// LogRemoteSessionClientDetachMcpServer records that an organization admin
-// detached a remote_session_client from an MCP server (clearing that server's
-// user_session_issuer link). The affected MCP server is captured in metadata so
-// the audit trail names the server whose authentication changed.
+// LogRemoteSessionClientDetachMcpServer records that a remote_session_client
+// was detached from an MCP server, either by an organization admin removing
+// the binding from the server's user session issuer or by removing the
+// server's own client association. The affected MCP server is captured in
+// metadata so the audit trail names the server whose authentication changed.
 func (l *Logger) LogRemoteSessionClientDetachMcpServer(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientDetachMcpServerEvent) error {
 	action := ActionRemoteSessionClientDetachMcpServer
 

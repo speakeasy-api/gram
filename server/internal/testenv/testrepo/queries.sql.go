@@ -2763,6 +2763,34 @@ func (q *Queries) InsertKillswitchPrescriptionFixture(ctx context.Context, arg I
 	return err
 }
 
+const insertMCPServerRemoteSessionClientFixture = `-- name: InsertMCPServerRemoteSessionClientFixture :exec
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+VALUES (
+    $1, $2, $3, $4,
+    (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = $4)
+)
+`
+
+type InsertMCPServerRemoteSessionClientFixtureParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// Test-only fixture: inserts an MCP server upstream client association with
+// no application checks, so a test can prove the schema itself refuses a
+// cross-tenant row.
+func (q *Queries) InsertMCPServerRemoteSessionClientFixture(ctx context.Context, arg InsertMCPServerRemoteSessionClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertMCPServerRemoteSessionClientFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.RemoteSessionClientID,
+	)
+	return err
+}
+
 const insertMdmDeviceFixture = `-- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
 VALUES ($1, $2, $3, NULLIF($4::text, ''), $5::text, NULLIF($6::text, ''), $7::timestamptz)
