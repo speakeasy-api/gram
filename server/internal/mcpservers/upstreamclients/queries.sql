@@ -546,6 +546,8 @@ SELECT sel.no_auth,
                AND h.name = c.name
                AND h.value IS NOT DISTINCT FROM c.value
                AND h.value_from_request_header IS NOT DISTINCT FROM c.value_from_request_header
+               AND h.is_required = c.is_required
+               AND h.is_secret = c.is_secret
            )
        )::boolean AS headers_stale,
        EXISTS (
@@ -555,7 +557,7 @@ SELECT sel.no_auth,
            AND h.deleted IS FALSE
            AND (lower(h.name) = 'authorization' OR h.value_from_request_header IS NOT NULL OR h.is_secret)
            -- An OAuth client's bearer replaces the server's Authorization.
-           AND NOT (lower(h.name) = 'authorization' AND ac.client_type IN ('remote_session', 'service_account'))
+           AND NOT (lower(h.name) = 'authorization' AND COALESCE(ac.client_type IN ('remote_session', 'service_account'), FALSE))
            AND NOT EXISTS (
              SELECT 1
              FROM mcp_auth_client_headers AS c

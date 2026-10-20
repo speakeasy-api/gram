@@ -2906,6 +2906,20 @@ func (q *Queries) SetEMAStoredScopesFixture(ctx context.Context, arg SetEMAStore
 	return err
 }
 
+const setRemoteHeaderRequiredFixture = `-- name: SetRemoteHeaderRequiredFixture :exec
+UPDATE remote_mcp_server_headers SET is_required = $1 WHERE id = $2
+`
+
+type SetRemoteHeaderRequiredFixtureParams struct {
+	IsRequired bool
+	ID         uuid.UUID
+}
+
+func (q *Queries) SetRemoteHeaderRequiredFixture(ctx context.Context, arg SetRemoteHeaderRequiredFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteHeaderRequiredFixture, arg.IsRequired, arg.ID)
+	return err
+}
+
 const setRequiresUpstreamAuthFixture = `-- name: SetRequiresUpstreamAuthFixture :exec
 UPDATE mcp_servers SET requires_upstream_auth = $1 WHERE id = $2
 `

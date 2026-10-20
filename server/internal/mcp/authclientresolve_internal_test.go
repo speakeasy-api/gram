@@ -291,6 +291,11 @@ func (f *authClientFixture) sourceHeader(name string, secret bool, value, forwar
 }
 
 // copyHeader stores a header copy on a client.
+func (f *authClientFixture) requireSourceHeader(id uuid.UUID) {
+	f.t.Helper()
+	require.NoError(f.t, f.q.SetRemoteHeaderRequiredFixture(f.t.Context(), authclientbackfill.SetRemoteHeaderRequiredFixtureParams{IsRequired: true, ID: id}))
+}
+
 func (f *authClientFixture) copyHeader(clientID uuid.UUID, name string, required, secret bool, value, forwarded pgtype.Text) {
 	f.t.Helper()
 	require.NoError(f.t, f.q.SeedAuthClientHeaderFixture(f.t.Context(), authclientbackfill.SeedAuthClientHeaderFixtureParams{AuthClientID: clientID, OrganizationID: f.orgID, Name: name, IsRequired: required, IsSecret: secret, Value: value, ValueFromRequestHeader: forwarded}))
@@ -484,14 +489,45 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.Equal(t, authClientReasonSetup, f.resolve(f.choose(uuid.NullUUID{})).reason)
 	})
 
+	t.Run("no-auth on a server whose only credential header is Authorization is a setup gap", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.sourceHeader("Authorization", false, text("Bearer plain"), pgtype.Text{})
+		require.Equal(t, authClientReasonSetup, f.resolve(f.choose(uuid.NullUUID{})).reason)
+	})
+
 	t.Run("static copies matching the server's headers resolve", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
-		f.sourceHeader("Authorization", true, text("sealed-v1"), pgtype.Text{})
+		f.requireSourceHeader(f.sourceHeader("Authorization", true, text("sealed-v1"), pgtype.Text{}))
 		f.sourceHeader("X-Api-Version", false, text("2"), pgtype.Text{})
 		id := f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
 		f.copyHeader(id, "Authorization", true, true, text("sealed-v1"), pgtype.Text{})
 		require.Equal(t, authClientResolved, f.resolve(f.choose(validUUID(id))).outcome)
+	})
+
+	t.Run("a server header made required leaves the copy stale", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		headerID := f.sourceHeader("X-Upstream", false, pgtype.Text{}, text("X-Caller"))
+		id := f.client(authClientTypePassThrough, uuid.NullUUID{}, true)
+		f.copyHeader(id, "X-Upstream", false, false, pgtype.Text{}, text("X-Caller"))
+		selector := f.choose(validUUID(id))
+		require.Equal(t, authClientResolved, f.resolve(selector).outcome)
+		f.requireSourceHeader(headerID)
+		require.Equal(t, authClientReasonHeadersStale, f.resolve(selector).reason)
+	})
+
+	t.Run("a server header made secret leaves the copy stale", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		headerID := f.sourceHeader("X-Api-Version", false, text("2"), pgtype.Text{})
+		id := f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
+		f.copyHeader(id, "X-Api-Version", false, false, text("2"), pgtype.Text{})
+		selector := f.choose(validUUID(id))
+		require.Equal(t, authClientResolved, f.resolve(selector).outcome)
+		require.NoError(t, f.q.UpdateRemoteHeaderFixture(ctx, authclientbackfill.UpdateRemoteHeaderFixtureParams{Name: "X-Api-Version", Value: text("2"), ValueFromRequestHeader: pgtype.Text{}, IsSecret: true, ID: headerID}))
+		require.Equal(t, authClientReasonHeadersStale, f.resolve(selector).reason)
 	})
 
 	t.Run("a rotated server header leaves the copy stale", func(t *testing.T) {
@@ -522,7 +558,7 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 	t.Run("a server credential header the client does not carry is a setup gap", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
-		f.sourceHeader("Authorization", true, text("sealed-v1"), pgtype.Text{})
+		f.requireSourceHeader(f.sourceHeader("Authorization", true, text("sealed-v1"), pgtype.Text{}))
 		f.sourceHeader("X-Api-Key", true, text("sealed-key"), pgtype.Text{})
 		static := f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
 		f.copyHeader(static, "Authorization", true, true, text("sealed-v1"), pgtype.Text{})
@@ -641,7 +677,7 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		t.Run("a required copy reading the inbound Authorization into "+destination+" is a setup gap", func(t *testing.T) {
 			t.Parallel()
 			f := newAuthClientFixture(t, pool)
-			f.sourceHeader(destination, false, pgtype.Text{}, text("authorization"))
+			f.requireSourceHeader(f.sourceHeader(destination, false, pgtype.Text{}, text("authorization")))
 			id := f.client(authClientTypePassThrough, uuid.NullUUID{}, true)
 			f.copyHeader(id, destination, true, false, pgtype.Text{}, text("authorization"))
 			res := f.serve(f.choose(validUUID(id)))
@@ -650,6 +686,20 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 			require.Empty(t, res.headers)
 		})
 	}
+
+	t.Run("a headers-only client left with no headers is a setup gap", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.sourceHeader("X-Token", false, pgtype.Text{}, text("Authorization"))
+		id := f.client(authClientTypePassThrough, uuid.NullUUID{}, true)
+		f.copyHeader(id, "X-Token", false, false, pgtype.Text{}, text("Authorization"))
+		res := f.serve(f.choose(validUUID(id)))
+		require.Equal(t, authClientGap, res.outcome, "nothing left to send would call the upstream anonymously")
+		require.Equal(t, authClientReasonSetup, res.reason)
+
+		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}, ID: f.serverID}))
+		require.Equal(t, authClientResolved, f.serve(f.choose(validUUID(id))).outcome, "a server needing no auth may be called without client headers")
+	})
 
 	t.Run("client headers are revealed for the proxy", func(t *testing.T) {
 		t.Parallel()

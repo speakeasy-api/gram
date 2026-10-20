@@ -114,6 +114,10 @@ type authClientResolution struct {
 
 	// headers are the client's own headers, loaded only when it serves.
 	headers []proxy.ConfiguredHeader
+
+	// noAuthAllowed is a server explicitly marked as needing no upstream
+	// authentication.
+	noAuthAllowed bool
 }
 
 // headersOnly reports a resolved client whose material is its headers alone,
@@ -158,7 +162,7 @@ func (connectPermitter) Permitted(context.Context, authClientPermitRequest) (boo
 // gapResolution is a choice that cannot be used, for reason.
 func gapResolution(reason string) authClientResolution {
 	none := upstreamChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
-	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil}
+	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthAllowed: false}
 }
 
 // decideAuthClient resolves a recorded choice without side effects.
@@ -166,6 +170,7 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 	res := gapResolution("")
 	res.serverName = row.ServerName.String
 	res.tunneled = row.Tunneled
+	res.noAuthAllowed = row.RequiresUpstreamAuth.Valid && !row.RequiresUpstreamAuth.Bool
 	if !row.AuthClientID.Valid {
 		if !row.NoAuth {
 			// An OAuth choice recorded before choices name auth clients.
@@ -302,7 +307,9 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 		}
 		var blocked bool
 		res.headers, blocked = withoutInboundAuthorization(headers)
-		if blocked {
+		// A headers-only client with nothing left to send would call the
+		// upstream anonymously, which only a server needing no auth allows.
+		if blocked || (res.headersOnly() && len(res.headers) == 0 && !res.noAuthAllowed) {
 			res.outcome = authClientGap
 			res.reason = authClientReasonSetup
 			res.headers = nil

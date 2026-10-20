@@ -22,7 +22,11 @@ func AuthClientResolver(ctx context.Context, flags Provider, organizationID stri
 	if flags == nil || organizationID == "" {
 		return AuthClientResolverOff
 	}
-	if enabled, err := flags.IsFlagEnabledLocal(ctx, FlagAuthClientResolver, organizationID, nil, nil); err == nil && enabled {
+	enforced, err := flags.IsFlagEnabledLocal(ctx, FlagAuthClientResolver, organizationID, nil, nil)
+	switch {
+	case err != nil:
+		return AuthClientResolverOff
+	case enforced:
 		return AuthClientResolverEnforced
 	}
 	if enabled, err := flags.IsFlagEnabledLocal(ctx, FlagAuthClientResolverShadow, organizationID, nil, nil); err == nil && enabled {

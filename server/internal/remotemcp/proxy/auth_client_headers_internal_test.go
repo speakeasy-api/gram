@@ -3,6 +3,7 @@ package proxy
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -88,9 +89,24 @@ func TestApplyRequestHeadersAuthClientOrder(t *testing.T) {
 	t.Run("no-auth sends no auth material", func(t *testing.T) {
 		t.Parallel()
 		remoteReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://upstream.test/mcp", nil)
+		// Only the Speakeasy session reaches this request: no client header
+		// is configured to carry anything else.
+		sessionOnly := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://gram.test/mcp", nil)
+		sessionOnly.Header.Set("Authorization", "Bearer speakeasy-session")
 		p := &Proxy{Logger: testenv.NewLogger(t), Headers: MergeAuthClientHeaders(HeaderPolicyRemote, server, nil), AuthorizationOverride: ""}
-		require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+		require.NoError(t, p.applyRequestHeaders(t.Context(), sessionOnly, remoteReq))
 		require.Empty(t, remoteReq.Header.Get("Authorization"))
+		require.Empty(t, remoteReq.Header.Get("X-Api-Key"))
+		require.Equal(t, []string{"User-Agent", "X-Workspace"}, headerNames(remoteReq.Header), "only the server's non-credential header is added")
 		require.Equal(t, "server-ws", remoteReq.Header.Get("X-Workspace"))
 	})
+}
+
+func headerNames(h http.Header) []string {
+	names := make([]string, 0, len(h))
+	for name := range h {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
 }

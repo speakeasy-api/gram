@@ -1468,6 +1468,9 @@ UPDATE remote_mcp_server_headers
 SET name = @name, value = sqlc.narg('value'), value_from_request_header = sqlc.narg('value_from_request_header'), is_secret = @is_secret
 WHERE id = @id;
 
+-- name: SetRemoteHeaderRequiredFixture :exec
+UPDATE remote_mcp_server_headers SET is_required = @is_required WHERE id = @id;
+
 -- name: SetEMAStoredScopesFixture :exec
 UPDATE mcp_auth_client_emas SET requested_scopes = @requested_scopes WHERE auth_client_id = @auth_client_id;
 
