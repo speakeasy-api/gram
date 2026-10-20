@@ -8076,6 +8076,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_features_organization_id_feature_
 ON organization_features (organization_id, feature_name)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS organization_features_organization_id_feature_name_idx
+ON organization_features (organization_id, feature_name);
+
 CREATE TABLE IF NOT EXISTS toolset_embeddings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
