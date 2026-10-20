@@ -36,6 +36,9 @@ func TestServiceConcurrentDeletedAttachments(t *testing.T) {
 					McpSlug: pgtype.Text{String: "example-tools-endpoint", Valid: true}, McpEnabled: true,
 				})
 				require.NoError(t, err)
+				if kind == "toolset" {
+					syncCanonicalWrapper(t, conn, ts)
+				}
 				payload := &gen.CreateAssistantPayload{Name: "Assistant", Model: "openai/gpt-4o-mini"}
 				targetID := ts.ID
 				if kind == "toolset" {
@@ -61,6 +64,9 @@ func TestServiceConcurrentDeletedAttachments(t *testing.T) {
 						McpSlug: pgtype.Text{String: "live-tools-endpoint", Valid: true}, McpEnabled: true,
 					})
 					require.NoError(t, err)
+					if kind == "toolset" {
+						syncCanonicalWrapper(t, conn, live)
+					}
 					original := &gen.CreateAssistantPayload{Name: "Original", Model: payload.Model}
 					if kind == "toolset" {
 						original.Toolsets = []*types.AssistantToolsetRef{{ToolsetSlug: live.Slug}}
@@ -130,15 +136,13 @@ func TestServiceConcurrentDeletedAttachments(t *testing.T) {
 					require.NoError(t, err)
 					require.Len(t, listed.Assistants, 1)
 					require.Equal(t, "Original", listed.Assistants[0].Name)
+					require.Zero(t, counts.Toolsets)
+					require.EqualValues(t, 1, counts.McpServers)
 					if kind == "toolset" {
-						require.EqualValues(t, 1, counts.Toolsets)
-						require.Zero(t, counts.McpServers)
 						require.Len(t, listed.Assistants[0].Toolsets, 1)
 						require.Equal(t, "live-tools", listed.Assistants[0].Toolsets[0].ToolsetSlug)
 						require.Empty(t, listed.Assistants[0].McpServers)
 					} else {
-						require.Zero(t, counts.Toolsets)
-						require.EqualValues(t, 1, counts.McpServers)
 						require.Empty(t, listed.Assistants[0].Toolsets)
 						require.Len(t, listed.Assistants[0].McpServers, 1)
 						require.Equal(t, "live-server", listed.Assistants[0].McpServers[0].McpServerSlug)
@@ -165,6 +169,7 @@ func TestServiceMixedAttachmentsConcurrentMCPBackendUpdate(t *testing.T) {
 		McpSlug: pgtype.Text{String: "target-tools-endpoint", Valid: true}, McpEnabled: true,
 	})
 	require.NoError(t, err)
+	syncCanonicalWrapper(t, conn, target)
 	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: uuid.New(), ProjectID: projectID, Name: pgtype.Text{String: "Example server", Valid: true},
 		Slug:      pgtype.Text{String: "example-server", Valid: true},

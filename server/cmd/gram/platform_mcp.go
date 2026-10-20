@@ -794,7 +794,7 @@ func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp
 	if config.TemporalEnv == nil {
 		config.Logger.WarnContext(context.Background(), "Platform MCP tool exposure cannot schedule toolset indexing; changes will report index_signal unavailable until the periodic sweep runs")
 	}
-	return service.WithFeatureProvider(config.FeatureFlags).WithIndexing(func(ctx context.Context, projectID, toolsetID uuid.UUID) error {
+	return service.WithIndexing(func(ctx context.Context, projectID, toolsetID uuid.UUID) error {
 		return toolsets.TriggerToolsetIndexForVersion(ctx, config.Logger, config.DB, config.TemporalEnv, projectID, toolsetID)
 	})
 }

@@ -39,6 +39,14 @@ describe("resolveEntityLink", () => {
     });
   });
 
+  it("does not link legacy custom-tool references to a removed route", () => {
+    expect(
+      resolveEntityLink("gram:custom_tool/example", "acme", "proj"),
+    ).toEqual({
+      href: null,
+    });
+  });
+
   it("resolves gram:risk_user/<id> to Risk Events filtered by that identifier", () => {
     expect(
       resolveEntityLink("gram:risk_user/alice@example.com", "acme", "proj"),

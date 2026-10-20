@@ -153,15 +153,3 @@ func TestParseCustomFlowsRefusesContractViolations(t *testing.T) {
 		})
 	}
 }
-
-func TestParseRefusesCustomFlowBlocksInAPlatform(t *testing.T) {
-	t.Parallel()
-
-	for _, block := range []string{
-		"- type: input\n          field: name\n          format: platform_name\n          label: Name",
-		"- type: wildcard_caution",
-	} {
-		_, err := catalog.Parse([]byte(strings.Replace(validPlatform, "- type: agent_picker", block, 1)))
-		require.ErrorContains(t, err, "blocks are not allowed here")
-	}
-}

@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -114,10 +115,10 @@ type ResolvedMcpEndpoint struct {
 	// serving it, and on every MCP request.
 	sharedResource *sharedResource
 
-	// RouteBase is the route surface (e.g. "mcp") — drives URL construction in
+	// RouteBase is the route surface — drives URL construction in
 	// WriteAuthenticateChallenge, the issuer URL emitted by /token, the
 	// consent form action, and the redirect from idp_callback.
-	RouteBase string
+	RouteBase mcproute.Base
 
 	// Slug is the public-facing endpoint slug (mcp_slug or
 	// mcp_endpoints.slug).
@@ -210,7 +211,7 @@ func (u AuthorizationServerURLs) clientAssertionAudiences(at clientAssertionEndp
 // IDP has stamped a subject onto the cached challenge state. Shape:
 // `<baseURL>/<RouteBase>/<Slug>/connect?state=<stateID>`.
 func (e *ResolvedMcpEndpoint) ConsentURL(baseURL, stateID string) (string, error) {
-	consentURL, err := url.JoinPath(baseURL, e.RouteBase, e.Slug, "connect")
+	consentURL, err := url.JoinPath(baseURL, e.RouteBase.String(), e.Slug, "connect")
 	if err != nil {
 		return "", fmt.Errorf("join consent path: %w", err)
 	}
@@ -283,19 +284,14 @@ func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool,
 	}, nil
 }
 
-// IDPCallbackURL is the route-base-scoped callback the Speakeasy IDP
-// redirects back to after authenticating a user on the private-endpoint
-// path. Shape: `<baseURL>/<RouteBase>/idp_callback`. The endpoint slug
-// is intentionally absent — the callback dispatches on the `state`
-// query parameter to recover the originating challenge. An organization
-// gateway is served on the /mcp surface and uses its callback, which is the
-// one the IDP already redirects to.
+// IDPCallbackURL is the callback the Speakeasy IDP redirects back to after
+// authenticating a user on the private-endpoint path. Shape:
+// `<baseURL>/mcp/idp_callback`, for every route base, organization gateways
+// included. The endpoint slug is intentionally absent — the callback
+// dispatches on the `state` query parameter to recover the originating
+// challenge.
 func (e *ResolvedMcpEndpoint) IDPCallbackURL(baseURL string) (string, error) {
-	routeBase := e.RouteBase
-	if e.IsOrganizationGateway() {
-		routeBase = "mcp"
-	}
-	u, err := url.JoinPath(baseURL, routeBase, "idp_callback")
+	u, err := url.JoinPath(baseURL, mcproute.MCP.String(), "idp_callback")
 	if err != nil {
 		return "", fmt.Errorf("build IDP callback URL: %w", err)
 	}
@@ -328,7 +324,7 @@ func (e *ResolvedMcpEndpoint) LogWith(logger *slog.Logger) *slog.Logger {
 // response itself; the two must match for spec-compliant clients to
 // find the AS.
 func (e *ResolvedMcpEndpoint) ProtectedResourceURL(baseURL string) (string, error) {
-	u, err := url.JoinPath(baseURL, ".well-known", "oauth-protected-resource", e.RouteBase, e.Slug)
+	u, err := url.JoinPath(baseURL, ".well-known", "oauth-protected-resource", e.RouteBase.String(), e.Slug)
 	if err != nil {
 		return "", fmt.Errorf("build protected-resource URL: %w", err)
 	}
@@ -340,7 +336,7 @@ func (e *ResolvedMcpEndpoint) ProtectedResourceURL(baseURL string) (string, erro
 // `issuer` claim of an access token, and the base every other OAuth
 // metadata URL on the endpoint hangs off of.
 func (e *ResolvedMcpEndpoint) RootURL(baseURL string) (string, error) {
-	u, err := url.JoinPath(baseURL, e.RouteBase, e.Slug)
+	u, err := url.JoinPath(baseURL, e.RouteBase.String(), e.Slug)
 	if err != nil {
 		return "", fmt.Errorf("build endpoint root URL: %w", err)
 	}
@@ -448,9 +444,9 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	// endpoint's RouteBase.
 	// Resuming a challenge on the other surface would emit an issuer that
 	// differs from the one the client recorded at mint time, which an
-	// iss-validating client rejects as a mix-up. Empty ref.RouteBase is
-	// treated as "mcp" for states minted before EndpointRef.RouteBase existed.
-	if e.RouteBase != conv.Default(ref.RouteBase, "mcp") {
+	// iss-validating client rejects as a mix-up. A ref naming no served
+	// surface, such as the retired x/mcp, never matches.
+	if routeBase, ok := ref.RouteBase.Resolve(); !ok || e.RouteBase != routeBase {
 		return errToolsetEndpointMismatch
 	}
 	// The authorization server is part of the flow's identity too: each one
@@ -486,7 +482,7 @@ func NewResolvedMcpEndpointFromMcpServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	mcpServer *mcpservers_repo.McpServer,
 	organizationID string,
-	routeBase string,
+	routeBase mcproute.Base,
 ) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
@@ -545,7 +541,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	metaServer *metamcp_repo.MetaMcpServer,
 	organizationID string,
-	routeBase string,
+	routeBase mcproute.Base,
 ) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewUserSessionIssuer(metaServer.UserSessionIssuerID.UUID).String(),
@@ -575,7 +571,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 // toolset.UserSessionIssuerID.Valid. routeBase is the URL surface the
 // request arrived under — the WWW-Authenticate URL, OAuth issuer URL, and
 // consent form action all need to match the caller's surface.
-func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase string) *ResolvedMcpEndpoint {
+func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase mcproute.Base) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewToolset(toolset.ID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
@@ -645,7 +641,12 @@ func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref Endpoint
 }
 
 func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
-	if ref.RouteBase == organizationGatewayRouteBase {
+	routeBase, ok := ref.RouteBase.Resolve()
+	if !ok {
+		return nil, errToolsetEndpointMismatch
+	}
+	ref.RouteBase = routeBase
+	if routeBase == mcproute.OrganizationGateway {
 		gateway, err := s.loadOrganizationGateway(ctx, ref.McpSlug)
 		if err != nil {
 			return nil, err
@@ -717,7 +718,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		if ref.Authority.IsPrivate() && project.OrganizationID != ref.Authority.OrganizationID {
 			return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
 		}
-		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, conv.Default(ref.RouteBase, "mcp"))
+		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, ref.RouteBase)
 		upstreamResource, err := s.resolveUpstreamResource(ctx, s.logger, mcpEndpoint.ProjectID, &mcpServer)
 		if err != nil {
 			return nil, err
@@ -744,13 +745,8 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 	}
 	// loadToolset has already checked the canonical hosted policy for this public fallback.
 	// Honour the surface the challenge was minted under so the resumed
-	// endpoint's URLs match the original mint. Empty ref.RouteBase falls
-	// back to "mcp" for states cached before EndpointRef.RouteBase existed.
-	routeBase := ref.RouteBase
-	if routeBase == "" {
-		routeBase = "mcp"
-	}
-	return newResolvedMcpEndpointFromToolset(toolset, routeBase), nil
+	// endpoint's URLs match the original mint.
+	return newResolvedMcpEndpointFromToolset(toolset, ref.RouteBase), nil
 }
 
 // loadResolvedMcpEndpointByToolsetSlug resolves an mcp_slug to a
@@ -762,7 +758,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 // of LoadResolvedMcpEndpointBySlug for slugs with no mcp_endpoint →
 // mcp_server row yet (issuer-gated toolset-backed servers predating the
 // toolsets → mcp_servers migration).
-func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug, routeBase string, entryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
+func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug string, routeBase mcproute.Base, entryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
 	var customDomainID uuid.NullUUID
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
@@ -838,12 +834,8 @@ func (s *Service) buildResolvedMetaMcpEndpointByRef(ctx context.Context, ref End
 		return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
 	}
 
-	routeBase := ref.RouteBase
-	if routeBase == "" {
-		routeBase = "mcp"
-	}
 	// The denormalized org id is authoritative — the composite FK on
 	// meta_mcp_servers pins (organization_id, project_id) to the projects
 	// row, and BuildResolvedMcpEndpointForMetaServer already relies on it.
-	return NewResolvedMcpEndpointFromMetaMcpServer(&mcpEndpoint, &metaServer, metaServer.OrganizationID, routeBase), nil
+	return NewResolvedMcpEndpointFromMetaMcpServer(&mcpEndpoint, &metaServer, metaServer.OrganizationID, ref.RouteBase), nil
 }

@@ -30,6 +30,7 @@ func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 		Toolset:               nil,
 		PrimaryEndpointID:     nil,
 		PrimaryEndpointURL:    nil,
+		HasEndpoint:           nil,
 		CreatedAt:             server.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:             server.UpdatedAt.Time.Format(time.RFC3339),
 	}
@@ -55,6 +56,7 @@ func BuildMcpServerToolsetSummaryView(row repo.ListToolsetSummariesByIDsRow) *ty
 		ID:                    row.ID.String(),
 		Slug:                  row.Slug,
 		Name:                  row.Name,
+		Description:           conv.FromPGText[string](row.Description),
 		ToolCount:             int(row.ToolCount),
 		ToolSelectionMode:     row.ToolSelectionMode,
 		ExternalMcpSlugs:      slugs,

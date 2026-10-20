@@ -683,6 +683,12 @@ INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_i
 VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_armed', @organization_id, 'organization')
 RETURNING id::text;
 
+-- name: SeedTrialStartAuditFixture :one
+-- Test-only fixture: records an admin-started trial generation.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_started', @organization_id, 'organization')
+RETURNING id::text;
+
 -- name: SeedTrialDemotionAuditFixture :exec
 -- Test-only fixture: records the committed demotion boundary for a retry cycle.
 INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
@@ -2135,6 +2141,24 @@ SELECT EXISTS (
     AND deleted IS FALSE
 );
 
+-- name: InsertMCPServerRemoteSessionClientFixture :exec
+-- Test-only fixture: inserts an MCP server upstream client association with
+-- no application checks, so a test can prove the schema itself refuses a
+-- cross-tenant row.
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+VALUES (
+    @project_id, @organization_id, @mcp_server_id, @remote_session_client_id,
+    (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = @remote_session_client_id)
+);
+
+-- name: ListUserSessionCredentialsForSubjectFixture :many
+-- Test-only fixture: every session row of one subject, oldest first, with the
+-- credential it belongs to, so a test can follow refresh rotation.
+SELECT id, COALESCE(credential_id, id)::uuid AS credential_id, deleted
+FROM user_sessions
+WHERE subject_urn = @subject_urn
+ORDER BY created_at, id;
+
 -- name: CountDatabasesWithPrefixFixture :one
 -- Databases whose name starts with a prefix, so a test can show clones are dropped.
 SELECT count(*)::bigint AS databases FROM pg_catalog.pg_database
@@ -2144,3 +2168,15 @@ WHERE starts_with(datname, @prefix::text);
 -- Test-only fixture: records one participant snapshot on a captured message.
 INSERT INTO chat_message_participants (project_id, chat_id, message_id, provider, provider_user_id, user_id)
 VALUES (@project_id, @chat_id, @message_id, @provider, @provider_user_id, sqlc.narg(user_id));
+
+-- name: InsertToolsetKeyedMcpMetadataFixture :one
+-- Plants a row under the toolset key, as pods from before the server-key writers wrote.
+INSERT INTO mcp_metadata (toolset_id, project_id, instructions, header_display_names, default_environment_id, external_documentation_url)
+VALUES (@toolset_id, @project_id, @instructions, COALESCE(sqlc.narg('header_display_names')::jsonb, '{}'::jsonb), @default_environment_id, sqlc.narg('external_documentation_url'))
+RETURNING id;
+
+-- name: InsertToolsetKeyedPluginServerFixture :one
+-- Plants a plugin entry under the toolset key, as pods from before the server-key writers wrote.
+INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order, deleted_at)
+VALUES (@plugin_id, @toolset_id, @display_name, @policy, @sort_order, sqlc.narg('deleted_at'))
+RETURNING *;

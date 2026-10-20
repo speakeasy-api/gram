@@ -135,7 +135,12 @@ type ListSessionsResponseBody struct {
 
 // ListResponseBody is the type of the "agents" service "list" endpoint HTTP
 // response body.
-type ListResponseBody []*ManagedAgentResponse
+type ListResponseBody struct {
+	// The agents in this page.
+	Items []*ManagedAgentResponseBody `form:"items" json:"items" xml:"items"`
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
 
 // CreateResponseBody is the type of the "agents" service "create" endpoint
 // HTTP response body.
@@ -3440,13 +3445,13 @@ type AgentSessionResponseBody struct {
 	LastUsedAt       *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 }
 
-// ManagedAgentResponse is used to define fields on response body types.
-type ManagedAgentResponse struct {
+// ManagedAgentResponseBody is used to define fields on response body types.
+type ManagedAgentResponseBody struct {
 	ID          string `form:"id" json:"id" xml:"id"`
 	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
 	// Safe profile of the active same-organization owner; does not require
 	// directory access
-	OwnerProfile *AgentOwnerProfileResponse `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
+	OwnerProfile *AgentOwnerProfileResponseBody `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
@@ -3454,29 +3459,11 @@ type ManagedAgentResponse struct {
 	Name                    string  `form:"name" json:"name" xml:"name"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                   `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   string                    `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions *AgentPermissionsResponse `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                    `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                    `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// AgentOwnerProfileResponse is used to define fields on response body types.
-type AgentOwnerProfileResponse struct {
-	DisplayName string  `form:"display_name" json:"display_name" xml:"display_name"`
-	PhotoURL    *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-}
-
-// AgentPermissionsResponse is used to define fields on response body types.
-type AgentPermissionsResponse struct {
-	// Whether the current human may read this agent
-	Read bool `form:"read" json:"read" xml:"read"`
-	// Whether the current human may configure or change this agent
-	Write bool `form:"write" json:"write" xml:"write"`
-	// Whether the current human may manage credentials for this agent
-	Authorize bool `form:"authorize" json:"authorize" xml:"authorize"`
-	// Whether the current human may transfer or reassign this agent
-	Transfer bool `form:"transfer" json:"transfer" xml:"transfer"`
+	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AgentOwnerProfileResponseBody is used to define fields on response body
@@ -3624,14 +3611,21 @@ func NewListSessionsResponseBody(res *agents.ListSessionsResult) *ListSessionsRe
 
 // NewListResponseBody builds the HTTP response body from the result of the
 // "list" endpoint of the "agents" service.
-func NewListResponseBody(res []*agents.ManagedAgent) ListResponseBody {
-	body := make([]*ManagedAgentResponse, len(res))
-	for i, val := range res {
-		if val == nil {
-			body[i] = nil
-			continue
+func NewListResponseBody(res *agents.ListAgentsResult) *ListResponseBody {
+	body := &ListResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Items != nil {
+		body.Items = make([]*ManagedAgentResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalAgentsManagedAgentToManagedAgentResponseBody(val)
 		}
-		body[i] = marshalAgentsManagedAgentToManagedAgentResponse(val)
+	} else {
+		body.Items = []*ManagedAgentResponseBody{}
 	}
 	return body
 }
@@ -6301,8 +6295,16 @@ func NewRevokeSessionPayload(body *RevokeSessionRequestBody, sessionToken *strin
 }
 
 // NewListPayload builds a agents service list endpoint payload.
-func NewListPayload(sessionToken *string) *agents.ListPayload {
+func NewListPayload(cursor *string, limit int, search *string, nameOrder string, lifecycle []string, ownerUserIds []string, registeredAfter *string, registeredBefore *string, sessionToken *string) *agents.ListPayload {
 	v := &agents.ListPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
+	v.Search = search
+	v.NameOrder = nameOrder
+	v.Lifecycle = lifecycle
+	v.OwnerUserIds = ownerUserIds
+	v.RegisteredAfter = registeredAfter
+	v.RegisteredBefore = registeredBefore
 	v.SessionToken = sessionToken
 
 	return v

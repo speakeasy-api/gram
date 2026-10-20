@@ -44,8 +44,6 @@ type ToolsetCreateInput struct {
 	// no version at all, exactly as the management API always has.
 	ToolURNs     []string
 	ResourceURNs []string
-	// HostedServerKey stores the Default plugin entry under the canonical server (feature.FlagHostedMCPServerKeyWrites).
-	HostedServerKey bool
 }
 
 // ToolsetCreateResult reports what the creation decided as well as what it
@@ -219,7 +217,7 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	if params.McpEnabled {
 		projectID := input.ProjectID
 		actor := &contextvalues.AuthContext{ActiveOrganizationID: input.OrganizationID, UserID: input.ActorUserID, Email: input.ActorEmail, ProjectID: &projectID}
-		outcome, err := attachToDefaultPluginWithOutcome(ctx, tx, logger, auditLogger, actor, created.ID, created.Name, input.HostedServerKey)
+		outcome, err := attachToDefaultPluginWithOutcome(ctx, tx, logger, auditLogger, actor, created.ID, created.Name)
 		if err != nil {
 			return ToolsetCreateResult{}, err
 		}
@@ -267,19 +265,18 @@ func ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logge
 // plugin (project predates this feature) — callers should enqueue an initial
 // publish for it, but only after their own transaction commits, since this
 // runs pre-commit and the DB writes could still roll back.
-func attachToDefaultPluginInTransaction(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string, hostedServerKey bool) (bool, error) {
-	outcome, err := attachToDefaultPluginWithOutcome(ctx, dbtx, logger, auditLogger, authCtx, toolsetID, displayName, hostedServerKey)
+func attachToDefaultPluginInTransaction(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
+	outcome, err := attachToDefaultPluginWithOutcome(ctx, dbtx, logger, auditLogger, authCtx, toolsetID, displayName)
 	return outcome.PluginCreated, err
 }
 
-func attachToDefaultPluginWithOutcome(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string, hostedServerKey bool) (plugins.DefaultPluginAttachOutcome, error) {
+func attachToDefaultPluginWithOutcome(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (plugins.DefaultPluginAttachOutcome, error) {
 	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, plugins.AttachToDefaultPluginParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       *authCtx.ProjectID,
-		ToolsetID:       uuid.NullUUID{UUID: toolsetID, Valid: true},
-		McpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		DisplayName:     displayName,
-		HostedServerKey: hostedServerKey,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
+		McpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		DisplayName:    displayName,
 	}, nil)
 	if err != nil {
 		return plugins.DefaultPluginAttachOutcome{}, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, logger)

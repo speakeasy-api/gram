@@ -217,6 +217,10 @@ WHERE project_id = @project_id::uuid AND deleted IS FALSE
   AND resource_identifier = 'https://mcp.linear.app/mcp'
   AND scope_override = ARRAY['read'];
 
+-- name: PostflightIDServerClientAssociations :one
+SELECT count(*) FROM mcp_server_remote_session_clients
+WHERE project_id = @project_id::uuid AND deleted IS FALSE;
+
 -- name: PostflightIDServiceAccountHeaders :one
 SELECT count(*)
 FROM remote_mcp_server_headers header

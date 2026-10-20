@@ -2081,15 +2081,6 @@ WHERE chat_id = @chat_id AND project_id = @project_id
   AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
   AND external_message_id NOT LIKE '%/block:%';
 
--- name: GetInferenceAcceptedCheckpoint :one
-SELECT inference_accepted_checkpoint FROM chats
-WHERE project_id = @project_id AND external_chat_id = @external_chat_id;
-
--- name: SetInferenceAcceptedCheckpoint :execrows
-UPDATE chats SET inference_accepted_checkpoint = @checkpoint
-WHERE project_id = @project_id AND external_chat_id = @external_chat_id
-  AND inference_accepted_checkpoint IS NOT DISTINCT FROM sqlc.narg('expected_checkpoint')::bytea;
-
 -- name: FindInferenceChatsByNewestMessageIdentity :many
 -- The actor's live chats whose newest stored Anthropic inference message
 -- carries one of these chain identities, with the identity each matched. A
@@ -2128,23 +2119,6 @@ SELECT EXISTS (
 UPDATE chats SET inference_actor_key = @inference_actor_key
 WHERE id = @id AND project_id = @project_id
   AND inference_actor_key IS NULL;
-
--- name: InferencePolicyRevision :one
--- Include mutable exclusions and custom rules, which do not bump policy
--- versions. Strict inference scans cannot accept in-scope prompt-policy
--- content while its feature flag is disabled or its evaluation is incomplete.
-WITH policies AS (
-  SELECT * FROM risk_policies
-  WHERE project_id = @project_id AND enabled IS TRUE AND deleted IS FALSE
-    AND action IN ('block', 'warn', 'quarantine')
-)
-SELECT jsonb_build_object(
-    'policies', (SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY p.id), '[]'::jsonb) FROM policies p),
-    'exclusions', (SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY e.id), '[]'::jsonb)
-      FROM risk_exclusions e WHERE e.project_id = @project_id AND e.enabled IS TRUE AND e.deleted IS FALSE),
-    'custom_rules', (SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.id), '[]'::jsonb)
-      FROM risk_custom_detection_rules r WHERE r.project_id = @project_id AND r.deleted IS FALSE)
-  )::text AS revision;
 
 -- name: RecordSlackMessageParticipant :exec
 -- Without a workspace hint, only a unique organization-local directory match
