@@ -25,7 +25,7 @@ func (w *ChatMessageWriter) enqueueMessageEvents(ctx context.Context, tx repo.DB
 	ids := make([]uuid.UUID, len(writes))
 	emails := make([]string, len(writes))
 	metadata := make(map[uuid.UUID]MessageWrite, len(writes))
-	lineage := repo.SetMessageCaptureLineageParams{ProjectID: projectID, Ids: nil, Kinds: nil, OriginalIds: nil}
+	lineage := repo.SetMessageCaptureLineageParams{ProjectID: projectID, OrganizationID: organizationID, Ids: nil, Kinds: nil, OriginalIds: nil}
 	for i, write := range writes {
 		if write.Params.ProjectID != projectID {
 			return fmt.Errorf("publication project does not match message")

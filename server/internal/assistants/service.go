@@ -4109,6 +4109,10 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 		BillingMode:       "",
 	})
 	for _, m := range userMessages {
+		originalID := m.ID
+		if m.OriginalMessageID.Valid {
+			originalID = m.OriginalMessageID.UUID
+		}
 		row := base
 		row.Content = conv.TruncateString(m.Content, selfHealUserMessageMaxLen)
 		row.UserID = m.UserID
@@ -4121,7 +4125,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 			UserEmail:         "",
 			Provider:          "",
 			InferenceProvider: "",
-			Lineage:           &chat.MessageLineage{Kind: chat.CaptureSynthetic, OriginalMessageID: m.ID},
+			Lineage:           &chat.MessageLineage{Kind: chat.CaptureSynthetic, OriginalMessageID: originalID},
 			HookHostname:      "",
 			AccountType:       chatRow.AccountType,
 			BillingMode:       "",

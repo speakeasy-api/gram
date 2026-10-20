@@ -24,16 +24,23 @@ func TestTranscriptLineage(t *testing.T) {
 		{name: "unaligned rewrite stays unknown", previous: []string{"old", "reply"}, incoming: []string{"summary", "new"}, kinds: []string{CaptureUnknown, CaptureUnknown}},
 		{name: "repeated tail is ambiguous", previous: []string{"old", "a", "b"}, incoming: []string{"summary", "a", "b", "a", "b"}, kinds: []string{CaptureUnknown, CaptureUnknown, CaptureUnknown, CaptureUnknown, CaptureUnknown}},
 		{name: "positionally identical prefix", previous: []string{"a", "b", "old"}, incoming: []string{"a", "b", "edited"}, kinds: []string{CaptureReobserved, CaptureReobserved, CaptureUnknown}},
+		{name: "retained tail with blank assistant slots", previous: []string{"old", "reply", "continue", "done"}, incoming: []string{"edited", "reply", "", "continue", "done", "new"}, kinds: []string{CaptureUnknown, CaptureReobserved, CaptureUnknown, CaptureReobserved, CaptureReobserved, CaptureOriginal}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			previous := make([]repo.ListChatMessagesForMatchRow, len(tc.previous))
 			for i, text := range tc.previous {
 				previous[i] = repo.ListChatMessagesForMatchRow{ID: uuid.New(), Role: "user", Content: text, CaptureKind: CaptureOriginal}
+				if i == 1 {
+					previous[i].OriginalMessageID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+				}
 			}
 			incoming := make([]messageSlot, len(tc.incoming))
 			for i, text := range tc.incoming {
 				incoming[i] = slotFromStored("user", text, "", nil)
+				if text == "" {
+					incoming[i] = slotFromStored("assistant", "", "", nil)
+				}
 			}
 			got := transcriptLineage(previous, incoming, tc.compacted)
 			for i, lineage := range got {
@@ -43,7 +50,15 @@ func TestTranscriptLineage(t *testing.T) {
 				}
 				require.Equal(t, tc.kinds[i], kind, "position %d", i)
 				if kind == CaptureReobserved {
-					require.NotEqual(t, uuid.Nil, lineage.OriginalMessageID)
+					for _, row := range previous {
+						if row.Content == tc.incoming[i] {
+							want := row.ID
+							if row.OriginalMessageID.Valid {
+								want = row.OriginalMessageID.UUID
+							}
+							require.Equal(t, want, lineage.OriginalMessageID, "position %d", i)
+						}
+					}
 				}
 			}
 		})

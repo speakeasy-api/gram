@@ -1698,7 +1698,8 @@ UPDATE chat_messages m
 SET capture_kind = (@kinds::text[])[input.ordinality],
     original_message_id = NULLIF((@original_ids::uuid[])[input.ordinality], '00000000-0000-0000-0000-000000000000'::uuid)
 FROM UNNEST(@ids::uuid[]) WITH ORDINALITY AS input(id, ordinality)
-WHERE m.project_id = @project_id::uuid AND m.id = input.id;
+WHERE m.project_id = @project_id::uuid AND m.id = input.id
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = m.project_id AND p.organization_id = @organization_id::text);
 
 -- name: UpdateChatTitle :exec
 -- Auto-generated title write. Guarded on title_manually_set so a manual rename

@@ -96,8 +96,17 @@ func transcriptLineage(previous []repo.ListChatMessagesForMatchRow, incoming []m
 	}
 	bestEnd, bestLength, tied := 0, 0, false
 	for end := i; end < len(incoming); end++ {
+		if incoming[end].isBlankAssistant() {
+			continue
+		}
 		length := 0
-		for end-length >= i && len(stored)-1-length >= j && same(end-length, len(stored)-1-length) {
+		for position := end; position >= i && len(stored)-1-length >= j; position-- {
+			if incoming[position].isBlankAssistant() {
+				continue
+			}
+			if !same(position, len(stored)-1-length) {
+				break
+			}
 			length++
 		}
 		if length > bestLength {
@@ -107,8 +116,12 @@ func transcriptLineage(previous []repo.ListChatMessagesForMatchRow, incoming []m
 		}
 	}
 	if !tied && (bestLength >= 2 || compacted && bestLength == 1) {
-		for offset := range bestLength {
-			copyLineage(bestEnd-offset, len(stored)-1-offset)
+		for position, copied := bestEnd, 0; copied < bestLength; position-- {
+			if incoming[position].isBlankAssistant() {
+				continue
+			}
+			copyLineage(position, len(stored)-1-copied)
+			copied++
 		}
 		if !compacted {
 			for i := bestEnd + 1; i < len(out); i++ {

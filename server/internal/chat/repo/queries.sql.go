@@ -4658,15 +4658,17 @@ const setMessageCaptureLineage = `-- name: SetMessageCaptureLineage :exec
 UPDATE chat_messages m
 SET capture_kind = ($1::text[])[input.ordinality],
     original_message_id = NULLIF(($2::uuid[])[input.ordinality], '00000000-0000-0000-0000-000000000000'::uuid)
-FROM UNNEST($4::uuid[]) WITH ORDINALITY AS input(id, ordinality)
+FROM UNNEST($5::uuid[]) WITH ORDINALITY AS input(id, ordinality)
 WHERE m.project_id = $3::uuid AND m.id = input.id
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = m.project_id AND p.organization_id = $4::text)
 `
 
 type SetMessageCaptureLineageParams struct {
-	Kinds       []string
-	OriginalIds []uuid.UUID
-	ProjectID   uuid.UUID
-	Ids         []uuid.UUID
+	Kinds          []string
+	OriginalIds    []uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Ids            []uuid.UUID
 }
 
 func (q *Queries) SetMessageCaptureLineage(ctx context.Context, arg SetMessageCaptureLineageParams) error {
@@ -4674,6 +4676,7 @@ func (q *Queries) SetMessageCaptureLineage(ctx context.Context, arg SetMessageCa
 		arg.Kinds,
 		arg.OriginalIds,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.Ids,
 	)
 	return err

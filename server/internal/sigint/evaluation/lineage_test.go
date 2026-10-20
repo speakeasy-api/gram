@@ -32,4 +32,10 @@ func TestConversationLineageIsPreserved(t *testing.T) {
 	require.EqualValues(t, 3, context.GetGeneration())
 	require.EqualValues(t, 57, context.GetSequence())
 	require.Equal(t, "original", context.GetCaptureKind())
+	context.SetOriginalMessageId("original-message")
+	outcomeContext := outcomeEvent(event.Subject).GetConversationMessage()
+	require.EqualValues(t, 3, outcomeContext.GetGeneration())
+	require.EqualValues(t, 57, outcomeContext.GetSequence())
+	require.Equal(t, "original", outcomeContext.GetCaptureKind())
+	require.Equal(t, "original-message", outcomeContext.GetOriginalMessageId())
 }
