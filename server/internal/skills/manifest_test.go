@@ -896,3 +896,41 @@ func TestValidateSkillSuggestionRejectsCanonicalNoOp(t *testing.T) {
 	_, err = ValidateSkillSuggestion(equivalent, "suggested-skill", base.CanonicalSHA256)
 	require.ErrorContains(t, err, "content is unchanged from base")
 }
+
+func TestSkillFrontmatterKeepsAuthoredCodePoints(t *testing.T) {
+	t.Parallel()
+
+	// "Cafe" followed by U+0301 COMBINING ACUTE ACCENT is valid, and NFC would
+	// compose it to "Café" (U+00E9). The frontmatter served over MCP must keep
+	// the decomposed form a client reads from the served bytes.
+	description := "Café helper.  "
+	content := "---\nname: cafe-helper\ndescription: |\n  " + description + "\n---\n\n# Body\n"
+
+	manifest, err := parseSkillManifest(content)
+	require.NoError(t, err)
+	require.True(t, manifest.SpecValid)
+
+	frontmatter, err := SkillFrontmatter(content)
+	require.NoError(t, err)
+	require.Equal(t, "cafe-helper", frontmatter["name"])
+	require.Equal(t, description+"\n", frontmatter["description"])
+	require.NotEqual(t, manifest.Frontmatter["description"], frontmatter["description"])
+}
+
+func TestSkillFrontmatterRejectsUnreadableFrontmatter(t *testing.T) {
+	t.Parallel()
+
+	for name, content := range map[string]string{
+		"empty":            "",
+		"no opening":       "name: x\n---\n",
+		"no closing":       "---\nname: x\n",
+		"not a mapping":    "---\n- x\n---\n",
+		"multiple docs":    "---\nname: x\n...\nname: y\n---\n",
+		"invalid utf-8":    "---\nname: \xff\n---\n",
+		"contains nul":     "---\nname: x\x00\n---\n",
+		"unparseable yaml": "---\nname: [x\n---\n",
+	} {
+		_, err := SkillFrontmatter(content)
+		require.Error(t, err, name)
+	}
+}

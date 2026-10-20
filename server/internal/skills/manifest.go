@@ -800,17 +800,75 @@ func frontmatterFields(fields map[string]*yaml.Node) map[string]any {
 }
 
 // SkillFrontmatter parses SKILL.md content and returns its YAML frontmatter
-// as JSON-compatible values, every field the author wrote included. It runs
-// the full manifest parse, canonicalization and digests included, so it fails
-// on anything that parse rejects, such as a missing or unnormalizable name.
-// Spec validation findings are not errors, so a manifest that fails spec
-// validation still yields its frontmatter.
+// as JSON-compatible values, every field the author wrote included. Strings
+// and keys keep the author's exact code points: unlike the manifest parse, it
+// applies no NFC or trailing-whitespace normalization, so the values match
+// what a client parsing the served bytes reads. It skips canonicalization and
+// digests and applies no spec validation, so a manifest that fails spec
+// validation still yields its frontmatter; it fails only when the
+// frontmatter cannot be read.
 func SkillFrontmatter(content string) (map[string]any, error) {
-	parsed, err := parseSkillManifest(content)
-	if err != nil {
-		return nil, err
+	if content == "" {
+		return nil, errors.New("parse skill frontmatter: content is empty")
 	}
-	return parsed.Frontmatter, nil
+	if len(content) > maxSkillContentBytes {
+		return nil, fmt.Errorf("parse skill frontmatter: content exceeds %d bytes", maxSkillContentBytes)
+	}
+	if !utf8.ValidString(content) {
+		return nil, errors.New("parse skill frontmatter: content is not valid UTF-8")
+	}
+	if strings.IndexByte(content, 0) >= 0 {
+		return nil, errors.New("parse skill frontmatter: content contains NUL")
+	}
+
+	source := strings.TrimPrefix(content, "\ufeff")
+	source = strings.ReplaceAll(source, "\r\n", "\n")
+	source = strings.ReplaceAll(source, "\r", "\n")
+	lines := strings.Split(source, "\n")
+	isDelimiter := func(line string) bool {
+		return strings.TrimRightFunc(line, unicode.IsSpace) == "---"
+	}
+	if !isDelimiter(lines[0]) {
+		return nil, errors.New("parse skill frontmatter: missing opening frontmatter delimiter")
+	}
+	closingLine := -1
+	for i := 1; i < len(lines); i++ {
+		if isDelimiter(lines[i]) {
+			closingLine = i
+			break
+		}
+	}
+	if closingLine < 0 {
+		return nil, errors.New("parse skill frontmatter: missing closing frontmatter delimiter")
+	}
+
+	frontmatter := strings.Join(lines[1:closingLine], "\n") + "\n"
+	if err := preflightYAMLSource(frontmatter); err != nil {
+		return nil, fmt.Errorf("preflight skill frontmatter: %w", err)
+	}
+	var document yaml.Node
+	decoder := yaml.NewDecoder(strings.NewReader(frontmatter))
+	if err := decoder.Decode(&document); err != nil {
+		return nil, fmt.Errorf("parse skill frontmatter: %w", err)
+	}
+	var extra yaml.Node
+	if err := decoder.Decode(&extra); err == nil {
+		return nil, errors.New("parse skill frontmatter: multiple YAML documents")
+	} else if !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("parse skill frontmatter: %w", err)
+	}
+	if len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
+		return nil, errors.New("parse skill frontmatter: top level must be a mapping")
+	}
+	if err := validateYAMLTree(&document); err != nil {
+		return nil, fmt.Errorf("parse skill frontmatter: %w", err)
+	}
+
+	value, ok := yamlJSONValueWith(document.Content[0], keepText).(map[string]any)
+	if !ok {
+		return nil, errors.New("parse skill frontmatter: top level must be a mapping")
+	}
+	return value, nil
 }
 
 // manifestFrontmatter re-derives the top-level frontmatter fields from stored
@@ -836,17 +894,26 @@ func metadataField(fields map[string]*yaml.Node) map[string]any {
 }
 
 func yamlJSONValue(node *yaml.Node) any {
+	return yamlJSONValueWith(node, norm.NFC.String)
+}
+
+// keepText leaves text as the author wrote it.
+func keepText(s string) string { return s }
+
+// yamlJSONValueWith converts a YAML node to JSON-compatible values, passing
+// every key and string through text.
+func yamlJSONValueWith(node *yaml.Node, text func(string) string) any {
 	switch node.Kind {
 	case yaml.MappingNode:
 		value := make(map[string]any, len(node.Content)/2)
 		for i := 0; i < len(node.Content); i += 2 {
-			value[norm.NFC.String(node.Content[i].Value)] = yamlJSONValue(node.Content[i+1])
+			value[text(node.Content[i].Value)] = yamlJSONValueWith(node.Content[i+1], text)
 		}
 		return value
 	case yaml.SequenceNode:
 		value := make([]any, len(node.Content))
 		for i, child := range node.Content {
-			value[i] = yamlJSONValue(child)
+			value[i] = yamlJSONValueWith(child, text)
 		}
 		return value
 	case yaml.ScalarNode:
@@ -871,7 +938,7 @@ func yamlJSONValue(node *yaml.Node) any {
 				return value
 			}
 		}
-		return norm.NFC.String(node.Value)
+		return text(node.Value)
 	default:
 		return nil
 	}

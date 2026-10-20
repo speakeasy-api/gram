@@ -2028,3 +2028,11 @@ SELECT id, kind, target, attempts, effective_at, next_attempt_at, claimed_until,
 FROM sign_in_revocation_deliveries
 WHERE organization_id = @organization_id
 ORDER BY created_at, id;
+
+-- name: ListMCPSkillObservations :many
+-- The skill observations one project recorded with one provider, oldest first.
+SELECT *
+FROM skill_observations
+WHERE project_id = @project_id
+  AND provider = @provider::text
+ORDER BY seen_at ASC, id ASC;
