@@ -133,6 +133,17 @@ vi.mock("@gram/client/react-query/listToolsetsForOrg.js", () => ({
       ...options,
     }),
 }));
+// A headless device's setup creates its bootstrap token on the provision
+// step, and its verify step polls the agent's tokens.
+vi.mock("@gram/client/react-query/createWorkloadDeviceJoinToken.js", () => ({
+  useCreateWorkloadDeviceJoinTokenMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/workloadDeviceJoinTokens.js", () => ({
+  useWorkloadDeviceJoinTokens: () => ({ data: undefined, isPending: true }),
+}));
 vi.mock("../agent-policy-grants", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../agent-policy-grants")>()),
   invalidateAgentPolicy: vi.fn(),
@@ -398,6 +409,73 @@ describe("Federating a platform's own tokens", () => {
       mocks.registerIssuer.mock.calls[0]?.[0]?.request
         ?.registerWorkloadIssuerForm?.issuer,
     ).toBe("https://issuer.example");
+  });
+});
+
+describe("Enrolling a headless device", () => {
+  async function reachDeviceChoice() {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Build Box" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Workload/ }));
+    fireEvent.click(
+      await screen.findByRole("radio", { name: /Headless device/ }),
+    );
+  }
+
+  it("grants device sync and hooks for the chosen project with the agent", async () => {
+    await reachDeviceChoice();
+    expect(screen.getByLabelText("Hooks project")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+
+    await screen.findByRole("heading", { name: "Enroll the box" });
+    expect(mocks.createKey).not.toHaveBeenCalled();
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toEqual([
+      grant,
+      {
+        effect: "allow",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "org_example" },
+      },
+      {
+        effect: "allow",
+        scope: "org:hooks_ingest",
+        selector: {
+          resourceKind: "org",
+          resourceId: "org_example",
+          projectId: "project_one",
+        },
+      },
+    ]);
+    // Until the install command ships, setting up by hand is open.
+    expect(screen.getByText("Set up manually")).toBeTruthy();
+  });
+
+  it("enrolls without hooks when they are not wanted, and says what that means", async () => {
+    await reachDeviceChoice();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Accept hooks from this project" }),
+    );
+    expect(screen.getByText(/hook events are refused/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    const policy: { scope: string }[] =
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants ?? [];
+    const scopes = policy.map((entry) => entry.scope);
+    expect(scopes).toEqual(["mcp:connect", "org:device_agent_sync"]);
+  });
+
+  it("is not offered without permission to manage workloads", async () => {
+    mocks.canFederate = false;
+    await reachCredentialStep();
+    expect(screen.queryByRole("radio", { name: /Headless device/ })).toBeNull();
   });
 });
 

@@ -1,6 +1,13 @@
 import { isRelativePath } from "@/components/setup-steps/origin";
 import { Badge } from "@/components/ui/Badge";
-import { Boxes, Cloud, GitBranch, KeyRound, ShieldCheck } from "lucide-react";
+import {
+  Boxes,
+  Cloud,
+  GitBranch,
+  KeyRound,
+  Server,
+  ShieldCheck,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
@@ -9,6 +16,7 @@ import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import { hasPlatformSetup } from "./platformSetups";
 import type { SetupStep } from "./setupInstructions";
 import type { CatalogEntry } from "./workloadCatalog";
+import { HEADLESS_DEVICE_KEY } from "../devices/device-enrollment";
 
 import type { JSX } from "react";
 import { WizardStepHeader } from "./WizardChrome";
@@ -76,6 +84,19 @@ const CUSTOM_ENTRY: PickerEntry = {
   Icon: KeyRound,
 };
 
+/**
+ * A box with no platform identity of its own. Not a catalog entry: Speakeasy
+ * is the issuer, and the box proves itself with a key it registers when it
+ * redeems a bootstrap token.
+ */
+const HEADLESS_DEVICE_ENTRY: PickerEntry = {
+  key: HEADLESS_DEVICE_KEY,
+  displayName: "Headless device",
+  description:
+    "Enroll a box with no platform identity, like a VPS or sandbox, with a single-use bootstrap token. Linux only for now.",
+  Icon: Server,
+};
+
 /** One selectable tile in the picker. */
 function PlatformTile({
   entry,
@@ -135,6 +156,7 @@ export function WorkloadPlatformPicker({
   onRetry,
   selectedKey,
   disabled = false,
+  showHeadlessDevice = false,
   onSelect,
 }: {
   entries: CatalogEntry[];
@@ -144,6 +166,8 @@ export function WorkloadPlatformPicker({
   selectedKey: string | null;
   /** Settled: the agent already signs in with one of these. */
   disabled?: boolean;
+  /** Offer enrolling a headless box. Needs permission to manage workloads. */
+  showHeadlessDevice?: boolean;
   onSelect: (key: string) => void;
 }): JSX.Element {
   // The catalog's policy is necessary but not sufficient: a platform is
@@ -157,6 +181,7 @@ export function WorkloadPlatformPicker({
         description: entry.description,
         icon: entry.icon,
       })),
+    ...(showHeadlessDevice ? [HEADLESS_DEVICE_ENTRY] : []),
     CUSTOM_ENTRY,
   ];
 
@@ -175,6 +200,14 @@ export function WorkloadPlatformPicker({
           Try again
         </Button>
         <ul className="grid gap-3 sm:grid-cols-2">
+          {showHeadlessDevice && (
+            <PlatformTile
+              entry={HEADLESS_DEVICE_ENTRY}
+              chosen={HEADLESS_DEVICE_ENTRY.key === selectedKey}
+              disabled={disabled}
+              onSelect={onSelect}
+            />
+          )}
           <PlatformTile
             entry={CUSTOM_ENTRY}
             chosen={CUSTOM_ENTRY.key === selectedKey}

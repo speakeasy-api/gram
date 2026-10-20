@@ -12,6 +12,7 @@ import { invalidateAllWorkloadIdentities } from "@gram/client/react-query/worklo
 import { useWithdrawWorkloadSubjectMutation } from "@gram/client/react-query/withdrawWorkloadSubject.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAgentAdmissions } from "./agentAdmissions";
+import { isDeviceAdmission } from "./devices/device-enrollment";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -45,7 +46,10 @@ export function AgentFederatedAccess({
     },
   });
 
-  const mine = identities.admissions;
+  // Enrolled devices are listed with the bootstrap tokens that enrolled them.
+  const mine = identities.admissions.filter(
+    (admission) => !isDeviceAdmission(admission),
+  );
 
   return (
     <>
