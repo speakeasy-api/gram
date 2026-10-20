@@ -957,7 +957,7 @@ func TestListSkillDistributionsResolvesThePluginFilterAndReportsVersionTracking(
 		skill: testSkill(),
 		pluginDistributions: []*types.PluginSkillDistribution{
 			{ID: "d1", SkillID: testSkillID, SkillName: "add-mcp", SkillDisplayName: "Add MCP", PluginID: testMarketingPlugin, PluginName: "Marketing", PinnedVersionID: nil, ResolvedVersionID: testSkillVersionID, Channel: "plugin", CreatedAt: "2026-08-20T00:00:00Z", UpdatedAt: "2026-08-21T00:00:00Z", LastLoadedOverMcpAt: &lastLoaded},
-			{ID: "d2", SkillID: testSkillID, SkillName: "add-mcp", SkillDisplayName: "Add MCP", PluginID: testDefaultPluginID, PluginName: "Default", PinnedVersionID: &pinned, ResolvedVersionID: testSkillVersionID, Channel: "plugin", CreatedAt: "2026-08-20T00:00:00Z", UpdatedAt: "2026-08-20T00:00:00Z", LastLoadedOverMcpAt: nil},
+			{ID: "d2", SkillID: testSkillID, SkillName: "add-mcp", SkillDisplayName: "Add MCP", PluginID: testDefaultPluginID, PluginName: "Default", PinnedVersionID: &pinned, ResolvedVersionID: testSkillVersionID, Channel: "plugin", CreatedAt: "2026-08-20T00:00:00Z", UpdatedAt: "2026-08-20T00:00:00Z", LastLoadedOverMcpAt: &lastLoaded},
 		},
 	}
 	service := testSkillsService(t, skills)
@@ -989,7 +989,8 @@ func TestListSkillDistributionsResolvesThePluginFilterAndReportsVersionTracking(
 	require.False(t, held.FollowsLatest)
 	require.Equal(t, testSkillVersionID, held.PinnedVersionID)
 	require.Equal(t, "Default", held.Target.Name)
-	require.Nil(t, held.LastLoadedOverMcpAt, "a skill never loaded over MCP reports no time")
+	require.NotNil(t, held.LastLoadedOverMcpAt)
+	require.Equal(t, lastLoaded, *held.LastLoadedOverMcpAt, "loads are per skill, so every distribution of the skill reports the same time")
 }
 
 func TestListSkillDistributionsReadsTheWholeProjectWhenNothingIsNamed(t *testing.T) {
