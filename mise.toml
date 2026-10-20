@@ -270,6 +270,8 @@ SPEAKEASY_AI_API_URL = "{{env.GRAM_API_URL}}"
 SPEAKEASY_AI_SITE_URL = "{{env.GRAM_SITE_URL}}"
 SPEAKEASY_AI_LOG_PRETTY = { default = "{{env.GRAM_LOG_PRETTY}}" }
 VITE_DEV_HOSTNAMES = "localhost"
+GRAM_AGENTATION_PORT = "4747"
+VITE_AGENTATION_URL = "http://localhost:{{env.GRAM_AGENTATION_PORT}}"
 ## Base URL of the CDN serving the dashboard's static assets (e.g.
 ## https://cdn.dev.getgram.ai). Not a build-time setting: the dashboard
 ## container's nginx reads it at runtime to rewrite /assets/ URLs in
