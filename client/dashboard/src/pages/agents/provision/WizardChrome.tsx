@@ -246,13 +246,18 @@ export function WizardSummary({
             Step {step} of {stepCount}
           </span>
         </div>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+        {/* Label and value share a line while both fit, and the value drops
+            to its own full-width line when it does not. A two-column grid
+            instead gave the value whatever the label left over, which was
+            narrow enough to shatter `mcp:connect` and an organization id
+            across several lines. */}
+        <dl className="space-y-2 text-sm">
           {/* The name is a decision like the others, so it is labelled like
               the others. Until it is typed it is a bar: a placeholder word
               would read as the agent's name rather than as its absence. */}
-          <div className="contents">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4">
             <dt className="text-muted-foreground">Name</dt>
-            <dd className="min-w-0 text-right break-words">
+            <dd className="grow basis-28 text-right break-words">
               {name.trim() ? (
                 <Marked on={highlight === "Name"}>{name.trim()}</Marked>
               ) : (
@@ -261,9 +266,12 @@ export function WizardSummary({
             </dd>
           </div>
           {rows.map((row) => (
-            <div key={row.label} className="contents">
+            <div
+              key={row.label}
+              className="flex flex-wrap items-baseline justify-between gap-x-4"
+            >
               <dt className="text-muted-foreground">{row.label}</dt>
-              <dd className="min-w-0 text-right break-words">
+              <dd className="grow basis-28 text-right break-words">
                 <Marked on={highlight === row.label}>{row.value}</Marked>
               </dd>
             </div>
