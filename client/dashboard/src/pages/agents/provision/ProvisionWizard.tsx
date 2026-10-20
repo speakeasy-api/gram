@@ -1111,7 +1111,7 @@ export function ProvisionWizard({
             <div className="space-y-5">
               <WizardStepHeader
                 title="Enroll the box"
-                description="Run the install on the box this agent runs on."
+                description="Install the Speakeasy device service on the box. It enrolls as this agent."
               />
               <DeviceSetupPanel
                 agentId={agentID}
