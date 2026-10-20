@@ -136,12 +136,12 @@ function linuxDownload(version: string | null) {
   version = inlinableVersion(version);
   if (version) {
     const base = `${RELEASES_BASE}/v${version}`;
-    return `curl -fSL -o speakeasyd ${base}/speakeasyd_${version}_linux_amd64
+    return `curl -fSL -o speakeasyd ${base}/speakeasyd_${version}_linux_amd64 && \\
 curl -fSL -o speakeasy  ${base}/speakeasy_${version}_linux_amd64`;
   }
   return `${bashVersionAssign(version)}
 BASE=${RELEASES_BASE}/v$VERSION
-curl -fSL -o speakeasyd "$BASE/speakeasyd_\${VERSION}_linux_amd64"
+curl -fSL -o speakeasyd "$BASE/speakeasyd_\${VERSION}_linux_amd64" && \\
 curl -fSL -o speakeasy  "$BASE/speakeasy_\${VERSION}_linux_amd64"`;
 }
 function psVersionAssign(version: string | null) {
@@ -361,7 +361,7 @@ function ManualDownload({ os }: { os: "linux" }) {
 
   const daemon = data?.latest?.["speakeasyd"];
   const cli = data?.latest?.["speakeasy"];
-  if (isError || !daemon) {
+  if (isError || !daemon || !cli) {
     return (
       <Text small muted>
         Couldn't load the latest release — open the{" "}
@@ -390,7 +390,7 @@ function ManualDownload({ os }: { os: "linux" }) {
       <div className="overflow-hidden border text-sm">
         {keys.map((key) => {
           const d = artifactFor(daemon, key);
-          const c = cli && artifactFor(cli, key);
+          const c = artifactFor(cli, key);
           return (
             <div
               key={key}
@@ -424,7 +424,7 @@ function ManualDownload({ os }: { os: "linux" }) {
                     sha256={c.sha256}
                     role="CLI"
                     name="speakeasy"
-                    version={cli?.version ?? daemon.version}
+                    version={cli.version}
                   />
                 )}
               </div>
@@ -433,8 +433,9 @@ function ManualDownload({ os }: { os: "linux" }) {
         })}
       </div>
       <Text small muted>
-        Hover a button for its <code>sha256</code>. Then press{" "}
-        <strong className="font-medium">Next step</strong>.
+        Save the files as <code>speakeasyd</code> and <code>speakeasy</code>,
+        the names the next step uses. Hover a button for its <code>sha256</code>
+        . Then press <strong className="font-medium">Next step</strong>.
       </Text>
     </div>
   );
@@ -765,7 +766,7 @@ export function ManagedProfileExample(): React.JSX.Element {
         org. <code>email</code> is per-user; have your MDM substitute its
         per-user email variable (Jamf / Iru <code>$EMAIL</code>, or your
         platform's equivalent) so one profile serves the whole fleet, or omit{" "}
-        <code>email</code> and have each user run <code>speakeasy enroll</code>.
+        <code>email</code> and have each user sign in with personal enrollment.
         Click{" "}
         <strong className="text-foreground">
           {hasExistingAgentKey ? "Re-generate token" : "Generate token"}
@@ -865,8 +866,9 @@ function FleetIdentity({ os }: { os: OsKey }) {
           scope it to your target device groups. <code>org_token</code> is a
           credential — distribute it the way you'd distribute any API key, and
           don't commit it or paste it into chat. If the agent isn't picking up
-          the file, confirm the path with <code>speakeasy config path</code>,
-          check that it's readable by the logged-in user, and validate the JSON.
+          the file, confirm the path with the agent CLI&apos;s{" "}
+          <code>config path</code> command (run by its install path), check that
+          it's readable by the logged-in user, and validate the JSON.
         </Text>
       </div>
     </div>
