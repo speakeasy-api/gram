@@ -243,7 +243,7 @@ func TestServeAgentGateway_PrivateTunnelReceivesAgentAssertion(t *testing.T) {
 	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeMetaRPCBody(t, "tools/call", map[string]any{
 		"name": "execute_tool",
 		"arguments": map[string]any{
-			"name": fx.grantedProject + "." + fx.granted + "--ping", "arguments": map[string]any{},
+			"name": fx.granted + "--ping", "arguments": map[string]any{},
 		},
 	}))
 	require.NoError(t, err)
@@ -396,7 +396,7 @@ func TestServeAgentGateway_ExcludesPrivateOnlyMembersOnPublicIngress(t *testing.
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	qualified := fx.grantedProject + "." + fx.granted
+	qualified := fx.granted
 
 	setMode := func(mode pgtype.Text) {
 		t.Helper()
@@ -467,7 +467,7 @@ func TestServeAgentGateway_ListsPrivateOnlyMembersOnPrivateIngress(t *testing.T)
 		"arguments": map[string]any{},
 	}))
 	require.NoError(t, err)
-	require.Contains(t, w.Body.String(), fx.grantedProject+"."+fx.granted)
+	require.Contains(t, w.Body.String(), fx.granted)
 	// public_only members are the ones excluded here.
 	require.NotContains(t, w.Body.String(), fx.open)
 }

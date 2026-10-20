@@ -12,10 +12,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -472,7 +472,7 @@ func TestRecordReadIdempotentPerSession(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, again, "the same content in the same session counts once")
 
-	observations, err := repo.New(f.conn).ListMCPSkillObservations(ctx, repo.ListMCPSkillObservationsParams{ProjectID: f.projectID, Provider: mcpskills.ObservationProvider})
+	observations, err := testrepo.New(f.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{ProjectID: f.projectID, Provider: mcpskills.ObservationProvider})
 	require.NoError(t, err)
 	require.Len(t, observations, 1)
 
@@ -530,7 +530,7 @@ func TestRecordReadLandsInSkillProject(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, written)
 
-	observations, err := repo.New(f.conn).ListMCPSkillObservations(ctx, repo.ListMCPSkillObservationsParams{ProjectID: otherProjectID, Provider: mcpskills.ObservationProvider})
+	observations, err := testrepo.New(f.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{ProjectID: otherProjectID, Provider: mcpskills.ObservationProvider})
 	require.NoError(t, err)
 	require.Len(t, observations, 1, "a gateway read is recorded in the project that owns the skill")
 }
@@ -550,7 +550,7 @@ func TestRecordReadWithoutSessionCountsEveryRead(t *testing.T) {
 		require.True(t, written)
 	}
 
-	observations, err := repo.New(f.conn).ListMCPSkillObservations(ctx, repo.ListMCPSkillObservationsParams{ProjectID: f.projectID, Provider: mcpskills.ObservationProvider})
+	observations, err := testrepo.New(f.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{ProjectID: f.projectID, Provider: mcpskills.ObservationProvider})
 	require.NoError(t, err)
 	require.Len(t, observations, 2)
 	require.False(t, observations[0].IdempotencyKey.Valid)

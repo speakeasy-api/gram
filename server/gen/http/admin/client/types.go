@@ -402,14 +402,14 @@ type UpdateSupportMatrixRequestBody struct {
 // PreviewExternalMcpMigrationRequestBody is the type of the "admin" service
 // "previewExternalMcpMigration" endpoint HTTP request body.
 type PreviewExternalMcpMigrationRequestBody struct {
-	// Servers to migrate, in order.
+	// Servers to migrate or delete, in order.
 	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers" json:"servers" xml:"servers"`
 }
 
 // MigrateExternalMcpServersRequestBody is the type of the "admin" service
 // "migrateExternalMcpServers" endpoint HTTP request body.
 type MigrateExternalMcpServersRequestBody struct {
-	// Servers to migrate, in order.
+	// Servers to migrate or delete, in order.
 	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers" json:"servers" xml:"servers"`
 }
 
@@ -1958,6 +1958,26 @@ type GetMcpServerToolCallsResponseBody struct {
 	BucketSeconds *int64 `form:"bucket_seconds,omitempty" json:"bucket_seconds,omitempty" xml:"bucket_seconds,omitempty"`
 	// Tool calls per bucket, oldest first.
 	Daily []*AdminMcpServerToolCallBucketResponseBody `form:"daily,omitempty" json:"daily,omitempty" xml:"daily,omitempty"`
+}
+
+// GetHookClientsResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body.
+type GetHookClientsResponseBody struct {
+	// Length of the window in days.
+	WindowDays *int `form:"window_days,omitempty" json:"window_days,omitempty" xml:"window_days,omitempty"`
+	// When the grids were read from ClickHouse.
+	QueriedAt *string `form:"queried_at,omitempty" json:"queried_at,omitempty" xml:"queried_at,omitempty"`
+	// True when the grids came from the cache rather than a fresh ClickHouse read.
+	// Cached grids last 24 hours and refresh in the background once an hour old.
+	FromCache *bool `form:"from_cache,omitempty" json:"from_cache,omitempty" xml:"from_cache,omitempty"`
+	// Every organization that appears in any grid.
+	Organizations []*AdminHookClientOrganizationResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	// The hook client grid, new sessions only.
+	Sessions []*AdminHookClientSessionCellResponseBody `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
+	// The inference hook traffic grid.
+	Inference []*AdminInferenceHookCellResponseBody `form:"inference,omitempty" json:"inference,omitempty" xml:"inference,omitempty"`
+	// The device agent version grid. Empty for days before versions were recorded.
+	DeviceAgents []*AdminDeviceAgentCellResponseBody `form:"device_agents,omitempty" json:"device_agents,omitempty" xml:"device_agents,omitempty"`
 }
 
 // ListExternalMcpMigrationCandidatesResponseBody is the type of the "admin"
@@ -13862,6 +13882,188 @@ type GetMcpServerToolCallsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetHookClientsUnauthorizedResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "unauthorized" error.
+type GetHookClientsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsForbiddenResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "forbidden" error.
+type GetHookClientsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsBadRequestResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "bad_request" error.
+type GetHookClientsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsNotFoundResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "not_found" error.
+type GetHookClientsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsConflictResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "conflict" error.
+type GetHookClientsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsUnsupportedMediaResponseBody is the type of the "admin"
+// service "getHookClients" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetHookClientsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsInvalidResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "invalid" error.
+type GetHookClientsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsInvariantViolationResponseBody is the type of the "admin"
+// service "getHookClients" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetHookClientsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsUnexpectedResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "unexpected" error.
+type GetHookClientsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsGatewayErrorResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "gateway_error" error.
+type GetHookClientsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListExternalMcpMigrationCandidatesUnavailableResponseBody is the type of the
 // "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
 // body for the "unavailable" error.
@@ -20597,6 +20799,67 @@ type AdminMcpServerToolCallBucketResponseBody struct {
 	Failed *int64 `form:"failed,omitempty" json:"failed,omitempty" xml:"failed,omitempty"`
 }
 
+// AdminHookClientOrganizationResponseBody is used to define fields on response
+// body types.
+type AdminHookClientOrganizationResponseBody struct {
+	// The organization ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The organization name. Absent when the organization no longer exists.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The organization slug. Absent when the organization no longer exists.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
+// AdminHookClientSessionCellResponseBody is used to define fields on response
+// body types.
+type AdminHookClientSessionCellResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The UTC day, as YYYY-MM-DD.
+	Day *string `form:"day,omitempty" json:"day,omitempty" xml:"day,omitempty"`
+	// curl for the legacy curl hooks, a hooks binary version, binary for binary
+	// rows that record no version, or empty for the organization-day total.
+	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Machines that started a session on this day.
+	Machines *int64 `form:"machines,omitempty" json:"machines,omitempty" xml:"machines,omitempty"`
+	// Sessions started on this day.
+	Sessions *int64 `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
+	// Machines that sent any hook on this day, including sessions started earlier.
+	MachinesAll *int64 `form:"machines_all,omitempty" json:"machines_all,omitempty" xml:"machines_all,omitempty"`
+}
+
+// AdminInferenceHookCellResponseBody is used to define fields on response body
+// types.
+type AdminInferenceHookCellResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The UTC day, as YYYY-MM-DD.
+	Day *string `form:"day,omitempty" json:"day,omitempty" xml:"day,omitempty"`
+	// The Claude app that sent the transcript, or empty for the organization-day
+	// total.
+	Surface *string `form:"surface,omitempty" json:"surface,omitempty" xml:"surface,omitempty"`
+	// Distinct users.
+	Users *int64 `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
+	// Stored transcript messages.
+	Events *int64 `form:"events,omitempty" json:"events,omitempty" xml:"events,omitempty"`
+	// Distinct sessions.
+	Sessions *int64 `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
+}
+
+// AdminDeviceAgentCellResponseBody is used to define fields on response body
+// types.
+type AdminDeviceAgentCellResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The UTC day, as YYYY-MM-DD.
+	Day *string `form:"day,omitempty" json:"day,omitempty" xml:"day,omitempty"`
+	// The speakeasyd version, or empty for the organization-day total.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Machines whose agent polled on this day, by the last version each reported
+	// that day.
+	Machines *int64 `form:"machines,omitempty" json:"machines,omitempty" xml:"machines,omitempty"`
+}
+
 // AdminExternalMcpMigrationCandidateResponseBody is used to define fields on
 // response body types.
 type AdminExternalMcpMigrationCandidateResponseBody struct {
@@ -20631,8 +20894,18 @@ type AdminExternalMcpMigrationCandidateResponseBody struct {
 	// Tool calls over the last tool_call_window_days. Absent when telemetry is
 	// unavailable.
 	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// What running the candidate does: migrate switches its server in place to a
+	// remote MCP server; delete removes the toolset because nothing is left to
+	// migrate, along with any server, addresses and plugin entries it still owns.
+	// A server already migrated in place is kept and keeps working.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Why the candidate is deleted rather than migrated. Empty when it migrates.
+	DeleteReasons []string `form:"delete_reasons,omitempty" json:"delete_reasons,omitempty" xml:"delete_reasons,omitempty"`
 	// Why the server cannot be migrated. Empty when it can.
 	Blockers []string `form:"blockers,omitempty" json:"blockers,omitempty" xml:"blockers,omitempty"`
+	// What migrating the server drops or cannot carry over. Warnings do not stop
+	// it.
+	Warnings []string `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
 }
 
 // AdminExternalMcpMigrationRequestRequestBody is used to define fields on
@@ -20647,18 +20920,26 @@ type AdminExternalMcpMigrationRequestRequestBody struct {
 type AdminExternalMcpMigrationOutcomeResponseBody struct {
 	// The candidate's toolset.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// migrated and previewed completed every step; failed left the server
+	// What the run did, or would do, with the candidate. Absent when it was not
+	// attempted.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// migrated, deleted and previewed completed every step; deleted removed the
+	// toolset and any server it still owned, so mcp_server_id,
+	// remote_mcp_server_id and remote_url are absent; failed left the server
 	// unchanged; not_attempted follows an earlier failure.
 	MigrationStatus *string `form:"migration_status,omitempty" json:"migration_status,omitempty" xml:"migration_status,omitempty"`
 	// Why the server failed or was not attempted.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	// The server's /mcp/<slug> address, which does not change.
+	// The server's /mcp/<slug> address. Migrating keeps it; deleting a server the
+	// toolset still owns removes it.
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// The server, which keeps its ID.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// The remote MCP source the server now proxies.
+	// The remote MCP source the server proxies once migrated. Absent when the
+	// server failed; a preview's source is rolled back.
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	// The upstream URL the server now dials.
+	// The upstream URL the server dials once migrated. Absent when the server
+	// failed.
 	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
 	// Each change, in order.
 	Actions []string `form:"actions,omitempty" json:"actions,omitempty" xml:"actions,omitempty"`
@@ -32274,6 +32555,200 @@ func NewGetMcpServerToolCallsGatewayError(body *GetMcpServerToolCallsGatewayErro
 	return v
 }
 
+// NewGetHookClientsAdminHookClientsResultOK builds a "admin" service
+// "getHookClients" endpoint result from a HTTP "OK" response.
+func NewGetHookClientsAdminHookClientsResultOK(body *GetHookClientsResponseBody) *admin.AdminHookClientsResult {
+	v := &admin.AdminHookClientsResult{
+		WindowDays: *body.WindowDays,
+		QueriedAt:  *body.QueriedAt,
+		FromCache:  *body.FromCache,
+	}
+	v.Organizations = make([]*admin.AdminHookClientOrganization, len(body.Organizations))
+	for i, val := range body.Organizations {
+		if val == nil {
+			v.Organizations[i] = nil
+			continue
+		}
+		v.Organizations[i] = unmarshalAdminHookClientOrganizationResponseBodyToAdminAdminHookClientOrganization(val)
+	}
+	v.Sessions = make([]*admin.AdminHookClientSessionCell, len(body.Sessions))
+	for i, val := range body.Sessions {
+		if val == nil {
+			v.Sessions[i] = nil
+			continue
+		}
+		v.Sessions[i] = unmarshalAdminHookClientSessionCellResponseBodyToAdminAdminHookClientSessionCell(val)
+	}
+	v.Inference = make([]*admin.AdminInferenceHookCell, len(body.Inference))
+	for i, val := range body.Inference {
+		if val == nil {
+			v.Inference[i] = nil
+			continue
+		}
+		v.Inference[i] = unmarshalAdminInferenceHookCellResponseBodyToAdminAdminInferenceHookCell(val)
+	}
+	v.DeviceAgents = make([]*admin.AdminDeviceAgentCell, len(body.DeviceAgents))
+	for i, val := range body.DeviceAgents {
+		if val == nil {
+			v.DeviceAgents[i] = nil
+			continue
+		}
+		v.DeviceAgents[i] = unmarshalAdminDeviceAgentCellResponseBodyToAdminAdminDeviceAgentCell(val)
+	}
+
+	return v
+}
+
+// NewGetHookClientsUnauthorized builds a admin service getHookClients endpoint
+// unauthorized error.
+func NewGetHookClientsUnauthorized(body *GetHookClientsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsForbidden builds a admin service getHookClients endpoint
+// forbidden error.
+func NewGetHookClientsForbidden(body *GetHookClientsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsBadRequest builds a admin service getHookClients endpoint
+// bad_request error.
+func NewGetHookClientsBadRequest(body *GetHookClientsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsNotFound builds a admin service getHookClients endpoint
+// not_found error.
+func NewGetHookClientsNotFound(body *GetHookClientsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsConflict builds a admin service getHookClients endpoint
+// conflict error.
+func NewGetHookClientsConflict(body *GetHookClientsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsUnsupportedMedia builds a admin service getHookClients
+// endpoint unsupported_media error.
+func NewGetHookClientsUnsupportedMedia(body *GetHookClientsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsInvalid builds a admin service getHookClients endpoint
+// invalid error.
+func NewGetHookClientsInvalid(body *GetHookClientsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsInvariantViolation builds a admin service getHookClients
+// endpoint invariant_violation error.
+func NewGetHookClientsInvariantViolation(body *GetHookClientsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsUnexpected builds a admin service getHookClients endpoint
+// unexpected error.
+func NewGetHookClientsUnexpected(body *GetHookClientsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsGatewayError builds a admin service getHookClients endpoint
+// gateway_error error.
+func NewGetHookClientsGatewayError(body *GetHookClientsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListExternalMcpMigrationCandidatesAdminListExternalMcpMigrationCandidatesResultOK
 // builds a "admin" service "listExternalMcpMigrationCandidates" endpoint
 // result from a HTTP "OK" response.
@@ -39373,6 +39848,64 @@ func ValidateGetMcpServerToolCallsResponseBody(body *GetMcpServerToolCallsRespon
 	for _, e := range body.Daily {
 		if e != nil {
 			if err2 := ValidateAdminMcpServerToolCallBucketResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetHookClientsResponseBody runs the validations defined on
+// GetHookClientsResponseBody
+func ValidateGetHookClientsResponseBody(body *GetHookClientsResponseBody) (err error) {
+	if body.WindowDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_days", "body"))
+	}
+	if body.QueriedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("queried_at", "body"))
+	}
+	if body.FromCache == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from_cache", "body"))
+	}
+	if body.Organizations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	if body.Sessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
+	}
+	if body.Inference == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("inference", "body"))
+	}
+	if body.DeviceAgents == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("device_agents", "body"))
+	}
+	if body.QueriedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.queried_at", *body.QueriedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.Organizations {
+		if e != nil {
+			if err2 := ValidateAdminHookClientOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Sessions {
+		if e != nil {
+			if err2 := ValidateAdminHookClientSessionCellResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Inference {
+		if e != nil {
+			if err2 := ValidateAdminInferenceHookCellResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.DeviceAgents {
+		if e != nil {
+			if err2 := ValidateAdminDeviceAgentCellResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -55138,6 +55671,246 @@ func ValidateGetMcpServerToolCallsGatewayErrorResponseBody(body *GetMcpServerToo
 	return
 }
 
+// ValidateGetHookClientsUnauthorizedResponseBody runs the validations defined
+// on getHookClients_unauthorized_response_body
+func ValidateGetHookClientsUnauthorizedResponseBody(body *GetHookClientsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsForbiddenResponseBody runs the validations defined on
+// getHookClients_forbidden_response_body
+func ValidateGetHookClientsForbiddenResponseBody(body *GetHookClientsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsBadRequestResponseBody runs the validations defined on
+// getHookClients_bad_request_response_body
+func ValidateGetHookClientsBadRequestResponseBody(body *GetHookClientsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsNotFoundResponseBody runs the validations defined on
+// getHookClients_not_found_response_body
+func ValidateGetHookClientsNotFoundResponseBody(body *GetHookClientsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsConflictResponseBody runs the validations defined on
+// getHookClients_conflict_response_body
+func ValidateGetHookClientsConflictResponseBody(body *GetHookClientsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsUnsupportedMediaResponseBody runs the validations
+// defined on getHookClients_unsupported_media_response_body
+func ValidateGetHookClientsUnsupportedMediaResponseBody(body *GetHookClientsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsInvalidResponseBody runs the validations defined on
+// getHookClients_invalid_response_body
+func ValidateGetHookClientsInvalidResponseBody(body *GetHookClientsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsInvariantViolationResponseBody runs the validations
+// defined on getHookClients_invariant_violation_response_body
+func ValidateGetHookClientsInvariantViolationResponseBody(body *GetHookClientsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsUnexpectedResponseBody runs the validations defined on
+// getHookClients_unexpected_response_body
+func ValidateGetHookClientsUnexpectedResponseBody(body *GetHookClientsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsGatewayErrorResponseBody runs the validations defined
+// on getHookClients_gateway_error_response_body
+func ValidateGetHookClientsGatewayErrorResponseBody(body *GetHookClientsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListExternalMcpMigrationCandidatesUnavailableResponseBody runs the
 // validations defined on
 // listExternalMcpMigrationCandidates_unavailable_response_body
@@ -64133,6 +64906,90 @@ func ValidateAdminMcpServerToolCallBucketResponseBody(body *AdminMcpServerToolCa
 	return
 }
 
+// ValidateAdminHookClientOrganizationResponseBody runs the validations defined
+// on AdminHookClientOrganizationResponseBody
+func ValidateAdminHookClientOrganizationResponseBody(body *AdminHookClientOrganizationResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	return
+}
+
+// ValidateAdminHookClientSessionCellResponseBody runs the validations defined
+// on AdminHookClientSessionCellResponseBody
+func ValidateAdminHookClientSessionCellResponseBody(body *AdminHookClientSessionCellResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Day == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("day", "body"))
+	}
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.Machines == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("machines", "body"))
+	}
+	if body.Sessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
+	}
+	if body.MachinesAll == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("machines_all", "body"))
+	}
+	if body.Day != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.day", *body.Day, goa.FormatDate))
+	}
+	return
+}
+
+// ValidateAdminInferenceHookCellResponseBody runs the validations defined on
+// AdminInferenceHookCellResponseBody
+func ValidateAdminInferenceHookCellResponseBody(body *AdminInferenceHookCellResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Day == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("day", "body"))
+	}
+	if body.Surface == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("surface", "body"))
+	}
+	if body.Users == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("users", "body"))
+	}
+	if body.Events == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("events", "body"))
+	}
+	if body.Sessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
+	}
+	if body.Day != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.day", *body.Day, goa.FormatDate))
+	}
+	return
+}
+
+// ValidateAdminDeviceAgentCellResponseBody runs the validations defined on
+// AdminDeviceAgentCellResponseBody
+func ValidateAdminDeviceAgentCellResponseBody(body *AdminDeviceAgentCellResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Day == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("day", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Machines == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("machines", "body"))
+	}
+	if body.Day != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.day", *body.Day, goa.FormatDate))
+	}
+	return
+}
+
 // ValidateAdminExternalMcpMigrationCandidateResponseBody runs the validations
 // defined on AdminExternalMcpMigrationCandidateResponseBody
 func ValidateAdminExternalMcpMigrationCandidateResponseBody(body *AdminExternalMcpMigrationCandidateResponseBody) (err error) {
@@ -64160,14 +65017,28 @@ func ValidateAdminExternalMcpMigrationCandidateResponseBody(body *AdminExternalM
 	if body.ServerName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("server_name", "body"))
 	}
+	if body.Action == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
+	}
+	if body.DeleteReasons == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("delete_reasons", "body"))
+	}
 	if body.Blockers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("blockers", "body"))
+	}
+	if body.Warnings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warnings", "body"))
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.Action != nil {
+		if !(*body.Action == "migrate" || *body.Action == "delete") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"migrate", "delete"}))
+		}
 	}
 	return
 }
@@ -64197,9 +65068,14 @@ func ValidateAdminExternalMcpMigrationOutcomeResponseBody(body *AdminExternalMcp
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
 	}
+	if body.Action != nil {
+		if !(*body.Action == "migrate" || *body.Action == "delete") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"migrate", "delete"}))
+		}
+	}
 	if body.MigrationStatus != nil {
-		if !(*body.MigrationStatus == "migrated" || *body.MigrationStatus == "previewed" || *body.MigrationStatus == "failed" || *body.MigrationStatus == "not_attempted") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.migration_status", *body.MigrationStatus, []any{"migrated", "previewed", "failed", "not_attempted"}))
+		if !(*body.MigrationStatus == "migrated" || *body.MigrationStatus == "deleted" || *body.MigrationStatus == "previewed" || *body.MigrationStatus == "failed" || *body.MigrationStatus == "not_attempted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.migration_status", *body.MigrationStatus, []any{"migrated", "deleted", "previewed", "failed", "not_attempted"}))
 		}
 	}
 	if body.McpServerID != nil {

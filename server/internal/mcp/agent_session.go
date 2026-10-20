@@ -110,9 +110,10 @@ func (s *Service) prepareAgentSessionContext(ctx context.Context, endpoint *Reso
 	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, subject.ID)
 	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, authCtx, actor, contextvalues.PrincipalCredential{
-		AuthorizerUserID:       credential.AuthorizerUserID,
-		DelegatedGrants:        credential.DelegatedGrants,
-		DelegatedGrantsVersion: credential.DelegatedGrantsVersion,
+		AuthorizerUserID:         credential.AuthorizerUserID,
+		DelegatedGrants:          credential.DelegatedGrants,
+		DelegatedGrantsVersion:   credential.DelegatedGrantsVersion,
+		DerivesPolicyAtAdmission: false,
 	})
 	return ctx, nil
 }

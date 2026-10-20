@@ -410,7 +410,7 @@ const (
 	// 2026-07-28), otherwise from the observed `initialize` response.
 	McpNegotiatedProtocolVersionKey = attribute.Key("gram.mcp.negotiated_protocol_version")
 	// McpSurfaceKey is the inbound MCP serving surface: "hosting" for the
-	// third-party-facing /mcp/{slug} and /x/mcp/{slug} paths (all backends), or
+	// third-party-facing /mcp/{slug} path (all backends), or
 	// "platform" for the assistant-token-only /platform/mcp/{toolsetSlug} path.
 	McpSurfaceKey = attribute.Key("gram.mcp.surface")
 	// McpRejectionReasonKey is the bounded reason an inbound MCP request was
@@ -729,7 +729,7 @@ const (
 	RiskScanLimitBytesKey        = attribute.Key("gram.risk.scan.limit_bytes")
 	RiskScanRequestIDKey         = attribute.Key("gram.risk.scan.request_id")
 	RiskScanEngineKey            = attribute.Key("gram.risk.scan.engine")
-	RiskScanGateReasonKey        = attribute.Key("gram.risk.scan.gate_reason")
+	RiskScanSelectionReasonKey   = attribute.Key("gram.risk.scan.selection_reason")
 	RiskFindingIDKey             = attribute.Key("gram.risk.finding.id")
 	RiskPolicyVersionKey         = attribute.Key("gram.risk.policy.version")
 	RiskConfidenceKey            = attribute.Key("gram.risk.confidence")
@@ -1255,6 +1255,7 @@ func SlogHookServerNameOverrideID(v string) slog.Attr {
 }
 
 func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v) }
+func SlogHookDecision(v string) slog.Attr      { return slog.String(string(HookDecisionKey), v) }
 
 func HookRiskScanned(v bool) attribute.KeyValue { return HookRiskScannedKey.Bool(v) }
 
@@ -2867,12 +2868,12 @@ func SlogRiskScanRequestID(v string) slog.Attr {
 func RiskScanEngine(v string) attribute.KeyValue { return RiskScanEngineKey.String(v) }
 func SlogRiskScanEngine(v string) slog.Attr      { return slog.String(string(RiskScanEngineKey), v) }
 
-func RiskScanGateReason[V ~string](v V) attribute.KeyValue {
-	return RiskScanGateReasonKey.String(string(v))
+func RiskScanSelectionReason[V ~string](v V) attribute.KeyValue {
+	return RiskScanSelectionReasonKey.String(string(v))
 }
 
-func SlogRiskScanGateReason(v string) slog.Attr {
-	return slog.String(string(RiskScanGateReasonKey), v)
+func SlogRiskScanSelectionReason(v string) slog.Attr {
+	return slog.String(string(RiskScanSelectionReasonKey), v)
 }
 
 func RiskFindingID(v string) attribute.KeyValue { return RiskFindingIDKey.String(v) }

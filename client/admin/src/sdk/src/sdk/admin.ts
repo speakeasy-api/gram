@@ -24,6 +24,7 @@ import { adminFetchGlobalIssuerMetadata } from "../funcs/adminFetchGlobalIssuerM
 import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
+import { adminGetHookClients } from "../funcs/adminGetHookClients.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
 import { adminGetMcpServerToolCalls } from "../funcs/adminGetMcpServerToolCalls.js";
@@ -96,6 +97,7 @@ import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysi
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
 import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
 import { AdminExternalMcpMigrationResult } from "../models/components/adminexternalmcpmigrationresult.js";
+import { AdminHookClientsResult } from "../models/components/adminhookclientsresult.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
 import { AdminInferenceKeyRepairResult } from "../models/components/admininferencekeyrepairresult.js";
@@ -190,6 +192,7 @@ import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admind
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
 import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
 import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
+import { AdminGetHookClientsRequest } from "../models/operations/admingethookclients.js";
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
 import { AdminGetMcpServerToolCallsRequest } from "../models/operations/admingetmcpservertoolcalls.js";
@@ -305,7 +308,7 @@ export class Admin extends ClientSDK {
    * migrateExternalMcpServers admin
    *
    * @remarks
-   * Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
+   * Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
    */
   async migrateExternalMcpServers(
     request: MigrateExternalMcpServersRequestBody,
@@ -322,13 +325,30 @@ export class Admin extends ClientSDK {
    * previewExternalMcpMigration admin
    *
    * @remarks
-   * Runs the migration of each server inside a transaction that is rolled back, reporting what would happen without changing anything.
+   * Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.
    */
   async previewExternalMcpMigration(
     request: PreviewExternalMcpMigrationRequestBody,
     options?: RequestOptions,
   ): Promise<AdminExternalMcpMigrationResult> {
     return unwrapAsync(adminPreviewExternalMcpMigration(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getHookClients admin
+   *
+   * @remarks
+   * Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.
+   */
+  async getHookClients(
+    request?: AdminGetHookClientsRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminHookClientsResult> {
+    return unwrapAsync(adminGetHookClients(
       this,
       request,
       options,

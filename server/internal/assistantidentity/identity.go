@@ -7,13 +7,10 @@ package assistantidentity
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 )
 
 // State is an assistant's workload identity configuration state.
@@ -81,12 +78,4 @@ type Resolution struct {
 // DB is the minimal database capability required for coherent read snapshots.
 type DB interface {
 	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
-}
-
-// CeilingSnapshot owns canonical delegated-policy bytes. It is detached from
-// later database changes; callers persist it as immutable execution input.
-type CeilingSnapshot struct {
-	EncodingVersion runtimepolicy.DelegatedPolicyVersion `json:"encoding_version"`
-	Policy          json.RawMessage                      `json:"policy"`
-	Digest          string                               `json:"digest"`
 }

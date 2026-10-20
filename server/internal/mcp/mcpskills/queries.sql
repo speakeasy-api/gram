@@ -238,11 +238,3 @@ SET first_seen_at = LEAST(COALESCE(s.first_seen_at, inserted.seen_at), inserted.
 FROM inserted
 WHERE s.project_id = @project_id
   AND s.id = inserted.skill_id;
-
--- name: ListMCPSkillObservations :many
--- Test fixture: the activations one project recorded over MCP, oldest first.
-SELECT *
-FROM skill_observations
-WHERE project_id = @project_id
-  AND provider = @provider::text
-ORDER BY seen_at ASC, id ASC;

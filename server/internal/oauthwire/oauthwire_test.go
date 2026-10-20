@@ -62,9 +62,7 @@ func TestValidateResourceIndicators_RejectsUppercaseSchemeAndHost(t *testing.T) 
 
 func TestValidateResourceIndicators_RejectsDifferentRouteBase(t *testing.T) {
 	t.Parallel()
-	// /mcp and /x/mcp can front the same server but mint different audiences
-	// (urn:toolset vs urn:user-session-issuer), so they are never equivalent
-	// resource identifiers.
+	// A different route base is never an equivalent resource identifier.
 	requireInvalidTarget(t, oauthwire.ValidateResourceIndicators([]string{"https://acme.example.com/x/mcp/support-bot"}, canonicalResource))
 }
 

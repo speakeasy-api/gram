@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestGetRiskOverview_DefaultWindow(t *testing.T) {
@@ -35,7 +34,6 @@ func TestGetRiskOverview_DefaultWindow(t *testing.T) {
 		chOverviewFinding(t, projectID, orgID, recentChat, recent, now.Add(-time.Hour), "gitleaks", "secret.github_pat", "recent@example.com"),
 		chOverviewFinding(t, projectID, orgID, oldChat, old, now.AddDate(0, 0, -10), "gitleaks", "secret.github_pat", "old@example.com"),
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.GetRiskOverview(ctx, &gen.GetRiskOverviewPayload{})
 	require.NoError(t, err)
@@ -107,7 +105,6 @@ func TestGetRuleBreakdown_ExcludesDeletedPolicies(t *testing.T) {
 		finding(deleted.ID, "secret.stripe"),
 		finding(deleted.ID, "secret.aws"),
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// Soft-delete through the repository so the findings stay behind, the way
 	// they do until TTL in production.
