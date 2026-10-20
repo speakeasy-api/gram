@@ -22,10 +22,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -57,6 +59,7 @@ type config struct {
 	ch            clickhouseConfig
 	orgID         string
 	projectID     uuid.NullUUID
+	sources       []string
 	policyID      uuid.NullUUID
 	from          *time.Time
 	to            *time.Time
@@ -64,6 +67,7 @@ type config struct {
 	batchSize     int
 	bufferSize    int
 	dryRun        bool
+	gapFill       bool
 	liftPartGuard bool
 }
 
@@ -100,7 +104,7 @@ func run() int {
 }
 
 func runRiskFindings(args []string) int {
-	cfg, err := parseFlags(args)
+	cfg, err := parseFlags(args, time.Now().UTC())
 	if err != nil {
 		log.Printf("invalid arguments: %v", err)
 		return 2
@@ -127,7 +131,7 @@ func runRiskFindings(args []string) int {
 	}
 
 	var chConn clickhouse.Conn
-	if !cfg.dryRun {
+	if cfg.gapFill || !cfg.dryRun {
 		chConn, err = openClickhouse(ctx, cfg.ch)
 		if err != nil {
 			log.Printf("connect clickhouse: %v", err)
@@ -142,16 +146,32 @@ func runRiskFindings(args []string) int {
 
 	source := riskfindings.NewSource(pool)
 	transformer := riskfindings.NewTransformer(fingerprinter)
-	sink := riskfindings.NewSink(chConn, cfg.bufferSize, cfg.batchSize, cfg.dryRun, cfg.liftPartGuard)
+	sink := riskfindings.NewSink(chConn, riskfindings.SinkOptions{
+		BufferSize:         cfg.bufferSize,
+		BatchSize:          cfg.batchSize,
+		DryRun:             cfg.dryRun,
+		LiftPartitionGuard: cfg.liftPartGuard,
+		GapFill:            cfg.gapFill,
+	})
 
 	runErr := pipeline.Run[riskfindings.SourceRow, riskfindings.FindingRow](
 		ctx, source, transformer, sink, cfg.criteria(), cfg.bufferSize,
 	)
 
-	// Resume from the sink's committed id, not the source read position: rows the
-	// source read but the sink had not yet flushed on interruption are not
-	// durable, and resuming from the read position would skip them.
-	printReport(cfg, source.Scanned(), sink.Inserted(), sink.LastCommitted())
+	if reportErr := printReport(
+		os.Stdout,
+		cfg,
+		source.Scanned(),
+		source.ScannedBySource(),
+		sink.StatsBySource(),
+		sink.LastCommitted(),
+	); reportErr != nil {
+		if runErr == nil {
+			runErr = fmt.Errorf("write migration report: %w", reportErr)
+		} else {
+			log.Printf("write migration report: %v", reportErr)
+		}
+	}
 
 	if runErr != nil {
 		// Both interruption and hard failure leave an incomplete backfill: exit
@@ -160,7 +180,10 @@ func runRiskFindings(args []string) int {
 		// run as done.
 		resumeHint := ""
 		if committed := sink.LastCommitted(); committed != uuid.Nil {
-			resumeHint = fmt.Sprintf("; resume with -cursor %s (repeat the same -from/-to/-org/-project/-policy)", committed)
+			resumeHint = fmt.Sprintf("; resume with -cursor %s and repeat the same mode, -from, -to, -org, -project, -policy, and -sources", committed)
+			if cfg.from != nil {
+				resumeHint += fmt.Sprintf(" (effective -from %s)", cfg.from.Format(time.RFC3339Nano))
+			}
 		}
 		if errors.Is(runErr, context.Canceled) {
 			log.Printf("migration interrupted before completion%s", resumeHint)
@@ -184,6 +207,9 @@ func (c config) criteria() pipeline.Criteria {
 	}
 	if c.policyID.Valid {
 		crit[riskfindings.CriteriaPolicyID] = c.policyID.UUID
+	}
+	if len(c.sources) > 0 {
+		crit[riskfindings.CriteriaSources] = c.sources
 	}
 	if c.from != nil {
 		crit[riskfindings.CriteriaFrom] = *c.from
@@ -240,12 +266,13 @@ func registerClickhouseFlags(fs *flag.FlagSet) *clickhouseConfig {
 	return cfg
 }
 
-// defaultFrom is the riskfindings default lower time bound: the start of the
-// reveal-metadata re-backfill window (see RISK_RESULTS_MIGRATION.md). Override
-// with -from, or pass -from "" to scan from the beginning of the table.
+// defaultFrom is the lower bound for the original full backfill.
 const defaultFrom = "2026-05-01T00:00:00Z"
 
-func parseFlags(args []string) (config, error) {
+// clickhouseRetention is the default gap-fill window.
+const clickhouseRetention = 90 * 24 * time.Hour
+
+func parseFlags(args []string, now time.Time) (config, error) {
 	fs := flag.NewFlagSet("riskfindings", flag.ContinueOnError)
 
 	// Secrets (Postgres URL, ClickHouse password, fingerprint pepper) are read
@@ -254,20 +281,29 @@ func parseFlags(args []string) (config, error) {
 	var (
 		pepperKeyringFile = fs.String("pepper-keyring-file", "", "path to a file holding the JSON pepper keyring (alternative to $GRAM_RISK_FINGERPRINT_PEPPER_KEYRING)")
 		chCfg             = registerClickhouseFlags(fs)
-		orgID             = fs.String("org", "", "organization_id to scope the migration (optional; all orgs if empty)")
+		gapFill           = fs.Bool("gap-fill", false, "skip findings already present in ClickHouse and append missing state copies")
+		orgID             = fs.String("org", "", "organization_id to scope the migration")
 		projectID         = fs.String("project", "", "project_id (uuid) to scope (optional)")
 		policyID          = fs.String("policy", "", "risk_policy_id (uuid) to scope (optional)")
-		fromStr           = fs.String("from", defaultFrom, "lower time bound, RFC3339 (default is the reveal-metadata re-backfill start; pass an empty string to scan from the beginning)")
-		toStr             = fs.String("to", "", "upper time bound, RFC3339 (optional; to the end if empty)")
-		cursorStr         = fs.String("cursor", "", "resume after this risk_results id (exclusive); keyset resume position only — still pass the original -from/-to/-org/-project/-policy")
+		sourcesStr        = fs.String("sources", "", "comma-separated finding sources to scope (optional)")
+		fromStr           = fs.String("from", "", "lower time bound, RFC3339")
+		toStr             = fs.String("to", "", "upper time bound, RFC3339 (optional)")
+		cursorStr         = fs.String("cursor", "", "resume after this risk_results id (exclusive)")
 		batchSize         = fs.Int("batch-size", riskfindings.DefaultBatchSize, "rows per source page and sink batch")
 		bufferSize        = fs.Int("buffer", riskfindings.DefaultBatchSize, "channel buffer between pipeline stages")
-		dryRun            = fs.Bool("dry-run", true, "when true (default) read and transform but do not write; pass -dry-run=false to insert")
+		dryRun            = fs.Bool("dry-run", true, "read and report without writing")
 		liftPartGuard     = fs.Bool("lift-partition-guard", true, "set max_partitions_per_insert_block=0 on inserts; pass -lift-partition-guard=false when the ClickHouse settings profile constrains that setting (code 452)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return config{}, fmt.Errorf("parse flags: %w", err)
 	}
+
+	fromSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "from" {
+			fromSet = true
+		}
+	})
 
 	pepperKeyring := os.Getenv("GRAM_RISK_FINGERPRINT_PEPPER_KEYRING")
 	if *pepperKeyringFile != "" {
@@ -287,12 +323,14 @@ func parseFlags(args []string) (config, error) {
 		orgID:         *orgID,
 		projectID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		policyID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		sources:       parseSources(*sourcesStr),
 		from:          nil,
 		to:            nil,
 		cursor:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		batchSize:     *batchSize,
 		bufferSize:    *bufferSize,
 		dryRun:        *dryRun,
+		gapFill:       *gapFill,
 		liftPartGuard: *liftPartGuard,
 	}
 
@@ -304,6 +342,9 @@ func parseFlags(args []string) (config, error) {
 	}
 	if cfg.batchSize <= 0 {
 		return cfg, errors.New("-batch-size must be positive")
+	}
+	if cfg.gapFill && cfg.orgID == "" {
+		return cfg, errors.New("-org is required with -gap-fill")
 	}
 
 	if *projectID != "" {
@@ -320,8 +361,20 @@ func parseFlags(args []string) (config, error) {
 		}
 		cfg.policyID = uuid.NullUUID{UUID: pol, Valid: true}
 	}
-	if *fromStr != "" {
-		from, err := time.Parse(time.RFC3339, *fromStr)
+	effectiveFrom := *fromStr
+	if !fromSet {
+		if cfg.gapFill {
+			if *cursorStr != "" {
+				return cfg, errors.New("-from is required with -cursor and -gap-fill because the default window moves with the clock")
+			}
+			from := now.Add(-clickhouseRetention)
+			cfg.from = &from
+		} else {
+			effectiveFrom = defaultFrom
+		}
+	}
+	if effectiveFrom != "" {
+		from, err := time.Parse(time.RFC3339, effectiveFrom)
 		if err != nil {
 			return cfg, fmt.Errorf("invalid -from: %w", err)
 		}
@@ -355,30 +408,85 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-func printReport(cfg config, scanned, inserted int64, lastCursor uuid.UUID) {
+func parseSources(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	for source := range strings.SplitSeq(value, ",") {
+		source = strings.TrimSpace(source)
+		if source != "" {
+			seen[source] = struct{}{}
+		}
+	}
+	sources := make([]string, 0, len(seen))
+	for source := range seen {
+		sources = append(sources, source)
+	}
+	sort.Strings(sources)
+	return sources
+}
+
+func printReport(
+	w io.Writer,
+	cfg config,
+	scanned int64,
+	scannedBySource map[string]int64,
+	statsBySource map[string]riskfindings.SourceStats,
+	lastCursor uuid.UUID,
+) error {
 	mode := "DRY RUN (no writes)"
 	if !cfg.dryRun {
 		mode = "APPLIED"
 	}
-	fmt.Println()
-	fmt.Println("risk_findings migration summary")
-	fmt.Printf("  mode:        %s\n", mode)
-	if cfg.orgID != "" {
-		fmt.Printf("  org:         %s\n", cfg.orgID)
-	} else {
-		fmt.Printf("  org:         (all)\n")
+	org := cfg.orgID
+	if org == "" {
+		org = "(all)"
 	}
-	fmt.Printf("  scanned:     %d\n", scanned)
-	fmt.Printf("  inserted:    %d\n", inserted)
-	// The resume cursor is meaningful only for an applied run: in dry-run nothing
-	// is written, so there is no durable checkpoint to resume from.
-	if cfg.dryRun {
-		fmt.Printf("  last cursor: (dry run — no durable checkpoint)\n")
+	lines := []string{
+		"",
+		"risk_findings migration summary",
+		fmt.Sprintf("  mode:        %s", mode),
+		fmt.Sprintf("  org:         %s", org),
+		fmt.Sprintf("  scanned:     %d", scanned),
+	}
+	if cfg.gapFill {
+		lines = append(lines, "  by source:")
+		sources := make([]string, 0, len(scannedBySource))
+		for source := range scannedBySource {
+			sources = append(sources, source)
+		}
+		sort.Strings(sources)
+		for _, source := range sources {
+			stats := statsBySource[source]
+			lines = append(lines, fmt.Sprintf(
+				"    %s: postgres=%d present_by_id=%d matched_by_key=%d state_copies=%d skipped_ch_newer=%d inserts=%d",
+				source,
+				scannedBySource[source],
+				stats.PresentByID,
+				stats.MatchedByKey,
+				stats.StateCopies,
+				stats.SkippedCHNewer,
+				stats.Inserted,
+			))
+		}
 	} else {
-		fmt.Printf("  last cursor: %s\n", lastCursor)
+		var inserted int64
+		for _, stats := range statsBySource {
+			inserted += stats.Inserted
+		}
+		lines = append(lines, fmt.Sprintf("  inserted:    %d", inserted))
+	}
+	if cfg.dryRun {
+		lines = append(lines, "  last cursor: (dry run, no durable checkpoint)")
+	} else {
+		lines = append(lines, fmt.Sprintf("  last cursor: %s", lastCursor))
 	}
 	if cfg.dryRun && scanned > 0 {
-		fmt.Println()
-		fmt.Println("re-run with -dry-run=false to write to ClickHouse.")
+		lines = append(lines, "", "re-run with -dry-run=false to write to ClickHouse.")
 	}
+	if _, err := fmt.Fprintln(w, strings.Join(lines, "\n")); err != nil {
+		return fmt.Errorf("write report: %w", err)
+	}
+	return nil
 }

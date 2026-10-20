@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -39,6 +40,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -62,9 +66,14 @@ type Service struct {
 	audit           *audit.Logger
 	productFeatures ProductFeaturesClient
 	serverURL       string
+	orgHosts        *orghost.Resolver
 	blobStore       assets.BlobStore
 	telemetry       *telemetry.Logger
 	growth          *growthsignals.Emitter
+
+	// deviceAgentTokens authenticates headless devices that present a
+	// device-agent token instead of an agent API key. Nil refuses them.
+	deviceAgentTokens *deviceagenttoken.Issuer
 }
 
 var (
@@ -82,24 +91,28 @@ func NewService(
 	auditLogger *audit.Logger,
 	productFeatures ProductFeaturesClient,
 	serverURL string,
+	orgHosts *orghost.Resolver,
 	blobStore assets.BlobStore,
 	telemetryLogger *telemetry.Logger,
 	growthEmitter *growthsignals.Emitter,
+	deviceAgentTokens *deviceagenttoken.Issuer,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
-		logger:          logger,
-		db:              db,
-		repo:            repo.New(db),
-		auth:            auth.New(logger, db, sessions, authzEngine),
-		authz:           authzEngine,
-		audit:           auditLogger,
-		productFeatures: productFeatures,
-		serverURL:       serverURL,
-		blobStore:       blobStore,
-		telemetry:       telemetryLogger,
-		growth:          growthEmitter,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
+		logger:            logger,
+		db:                db,
+		repo:              repo.New(db),
+		auth:              auth.New(logger, db, sessions, authzEngine),
+		authz:             authzEngine,
+		audit:             auditLogger,
+		productFeatures:   productFeatures,
+		serverURL:         serverURL,
+		orgHosts:          orgHosts,
+		blobStore:         blobStore,
+		telemetry:         telemetryLogger,
+		growth:            growthEmitter,
+		deviceAgentTokens: deviceAgentTokens,
 	}
 }
 
@@ -107,16 +120,23 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	// Only getPlugins accepts device-agent tokens.
+	server.GetPlugins = deviceagenttoken.BearerChallenge(server.GetPlugins)
+	srv.Mount(mux, server)
 	// Public capability-URL route for minted session handoffs (see
 	// handoffs.go): unauthenticated by design, the token is the credential.
 	o11y.AttachHandler(mux, http.MethodGet, "/shared/handoffs/{token}", oops.ErrHandle(service.logger, service.ServeSessionHandoff).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	// A refused device-agent token is the better answer than a missing key
+	// for a device that sent no key.
+	if key == "" {
+		if err := deviceagenttoken.AuthFailure(ctx); err != nil {
+			return ctx, fmt.Errorf("device-agent token refused: %w", err)
+		}
+	}
 	ctx, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, err
@@ -137,6 +157,43 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 		return ctx, fmt.Errorf("authorize agent device sync: %w", err)
 	}
 	return ctx, nil
+}
+
+// JWTAuth authenticates a headless device's device-agent token, admitting the
+// workload through its agent's live policy; like an agent key it needs the
+// device-sync grant. Without a token the context passes to the API key scheme.
+func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
+	if token == "" {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if !deviceagenttoken.IsToken(token) {
+		// A bearer is presented but is not a device-agent token.
+		deviceagenttoken.MarkInvalidToken(ctx)
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if s.deviceAgentTokens == nil {
+		refusal := oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
+		return deviceagenttoken.WithAuthFailure(ctx, refusal), refusal
+	}
+	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+
+	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	if err != nil {
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	authCtx, ok := contextvalues.GetAuthContext(admitted)
+	if !ok || authCtx == nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(admitted, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		err = fmt.Errorf("authorize workload device sync: %w", err)
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	// The workload stays the actor; getPlugins reads the agent it acts for
+	// through deviceagenttoken.EffectiveAgent.
+	return admitted, nil
 }
 
 // GetPlugins returns every plugin assigned to the device user's resolved
@@ -171,10 +228,10 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// An agent-principal key is itself the identity; APIKeyAuth already
-	// required its device-sync grant.
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
-		return s.getAgentPlugins(ctx, authCtx, actor)
+	// An agent-principal key, or a workload acting for its assigned agent, polls
+	// as that agent; the auth step already required the device-sync grant.
+	if agent, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
+		return s.getAgentPlugins(ctx, authCtx, agent)
 	}
 
 	// Resolve the polling identity by credential type. An org install key carries
@@ -317,9 +374,10 @@ func (s *Service) getAgentPlugins(ctx context.Context, authCtx *contextvalues.Au
 // pluginSetFor builds the poll response for an already-resolved principal set.
 func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthContext, principals []string) (*gen.GetPluginsResult, error) {
 	var (
-		rows             []repo.GetAgentPluginSetRow
-		configurationRow repo.DeviceAgentConfiguration
-		hasConfiguration bool
+		rows                   []repo.GetAgentPluginSetRow
+		configurationRow       repo.DeviceAgentConfiguration
+		hasConfiguration       bool
+		organizationGatewayURL *string
 	)
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.Go(func() error {
@@ -345,6 +403,23 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 			hasConfiguration = true
 			return nil
 		}
+	})
+	group.Go(func() error {
+		organizationGatewayURL = optionalOrganizationGatewayURL(ctx, s.logger, func() (*string, error) {
+			organization, err := orgrepo.New(s.db).GetOrganizationMetadata(groupCtx, authCtx.ActiveOrganizationID)
+			if err != nil {
+				return nil, fmt.Errorf("read organization for gateway: %w", err)
+			}
+			_, unavailable, err := orggateway.Availability(groupCtx, s.db, organization)
+			if err != nil {
+				return nil, fmt.Errorf("resolve organization gateway: %w", err)
+			}
+			if unavailable != orggateway.UnavailabilityNone {
+				return nil, nil
+			}
+			return new(orggateway.URL(s.orgHosts.ServerURL(organization.DefaultHost), organization.Slug)), nil
+		})
+		return nil
 	})
 	if err := group.Wait(); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent policy").LogError(ctx, s.logger)
@@ -373,8 +448,21 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 		attachAIScanEnvelope(configuration, list.Snapshot)
 	}
 	attachDeviceAgentConfiguration(result, configuration)
+	attachOrganizationGatewayURL(result, organizationGatewayURL)
 
 	return result, nil
+}
+
+// optionalOrganizationGatewayURL keeps this additive display metadata from
+// becoming a dependency of the policy poll: lookup failures are observable but
+// fail open, leaving older/cached agent behavior intact.
+func optionalOrganizationGatewayURL(ctx context.Context, logger *slog.Logger, resolve func() (*string, error)) *string {
+	url, err := resolve()
+	if err != nil {
+		logger.WarnContext(ctx, "organization gateway unavailable; plugin poll omits organization_gateway_url", attr.SlogError(err))
+		return nil
+	}
+	return url
 }
 
 // ListSyncedUsers returns the emails seen polling agent.getPlugins for the

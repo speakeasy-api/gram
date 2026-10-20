@@ -109,6 +109,10 @@ type Service struct {
 
 	supportCoverage SupportCoverageReader
 	mcpServerHealth MCPServerHealthReader
+	hookClients     HookClientsReader
+	// hookClientsCache keeps the fleet-wide grids for an hour, since each
+	// read scans weeks of telemetry.
+	hookClientsCache cache.TypedCacheObject[hookClientsSnapshot]
 
 	// externalMCPMigrator lists and migrates external-MCP-backed servers. Nil
 	// leaves those methods unavailable.
@@ -270,6 +274,12 @@ func NewService(
 		billing:         billing,
 		supportCoverage: supportCoverage,
 		mcpServerHealth: mcpServerHealth,
+		hookClients:     nil,
+		hookClientsCache: cache.NewTypedObjectCache[hookClientsSnapshot](
+			logger.With(attr.SlogCacheNamespace("admin_hook_clients")),
+			adminCache,
+			cache.SuffixNone,
+		),
 
 		externalMCPMigrator: nil,
 	}

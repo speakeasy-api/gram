@@ -65,10 +65,7 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 		return nil, fmt.Errorf("failed to create pylon client: %w", err)
 	}
 	posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
-	var featureFlags feature.Provider = posthogClient
-	if c.String("environment") == "local" {
-		featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
-	}
+	featureFlags := newFeatureFlags(ctx, c, logger, posthogClient)
 	workosClient, available, err := newWorkOSClient(guardianPolicy, c)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create WorkOS client: %w", err)

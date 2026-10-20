@@ -320,7 +320,7 @@
           class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
         >
           <div class="flex items-baseline justify-between gap-3">
-            <h2 class="text-eyebrow">Connected services</h2>
+            <h2 class="text-eyebrow">Service connections</h2>
             <p
               class="text-xs text-muted-foreground"
               data-connected-summary
@@ -330,6 +330,12 @@
               {{.ConnectedCardCount}} of {{len .RemoteSessionCards}} connected
             </p>
           </div>
+          {{if and (not .FirstParty) (not .Gateway)}}
+          <p class="text-sm text-muted-foreground">
+            These connections sign you in to services. Choose Give access below
+            to approve {{.ClientName}}’s access.
+          </p>
+          {{end}}
           <ul
             class="m-0 flex list-none flex-col border p-0"
             {{if .ValidationDeadlineMS}}data-verify-deadline-ms="{{.ValidationDeadlineMS}}"{{end}}
@@ -366,7 +372,7 @@
                   >
                   {{else}}
                   <span class="text-xs text-default-success" data-card-status
-                    >Connected{{if .Pending}}<span class="text-muted-foreground" data-validation="pending"
+                    >Service connected{{if .Pending}}<span class="text-muted-foreground" data-validation="pending"
                       > · Verifying…</span
                     >{{else if .Verified}}<span class="text-muted-foreground" data-validation="valid"
                       > · Verified
@@ -392,7 +398,7 @@
                   script; the script shows checking and settles it. */}}
                   {{if eq .ChainCheck "connected"}}
                   <span class="text-xs text-default-success" data-card-status data-identity-chained data-chain-check="connected"
-                    >Connected through your identity provider</span
+                    >Service connected through your identity provider</span
                   >
                   {{else if eq .ChainCheck "rejected"}}
                   <span class="text-xs text-default-warning" data-card-status data-identity-chained data-chain-check="rejected"
@@ -734,6 +740,31 @@
                   </option>
                   {{end}}
                 </select>
+              </dd>
+            </div>
+            {{end}} {{if .ShowDiscoveryMode}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0">
+                <select
+                  name="discovery_mode"
+                  form="consent-approve-form"
+                  aria-label="Tool discovery"
+                  aria-describedby="discovery-mode-help"
+                  class="bg-card border px-2 py-1.5 font-mono text-sm"
+                >
+                  <option value="">Use gateway default</option>
+                  <option value="progressive" {{if eq .PrefillDiscoveryMode "progressive"}}selected{{end}}>Progressive</option>
+                  <option value="direct" {{if eq .PrefillDiscoveryMode "direct"}}selected{{end}}>Direct</option>
+                </select>
+                <p
+                  id="discovery-mode-help"
+                  class="text-muted-foreground mt-2 text-sm"
+                >
+                  Progressive discovers tools as needed. Direct lists every
+                  available tool. Use Direct if your client cannot discover
+                  tools progressively.
+                </p>
               </dd>
             </div>
             {{end}} {{if .RemoteSessionCards}}

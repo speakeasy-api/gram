@@ -31,9 +31,10 @@ import (
 )
 
 const (
-	// verdictBudget caps risk evaluation at nine seconds. Earlier request work
-	// can shorten it to preserve checkpoint and response headroom.
-	verdictBudget = 9 * time.Second
+	// verdictBudget fits the exchange within Anthropic's default 5-second timeout.
+	verdictBudget = 3750 * time.Millisecond
+	// backlogBudget bounds how long a verdict waits on unaccepted stored content.
+	backlogBudget = time.Second
 	// scanConcurrency bounds how many inputs of one transcript are evaluated
 	// at once.
 	scanConcurrency = 4
@@ -41,7 +42,7 @@ const (
 	checkpointBudget = 500 * time.Millisecond
 	// responseBudget reserves time to serialize the verdict after checkpointing.
 	responseBudget = 250 * time.Millisecond
-	// requestBudget leaves 250ms before the documented 10-second upstream timeout.
+	// requestBudget leaves 500ms of Anthropic's default 5-second timeout for the network.
 	requestBudget = verdictBudget + checkpointBudget + responseBudget
 	// titleScheduleTimeout bounds the goroutine that asks for a title, so a
 	// degraded Temporal frontend cannot pin one goroutine per inference request.
@@ -64,6 +65,14 @@ type inputScan struct {
 // The protocol has no acknowledgement flow; warn policies deny the call.
 func denies(result *risk.ScanResult) bool {
 	return result != nil && (result.Action == "block" || result.Action == "warn" || result.Action == "quarantine")
+}
+
+func allowVerdict() Verdict {
+	return Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
+}
+
+func denyVerdict(reason string) Verdict {
+	return Verdict{Action: "deny", DenyReason: reason, ReferenceID: ""}
 }
 
 type scanner interface {
@@ -110,14 +119,11 @@ func NewService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgx
 // evaluated checkpoint can exempt historical content from another scan.
 func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verdict, error) {
 	ctx = policyflags.WithRequestMemo(ctx)
-	duration := verdictBudget
-	if deadline, ok := ctx.Deadline(); ok {
-		duration = min(duration, time.Until(deadline)-checkpointBudget-responseBudget)
-	}
-	budget, cancel := context.WithTimeout(ctx, duration)
+	budget, cancel := verdictContext(ctx)
 	defer cancel()
 	messages := conversationMessages(frame.Messages)
-	if _, err := policyInputs(messages); err != nil {
+	inputs, err := policyInputs(messages)
+	if err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
 	conversation, outcome, err := s.store.ResolveConversation(budget, config, frame)
@@ -140,7 +146,7 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	if err != nil {
 		return Verdict{}, fmt.Errorf("resolve inference hook actor: %w", err)
 	}
-	_, err = s.store.Save(budget, config, frame, userID)
+	freshStart, err := s.store.Save(budget, config, frame, userID)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("store inference transcript: %w", err)
 	}
@@ -154,101 +160,159 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	}
 	hashes := transcriptHashes(messages)
 	matched := acceptedPrefix(accepted, hashes)
-	scanStart := min(matched, currentTurnStart(messages))
-	inputs, err := policyInputs(messages[scanStart:])
+	scope := newScanRange(messages, matched, freshStart).inputs(inputs)
+	scans, err := s.scanInputs(budget, config, frame, userID, inputs, scope)
 	if err != nil {
-		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
-	}
-	priorInputs, err := policyInputs(messages[:scanStart])
-	if err != nil {
-		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
-	}
-	scans := make([]inputScan, len(inputs))
-	group, groupCtx := errgroup.WithContext(budget)
-	group.SetLimit(scanConcurrency)
-	for offset, input := range inputs {
-		if groupCtx.Err() != nil {
-			break
-		}
-		group.Go(func() error {
-			// group.Go can block on a free slot past the budget, so the check
-			// above may be stale by the time this runs.
-			if groupCtx.Err() != nil {
-				return nil
-			}
-			outcome, err := s.scanner.ScanForInferenceEnforcement(groupCtx, scanRequest(config, frame, userID, len(priorInputs)+offset, input))
-			if err != nil {
-				if groupCtx.Err() != nil {
-					return nil
-				}
-				return fmt.Errorf("scan input %d: %w", len(priorInputs)+offset, err)
-			}
-			scans[offset] = inputScan{evaluated: true, complete: outcome != nil && outcome.Complete, result: nil}
-			if outcome != nil {
-				scans[offset].result = outcome.Result
-			}
-			if denies(scans[offset].result) {
-				return errPolicyDenied
-			}
-			return nil
-		})
-	}
-	if err := group.Wait(); err != nil && !errors.Is(err, errPolicyDenied) {
-		return Verdict{}, fmt.Errorf("evaluate inference policy: %w", err)
+		return Verdict{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
 	}
-	for _, scan := range scans {
-		if denies(scan.result) {
-			return Verdict{
-				Action:      "deny",
-				DenyReason:  conv.Default(conv.PtrValOr(scan.result.UserMessage, ""), "This request was blocked by your organization's security policy."),
-				ReferenceID: "",
-			}, nil
-		}
+	if match := firstDenial(scans[scope.start:]); match != nil {
+		// Denied content is never accepted, so a retry scans it again.
+		return denyVerdict(conv.Default(conv.PtrValOr(match.UserMessage, ""), "This request was blocked by your organization's security policy.")), nil
 	}
-	verdict := Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
-	// Only the leading messages whose inputs all evaluated complete can be
-	// accepted. Accepting them after a cut-off makes the redelivery
-	// incremental instead of repeating the same scans into the same budget.
-	cleanThrough := len(messages)
-	for offset, scan := range scans {
-		if !scan.evaluated || !scan.complete {
-			cleanThrough = scanStart + inputs[offset].message
-			break
-		}
-	}
-	if slices.ContainsFunc(scans, func(scan inputScan) bool { return !scan.evaluated }) {
+	cleanThrough := cleanPrefix(inputs, scans, scope.start, len(messages))
+	verdict := allowVerdict()
+	if slices.ContainsFunc(scans[scope.live:], func(scan inputScan) bool { return !scan.evaluated }) {
 		// A failed evaluation must not silently allow inference, including when
 		// Anthropic's administrator selected allow-on-webhook-failure.
 		s.logger.WarnContext(ctx, "inference verdict budget exhausted",
 			attr.SlogOrganizationID(config.OrganizationID), attr.SlogProjectID(config.ProjectID.String()),
-			attr.SlogInferenceInputCount(len(inputs)), attr.SlogInferenceAcceptedMessages(cleanThrough))
-		verdict = Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}
+			attr.SlogInferenceInputCount(len(inputs)-scope.start), attr.SlogInferenceAcceptedMessages(cleanThrough))
+		verdict = denyVerdict(unavailableDenyReason)
 	}
-	if cleanThrough > matched || cleanThrough == len(messages) {
-		// The scan budget may already be spent; the marker gets its own short
-		// window so a slow write cannot push the verdict past the provider's.
-		acceptCtx, cancelAccept := context.WithTimeout(ctx, checkpointBudget)
-		defer cancelAccept()
-		err := session.Accept(acceptCtx, hashes[:cleanThrough])
-		switch {
-		case err == nil:
-		case ctx.Err() != nil:
-			return Verdict{}, fmt.Errorf("accept inference checkpoint context: %w", ctx.Err())
-		case errors.Is(err, errCheckpointConflict):
-			// Another fully scanned delivery won. Keep its marker, without
-			// turning this optimization into an artificial denial.
-		case verdict.Action == "deny":
-			// The verdict already fails closed; the marker only makes the
-			// redelivery incremental.
-			s.logger.WarnContext(ctx, "accept partial inference checkpoint", attr.SlogError(err))
-		default:
-			return Verdict{}, fmt.Errorf("accept inference checkpoint: %w", err)
+	// Re-accepting a complete frame refreshes the marker's token.
+	advances, fullyAccepted := cleanThrough > matched, cleanThrough == len(messages)
+	if advances || fullyAccepted {
+		if err := s.accept(ctx, session, hashes[:cleanThrough], verdict); err != nil {
+			return Verdict{}, err
 		}
 	}
 	return verdict, nil
+}
+
+// verdictContext keeps checkpoint and response headroom before ctx's deadline.
+func verdictContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	duration := verdictBudget
+	if deadline, ok := ctx.Deadline(); ok {
+		duration = min(duration, time.Until(deadline)-checkpointBudget-responseBudget)
+	}
+	return context.WithTimeout(ctx, duration)
+}
+
+// scanRange holds message positions: [start, live) is stored content the
+// checkpoint never accepted (backlog), and [live, end) gates the verdict.
+type scanRange struct{ start, live int }
+
+func newScanRange(messages []Message, accepted, fresh int) scanRange {
+	live := min(currentTurnStart(messages), max(accepted, fresh))
+	return scanRange{start: min(accepted, live), live: live}
+}
+
+// inputs maps the range onto policy-input indexes, which follow message order.
+func (r scanRange) inputs(inputs []policyInput) scanRange {
+	return scanRange{start: firstInputAt(inputs, r.start), live: firstInputAt(inputs, r.live)}
+}
+
+func firstInputAt(inputs []policyInput, message int) int {
+	if index := slices.IndexFunc(inputs, func(input policyInput) bool { return input.message >= message }); index >= 0 {
+		return index
+	}
+	return len(inputs)
+}
+
+// scanInputs scans live inputs before backlog; backlog errors only leave inputs unevaluated.
+func (s *Service) scanInputs(ctx context.Context, config Config, frame Frame, userID string, inputs []policyInput, scope scanRange) ([]inputScan, error) {
+	scans := make([]inputScan, len(inputs))
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(scanConcurrency)
+	submit := func(scanCtx context.Context, from, to int, backlog bool) {
+		for index := from; index < to && scanCtx.Err() == nil; index++ {
+			group.Go(func() error {
+				// group.Go can block on a free slot past the budget, so the loop
+				// check may be stale by the time this runs.
+				if scanCtx.Err() != nil {
+					return nil
+				}
+				outcome, err := s.scanner.ScanForInferenceEnforcement(scanCtx, scanRequest(config, frame, userID, index, inputs[index]))
+				switch {
+				case err == nil:
+				case scanCtx.Err() != nil:
+					return nil
+				case backlog:
+					s.logger.WarnContext(ctx, "scan inference backlog input", attr.SlogError(err))
+					return nil
+				default:
+					return fmt.Errorf("scan input %d: %w", index, err)
+				}
+				scan := inputScan{evaluated: true, complete: false, result: nil}
+				if outcome != nil {
+					scan.complete, scan.result = outcome.Complete, outcome.Result
+				}
+				scans[index] = scan
+				if denies(scan.result) {
+					return errPolicyDenied
+				}
+				return nil
+			})
+		}
+	}
+	submit(groupCtx, scope.live, len(inputs), false)
+	// The backlog window opens once every live input holds a slot.
+	backlogCtx, cancelBacklog := context.WithTimeout(groupCtx, backlogBudget)
+	defer cancelBacklog()
+	submit(backlogCtx, scope.start, scope.live, true)
+	if err := group.Wait(); err != nil && !errors.Is(err, errPolicyDenied) {
+		return nil, fmt.Errorf("evaluate inference policy: %w", err)
+	}
+	return scans, nil
+}
+
+func firstDenial(scans []inputScan) *risk.ScanResult {
+	for _, scan := range scans {
+		if denies(scan.result) {
+			return scan.result
+		}
+	}
+	return nil
+}
+
+// cleanPrefix is how many leading messages can be accepted: up to the first
+// scanned input that did not evaluate complete. Accepting them after a cut-off
+// makes the redelivery incremental instead of repeating the same scans into
+// the same budget.
+func cleanPrefix(inputs []policyInput, scans []inputScan, start, messages int) int {
+	for index := start; index < len(scans); index++ {
+		if !scans[index].evaluated || !scans[index].complete {
+			return inputs[index].message
+		}
+	}
+	return messages
+}
+
+// accept gets its own window because the scan budget may already be spent.
+func (s *Service) accept(ctx context.Context, session checkpointSession, hashes [][]byte, verdict Verdict) error {
+	acceptCtx, cancel := context.WithTimeout(ctx, checkpointBudget)
+	defer cancel()
+	err := session.Accept(acceptCtx, hashes)
+	switch {
+	case err == nil:
+		return nil
+	case ctx.Err() != nil:
+		return fmt.Errorf("accept inference checkpoint context: %w", ctx.Err())
+	case errors.Is(err, errCheckpointConflict):
+		// Another fully scanned delivery won. Keep its marker, without
+		// turning this optimization into an artificial denial.
+		return nil
+	case verdict.Action == "deny":
+		// The verdict already fails closed; the marker only makes the
+		// redelivery incremental.
+		s.logger.WarnContext(ctx, "accept partial inference checkpoint", attr.SlogError(err))
+		return nil
+	default:
+		return fmt.Errorf("accept inference checkpoint: %w", err)
+	}
 }
 
 func scanRequest(config Config, frame Frame, userID string, index int, input policyInput) risk.RealtimeScanRequest {

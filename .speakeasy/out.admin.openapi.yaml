@@ -702,6 +702,97 @@ paths:
       tags:
         - admin
       x-speakeasy-name-override: previewExternalMcpMigration
+  /admin/hookClients.get:
+    get:
+      description: 'Fleet-wide hook client grids: which hook client (legacy curl or hooks binary version) each organization''s new sessions use per day, and inference hook traffic per Claude app.'
+      operationId: adminGetHookClients
+      parameters:
+        - allowEmptyValue: true
+          description: Window in days.
+          in: query
+          name: window_days
+          schema:
+            default: 15
+            description: Window in days.
+            format: int64
+            maximum: 30
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Skip the one-hour cache and read ClickHouse now.
+          in: query
+          name: refresh
+          schema:
+            default: false
+            description: Skip the one-hour cache and read ClickHouse now.
+            type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminHookClientsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getHookClients admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getHookClients
+      x-speakeasy-react-hook:
+        name: AdminGetHookClients
   /admin/onboarding.playbooks:
     get:
       description: Read every playbook, or, when an organization is named, the shared ones and its own.
@@ -7811,6 +7902,124 @@ components:
           description: One outcome per requested server, in request order.
       required:
         - outcomes
+    AdminHookClientOrganization:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The organization ID.
+        name:
+          type: string
+          description: The organization name. Absent when the organization no longer exists.
+        slug:
+          type: string
+          description: The organization slug. Absent when the organization no longer exists.
+      description: An organization that appears in either hook client grid.
+      required:
+        - id
+    AdminHookClientSessionCell:
+      type: object
+      properties:
+        client:
+          type: string
+          description: curl for the legacy curl hooks, a hooks binary version, binary for binary rows that record no version, or empty for the organization-day total.
+        day:
+          type: string
+          description: The UTC day, as YYYY-MM-DD.
+          format: date
+        machines:
+          type: integer
+          description: Machines that started a session on this day.
+          format: int64
+        machines_all:
+          type: integer
+          description: Machines that sent any hook on this day, including sessions started earlier.
+          format: int64
+        organization_id:
+          type: string
+          description: The organization ID.
+        sessions:
+          type: integer
+          description: Sessions started on this day.
+          format: int64
+      description: One (organization, day, client) cell of the hook client grid. Sessions count on the UTC day of their first hook.
+      required:
+        - organization_id
+        - day
+        - client
+        - machines
+        - sessions
+        - machines_all
+    AdminHookClientsResult:
+      type: object
+      properties:
+        from_cache:
+          type: boolean
+          description: True when the grids came from the one-hour cache rather than a fresh ClickHouse read.
+        inference:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminInferenceHookCell'
+          description: The inference hook traffic grid.
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHookClientOrganization'
+          description: Every organization that appears in either grid.
+        queried_at:
+          type: string
+          description: When the grids were read from ClickHouse.
+          format: date-time
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHookClientSessionCell'
+          description: The hook client grid, new sessions only.
+        window_days:
+          type: integer
+          description: Length of the window in days.
+          format: int64
+      description: Fleet-wide hook client grids over a fixed window.
+      required:
+        - window_days
+        - queried_at
+        - from_cache
+        - organizations
+        - sessions
+        - inference
+    AdminInferenceHookCell:
+      type: object
+      properties:
+        day:
+          type: string
+          description: The UTC day, as YYYY-MM-DD.
+          format: date
+        events:
+          type: integer
+          description: Stored transcript messages.
+          format: int64
+        organization_id:
+          type: string
+          description: The organization ID.
+        sessions:
+          type: integer
+          description: Distinct sessions.
+          format: int64
+        surface:
+          type: string
+          description: The Claude app that sent the transcript, or empty for the organization-day total.
+        users:
+          type: integer
+          description: Distinct users.
+          format: int64
+      description: One (organization, day, surface) cell of the inference hook grid.
+      required:
+        - organization_id
+        - day
+        - surface
+        - users
+        - events
+        - sessions
     AdminInferenceKey:
       type: object
       properties:
@@ -11463,6 +11672,10 @@ components:
     chat_sessions_token_header_Gram-Chat-Session:
       type: http
       description: Speakeasy Chat Sessions token based auth.
+      scheme: bearer
+    device_agent_token_header_Authorization:
+      type: http
+      description: Device-agent token from the workload assertion grant at /oauth/workload/device-agent/{organization_id}/token.
       scheme: bearer
     function_token_header_Authorization:
       type: http
