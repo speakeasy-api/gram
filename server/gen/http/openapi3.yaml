@@ -708,7 +708,7 @@ paths:
             x-speakeasy-name-override: previewExternalMcpMigration
     /admin/hookClients.get:
         get:
-            description: 'Fleet-wide hook client grids: which hook client (legacy curl or hooks binary version) each organization''s new sessions use per day, and inference hook traffic per Claude app.'
+            description: 'Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization''s new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.'
             operationId: adminGetHookClients
             parameters:
                 - allowEmptyValue: true
@@ -88354,6 +88354,29 @@ components:
             required:
                 - location
                 - cache_control
+        AdminDeviceAgentCell:
+            type: object
+            properties:
+                day:
+                    type: string
+                    description: The UTC day, as YYYY-MM-DD.
+                    format: date
+                machines:
+                    type: integer
+                    description: Machines whose agent polled on this day, by the last version each reported that day.
+                    format: int64
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                version:
+                    type: string
+                    description: The speakeasyd version, or empty for the organization-day total.
+            description: One (organization, day, version) cell of the device agent grid.
+            required:
+                - organization_id
+                - day
+                - version
+                - machines
         AdminExternalMcpMigrationCandidate:
             type: object
             properties:
@@ -88559,6 +88582,11 @@ components:
         AdminHookClientsResult:
             type: object
             properties:
+                device_agents:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminDeviceAgentCell'
+                    description: The device agent version grid. Empty for days before versions were recorded.
                 from_cache:
                     type: boolean
                     description: True when the grids came from the one-hour cache rather than a fresh ClickHouse read.
@@ -88593,6 +88621,7 @@ components:
                 - organizations
                 - sessions
                 - inference
+                - device_agents
         AdminInferenceHookCell:
             type: object
             properties:

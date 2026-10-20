@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  agentSeries,
   cacheAgeLabel,
+  deviceAgentRows,
+  latestAgentShare,
   clientSeries,
   inferenceRows,
   surfaceSeries,
@@ -10,10 +13,10 @@ import {
   sessionRows,
   versionColor,
   windowDays,
-  type HookClients,
-} from "./hookClientsModel";
+  type FleetHealth,
+} from "./fleetHealthModel";
 
-const data: HookClients = {
+const data: FleetHealth = {
   window_days: 2,
   queried_at: "2026-10-19T11:00:00Z",
   from_cache: false,
@@ -126,6 +129,21 @@ const data: HookClients = {
       sessions: 1,
     },
   ],
+  device_agents: [
+    { organization_id: "org-a", day: "2026-10-19", version: "", machines: 4 },
+    {
+      organization_id: "org-a",
+      day: "2026-10-19",
+      version: "0.3.29",
+      machines: 1,
+    },
+    {
+      organization_id: "org-a",
+      day: "2026-10-19",
+      version: "0.3.31",
+      machines: 3,
+    },
+  ],
 };
 
 describe("compareVersions", () => {
@@ -212,5 +230,19 @@ describe("inferenceRows", () => {
     expect(day?.label).toBe(3);
     expect(day?.parts.get("claude-code")).toBe(7);
     expect(day?.parts.get("claude-chat")).toBe(3);
+  });
+});
+
+describe("device agents", () => {
+  it("orders versions old to new and reports the newest version share", () => {
+    const series = agentSeries(data.device_agents);
+    expect(series.map((s) => s.key)).toEqual(["0.3.29", "0.3.31"]);
+    const [row] = deviceAgentRows(data);
+    expect(row?.days.get("2026-10-19")?.parts.get("0.3.31")).toBe(3);
+    expect(row && latestAgentShare(row, series)).toEqual({
+      day: "2026-10-19",
+      version: "0.3.31",
+      share: 0.75,
+    });
   });
 });

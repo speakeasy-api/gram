@@ -104,9 +104,10 @@ export const ADMIN_NAV_GROUPS = [
         icon: ArrowRightLeftIcon,
       },
       {
-        to: "/hook-clients",
-        label: "Hook clients",
-        keywords: "hooks curl binary versions inference sessions rollout",
+        to: "/fleet-health",
+        label: "Fleet health",
+        keywords:
+          "hook clients curl binary versions inference device agents speakeasyd rollout",
         icon: ActivityIcon,
       },
       {

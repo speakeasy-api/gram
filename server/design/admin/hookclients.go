@@ -39,9 +39,19 @@ var AdminInferenceHookCell = Type("AdminInferenceHookCell", func() {
 	Attribute("sessions", Int64, "Distinct sessions.")
 })
 
+var AdminDeviceAgentCell = Type("AdminDeviceAgentCell", func() {
+	Description("One (organization, day, version) cell of the device agent grid.")
+	Required("organization_id", "day", "version", "machines")
+
+	Attribute("organization_id", String, "The organization ID.")
+	Attribute("day", String, "The UTC day, as YYYY-MM-DD.", func() { Format(FormatDate) })
+	Attribute("version", String, "The speakeasyd version, or empty for the organization-day total.")
+	Attribute("machines", Int64, "Machines whose agent polled on this day, by the last version each reported that day.")
+})
+
 var AdminHookClientsResult = Type("AdminHookClientsResult", func() {
 	Description("Fleet-wide hook client grids over a fixed window.")
-	Required("window_days", "queried_at", "from_cache", "organizations", "sessions", "inference")
+	Required("window_days", "queried_at", "from_cache", "organizations", "sessions", "inference", "device_agents")
 
 	Attribute("window_days", Int, "Length of the window in days.")
 	Attribute("queried_at", String, "When the grids were read from ClickHouse.", func() { Format(FormatDateTime) })
@@ -49,6 +59,7 @@ var AdminHookClientsResult = Type("AdminHookClientsResult", func() {
 	Attribute("organizations", ArrayOf(AdminHookClientOrganization), "Every organization that appears in either grid.")
 	Attribute("sessions", ArrayOf(AdminHookClientSessionCell), "The hook client grid, new sessions only.")
 	Attribute("inference", ArrayOf(AdminInferenceHookCell), "The inference hook traffic grid.")
+	Attribute("device_agents", ArrayOf(AdminDeviceAgentCell), "The device agent version grid. Empty for days before versions were recorded.")
 })
 
 // MCP parity: not exposed through Staff Admin MCP. This is a fleet-wide
@@ -61,7 +72,7 @@ func hookClientsMethods() {
 		Meta("openapi:operationId", "adminGetHookClients")
 		Meta("openapi:extension:x-speakeasy-name-override", "getHookClients")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminGetHookClients"}`)
-		Description("Fleet-wide hook client grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, and inference hook traffic per Claude app.")
+		Description("Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.")
 		Payload(func() {
 			security.AdminAuthPayload()
 			Attribute("window_days", Int, "Window in days.", func() {

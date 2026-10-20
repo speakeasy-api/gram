@@ -226,9 +226,9 @@ type Service interface {
 	// view, no auth scoping). Returns logging:disabled without reading telemetry
 	// when the organization's logs are off.
 	GetMcpServerToolCalls(context.Context, *GetMcpServerToolCallsPayload) (res *AdminMcpServerToolCalls, err error)
-	// Fleet-wide hook client grids: which hook client (legacy curl or hooks binary
-	// version) each organization's new sessions use per day, and inference hook
-	// traffic per Claude app.
+	// Fleet-wide client health grids: which hook client (legacy curl or hooks
+	// binary version) each organization's new sessions use per day, inference hook
+	// traffic per Claude app, and device agent versions per day.
 	GetHookClients(context.Context, *GetHookClientsPayload) (res *AdminHookClientsResult, err error)
 	// Lists every live server across all organizations whose latest toolset
 	// version proxies an external MCP attachment on its project's active
@@ -429,6 +429,19 @@ type AdminDashboardRedirect struct {
 	CacheControl string
 }
 
+// One (organization, day, version) cell of the device agent grid.
+type AdminDeviceAgentCell struct {
+	// The organization ID.
+	OrganizationID string
+	// The UTC day, as YYYY-MM-DD.
+	Day string
+	// The speakeasyd version, or empty for the organization-day total.
+	Version string
+	// Machines whose agent polled on this day, by the last version each reported
+	// that day.
+	Machines int64
+}
+
 // A toolset backed by an external MCP attachment, with what running it does:
 // migrate its server in place, or delete it.
 type AdminExternalMcpMigrationCandidate struct {
@@ -564,6 +577,8 @@ type AdminHookClientsResult struct {
 	Sessions []*AdminHookClientSessionCell
 	// The inference hook traffic grid.
 	Inference []*AdminInferenceHookCell
+	// The device agent version grid. Empty for days before versions were recorded.
+	DeviceAgents []*AdminDeviceAgentCell
 }
 
 // One (organization, day, surface) cell of the inference hook grid.

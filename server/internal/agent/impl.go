@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
@@ -74,6 +75,10 @@ type Service struct {
 	// deviceAgentTokens authenticates headless devices that present a
 	// device-agent token instead of an agent API key. Nil refuses them.
 	deviceAgentTokens *deviceagenttoken.Issuer
+
+	// agentVersions records each polling agent's speakeasyd version for the
+	// staff fleet view. Nil skips recording.
+	agentVersions *deviceagentversions.Store
 }
 
 var (
@@ -113,6 +118,7 @@ func NewService(
 		telemetry:         telemetryLogger,
 		growth:            growthEmitter,
 		deviceAgentTokens: deviceAgentTokens,
+		agentVersions:     nil,
 	}
 }
 
@@ -329,6 +335,8 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 			)
 		}
 	}
+
+	s.recordAgentVersion(ctx, authCtx.ActiveOrganizationID, agentMachine(payload, email, environment))
 
 	// Resolve the reported email through current organization membership before
 	// adding user:<id>, user:all, or role principals. Agent keys can outlive their

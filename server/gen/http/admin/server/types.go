@@ -1984,6 +1984,8 @@ type GetHookClientsResponseBody struct {
 	Sessions []*AdminHookClientSessionCellResponseBody `form:"sessions" json:"sessions" xml:"sessions"`
 	// The inference hook traffic grid.
 	Inference []*AdminInferenceHookCellResponseBody `form:"inference" json:"inference" xml:"inference"`
+	// The device agent version grid. Empty for days before versions were recorded.
+	DeviceAgents []*AdminDeviceAgentCellResponseBody `form:"device_agents" json:"device_agents" xml:"device_agents"`
 }
 
 // ListExternalMcpMigrationCandidatesResponseBody is the type of the "admin"
@@ -20832,6 +20834,20 @@ type AdminInferenceHookCellResponseBody struct {
 	Sessions int64 `form:"sessions" json:"sessions" xml:"sessions"`
 }
 
+// AdminDeviceAgentCellResponseBody is used to define fields on response body
+// types.
+type AdminDeviceAgentCellResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The UTC day, as YYYY-MM-DD.
+	Day string `form:"day" json:"day" xml:"day"`
+	// The speakeasyd version, or empty for the organization-day total.
+	Version string `form:"version" json:"version" xml:"version"`
+	// Machines whose agent polled on this day, by the last version each reported
+	// that day.
+	Machines int64 `form:"machines" json:"machines" xml:"machines"`
+}
+
 // AdminExternalMcpMigrationCandidateResponseBody is used to define fields on
 // response body types.
 type AdminExternalMcpMigrationCandidateResponseBody struct {
@@ -22671,6 +22687,18 @@ func NewGetHookClientsResponseBody(res *admin.AdminHookClientsResult) *GetHookCl
 		}
 	} else {
 		body.Inference = []*AdminInferenceHookCellResponseBody{}
+	}
+	if res.DeviceAgents != nil {
+		body.DeviceAgents = make([]*AdminDeviceAgentCellResponseBody, len(res.DeviceAgents))
+		for i, val := range res.DeviceAgents {
+			if val == nil {
+				body.DeviceAgents[i] = nil
+				continue
+			}
+			body.DeviceAgents[i] = marshalAdminAdminDeviceAgentCellToAdminDeviceAgentCellResponseBody(val)
+		}
+	} else {
+		body.DeviceAgents = []*AdminDeviceAgentCellResponseBody{}
 	}
 	return body
 }
