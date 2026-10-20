@@ -476,7 +476,7 @@ export function FleetHealth(): JSX.Element {
             variant="outline"
             size="sm"
             disabled={busy}
-            title="Read ClickHouse now instead of the one-hour cache"
+            title="Read ClickHouse now instead of the cache"
             onClick={() => refresh.mutate()}
           >
             <RefreshCw
