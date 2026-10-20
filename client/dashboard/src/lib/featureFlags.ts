@@ -7,7 +7,6 @@ export const FEATURE_FLAGS = {
   emaProviders: "ema-providers",
   experimentalChat: "gram-experimental-chat",
   explore: "gram-explore",
-  functions: "gram-functions",
   gatewayEndpoints: "gram-gateway-endpoints",
   headlessModeSwitcher: "headless-mode-switcher",
   killswitches: "gram-killswitches",
