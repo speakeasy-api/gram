@@ -574,8 +574,10 @@ SELECT sel.no_auth,
            AND c.organization_id = sel.organization_id
            AND c.deleted IS FALSE
            AND c.is_required
-           AND lower(btrim(c.value_from_request_header)) = 'authorization'
-       )::boolean AS requires_inbound_authorization,
+           -- Mirrors proxy.IsDeniedPassThroughSource.
+           AND replace(lower(btrim(c.value_from_request_header)), '_', '-')
+               IN ('authorization', 'cookie', 'set-cookie', 'proxy-authorization')
+       )::boolean AS requires_denied_source,
        EXISTS (
          SELECT 1
          FROM mcp_server_auth_clients AS link

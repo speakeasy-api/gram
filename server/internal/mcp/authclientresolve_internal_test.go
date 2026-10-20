@@ -96,12 +96,12 @@ func TestDecideAuthClient(t *testing.T) {
 		{"a personal connection that may chain is served the old way", with(authClientTypeRemoteSession, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RegistrationHasEma = true }), authClientLegacy, authClientReasonLegacyMayChain},
 		{"a service account never chains", with(authClientTypeServiceAccount, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RegistrationHasEma = true }), authClientResolved, ""},
 		{"an OAuth client missing a server credential header is a setup gap", with(authClientTypeRemoteSession, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.CredentialHeadersUncovered = true }), authClientGap, authClientReasonSetup},
-		{"an OAuth client requiring the inbound Authorization is a setup gap", with(authClientTypeServiceAccount, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RequiresInboundAuthorization = true }), authClientGap, authClientReasonSetup},
+		{"an OAuth client requiring the inbound Authorization is a setup gap", with(authClientTypeServiceAccount, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RequiresDeniedSource = true }), authClientGap, authClientReasonSetup},
 		{"a static credential on a tunneled server is served the old way", headersOnly(authClientTypeStaticCredential, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.Tunneled = true }), authClientLegacy, authClientReasonTunneledHeaders},
 		{"a pass-through on a tunneled server is served the old way", headersOnly(authClientTypePassThrough, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.Tunneled = true }), authClientLegacy, authClientReasonTunneledHeaders},
 		{"stale header copies are served the old way", headersOnly(authClientTypeStaticCredential, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.HeadersStale = true }), authClientLegacy, authClientReasonHeadersStale},
 		{"a headers-only client missing a server credential header is a setup gap", headersOnly(authClientTypePassThrough, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.CredentialHeadersUncovered = true }), authClientGap, authClientReasonSetup},
-		{"a pass-through requiring the inbound Authorization is a setup gap", headersOnly(authClientTypePassThrough, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RequiresInboundAuthorization = true }), authClientGap, authClientReasonSetup},
+		{"a pass-through requiring the inbound Authorization is a setup gap", headersOnly(authClientTypePassThrough, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RequiresDeniedSource = true }), authClientGap, authClientReasonSetup},
 		{"no-auth on a server that explicitly needs none", noAuth(pgtype.Bool{Bool: false, Valid: true}, true), authClientNoAuth, ""},
 		{"no-auth on an undecided server with no clients", noAuth(undecided, false), authClientNoAuth, ""},
 		{"no-auth on an undecided server that has clients is a gap", noAuth(undecided, true), authClientGap, authClientReasonNoAuthStale},
@@ -139,13 +139,13 @@ func TestDecideAuthClient(t *testing.T) {
 	}
 }
 
-func TestWithoutInboundAuthorization(t *testing.T) {
+func TestWithoutDeniedSources(t *testing.T) {
 	t.Parallel()
 
 	for _, destination := range []string{"Authorization", "X-Token"} {
 		t.Run("an optional header reading Authorization into "+destination+" is dropped", func(t *testing.T) {
 			t.Parallel()
-			kept, blocked := withoutInboundAuthorization([]proxy.ConfiguredHeader{
+			kept, blocked := withoutDeniedSources([]proxy.ConfiguredHeader{
 				{IsRequired: false, Name: destination, StaticValue: "", ValueFromRequestHeader: " authorization "},
 				{IsRequired: true, Name: "X-Tenant", StaticValue: "", ValueFromRequestHeader: "X-Caller-Tenant"},
 			})
@@ -154,14 +154,19 @@ func TestWithoutInboundAuthorization(t *testing.T) {
 		})
 		t.Run("a required header reading Authorization into "+destination+" blocks the client", func(t *testing.T) {
 			t.Parallel()
-			kept, blocked := withoutInboundAuthorization([]proxy.ConfiguredHeader{
+			kept, blocked := withoutDeniedSources([]proxy.ConfiguredHeader{
 				{IsRequired: true, Name: destination, StaticValue: "", ValueFromRequestHeader: "AUTHORIZATION"},
 			})
 			require.True(t, blocked)
 			require.Empty(t, kept)
 		})
 	}
-	kept, blocked := withoutInboundAuthorization([]proxy.ConfiguredHeader{{IsRequired: true, Name: "Authorization", StaticValue: "Bearer stored", ValueFromRequestHeader: ""}})
+	for _, source := range []string{"Cookie", "proxy_authorization"} {
+		kept, blocked := withoutDeniedSources([]proxy.ConfiguredHeader{{IsRequired: false, Name: "X-Forwarded", StaticValue: "", ValueFromRequestHeader: source}})
+		require.False(t, blocked)
+		require.Empty(t, kept, "%s is a denied pass-through source", source)
+	}
+	kept, blocked := withoutDeniedSources([]proxy.ConfiguredHeader{{IsRequired: true, Name: "Authorization", StaticValue: "Bearer stored", ValueFromRequestHeader: ""}})
 	require.False(t, blocked)
 	require.Len(t, kept, 1, "a stored Authorization value is the client's own credential")
 }

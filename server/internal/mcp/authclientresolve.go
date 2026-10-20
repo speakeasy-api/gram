@@ -224,7 +224,7 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 			// registration when its token is unusable; the resolver does not.
 			res.outcome = authClientLegacy
 			res.reason = authClientReasonLegacyMayChain
-		case row.CredentialHeadersUncovered, row.RequiresInboundAuthorization:
+		case row.CredentialHeadersUncovered, row.RequiresDeniedSource:
 			res.reason = authClientReasonSetup
 		default:
 			res.outcome = authClientResolved
@@ -240,7 +240,7 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 		case row.HeadersStale:
 			res.outcome = authClientLegacy
 			res.reason = authClientReasonHeadersStale
-		case row.CredentialHeadersUncovered, row.RequiresInboundAuthorization:
+		case row.CredentialHeadersUncovered, row.RequiresDeniedSource:
 			res.reason = authClientReasonSetup
 		default:
 			res.outcome = authClientResolved
@@ -306,7 +306,7 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 			return res, err
 		}
 		var blocked bool
-		res.headers, blocked = withoutInboundAuthorization(headers)
+		res.headers, blocked = withoutDeniedSources(headers)
 		// A headers-only client with nothing left to send would call the
 		// upstream anonymously, which only a server needing no auth allows.
 		if blocked || (res.headersOnly() && len(res.headers) == 0 && !res.noAuthAllowed) {
@@ -326,16 +326,15 @@ func (s *Service) authClientPermit() authClientPermitter {
 	return connectPermitter{}
 }
 
-// withoutInboundAuthorization drops client headers that read the inbound
-// Authorization header. On an issuer-gated endpoint that header carries the
-// caller's Speakeasy session token, which never goes upstream under any name.
-// It reports whether a dropped header was required, which the client cannot
-// serve without.
-func withoutInboundAuthorization(headers []proxy.ConfiguredHeader) ([]proxy.ConfiguredHeader, bool) {
+// withoutDeniedSources drops client headers that read a denied inbound header,
+// such as Authorization, which on an issuer-gated endpoint carries the
+// caller's Speakeasy session token. It reports whether a dropped header was
+// required, which the client cannot serve without.
+func withoutDeniedSources(headers []proxy.ConfiguredHeader) ([]proxy.ConfiguredHeader, bool) {
 	kept := make([]proxy.ConfiguredHeader, 0, len(headers))
 	blocked := false
 	for _, h := range headers {
-		if strings.EqualFold(strings.TrimSpace(h.ValueFromRequestHeader), "authorization") {
+		if h.ValueFromRequestHeader != "" && proxy.IsDeniedPassThroughSource(h.ValueFromRequestHeader) {
 			blocked = blocked || h.IsRequired
 			continue
 		}

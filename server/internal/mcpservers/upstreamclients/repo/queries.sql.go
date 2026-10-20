@@ -420,8 +420,10 @@ SELECT sel.no_auth,
            AND c.organization_id = sel.organization_id
            AND c.deleted IS FALSE
            AND c.is_required
-           AND lower(btrim(c.value_from_request_header)) = 'authorization'
-       )::boolean AS requires_inbound_authorization,
+           -- Mirrors proxy.IsDeniedPassThroughSource.
+           AND replace(lower(btrim(c.value_from_request_header)), '_', '-')
+               IN ('authorization', 'cookie', 'set-cookie', 'proxy-authorization')
+       )::boolean AS requires_denied_source,
        EXISTS (
          SELECT 1
          FROM mcp_server_auth_clients AS link
@@ -467,27 +469,27 @@ type GetAuthClientSelectionParams struct {
 }
 
 type GetAuthClientSelectionRow struct {
-	NoAuth                       bool
-	AuthClientID                 uuid.NullUUID
-	ServerName                   pgtype.Text
-	Tunneled                     bool
-	ClientID                     uuid.NullUUID
-	ClientType                   pgtype.Text
-	ClientEnabled                pgtype.Bool
-	ClientDeleted                pgtype.Bool
-	RegistrationID               uuid.NullUUID
-	RegistrationIssuerID         uuid.NullUUID
-	RegistrationLive             bool
-	RegistrationAttached         bool
-	Associated                   bool
-	RequiresUpstreamAuth         pgtype.Bool
-	ServerHasClients             bool
-	ServerHasHeaderClients       bool
-	ServerHasOauthClients        bool
-	HeadersStale                 bool
-	CredentialHeadersUncovered   bool
-	RequiresInboundAuthorization bool
-	RegistrationHasEma           bool
+	NoAuth                     bool
+	AuthClientID               uuid.NullUUID
+	ServerName                 pgtype.Text
+	Tunneled                   bool
+	ClientID                   uuid.NullUUID
+	ClientType                 pgtype.Text
+	ClientEnabled              pgtype.Bool
+	ClientDeleted              pgtype.Bool
+	RegistrationID             uuid.NullUUID
+	RegistrationIssuerID       uuid.NullUUID
+	RegistrationLive           bool
+	RegistrationAttached       bool
+	Associated                 bool
+	RequiresUpstreamAuth       pgtype.Bool
+	ServerHasClients           bool
+	ServerHasHeaderClients     bool
+	ServerHasOauthClients      bool
+	HeadersStale               bool
+	CredentialHeadersUncovered bool
+	RequiresDeniedSource       bool
+	RegistrationHasEma         bool
 }
 
 // One credential's choice for one MCP server, read the way the typed auth
@@ -527,7 +529,7 @@ func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientS
 		&i.ServerHasOauthClients,
 		&i.HeadersStale,
 		&i.CredentialHeadersUncovered,
-		&i.RequiresInboundAuthorization,
+		&i.RequiresDeniedSource,
 		&i.RegistrationHasEma,
 	)
 	return i, err
