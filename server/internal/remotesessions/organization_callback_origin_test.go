@@ -1,11 +1,13 @@
 package remotesessions_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -46,7 +49,9 @@ func TestNewClientsUseOrganizationCallbackOrigin(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ctx, ti := newTestService(t)
+			ctx, ti := newTestServiceWithConfig(t, testServiceConfig{maxDBConns: 1})
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
 			err := orgrepo.New(ti.conn).SetOrganizationDefaultHostForTest(ctx, orgrepo.SetOrganizationDefaultHostForTestParams{DefaultHost: pgtype.Text{String: tc.stored, Valid: tc.stored != ""}, ID: activeOrganizationID(t, ctx)})
 			require.NoError(t, err)
 			ti.service.SetCallbackOrigins(organizationCallbackOrigins(t))
@@ -209,4 +214,39 @@ func TestProxyRegisterUsesOrganizationCallbackOrigin(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.NotNil(t, registered.Load())
 	require.Equal(t, []string{pinnedOrigin + "/mcp/remote_login_callback"}, registered.Load().RedirectURIs)
+}
+
+func TestIdentityCommitResolvesOriginBeforeBegin(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"manual", "cimd"} {
+		t.Run(mode, func(t *testing.T) {
+			cimd := mode == "cimd"
+			t.Parallel()
+			ctx, ti := newTestServiceWithConfig(t, testServiceConfig{maxDBConns: 1})
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			committer := remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), audit.NewLogger(), mustURL(t, movedOrigin), nil, nil, nil)
+			committer.SetCallbackOrigins(organizationCallbackOrigins(t))
+			usi := createUserSessionIssuer(t, ctx, ti.conn, "origin-before-begin")
+			provider := createServerIdentityProvider(t, ctx, ti, "origin-provider", "", cimd, []string{"none", "client_secret_basic"})
+			plan := linkPlan(t, ctx, usi, provider, uuid.Nil)
+			plan.Client = remotesessions.ManualClient(remotesessions.ClientCredentials{ClientID: "manual-origin", ClientSecret: "test-secret"})
+			if cimd {
+				plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{AllowCIMD: true})
+			}
+			commit := committer.Prepare(plan)
+			require.NoError(t, commit.Preflight(ctx))
+			reg, err := commit.Register(ctx)
+			require.NoError(t, err)
+			require.True(t, reg.Ready())
+			tx, err := commit.Begin(ctx)
+			require.NoError(t, err)
+			defer o11y.NoLogDefer(func() error { return tx.Rollback(context.Background()) })
+			require.NoError(t, commit.Lock(ctx, tx))
+			require.NoError(t, commit.Bind(ctx, tx, reg))
+			result, err := commit.Commit(ctx, tx)
+			require.NoError(t, err)
+			require.True(t, result.Client.CallbackBaseUrl.Valid)
+		})
+	}
 }

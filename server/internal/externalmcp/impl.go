@@ -289,7 +289,7 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 	if s.callbackOrigins != nil {
 		base, err := s.callbackOrigins.ResolveNewClientBaseURL(ctx, s.db, authCtx.ActiveOrganizationID)
 		if err != nil {
-			return nil, fmt.Errorf("resolve organization callback origin: %w", err)
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, s.logger)
 		}
 		callbackURL = remotesessions.RemoteLoginCallbackURL(s.callbackOrigins.ForClient(base))
 	}

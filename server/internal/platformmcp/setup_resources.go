@@ -193,7 +193,6 @@ func registerSetupResources(reg *Registrar, resources []SetupResource, now func(
 			Title:       resource.Title,
 			Description: resource.Description,
 			MIMEType:    "text/markdown",
-			Size:        int64(len(resource.Text)),
 		}, ResourceMeta{
 			Authorization: ExternalAuthorizationMember,
 			// Both audiences: a reviewed guide carries no connection-scoped or
@@ -207,7 +206,7 @@ func registerSetupResources(reg *Registrar, resources []SetupResource, now func(
 				var err error
 				text, err = resource.Render(ctx, text)
 				if err != nil {
-					return "", err
+					return "", reg.failSafe(ctx, resource.URI, err)
 				}
 			}
 			switch resource.staleness(now()) {

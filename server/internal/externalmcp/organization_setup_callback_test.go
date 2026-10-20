@@ -34,5 +34,6 @@ func TestSetupDocsOrganizationCallback(t *testing.T) {
 			want = canonical.String()
 		}
 		require.Equal(t, string(guide.RenderExternal(guides.Vars{OAuthCallbackURL: want + "/mcp/remote_login_callback"})), result.Guides[0].ExternalMarkdown)
+		require.Equal(t, string(guide.RenderSpeakeasy(guides.Vars{OAuthCallbackURL: want + "/mcp/remote_login_callback"})), result.Guides[0].SpeakeasyMarkdown)
 	}
 }

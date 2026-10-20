@@ -594,6 +594,13 @@ func (c *IdentityCommit) Register(ctx context.Context) (Registration, error) {
 	default:
 		return Registration{}, errors.New("identity plan has no client choice")
 	}
+	// Resolve before Begin for manual and CIMD clients too: Bind must not
+	// acquire a second pool connection while holding its transaction.
+	if reg.Method == RegistrationManual || reg.Method == RegistrationCIMD {
+		if _, err := c.newClientBaseURL(ctx); err != nil {
+			return Registration{}, err
+		}
+	}
 	c.registration = reg
 	return reg, nil
 }

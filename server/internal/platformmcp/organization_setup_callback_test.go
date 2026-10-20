@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"errors"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/stretchr/testify/require"
@@ -41,5 +42,25 @@ func TestSetupResourcesOrganizationCallback(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, hits)
 		require.Contains(t, hits[0].Excerpt, want)
+	}
+}
+
+func TestSetupResourceCallbackFailureIsSafe(t *testing.T) {
+	t.Parallel()
+	resource := testSetupResource()
+	resource.Render = func(context.Context, string) (string, error) {
+		return "", errors.New("private SQL driver detail")
+	}
+	reg := newRegistrar(newTestMCPServer())
+	registerSetupResources(reg, []SetupResource{resource}, func() time.Time { return resource.RevalidateBy.Add(-time.Hour) })
+	for _, audience := range []Audience{AudienceExternal, AudienceAssistant} {
+		descriptor, ok := reg.ResourceFor(audience, resource.URI)
+		require.True(t, ok)
+		_, err := descriptor.Read(t.Context())
+		require.Error(t, err)
+		require.NotContains(t, err.Error(), "private SQL driver detail")
+		var refusal *ToolRefusalError
+		require.ErrorAs(t, err, &refusal)
+		require.Equal(t, unavailableCode, refusal.Code)
 	}
 }
