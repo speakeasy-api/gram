@@ -461,3 +461,29 @@ func TestSelector_Matches_dispositionGrantDeniesWrongDisposition(t *testing.T) {
 	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "disposition": "read_only"}))
 	require.False(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "disposition": "destructive"}))
 }
+
+func TestValidateSelector_ProjectBoundsHooksIngestOnly(t *testing.T) {
+	t.Parallel()
+
+	bounded := func(scope Scope) Selector {
+		selector := NewSelector(scope, "org-123")
+		selector[SelectorKeyProjectID] = "project-1"
+		return selector
+	}
+	require.NoError(t, ValidateSelector(ScopeOrgHooksIngest, bounded(ScopeOrgHooksIngest)))
+	require.Error(t, ValidateSelector(ScopeOrgDeviceAgentSync, bounded(ScopeOrgDeviceAgentSync)), "project_id must not read as a restriction on scopes not checked by project")
+	require.Error(t, ValidateSelector(ScopeOrgRead, bounded(ScopeOrgRead)))
+}
+
+func TestHooksIngestCheck_MatchesOnlyItsProjectBound(t *testing.T) {
+	t.Parallel()
+
+	selector := NewSelector(ScopeOrgHooksIngest, "org-123")
+	selector[SelectorKeyProjectID] = "project-1"
+	bounded := []Grant{NewGrantWithSelector(ScopeOrgHooksIngest, selector)}
+	unbounded := []Grant{NewGrant(ScopeOrgHooksIngest, "org-123")}
+
+	require.True(t, GrantsSatisfy(bounded, HooksIngestCheck("org-123", "project-1")))
+	require.False(t, GrantsSatisfy(bounded, HooksIngestCheck("org-123", "project-2")))
+	require.True(t, GrantsSatisfy(unbounded, HooksIngestCheck("org-123", "project-2")), "a grant naming no project covers every project")
+}

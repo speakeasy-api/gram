@@ -3590,7 +3590,7 @@ func NewGetStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetStatusGatew
 }
 
 // NewClaudePayload builds a hooks service claude endpoint payload.
-func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.ClaudePayload {
+func NewClaudePayload(body *ClaudeRequestBody, deviceAgentToken *string, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.ClaudePayload {
 	v := &hooks.ClaudePayload{
 		HookEventName:        *body.HookEventName,
 		ToolName:             body.ToolName,
@@ -3621,6 +3621,7 @@ func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugI
 			v.AdditionalData[tk] = tv
 		}
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
@@ -3630,7 +3631,7 @@ func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugI
 }
 
 // NewCursorPayload builds a hooks service cursor endpoint payload.
-func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.CursorPayload {
+func NewCursorPayload(body *CursorRequestBody, deviceAgentToken *string, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.CursorPayload {
 	v := &hooks.CursorPayload{
 		HookEventName:    *body.HookEventName,
 		ConversationID:   body.ConversationID,
@@ -3669,6 +3670,7 @@ func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugI
 			v.AdditionalData[tk] = tv
 		}
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
@@ -3678,7 +3680,7 @@ func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugI
 }
 
 // NewCodexPayload builds a hooks service codex endpoint payload.
-func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.CodexPayload {
+func NewCodexPayload(body *CodexRequestBody, deviceAgentToken *string, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.CodexPayload {
 	v := &hooks.CodexPayload{
 		HookEventName:        *body.HookEventName,
 		SessionID:            body.SessionID,
@@ -3701,6 +3703,7 @@ func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInp
 			v.AdditionalData[tk] = tv
 		}
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
@@ -3710,7 +3713,7 @@ func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInp
 }
 
 // NewIngestPayload builds a hooks service ingest endpoint payload.
-func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string, idempotencyKey *string, replayed *bool) *hooks.IngestPayload {
+func NewIngestPayload(body *IngestRequestBody, deviceAgentToken *string, apikeyToken *string, projectSlugInput *string, idempotencyKey *string, replayed *bool) *hooks.IngestPayload {
 	v := &hooks.IngestPayload{
 		SchemaVersion: *body.SchemaVersion,
 		Raw:           body.Raw,
@@ -3723,6 +3726,7 @@ func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugI
 	if body.Data != nil {
 		v.Data = unmarshalHookIngestDataRequestBodyToHooksHookIngestData(body.Data)
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey
@@ -3761,7 +3765,7 @@ func NewSkillFeedbackPayload(body *SkillFeedbackRequestBody, apikeyToken *string
 }
 
 // NewLogsPayload builds a hooks service logs endpoint payload.
-func NewLogsPayload(body *LogsRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.LogsPayload {
+func NewLogsPayload(body *LogsRequestBody, deviceAgentToken *string, apikeyToken *string, projectSlugInput *string) *hooks.LogsPayload {
 	v := &hooks.LogsPayload{}
 	if body.ResourceLogs != nil {
 		v.ResourceLogs = make([]*hooks.OTELResourceLog, len(body.ResourceLogs))
@@ -3773,6 +3777,7 @@ func NewLogsPayload(body *LogsRequestBody, apikeyToken *string, projectSlugInput
 			v.ResourceLogs[i] = unmarshalOTELResourceLogRequestBodyToHooksOTELResourceLog(val)
 		}
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -3780,7 +3785,7 @@ func NewLogsPayload(body *LogsRequestBody, apikeyToken *string, projectSlugInput
 }
 
 // NewMetricsPayload builds a hooks service metrics endpoint payload.
-func NewMetricsPayload(body *MetricsRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.MetricsPayload {
+func NewMetricsPayload(body *MetricsRequestBody, deviceAgentToken *string, apikeyToken *string, projectSlugInput *string) *hooks.MetricsPayload {
 	v := &hooks.MetricsPayload{}
 	if body.ResourceMetrics != nil {
 		v.ResourceMetrics = make([]*hooks.OTELResourceMetrics, len(body.ResourceMetrics))
@@ -3792,6 +3797,7 @@ func NewMetricsPayload(body *MetricsRequestBody, apikeyToken *string, projectSlu
 			v.ResourceMetrics[i] = unmarshalOTELResourceMetricsRequestBodyToHooksOTELResourceMetrics(val)
 		}
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
