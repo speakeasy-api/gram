@@ -1,4 +1,10 @@
 import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
+import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-client/react-query/adminGetUpstreamOAuthMigrationStatus.core";
+import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
+import { buildAdminRunUpstreamOAuthMigrationMutation } from "@gram/admin-client/react-query/adminRunUpstreamOAuthMigration";
+import type { AdminUpstreamOAuthMigrationOrganizations } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganizations";
+import type { AdminUpstreamOAuthMigrationRun } from "@gram/admin-client/models/components/adminupstreamoauthmigrationrun";
+import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
 import { buildAdminGetInferenceKeysQuery } from "@gram/admin-client/react-query/adminGetInferenceKeys.core";
 import type { AdminInferenceKeyRepairResult } from "@gram/admin-client/models/components/admininferencekeyrepairresult";
 import { buildAdminRepairInferenceKeyMutation } from "@gram/admin-client/react-query/adminRepairInferenceKey";
@@ -1074,6 +1080,48 @@ export function inferenceKeysQuery(
     queryFn: (context) => redirecting(generated.queryFn(context)),
     retry: false,
   });
+}
+
+export function upstreamOAuthMigrationOrganizationsQuery(): UseQueryOptions<AdminUpstreamOAuthMigrationOrganizations> {
+  const generated = buildAdminListUpstreamOAuthMigrationOrganizationsQuery(
+    redirectingClient,
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
+
+export function upstreamOAuthMigrationStatusQuery(
+  organizationID: string,
+): UseQueryOptions<AdminUpstreamOAuthMigrationStatus> {
+  const generated = buildAdminGetUpstreamOAuthMigrationStatusQuery(
+    redirectingClient,
+    { organizationId: organizationID },
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
+
+const generatedRunUpstreamOAuthMigrationMutation =
+  buildAdminRunUpstreamOAuthMigrationMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function runUpstreamOAuthMigration(
+  organizationID: string,
+): Promise<AdminUpstreamOAuthMigrationRun> {
+  return redirecting(
+    generatedRunUpstreamOAuthMigrationMutation.mutationFn({
+      request: { organizationId: organizationID },
+    }),
+  );
 }
 
 function createAdminListExternalMcpMigrationCandidatesQuery() {
