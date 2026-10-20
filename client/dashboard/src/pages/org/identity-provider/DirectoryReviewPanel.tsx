@@ -136,7 +136,7 @@ export function DirectoryReviewPanel({
       aria-label="Directory changes to review"
       className="border-border border"
     >
-      <div className="border-border border-b px-3 py-2">
+      <div className="border-border bg-muted/40 border-b px-3 py-2">
         <Text className="font-medium">
           {pluralize(items.length, "directory change")} to review
         </Text>
@@ -145,7 +145,9 @@ export function DirectoryReviewPanel({
           you decide.
         </Text>
       </div>
-      <ul className="divide-border divide-y">
+      {/* Indented under the header with a rule down the side, so the items
+          read as entries in its list rather than as more headers. */}
+      <ul className="divide-border border-border my-2 mr-3 ml-4 divide-y border-l-2">
         {items.map((item) => (
           <ReviewRow
             key={item.id}
@@ -175,12 +177,22 @@ function ReviewRow({
   onDecide: (decision: ReviewDecision, choice?: SetupChoice) => void;
 }): JSX.Element {
   const proposed = proposedChoice(item.item);
-  const [choice, setChoice] = useState<SetupChoice | undefined>(proposed);
+  // Only an explicit pick is stored. An untouched row follows the proposal
+  // as a refetch changes it, and a pick no longer offered (a new role that
+  // now exists, or a role since deleted) falls back to the proposal rather
+  // than submitting something the server will refuse.
+  const [picked, setPicked] = useState<SetupChoice | undefined>(undefined);
+  const pickedOffered =
+    picked !== undefined &&
+    (picked.kind === "create"
+      ? proposed !== undefined && choiceValue(proposed) === choiceValue(picked)
+      : roles.some((role) => role.principalUrn === picked.roleUrn));
+  const choice = pickedOffered ? picked : proposed;
   const missing = item.kind === "source_missing";
   const title = reviewItemTitle(item);
 
   return (
-    <li className="flex flex-wrap items-center gap-3 px-3 py-2">
+    <li className="flex flex-wrap items-center gap-3 py-2 pr-1 pl-3">
       {/* The text keeps a readable width; the controls wrap below it. */}
       <div className="min-w-64 flex-1">
         <Text className="truncate font-medium">{title}</Text>
@@ -193,8 +205,10 @@ function ReviewRow({
           </Text>
         )}
       </div>
+      {/* ml-auto keeps every row's controls on the right, including when
+          they wrap below the text. */}
       {missing ? (
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2">
           <Button
             variant="secondary"
             size="sm"
@@ -213,10 +227,10 @@ function ReviewRow({
           </Button>
         </div>
       ) : (
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           <Select
             value={choice ? choiceValue(choice) : undefined}
-            onValueChange={(value) => setChoice(choiceFromValue(value))}
+            onValueChange={(value) => setPicked(choiceFromValue(value))}
             disabled={disabled}
           >
             <SelectTrigger className="w-56" aria-label={`Role for ${title}`}>
