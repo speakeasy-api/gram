@@ -154,6 +154,7 @@ func TestListMcpServers_DegradesWhenEnrichmentFails(t *testing.T) {
 	require.Equal(t, server.ID, result.McpServers[0].ID)
 	require.Nil(t, result.McpServers[0].Toolset)
 	require.Nil(t, result.McpServers[0].PrimaryEndpointID)
+	require.Nil(t, result.McpServers[0].HasEndpoint, "unknown, not false, so clients never hide on a failed read")
 
 	orgResult, err := ti.service.ListMcpServersForOrg(ctx, &gen.ListMcpServersForOrgPayload{})
 	require.NoError(t, err)

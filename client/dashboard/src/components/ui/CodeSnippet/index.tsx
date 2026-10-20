@@ -66,6 +66,12 @@ export interface CodeSnippetProps {
    * Additional CSS classes to apply to the code snippet inner container (e.g the Pre component).
    */
   snippetClassName?: string;
+
+  /**
+   * The accessible name of the copy button. Name it when a page shows several
+   * snippets, so each button says what it copies rather than just "copy".
+   */
+  copyLabel?: string;
 }
 
 const fontSizeMap: Record<Size, string> = {
@@ -94,6 +100,7 @@ export function CodeSnippet({
   snippetClassName,
   showLineNumbers = false,
   wordWrap = false,
+  copyLabel = "copy",
 }: CodeSnippetProps): React.JSX.Element {
   const [copying, setCopying] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -191,7 +198,7 @@ export function CodeSnippet({
           >
             <button
               role="button"
-              aria-label="copy"
+              aria-label={copyLabel}
               className="relative ml-2 border-none bg-transparent outline-none"
               onClick={handleCopy}
             >

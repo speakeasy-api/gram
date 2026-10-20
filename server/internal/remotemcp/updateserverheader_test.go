@@ -201,7 +201,7 @@ func TestUpdateServerHeader_SecretToPassThrough(t *testing.T) {
 	created := createSecretHeader(t, ctx, ti, server.ID, "Authorization", "Bearer token")
 
 	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "Authorization", func(p *gen.UpdateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("Authorization")
+		p.ValueFromRequestHeader = new("X-Upstream-Credential")
 	}))
 	require.NoError(t, err)
 	require.False(t, updated.IsSecret)
@@ -413,6 +413,27 @@ func TestUpdateServerHeader_RejectsProtectedPassThroughSource(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	// Repairing it to a separately supplied header works.
+	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "X-Upstream-Token", func(p *gen.UpdateServerHeaderPayload) {
+		p.ValueFromRequestHeader = new("X-Client-Upstream-Token")
+	}))
+	require.NoError(t, err)
+	require.Equal(t, "X-Client-Upstream-Token", *updated.ValueFromRequestHeader)
+}
+
+// A stored row reading the caller's Authorization cannot be kept, only
+// repointed to a header the caller supplies for the upstream.
+func TestUpdateServerHeader_RejectsAuthorizationPassThroughSource(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	legacy := seedLegacyHeader(t, ctx, ti, server.ID, "X-Upstream-Token", "", "Authorization")
+
+	_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "X-Upstream-Token", func(p *gen.UpdateServerHeaderPayload) {
+		p.ValueFromRequestHeader = new("authorization")
+	}))
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
 	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "X-Upstream-Token", func(p *gen.UpdateServerHeaderPayload) {
 		p.ValueFromRequestHeader = new("X-Client-Upstream-Token")
 	}))
