@@ -449,7 +449,7 @@ export function InsightsToolsContent(): JSX.Element {
     void refetchTargetToolBreakdown();
     // refetch() ignores `enabled`, so the skill reads are only asked for where
     // their queries are on.
-    if (splitSkillChannels) {
+    if (!roleFilterPending && splitSkillChannels) {
       void refetchSkillTotals();
       void refetchSkillHookTotals();
       void refetchSkillHookTargets();
@@ -461,6 +461,7 @@ export function InsightsToolsContent(): JSX.Element {
     refetchTargetTimeSeries,
     refetchClients,
     refetchTargetToolBreakdown,
+    roleFilterPending,
     splitSkillChannels,
     refetchSkillTotals,
     refetchSkillHookTotals,
