@@ -77,7 +77,7 @@ func NewRuntime(service *Service, authenticate Authenticator, store ratelimit.St
 		limiter = ratelimit.New(store, "approval-watch", watchRate)
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: MCPServerName, Title: "Speakeasy Approvals", Description: "", Version: "1.0.0", WebsiteURL: "", Icons: nil}, &mcp.ServerOptions{
-		Instructions:                "Use request_approval when a tool call was blocked with a request token (apr_...). Pass the token and a one-sentence reason, run the watcher it returns, and retry the blocked call with the same arguments once the watcher prints APPROVED.",
+		Instructions:                "Use request_approval when a tool call was blocked with a request token (apr_...). Pass the token and a one-sentence reason, then start the watcher exactly as its result says: with the Monitor tool in Claude Code, or in a background terminal elsewhere while you keep the turn open. Retry the blocked call with the same arguments once the watcher prints APPROVED.",
 		Logger:                      nil,
 		InitializedHandler:          nil,
 		PageSize:                    0,
@@ -99,7 +99,7 @@ func NewRuntime(service *Service, authenticate Authenticator, store ratelimit.St
 	mcp.AddTool(server, &mcp.Tool{
 		Name:         "request_approval",
 		Title:        "Request approval for a blocked tool call",
-		Description:  "Ask a person to approve a tool call that a Speakeasy approval policy blocked. Pass the request token from the block message and one sentence explaining why the call is needed. Returns how to wait for the decision.",
+		Description:  "Ask a person to approve a tool call that a Speakeasy approval policy blocked. Pass the request token from the block message and one sentence explaining why the call is needed. Returns the steps and the watcher script to wait for the decision; follow them exactly.",
 		Annotations:  &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
 		Meta:         nil,
 		InputSchema:  nil,
@@ -124,29 +124,20 @@ type requestApprovalInput struct {
 	ExpiresIn int `json:"expires_in,omitempty" jsonschema:"Seconds to wait for a decision. Defaults to 1800; between 60 and 86400."`
 }
 
-// requestApprovalOutput is the structured request_approval result.
-type requestApprovalOutput struct {
-	// Status is the request's status after the call.
-	Status string `json:"status"`
-
-	// WatchURL is the endpoint the watcher polls.
-	WatchURL string `json:"watch_url"`
-
-	// ExpiresAt is when the request stops waiting for a decision.
-	ExpiresAt string `json:"expires_at,omitempty"`
-}
-
-func (r *Runtime) requestApproval(ctx context.Context, _ *mcp.CallToolRequest, input requestApprovalInput) (*mcp.CallToolResult, requestApprovalOutput, error) {
+// requestApproval returns text only, with no output schema or structured
+// content. Clients that get structured content show it to the model in place of
+// the text (Claude Code does), and the text is where the watcher steps are.
+func (r *Runtime) requestApproval(ctx context.Context, _ *mcp.CallToolRequest, input requestApprovalInput) (*mcp.CallToolResult, any, error) {
 	identity, _ := mcpidentity.FromContext(ctx)
 	requesterURN, _, ok := Requester(identity)
 	authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
 	if !ok || !hasAuth || authCtx == nil {
-		return nil, requestApprovalOutput{}, errors.New("this credential cannot request approval; call with an agent key or sign in")
+		return nil, nil, errors.New("this credential cannot request approval; call with an agent key or sign in")
 	}
 	// Check the bounds in seconds first, so a huge value cannot wrap around
 	// when it becomes a Duration.
 	if input.ExpiresIn != 0 && (input.ExpiresIn < int(minRequestTTL/time.Second) || input.ExpiresIn > int(maxRequestTTL/time.Second)) {
-		return nil, requestApprovalOutput{}, fmt.Errorf("%w: expires_in must be between %d and %d seconds", ErrInvalidRequest, int(minRequestTTL/time.Second), int(maxRequestTTL/time.Second))
+		return nil, nil, fmt.Errorf("%w: expires_in must be between %d and %d seconds", ErrInvalidRequest, int(minRequestTTL/time.Second), int(maxRequestTTL/time.Second))
 	}
 	row, status, err := r.service.Request(ctx, RequestInput{
 		Token:          strings.TrimSpace(input.Token),
@@ -158,18 +149,14 @@ func (r *Runtime) requestApproval(ctx context.Context, _ *mcp.CallToolRequest, i
 	})
 	switch {
 	case errors.Is(err, ErrNotFound):
-		return nil, requestApprovalOutput{}, errors.New("no approval request matches this token for your credential; use the token from the block message")
+		return nil, nil, errors.New("no approval request matches this token for your credential; use the token from the block message")
 	case errors.Is(err, ErrInvalidRequest):
-		return nil, requestApprovalOutput{}, err
+		return nil, nil, err
 	case err != nil:
 		r.service.logger.ErrorContext(ctx, "request approval", attr.SlogError(err))
-		return nil, requestApprovalOutput{}, errors.New("the approval request could not be recorded; try again")
+		return nil, nil, errors.New("the approval request could not be recorded; try again")
 	}
 
-	output := requestApprovalOutput{Status: string(status), WatchURL: r.service.WatchURL(), ExpiresAt: ""}
-	if row.ExpiresAt.Valid {
-		output.ExpiresAt = row.ExpiresAt.Time.UTC().Format(time.RFC3339)
-	}
 	return &mcp.CallToolResult{
 		Meta:              nil,
 		Content:           []mcp.Content{&mcp.TextContent{Text: r.requestResultText(row, status), Meta: nil, Annotations: nil}},
@@ -177,7 +164,7 @@ func (r *Runtime) requestApproval(ctx context.Context, _ *mcp.CallToolRequest, i
 		IsError:           false,
 		InputRequests:     nil,
 		RequestState:      "",
-	}, output, nil
+	}, nil, nil
 }
 
 func (r *Runtime) requestResultText(row repo.RiskPolicyApproval, status Status) string {
@@ -193,19 +180,37 @@ func (r *Runtime) requestResultText(row repo.RiskPolicyApproval, status Status) 
 	case StatusBlocked, StatusPending:
 	}
 
-	tokenFile := "$HOME/.speakeasy-approval-" + shortID(row.Token) + ".token"
-	return fmt.Sprintf(`Approval requested (status: %s). It stays pending until an approver decides or it expires.
-Wait for the decision with the watcher below, then retry the blocked call with exactly the same arguments when it prints APPROVED.
+	id := shortID(row.Token)
+	tokenFile := "$HOME/.speakeasy-approval-" + id + ".token"
+	checks := r.watchChecks(row)
+	expires := "when its window ends"
+	if row.ExpiresAt.Valid {
+		expires = "at " + row.ExpiresAt.Time.UTC().Format("2006-01-02 15:04 UTC")
+	}
+	command := fmt.Sprintf(`bash approval-watch.sh %s "%s" %d %d`, r.service.WatchURL(), tokenFile, watchIntervalSeconds, checks)
+	return fmt.Sprintf(`Approval requested (status: %s). An approver has been asked. The request expires %s.
+Do not retry the blocked call yet. Start the watcher below and retry with exactly the same arguments only when it prints APPROVED.
 
 1. Save the request token, and nothing else, to %s with your file-writing tool. If you have none, run:
    umask 077 && printf '%%s' '%s' > "%s"
-2. Save the script below as approval-watch.sh.
-3. Run it: bash approval-watch.sh %s "%s" %d %d
-   In Claude Code, run it with the Monitor tool so its output wakes you. Elsewhere, run it in a background terminal and check its output.
-   It prints APPROVED, DENIED or EXPIRED and exits. On DENIED, EXPIRED, WATCH FAILED or WATCH TIMEOUT, do not retry; tell the user.
+2. Save the script at the end of this message as approval-watch.sh in your working directory.
+3. Start the watcher. Do not write your own poller: the watch URL only accepts the token as an "Authorization: Bearer apr_..." header, and the script sends it.
+   In Claude Code, call the Monitor tool with:
+     command: %s
+     description: Waiting for approval %s
+     timeout_ms: %d
+   Then you can end your turn. The watcher prints a line only when the status changes, so its last line wakes you. If the Monitor times out first, start it again with the same command.
+   In Codex, OpenClaw and other agents, run the same command in a background terminal and keep this turn open: wait on its output until it exits. Do not end your turn while it runs, because nothing wakes you when it finishes.
+4. When it prints APPROVED, retry the blocked call with exactly the same arguments. On DENIED, EXPIRED, WATCH FAILED or WATCH TIMEOUT, do not retry; tell the user.
 
 approval-watch.sh:
-%s`, status, tokenFile, row.Token, tokenFile, r.service.WatchURL(), tokenFile, watchIntervalSeconds, r.watchChecks(row), watchScript)
+%s`, status, expires, tokenFile, row.Token, tokenFile, command, id, monitorTimeoutMs(checks), watchScript)
+}
+
+// monitorTimeoutMs covers the watcher's run plus a minute, capped at an hour,
+// the longest Monitor timeout Claude Code allows.
+func monitorTimeoutMs(checks int) int {
+	return min((checks*watchIntervalSeconds+60)*1000, 3_600_000)
 }
 
 // watchChecks is how many polls cover the rest of the request's window, plus
@@ -264,7 +269,7 @@ func (r *Runtime) HandleWatch(w http.ResponseWriter, req *http.Request) error {
 	kind, token, ok := strings.Cut(req.Header.Get("Authorization"), " ")
 	token = strings.TrimSpace(token)
 	if !ok || !strings.EqualFold(kind, "Bearer") || !IsToken(token) {
-		return oops.E(oops.CodeUnauthorized, nil, "unknown or invalid approval token")
+		return oops.E(oops.CodeUnauthorized, nil, "missing request token: send the apr_ token from the block message in the header \"Authorization: Bearer apr_...\", not in the URL. The approval-watch.sh script from request_approval does this")
 	}
 	if r.watchLimiter != nil {
 		res, err := r.watchLimiter.Allow(ctx, tokenKey(token))
@@ -278,7 +283,7 @@ func (r *Runtime) HandleWatch(w http.ResponseWriter, req *http.Request) error {
 	}
 	status, err := r.service.WatchStatus(ctx, token)
 	if errors.Is(err, ErrNotFound) {
-		return oops.E(oops.CodeUnauthorized, nil, "unknown or invalid approval token")
+		return oops.E(oops.CodeUnauthorized, nil, "unknown request token: send the exact apr_ token from the block message as \"Authorization: Bearer apr_...\". The approval-watch.sh script from request_approval does this")
 	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "read approval status").LogError(ctx, r.service.logger)

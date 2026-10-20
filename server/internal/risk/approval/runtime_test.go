@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -30,6 +31,7 @@ type watchResult struct {
 	status       int
 	cacheControl string
 	body         watchResponse
+	raw          string
 }
 
 // watch polls the watch endpoint once and decodes a successful body.
@@ -45,9 +47,11 @@ func watch(t *testing.T, runtime *Runtime, authorization string) watchResult {
 	res, err := server.Client().Do(req)
 	require.NoError(t, err)
 	defer func() { _ = res.Body.Close() }()
-	result := watchResult{status: res.StatusCode, cacheControl: res.Header.Get("Cache-Control"), body: watchResponse{Status: ""}}
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	result := watchResult{status: res.StatusCode, cacheControl: res.Header.Get("Cache-Control"), body: watchResponse{Status: ""}, raw: string(raw)}
 	if res.StatusCode == http.StatusOK {
-		require.NoError(t, json.NewDecoder(res.Body).Decode(&result.body))
+		require.NoError(t, json.Unmarshal(raw, &result.body))
 	}
 	return result
 }
@@ -82,7 +86,11 @@ func TestHandleWatchRejectsMissingOrUnknownTokens(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, http.StatusUnauthorized, watch(t, runtime, authorization).status)
+			result := watch(t, runtime, authorization)
+			require.Equal(t, http.StatusUnauthorized, result.status)
+			// An agent that guessed how to call the endpoint learns where the
+			// token goes.
+			require.Contains(t, result.raw, `Authorization: Bearer apr_...`)
 		})
 	}
 }
@@ -125,17 +133,44 @@ func TestRequestApprovalToolFilesRequestAndReturnsWatcher(t *testing.T) {
 	require.Contains(t, text, "https://speakeasy.test/approvals/watch")
 	require.Contains(t, text, "APPROVED")
 	require.Contains(t, text, watchScript)
-	out, err := json.Marshal(res.StructuredContent)
-	require.NoError(t, err)
-	var structured requestApprovalOutput
-	require.NoError(t, json.Unmarshal(out, &structured))
-	require.Equal(t, string(StatusPending), structured.Status)
-	require.Equal(t, "https://speakeasy.test/approvals/watch", structured.WatchURL)
-	require.NotEmpty(t, structured.ExpiresAt)
+	require.Contains(t, text, "The request expires at ")
+	require.Contains(t, text, "In Claude Code, call the Monitor tool with:")
+	require.Contains(t, text, `command: bash approval-watch.sh https://speakeasy.test/approvals/watch "$HOME/.speakeasy-approval-`)
+	require.Contains(t, text, "timeout_ms: ")
+	require.Contains(t, text, `"Authorization: Bearer apr_..." header`)
+	require.Contains(t, text, "keep this turn open")
+	// The steps are only in the text. Structured content would replace them
+	// in clients that show it to the model instead.
+	require.Nil(t, res.StructuredContent)
 
 	status, err := f.service.WatchStatus(t.Context(), token)
 	require.NoError(t, err)
 	require.Equal(t, StatusPending, status)
+}
+
+func TestRequestApprovalToolHasNoOutputSchema(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	runtime := NewRuntime(f.service, agentAuthenticator(f.organizationID, uuid.New()), nil)
+	server := httptest.NewServer(runtime.Handler())
+	t.Cleanup(server.Close)
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "agent", Version: "1"}, nil).Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: server.URL, HTTPClient: server.Client(), MaxRetries: -1, DisableStandaloneSSE: true}, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close() })
+
+	tools, err := session.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, tools.Tools, 1)
+	require.Equal(t, "request_approval", tools.Tools[0].Name)
+	// With an output schema, Claude Code shows the structured result in place
+	// of the text, and the agent never sees the watcher steps.
+	require.Nil(t, tools.Tools[0].OutputSchema)
+}
+
+func TestMonitorTimeoutCoversTheWatcherUpToAnHour(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, (620*watchIntervalSeconds+60)*1000, monitorTimeoutMs(620))
+	require.Equal(t, 3_600_000, monitorTimeoutMs(30_000))
 }
 
 func TestRequestApprovalToolRejectsOtherCallers(t *testing.T) {

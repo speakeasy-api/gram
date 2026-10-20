@@ -572,7 +572,7 @@ Run the watcher from your request_approval result if it is not running. When it 
 	return fmt.Sprintf(`Blocked: calling %s needs approval under risk policy %q.
 Request token: %s
 1. Call request_approval on the speakeasy-approvals MCP server (%s) with this token and a one-sentence reason.
-2. Run the watcher it returns. When it prints APPROVED, retry this exact call with the same arguments.`,
+2. Start the watcher exactly as its result says (in Claude Code, with the Monitor tool). When it prints APPROVED, retry this exact call with the same arguments.`,
 		toolName, policyName, row.Token, s.MCPServerURL())
 }
 
