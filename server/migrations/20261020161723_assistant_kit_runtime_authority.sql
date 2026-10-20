@@ -57,9 +57,11 @@ CREATE TABLE "assistant_kit_gateway_credentials" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "assistant_kit_gateway_credentials_assistant_id_fkey" FOREIGN KEY ("project_id", "assistant_id") REFERENCES "assistants" ("project_id", "id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_gateway_credentials_assistant_id_fkey" FOREIGN KEY ("assistant_id") REFERENCES "assistants" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_gateway_credentials_assistant_id_tenant_fkey" FOREIGN KEY ("project_id", "assistant_id") REFERENCES "assistants" ("project_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT "assistant_kit_gateway_credentials_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "assistant_kit_gateway_credentials_runtime_id_fkey" FOREIGN KEY ("project_id", "runtime_id") REFERENCES "assistant_runtimes" ("project_id", "id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_gateway_credentials_runtime_id_fkey" FOREIGN KEY ("runtime_id") REFERENCES "assistant_runtimes" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_gateway_credentials_runtime_id_tenant_fkey" FOREIGN KEY ("project_id", "runtime_id") REFERENCES "assistant_runtimes" ("project_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT "assistant_kit_gateway_credentials_token_ciphertext_check" CHECK (token_ciphertext <> ''::text)
 );
 -- Create index "assistant_kit_gateway_credentials_runtime_key" to table: "assistant_kit_gateway_credentials"
@@ -95,11 +97,15 @@ CREATE TABLE "assistant_kit_interrupt_requests" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "acknowledged_at" timestamptz NULL,
   PRIMARY KEY ("id"),
-  CONSTRAINT "assistant_kit_interrupt_requests_assistant_id_fkey" FOREIGN KEY ("project_id", "assistant_id") REFERENCES "assistants" ("project_id", "id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "assistant_kit_interrupt_requests_assistant_thread_id_fkey" FOREIGN KEY ("project_id", "assistant_thread_id") REFERENCES "assistant_threads" ("project_id", "id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "assistant_kit_interrupt_requests_event_id_fkey" FOREIGN KEY ("project_id", "event_id") REFERENCES "assistant_thread_events" ("project_id", "id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_interrupt_requests_assistant_id_fkey" FOREIGN KEY ("assistant_id") REFERENCES "assistants" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_interrupt_requests_assistant_id_tenant_fkey" FOREIGN KEY ("project_id", "assistant_id") REFERENCES "assistants" ("project_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT "assistant_kit_interrupt_requests_assistant_thread_id_fkey" FOREIGN KEY ("assistant_thread_id") REFERENCES "assistant_threads" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_interrupt_requests_assistant_thread_id_tenant_fke" FOREIGN KEY ("project_id", "assistant_thread_id") REFERENCES "assistant_threads" ("project_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT "assistant_kit_interrupt_requests_event_id_fkey" FOREIGN KEY ("event_id") REFERENCES "assistant_thread_events" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_interrupt_requests_event_id_tenant_fkey" FOREIGN KEY ("project_id", "event_id") REFERENCES "assistant_thread_events" ("project_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT "assistant_kit_interrupt_requests_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "assistant_kit_interrupt_requests_runtime_id_fkey" FOREIGN KEY ("project_id", "runtime_id") REFERENCES "assistant_runtimes" ("project_id", "id") ON UPDATE NO ACTION ON DELETE SET NULL
+  CONSTRAINT "assistant_kit_interrupt_requests_runtime_id_fkey" FOREIGN KEY ("runtime_id") REFERENCES "assistant_runtimes" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_interrupt_requests_runtime_id_tenant_fkey" FOREIGN KEY ("project_id", "runtime_id") REFERENCES "assistant_runtimes" ("project_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION
 );
 -- Create index "assistant_kit_interrupt_requests_attempt_key" to table: "assistant_kit_interrupt_requests"
 CREATE UNIQUE INDEX "assistant_kit_interrupt_requests_attempt_key" ON "assistant_kit_interrupt_requests" ("project_id", "runtime_id", "event_id", "attempt");
@@ -133,10 +139,13 @@ CREATE TABLE "assistant_kit_sessions" (
   "acp_session_id" text NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "assistant_kit_sessions_assistant_id_fkey" FOREIGN KEY ("project_id", "assistant_id") REFERENCES "assistants" ("project_id", "id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "assistant_kit_sessions_assistant_thread_id_fkey" FOREIGN KEY ("project_id", "assistant_thread_id") REFERENCES "assistant_threads" ("project_id", "id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_sessions_assistant_id_fkey" FOREIGN KEY ("assistant_id") REFERENCES "assistants" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_sessions_assistant_id_tenant_fkey" FOREIGN KEY ("project_id", "assistant_id") REFERENCES "assistants" ("project_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT "assistant_kit_sessions_assistant_thread_id_fkey" FOREIGN KEY ("assistant_thread_id") REFERENCES "assistant_threads" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_sessions_assistant_thread_id_tenant_fkey" FOREIGN KEY ("project_id", "assistant_thread_id") REFERENCES "assistant_threads" ("project_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT "assistant_kit_sessions_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "assistant_kit_sessions_runtime_id_fkey" FOREIGN KEY ("project_id", "runtime_id") REFERENCES "assistant_runtimes" ("project_id", "id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_sessions_runtime_id_fkey" FOREIGN KEY ("runtime_id") REFERENCES "assistant_runtimes" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "assistant_kit_sessions_runtime_id_tenant_fkey" FOREIGN KEY ("project_id", "runtime_id") REFERENCES "assistant_runtimes" ("project_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT "assistant_kit_sessions_acp_session_id_check" CHECK (acp_session_id <> ''::text)
 );
 -- Create index "assistant_kit_sessions_runtime_session_key" to table: "assistant_kit_sessions"
