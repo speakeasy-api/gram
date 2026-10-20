@@ -41,9 +41,9 @@ const (
 	// servedSkillLimit is the most skills one resolution serves. A listing is
 	// answered in one page, so the cap bounds the work of a single call. The
 	// query picks one version per skill before the cap applies, so a skill
-	// linked many times takes one slot; an endpoint with more skills
-	// than this has its later skills by name cut off, which the resolver
-	// logs.
+	// linked many times takes one slot; an endpoint with more skills than
+	// this has its later skills by project slug and name cut off, which the
+	// resolver logs.
 	servedSkillLimit = 1000
 )
 
@@ -105,20 +105,30 @@ func NewResolver(logger *slog.Logger, db database.DBTX) *Resolver {
 }
 
 // List returns every skill the surface serves to the caller, one entry per
-// skill name, sorted by name. A caller who is not a live member of the
+// skill, sorted by project slug and then name. A caller who is not a live member of the
 // organization yields no entries.
 func (r *Resolver) List(ctx context.Context, scope Scope) ([]Entry, error) {
-	return r.resolve(ctx, scope, pgtype.Text{String: "", Valid: false})
+	return r.resolve(ctx, scope, skillKey{
+		projectSlug: pgtype.Text{String: "", Valid: false},
+		name:        pgtype.Text{String: "", Valid: false},
+	})
+}
+
+// skillKey narrows a resolution to one skill by its URI segments; unset
+// fields match every skill.
+type skillKey struct {
+	projectSlug pgtype.Text
+	name        pgtype.Text
 }
 
 // Get returns the served skill at uri for the caller, or [ErrSkillNotFound].
 func (r *Resolver) Get(ctx context.Context, scope Scope, uri string) (*Entry, error) {
-	name, ok := ParseSkillURI(uri)
+	projectSlug, name, ok := ParseSkillURI(uri)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrSkillNotFound, uri)
 	}
 
-	entries, err := r.resolve(ctx, scope, conv.ToPGText(name))
+	entries, err := r.resolve(ctx, scope, skillKey{projectSlug: conv.ToPGText(projectSlug), name: conv.ToPGText(name)})
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +138,7 @@ func (r *Resolver) Get(ctx context.Context, scope Scope, uri string) (*Entry, er
 	return &entries[0], nil
 }
 
-func (r *Resolver) resolve(ctx context.Context, scope Scope, name pgtype.Text) ([]Entry, error) {
+func (r *Resolver) resolve(ctx context.Context, scope Scope, key skillKey) ([]Entry, error) {
 	if err := scope.Target.Validate(); err != nil {
 		return nil, err
 	}
@@ -158,7 +168,8 @@ func (r *Resolver) resolve(ctx context.Context, scope Scope, name pgtype.Text) (
 	rows, err := repo.New(r.db).ListServedSkillsForTarget(ctx, repo.ListServedSkillsForTargetParams{
 		RowLimit:          r.limit + 1,
 		OrganizationID:    scope.OrganizationID,
-		SkillName:         name,
+		ProjectSlug:       key.projectSlug,
+		SkillName:         key.name,
 		McpServerIds:      mcpServerIDs,
 		MetaMcpServerID:   metaMCPServerID,
 		RowLessTargetKind: rowLessKind,
@@ -172,24 +183,23 @@ func (r *Resolver) resolve(ctx context.Context, scope Scope, name pgtype.Text) (
 		attr.SlogMcpSkillTargetID(scope.Target.ID.String()),
 	}
 	if len(rows) > int(r.limit) {
-		r.logger.WarnContext(ctx, "served skill listing exceeds its cap; later skills by name are not served", logTarget...)
+		r.logger.WarnContext(ctx, "served skill listing exceeds its cap; later skills by project and name are not served", logTarget...)
 		rows = rows[:r.limit]
 	}
 
 	entries := make([]Entry, 0, len(rows))
 	for _, row := range rows {
-		// The query already kept one version per skill name: a pin over
-		// latest, and the newest version between pins.
+		// The query already kept one version per skill: a pin over latest,
+		// and the newest version between pins.
 		entry := Entry{
 			SkillID:     row.SkillID,
 			ProjectID:   row.ProjectID,
+			ProjectSlug: row.ProjectSlug,
 			VersionID:   row.VersionID,
-			LinkID:      row.LinkID,
 			Name:        row.SkillName,
 			Content:     row.Content,
 			RawSHA256:   row.RawSha256,
 			Frontmatter: nil,
-			Pinned:      row.Pinned,
 		}
 		if row.PinnedVersions > 1 {
 			r.logger.WarnContext(ctx, "served skill pinned to different versions across links; serving the newest pin",

@@ -306,6 +306,7 @@ WITH candidates AS (
   SELECT
       sk.id AS skill_id,
       sk.project_id,
+      p.slug AS project_slug,
       sk.name AS skill_name,
       l.id AS link_id,
       (l.pinned_version_id IS NOT NULL)::boolean AS pinned,
@@ -341,46 +342,59 @@ WITH candidates AS (
   ) resolved ON TRUE
   WHERE l.organization_id = $2
     AND l.deleted IS FALSE
-    AND ($3::text IS NULL OR sk.name = $3::text)
+    AND ($3::text IS NULL OR p.slug = $3::text)
+    AND ($4::text IS NULL OR sk.name = $4::text)
     AND (
-      (l.target_kind = 'mcp_server' AND l.mcp_server_id = ANY($4::uuid[]))
+      (l.target_kind = 'mcp_server' AND l.mcp_server_id = ANY($5::uuid[]))
       OR (
         l.target_kind = 'meta_mcp_server'
-        AND $5::uuid IS NOT NULL
-        AND l.meta_mcp_server_id = $5::uuid
+        AND $6::uuid IS NOT NULL
+        AND l.meta_mcp_server_id = $6::uuid
       )
       OR (
-        $6::text IS NOT NULL
-        AND l.target_kind = $6::text
+        $7::text IS NOT NULL
+        AND l.target_kind = $7::text
       )
     )
 ),
 pins AS (
-  SELECT skill_name, COUNT(DISTINCT version_id)::int AS pinned_versions
+  SELECT skill_id, COUNT(DISTINCT version_id)::int AS pinned_versions
   FROM candidates
   WHERE pinned
-  GROUP BY skill_name
+  GROUP BY skill_id
+),
+winners AS (
+  SELECT DISTINCT ON (c.skill_id)
+      c.skill_id,
+      c.project_id,
+      c.project_slug,
+      c.skill_name,
+      c.version_id,
+      c.content,
+      c.raw_sha256,
+      COALESCE(pins.pinned_versions, 0)::int AS pinned_versions
+  FROM candidates c
+  LEFT JOIN pins ON pins.skill_id = c.skill_id
+  ORDER BY c.skill_id, c.pinned DESC, c.effective_at DESC, c.version_id DESC, c.link_id ASC
 )
-SELECT DISTINCT ON (c.skill_name)
-    c.skill_id,
-    c.project_id,
-    c.skill_name,
-    c.link_id,
-    c.pinned,
-    c.version_id,
-    c.content,
-    c.raw_sha256,
-    c.effective_at,
-    COALESCE(pins.pinned_versions, 0)::int AS pinned_versions
-FROM candidates c
-LEFT JOIN pins ON pins.skill_name = c.skill_name
-ORDER BY c.skill_name ASC, c.pinned DESC, c.effective_at DESC, c.version_id DESC, c.link_id ASC
+SELECT
+    w.skill_id,
+    w.project_id,
+    w.project_slug,
+    w.skill_name,
+    w.version_id,
+    w.content,
+    w.raw_sha256,
+    w.pinned_versions
+FROM winners w
+ORDER BY w.project_slug ASC, w.skill_name ASC
 LIMIT $1
 `
 
 type ListServedSkillsForTargetParams struct {
 	RowLimit          int32
 	OrganizationID    string
+	ProjectSlug       pgtype.Text
 	SkillName         pgtype.Text
 	McpServerIds      []uuid.UUID
 	MetaMcpServerID   uuid.NullUUID
@@ -390,29 +404,29 @@ type ListServedSkillsForTargetParams struct {
 type ListServedSkillsForTargetRow struct {
 	SkillID        uuid.UUID
 	ProjectID      uuid.UUID
+	ProjectSlug    string
 	SkillName      string
-	LinkID         uuid.UUID
-	Pinned         bool
 	VersionID      uuid.UUID
 	Content        string
 	RawSha256      string
-	EffectiveAt    pgtype.Timestamptz
 	PinnedVersions int32
 }
 
 // The skills an MCP surface serves over the Skills extension, one row per
-// skill name, ordered by name. A candidate is a live mcp_skill_links row in
-// the surface's organization that names the surface: an mcp_server link to
-// any of @mcp_server_ids (the surface's own server, plus the member servers a
-// gateway inherits), a meta_mcp_server link to @meta_mcp_server_id, or a link
-// of the row-less kind @row_less_target_kind (such as the organization
-// gateway). The skill must not be archived. Each candidate carries the link's
-// resolved version: the pin when one is set, otherwise the latest valid
-// version under the same ordering as GetLatestValidSkillVersion.
+// skill, ordered by project slug and then name. A candidate is a live
+// mcp_skill_links row in the surface's organization that names the surface: an
+// mcp_server link to any of @mcp_server_ids (the surface's own server, plus
+// the member servers a gateway inherits), a meta_mcp_server link to
+// @meta_mcp_server_id, or a link of the row-less kind @row_less_target_kind
+// (such as the organization gateway). The skill must not be archived and its
+// project must not be deleted. Each candidate carries the link's resolved
+// version: the pin when one is set, otherwise the latest valid version under
+// the same ordering as GetLatestValidSkillVersion.
 //
 // The organization, not one project, bounds the read because a gateway spans
 // every project in it; each link's project is pinned to its skill's by
-// foreign key.
+// foreign key. Skills from different projects may share a name: each is its
+// own row, told apart by project_slug.
 //
 // A skill linked several times has several candidates, and the query keeps
 // one: a pinned candidate beats one that tracks the latest version, and
@@ -421,11 +435,12 @@ type ListServedSkillsForTargetRow struct {
 // pinned_versions counts the distinct versions the skill is pinned to across
 // its candidates, so a caller can tell when pins disagree. The limit counts
 // skills, not candidates, so a skill linked many times never crowds out a
-// later skill by name.
+// later skill.
 func (q *Queries) ListServedSkillsForTarget(ctx context.Context, arg ListServedSkillsForTargetParams) ([]ListServedSkillsForTargetRow, error) {
 	rows, err := q.db.Query(ctx, listServedSkillsForTarget,
 		arg.RowLimit,
 		arg.OrganizationID,
+		arg.ProjectSlug,
 		arg.SkillName,
 		arg.McpServerIds,
 		arg.MetaMcpServerID,
@@ -441,13 +456,11 @@ func (q *Queries) ListServedSkillsForTarget(ctx context.Context, arg ListServedS
 		if err := rows.Scan(
 			&i.SkillID,
 			&i.ProjectID,
+			&i.ProjectSlug,
 			&i.SkillName,
-			&i.LinkID,
-			&i.Pinned,
 			&i.VersionID,
 			&i.Content,
 			&i.RawSha256,
-			&i.EffectiveAt,
 			&i.PinnedVersions,
 		); err != nil {
 			return nil, err
