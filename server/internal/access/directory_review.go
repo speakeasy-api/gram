@@ -102,6 +102,94 @@ func (s *Service) ListDirectoryReviewItems(ctx context.Context, _ *gen.ListDirec
 	return &gen.ListDirectoryReviewItemsResult{Items: items}, nil
 }
 
+// GetDirectoryReviewSettings reports whether the organization's admins are
+// emailed about pending directory review items.
+func (s *Service) GetDirectoryReviewSettings(ctx context.Context, _ *gen.GetDirectoryReviewSettingsPayload) (*gen.DirectoryReviewSettings, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	enabled, err := directoryReviewEmailsEnabled(ctx, reviewrepo.New(s.db), ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get directory review settings").LogError(ctx, s.logger)
+	}
+	return &gen.DirectoryReviewSettings{EmailsEnabled: enabled}, nil
+}
+
+// UpdateDirectoryReviewSettings turns the organization's directory review
+// emails on or off. Pending items and webhooks are unaffected.
+func (s *Service) UpdateDirectoryReviewSettings(ctx context.Context, payload *gen.UpdateDirectoryReviewSettingsPayload) (*gen.DirectoryReviewSettings, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+	orgID := ac.ActiveOrganizationID
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	if err := s.requireLiveOrgAdminWithDBTX(ctx, ac, dbtx); err != nil {
+		return nil, err
+	}
+	reviews := reviewrepo.New(dbtx)
+	before, err := directoryReviewEmailsEnabled(ctx, reviews, orgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get directory review settings").LogError(ctx, s.logger)
+	}
+	if before == payload.EmailsEnabled {
+		return &gen.DirectoryReviewSettings{EmailsEnabled: before}, nil
+	}
+
+	if _, err := reviews.SetDirectoryReviewEmailsDisabled(ctx, reviewrepo.SetDirectoryReviewEmailsDisabledParams{
+		OrganizationID: orgID, Disabled: !payload.EmailsEnabled,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "update directory review settings").LogError(ctx, s.logger)
+	}
+	if err := s.audit.LogDirectoryReviewSettingsUpdate(ctx, dbtx, audit.LogDirectoryReviewSettingsUpdateEvent{
+		OrganizationID: orgID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ActorSlug: nil,
+		DirectoryReviewSettingsSnapshotBefore: &audit.DirectoryReviewSettingsSnapshot{EmailsEnabled: before},
+		DirectoryReviewSettingsSnapshotAfter:  &audit.DirectoryReviewSettingsSnapshot{EmailsEnabled: payload.EmailsEnabled},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log directory review settings update").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit directory review settings").LogError(ctx, s.logger)
+	}
+	return &gen.DirectoryReviewSettings{EmailsEnabled: payload.EmailsEnabled}, nil
+}
+
+// directoryReviewEmailsEnabled reports whether an organization's directory
+// review emails are on. They are until an admin turns them off.
+func directoryReviewEmailsEnabled(ctx context.Context, reviews *reviewrepo.Queries, organizationID string) (bool, error) {
+	disabledAt, err := reviews.GetDirectoryReviewEmailsDisabledAt(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return true, nil
+	case err != nil:
+		return false, err
+	}
+	return !disabledAt.Valid, nil
+}
+
 // ResolveDirectoryReviewItem records an admin's decision on one pending item,
 // and for an approval writes the source's mappings in the same transaction.
 func (s *Service) ResolveDirectoryReviewItem(ctx context.Context, payload *gen.ResolveDirectoryReviewItemPayload) (*gen.ResolveDirectoryReviewItemResult, error) {

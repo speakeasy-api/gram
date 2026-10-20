@@ -776,6 +776,96 @@ paths:
       x-speakeasy-name-override: explainResourceAccess
       x-speakeasy-react-hook:
         name: ExplainResourceAccess
+  /rpc/access.getDirectoryReviewSettings:
+    get:
+      description: 'Get the organization''s directory review settings: whether its admins are emailed when directory changes are waiting for a decision.'
+      operationId: getDirectoryReviewSettings
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectoryReviewSettings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: getDirectoryReviewSettings access
+      tags:
+        - access
+      x-speakeasy-name-override: getDirectoryReviewSettings
+      x-speakeasy-react-hook:
+        name: DirectoryReviewSettings
   /rpc/access.getRole:
     get:
       description: Get a role by ID.
@@ -3604,6 +3694,103 @@ paths:
       x-speakeasy-name-override: syncDirectoryGroups
       x-speakeasy-react-hook:
         name: SyncDirectoryGroups
+        type: mutation
+  /rpc/access.updateDirectoryReviewSettings:
+    post:
+      description: Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.
+      operationId: updateDirectoryReviewSettings
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DirectoryReviewSettings'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectoryReviewSettings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateDirectoryReviewSettings access
+      tags:
+        - access
+      x-speakeasy-name-override: updateDirectoryReviewSettings
+      x-speakeasy-react-hook:
+        name: UpdateDirectoryReviewSettings
         type: mutation
   /rpc/access.updateMemberRoles:
     put:
@@ -87932,6 +88119,14 @@ components:
         - occurrence
         - created_at
         - item
+    DirectoryReviewSettings:
+      type: object
+      properties:
+        emails_enabled:
+          type: boolean
+          description: Whether organization admins are emailed when directory changes are waiting for a decision. On by default.
+      required:
+        - emails_enabled
     DirectoryRoleMapping:
       type: object
       properties:

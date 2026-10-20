@@ -89,6 +89,7 @@ import {
 
 import { invalidateDirectoryMappingAccess } from "./invalidateDirectoryMappingAccess";
 import { visibleChipCount } from "./chipOverflow";
+import { DirectoryReviewEmailSetting } from "./DirectoryReviewEmailSetting";
 import { DirectoryReviewPanel } from "./DirectoryReviewPanel";
 import { DirectoryRoleSetupDialog } from "./DirectoryRoleSetupDialog";
 
@@ -384,6 +385,7 @@ export function DirectoryRoleMappings({
         roles={roles}
         rolesLoaded={rolesData !== undefined}
       />
+      <DirectoryReviewEmailSetting />
 
       <Collapsible>
         {isPending && <SkeletonTable />}

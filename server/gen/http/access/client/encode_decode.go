@@ -3319,6 +3319,480 @@ func DecodeResolveDirectoryReviewItemResponse(decoder func(*http.Response) goaht
 	}
 }
 
+// BuildGetDirectoryReviewSettingsRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "getDirectoryReviewSettings" endpoint
+func (c *Client) BuildGetDirectoryReviewSettingsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetDirectoryReviewSettingsAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "getDirectoryReviewSettings", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetDirectoryReviewSettingsRequest returns an encoder for requests sent
+// to the access getDirectoryReviewSettings server.
+func EncodeGetDirectoryReviewSettingsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.GetDirectoryReviewSettingsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "getDirectoryReviewSettings", "*access.GetDirectoryReviewSettingsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetDirectoryReviewSettingsResponse returns a decoder for responses
+// returned by the access getDirectoryReviewSettings endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetDirectoryReviewSettingsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetDirectoryReviewSettingsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetDirectoryReviewSettingsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getDirectoryReviewSettings", err)
+			}
+			err = ValidateGetDirectoryReviewSettingsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getDirectoryReviewSettings", err)
+			}
+			res := NewGetDirectoryReviewSettingsDirectoryReviewSettingsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetDirectoryReviewSettingsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getDirectoryReviewSettings", err)
+			}
+			err = ValidateGetDirectoryReviewSettingsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getDirectoryReviewSettings", err)
+			}
+			return nil, NewGetDirectoryReviewSettingsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetDirectoryReviewSettingsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getDirectoryReviewSettings", err)
+			}
+			err = ValidateGetDirectoryReviewSettingsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getDirectoryReviewSettings", err)
+			}
+			return nil, NewGetDirectoryReviewSettingsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetDirectoryReviewSettingsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getDirectoryReviewSettings", err)
+			}
+			err = ValidateGetDirectoryReviewSettingsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getDirectoryReviewSettings", err)
+			}
+			return nil, NewGetDirectoryReviewSettingsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetDirectoryReviewSettingsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getDirectoryReviewSettings", err)
+			}
+			err = ValidateGetDirectoryReviewSettingsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getDirectoryReviewSettings", err)
+			}
+			return nil, NewGetDirectoryReviewSettingsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetDirectoryReviewSettingsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getDirectoryReviewSettings", err)
+			}
+			err = ValidateGetDirectoryReviewSettingsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getDirectoryReviewSettings", err)
+			}
+			return nil, NewGetDirectoryReviewSettingsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetDirectoryReviewSettingsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getDirectoryReviewSettings", err)
+			}
+			err = ValidateGetDirectoryReviewSettingsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getDirectoryReviewSettings", err)
+			}
+			return nil, NewGetDirectoryReviewSettingsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetDirectoryReviewSettingsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getDirectoryReviewSettings", err)
+			}
+			err = ValidateGetDirectoryReviewSettingsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getDirectoryReviewSettings", err)
+			}
+			return nil, NewGetDirectoryReviewSettingsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetDirectoryReviewSettingsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "getDirectoryReviewSettings", err)
+				}
+				err = ValidateGetDirectoryReviewSettingsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "getDirectoryReviewSettings", err)
+				}
+				return nil, NewGetDirectoryReviewSettingsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetDirectoryReviewSettingsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "getDirectoryReviewSettings", err)
+				}
+				err = ValidateGetDirectoryReviewSettingsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "getDirectoryReviewSettings", err)
+				}
+				return nil, NewGetDirectoryReviewSettingsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "getDirectoryReviewSettings", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetDirectoryReviewSettingsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getDirectoryReviewSettings", err)
+			}
+			err = ValidateGetDirectoryReviewSettingsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getDirectoryReviewSettings", err)
+			}
+			return nil, NewGetDirectoryReviewSettingsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "getDirectoryReviewSettings", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateDirectoryReviewSettingsRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "updateDirectoryReviewSettings" endpoint
+func (c *Client) BuildUpdateDirectoryReviewSettingsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateDirectoryReviewSettingsAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "updateDirectoryReviewSettings", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateDirectoryReviewSettingsRequest returns an encoder for requests
+// sent to the access updateDirectoryReviewSettings server.
+func EncodeUpdateDirectoryReviewSettingsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.UpdateDirectoryReviewSettingsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "updateDirectoryReviewSettings", "*access.UpdateDirectoryReviewSettingsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpdateDirectoryReviewSettingsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "updateDirectoryReviewSettings", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateDirectoryReviewSettingsResponse returns a decoder for responses
+// returned by the access updateDirectoryReviewSettings endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeUpdateDirectoryReviewSettingsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateDirectoryReviewSettingsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateDirectoryReviewSettingsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateDirectoryReviewSettings", err)
+			}
+			err = ValidateUpdateDirectoryReviewSettingsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateDirectoryReviewSettings", err)
+			}
+			res := NewUpdateDirectoryReviewSettingsDirectoryReviewSettingsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateDirectoryReviewSettingsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateDirectoryReviewSettings", err)
+			}
+			err = ValidateUpdateDirectoryReviewSettingsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateDirectoryReviewSettings", err)
+			}
+			return nil, NewUpdateDirectoryReviewSettingsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateDirectoryReviewSettingsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateDirectoryReviewSettings", err)
+			}
+			err = ValidateUpdateDirectoryReviewSettingsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateDirectoryReviewSettings", err)
+			}
+			return nil, NewUpdateDirectoryReviewSettingsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateDirectoryReviewSettingsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateDirectoryReviewSettings", err)
+			}
+			err = ValidateUpdateDirectoryReviewSettingsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateDirectoryReviewSettings", err)
+			}
+			return nil, NewUpdateDirectoryReviewSettingsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateDirectoryReviewSettingsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateDirectoryReviewSettings", err)
+			}
+			err = ValidateUpdateDirectoryReviewSettingsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateDirectoryReviewSettings", err)
+			}
+			return nil, NewUpdateDirectoryReviewSettingsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateDirectoryReviewSettingsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateDirectoryReviewSettings", err)
+			}
+			err = ValidateUpdateDirectoryReviewSettingsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateDirectoryReviewSettings", err)
+			}
+			return nil, NewUpdateDirectoryReviewSettingsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateDirectoryReviewSettingsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateDirectoryReviewSettings", err)
+			}
+			err = ValidateUpdateDirectoryReviewSettingsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateDirectoryReviewSettings", err)
+			}
+			return nil, NewUpdateDirectoryReviewSettingsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateDirectoryReviewSettingsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateDirectoryReviewSettings", err)
+			}
+			err = ValidateUpdateDirectoryReviewSettingsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateDirectoryReviewSettings", err)
+			}
+			return nil, NewUpdateDirectoryReviewSettingsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateDirectoryReviewSettingsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "updateDirectoryReviewSettings", err)
+				}
+				err = ValidateUpdateDirectoryReviewSettingsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "updateDirectoryReviewSettings", err)
+				}
+				return nil, NewUpdateDirectoryReviewSettingsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateDirectoryReviewSettingsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "updateDirectoryReviewSettings", err)
+				}
+				err = ValidateUpdateDirectoryReviewSettingsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "updateDirectoryReviewSettings", err)
+				}
+				return nil, NewUpdateDirectoryReviewSettingsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "updateDirectoryReviewSettings", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateDirectoryReviewSettingsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "updateDirectoryReviewSettings", err)
+			}
+			err = ValidateUpdateDirectoryReviewSettingsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "updateDirectoryReviewSettings", err)
+			}
+			return nil, NewUpdateDirectoryReviewSettingsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "updateDirectoryReviewSettings", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListScopesRequest instantiates a HTTP request object with method and
 // path set to call the "access" service "listScopes" endpoint
 func (c *Client) BuildListScopesRequest(ctx context.Context, v any) (*http.Request, error) {

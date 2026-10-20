@@ -77,6 +77,16 @@ func ResolveDirectoryReviewItemAccessPath() string {
 	return "/rpc/access.resolveDirectoryReviewItem"
 }
 
+// GetDirectoryReviewSettingsAccessPath returns the URL path to the access service getDirectoryReviewSettings HTTP endpoint.
+func GetDirectoryReviewSettingsAccessPath() string {
+	return "/rpc/access.getDirectoryReviewSettings"
+}
+
+// UpdateDirectoryReviewSettingsAccessPath returns the URL path to the access service updateDirectoryReviewSettings HTTP endpoint.
+func UpdateDirectoryReviewSettingsAccessPath() string {
+	return "/rpc/access.updateDirectoryReviewSettings"
+}
+
 // ListScopesAccessPath returns the URL path to the access service listScopes HTTP endpoint.
 func ListScopesAccessPath() string {
 	return "/rpc/access.listScopes"

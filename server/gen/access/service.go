@@ -73,6 +73,12 @@ type Service interface {
 	// and returns conflict if the source changed. An item that is no longer
 	// pending returns conflict.
 	ResolveDirectoryReviewItem(context.Context, *ResolveDirectoryReviewItemPayload) (res *ResolveDirectoryReviewItemResult, err error)
+	// Get the organization's directory review settings: whether its admins are
+	// emailed when directory changes are waiting for a decision.
+	GetDirectoryReviewSettings(context.Context, *GetDirectoryReviewSettingsPayload) (res *DirectoryReviewSettings, err error)
+	// Turn the organization's directory review emails on or off. Pending items
+	// stay listed in the dashboard either way, and webhooks are unaffected.
+	UpdateDirectoryReviewSettings(context.Context, *UpdateDirectoryReviewSettingsPayload) (res *DirectoryReviewSettings, err error)
 	// List all available scopes and their resource types.
 	ListScopes(context.Context, *ListScopesPayload) (res *ListScopesResult, err error)
 	// List all team members with their role assignments.
@@ -194,7 +200,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [37]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [39]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -579,6 +585,14 @@ type DirectoryReviewItem struct {
 	Item *DirectoryRoleSetupPreviewItem
 }
 
+// DirectoryReviewSettings is the result type of the access service
+// getDirectoryReviewSettings method.
+type DirectoryReviewSettings struct {
+	// Whether organization admins are emailed when directory changes are waiting
+	// for a decision. On by default.
+	EmailsEnabled bool
+}
+
 // DirectoryRoleMapping is the result type of the access service
 // setDirectoryRoleMapping method.
 type DirectoryRoleMapping struct {
@@ -755,6 +769,13 @@ type ExplainedAccessRule struct {
 	// also hold it directly. Returned only to organization administrators, because
 	// attribute values can carry personal data.
 	DirectorySources []*ExplainedAccessDirectorySource
+}
+
+// GetDirectoryReviewSettingsPayload is the payload type of the access service
+// getDirectoryReviewSettings method.
+type GetDirectoryReviewSettingsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
 }
 
 // GetRolePayload is the payload type of the access service getRole method.
@@ -1557,6 +1578,16 @@ type SyncDirectoryGroupsPayload struct {
 type SyncDirectoryGroupsResult struct {
 	// Number of groups WorkOS returned across the organization's directories.
 	GroupCount int
+}
+
+// UpdateDirectoryReviewSettingsPayload is the payload type of the access
+// service updateDirectoryReviewSettings method.
+type UpdateDirectoryReviewSettingsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// Whether organization admins are emailed when directory changes are waiting
+	// for a decision. On by default.
+	EmailsEnabled bool
 }
 
 // UpdateMemberRolesPayload is the payload type of the access service

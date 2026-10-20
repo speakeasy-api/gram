@@ -30,6 +30,7 @@ const (
 	subjectTypeAIToolDecision              subjectType = "ai_tool_decision"
 	subjectTypeDeviceIntegration           subjectType = "device_integration_config"
 	subjectTypeDirectoryReviewItem         subjectType = "directory_review_item"
+	subjectTypeDirectoryReviewSettings     subjectType = "directory_review_settings"
 	subjectTypeDirectoryRoleMapping        subjectType = "directory_role_mapping"
 	subjectTypeEnvironment                 subjectType = "environment"
 	subjectTypeGcpIamCredential            subjectType = "gcp_iam_credential"

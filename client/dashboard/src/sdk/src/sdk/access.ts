@@ -7,6 +7,7 @@ import { accessCreateRole } from "../funcs/accessCreateRole.js";
 import { accessDeleteDirectoryRoleMapping } from "../funcs/accessDeleteDirectoryRoleMapping.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessExplainResourceAccess } from "../funcs/accessExplainResourceAccess.js";
+import { accessGetDirectoryReviewSettings } from "../funcs/accessGetDirectoryReviewSettings.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
 import { accessListAIDetections } from "../funcs/accessListAIDetections.js";
@@ -35,12 +36,14 @@ import { accessSetAIToolDecision } from "../funcs/accessSetAIToolDecision.js";
 import { accessSetDirectoryRoleMappings } from "../funcs/accessSetDirectoryRoleMappings.js";
 import { accessSetResourceAudience } from "../funcs/accessSetResourceAudience.js";
 import { accessSyncDirectoryGroups } from "../funcs/accessSyncDirectoryGroups.js";
+import { accessUpdateDirectoryReviewSettings } from "../funcs/accessUpdateDirectoryReviewSettings.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { accessUpdateShadowMCPInventoryServerName } from "../funcs/accessUpdateShadowMCPInventoryServerName.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
 import { ApplyDirectoryRoleSetupResult } from "../models/components/applydirectoryrolesetupresult.js";
+import { DirectoryReviewSettings } from "../models/components/directoryreviewsettings.js";
 import { DirectoryRoleMapping } from "../models/components/directoryrolemapping.js";
 import { DirectoryRoleSetupPreviewResult } from "../models/components/directoryrolesetuppreviewresult.js";
 import { ExplainResourceAccessResult } from "../models/components/explainresourceaccessresult.js";
@@ -87,6 +90,10 @@ import {
   ExplainResourceAccessRequest,
   ExplainResourceAccessSecurity,
 } from "../models/operations/explainresourceaccess.js";
+import {
+  GetDirectoryReviewSettingsRequest,
+  GetDirectoryReviewSettingsSecurity,
+} from "../models/operations/getdirectoryreviewsettings.js";
 import {
   GetRoleRequest,
   GetRoleSecurity,
@@ -200,6 +207,10 @@ import {
   SyncDirectoryGroupsSecurity,
 } from "../models/operations/syncdirectorygroups.js";
 import {
+  UpdateDirectoryReviewSettingsRequest,
+  UpdateDirectoryReviewSettingsSecurity,
+} from "../models/operations/updatedirectoryreviewsettings.js";
+import {
   UpdateMemberRolesRequest,
   UpdateMemberRolesSecurity,
 } from "../models/operations/updatememberroles.js";
@@ -302,6 +313,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ExplainResourceAccessResult> {
     return unwrapAsync(accessExplainResourceAccess(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getDirectoryReviewSettings access
+   *
+   * @remarks
+   * Get the organization's directory review settings: whether its admins are emailed when directory changes are waiting for a decision.
+   */
+  async getDirectoryReviewSettings(
+    request?: GetDirectoryReviewSettingsRequest | undefined,
+    security?: GetDirectoryReviewSettingsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<DirectoryReviewSettings> {
+    return unwrapAsync(accessGetDirectoryReviewSettings(
       this,
       request,
       security,
@@ -834,6 +864,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SyncDirectoryGroupsResult> {
     return unwrapAsync(accessSyncDirectoryGroups(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateDirectoryReviewSettings access
+   *
+   * @remarks
+   * Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.
+   */
+  async updateDirectoryReviewSettings(
+    request: UpdateDirectoryReviewSettingsRequest,
+    security?: UpdateDirectoryReviewSettingsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<DirectoryReviewSettings> {
+    return unwrapAsync(accessUpdateDirectoryReviewSettings(
       this,
       request,
       security,
