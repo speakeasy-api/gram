@@ -176,13 +176,14 @@ type wakeTriggerEvent struct {
 }
 
 var registry = map[string]Definition{
-	DefinitionSlugSlack:     newSlackDefinition(),
-	DefinitionSlugMSTeams:   newMSTeamsDefinition(),
-	DefinitionSlugLinear:    newLinearDefinition(),
-	DefinitionSlugGithub:    newGitHubDefinition(),
-	DefinitionSlugCron:      newCronDefinition(),
-	DefinitionSlugWake:      newWakeDefinition(),
-	DefinitionSlugDashboard: newDashboardDefinition(),
+	DefinitionSlugSlack:      newSlackDefinition(),
+	DefinitionSlugMSTeams:    newMSTeamsDefinition(),
+	DefinitionSlugGoogleChat: newGoogleChatDefinition(),
+	DefinitionSlugLinear:     newLinearDefinition(),
+	DefinitionSlugGithub:     newGitHubDefinition(),
+	DefinitionSlugCron:       newCronDefinition(),
+	DefinitionSlugWake:       newWakeDefinition(),
+	DefinitionSlugDashboard:  newDashboardDefinition(),
 }
 
 func List() []Definition {

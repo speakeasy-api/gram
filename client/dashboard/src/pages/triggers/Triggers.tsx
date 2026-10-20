@@ -472,6 +472,16 @@ function TriggerConfigFields({
 
   return (
     <Stack gap={3}>
+      {definition.slug === "googlechat" && (
+        <Text small muted>
+          Google Chat invokes this assistant for DMs and explicit @mentions
+          only, not unmentioned thread replies. Configure a non-add-on Chat app
+          with HTTP endpoint URL and Project Number audience. Set
+          GOOGLE_CHAT_PROJECT_NUMBER and GOOGLE_CHAT_SERVICE_ACCOUNT_JSON in the
+          selected environment, and attach the Google Chat tools using that same
+          environment. History tools require Workspace administrator approval.
+        </Text>
+      )}
       {showSlackReplyMode && (
         <SlackReplyModeField config={config} onChange={onChange} />
       )}

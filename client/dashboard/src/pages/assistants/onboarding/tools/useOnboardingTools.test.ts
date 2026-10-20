@@ -17,6 +17,18 @@ const assistantReader: OnboardingToolPermissions = {
 };
 
 describe("isOnboardingToolAllowed", () => {
+  it("allows Google Chat guidance with project read, without mutation privileges", () => {
+    expect(
+      isOnboardingToolAllowed("show_google_chat_app_guide", assistantReader),
+    ).toBe(false);
+    expect(
+      isOnboardingToolAllowed("show_google_chat_app_guide", {
+        ...assistantReader,
+        canReadProject: true,
+      }),
+    ).toBe(true);
+  });
+
   it("keeps assistant-only read workflows while suppressing other resources", () => {
     expect(isOnboardingToolAllowed("finish_onboarding", assistantReader)).toBe(
       true,

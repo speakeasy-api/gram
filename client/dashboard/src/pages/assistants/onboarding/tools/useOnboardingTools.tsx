@@ -30,6 +30,7 @@ import {
   ChooseSlackReplyModeComponent,
   RequestEnvironmentSecretsComponent,
   ShowSlackAppGuideComponent,
+  ShowGoogleChatAppGuideComponent,
   ShowWebhookUrlComponent,
 } from "./components";
 
@@ -1722,10 +1723,12 @@ function buildAssistantTools(deps: ToolDeps) {
   const create_trigger = defineFrontendTool<CreateTriggerArgs, ToolResult>(
     {
       description:
-        "Create a trigger instance pointed at the current assistant. The assistant must already exist (call update_assistant first if needed). The trigger is bound to the assistant's shared environment by default — omit environment_id in almost all cases. For Slack triggers the env can be empty at creation time (Speakeasy's webhook answers Slack's url_verification challenge without a signing secret), but SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET must be populated before real events fire. For cron triggers the config must include a 5-field cron string in 'schedule'. After creation: if SLACK_BOT_TOKEN is NOT yet populated on the assistant's env (check via list_environments → populated_entry_names), pass webhook_url to show_slack_app_guide so the manifest pre-fills event_subscriptions.request_url. Otherwise the bot already exists — skip the guide and use show_webhook_url (or nothing, if the trigger is just being reconfigured).",
+        "Create a trigger instance pointed at the current assistant. The assistant must already exist (call update_assistant first if needed). The trigger is bound to the assistant's shared environment by default — omit environment_id in almost all cases. For Google Chat triggers, FIRST collect GOOGLE_CHAT_PROJECT_NUMBER and GOOGLE_CHAT_SERVICE_ACCOUNT_JSON securely using request_environment_secrets and confirm BOTH are populated. Empty declarations, skipped forms, or partial saves are not sufficient; stop rather than retry creation until credentials are ready. Only after creation succeeds show_google_chat_app_guide with webhook_url. For Slack triggers the env can be empty at creation time (Speakeasy's webhook answers Slack's url_verification challenge without a signing secret), but SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET must be populated before real events fire. For cron triggers the config must include a 5-field cron string in 'schedule'. After creation: if SLACK_BOT_TOKEN is NOT yet populated on the assistant's env (check via list_environments → populated_entry_names), pass webhook_url to show_slack_app_guide so the manifest pre-fills event_subscriptions.request_url. Otherwise the bot already exists — skip the guide and use show_webhook_url (or nothing, if the trigger is just being reconfigured).",
       parameters: z.object({
         name: z.string().min(1),
-        definition_slug: z.string().describe("e.g. 'slack' or 'cron'."),
+        definition_slug: z
+          .string()
+          .describe("e.g. 'slack', 'googlechat', or 'cron'."),
         config: z
           .record(z.string(), z.any())
           .describe(
@@ -1889,6 +1892,23 @@ function buildAssistantTools(deps: ToolDeps) {
     "show_webhook_url",
   );
 
+  const show_google_chat_app_guide = defineFrontendTool<
+    ShowWebhookArgs,
+    ToolResult
+  >(
+    {
+      description:
+        "Show Google Chat Cloud setup and permission instructions with the trigger webhook URL. Read googlechat docs first; attach selected native tools using the same assistant environment as the trigger. Informational only: this does not confirm installation or validate credentials. Both Google Chat environment values must already be securely saved before creating the trigger and showing this guide. Now finish Cloud HTTP endpoint configuration and test a DM or @mention.",
+      parameters: z.object({ webhook_url: z.string().url() }),
+      execute: async (args) =>
+        okResult({
+          shown: true,
+          webhook_url: (args as ShowWebhookArgs).webhook_url,
+        }),
+    },
+    "show_google_chat_app_guide",
+  );
+
   const show_slack_app_guide = defineFrontendTool<
     ShowSlackGuideArgs,
     ToolResult
@@ -2040,7 +2060,9 @@ function buildAssistantTools(deps: ToolDeps) {
       parameters: z.object({
         slug: z
           .string()
-          .describe("Integration slug from list_docs, e.g. 'slack' or 'cron'."),
+          .describe(
+            "Integration slug from list_docs, e.g. 'slack', 'googlechat', or 'cron'.",
+          ),
       }),
       execute: async (args) => {
         const { slug } = args as ReadDocsArgs;
@@ -2465,6 +2487,7 @@ function buildAssistantTools(deps: ToolDeps) {
     update_trigger,
     show_webhook_url,
     show_slack_app_guide,
+    show_google_chat_app_guide,
     propose_slack_setup,
     choose_slack_reply_mode,
     list_integrations,
@@ -2497,6 +2520,7 @@ const ASSISTANT_READ_TOOLS = new Set<OnboardingToolName>([
   "list_triggers",
   "show_webhook_url",
   "show_slack_app_guide",
+  "show_google_chat_app_guide",
   "list_integrations",
   "list_docs",
   "read_docs",
@@ -2509,6 +2533,7 @@ const PROJECT_READ_TOOLS = new Set<OnboardingToolName>([
   "list_trigger_definitions",
   "list_triggers",
   "show_slack_app_guide",
+  "show_google_chat_app_guide",
   "propose_slack_setup",
 ]);
 
@@ -2646,6 +2671,7 @@ export function useOnboardingTools(): {
       request_environment_secrets: RequestEnvironmentSecretsComponent,
       show_webhook_url: ShowWebhookUrlComponent,
       show_slack_app_guide: ShowSlackAppGuideComponent,
+      show_google_chat_app_guide: ShowGoogleChatAppGuideComponent,
     }),
     [],
   );

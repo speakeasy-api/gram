@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
+	platformgooglechat "github.com/speakeasy-api/gram/server/internal/platformtools/googlechat"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformslack "github.com/speakeasy-api/gram/server/internal/platformtools/slack"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
@@ -17,6 +18,28 @@ import (
 type toolFactory func(deps Dependencies) core.PlatformToolExecutor
 
 var registry = []toolFactory{
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformgooglechat.NewSendMessageTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformgooglechat.NewReplyToThreadTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformgooglechat.NewUpdateMessageTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformgooglechat.NewDeleteMessageTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformgooglechat.NewListSpacesTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformgooglechat.NewGetMessageTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformgooglechat.NewListMessagesTool(deps.SlackHTTPClient)
+	},
+
 	func(deps Dependencies) PlatformToolExecutor {
 		return logs.NewSearchLogsTool(deps.TelemetryService)
 	},

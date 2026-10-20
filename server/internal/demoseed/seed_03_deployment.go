@@ -565,6 +565,17 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 		}
 	}
 
+	// This paused example deliberately has no credentials or webhook subscription.
+	if err := s.q.DeployInsertGoogleChatTrigger(ctx, repo.DeployInsertGoogleChatTriggerParams{
+		ID:             s.det("assistant-googlechat-bound"),
+		OrganizationID: org,
+		ProjectID:      proj,
+		TargetRef:      bound.String(),
+		TargetDisplay:  "Identity-bound assistant",
+	}); err != nil {
+		return fmt.Errorf("insert demo Google Chat trigger: %w", err)
+	}
+
 	if err := s.q.DeployInsertAssistantWorkloadIssuer(ctx, repo.DeployInsertAssistantWorkloadIssuerParams{
 		ID:             trust,
 		OrganizationID: org,

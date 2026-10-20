@@ -383,6 +383,34 @@ func (q *Queries) DeployInsertExternalOAuthMetadata(ctx context.Context, arg Dep
 	return err
 }
 
+const deployInsertGoogleChatTrigger = `-- name: DeployInsertGoogleChatTrigger :exec
+INSERT INTO trigger_instances
+  (id, organization_id, project_id, definition_slug, name, target_kind, target_ref, target_display, status)
+VALUES
+  ($1, $2::text, $3::uuid, 'googlechat', 'Google Chat team assistant',
+   'assistant', $4, $5, 'paused')
+`
+
+type DeployInsertGoogleChatTriggerParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TargetRef      string
+	TargetDisplay  string
+}
+
+// Paused display fixture: no credentials, environment, or webhook subscription.
+func (q *Queries) DeployInsertGoogleChatTrigger(ctx context.Context, arg DeployInsertGoogleChatTriggerParams) error {
+	_, err := q.db.Exec(ctx, deployInsertGoogleChatTrigger,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.TargetRef,
+		arg.TargetDisplay,
+	)
+	return err
+}
+
 const deployInsertHTTPTool = `-- name: DeployInsertHTTPTool :exec
 INSERT INTO http_tool_definitions
   (tool_urn, project_id, deployment_id, openapiv3_document_id, name, summary,

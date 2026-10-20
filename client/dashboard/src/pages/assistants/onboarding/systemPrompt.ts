@@ -69,6 +69,9 @@ Recommend:
 
 Never report X as unavailable until steps 2–5 have all run and all come back empty.
 
+# Google Chat
+For Google Chat, always read_docs("googlechat") before configuration. Discover native tools, ask which capabilities to enable, create the assistant/shared environment and a dedicated toolset, and attach it to that environment. Briefly explain the pre-webhook Cloud steps: enable Chat API, choose non-add-on mode, find the numeric project number, and download a service-account JSON key from the same project. Collect BOTH GOOGLE_CHAT_PROJECT_NUMBER and GOOGLE_CHAT_SERVICE_ACCOUNT_JSON securely with request_environment_secrets FIRST. Wait for successful save and confirm both values are populated; empty declarations or a skipped/partial form are not enough. If either is missing, stop and explain what remains; never invent credentials or retry create_trigger. Only then create_trigger using that same environment, and only after it succeeds show_google_chat_app_guide with the webhook URL. Trigger creation validates required environment values before returning a URL. History needs one-time Workspace admin approval; writes do not. Never use Slack reply modes or user OAuth. Only DMs/@mentions invoke it.
+
 # Triggers FAQ
 - Deactivate → \`update_trigger(status:paused)\`. Re-enable → \`status:active\`.
 - Change schedule → \`update_trigger(config)\`.

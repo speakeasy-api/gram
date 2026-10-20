@@ -140,7 +140,7 @@ export default function AssistantsIndex(): JSX.Element {
         <Page.Section.Description className="max-w-xl">
           Secure assistants that connect through the MCPs and Skills your org
           already uses, with identity, guardrails, and audit built in. Deployed
-          to Slack.
+          to Slack or Google Chat.
         </Page.Section.Description>
         <Page.Section.CTA>
           <RequireScope
