@@ -6315,6 +6315,82 @@ func (q *Queries) ListPlatformMCPProjectPlugins(ctx context.Context, arg ListPla
 	return items, nil
 }
 
+const listPlatformMCPProjectSkillLinkServers = `-- name: ListPlatformMCPProjectSkillLinkServers :many
+SELECT
+    'mcp_server'::text AS kind,
+    mcp_servers.id,
+    COALESCE(mcp_servers.name, toolsets.name, mcp_servers.slug, mcp_servers.id::text)::text AS name,
+    COALESCE(mcp_servers.slug, '')::text AS slug
+FROM mcp_servers
+JOIN projects
+  ON projects.id = mcp_servers.project_id
+LEFT JOIN toolsets
+  ON toolsets.id = mcp_servers.toolset_id
+  AND toolsets.project_id = mcp_servers.project_id
+  AND toolsets.deleted IS FALSE
+WHERE mcp_servers.project_id = $2
+  AND projects.organization_id = $3
+  AND projects.deleted IS FALSE
+  AND mcp_servers.deleted IS FALSE
+UNION ALL
+SELECT
+    'meta_mcp_server'::text AS kind,
+    meta_mcp_servers.id,
+    meta_mcp_servers.name,
+    ''::text AS slug
+FROM meta_mcp_servers
+JOIN projects
+  ON projects.id = meta_mcp_servers.project_id
+WHERE meta_mcp_servers.project_id = $2
+  AND meta_mcp_servers.organization_id = $3
+  AND projects.organization_id = $3
+  AND projects.deleted IS FALSE
+  AND meta_mcp_servers.deleted IS FALSE
+ORDER BY kind ASC, name ASC, id ASC
+LIMIT $1
+`
+
+type ListPlatformMCPProjectSkillLinkServersParams struct {
+	ResultLimit    int32
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type ListPlatformMCPProjectSkillLinkServersRow struct {
+	Kind string
+	ID   uuid.UUID
+	Name string
+	Slug string
+}
+
+// The live MCP servers and gateways in one project that a skill can be linked
+// to, so a caller can name one exactly. A server is named by its own name,
+// falling back to its toolset's name and then its slug.
+func (q *Queries) ListPlatformMCPProjectSkillLinkServers(ctx context.Context, arg ListPlatformMCPProjectSkillLinkServersParams) ([]ListPlatformMCPProjectSkillLinkServersRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPProjectSkillLinkServers, arg.ResultLimit, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPProjectSkillLinkServersRow
+	for rows.Next() {
+		var i ListPlatformMCPProjectSkillLinkServersRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPProjectToolURNs = `-- name: ListPlatformMCPProjectToolURNs :many
 WITH deployment AS (
     SELECT d.id
