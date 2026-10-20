@@ -13,10 +13,10 @@ import (
 
 // remoteLoginCallbackPath is the path of the redirect_uri Speakeasy registers with
 // every upstream provider. It is served on every platform host.
-const remoteLoginCallbackPath = "/" + canonicalCallbackRouteBase + "/remote_login_callback"
+const remoteLoginCallbackPath = "/" + string(canonicalCallbackRouteBase) + "/remote_login_callback"
 
 // federatedIDPCallbackPathPrefix prefixes the per-client federated IdP redirect_uri.
-const federatedIDPCallbackPathPrefix = "/" + canonicalCallbackRouteBase + "/idp_callback/"
+const federatedIDPCallbackPathPrefix = "/" + string(canonicalCallbackRouteBase) + "/idp_callback/"
 
 // legacyProxyCallbackPath is the oauth_proxy_servers-era redirect_uri path.
 const legacyProxyCallbackPath = "/oauth/callback"
