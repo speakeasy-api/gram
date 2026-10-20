@@ -11,7 +11,7 @@ import {
 
 export type PreviewExternalMcpMigrationRequestBody = {
   /**
-   * Servers to migrate, in order.
+   * Servers to migrate or delete, in order.
    */
   servers: Array<AdminExternalMcpMigrationRequest>;
 };

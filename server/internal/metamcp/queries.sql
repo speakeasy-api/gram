@@ -77,6 +77,7 @@ ORDER BY meta_mcp_servers.created_at DESC, meta_mcp_servers.id DESC;
 -- built-in instructions), so COALESCE cannot distinguish omit from clear.
 UPDATE meta_mcp_servers
 SET name = @name,
+    discovery_mode = COALESCE(sqlc.narg('discovery_mode'), discovery_mode),
     user_session_issuer_id = sqlc.narg('user_session_issuer_id'),
     visibility = COALESCE(sqlc.narg('visibility'), visibility),
     network_access_mode = CASE

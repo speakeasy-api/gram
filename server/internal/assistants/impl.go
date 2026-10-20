@@ -530,7 +530,7 @@ func (s *Service) Dispatch(ctx context.Context, task bgtriggers.Task) error {
 }
 
 // startRuntimeWarmup eagerly boots the assistant's runtime so the first turn
-// doesn't pay the Fly cold-start cost. It rides the standard turn machinery:
+// doesn't pay the runtime cold-start cost. It rides the standard turn machinery:
 // an event-less warmup thread reserves the runtime row, and its thread
 // workflow runs Ensure, coordinator kicks and the warm window exactly as a
 // turn would. Best-effort: a failure here never fails the request — the

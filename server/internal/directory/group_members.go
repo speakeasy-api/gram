@@ -188,6 +188,7 @@ func insertListedUser(ctx context.Context, dbtx database.DBTX, organizationID st
 		OrganizationID:        organizationID,
 		UserID:                userID,
 		WorkosDirectoryUserID: user.ID,
+		DirectoryID:           conv.ToPGTextEmpty(user.DirectoryID),
 		Email:                 conv.ToPGTextEmpty(email),
 		Attributes:            attributes,
 		WorkosCreatedAt:       conv.ToPGTimestamptz(listedTimeOr(user.CreatedAt, asOf)),

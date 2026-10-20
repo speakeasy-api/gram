@@ -25,37 +25,30 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 type mcpServerRuntime struct {
 	MCP      *mcp.Service
-	XMCP     *xmcp.Service
 	Metadata *mcpmetadata.Service
 }
 
 type mcpServerRuntimeDependencies struct {
-	Logger     *slog.Logger
-	DB         *pgxpool.Pool
-	Encryption *encryption.Client
-	MCP        *mcp.Service
-	Metadata   *mcpmetadata.Service
+	MCP      *mcp.Service
+	Metadata *mcpmetadata.Service
 }
 
 func buildMCPServerRuntime(deps mcpServerRuntimeDependencies) (*mcpServerRuntime, error) {
-	if deps.Logger == nil || deps.DB == nil || deps.Encryption == nil || deps.MCP == nil || deps.Metadata == nil {
+	if deps.MCP == nil || deps.Metadata == nil {
 		return nil, errors.New("MCP server runtime dependencies are incomplete")
 	}
 
 	return &mcpServerRuntime{
 		MCP:      deps.MCP,
-		XMCP:     xmcp.NewService(deps.Logger, deps.DB, deps.Encryption, deps.MCP),
 		Metadata: deps.Metadata,
 	}, nil
 }
@@ -220,7 +213,6 @@ func servePrivateIngress(
 	))
 	mux.Use(middleware.SessionMiddleware)
 	mcp.AttachPrivate(mux, deps.Runtime.MCP, deps.Runtime.Metadata)
-	xmcp.AttachPrivate(mux, deps.Runtime.XMCP, deps.Runtime.Metadata)
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {

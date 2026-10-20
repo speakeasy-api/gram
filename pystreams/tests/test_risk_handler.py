@@ -12,10 +12,11 @@ from structlog.testing import capture_logs
 
 from pystreams.risk import handler as handler_mod
 from pystreams.risk import metering, metrics
-from pystreams.risk.handler import PresidioHandler
+from pystreams.risk.handler import PresidioHandler, RetryablePresidioError
 from pystreams.risk.scanner import (
     DEFAULT_SCORE_THRESHOLD,
     Detection,
+    ScanInputError,
     ScanSlotTimeout,
     _AsyncCloseable,
 )
@@ -616,7 +617,7 @@ async def test_external_cancellation_during_meter_publish_is_not_swallowed():
 async def test_scan_failure_does_not_publish_meter_reading():
     meter_publisher = FakeMeterPublisher()
     handler = _handler(
-        FakeScanner(error=RuntimeError("scan failed")),
+        FakeScanner(error=ScanInputError("ValueError")),
         meter_publisher=meter_publisher,
     )
 
@@ -679,30 +680,44 @@ async def test_unset_score_threshold_defaults():
     assert scanner.score_thresholds == [DEFAULT_SCORE_THRESHOLD]
 
 
-async def test_scan_failure_is_swallowed_and_logged():
+async def test_deterministic_scan_failure_is_acked_and_logged():
     secret = "my ssn is 123-45-6789"
-    # The error carries the content to prove it isn't logged.
-    scanner = FakeScanner(error=RuntimeError(secret))
+    scanner = FakeScanner(error=ScanInputError(secret))
     publisher = FakePublisher()
     handler = _handler(scanner, publisher)
     msg = _message(secret, request_id="req-1", reply_urn="urn:reply:1")
 
-    # A scan failure must not propagate: raising here would nack the message and,
-    # with no dead-letter policy on the subscription, poison it via redelivery.
     with capture_logs() as logs:
         await handler.handle(msg, _meta(delivery_attempt=3))
 
     (entry,) = logs
-    assert entry["event"] == "presidio scan failed"
+    assert entry["event"] == "presidio scan rejected input"
     assert entry["request_id"] == "req-1"
-    assert entry["error_type"] == "RuntimeError"
+    assert entry["error_type"] == "ScanInputError"
     assert entry["delivery_attempt"] == 3
-    # Nothing is published when the scan failed.
     assert publisher.published == []
-    # The error must not leak the scanned content even though the exception
-    # carried it.
     assert secret not in repr(entry)
     assert "123-45-6789" not in repr(entry)
+
+
+async def test_transient_scan_failure_is_raised_for_redelivery():
+    scanner = FakeScanner(error=RuntimeError("private model transport details"))
+    publisher = FakePublisher()
+    meter_publisher = FakeMeterPublisher()
+    handler = _handler(scanner, publisher, meter_publisher)
+
+    with (
+        capture_logs() as logs,
+        pytest.raises(RetryablePresidioError, match="transient presidio scan failure"),
+    ):
+        await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
+
+    (entry,) = logs
+    assert entry["event"] == "presidio scan failed, requeuing"
+    assert entry["error_type"] == "RuntimeError"
+    assert "private model transport details" not in repr(entry)
+    assert publisher.published == []
+    assert meter_publisher.published == []
 
 
 async def test_slot_timeout_is_reraised_for_redelivery():
@@ -763,7 +778,7 @@ class _BoomPublisher:
         return _BoomResult(message.match)
 
 
-async def test_publish_failure_is_swallowed_and_logged():
+async def test_publish_commit_failure_is_raised_for_redelivery():
     secret = "a@b.com"
     scanner = FakeScanner([_detection("EMAIL_ADDRESS", secret)])
     meter_publisher = FakeMeterPublisher()
@@ -771,9 +786,10 @@ async def test_publish_failure_is_swallowed_and_logged():
         structlog.get_logger(), _BoomPublisher(), meter_publisher, scanner
     )
 
-    # A publish failure must not propagate either: nacking would redeliver and
-    # re-publish any findings that already landed, duplicating them.
-    with capture_logs() as logs:
+    with (
+        capture_logs() as logs,
+        pytest.raises(RetryablePresidioError, match="risk finding commit failed"),
+    ):
         await handler.handle(
             _message(
                 secret,
@@ -788,13 +804,8 @@ async def test_publish_failure_is_swallowed_and_logged():
     assert err["request_id"] == "req-1"
     assert err["rule_id"] == "pii.email_address"
     assert err["error_type"] == "RuntimeError"
-    # The matched value must not leak into the log even though the error carried it.
     assert secret not in repr(err)
-    # The summary line still reports zero published.
-    summary = next(e for e in logs if e["event"] == "presidio scan detected entities")
-    assert summary["published_count"] == 0
-    # Finding transport is best effort and does not suppress successful usage.
-    assert len(meter_publisher.published) == 1
+    assert meter_publisher.published == []
 
 
 class _SyncBoomPublisher:
@@ -805,17 +816,17 @@ class _SyncBoomPublisher:
         raise RuntimeError(message.match)
 
 
-async def test_sync_publish_failure_is_swallowed_and_logged():
+async def test_sync_publish_failure_is_raised_for_redelivery():
     secret = "a@b.com"
     scanner = FakeScanner([_detection("EMAIL_ADDRESS", secret)])
     handler = PresidioHandler(
         structlog.get_logger(), _SyncBoomPublisher(), FakeMeterPublisher(), scanner
     )
 
-    # A synchronous publish failure must be treated like an async one: logged as a
-    # publish failure and skipped, never escaping to nack/redeliver the message
-    # (which would duplicate findings) and never mislabeled as a scan failure.
-    with capture_logs() as logs:
+    with (
+        capture_logs() as logs,
+        pytest.raises(RetryablePresidioError, match="risk finding publish failed"),
+    ):
         await handler.handle(_message(secret, request_id="req-1"), _meta())
 
     publish_errors = [e for e in logs if e["event"] == "failed to publish risk finding"]
@@ -823,11 +834,7 @@ async def test_sync_publish_failure_is_swallowed_and_logged():
     assert err["rule_id"] == "pii.email_address"
     assert err["error_type"] == "RuntimeError"
     assert secret not in repr(err)
-    # Not reported as a scan failure...
-    assert not [e for e in logs if e["event"] == "presidio scan failed"]
-    # ...and the summary still lands, reporting zero published.
-    summary = next(e for e in logs if e["event"] == "presidio scan detected entities")
-    assert summary["published_count"] == 0
+    assert not [e for e in logs if e["event"].startswith("presidio scan")]
 
 
 @pytest.fixture
@@ -870,28 +877,39 @@ async def test_records_clean_outcome_when_nothing_detected(recorded_durations):
     assert size_bucket == "0-1k"
 
 
-async def test_records_error_outcome_when_scan_fails(recorded_durations):
-    handler = _handler(FakeScanner(error=RuntimeError("boom")))
+async def test_records_dropped_outcome_when_scan_failure_is_deterministic(
+    recorded_durations,
+):
+    handler = _handler(FakeScanner(error=ScanInputError("ValueError")))
 
     await handler.handle(_message("...", request_id="req-1"), _meta())
 
     (seconds, outcome, _) = recorded_durations[-1]
-    assert outcome == metrics.OUTCOME_ERROR
+    assert outcome == metrics.OUTCOME_DROPPED
     assert seconds >= 0.0
 
 
-async def test_records_error_outcome_when_all_publishes_fail(recorded_durations):
-    # Detections found, but every publish fails: nothing landed, so this must not
-    # inflate the "detected" bucket — it is recorded as an error outcome.
+async def test_unclassified_value_error_is_requeued(recorded_durations):
+    handler = _handler(FakeScanner(error=ValueError("worker failure")))
+
+    with pytest.raises(RetryablePresidioError):
+        await handler.handle(_message("...", request_id="req-1"), _meta())
+
+    (_, outcome, _) = recorded_durations[-1]
+    assert outcome == metrics.OUTCOME_REQUEUED
+
+
+async def test_records_requeued_outcome_when_publish_fails(recorded_durations):
     scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
     handler = PresidioHandler(
         structlog.get_logger(), _BoomPublisher(), FakeMeterPublisher(), scanner
     )
 
-    await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
+    with pytest.raises(RetryablePresidioError):
+        await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
 
     (seconds, outcome, _) = recorded_durations[-1]
-    assert outcome == metrics.OUTCOME_ERROR
+    assert outcome == metrics.OUTCOME_REQUEUED
     assert seconds >= 0.0
 
 

@@ -23,7 +23,7 @@ func postJSON(t *testing.T, p interface {
 }, body string,
 ) (*httptest.ResponseRecorder, error) {
 	t.Helper()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	rr := httptest.NewRecorder()

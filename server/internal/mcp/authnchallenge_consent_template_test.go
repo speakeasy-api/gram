@@ -22,7 +22,7 @@ func TestConsentTemplateCompletedFirstPartyConnectionAutoCloses(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
-		MCPRouteBase:   "x/mcp",
+		MCPRouteBase:   "mcp",
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -58,7 +58,7 @@ func TestConsentTemplateIncompleteFirstPartyConnectionStaysOpen(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
-		MCPRouteBase:   "x/mcp",
+		MCPRouteBase:   "mcp",
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -94,7 +94,7 @@ func TestConsentTemplateRendersPendingVerification(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
-		MCPRouteBase:   "x/mcp",
+		MCPRouteBase:   "mcp",
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -885,7 +885,7 @@ func TestConsentTemplateOffersIdentityReconnect(t *testing.T) {
 	with := renderCard(true)
 	require.Contains(t, with, "Reconnect to add account details")
 	require.Contains(t, with, "> Reconnect </button>")
-	require.Contains(t, with, "Connected")
+	require.Contains(t, with, "Service connected")
 
 	without := renderCard(false)
 	require.NotContains(t, without, "Reconnect to add account details")
@@ -928,7 +928,7 @@ func TestConsentTemplateShowsConnectedIdentity(t *testing.T) {
 
 func TestConsentTemplateAgentConnectionsRemainVisibleAndUseResolvedRoute(t *testing.T) {
 	t.Parallel()
-	for _, routeBase := range []string{"mcp", "x/mcp"} {
+	for _, routeBase := range []string{"mcp", "mcp/gateway"} {
 		t.Run(routeBase, func(t *testing.T) {
 			t.Parallel()
 			var page bytes.Buffer

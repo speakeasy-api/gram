@@ -253,7 +253,7 @@ func TestIdentityProvisioningIsAlwaysOn(t *testing.T) {
 	require.Equal(t, string(assistantidentity.Active), *upgraded.IdentityState)
 }
 
-func TestSnapshotCeilingCarriesAssistantSelfAdministration(t *testing.T) {
+func TestDerivedWorkloadCeilingCarriesAssistantSelfAdministration(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "identity_ceiling")
 	require.NoError(t, err)
@@ -267,12 +267,10 @@ func TestSnapshotCeilingCarriesAssistantSelfAdministration(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Active, resolution.State)
 
-	ceiling, err := testIdentityService.SnapshotCeiling(t.Context(), db, *resolution.Identity)
+	agentPolicy, err := runtimepolicy.LoadAgentPolicy(t.Context(), db, "org-test", urn.NewPrincipal(urn.PrincipalTypeAgent, resolution.Identity.AgentID.String()))
 	require.NoError(t, err)
-	require.Equal(t, runtimepolicy.CurrentDelegatedPolicyVersion, ceiling.EncodingVersion)
-	policy, err := runtimepolicy.DecodeDelegatedPolicy(ceiling.EncodingVersion, ceiling.Policy)
+	grants, err := runtimepolicy.DelegatedRuntimeGrants(agentPolicy, agentPolicy, agentPolicy)
 	require.NoError(t, err)
-	grants := policy.RuntimeGrants()
 	allowed, err := authz.GrantsAuthorize(grants, authz.AssistantCheck(authz.ScopeAssistantWrite, record.ID.String(), project.String()))
 	require.NoError(t, err)
 	require.True(t, allowed, "the ceiling keeps the agent's own-assistant administration")

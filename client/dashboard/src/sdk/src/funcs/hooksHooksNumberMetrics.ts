@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * metrics hooks
  *
  * @remarks
- * Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.
+ * Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.
  */
 export function hooksHooksNumberMetrics(
   client: GramCore,
@@ -120,14 +120,26 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
-        fieldName: "Gram-Key",
-        type: "apiKey:header",
-        value: security?.apikeyHeaderGramKey,
+        fieldName: "Authorization",
+        type: "http:bearer",
+        value: security?.option1?.deviceAgentTokenHeaderAuthorization,
       },
       {
         fieldName: "Gram-Project",
         type: "apiKey:header",
-        value: security?.projectSlugHeaderGramProject,
+        value: security?.option1?.projectSlugHeaderGramProject,
+      },
+    ],
+    [
+      {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.option2?.apikeyHeaderGramKey,
+      },
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option2?.projectSlugHeaderGramProject,
       },
     ],
   );
