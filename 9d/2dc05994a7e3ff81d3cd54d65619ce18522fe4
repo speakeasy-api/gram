@@ -1,0 +1,77 @@
+server/internal/background/activities/process_workos_directory_attributes_events.go
+  h_9630b74bdac540 32,42,163,165-171,179-181,192,196,217,249,260-263,280,289-292,299,310-313,344,355-358,384-387,422,426,484-490,501-503,514,518,535,587,599
+  h_9630b74bdac540 182,504
+.changeset/directory-source-validity.md
+  h_9630b74bdac540 1-5
+server/cmd/directory-id-backfill/README.md
+  h_9630b74bdac540 1-35
+server/cmd/directory-id-backfill/main.go
+  h_9630b74bdac540 1-105
+server/cmd/directory-id-backfill/main_test.go
+  h_9630b74bdac540 1-77
+server/database/schema.sql
+  h_9630b74bdac540 6799,6837-6843,6857,6896-6902
+server/database/sqlc.yaml
+  h_9630b74bdac540 109
+server/internal/access/directory_inventory_sync_test.go
+  h_9630b74bdac540 1-59
+server/internal/access/directory_role_mappings.go
+  h_9630b74bdac540 140-144,150,166,169,174-176,178-189,192-194,196-203
+server/internal/access/directory_role_mappings_test.go
+  h_9630b74bdac540 93-96,206,859
+server/internal/agent/getplugins_test.go
+  h_9630b74bdac540 235,246
+server/internal/background/activities/directory_source_lifecycle_test.go
+  h_9630b74bdac540 1-446
+server/internal/background/activities/process_workos_org_events.go
+  h_9630b74bdac540 29,333-335,944,960-962,986-1005
+server/internal/database/models.go
+  h_9630b74bdac540 1709-1711,1833-1835
+server/internal/directory/attribution.go
+  h_9630b74bdac540 1-154
+server/internal/directory/attribution_test.go
+  h_9630b74bdac540 1-236
+server/internal/directory/directory_test.go
+  h_9630b74bdac540 142,210
+server/internal/directory/group_members.go
+  h_9630b74bdac540 191
+server/internal/directory/queries.sql
+  h_9630b74bdac540 5,17,27,36,40,64-65,70-71,78,91,101,114,120,151-152,157-158,473,482,489-496,501-552,557-558,563,573
+server/internal/directory/repo/models.go
+  h_9630b74bdac540 21-23
+server/internal/directory/repo/queries.sql.go
+  h_9630b74bdac540 15-58,153-157,159-160,164,168,172-178,185-186,192-228,232,236,240-280,403,410,418-423,428,442,473,479,490-495,621,634-635,644,653-654,660,1037-1072,1264,1279,1281,1283,1286,1295,1302,1314,1331,1347,1349,1351,1354,1361,1364,1367,1375,1389,1406,1418-1419,1422-1429,1434-1435,1441,1455
+server/internal/directory/sync_snapshot.go
+  h_9630b74bdac540 1-64
+server/internal/plugins/impl_test.go
+  h_9630b74bdac540 840
+server/internal/testenv/directory_source_queries.sql
+  h_9630b74bdac540 1-26
+server/internal/testenv/testrepo/directory_source_queries.sql.go
+  h_9630b74bdac540 1-156
+server/internal/thirdparty/workos/connection.go
+  h_9630b74bdac540 67-76,78-95
+server/internal/thirdparty/workos/connection_test.go
+  h_9630b74bdac540 9,134-155
+server/internal/thirdparty/workos/queries.sql
+  h_9630b74bdac540 1-8,19
+server/internal/thirdparty/workos/repo/queries.sql.go
+  h_9630b74bdac540 28-46,60-68,74
+server/internal/usersessions/sign_ins_test.go
+  h_9630b74bdac540 358,368,372
+server/migrations/20261020021051_directory-source-identities.sql
+  h_9630b74bdac540 1-16
+server/migrations/atlas.sum
+  h_9630b74bdac540 1,481-482
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9d2dc05994a7e3ff81d3cd54d65619ce18522fe4",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
