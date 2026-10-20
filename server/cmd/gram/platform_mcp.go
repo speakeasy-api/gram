@@ -106,9 +106,7 @@ type platformMCPConfig struct {
 	// the dashboard makes. Nil keeps both tools visible as unavailable.
 	ProjectCore *projects.Core
 	Skills      platformmcp.SkillsManagement
-	// CallbackOrigin is the origin of the redirect_uri a remote session client
-	// created now registers. The setup guides show that URL.
-	CallbackOrigin  *url.URL
+	// CallbackOrigins resolves new-client redirect URIs shown in setup guides.
 	CallbackOrigins remotesessions.CallbackOrigins
 	// OutboundCallbackOrigin is the pinned origin of the identity provider
 	// callback the Platform MCP OAuth login registers.
@@ -630,7 +628,7 @@ func attachShadowAI(reader *platformmcp.PostgresReader, config platformMCPConfig
 func platformMCPSetupResources(config platformMCPConfig) ([]platformmcp.SetupResource, error) {
 	// The redirect_uri a newly created client registers, derived the same way
 	// externalmcp, remotesessions, and the dashboard derive it.
-	callbackURL := remotesessions.RemoteLoginCallbackURL(config.CallbackOrigin)
+	callbackURL := remotesessions.RemoteLoginCallbackURL(config.CallbackOrigins.Outbound)
 	if config.CallbackOrigins.OrganizationHosts != nil {
 		callbackURL = "{{organization_oauth_callback_url}}"
 	}

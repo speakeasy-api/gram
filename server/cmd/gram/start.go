@@ -1867,7 +1867,6 @@ func newStartCommand() *cli.Command {
 				DB:                        db,
 				Redis:                     redisClient,
 				ServerURL:                 serverURL,
-				CallbackOrigin:            callbackOrigins.Outbound,
 				CallbackOrigins:           callbackOrigins,
 				OutboundCallbackOrigin:    callbackOrigins.Outbound,
 				IssuerGate:                issuerGate,

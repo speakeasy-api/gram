@@ -43,10 +43,8 @@ type Service struct {
 	sessions       *sessions.Manager
 	registryClient *RegistryClient
 	catalog        *CatalogService
-	// callbackOrigin is the origin of the redirect_uri a newly created remote
-	// session client registers, shown in setup guides.
-	callbackOrigin  *url.URL
-	callbackOrigins *remotesessions.CallbackOrigins
+	// callbackOrigins resolves new-client redirect URIs shown in setup guides.
+	callbackOrigins remotesessions.CallbackOrigins
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -65,8 +63,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		sessions:        sessions,
 		registryClient:  registryClient,
 		catalog:         catalog,
-		callbackOrigin:  callbackOrigin,
-		callbackOrigins: nil,
+		callbackOrigins: remotesessions.DefaultCallbackOrigins(callbackOrigin),
 	}
 }
 
@@ -264,7 +261,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 }
 
 func (s *Service) SetCallbackOrigins(origins remotesessions.CallbackOrigins) {
-	s.callbackOrigins = &origins
+	s.callbackOrigins = origins
 }
 
 func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPayload) (*gen.GetSetupDocsResult, error) {
@@ -285,14 +282,11 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 
 	// The redirect_uri a newly created client registers, for every provider
 	// and slug. remotesessions and the dashboard derive it the same way.
-	callbackURL := s.callbackOrigin.JoinPath("mcp", "remote_login_callback").String()
-	if s.callbackOrigins != nil {
-		base, err := s.callbackOrigins.ResolveNewClientBaseURL(ctx, s.db, authCtx.ActiveOrganizationID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, s.logger)
-		}
-		callbackURL = remotesessions.RemoteLoginCallbackURL(s.callbackOrigins.ForClient(base))
+	base, err := s.callbackOrigins.ResolveNewClientBaseURL(ctx, s.db, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, s.logger)
 	}
+	callbackURL := remotesessions.RemoteLoginCallbackURL(s.callbackOrigins.ForClient(base))
 
 	return &gen.GetSetupDocsResult{
 		Guides: resolveSetupGuides(registrySpecifier, serverURL, callbackURL),
