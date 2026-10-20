@@ -1437,6 +1437,34 @@ func (m *ChallengeManager) mintAuthorization(
 	return u.String(), nil
 }
 
+// errRemoteLoginWithoutOrganization rejects a login state minted before it
+// carried an organization; without one the write could overwrite another
+// organization's grant.
+var errRemoteLoginWithoutOrganization = errors.New("remote login state has no organization")
+
+// storeRemoteSessionGrant records a consent for (subject, client). A live
+// grant consented through another organization's sign-in is tombstoned first,
+// so the new row records the organization the consent was made in; otherwise
+// the grant is updated in place. q must be the caller's transaction, holding
+// the sign-in and client locks.
+func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries, organizationID string, params remotesessions_repo.UpsertRemoteSessionParams) (remotesessions_repo.RemoteSession, error) {
+	if organizationID == "" {
+		return remotesessions_repo.RemoteSession{}, errRemoteLoginWithoutOrganization
+	}
+	if _, err := q.SoftDeleteRemoteSessionConsentedInOtherOrganization(ctx, remotesessions_repo.SoftDeleteRemoteSessionConsentedInOtherOrganizationParams{
+		SubjectUrn:            params.SubjectUrn,
+		RemoteSessionClientID: params.RemoteSessionClientID,
+		OrganizationID:        organizationID,
+	}); err != nil {
+		return remotesessions_repo.RemoteSession{}, fmt.Errorf("tombstone grant from another organization: %w", err)
+	}
+	sess, err := q.UpsertRemoteSession(ctx, params)
+	if err != nil {
+		return sess, fmt.Errorf("upsert remote session: %w", err)
+	}
+	return sess, nil
+}
+
 // HandleRemoteLoginCallback is the GET handler for
 // /mcp/remote_login_callback. Bound by mcp/ at route-mount time. The legacy
 // /mcp/{mcpSlug}/remote_login_callback route is still accepted, but the MCP
@@ -1769,7 +1797,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 
-	storedSession, err := txQueries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	storedSession, err := storeRemoteSessionGrant(ctx, txQueries, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
 		RemoteSessionClientID: state.RemoteSessionClientID,
@@ -1790,6 +1818,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		Enrichment:          enrichment,
 	})
 	if err != nil {
+		if errors.Is(err, errRemoteLoginWithoutOrganization) {
+			return none, oops.E(oops.CodeUnauthorized, err, "this login expired, start it again").LogWarn(ctx, logger)
+		}
 		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 

@@ -38,6 +38,7 @@ import (
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -448,7 +449,7 @@ func (s *Service) authClientNoAccessError(ctx context.Context, serverID uuid.UUI
 // organization it serves: whether the refreshed session must reconnect, and
 // whether the resolver decided at all. Undecided, the upstream client choice
 // decides as before.
-func (s *Service) refreshNeedsAuthClientReconnect(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (reconnect bool, decided bool, err error) {
+func (s *Service) refreshNeedsAuthClientReconnect(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) (reconnect bool, decided bool, err error) {
 	if !endpoint.McpServerID.Valid || s.authClientMode(ctx, endpoint.OrganizationID) != feature.AuthClientResolverEnforced {
 		return false, false, nil
 	}
@@ -459,6 +460,22 @@ func (s *Service) refreshNeedsAuthClientReconnect(ctx context.Context, endpoint 
 	res, err := selector.resolveAuthClient(ctx, endpoint.McpServerID.UUID)
 	if err != nil {
 		return false, false, err
+	}
+	if res.outcome == authClientResolved && res.choice.clientID.Valid {
+		// The resolved registration's stored grant decides, whichever sign-in
+		// it was consented through.
+		reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
+			ProjectID:           endpoint.ProjectID,
+			OrganizationID:      endpoint.OrganizationID,
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Subject:             subject,
+			RegistrationID:      res.choice.clientID.UUID,
+			SkipUnusable:        false,
+		})
+		if err != nil {
+			return false, false, fmt.Errorf("check auth client reconnect: %w", err)
+		}
+		return reconnect, true, nil
 	}
 	reconnect, decided = refreshDecision(res)
 	return reconnect, decided, nil

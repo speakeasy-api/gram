@@ -1,0 +1,191 @@
+package remotesessions
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+// tokenLookup selects how a user's stored credential is tied to the server's
+// sign-in.
+type tokenLookup int
+
+const (
+	// lookupSignIn requires the client to be linked to the server's user
+	// session issuer.
+	lookupSignIn tokenLookup = iota
+	// lookupAuthClient is for the auth client resolver, which has already
+	// checked the client against the server: no link is required, but the
+	// consent's sign-in must be in the server's project or organization.
+	lookupAuthClient
+)
+
+// AuthClientTokenRequest names one OAuth registration a typed auth client
+// resolved to, for one caller.
+type AuthClientTokenRequest struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	// UserSessionIssuerID is consulted only for agent attachments, which are
+	// still keyed by the sign-in.
+	UserSessionIssuerID uuid.UUID
+	Subject             urn.SessionSubject
+	RegistrationID      uuid.UUID
+	SkipUnusable        bool
+}
+
+// ResolveAuthClientAccessTokens resolves the caller's credential for the
+// registration an auth client resolved to, with the per-client behavior of
+// ResolveClientAccessTokens but without requiring the registration to be
+// linked to the endpoint's user session issuer. The registration and its
+// issuer must be live and within the project's or organization's reach;
+// otherwise it returns ErrChosenClientUnbound. A consent serves only when it
+// came through a sign-in of the server's organization: a project registration
+// stays in its project, and an organization or global one in the organization.
+//
+// Only the auth client resolver calls it, after checking the client against
+// the server. Agent attachments keep the sign-in-keyed lookup.
+func (m *ChallengeManager) ResolveAuthClientAccessTokens(ctx context.Context, req AuthClientTokenRequest) (map[uuid.UUID]UpstreamToken, error) {
+	if req.ProjectID == uuid.Nil || req.OrganizationID == "" || req.RegistrationID == uuid.Nil || req.Subject.IsZero() {
+		return nil, ErrInvalidAuthorizationRequest
+	}
+	if attached, err := attachedCaller(ctx, req.Subject); err != nil {
+		return nil, err
+	} else if attached {
+		return m.ResolveClientAccessTokens(ctx, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable)
+	}
+	client, err := m.reachableClient(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return m.resolveClientTokens(ctx, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.SkipUnusable)
+}
+
+// AuthClientNeedsReconnect is RemoteSessionsNeedReconnect for the one
+// registration an auth client resolved to, judged from stored state alone and
+// without the user session issuer link. A registration that is gone or out of
+// reach needs reconnecting.
+func (m *ChallengeManager) AuthClientNeedsReconnect(ctx context.Context, req AuthClientTokenRequest) (bool, error) {
+	if req.ProjectID == uuid.Nil || req.OrganizationID == "" || req.RegistrationID == uuid.Nil || req.Subject.IsZero() {
+		return false, ErrInvalidAuthorizationRequest
+	}
+	if attached, err := attachedCaller(ctx, req.Subject); err != nil {
+		return false, err
+	} else if attached {
+		clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, false)
+		if err != nil {
+			return false, fmt.Errorf("list remote_session_clients: %w", err)
+		}
+		chosen := slices.DeleteFunc(clients, func(c remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
+			return c.ClientID != req.RegistrationID
+		})
+		if len(chosen) == 0 {
+			return true, nil
+		}
+		return m.storedGrantsNeedReconnect(ctx, lookupSignIn, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, chosen, req.Subject)
+	}
+	client, err := m.reachableClient(ctx, req)
+	switch {
+	case errors.Is(err, ErrChosenClientUnbound):
+		return true, nil
+	case err != nil:
+		return false, err
+	}
+	return m.storedGrantsNeedReconnect(ctx, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.Subject)
+}
+
+// attachedCaller reports whether the caller resolves through an agent
+// attachment, deciding the credential source in resolveCallerUpstreamToken's
+// order: workloads and principal credentials use the user's own session.
+func attachedCaller(ctx context.Context, subject urn.SessionSubject) (bool, error) {
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
+		return false, nil
+	}
+	if subject.Kind == urn.SessionSubjectKindWorkload {
+		return false, ErrInvalidAuthorizationRequest
+	}
+	if _, ok := principalcredential.FromContext(ctx); ok {
+		return false, nil
+	}
+	_, attached, err := remoteSessionCallerPrincipal(ctx, subject)
+	return attached, err
+}
+
+func (m *ChallengeManager) reachableClient(ctx context.Context, req AuthClientTokenRequest) (remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow, error) {
+	row, err := remotesessions_repo.New(m.db).GetReachableRemoteSessionClient(ctx, remotesessions_repo.GetReachableRemoteSessionClientParams{
+		ProjectID:             req.ProjectID,
+		OrganizationID:        req.OrganizationID,
+		RemoteSessionClientID: req.RegistrationID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{}, ErrChosenClientUnbound
+	case err != nil:
+		return remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{}, fmt.Errorf("get reachable remote_session_client: %w", err)
+	}
+	return remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow(row), nil
+}
+
+// tenantUserRemoteSession selects a user's own session for clientID in the
+// tenant: through the user session issuer link, or, for the auth client
+// resolver, through any sign-in of the server's project or organization.
+func tenantUserRemoteSession(ctx context.Context, q *remotesessions_repo.Queries, lookup tokenLookup, subject urn.SessionSubject, clientID, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID) (remotesessions_repo.RemoteSession, error) {
+	if lookup == lookupAuthClient {
+		sess, err := q.GetTenantUserRemoteSessionForClient(ctx, remotesessions_repo.GetTenantUserRemoteSessionForClientParams{
+			ProjectID:             projectID,
+			OrganizationID:        organizationID,
+			SubjectUrn:            subject,
+			RemoteSessionClientID: clientID,
+		})
+		if err != nil {
+			return sess, fmt.Errorf("get tenant user remote session for client: %w", err)
+		}
+		return sess, nil
+	}
+	sess, err := q.GetTenantUserRemoteSession(ctx, remotesessions_repo.GetTenantUserRemoteSessionParams{
+		SubjectUrn:            subject,
+		RemoteSessionClientID: clientID,
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+		UserSessionIssuerID:   userSessionIssuerID,
+	})
+	if err != nil {
+		return sess, fmt.Errorf("get tenant user remote session: %w", err)
+	}
+	return sess, nil
+}
+
+// activeUserRemoteSession selects a plain caller's own session for clientID:
+// by subject and client alone, which the sign-in link scopes, or, for the auth
+// client resolver, only when the consent came through the server's
+// organization.
+func activeUserRemoteSession(ctx context.Context, q *remotesessions_repo.Queries, lookup tokenLookup, subject urn.SessionSubject, clientID, projectID uuid.UUID, organizationID string) (remotesessions_repo.RemoteSession, error) {
+	if lookup == lookupAuthClient {
+		sess, err := q.GetActiveRemoteSessionInTenant(ctx, remotesessions_repo.GetActiveRemoteSessionInTenantParams{
+			ProjectID:             projectID,
+			OrganizationID:        organizationID,
+			SubjectUrn:            subject,
+			RemoteSessionClientID: clientID,
+		})
+		if err != nil {
+			return sess, fmt.Errorf("get active remote_session in tenant: %w", err)
+		}
+		return sess, nil
+	}
+	sess, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            subject,
+		RemoteSessionClientID: clientID,
+	})
+	if err != nil {
+		return sess, fmt.Errorf("get active remote_session: %w", err)
+	}
+	return sess, nil
+}
