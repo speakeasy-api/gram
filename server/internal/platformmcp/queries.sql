@@ -921,7 +921,11 @@ SELECT
     COALESCE(registration.mcp_endpoint_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_endpoint_id,
     COALESCE(readiness.state, '') AS readiness_state,
     readiness.checked_at AS readiness_checked_at,
-    readiness.expires_at AS readiness_expires_at
+    readiness.expires_at AS readiness_expires_at,
+    install_page.logo_id AS install_page_logo_id,
+    install_page.external_documentation_url AS install_page_documentation_url,
+    install_page.external_documentation_text AS install_page_documentation_text,
+    install_page.instructions AS install_page_instructions
 FROM mcp_servers AS m
 JOIN projects AS project
   ON project.id = m.project_id
@@ -960,6 +964,16 @@ LEFT JOIN LATERAL (
     ORDER BY readiness.checked_at DESC, readiness.id DESC
     LIMIT 1
 ) AS readiness ON TRUE
+-- The install-page row the dashboard reads for this server, in the order
+-- GetMetadataByBackendID picks it, so update_mcp_metadata's version agrees.
+LEFT JOIN LATERAL (
+    SELECT metadata.logo_id, metadata.external_documentation_url, metadata.external_documentation_text, metadata.instructions
+    FROM mcp_metadata AS metadata
+    WHERE metadata.project_id = m.project_id
+      AND (metadata.toolset_id = m.id OR metadata.mcp_server_id = m.id)
+    ORDER BY (metadata.toolset_id IS NOT NULL) DESC, metadata.updated_at DESC
+    LIMIT 1
+) AS install_page ON TRUE
 WHERE m.deleted IS FALSE
   AND (@skip_authorization_filter::boolean OR m.id = ANY(@allowed_mcp_ids::uuid[]))
   AND (sqlc.narg(project_id)::uuid IS NULL OR m.project_id = sqlc.narg(project_id)::uuid)
@@ -1017,7 +1031,11 @@ FROM (
         COALESCE(registration.mcp_endpoint_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_endpoint_id,
         COALESCE(readiness.state, '') AS readiness_state,
         readiness.checked_at AS readiness_checked_at,
-        readiness.expires_at AS readiness_expires_at
+        readiness.expires_at AS readiness_expires_at,
+        install_page.logo_id AS install_page_logo_id,
+        install_page.external_documentation_url AS install_page_documentation_url,
+        install_page.external_documentation_text AS install_page_documentation_text,
+        install_page.instructions AS install_page_instructions
     FROM mcp_servers AS m
     JOIN projects AS project
       ON project.id = m.project_id
@@ -1056,10 +1074,28 @@ FROM (
         ORDER BY readiness.checked_at DESC, readiness.id DESC
         LIMIT 1
     ) AS readiness ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT metadata.logo_id, metadata.external_documentation_url, metadata.external_documentation_text, metadata.instructions
+        FROM mcp_metadata AS metadata
+        WHERE metadata.project_id = m.project_id
+          AND (metadata.toolset_id = m.id OR metadata.mcp_server_id = m.id)
+        ORDER BY (metadata.toolset_id IS NOT NULL) DESC, metadata.updated_at DESC
+        LIMIT 1
+    ) AS install_page ON TRUE
     WHERE m.id = @mcp_server_id
       AND m.project_id = @project_id
       AND m.deleted IS FALSE
 ) AS inventory;
+
+-- name: GetPlatformMCPInstallPage :one
+-- The install-page row the dashboard reads for one server, as the inventory
+-- joins it.
+SELECT logo_id, external_documentation_url, external_documentation_text, instructions
+FROM mcp_metadata
+WHERE project_id = @project_id
+  AND (toolset_id = @mcp_server_id::uuid OR mcp_server_id = @mcp_server_id::uuid)
+ORDER BY (toolset_id IS NOT NULL) DESC, updated_at DESC
+LIMIT 1;
 
 -- plugin_servers is the attachment authority, so plugin membership is read from
 -- it and keyed by MCP server. platform_mcp_distributions only records the

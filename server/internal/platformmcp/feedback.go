@@ -421,6 +421,7 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	renameProjectToolName:                   {},
 	"remove_plugin_server":                  {},
 	"update_mcp_metadata":                   {},
+	createOrgImageUploadURLToolName:         {},
 	"disable_mcp":                           {},
 	"enable_mcp":                            {},
 	"list_plugin_assignments":               {},

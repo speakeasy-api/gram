@@ -1862,6 +1862,7 @@ func newStartCommand() *cli.Command {
 				IssuerGate:                issuerGate,
 				IssuerSigner:              issuerSigner,
 				DashboardURL:              siteURL,
+				Assets:                    assetsService,
 				Environment:               c.String("environment"),
 				JWTSigningKey:             c.String(usersessions.JWTSigningKeyFlag),
 				ProductFeatures:           productFeatures,

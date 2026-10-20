@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -80,12 +81,92 @@ func TestLifecycleMetadataVersionChangesOnlyWithMutableInventoryState(t *testing
 	t.Parallel()
 
 	key := lifecycleMetadataVersionKey("test-key")
-	baseline := lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "private")
+	none := LifecycleInstallPage{}
+	baseline := lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "private", none)
 	require.NotEmpty(t, baseline)
-	require.Equal(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "private"))
-	require.NotEqual(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Renamed", "example", "private"))
-	require.NotEqual(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "disabled"))
-	require.NotEqual(t, baseline, lifecycleMetadataVersion(lifecycleMetadataVersionKey("other-key"), "mcp", "project", "Example", "example", "private"))
+	require.Equal(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "private", none))
+	require.NotEqual(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Renamed", "example", "private", none))
+	require.NotEqual(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "disabled", none))
+	require.NotEqual(t, baseline, lifecycleMetadataVersion(lifecycleMetadataVersionKey("other-key"), "mcp", "project", "Example", "example", "private", none))
+
+	// Every install-page field is covered, and clearing a field to NULL is not
+	// the same state as storing an empty string in it.
+	logo := "0193d6f4-0000-7000-8000-000000000001"
+	empty := ""
+	for name, page := range map[string]LifecycleInstallPage{
+		"logo":               {LogoAssetID: &logo},
+		"documentation url":  {ExternalDocumentationURL: new("https://docs.example.test")},
+		"documentation text": {ExternalDocumentationText: new("Docs")},
+		"instructions":       {Instructions: new("Use it")},
+		"empty instructions": {Instructions: &empty},
+	} {
+		require.NotEqual(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "private", page), name)
+	}
+	require.NotEqual(t,
+		lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "private", LifecycleInstallPage{ExternalDocumentationURL: new("a"), ExternalDocumentationText: new("")}),
+		lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "private", LifecycleInstallPage{ExternalDocumentationURL: new(""), ExternalDocumentationText: new("a")}),
+		"a value cannot move between fields without changing the version")
+}
+
+func TestLifecycleMetadataInputHashSeparatesOmittedFromCleared(t *testing.T) {
+	t.Parallel()
+
+	projectID, mcpID := uuid.New(), uuid.New()
+	none := uuid.NullUUID{}
+	base := UpdateMCPMetadataInput{ExpectedVersion: "v", LogoAssetID: new("")}
+	cleared := lifecycleMetadataInputHash(projectID, none, mcpID, "", base)
+	require.Equal(t, cleared, lifecycleMetadataInputHash(projectID, none, mcpID, "", base))
+
+	omitted := base
+	omitted.LogoAssetID = nil
+	omitted.Instructions = new("")
+	require.NotEqual(t, cleared, lifecycleMetadataInputHash(projectID, none, mcpID, "", omitted), "clearing the logo is not clearing the instructions")
+
+	renamed := base
+	renamed.Name = new(" Example ")
+	require.Equal(t, lifecycleMetadataInputHash(projectID, none, mcpID, "Example", renamed), lifecycleMetadataInputHash(projectID, none, mcpID, "Example", UpdateMCPMetadataInput{ExpectedVersion: "v", LogoAssetID: new(""), Name: new("Example")}), "the name hashes trimmed")
+	require.NotEqual(t, cleared, lifecycleMetadataInputHash(projectID, uuid.NullUUID{UUID: uuid.New(), Valid: true}, mcpID, "", base))
+}
+
+func TestValidateLifecycleMetadataInput(t *testing.T) {
+	t.Parallel()
+
+	long := func(n int) *string { return new(strings.Repeat("a", n)) }
+	for _, tc := range []struct {
+		name  string
+		input UpdateMCPMetadataInput
+		err   error
+	}{
+		{"nothing to change", UpdateMCPMetadataInput{}, ErrLifecycleMetadataInvalid},
+		{"clear logo", UpdateMCPMetadataInput{LogoAssetID: new("")}, nil},
+		{"set logo", UpdateMCPMetadataInput{LogoAssetID: new(uuid.NewString())}, nil},
+		{"malformed logo", UpdateMCPMetadataInput{LogoAssetID: new("logo.png")}, ErrLifecycleMetadataLogoInvalid},
+		{"nil logo", UpdateMCPMetadataInput{LogoAssetID: new(uuid.Nil.String())}, ErrLifecycleMetadataLogoInvalid},
+		{"https docs", UpdateMCPMetadataInput{ExternalDocumentationURL: new("https://docs.example.test/mcp")}, nil},
+		{"clear docs", UpdateMCPMetadataInput{ExternalDocumentationURL: new("")}, nil},
+		{"http docs", UpdateMCPMetadataInput{ExternalDocumentationURL: new("http://docs.example.test")}, ErrLifecycleMetadataInvalid},
+		{"script docs", UpdateMCPMetadataInput{ExternalDocumentationURL: new("javascript:alert(1)")}, ErrLifecycleMetadataInvalid},
+		{"docs with credentials", UpdateMCPMetadataInput{ExternalDocumentationURL: new("https://user:pass@docs.example.test")}, ErrLifecycleMetadataInvalid},
+		{"relative docs", UpdateMCPMetadataInput{ExternalDocumentationURL: new("/docs")}, ErrLifecycleMetadataInvalid},
+		{"long docs label", UpdateMCPMetadataInput{ExternalDocumentationText: long(maxLifecycleDocumentationTextBytes + 1)}, ErrLifecycleMetadataInvalid},
+		{"multiline docs label", UpdateMCPMetadataInput{ExternalDocumentationText: new("Read\nthis")}, ErrLifecycleMetadataInvalid},
+		{"long instructions", UpdateMCPMetadataInput{Instructions: long(maxLifecycleInstructionsBytes + 1)}, ErrLifecycleMetadataInvalid},
+		{"instructions at the limit", UpdateMCPMetadataInput{Instructions: long(maxLifecycleInstructionsBytes)}, nil},
+		{"rename", UpdateMCPMetadataInput{Name: new("Renamed"), RegistrationID: uuid.NewString()}, nil},
+		{"rename without registration", UpdateMCPMetadataInput{Name: new("Renamed")}, ErrLifecycleMetadataRenameUnsupported},
+		{"clear name", UpdateMCPMetadataInput{Name: new(" "), RegistrationID: uuid.NewString()}, ErrLifecycleMetadataInvalid},
+		{"multiline name", UpdateMCPMetadataInput{Name: new("a\nb"), RegistrationID: uuid.NewString()}, ErrLifecycleMetadataInvalid},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := validateLifecycleMetadataInput(tc.input)
+			if tc.err == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tc.err)
+		})
+	}
 }
 
 func TestInventoryLookupAndDetailExposeDashboardManagedRemoteUpstreamURL(t *testing.T) {

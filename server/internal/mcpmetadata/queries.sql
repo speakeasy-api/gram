@@ -239,3 +239,71 @@ WHERE mcp_metadata_id = @mcp_metadata_id
 -- name: DeleteAllEnvironmentConfigs :exec
 DELETE FROM mcp_environment_configs
 WHERE mcp_metadata_id = @mcp_metadata_id;
+
+-- name: PatchMetadataInstallPage :one
+-- Changes only the install-page columns whose set_* flag is true, on the row the caller locked.
+UPDATE mcp_metadata
+SET logo_id = CASE WHEN @set_logo_id::boolean THEN sqlc.narg(logo_id)::uuid ELSE logo_id END,
+    external_documentation_url = CASE WHEN @set_external_documentation_url::boolean THEN sqlc.narg(external_documentation_url)::text ELSE external_documentation_url END,
+    external_documentation_text = CASE WHEN @set_external_documentation_text::boolean THEN sqlc.narg(external_documentation_text)::text ELSE external_documentation_text END,
+    instructions = CASE WHEN @set_instructions::boolean THEN sqlc.narg(instructions)::text ELSE instructions END,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+RETURNING id,
+          toolset_id,
+          mcp_server_id,
+          project_id,
+          external_documentation_url,
+          external_documentation_text,
+          logo_id,
+          instructions,
+          header_display_names,
+          default_environment_id,
+          installation_override_url,
+          created_at,
+          updated_at;
+
+-- name: CreateMetadataInstallPageByMcpServerID :one
+-- A server with no row gets a server-keyed one holding only its install-page columns.
+INSERT INTO mcp_metadata (
+    mcp_server_id,
+    project_id,
+    logo_id,
+    external_documentation_url,
+    external_documentation_text,
+    instructions
+) VALUES (@mcp_server_id, @project_id, sqlc.narg(logo_id)::uuid, sqlc.narg(external_documentation_url)::text, sqlc.narg(external_documentation_text)::text, sqlc.narg(instructions)::text)
+RETURNING id,
+          toolset_id,
+          mcp_server_id,
+          project_id,
+          external_documentation_url,
+          external_documentation_text,
+          logo_id,
+          instructions,
+          header_display_names,
+          default_environment_id,
+          installation_override_url,
+          created_at,
+          updated_at;
+
+-- name: OrganizationImageAssetExists :one
+-- An organization's images: its organization-tier rows and the rows of its live projects.
+SELECT EXISTS (
+    SELECT 1
+    FROM assets AS a
+    WHERE a.id = @id
+      AND a.kind = 'image'
+      AND a.deleted IS FALSE
+      AND (
+          a.organization_id = @organization_id::text
+          OR EXISTS (
+              SELECT 1
+              FROM projects AS p
+              WHERE p.id = a.project_id
+                AND p.organization_id = @organization_id::text
+                AND p.deleted IS FALSE
+          )
+      )
+) AS found;

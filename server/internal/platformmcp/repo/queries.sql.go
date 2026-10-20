@@ -2575,6 +2575,41 @@ func (q *Queries) GetPlatformMCPFeedbackByIdempotencyKey(ctx context.Context, ar
 	return i, err
 }
 
+const getPlatformMCPInstallPage = `-- name: GetPlatformMCPInstallPage :one
+SELECT logo_id, external_documentation_url, external_documentation_text, instructions
+FROM mcp_metadata
+WHERE project_id = $1
+  AND (toolset_id = $2::uuid OR mcp_server_id = $2::uuid)
+ORDER BY (toolset_id IS NOT NULL) DESC, updated_at DESC
+LIMIT 1
+`
+
+type GetPlatformMCPInstallPageParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+}
+
+type GetPlatformMCPInstallPageRow struct {
+	LogoID                    uuid.NullUUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	Instructions              pgtype.Text
+}
+
+// The install-page row the dashboard reads for one server, as the inventory
+// joins it.
+func (q *Queries) GetPlatformMCPInstallPage(ctx context.Context, arg GetPlatformMCPInstallPageParams) (GetPlatformMCPInstallPageRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPInstallPage, arg.ProjectID, arg.McpServerID)
+	var i GetPlatformMCPInstallPageRow
+	err := row.Scan(
+		&i.LogoID,
+		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
+		&i.Instructions,
+	)
+	return i, err
+}
+
 const getPlatformMCPInstallTarget = `-- name: GetPlatformMCPInstallTarget :one
 SELECT
     m.name,
@@ -2628,7 +2663,7 @@ func (q *Queries) GetPlatformMCPInstallTarget(ctx context.Context, arg GetPlatfo
 }
 
 const getPlatformMCPInventoryItem = `-- name: GetPlatformMCPInventoryItem :one
-SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
+SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at, install_page_logo_id, install_page_documentation_url, install_page_documentation_text, install_page_instructions
 FROM (
     SELECT
         m.id AS mcp_server_id,
@@ -2654,7 +2689,11 @@ FROM (
         COALESCE(registration.mcp_endpoint_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_endpoint_id,
         COALESCE(readiness.state, '') AS readiness_state,
         readiness.checked_at AS readiness_checked_at,
-        readiness.expires_at AS readiness_expires_at
+        readiness.expires_at AS readiness_expires_at,
+        install_page.logo_id AS install_page_logo_id,
+        install_page.external_documentation_url AS install_page_documentation_url,
+        install_page.external_documentation_text AS install_page_documentation_text,
+        install_page.instructions AS install_page_instructions
     FROM mcp_servers AS m
     JOIN projects AS project
       ON project.id = m.project_id
@@ -2693,6 +2732,14 @@ FROM (
         ORDER BY readiness.checked_at DESC, readiness.id DESC
         LIMIT 1
     ) AS readiness ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT metadata.logo_id, metadata.external_documentation_url, metadata.external_documentation_text, metadata.instructions
+        FROM mcp_metadata AS metadata
+        WHERE metadata.project_id = m.project_id
+          AND (metadata.toolset_id = m.id OR metadata.mcp_server_id = m.id)
+        ORDER BY (metadata.toolset_id IS NOT NULL) DESC, metadata.updated_at DESC
+        LIMIT 1
+    ) AS install_page ON TRUE
     WHERE m.id = $6
       AND m.project_id = $7
       AND m.deleted IS FALSE
@@ -2734,6 +2781,10 @@ type GetPlatformMCPInventoryItemRow struct {
 	ReadinessState                  string
 	ReadinessCheckedAt              pgtype.Timestamptz
 	ReadinessExpiresAt              pgtype.Timestamptz
+	InstallPageLogoID               uuid.NullUUID
+	InstallPageDocumentationUrl     pgtype.Text
+	InstallPageDocumentationText    pgtype.Text
+	InstallPageInstructions         pgtype.Text
 }
 
 func (q *Queries) GetPlatformMCPInventoryItem(ctx context.Context, arg GetPlatformMCPInventoryItemParams) (GetPlatformMCPInventoryItemRow, error) {
@@ -2772,6 +2823,10 @@ func (q *Queries) GetPlatformMCPInventoryItem(ctx context.Context, arg GetPlatfo
 		&i.ReadinessState,
 		&i.ReadinessCheckedAt,
 		&i.ReadinessExpiresAt,
+		&i.InstallPageLogoID,
+		&i.InstallPageDocumentationUrl,
+		&i.InstallPageDocumentationText,
+		&i.InstallPageInstructions,
 	)
 	return i, err
 }
@@ -5256,7 +5311,11 @@ SELECT
     COALESCE(registration.mcp_endpoint_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_endpoint_id,
     COALESCE(readiness.state, '') AS readiness_state,
     readiness.checked_at AS readiness_checked_at,
-    readiness.expires_at AS readiness_expires_at
+    readiness.expires_at AS readiness_expires_at,
+    install_page.logo_id AS install_page_logo_id,
+    install_page.external_documentation_url AS install_page_documentation_url,
+    install_page.external_documentation_text AS install_page_documentation_text,
+    install_page.instructions AS install_page_instructions
 FROM mcp_servers AS m
 JOIN projects AS project
   ON project.id = m.project_id
@@ -5295,6 +5354,14 @@ LEFT JOIN LATERAL (
     ORDER BY readiness.checked_at DESC, readiness.id DESC
     LIMIT 1
 ) AS readiness ON TRUE
+LEFT JOIN LATERAL (
+    SELECT metadata.logo_id, metadata.external_documentation_url, metadata.external_documentation_text, metadata.instructions
+    FROM mcp_metadata AS metadata
+    WHERE metadata.project_id = m.project_id
+      AND (metadata.toolset_id = m.id OR metadata.mcp_server_id = m.id)
+    ORDER BY (metadata.toolset_id IS NOT NULL) DESC, metadata.updated_at DESC
+    LIMIT 1
+) AS install_page ON TRUE
 WHERE m.deleted IS FALSE
   AND ($6::boolean OR m.id = ANY($7::uuid[]))
   AND ($8::uuid IS NULL OR m.project_id = $8::uuid)
@@ -5366,6 +5433,10 @@ type ListPlatformMCPInventoryRow struct {
 	ReadinessState                  string
 	ReadinessCheckedAt              pgtype.Timestamptz
 	ReadinessExpiresAt              pgtype.Timestamptz
+	InstallPageLogoID               uuid.NullUUID
+	InstallPageDocumentationUrl     pgtype.Text
+	InstallPageDocumentationText    pgtype.Text
+	InstallPageInstructions         pgtype.Text
 }
 
 // One bounded, tenant-qualified inventory projection for every Platform MCP
@@ -5374,6 +5445,8 @@ type ListPlatformMCPInventoryRow struct {
 // distribution state only; it never contacts a remote MCP or provider.
 // skip_authorization_filter is reserved for trusted internal services whose own
 // authorization boundary is broader than this member-facing read path.
+// The install-page row the dashboard reads for this server, in the order
+// GetMetadataByBackendID picks it, so update_mcp_metadata's version agrees.
 func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatformMCPInventoryParams) ([]ListPlatformMCPInventoryRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPInventory,
 		arg.OrganizationID,
@@ -5421,6 +5494,10 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 			&i.ReadinessState,
 			&i.ReadinessCheckedAt,
 			&i.ReadinessExpiresAt,
+			&i.InstallPageLogoID,
+			&i.InstallPageDocumentationUrl,
+			&i.InstallPageDocumentationText,
+			&i.InstallPageInstructions,
 		); err != nil {
 			return nil, err
 		}

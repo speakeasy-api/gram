@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"time"
 
@@ -46,10 +47,21 @@ func (s *Service) UploadOrganizationImage(ctx context.Context, payload *orggen.U
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
+	return s.StoreOrganizationImage(ctx, logger, authCtx.ActiveOrganizationID, authCtx.UserID, authCtx.Email, reader, payload.ContentLength, payload.ContentType)
+}
+
+// StoreOrganizationImage stores an organization-tier image owned by
+// organizationID and audits its creation as actorUserID. Callers must already
+// have authorized an org:admin write for that user in that organization.
+func (s *Service) StoreOrganizationImage(ctx context.Context, logger *slog.Logger, organizationID, actorUserID string, actorEmail *string, reader io.Reader, contentLength int64, contentType string) (*orggen.UploadImageResult, error) {
+	if organizationID == "" || actorUserID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	result, err := s.downloadAuthorizedAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
-		contentLength: payload.ContentLength,
-		contentType:   payload.ContentType,
+		contentLength: contentLength,
+		contentType:   contentType,
 	})
 	if err != nil {
 		return nil, err
@@ -61,7 +73,7 @@ func (s *Service) UploadOrganizationImage(ctx context.Context, payload *orggen.U
 	existing, err := s.findExistingAsset(ctx, &findAssetParams{
 		tier:           tierOrganization,
 		projectID:      uuid.Nil,
-		organizationID: authCtx.ActiveOrganizationID,
+		organizationID: organizationID,
 		hash:           result.hash,
 	})
 	if err != nil {
@@ -79,13 +91,13 @@ func (s *Service) UploadOrganizationImage(ctx context.Context, payload *orggen.U
 		}}, nil
 	}
 
-	inContentType, _, err := mime.ParseMediaType(payload.ContentType)
+	inContentType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse content type: %w", err), "error parsing content type")
 	}
 
 	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
-		contentLength: payload.ContentLength,
+		contentLength: contentLength,
 		inputMimeType: inContentType,
 		allowedTypes:  []string{"image/png", "image/jpeg", "image/gif", "image/webp"},
 	})
@@ -97,10 +109,10 @@ func (s *Service) UploadOrganizationImage(ctx context.Context, payload *orggen.U
 	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
 		tier:           tierOrganization,
 		projectID:      uuid.Nil,
-		organizationID: authCtx.ActiveOrganizationID,
+		organizationID: organizationID,
 		filename:       filename,
 		contentType:    mimeType,
-		contentLength:  payload.ContentLength,
+		contentLength:  contentLength,
 		file:           result.file,
 	})
 	if err != nil {
@@ -118,22 +130,22 @@ func (s *Service) UploadOrganizationImage(ctx context.Context, payload *orggen.U
 	asset, err := ar.CreateOrganizationAsset(ctx, repo.CreateOrganizationAssetParams{
 		Name:           filename,
 		Url:            uri.String(),
-		OrganizationID: authCtx.ActiveOrganizationID,
+		OrganizationID: organizationID,
 		Sha256:         result.hash,
 		Kind:           "image",
 		ContentType:    inContentType,
-		ContentLength:  payload.ContentLength,
+		ContentLength:  contentLength,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create organization asset in database: %w", err), "error saving document info").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
-		OrganizationID: authCtx.ActiveOrganizationID,
+		OrganizationID: organizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, actorUserID),
+		ActorDisplayName: actorEmail,
 		ActorSlug:        nil,
 
 		AssetURN:  urn.NewAsset(urn.AssetKindImage, asset.ID),

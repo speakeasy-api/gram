@@ -368,6 +368,7 @@ type PostgresReader struct {
 	chatMetadata              *ChatMetadataService
 	chatSearch                *ChatSearchService
 	organizationGateway       *OrganizationGatewayService
+	organizationImageUploads  OrganizationImageUploader
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
@@ -406,6 +407,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		chatMetadata:              nil,
 		chatSearch:                nil,
 		organizationGateway:       nil,
+		organizationImageUploads:  nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
@@ -786,7 +788,7 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 	mcps := make([]MCP, 0, len(rows))
 	for _, row := range rows {
 		mcp := mcpFromInventoryRow(row, byMCPServer)
-		r.setInventoryVersion(&mcp)
+		r.setInventoryVersion(&mcp, inventoryInstallPageFromRow(row))
 		mcps = append(mcps, mcp)
 	}
 	if query != "" {
@@ -900,7 +902,11 @@ func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principa
 		}
 	}
 	mcp := mcpFromInventoryItem(row, byMCPServer)
-	r.setInventoryVersion(&mcp)
+	installPage := inventoryInstallPageFromItem(row)
+	r.setInventoryVersion(&mcp, installPage)
+	if withPluginMembership {
+		mcp.InstallPage = mcpInstallPageFromLifecycle(installPage)
+	}
 	// The exposure read rides the same mcp:read boundary as the rest of the
 	// detail, so it is filled in only where plugin membership is: a caller
 	// admitted on project read alone gets the operational projection, not the
@@ -923,11 +929,14 @@ func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principa
 	return mcp, nil
 }
 
-func (r *PostgresReader) setInventoryVersion(mcp *MCP) {
-	if r == nil || mcp == nil || mcp.Registration == nil || len(r.metadataVersionKey) == 0 {
+// setInventoryVersion stamps every MCP with the version update_mcp_metadata
+// takes back: install-page patches apply to any server, not only to the
+// Platform registrations the visibility tools and renames are limited to.
+func (r *PostgresReader) setInventoryVersion(mcp *MCP, installPage LifecycleInstallPage) {
+	if r == nil || mcp == nil || len(r.metadataVersionKey) == 0 {
 		return
 	}
-	mcp.Version = lifecycleMetadataVersion(r.metadataVersionKey, mcp.ID, mcp.ProjectID, inventoryMCPDisplayName(mcp), mcp.Slug, mcp.Visibility)
+	mcp.Version = lifecycleMetadataVersion(r.metadataVersionKey, mcp.ID, mcp.ProjectID, inventoryMCPDisplayName(mcp), mcp.Slug, mcp.Visibility, installPage)
 }
 
 func inventoryMCPDisplayName(mcp *MCP) string {

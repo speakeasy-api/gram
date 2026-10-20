@@ -120,6 +120,38 @@ func platformImageUploadKey(token string) string {
 // ID and public URL. A token is spent by its first request, even one that fails
 // validation.
 func (u *PlatformImageUploads) Handler() http.Handler {
+	return imageUploadHandler(u.cache, u.logger, func() time.Time { return u.now() }, u.siteURL, platformImageUploadKey, func(ctx context.Context, grant platformImageUploadGrant, data []byte, contentType string) (*slog.Logger, string, string, error) {
+		logger := u.logger.With(attr.SlogAuthUserEmail(grant.OperatorEmail))
+		stored, err := u.images.StorePlatformImage(ctx, logger, grant.OperatorEmail, bytes.NewReader(data), int64(len(data)), contentType)
+		if err != nil || stored == nil || stored.Asset == nil {
+			return logger, "", "", errors.Join(err, errNoStoredImage)
+		}
+		return logger, stored.Asset.ID, stored.Asset.Sha256, nil
+	}, func(ctx context.Context, logger *slog.Logger, assetID uuid.UUID) {
+		// The staff record of this direct write: who published which image.
+		logger.InfoContext(ctx, "staff platform image uploaded", attr.SlogAssetID(assetID.String()))
+	})
+}
+
+func (g platformImageUploadGrant) usable(now time.Time) bool {
+	return g.OperatorEmail != "" && now.Before(g.ExpiresAt)
+}
+
+var errNoStoredImage = errors.New("no image was stored")
+
+// imageUploadGrant is what an upload token was issued for.
+type imageUploadGrant interface {
+	usable(now time.Time) bool
+}
+
+// imageUploadHandler serves the PUT every single-use image upload token is
+// redeemed with. The token arrives as a bearer header and is looked up by its
+// hash, deleted by its first request whatever the outcome, and refused once
+// expired; the image is read up to MaxFileSizeImage and typed from its bytes,
+// so only PNG, JPEG, GIF, or WebP is ever stored. store saves the image for the
+// grant's owner and returns the logger for its errors with the stored asset's
+// ID and SHA-256; stored records a successful upload.
+func imageUploadHandler[G imageUploadGrant](uploadCache cache.Cache, logger *slog.Logger, now func() time.Time, siteURL *url.URL, key func(token string) string, store func(ctx context.Context, grant G, data []byte, contentType string) (*slog.Logger, string, string, error), stored func(ctx context.Context, logger *slog.Logger, assetID uuid.UUID)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		if r.Method != http.MethodPut {
@@ -132,14 +164,14 @@ func (u *PlatformImageUploads) Handler() http.Handler {
 			writeUploadJSON(w, http.StatusUnauthorized, map[string]string{"error": "send the upload token as Authorization: Bearer <token>"})
 			return
 		}
-		var grant platformImageUploadGrant
-		err := u.cache.GetAndDelete(r.Context(), platformImageUploadKey(token), &grant)
+		var grant G
+		err := uploadCache.GetAndDelete(r.Context(), key(token), &grant)
 		if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
-			u.logger.ErrorContext(r.Context(), "redeem platform image upload token", attr.SlogError(err))
+			logger.ErrorContext(r.Context(), "redeem image upload token", attr.SlogError(err))
 			writeUploadJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "uploads are temporarily unavailable; try again"})
 			return
 		}
-		if errors.Is(err, redisCache.ErrCacheMiss) || grant.OperatorEmail == "" || !u.now().Before(grant.ExpiresAt) {
+		if errors.Is(err, redisCache.ErrCacheMiss) || !grant.usable(now()) {
 			writeUploadJSON(w, http.StatusUnauthorized, map[string]string{"error": "this upload token is unknown, used or expired; request a new one"})
 			return
 		}
@@ -160,26 +192,24 @@ func (u *PlatformImageUploads) Handler() http.Handler {
 			writeUploadJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "upload a PNG, JPEG, GIF or WebP image"})
 			return
 		}
-		logger := u.logger.With(attr.SlogAuthUserEmail(grant.OperatorEmail))
-		stored, err := u.images.StorePlatformImage(r.Context(), logger, grant.OperatorEmail, bytes.NewReader(data), int64(len(data)), contentType)
-		if err != nil || stored == nil || stored.Asset == nil {
+		storeLogger, id, sha, err := store(r.Context(), grant, data, contentType)
+		if err != nil {
 			var shareable *oops.ShareableError
 			if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
 				writeUploadJSON(w, http.StatusBadRequest, map[string]string{"error": shareable.Error()})
 				return
 			}
-			logger.ErrorContext(r.Context(), "platform image upload failed", attr.SlogError(err))
+			storeLogger.ErrorContext(r.Context(), "image upload failed", attr.SlogError(err))
 			writeUploadJSON(w, http.StatusInternalServerError, map[string]string{"error": "upload failed"})
 			return
 		}
-		assetID, err := uuid.Parse(stored.Asset.ID)
+		assetID, err := uuid.Parse(id)
 		if err != nil {
 			writeUploadJSON(w, http.StatusInternalServerError, map[string]string{"error": "upload failed"})
 			return
 		}
-		// The staff record of this direct write: who published which image.
-		logger.InfoContext(r.Context(), "staff platform image uploaded", attr.SlogAssetID(assetID.String()))
-		writeUploadJSON(w, http.StatusOK, StoredPlatformImage{AssetID: assetID.String(), URL: ServeImageURL(u.siteURL, assetID), SHA256: stored.Asset.Sha256, ContentType: contentType, Size: int64(len(data))})
+		stored(r.Context(), storeLogger, assetID)
+		writeUploadJSON(w, http.StatusOK, StoredPlatformImage{AssetID: assetID.String(), URL: ServeImageURL(siteURL, assetID), SHA256: sha, ContentType: contentType, Size: int64(len(data))})
 	})
 }
 

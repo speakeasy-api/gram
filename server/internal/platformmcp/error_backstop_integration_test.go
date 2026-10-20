@@ -142,6 +142,13 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 	readiness := NewReadinessService(store, gate, NewProviderAdapters(nil), budget.Connection, budget)
 	metadata, err := NewLifecycleMetadataService(pool, func(context.Context, pgx.Tx, mcpserversrepo.McpServer, LifecycleMetadataUpdate) (mcpserversrepo.McpServer, error) {
 		return mcpserversrepo.McpServer{}, errNotReached
+	}, LifecycleInstallPageStore{
+		Lock: func(context.Context, pgx.Tx, mcpserversrepo.McpServer) (LifecycleInstallPage, error) {
+			return LifecycleInstallPage{}, errNotReached
+		},
+		Patch: func(context.Context, pgx.Tx, mcpserversrepo.McpServer, LifecycleInstallPagePatch) (LifecycleInstallPage, error) {
+			return LifecycleInstallPage{}, errNotReached
+		},
 	}, key)
 	require.NoError(t, err)
 	visibility, err := NewLifecycleVisibilityService(pool, auditLogger,

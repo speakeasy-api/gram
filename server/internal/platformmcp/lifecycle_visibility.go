@@ -3,8 +3,11 @@ package platformmcp
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -218,7 +221,11 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, fmt.Errorf("lock platform mcp visibility target: %w", err)
 	}
-	if server.Visibility != from || !hmac.Equal([]byte(lifecycleMetadataVersion(s.key, server.ID.String(), server.ProjectID.String(), lifecycleMCPDisplayName(server), server.Slug.String, server.Visibility)), []byte(input.ExpectedVersion)) {
+	page, err := lifecycleInstallPage(ctx, q, project.ID, mcpID)
+	if err != nil {
+		return UpdateMCPVisibilityResult{}, err
+	}
+	if server.Visibility != from || !hmac.Equal([]byte(lifecycleServerVersion(s.key, server, page)), []byte(input.ExpectedVersion)) {
 		return UpdateMCPVisibilityResult{}, ErrRegistrationConflict
 	}
 	receipt, err := q.CreatePlatformMCPOperationReceipt(ctx, platformrepo.CreatePlatformMCPOperationReceiptParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, ConnectionID: connectionID, ConnectionGeneration: generation, UserID: conv.ToPGText(principal.UserID), ActingSurface: conv.ToPGText(string(principal.surface())), Operation: operation, IdempotencyKey: input.IdempotencyKey, InputHash: inputHash, Status: receiptStatusPending, ResultCode: pgtype.Text{String: "", Valid: false}, ResultPayload: nil, ExpiresAt: pgtype.Timestamptz{Time: s.now().Add(receiptLifetime), InfinityModifier: pgtype.Finite, Valid: true}})
@@ -238,7 +245,7 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	}
 
 	updated := visibilityResult.Server
-	result := UpdateMCPVisibilityResult{Project: project, RegistrationID: registrationID.String(), MCPID: updated.ID.String(), Visibility: updated.Visibility, Version: lifecycleMetadataVersion(s.key, updated.ID.String(), updated.ProjectID.String(), lifecycleMCPDisplayName(updated), updated.Slug.String, updated.Visibility), Receipt: operationReceiptFromRow(completed, false), Readiness: MCPReadiness{State: "unknown", CheckedAt: "", ExpiresAt: ""}, Published: false}
+	result := UpdateMCPVisibilityResult{Project: project, RegistrationID: registrationID.String(), MCPID: updated.ID.String(), Visibility: updated.Visibility, Version: lifecycleServerVersion(s.key, updated, page), Receipt: operationReceiptFromRow(completed, false), Readiness: MCPReadiness{State: "unknown", CheckedAt: "", ExpiresAt: ""}, Published: false}
 	if err := s.reconcile(ctx, visibilityResult.ClearedRootDomainIDs); err != nil {
 		return UpdateMCPVisibilityResult{}, fmt.Errorf("reconcile platform mcp custom domains: %w", err)
 	}
@@ -282,9 +289,14 @@ func (s *LifecycleVisibilityService) current(ctx context.Context, principal Prin
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityInvalid
 	}
-	return UpdateMCPVisibilityResult{Project: project, RegistrationID: registrationID.String(), MCPID: mcpID.String(), Visibility: server.Visibility, Version: lifecycleMetadataVersion(s.key, server.ID.String(), server.ProjectID.String(), lifecycleMCPDisplayName(server), server.Slug.String, server.Visibility), Receipt: receipt, Readiness: MCPReadiness{State: "unknown", CheckedAt: "", ExpiresAt: ""}, Published: false}, nil
+	page, err := lifecycleInstallPage(ctx, platformrepo.New(s.db), project.ID, mcpID)
+	if err != nil {
+		return UpdateMCPVisibilityResult{}, err
+	}
+	return UpdateMCPVisibilityResult{Project: project, RegistrationID: registrationID.String(), MCPID: mcpID.String(), Visibility: server.Visibility, Version: lifecycleServerVersion(s.key, server, page), Receipt: receipt, Readiness: MCPReadiness{State: "unknown", CheckedAt: "", ExpiresAt: ""}, Published: false}, nil
 }
 
 func lifecycleVisibilityInputHash(projectID, registrationID, mcpID uuid.UUID, version, operation string) string {
-	return lifecycleMetadataInputHash(projectID, registrationID, mcpID, operation, version)
+	digest := sha256.Sum256([]byte(strings.Join([]string{projectID.String(), registrationID.String(), mcpID.String(), operation, version}, "\x00")))
+	return base64.RawURLEncoding.EncodeToString(digest[:])
 }

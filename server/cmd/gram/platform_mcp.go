@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
@@ -38,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -77,6 +79,9 @@ type platformMCPConfig struct {
 	Redis                  *redis.Client
 	ServerURL              *url.URL
 	DashboardURL           *url.URL
+	// Assets stores the organization images create_org_image_upload_url
+	// tokens upload. Nil keeps that tool visible as unavailable.
+	Assets *assets.Service
 	Environment            string
 	JWTSigningKey          string
 	ProductFeatures        *productfeatures.Client
@@ -490,6 +495,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
+	organizationImageUploads := attachPlatformMCPOrganizationImageUploads(ctx, config)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
@@ -513,6 +519,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			WithRiskFindingsClickHouse(chatfindings.New(config.DB, config.ChatRiskFindings), config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
+		WithOrganizationImageUploads(organizationImageUploads).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
@@ -637,6 +644,23 @@ func platformMCPSetupResources(config platformMCPConfig) ([]platformmcp.SetupRes
 	return resources, nil
 }
 
+// attachPlatformMCPOrganizationImageUploads serves the PUT that redeems
+// create_org_image_upload_url tokens. Without an assets service, or on a
+// server URL a bearer token must not travel to, the tool stays registered as
+// unavailable rather than issuing URLs nothing accepts.
+func attachPlatformMCPOrganizationImageUploads(ctx context.Context, config platformMCPConfig) platformmcp.OrganizationImageUploader {
+	if config.Assets == nil {
+		return nil
+	}
+	uploads, err := assets.NewOrganizationImageUploads(config.Assets, cache.NewRedisCacheAdapter(config.Redis), config.ServerURL, config.DashboardURL, config.Logger)
+	if err != nil {
+		config.Logger.WarnContext(ctx, "Platform MCP organization image uploads unavailable", attr.SlogError(err))
+		return nil
+	}
+	config.Mux.Handle(http.MethodPut, assets.OrganizationImageUploadPath, uploads.Handler().ServeHTTP)
+	return uploads
+}
+
 func newPlatformMCPLifecycleMetadataService(config platformMCPConfig) (*platformmcp.LifecycleMetadataService, error) {
 	return platformmcp.NewLifecycleMetadataService(config.DB, func(ctx context.Context, tx pgx.Tx, existing mcpserversrepo.McpServer, input platformmcp.LifecycleMetadataUpdate) (mcpserversrepo.McpServer, error) {
 		name := input.Name
@@ -656,7 +680,40 @@ func newPlatformMCPLifecycleMetadataService(config platformMCPConfig) (*platform
 			UnproxiedMcpServerID:  existing.UnproxiedMcpServerID,
 			ToolVariationsGroupID: existing.ToolVariationsGroupID,
 		})
+	}, platformmcp.LifecycleInstallPageStore{
+		Lock: func(ctx context.Context, tx pgx.Tx, server mcpserversrepo.McpServer) (platformmcp.LifecycleInstallPage, error) {
+			page, err := mcpmetadata.LockMCPServerInstallPageInTransaction(ctx, tx, server)
+			if err != nil {
+				return platformmcp.LifecycleInstallPage{}, err
+			}
+			return platformMCPInstallPage(page), nil
+		},
+		Patch: func(ctx context.Context, tx pgx.Tx, server mcpserversrepo.McpServer, patch platformmcp.LifecycleInstallPagePatch) (platformmcp.LifecycleInstallPage, error) {
+			page, err := mcpmetadata.PatchMCPServerInstallPageInTransaction(ctx, tx, config.AuditLogger, server, mcpmetadata.InstallPagePatch{
+				OrganizationID:            patch.OrganizationID,
+				ProjectID:                 patch.ProjectID,
+				ActorUserID:               patch.ActorUserID,
+				ActorEmail:                nil,
+				LogoAssetID:               patch.LogoAssetID,
+				ExternalDocumentationURL:  patch.ExternalDocumentationURL,
+				ExternalDocumentationText: patch.ExternalDocumentationText,
+				Instructions:              patch.Instructions,
+			})
+			switch {
+			case errors.Is(err, mcpmetadata.ErrInstallPageLogoInvalid):
+				return platformmcp.LifecycleInstallPage{}, platformmcp.ErrLifecycleMetadataLogoInvalid
+			case errors.Is(err, mcpmetadata.ErrInstallPageInherited):
+				return platformmcp.LifecycleInstallPage{}, platformmcp.ErrLifecycleMetadataInherited
+			case err != nil:
+				return platformmcp.LifecycleInstallPage{}, err
+			}
+			return platformMCPInstallPage(page), nil
+		},
 	}, config.JWTSigningKey)
+}
+
+func platformMCPInstallPage(page mcpmetadata.InstallPage) platformmcp.LifecycleInstallPage {
+	return platformmcp.LifecycleInstallPageFromColumns(page.LogoAssetID, page.ExternalDocumentationURL, page.ExternalDocumentationText, page.Instructions)
 }
 
 func newPlatformMCPLifecycleVisibilityService(config platformMCPConfig, readiness *platformmcp.ReadinessService) (*platformmcp.LifecycleVisibilityService, error) {
@@ -1116,6 +1173,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithAdministratorAuthorization(config.Authz)
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
+	organizationImageUploads := attachPlatformMCPOrganizationImageUploads(ctx, config)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
@@ -1139,6 +1197,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			WithRiskFindingsClickHouse(chatfindings.New(config.DB, config.ChatRiskFindings), config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
+		WithOrganizationImageUploads(organizationImageUploads).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))

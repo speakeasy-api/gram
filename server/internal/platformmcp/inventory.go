@@ -107,6 +107,14 @@ func mcpFromInventoryItem(row platformrepo.GetPlatformMCPInventoryItemRow, distr
 	)
 }
 
+func inventoryInstallPageFromRow(row platformrepo.ListPlatformMCPInventoryRow) LifecycleInstallPage {
+	return LifecycleInstallPageFromColumns(row.InstallPageLogoID, row.InstallPageDocumentationUrl, row.InstallPageDocumentationText, row.InstallPageInstructions)
+}
+
+func inventoryInstallPageFromItem(row platformrepo.GetPlatformMCPInventoryItemRow) LifecycleInstallPage {
+	return LifecycleInstallPageFromColumns(row.InstallPageLogoID, row.InstallPageDocumentationUrl, row.InstallPageDocumentationText, row.InstallPageInstructions)
+}
+
 func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, slug, visibility, model string, backendKind MCPBackendKind, upstreamURL string, registrationID uuid.UUID, sourceKind, provider, reference, registrationStatus string, registrationRemoteID, registrationIssuerID, registrationMCPID, registrationEndpointID uuid.NullUUID, readinessState, checkedAt, expiresAt string, distributions map[uuid.UUID][]MCPDistribution) MCP {
 	mcp := MCP{
 		ID:               id.String(),
@@ -130,6 +138,8 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		// The inventory projection never reads a server's tool list: only the
 		// server detail does, and it fills this in after the read.
 		ToolExposure: nil,
+		// Only the server detail reads the install page out, after the read.
+		InstallPage: nil,
 	}
 
 	// Every model can be carried by a plugin, so membership is attached before

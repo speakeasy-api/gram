@@ -158,6 +158,21 @@ type MCP struct {
 	// absent on a server whose tools come from an upstream rather than from
 	// this project.
 	ToolExposure *MCPToolExposure `json:"tool_exposure,omitempty"`
+
+	// InstallPage is the logo, documentation link, and instructions this
+	// server shows on its install page, which update_mcp_metadata patches.
+	// Like ToolExposure it is filled in by get_mcp only, for a caller who
+	// cleared the MCP-read boundary; absent means "not read here".
+	InstallPage *MCPInstallPage `json:"install_page,omitempty"`
+}
+
+// MCPInstallPage is an MCP server's install-page metadata. An omitted field is
+// unset.
+type MCPInstallPage struct {
+	LogoAssetID               string `json:"logo_asset_id,omitempty"`
+	ExternalDocumentationURL  string `json:"external_documentation_url,omitempty"`
+	ExternalDocumentationText string `json:"external_documentation_text,omitempty"`
+	Instructions              string `json:"instructions,omitempty"`
 }
 
 type MCPRegistration struct {
@@ -498,6 +513,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		organizationGateway = postgresReader.organizationGateway
 	}
 	registerOrganizationGatewayTool(reg, organizationGateway)
+	var organizationImageUploads OrganizationImageUploader
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		organizationImageUploads = postgresReader.organizationImageUploads
+	}
+	registerOrgImageUploadTool(reg, organizationImageUploads)
 	if feedback == nil {
 		addTool(reg, &mcp.Tool{
 			Name:        "send_platform_mcp_feedback",
@@ -565,8 +585,8 @@ func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
 func registerUnavailableLifecycleMetadataTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "update_mcp_metadata",
-		Title:       "Rename an MCP Server",
-		Description: "Rename one MCP server. This is not switched on for your organization yet.",
+		Title:       updateMCPMetadataTitle,
+		Description: "Change one MCP server's name, install-page logo, documentation link, or instructions. This is not switched on for your organization yet.",
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_metadata"))
 }
 
@@ -623,6 +643,12 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	switch {
 	case errors.Is(err, ErrReadinessRegistrationNotFound):
 		result = operationBudgetResult{Code: "registration_not_found", Message: "That MCP server is not one this project and caller can act on. Use the one returned when it was added to the project."}
+	case errors.Is(err, ErrLifecycleMetadataRenameUnsupported):
+		result = operationBudgetResult{Code: "invalid_request", Reason: "rename_unsupported", Message: "Only a fully set-up MCP server added through this platform can be renamed here. Rename this one in the dashboard. Its logo, documentation link, and instructions can still be changed here without renaming it."}
+	case errors.Is(err, ErrLifecycleMetadataLogoInvalid):
+		result = operationBudgetResult{Code: "invalid_request", Reason: "logo_not_found", Message: "That logo is not an image uploaded to this organization. Upload the image to the organization first and use the asset ID the upload returns."}
+	case errors.Is(err, ErrLifecycleMetadataInherited):
+		result = operationBudgetResult{Code: "invalid_request", Reason: "install_page_inherited", Message: "This MCP server's install page shows the settings of the toolset behind it, so changing them here would replace those settings. Change them in the dashboard instead."}
 	case errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrLifecycleMetadataInvalid), errors.Is(err, ErrLifecycleVisibilityInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrCatalogConfigurationRejected), errors.Is(err, ErrCatalogRejected), errors.Is(err, ErrCatalogCursorInvalid):
 		result = operationBudgetResult{Code: "invalid_request", Message: "That request is not valid, or no longer matches how things are set up now. Read the current state again; do not retry the same input."}
 	case errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrReadinessRateLimited):

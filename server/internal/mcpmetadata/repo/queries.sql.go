@@ -27,6 +27,68 @@ func (q *Queries) AcquireMetadataBackendLock(ctx context.Context, arg AcquireMet
 	return err
 }
 
+const createMetadataInstallPageByMcpServerID = `-- name: CreateMetadataInstallPageByMcpServerID :one
+INSERT INTO mcp_metadata (
+    mcp_server_id,
+    project_id,
+    logo_id,
+    external_documentation_url,
+    external_documentation_text,
+    instructions
+) VALUES ($1, $2, $3::uuid, $4::text, $5::text, $6::text)
+RETURNING id,
+          toolset_id,
+          mcp_server_id,
+          project_id,
+          external_documentation_url,
+          external_documentation_text,
+          logo_id,
+          instructions,
+          header_display_names,
+          default_environment_id,
+          installation_override_url,
+          created_at,
+          updated_at
+`
+
+type CreateMetadataInstallPageByMcpServerIDParams struct {
+	McpServerID               uuid.NullUUID
+	ProjectID                 uuid.UUID
+	LogoID                    uuid.NullUUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	Instructions              pgtype.Text
+}
+
+// A server with no row gets a server-keyed one holding only its install-page columns.
+func (q *Queries) CreateMetadataInstallPageByMcpServerID(ctx context.Context, arg CreateMetadataInstallPageByMcpServerIDParams) (McpMetadatum, error) {
+	row := q.db.QueryRow(ctx, createMetadataInstallPageByMcpServerID,
+		arg.McpServerID,
+		arg.ProjectID,
+		arg.LogoID,
+		arg.ExternalDocumentationUrl,
+		arg.ExternalDocumentationText,
+		arg.Instructions,
+	)
+	var i McpMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
+		&i.LogoID,
+		&i.Instructions,
+		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteAllEnvironmentConfigs = `-- name: DeleteAllEnvironmentConfigs :exec
 DELETE FROM mcp_environment_configs
 WHERE mcp_metadata_id = $1
@@ -298,6 +360,109 @@ func (q *Queries) LockMetadataByBackendID(ctx context.Context, arg LockMetadataB
 		return nil, err
 	}
 	return items, nil
+}
+
+const organizationImageAssetExists = `-- name: OrganizationImageAssetExists :one
+SELECT EXISTS (
+    SELECT 1
+    FROM assets AS a
+    WHERE a.id = $1
+      AND a.kind = 'image'
+      AND a.deleted IS FALSE
+      AND (
+          a.organization_id = $2::text
+          OR EXISTS (
+              SELECT 1
+              FROM projects AS p
+              WHERE p.id = a.project_id
+                AND p.organization_id = $2::text
+                AND p.deleted IS FALSE
+          )
+      )
+) AS found
+`
+
+type OrganizationImageAssetExistsParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// An organization's images: its organization-tier rows and the rows of its live projects.
+func (q *Queries) OrganizationImageAssetExists(ctx context.Context, arg OrganizationImageAssetExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, organizationImageAssetExists, arg.ID, arg.OrganizationID)
+	var found bool
+	err := row.Scan(&found)
+	return found, err
+}
+
+const patchMetadataInstallPage = `-- name: PatchMetadataInstallPage :one
+UPDATE mcp_metadata
+SET logo_id = CASE WHEN $1::boolean THEN $2::uuid ELSE logo_id END,
+    external_documentation_url = CASE WHEN $3::boolean THEN $4::text ELSE external_documentation_url END,
+    external_documentation_text = CASE WHEN $5::boolean THEN $6::text ELSE external_documentation_text END,
+    instructions = CASE WHEN $7::boolean THEN $8::text ELSE instructions END,
+    updated_at = clock_timestamp()
+WHERE id = $9
+  AND project_id = $10
+RETURNING id,
+          toolset_id,
+          mcp_server_id,
+          project_id,
+          external_documentation_url,
+          external_documentation_text,
+          logo_id,
+          instructions,
+          header_display_names,
+          default_environment_id,
+          installation_override_url,
+          created_at,
+          updated_at
+`
+
+type PatchMetadataInstallPageParams struct {
+	SetLogoID                    bool
+	LogoID                       uuid.NullUUID
+	SetExternalDocumentationUrl  bool
+	ExternalDocumentationUrl     pgtype.Text
+	SetExternalDocumentationText bool
+	ExternalDocumentationText    pgtype.Text
+	SetInstructions              bool
+	Instructions                 pgtype.Text
+	ID                           uuid.UUID
+	ProjectID                    uuid.UUID
+}
+
+// Changes only the install-page columns whose set_* flag is true, on the row the caller locked.
+func (q *Queries) PatchMetadataInstallPage(ctx context.Context, arg PatchMetadataInstallPageParams) (McpMetadatum, error) {
+	row := q.db.QueryRow(ctx, patchMetadataInstallPage,
+		arg.SetLogoID,
+		arg.LogoID,
+		arg.SetExternalDocumentationUrl,
+		arg.ExternalDocumentationUrl,
+		arg.SetExternalDocumentationText,
+		arg.ExternalDocumentationText,
+		arg.SetInstructions,
+		arg.Instructions,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i McpMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
+		&i.LogoID,
+		&i.Instructions,
+		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const rekeyMetadataToMcpServer = `-- name: RekeyMetadataToMcpServer :execrows
