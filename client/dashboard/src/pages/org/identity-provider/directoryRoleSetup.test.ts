@@ -95,6 +95,62 @@ describe("setupRows", () => {
     expect(refreshed[0]?.item.version).toBe("v-new");
     expect(refreshed[1]?.selected).toBe(true);
   });
+
+  // Someone else created "Engineering" after the first preview, so the
+  // refreshed preview proposes reusing it. Creating it again would conflict on
+  // every apply.
+  const reuseEngineering = groupItem("g1", "Engineering", {
+    proposedRoles: [
+      {
+        roleAction: "reuse",
+        roleId: "role-eng",
+        roleUrn: "role:eng",
+        roleName: "Engineering",
+        currentGrants: [],
+      },
+    ],
+    version: "v-new",
+  });
+
+  it("follows a refreshed proposal when the choice was never changed", () => {
+    const first = setupRows(preview([groupItem("g1", "Engineering")]));
+    expect(first[0]?.choice).toEqual({ kind: "create", name: "Engineering" });
+    const refreshed = setupRows(preview([reuseEngineering]), first);
+    expect(refreshed[0]?.choice).toEqual({
+      kind: "reuse",
+      roleUrn: "role:eng",
+    });
+    expect(setupRequest(refreshed).items[0]?.roles).toEqual([
+      { roleUrn: "role:eng" },
+    ]);
+  });
+
+  it("drops a chosen create once the refreshed preview reuses an existing role", () => {
+    const first = setupRows(
+      preview([
+        groupItem("g1", "Engineering", {
+          proposedRoles: [
+            {
+              roleAction: "reuse",
+              roleId: "role-dev",
+              roleUrn: "role:dev",
+              roleName: "Developers",
+              currentGrants: [],
+            },
+          ],
+        }),
+      ]),
+    );
+    const edited = first.map((row) => ({
+      ...row,
+      choice: { kind: "create" as const, name: "Engineering" },
+    }));
+    const refreshed = setupRows(preview([reuseEngineering]), edited);
+    expect(refreshed[0]?.choice).toEqual({
+      kind: "reuse",
+      roleUrn: "role:eng",
+    });
+  });
 });
 
 describe("setupRequest", () => {

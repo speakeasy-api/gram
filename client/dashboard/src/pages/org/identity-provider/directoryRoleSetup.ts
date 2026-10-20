@@ -55,13 +55,38 @@ function proposedChoice(
 }
 
 /**
+ * The choice a row keeps when the preview is refreshed. A choice the admin
+ * never changed follows the refreshed proposal, so a role someone else
+ * created meanwhile is reused rather than created again. A choice the admin
+ * made is kept, unless it creates a role the refreshed preview now reuses by
+ * that name: that create can only conflict again.
+ */
+function refreshedChoice(
+  earlier: SetupRow | undefined,
+  proposed: SetupChoice,
+): SetupChoice {
+  if (!earlier) return proposed;
+  if (choiceValue(earlier.choice) === choiceValue(earlier.proposed)) {
+    return proposed;
+  }
+  if (
+    earlier.choice.kind === "create" &&
+    proposed.kind === "reuse" &&
+    choiceValue(earlier.proposed) !== choiceValue(proposed)
+  ) {
+    return proposed;
+  }
+  return earlier.choice;
+}
+
+/**
  * The rows to offer: every source with no roles yet. Sources that already
  * have roles are edited in the mappings table instead, so bulk setup never
  * replaces a role set someone chose. Groups start selected; attribute values
  * start cleared, since a key can have many values and each would get a role.
  *
- * Rows already on screen keep their selection and choice when the preview is
- * refreshed, as long as the source is still unmapped.
+ * Rows already on screen keep their selection when the preview is refreshed,
+ * as long as the source is still unmapped. See refreshedChoice for the role.
  */
 export function setupRows(
   preview: DirectoryRoleSetupPreviewResult,
@@ -79,7 +104,7 @@ export function setupRows(
       key,
       item,
       proposed,
-      choice: earlier?.choice ?? proposed,
+      choice: refreshedChoice(earlier, proposed),
       selected: earlier?.selected ?? item.source.sourceKind === "group",
     });
   }
