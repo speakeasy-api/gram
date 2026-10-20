@@ -331,18 +331,20 @@ export function ServerPickerSheet({
                           {option.badge &&
                             (option.disabled ? (
                               <Tooltip>
-<TooltipTrigger asChild>
-                                <span
-                                  role="img"
-                                  aria-label={option.badge}
-                                  tabIndex={0}
-                                  className="text-destructive shrink-0"
-                                >
-                                  <TriangleAlert className="size-4" />
-                                </span>
-                              </TooltipTrigger>
-<TooltipContent side="left">{option.description}</TooltipContent>
-</Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span
+                                    role="img"
+                                    aria-label={option.badge}
+                                    tabIndex={0}
+                                    className="text-destructive shrink-0"
+                                  >
+                                    <TriangleAlert className="size-4" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="left">
+                                  {option.description}
+                                </TooltipContent>
+                              </Tooltip>
                             ) : (
                               <Badge variant="warning">
                                 <Badge.Text>{option.badge}</Badge.Text>
