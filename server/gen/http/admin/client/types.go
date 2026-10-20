@@ -1977,12 +1977,14 @@ type GetHookClientsResponseBody struct {
 	// True when the grids came from the one-hour cache rather than a fresh
 	// ClickHouse read.
 	FromCache *bool `form:"from_cache,omitempty" json:"from_cache,omitempty" xml:"from_cache,omitempty"`
-	// Every organization that appears in either grid.
+	// Every organization that appears in any grid.
 	Organizations []*AdminHookClientOrganizationResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 	// The hook client grid, new sessions only.
 	Sessions []*AdminHookClientSessionCellResponseBody `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
 	// The inference hook traffic grid.
 	Inference []*AdminInferenceHookCellResponseBody `form:"inference,omitempty" json:"inference,omitempty" xml:"inference,omitempty"`
+	// The device agent version grid. Empty for days before versions were recorded.
+	DeviceAgents []*AdminDeviceAgentCellResponseBody `form:"device_agents,omitempty" json:"device_agents,omitempty" xml:"device_agents,omitempty"`
 }
 
 // ListExternalMcpMigrationCandidatesResponseBody is the type of the "admin"
@@ -21467,6 +21469,20 @@ type AdminInferenceHookCellResponseBody struct {
 	Sessions *int64 `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
 }
 
+// AdminDeviceAgentCellResponseBody is used to define fields on response body
+// types.
+type AdminDeviceAgentCellResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The UTC day, as YYYY-MM-DD.
+	Day *string `form:"day,omitempty" json:"day,omitempty" xml:"day,omitempty"`
+	// The speakeasyd version, or empty for the organization-day total.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Machines whose agent polled on this day, by the last version each reported
+	// that day.
+	Machines *int64 `form:"machines,omitempty" json:"machines,omitempty" xml:"machines,omitempty"`
+}
+
 // AdminExternalMcpMigrationCandidateResponseBody is used to define fields on
 // response body types.
 type AdminExternalMcpMigrationCandidateResponseBody struct {
@@ -33250,6 +33266,14 @@ func NewGetHookClientsAdminHookClientsResultOK(body *GetHookClientsResponseBody)
 		}
 		v.Inference[i] = unmarshalAdminInferenceHookCellResponseBodyToAdminAdminInferenceHookCell(val)
 	}
+	v.DeviceAgents = make([]*admin.AdminDeviceAgentCell, len(body.DeviceAgents))
+	for i, val := range body.DeviceAgents {
+		if val == nil {
+			v.DeviceAgents[i] = nil
+			continue
+		}
+		v.DeviceAgents[i] = unmarshalAdminDeviceAgentCellResponseBodyToAdminAdminDeviceAgentCell(val)
+	}
 
 	return v
 }
@@ -41039,6 +41063,9 @@ func ValidateGetHookClientsResponseBody(body *GetHookClientsResponseBody) (err e
 	if body.Inference == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("inference", "body"))
 	}
+	if body.DeviceAgents == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("device_agents", "body"))
+	}
 	if body.QueriedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.queried_at", *body.QueriedAt, goa.FormatDateTime))
 	}
@@ -41059,6 +41086,13 @@ func ValidateGetHookClientsResponseBody(body *GetHookClientsResponseBody) (err e
 	for _, e := range body.Inference {
 		if e != nil {
 			if err2 := ValidateAdminInferenceHookCellResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.DeviceAgents {
+		if e != nil {
+			if err2 := ValidateAdminDeviceAgentCellResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -66931,6 +66965,27 @@ func ValidateAdminInferenceHookCellResponseBody(body *AdminInferenceHookCellResp
 	}
 	if body.Sessions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
+	}
+	if body.Day != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.day", *body.Day, goa.FormatDate))
+	}
+	return
+}
+
+// ValidateAdminDeviceAgentCellResponseBody runs the validations defined on
+// AdminDeviceAgentCellResponseBody
+func ValidateAdminDeviceAgentCellResponseBody(body *AdminDeviceAgentCellResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Day == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("day", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Machines == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("machines", "body"))
 	}
 	if body.Day != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.day", *body.Day, goa.FormatDate))

@@ -147,6 +147,7 @@ trackedFiles:
   src/models/components/admincustomerusage.ts: {}
   src/models/components/admincustomerusageproductcost.ts: {}
   src/models/components/admincustomerusageresponse.ts: {}
+  src/models/components/admindeviceagentcell.ts: {}
   src/models/components/adminexternalmcpmigrationcandidate.ts: {}
   src/models/components/adminexternalmcpmigrationoutcome.ts: {}
   src/models/components/adminexternalmcpmigrationrequest.ts: {}
@@ -841,7 +842,7 @@ examples:
           refresh: false
       responses:
         "200":
-          application/json: {"from_cache": false, "inference": [{"day": "2026-04-27", "events": 100846, "organization_id": "<id>", "sessions": 784612, "surface": "<value>", "users": 471482}], "organizations": [], "queried_at": "2026-05-11T11:31:26.857Z", "sessions": [], "window_days": 708711}
+          application/json: {"device_agents": [{"day": "2026-01-27", "machines": 773425, "organization_id": "<id>", "version": "<value>"}], "from_cache": false, "inference": [{"day": "2026-04-27", "events": 100846, "organization_id": "<id>", "sessions": 784612, "surface": "<value>", "users": 471482}], "organizations": [], "queried_at": "2026-05-11T11:31:26.857Z", "sessions": [], "window_days": 708711}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

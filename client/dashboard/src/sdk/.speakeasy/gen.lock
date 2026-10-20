@@ -5399,7 +5399,7 @@ examples:
   createTemplate:
     speakeasy-default-create-template:
       requestBody:
-        application/json: {"engine": "mustache", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>"}
+        application/json: {"engine": "mustache", "kind": "prompt", "name": "<value>", "prompt": "<value>"}
       responses:
         "200":
           application/json: {"template": {"canonical_name": "<value>", "created_at": "2024-07-17T03:17:12.882Z", "description": "immense extent aboard strident", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": [], "updated_at": "2024-01-27T21:04:32.774Z"}}
@@ -11330,7 +11330,7 @@ examples:
   renderTemplate:
     speakeasy-default-render-template:
       requestBody:
-        application/json: {"arguments": {"key": "<value>"}, "engine": "mustache", "kind": "higher_order_tool", "prompt": "<value>"}
+        application/json: {"arguments": {"key": "<value>"}, "engine": "mustache", "kind": "prompt", "prompt": "<value>"}
       responses:
         "200":
           application/json: {"prompt": "<value>"}
