@@ -2917,6 +2917,29 @@ type McpServer struct {
 	Deleted bool
 }
 
+type McpServerRemoteSessionClient struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	RemoteSessionClientID uuid.UUID
+	// @access: confidential
+	ClientAttachmentScope string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type McpServerToolMetadatum struct {
 	// @access: confidential
 	ID uuid.UUID

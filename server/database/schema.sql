@@ -9495,6 +9495,63 @@ CREATE INDEX IF NOT EXISTS mcp_servers_unproxied_mcp_server_id_idx
 ON mcp_servers (unproxied_mcp_server_id)
 WHERE unproxied_mcp_server_id IS NOT NULL;
 
+-- Upstream OAuth clients an MCP server is configured to use. Many-to-many:
+-- one client can serve several servers, and one server can offer several
+-- clients. Each client keeps its single remote session issuer, so the
+-- association, not a server-level issuer field, names the upstream path.
+-- Detaching a server removes only its row; the client and its other
+-- associations are untouched. Associating a client grants no access.
+CREATE TABLE IF NOT EXISTS mcp_server_remote_session_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  remote_session_client_id uuid NOT NULL,
+  -- The client's attachment_scope, copied by the writer and pinned to the
+  -- client by a composite foreign key.
+  client_attachment_scope TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_server_remote_session_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_server_remote_session_clients_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_server_remote_session_clients_mcp_server_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_server_remote_session_clients_client_scope_fkey FOREIGN KEY (remote_session_client_id, client_attachment_scope) REFERENCES remote_session_clients (id, attachment_scope) ON DELETE CASCADE,
+  -- The client may be platform-global; otherwise it belongs to the server's
+  -- project or organization.
+  CONSTRAINT mcp_server_remote_session_clients_client_scope_check CHECK (
+    client_attachment_scope IN ('project:' || project_id::text, 'organization:' || organization_id, 'global')
+  )
+);
+
+COMMENT ON COLUMN mcp_server_remote_session_clients.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_remote_session_clients.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_remote_session_clients.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_remote_session_clients.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_remote_session_clients.remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_remote_session_clients.client_attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_remote_session_clients.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_remote_session_clients.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_remote_session_clients.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_remote_session_clients.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_remote_session_clients_server_client_key
+ON mcp_server_remote_session_clients (mcp_server_id, remote_session_client_id)
+WHERE deleted IS FALSE;
+
+-- Unfiltered so the cascading foreign keys find removed rows too.
+CREATE INDEX IF NOT EXISTS mcp_server_remote_session_clients_client_idx
+ON mcp_server_remote_session_clients (remote_session_client_id);
+
+CREATE INDEX IF NOT EXISTS mcp_server_remote_session_clients_mcp_server_id_idx
+ON mcp_server_remote_session_clients (mcp_server_id);
+
+CREATE INDEX IF NOT EXISTS mcp_server_remote_session_clients_project_id_idx
+ON mcp_server_remote_session_clients (project_id);
+
 -- Meta MCP servers expose an explicitly managed set of MCP servers through a
 -- dedicated runtime. This identity remains separate from mcp_servers so
 -- gateway-specific behavior can evolve without changing existing backends.
