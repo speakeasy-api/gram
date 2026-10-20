@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import type { AdminUpstreamOAuthMigrationOrganization } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganization";
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
+import type { AdminUpstreamOAuthMigrationUnresolvedAssociation } from "@gram/admin-client/models/components/adminupstreamoauthmigrationunresolvedassociation";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
@@ -99,7 +100,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
     const ok = await confirm({
       title: `Migrate ${org.name}?`,
       description:
-        "Records the upstream OAuth client associations its configuration proves, then each live credential's client choice, then a typed auth client for each associated client. Safe to run again.",
+        "Records the upstream OAuth client associations its configuration proves, then each live credential's client choice, then a typed auth client for each upstream identity its servers use. Safe to run again.",
       confirmLabel: "Migrate",
     });
     if (!ok) return;
@@ -379,9 +380,19 @@ function AuthClientStatus({
       </p>
     );
   }
+  if (a.inProgress) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Auth clients: run in progress
+      </p>
+    );
+  }
   if (a.complete) {
     return (
-      <p className="text-muted-foreground text-xs">Auth clients: recorded</p>
+      <div className="space-y-1">
+        <p className="text-muted-foreground text-xs">Auth clients: recorded</p>
+        <AuthClientItems items={a.warnings} label="Worth a look" />
+      </div>
     );
   }
   const parts = [
@@ -391,6 +402,9 @@ function AuthClientStatus({
     a.pendingLinks > 0
       ? `${a.pendingLinks} server ${a.pendingLinks === 1 ? "link" : "links"} to record`
       : null,
+    a.pendingHeaders > 0
+      ? `${a.pendingHeaders} ${a.pendingHeaders === 1 ? "header or scope set" : "headers or scope sets"} to update`
+      : null,
     a.pendingRetirements > 0
       ? `${a.pendingRetirements} stale ${a.pendingRetirements === 1 ? "record" : "records"} to retire`
       : null,
@@ -399,22 +413,83 @@ function AuthClientStatus({
       : null,
     a.unresolved > 0 ? `${a.unresolved} need attention` : null,
   ].filter((part) => part !== null);
+  const kinds = a.kinds.filter(
+    (k) =>
+      k.pendingClients +
+        k.pendingLinks +
+        k.pendingHeaders +
+        k.pendingRetirements +
+        k.unresolved >
+      0,
+  );
   return (
     <div className="space-y-1">
       <p className="text-muted-foreground text-xs">
         Auth clients: {parts.length > 0 ? parts.join(", ") : "run again"}
       </p>
-      {a.unresolvedAssociations.length > 0 ? (
-        <ul className="text-muted-foreground font-mono text-xs">
-          {a.unresolvedAssociations.map((association) => (
-            <li key={association.associationId}>
-              server {association.mcpServerId} in project{" "}
-              {association.projectId}, client{" "}
-              {association.remoteSessionClientId}
+      {a.failedPhases.length > 0 ? (
+        <p className="text-destructive text-xs">
+          Couldn't check: {a.failedPhases.join(", ")}
+        </p>
+      ) : null}
+      {kinds.length > 0 ? (
+        <ul className="text-muted-foreground text-xs">
+          {kinds.map((k) => (
+            <li key={k.kind}>
+              {k.kind}: {k.pendingClients} clients, {k.pendingLinks} links,{" "}
+              {k.pendingHeaders} headers to record; {k.pendingRetirements} to
+              retire; {k.unresolved} need attention
             </li>
           ))}
         </ul>
       ) : null}
+      <AuthClientItems items={a.unresolvedAssociations} />
+      <AuthClientItems items={a.warnings} label="Worth a look" />
     </div>
   );
 }
+
+function AuthClientItems({
+  items,
+  label,
+}: {
+  items: AdminUpstreamOAuthMigrationUnresolvedAssociation[];
+  label?: string;
+}): JSX.Element | null {
+  if (items.length === 0) {
+    return null;
+  }
+  return (
+    <div className="space-y-1">
+      {label ? <p className="text-muted-foreground text-xs">{label}:</p> : null}
+      <ul className="text-muted-foreground font-mono text-xs">
+        {items.map((item) => (
+          <li
+            key={`${item.kind}:${item.reason}:${item.subjectId}:${item.mcpServerId}`}
+          >
+            {item.kind} {item.reason}: {item.subjectId}
+            {item.projectId !== NIL_UUID ? ` in project ${item.projectId}` : ""}
+            {item.mcpServerId !== NIL_UUID
+              ? `, server ${item.mcpServerId}`
+              : ""}
+            {item.remoteSessionClientId !== NIL_UUID &&
+            item.remoteSessionClientId !== item.subjectId
+              ? `, client ${item.remoteSessionClientId}`
+              : ""}
+            {item.bindingIds.length > 0
+              ? `, bindings ${item.bindingIds.join(", ")}`
+              : ""}
+            {item.sourceIds.length > 0
+              ? `, sources ${item.sourceIds.join(", ")}`
+              : ""}
+            {item.serverIds.length > 0
+              ? `, servers ${item.serverIds.join(", ")}`
+              : ""}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";

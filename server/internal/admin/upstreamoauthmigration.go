@@ -2,6 +2,10 @@ package admin
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -40,6 +44,10 @@ func (s *Service) GetUpstreamOAuthMigrationStatus(ctx context.Context, p *gen.Ge
 	return s.upstreamOAuthMigrationStatus(ctx, organizationID)
 }
 
+// authClientRunTimeout bounds a typed auth client apply, which outlives the
+// request so a closed tab does not cut a phase short.
+const authClientRunTimeout = 15 * time.Minute
+
 func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstreamOAuthMigrationPayload) (*gen.AdminUpstreamOAuthMigrationRun, error) {
 	auth, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || auth == nil || auth.OIDCSubject == "" {
@@ -64,11 +72,37 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 	// Typed auth clients last, from the associations just recorded. A failure
 	// here is reported beside the run and never fails the migration above.
 	var authClientsError *string
-	authClients, err := authclientbackfill.Run(ctx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
-	if err != nil {
+	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), authClientRunTimeout)
+	authClients, err := authclientbackfill.Run(runCtx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
+	cancel()
+	switch {
+	case errors.Is(err, authclientbackfill.ErrRunInProgress):
+		logger.WarnContext(ctx, "record typed auth clients", attr.SlogError(err))
+		message := "A typed auth client run is already in progress for this organization; try again when it finishes."
+		authClientsError = &message
+	case err != nil:
 		logger.ErrorContext(ctx, "record typed auth clients", attr.SlogError(err))
 		message := "Recording typed auth clients failed. Run again; the upstream OAuth migration is unaffected."
 		authClientsError = &message
+	case len(authClients.PhaseErrors) > 0:
+		phases := failedPhases(authClients)
+		for _, phase := range phases {
+			logger.ErrorContext(ctx, "record typed auth clients", attr.SlogError(errors.New(authClients.PhaseErrors[phase])), attr.SlogAuthClientBackfillPhase(phase))
+		}
+		message := fmt.Sprintf("Recording typed auth clients failed in %s; the other phases were recorded. Run again; the upstream OAuth migration is unaffected.", strings.Join(phases, ", "))
+		authClientsError = &message
+	}
+	if err == nil {
+		for _, kind := range authclientbackfill.Kinds {
+			counts := authClients.ByKind[kind]
+			logger.InfoContext(ctx, "typed auth clients recorded",
+				attr.SlogAuthClientBackfillKind(string(kind)),
+				attr.SlogAuthClientBackfillDecided(counts.Decided),
+				attr.SlogAuthClientBackfillWritten(counts.Written),
+				attr.SlogAuthClientBackfillRetired(counts.Retired),
+				attr.SlogAuthClientBackfillUnresolved(counts.Unresolved),
+			)
+		}
 	}
 	status, err := s.upstreamOAuthMigrationStatus(ctx, organizationID)
 	if err != nil {
@@ -145,39 +179,113 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 
 // authClientMigrationStatus dry-runs the typed auth client backfill. It is
 // reported apart from migrated and never gates the cutover, so a failure only
-// leaves it out.
+// leaves it out, and a failed phase is named beside the others' counts.
 func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID string) *gen.AdminUpstreamOAuthMigrationAuthClients {
+	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
 	report, err := authclientbackfill.Run(ctx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0})
-	if err != nil {
-		s.logger.With(attr.SlogOrganizationID(organizationID)).ErrorContext(ctx, "check typed auth clients", attr.SlogError(err))
+	switch {
+	case errors.Is(err, authclientbackfill.ErrRunInProgress):
+		return &gen.AdminUpstreamOAuthMigrationAuthClients{
+			Complete:               false,
+			InProgress:             true,
+			Associations:           0,
+			PendingClients:         0,
+			PendingLinks:           0,
+			PendingHeaders:         0,
+			PendingRetirements:     0,
+			PendingMarkedServers:   0,
+			Unresolved:             0,
+			UnresolvedAssociations: []*gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{},
+			Warnings:               []*gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{},
+			Kinds:                  []*gen.AdminUpstreamOAuthMigrationAuthClientKind{},
+			FailedPhases:           []string{},
+		}
+	case err != nil:
+		logger.ErrorContext(ctx, "check typed auth clients", attr.SlogError(err))
 		return nil
 	}
+	phases := failedPhases(report)
+	for _, phase := range phases {
+		logger.ErrorContext(ctx, "check typed auth clients", attr.SlogError(errors.New(report.PhaseErrors[phase])), attr.SlogAuthClientBackfillPhase(phase))
+	}
 	unresolved := []*gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{}
+	warnings := []*gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{}
 	for _, result := range report.Results {
-		if result.Outcome != authclientbackfill.OutcomeAmbiguous {
+		var list *[]*gen.AdminUpstreamOAuthMigrationUnresolvedAssociation
+		switch result.Outcome {
+		case authclientbackfill.OutcomeAmbiguous:
+			list = &unresolved
+		case authclientbackfill.OutcomeWarning:
+			list = &warnings
+		default:
 			continue
 		}
 		var authClientID *string
 		if result.AuthClientID.Valid {
 			authClientID = new(result.AuthClientID.UUID.String())
 		}
-		unresolved = append(unresolved, &gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{
+		bindingIDs, sourceIDs, serverIDs := idStrings(result.BindingIDs), idStrings(result.SourceIDs), idStrings(result.ServerIDs)
+		*list = append(*list, &gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{
+			Kind:                  string(result.Kind),
+			Reason:                string(result.Reason),
+			SubjectID:             result.SubjectID.String(),
 			AssociationID:         result.AssociationID.String(),
 			McpServerID:           result.MCPServerID.String(),
 			ProjectID:             result.ProjectID.String(),
 			RemoteSessionClientID: result.RemoteSessionClientID.String(),
+			BindingIds:            bindingIDs,
+			SourceIds:             sourceIDs,
+			ServerIds:             serverIDs,
 			AuthClientID:          authClientID,
+		})
+	}
+	kinds := make([]*gen.AdminUpstreamOAuthMigrationAuthClientKind, 0, len(authclientbackfill.Kinds))
+	for _, kind := range authclientbackfill.Kinds {
+		counts := report.ByKind[kind]
+		kinds = append(kinds, &gen.AdminUpstreamOAuthMigrationAuthClientKind{
+			Kind:               string(kind),
+			Decided:            int64(counts.Decided),
+			PendingClients:     int64(counts.PendingClients),
+			PendingLinks:       int64(counts.PendingLinks),
+			PendingHeaders:     int64(counts.PendingHeaders),
+			PendingRetirements: int64(counts.PendingRetirements),
+			Unresolved:         int64(counts.Unresolved),
 		})
 	}
 	pendingRetirements := int64(report.PendingRetiredClients + report.PendingRetiredLinks)
 	return &gen.AdminUpstreamOAuthMigrationAuthClients{
-		Complete:               report.PendingClients == 0 && report.PendingLinks == 0 && report.Gaps == 0 && pendingRetirements == 0 && report.PendingMarkedServers == 0,
+		Complete:               report.PendingClients == 0 && report.PendingLinks == 0 && report.PendingHeaders == 0 && report.Gaps == 0 && pendingRetirements == 0 && report.PendingMarkedServers == 0 && len(phases) == 0,
+		InProgress:             false,
 		Associations:           int64(report.Associations),
 		PendingClients:         int64(report.PendingClients),
 		PendingLinks:           int64(report.PendingLinks),
+		PendingHeaders:         int64(report.PendingHeaders),
 		PendingRetirements:     pendingRetirements,
 		PendingMarkedServers:   int64(report.PendingMarkedServers),
 		Unresolved:             int64(len(unresolved)),
 		UnresolvedAssociations: unresolved,
+		Warnings:               warnings,
+		Kinds:                  kinds,
+		FailedPhases:           phases,
 	}
+}
+
+// failedPhases names the phases a run reports failed, in run order.
+func failedPhases(report authclientbackfill.Report) []string {
+	phases := []string{}
+	for _, phase := range []string{authclientbackfill.PhaseOAuth, authclientbackfill.PhaseHeaders, authclientbackfill.PhaseEMA, authclientbackfill.PhaseReconcile, authclientbackfill.PhaseMark} {
+		if _, failed := report.PhaseErrors[phase]; failed {
+			phases = append(phases, phase)
+		}
+	}
+	return phases
+}
+
+// idStrings renders ids, never nil.
+func idStrings(ids []uuid.UUID) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, id.String())
+	}
+	return out
 }

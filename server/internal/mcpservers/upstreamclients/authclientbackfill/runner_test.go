@@ -232,9 +232,12 @@ func TestRun_RemovedAssociationIsSkipped(t *testing.T) {
 
 	// The association is removed after it was read: the decided writes lose.
 	require.NoError(t, f.q.SoftDeleteAssociationFixture(t.Context(), association))
-	report := Report{Mode: "apply", Outcomes: map[Outcome]int{}, Results: []Result{}}
-	result, err := decideAndWrite(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, rows[0], map[clientKey]uuid.UUID{}, &report)
+	report := Report{Mode: "apply", Outcomes: map[Outcome]int{}, ByKind: map[Kind]*KindCounts{}, PhaseErrors: map[string]string{}, Results: []Result{}}
+	tx, err := f.pool.Begin(t.Context()) //nolint:glint // notestingrawsql: transaction boundary only; the decision uses generated SQLc methods.
 	require.NoError(t, err)
+	result, err := decideAndWrite(t.Context(), tx, New(tx), Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, rows[0], map[clientKey]uuid.UUID{}, &report)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
 
 	require.Equal(t, OutcomeSkippedRace, result.Outcome)
 	require.Empty(t, f.authClients())

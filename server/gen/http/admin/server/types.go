@@ -21801,41 +21801,92 @@ type AdminUpstreamOAuthMigrationServerResponseBody struct {
 // AdminUpstreamOAuthMigrationAuthClientsResponseBody is used to define fields
 // on response body types.
 type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
-	// Whether every association has its auth client and server link recorded, no
-	// backfilled record is left to retire, and no server offering one is left
-	// undecided.
+	// Whether every configured identity has its auth client, server links and
+	// header copies recorded, no backfilled record is left to retire, no server
+	// offering one is left undecided, and no phase failed.
 	Complete bool `form:"complete" json:"complete" xml:"complete"`
-	// Live server to upstream OAuth client associations decided.
+	// Whether a run is recording typed auth clients for the organization right
+	// now. The other counts are then empty; check again when it finishes.
+	InProgress bool `form:"in_progress" json:"in_progress" xml:"in_progress"`
+	// Servers offering a backfilled auth client whose need for upstream
+	// authentication is still undecided, not yet marked as needing it.
+	PendingMarkedServers int64 `form:"pending_marked_servers" json:"pending_marked_servers" xml:"pending_marked_servers"`
+	// Configured identities and server links decided.
 	Associations int64 `form:"associations" json:"associations" xml:"associations"`
 	// Auth clients not yet recorded.
 	PendingClients int64 `form:"pending_clients" json:"pending_clients" xml:"pending_clients"`
 	// Server to auth client links not yet recorded.
 	PendingLinks int64 `form:"pending_links" json:"pending_links" xml:"pending_links"`
-	// Backfilled auth clients and server links whose association or upstream
-	// client is gone, not yet retired.
+	// Header copies and EMA scope sets not yet up to date.
+	PendingHeaders int64 `form:"pending_headers" json:"pending_headers" xml:"pending_headers"`
+	// Backfilled auth clients and server links the configuration no longer yields,
+	// not yet retired.
 	PendingRetirements int64 `form:"pending_retirements" json:"pending_retirements" xml:"pending_retirements"`
-	// Servers offering a backfilled auth client whose need for upstream
-	// authentication is still undecided, not yet marked as needing it.
-	PendingMarkedServers int64 `form:"pending_marked_servers" json:"pending_marked_servers" xml:"pending_marked_servers"`
-	// Associations whose client cannot be typed and need attention.
+	// Configured identities that cannot be recorded without a guess and need
+	// attention.
 	Unresolved int64 `form:"unresolved" json:"unresolved" xml:"unresolved"`
-	// The associations counted in unresolved.
+	// The configuration counted in unresolved.
 	UnresolvedAssociations []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"unresolved_associations" json:"unresolved_associations" xml:"unresolved_associations"`
+	// Configuration worth a look that needs no action and does not hold back
+	// complete, such as a server at an identity chaining upstream's origin that
+	// only live discovery could confirm.
+	Warnings []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"warnings" json:"warnings" xml:"warnings"`
+	// The same counts for each kind of configured identity.
+	Kinds []*AdminUpstreamOAuthMigrationAuthClientKindResponseBody `form:"kinds" json:"kinds" xml:"kinds"`
+	// Phases whose check failed: oauth, headers, ema, reconcile or mark. The
+	// counts cover the other phases.
+	FailedPhases []string `form:"failed_phases" json:"failed_phases" xml:"failed_phases"`
 }
 
 // AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody is used to
 // define fields on response body types.
 type AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody struct {
-	// The server to upstream OAuth client association ID.
+	// What was decided: oauth, header or ema.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Why it cannot be recorded: unknown_owner, type_mismatch, project_mismatch,
+	// multiple_authorization_headers, duplicate_header_names,
+	// mixed_credential_headers, oauth_client_shared_across_sources,
+	// conflicting_scopes, resource_variants, resource_not_matched or
+	// issuer_not_allowed; for a warning, server_not_matched.
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+	// The association, source, upstream OAuth client or first binding decided.
+	SubjectID string `form:"subject_id" json:"subject_id" xml:"subject_id"`
+	// The server to upstream OAuth client association ID, for an oauth association.
 	AssociationID string `form:"association_id" json:"association_id" xml:"association_id"`
-	// The MCP server ID.
+	// The MCP server ID, when one server is concerned.
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	// The server's project ID.
+	// The project the configuration belongs to.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The upstream OAuth client ID.
+	// The upstream OAuth client ID, for oauth and ema.
 	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
-	// The auth client already recorded for the client, if any.
+	// Every identity chaining binding decided together, for ema.
+	BindingIds []string `form:"binding_ids" json:"binding_ids" xml:"binding_ids"`
+	// The sources concerned, for an upstream OAuth client shared across sources.
+	SourceIds []string `form:"source_ids" json:"source_ids" xml:"source_ids"`
+	// The servers concerned, for an upstream OAuth client shared across sources.
+	ServerIds []string `form:"server_ids" json:"server_ids" xml:"server_ids"`
+	// The auth client already recorded, if any.
 	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationAuthClientKindResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationAuthClientKindResponseBody struct {
+	// The kind: oauth, header or ema.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Configuration and server links decided.
+	Decided int64 `form:"decided" json:"decided" xml:"decided"`
+	// Auth clients not yet recorded.
+	PendingClients int64 `form:"pending_clients" json:"pending_clients" xml:"pending_clients"`
+	// Server to auth client links not yet recorded.
+	PendingLinks int64 `form:"pending_links" json:"pending_links" xml:"pending_links"`
+	// Header copies and EMA scope sets not yet up to date.
+	PendingHeaders int64 `form:"pending_headers" json:"pending_headers" xml:"pending_headers"`
+	// Backfilled auth clients and server links the configuration no longer yields,
+	// not yet retired.
+	PendingRetirements int64 `form:"pending_retirements" json:"pending_retirements" xml:"pending_retirements"`
+	// Configuration that cannot be recorded without a guess.
+	Unresolved int64 `form:"unresolved" json:"unresolved" xml:"unresolved"`
 }
 
 // AdminUpstreamOAuthMigrationStatusResponseBody is used to define fields on
