@@ -1,27 +1,14 @@
 import { SettingsPage } from "@/components/page-templates";
-import { RequireScope } from "@/components/require-scope";
+import {
+  GatewayNotServed,
+  OrganizationGatewaySwitch,
+} from "@/components/mcp/organization-gateway-setting";
+import { useOrganizationGatewaySetting } from "@/components/mcp/useOrganizationGatewaySetting";
 import { Button } from "@/components/ui/Button";
-import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
-import { handleAPIError } from "@/lib/errors";
-import { useOrgRoutes } from "@/routes";
-import type { OrganizationGateway } from "@gram/client/models/components/organizationgateway.js";
-import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
-import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
-import {
-  invalidateAllOrganizationGateway,
-  useOrganizationGateway,
-} from "@gram/client/react-query/organizationGateway.js";
-import {
-  invalidateAllProductFeatures,
-  useProductFeatures,
-} from "@gram/client/react-query/productFeatures.js";
-import { useQueryClient } from "@tanstack/react-query";
 import { Network } from "lucide-react";
-import { Link } from "react-router";
-import { toast } from "sonner";
 
 export default function OrgGateway(): JSX.Element {
   const organization = useOrganization();
@@ -48,37 +35,12 @@ function GatewaySetting({
   organizationId: string;
   isCurrentOrganization: () => boolean;
 }): JSX.Element | null {
-  const queryClient = useQueryClient();
-  const features = useProductFeatures({ organizationId }, undefined, {
-    throwOnError: false,
-  });
-  const gateway = useOrganizationGateway(undefined, undefined, {
-    throwOnError: false,
-  });
-  const mutation = useFeaturesSetMutation({
-    onSuccess: async (_, variables) => {
-      if (!isCurrentOrganization()) return;
-      await Promise.all([
-        invalidateAllProductFeatures(queryClient),
-        invalidateAllOrganizationGateway(queryClient),
-      ]);
-      if (!isCurrentOrganization()) return;
-      // The stored feature turns the gateway off, so enabled means "off".
-      toast.success(
-        variables.request.setProductFeatureRequestBody.enabled
-          ? "Gateway turned off"
-          : "Gateway turned on",
-      );
-    },
-    onError: (error) => {
-      if (!isCurrentOrganization()) return;
-      handleAPIError(error, "Failed to update the gateway");
-    },
-  });
+  const { features, gateway, on, setOn, isPending } =
+    useOrganizationGatewaySetting({ organizationId, isCurrentOrganization });
 
   if (features.isLoading) return null;
 
-  if (features.error || !features.data) {
+  if (features.error || on === undefined) {
     return (
       <section
         className="border-border bg-card border p-5"
@@ -101,8 +63,6 @@ function GatewaySetting({
     );
   }
 
-  const on = !features.data.organizationGatewayDisabled;
-
   return (
     <section className="border-border bg-card border p-5">
       <div className="flex items-start justify-between gap-3">
@@ -111,7 +71,7 @@ function GatewaySetting({
             <Network className="text-muted-foreground size-4" />
           </div>
           <div>
-            <Text variant="subheading">Organization gateway</Text>
+            <Text variant="subheading">Organization Gateway</Text>
             <Text small muted className="mt-1 max-w-3xl">
               Members add one URL to their AI client and sign in with their
               organization account. Turning it off stops it working for everyone
@@ -135,82 +95,12 @@ function GatewaySetting({
             )}
           </div>
         </div>
-        <RequireScope
-          scope="org:admin"
-          level="component"
-          reason="Only organization admins can change this setting."
-        >
-          <Switch
-            checked={on}
-            onCheckedChange={(checked) =>
-              mutation.mutate({
-                request: {
-                  setProductFeatureRequestBody: {
-                    organizationId,
-                    featureName: FeatureName.OrganizationGatewayDisabled,
-                    enabled: !checked,
-                  },
-                },
-              })
-            }
-            disabled={mutation.isPending}
-            aria-label="Organization gateway"
-          />
-        </RequireScope>
+        <OrganizationGatewaySwitch
+          on={on}
+          setOn={setOn}
+          isPending={isPending}
+        />
       </div>
     </section>
   );
-}
-
-/**
- * Explains why a gateway that is switched on still isn't served, and where to
- * fix it, so the switch never reads as on for a URL that answers 404.
- */
-function GatewayNotServed({
-  reason,
-}: {
-  reason: OrganizationGateway["unavailableReason"];
-}): JSX.Element | null {
-  const orgRoutes = useOrgRoutes();
-  switch (reason) {
-    case "no_organization_issuer":
-      return (
-        <Text small className="text-warning mt-3">
-          Not available yet: it needs an organization-wide sign-in. Set one up
-          in{" "}
-          <Link to={orgRoutes.identity.href()} className="underline">
-            IDP and SSO
-          </Link>
-          .
-        </Text>
-      );
-    case "multiple_organization_issuers":
-      return (
-        <Text small className="text-warning mt-3">
-          Not available: the organization has more than one organization-wide
-          sign-in. Keep one in{" "}
-          <Link to={orgRoutes.identity.href()} className="underline">
-            IDP and SSO
-          </Link>
-          .
-        </Text>
-      );
-    case "custom_domain_only":
-      return (
-        <Text small className="text-warning mt-3">
-          Not available: your custom domain only allows access from listed IP
-          addresses, and the gateway isn&apos;t served there. Change this in{" "}
-          <Link to={orgRoutes.domains.href()} className="underline">
-            Network Access
-          </Link>
-          .
-        </Text>
-      );
-    // The switch itself already reads off, and a disabled organization
-    // never reaches its settings.
-    case "turned_off":
-    case "organization_disabled":
-    case undefined:
-      return null;
-  }
 }

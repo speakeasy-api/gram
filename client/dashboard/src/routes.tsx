@@ -55,6 +55,7 @@ import { RedirectToDeployments } from "./pages/mcp/add/LegacyRedirects";
 import Sources, { SourcesRoot } from "./pages/mcp/sources/Sources";
 import SourceDetailRoute from "./pages/mcp/sources/SourceDetail";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
+import OrganizationGatewayPage from "./pages/mcp/OrganizationGateway";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
@@ -164,11 +165,6 @@ import {
   KillswitchIndexRedirect,
   KillswitchRecordRedirect,
 } from "./pages/killswitch/KillswitchesRoot";
-import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
-import {
-  ToolBuilderNew,
-  ToolBuilderPage,
-} from "./pages/toolBuilder/ToolBuilder";
 
 const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
 const SetupTaskRedirect = React.lazy(
@@ -310,25 +306,6 @@ const ROUTE_STRUCTURE = {
     url: "integrations",
     icon: "package",
     component: Integrations,
-  },
-  customTools: {
-    title: "Custom Tools",
-    url: "custom-tools",
-    icon: "pencil-ruler",
-    component: CustomToolsRoot,
-    indexComponent: CustomTools,
-    subPages: {
-      toolBuilderNew: {
-        title: "Tool Builder",
-        url: "new",
-        component: ToolBuilderNew,
-      },
-      toolBuilder: {
-        title: "Tool Builder",
-        url: ":toolName",
-        component: ToolBuilderPage,
-      },
-    },
   },
   prompts: {
     title: "Prompts",
@@ -570,6 +547,15 @@ const ROUTE_STRUCTURE = {
             url: "settings",
           },
         },
+      },
+      // The Organization Gateway. A static segment beside `add`,
+      // `catalog` and `sources`, with the same latent toolset-slug collision.
+      // It lives under MCP rather than the organization settings because it
+      // is opened from the head of the MCP Servers list.
+      organizationGateway: {
+        title: "Organization Gateway",
+        url: "organization-gateway",
+        component: OrganizationGatewayPage,
       },
       // Gateway Endpoints (meta MCP servers). Addressed by id: a gateway has
       // no slug of its own — routing identity lives on its mcp_endpoints.

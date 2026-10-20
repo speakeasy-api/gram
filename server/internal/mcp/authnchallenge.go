@@ -286,7 +286,11 @@ type UserSessionGrant struct {
 	SignInID *uuid.UUID `json:"sign_in_id,omitempty"`
 	// GatewayPolicy is cached only in the versioned gateway grant namespace.
 	GatewayPolicy *toolfilter.SessionPolicy `json:"gateway_policy,omitempty"`
-	CreatedAt     time.Time                 `json:"created_at"`
+	// UpstreamClientPicks is the upstream OAuth client the subject chose on
+	// the consent page for each MCP server offering several, keyed by server.
+	// The credential this grant mints records it as its choice.
+	UpstreamClientPicks map[uuid.UUID]uuid.UUID `json:"upstream_client_picks,omitempty"`
+	CreatedAt           time.Time               `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)

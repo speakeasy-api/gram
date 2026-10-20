@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -31,6 +32,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -246,6 +249,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		"test-jwt-secret",
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		deviceagenttoken.New(sharedDeviceAgentIssuer(t), conn),
 	)
 
 	return ctx, &testInstance{
@@ -279,4 +283,18 @@ func seedHookUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organiz
 		WorkosMembershipID: pgtype.Text{},
 	})
 	require.NoError(t, err)
+}
+
+// sharedDeviceAgentSigner is generated once per package to avoid RSA keygen per
+// fixture. Forged-token tests still use mcpauthztest.NewIssuer.
+var sharedDeviceAgentSigner struct {
+	once   sync.Once
+	issuer *mcpauthz.Issuer
+}
+
+func sharedDeviceAgentIssuer(t *testing.T) *mcpauthz.Issuer {
+	t.Helper()
+	sharedDeviceAgentSigner.once.Do(func() { sharedDeviceAgentSigner.issuer = mcpauthztest.NewIssuer(t) })
+	require.NotNil(t, sharedDeviceAgentSigner.issuer)
+	return sharedDeviceAgentSigner.issuer
 }
