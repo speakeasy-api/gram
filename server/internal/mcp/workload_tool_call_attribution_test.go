@@ -35,8 +35,13 @@ func TestServePublic_WorkloadToolCallRecordsItsAgent(t *testing.T) {
 		require.NotContains(t, decodeRPCResponse(t, w), "error")
 	}
 
+	issuerID, subject, err := fx.session.SubjectUrn.Workload()
+	require.NoError(t, err)
+	workload := urn.NewWorkloadPrincipal(issuerID, subject)
+
 	requireTelemetryRowCount(t, `event_source = ?
 		   AND toString(attributes.gram.authorization.actor.type) = ?
+		   AND toString(attributes.gram.authorization.actor.id) = ?
 		   AND toString(attributes.gram.authorization.agent.id) = ?`,
-		1, string(telemetry.EventSourceToolCall), string(urn.PrincipalTypeWorkload), fx.agent.ID.String())
+		1, string(telemetry.EventSourceToolCall), string(urn.PrincipalTypeWorkload), workload.ID, fx.agent.ID.String())
 }
