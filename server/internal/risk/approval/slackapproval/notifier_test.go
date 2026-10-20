@@ -104,6 +104,10 @@ func TestNotifyDMsEachApprover(t *testing.T) {
 		// Agent-written text cannot ping the channel or render a link.
 		require.Contains(t, text, "&lt;!channel&gt;")
 		require.NotContains(t, text, "<!channel>")
+		// Each argument is its own field, not a JSON code block.
+		require.Contains(t, text, "*channel*\nC123")
+		require.Contains(t, text, "*text*\nDeploy &lt;!channel&gt; finished")
+		require.NotContains(t, text, "```")
 		require.Contains(t, text, "The agent is told the call to slack__post_message was denied.")
 	}
 

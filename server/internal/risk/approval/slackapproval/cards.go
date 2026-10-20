@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -23,10 +25,15 @@ const (
 	// reports its clicks too; the interactions endpoint ignores them.
 	actionOpen = "risk_approval_open"
 
-	// maxArgumentsChars bounds the arguments shown on a card. Slack caps a
-	// section's text at 3,000 characters, and the card keeps room for the
-	// code fence and heading.
-	maxArgumentsChars = 2500
+	// maxArgumentFields bounds the argument fields on a card. Slack allows ten
+	// fields in a section; when there are more, the last one says how many.
+	maxArgumentFields = 10
+
+	// maxArgumentNameChars and maxArgumentValueChars bound one argument field.
+	// Slack caps a field at 2,000 characters, and escaping can grow a value
+	// fivefold.
+	maxArgumentNameChars  = 100
+	maxArgumentValueChars = 300
 
 	// maxReasonChars bounds the agent's reason on a card. Request reasons are
 	// already capped on the way in; this keeps one card inside Slack's limits
@@ -245,37 +252,61 @@ func detailSections(in cardInput) []block {
 	if reason := in.Approval.Reason.String; in.Approval.Reason.Valid && reason != "" {
 		blocks = append(blocks, mrkdwnSection("*Reason, from the agent*\n"+quote(truncate(reason, maxReasonChars))))
 	}
-	if args := formatArguments(in.Approval.ArgumentsPreview); args != "" {
-		blocks = append(blocks, mrkdwnSection("*Arguments*\n```"+args+"```"))
+	if args, ok := argumentsSection(in.Approval.ArgumentsPreview); ok {
+		blocks = append(blocks, args)
 	}
 	return blocks
 }
 
-// formatArguments renders the redacted arguments preview as indented JSON for
-// a code block, bounded so the card stays inside Slack's limits.
-func formatArguments(raw []byte) string {
+// argumentsSection renders the redacted arguments preview as one field per
+// argument, sorted by name and bounded so the card stays inside Slack's
+// limits. It reports false when there are no arguments to show.
+func argumentsSection(raw []byte) (block, bool) {
+	var none block
 	if len(raw) == 0 {
-		return ""
+		return none, false
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	var preview any
 	if err := decoder.Decode(&preview); err != nil || preview == nil {
-		return ""
+		return none, false
 	}
-	if object, ok := preview.(map[string]any); ok && len(object) == 0 {
-		return ""
+	arguments, ok := preview.(map[string]any)
+	if !ok {
+		arguments = map[string]any{"value": preview}
+	}
+	if len(arguments) == 0 {
+		return none, false
+	}
+	names := slices.Sorted(maps.Keys(arguments))
+	fields := make([]textObject, 0, min(len(names), maxArgumentFields))
+	for i, name := range names {
+		if i == maxArgumentFields-1 && len(names) > maxArgumentFields {
+			fields = append(fields, textObject{Type: "mrkdwn", Text: fmt.Sprintf("*More*\n%d more arguments, in Speakeasy", len(names)-i)})
+			break
+		}
+		fields = append(fields, textObject{Type: "mrkdwn", Text: "*" + escape(truncate(name, maxArgumentNameChars)) + "*\n" + argumentValue(arguments[name])})
+	}
+	return block{Type: "section", BlockID: "", Text: &textObject{Type: "mrkdwn", Text: "*Arguments*"}, Fields: fields, Elements: nil}, true
+}
+
+// argumentValue renders one argument. Text reads as text; numbers, booleans,
+// null and nested values read as compact JSON in code, so the string "true"
+// and the boolean true look different.
+func argumentValue(value any) string {
+	if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+		return escape(truncate(text, maxArgumentValueChars))
 	}
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(preview); err != nil {
-		return ""
+	if err := encoder.Encode(value); err != nil {
+		return "_cannot show this value_"
 	}
-	// A code fence inside the arguments would end the block early.
-	text := strings.ReplaceAll(strings.TrimSpace(buf.String()), "```", "'''")
-	return escape(truncate(text, maxArgumentsChars))
+	// A backtick inside the value would end the code span early.
+	code := strings.ReplaceAll(strings.TrimSpace(buf.String()), "`", "'")
+	return "`" + escape(truncate(code, maxArgumentValueChars)) + "`"
 }
 
 func mrkdwnSection(text string) block {
