@@ -2089,6 +2089,14 @@ VALUES (
     (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = @remote_session_client_id)
 );
 
+-- name: ListUserSessionCredentialsForSubjectFixture :many
+-- Test-only fixture: every session row of one subject, oldest first, with the
+-- credential it belongs to, so a test can follow refresh rotation.
+SELECT id, COALESCE(credential_id, id)::uuid AS credential_id, deleted
+FROM user_sessions
+WHERE subject_urn = @subject_urn
+ORDER BY created_at, id;
+
 -- name: CountDatabasesWithPrefixFixture :one
 -- Databases whose name starts with a prefix, so a test can show clones are dropped.
 SELECT count(*)::bigint AS databases FROM pg_catalog.pg_database

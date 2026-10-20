@@ -3682,6 +3682,41 @@ func (q *Queries) ListSignInRevocationDeliveriesFixture(ctx context.Context, org
 	return items, nil
 }
 
+const listUserSessionCredentialsForSubjectFixture = `-- name: ListUserSessionCredentialsForSubjectFixture :many
+SELECT id, COALESCE(credential_id, id)::uuid AS credential_id, deleted
+FROM user_sessions
+WHERE subject_urn = $1
+ORDER BY created_at, id
+`
+
+type ListUserSessionCredentialsForSubjectFixtureRow struct {
+	ID           uuid.UUID
+	CredentialID uuid.UUID
+	Deleted      bool
+}
+
+// Test-only fixture: every session row of one subject, oldest first, with the
+// credential it belongs to, so a test can follow refresh rotation.
+func (q *Queries) ListUserSessionCredentialsForSubjectFixture(ctx context.Context, subjectUrn urn.SessionSubject) ([]ListUserSessionCredentialsForSubjectFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionCredentialsForSubjectFixture, subjectUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionCredentialsForSubjectFixtureRow
+	for rows.Next() {
+		var i ListUserSessionCredentialsForSubjectFixtureRow
+		if err := rows.Scan(&i.ID, &i.CredentialID, &i.Deleted); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockExternalOAuthMetadataNowaitFixture = `-- name: LockExternalOAuthMetadataNowaitFixture :one
 SELECT id FROM external_oauth_server_metadata WHERE id = $1 AND project_id = $2 FOR UPDATE NOWAIT
 `
