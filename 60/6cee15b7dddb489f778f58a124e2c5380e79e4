@@ -1,0 +1,16 @@
+server/internal/access/directory_role_inventory_test.go
+  h_9630b74bdac540 9,19,23,309,321-332,341-345,358
+server/internal/auth/sessions/support_command.go
+  h_9630b74bdac540 23-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "606cee15b7dddb489f778f58a124e2c5380e79e4",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
