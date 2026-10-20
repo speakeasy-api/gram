@@ -5,23 +5,32 @@
 package mcp_test
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const integrationRedirectURI = "http://localhost:8080/callback"
@@ -443,4 +452,185 @@ func TestServePublic_ExternalOAuth21_ExpiredUpstreamJWTStillForwarded(t *testing
 	require.NoError(t, err, "external/passthrough mode must NOT validate JWT claims; expired upstream JWT should be forwarded")
 	require.Empty(t, w.Header().Get("WWW-Authenticate"),
 		"WWW-Authenticate must NOT be set in passthrough mode regardless of bearer freshness")
+}
+
+// TestServePublic_ExternalOAuth_UpstreamUnauthorizedChallenges proves that
+// when the upstream API rejects a forwarded bearer, tools/call answers with an
+// invalid_token challenge instead of an HTTP 200 isError result, so the MCP
+// client refreshes or reauthorizes.
+func TestServePublic_ExternalOAuth_UpstreamUnauthorizedChallenges(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	var upstreamAuth atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamAuth.Store(r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"message":"token expired"}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	result := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug:     "ext-oauth-upstream-401",
+		IsPublic: true,
+	})
+	addUpstreamTool(t, ctx, ti, result.Toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, upstream.URL, deployments_repo.CreateHTTPSecurityParams{
+		Key:          "upstream_oauth",
+		Type:         pgtype.Text{String: "oauth2", Valid: true},
+		EnvVariables: []string{"UPSTREAM_OAUTH_ACCESS_TOKEN"},
+		OauthTypes:   []string{"authorization_code"},
+	})
+
+	slug := result.Toolset.McpSlug.String
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeUpstreamToolCallBody(t), "revoked-upstream-token", nil)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	got, _ := upstreamAuth.Load().(string)
+	require.Equal(t, "Bearer revoked-upstream-token", got, "the bearer must still be forwarded upstream")
+	challenge := w.Header().Get("WWW-Authenticate")
+	require.Contains(t, challenge, `resource_metadata="`)
+	require.Contains(t, challenge, "/.well-known/oauth-protected-resource/mcp/"+slug)
+	require.Contains(t, challenge, `error="invalid_token"`)
+}
+
+// TestServePublic_ExternalOAuth_UnrelatedUpstreamUnauthorizedKeepsBearer proves
+// that an upstream 401 for a credential other than the caller's bearer stays an
+// isError result, since reauthorizing could not fix it.
+func TestServePublic_ExternalOAuth_UnrelatedUpstreamUnauthorizedKeepsBearer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	var upstreamAuth, upstreamAPIKey atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamAuth.Store(r.Header.Get("Authorization"))
+		upstreamAPIKey.Store(r.Header.Get("X-Api-Key"))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"message":"invalid api key"}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	result := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug:     "ext-oauth-apikey-401",
+		IsPublic: true,
+	})
+	addUpstreamTool(t, ctx, ti, result.Toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, upstream.URL, deployments_repo.CreateHTTPSecurityParams{
+		Key:          "upstream_api_key",
+		Type:         pgtype.Text{String: "apiKey", Valid: true},
+		Name:         pgtype.Text{String: "X-Api-Key", Valid: true},
+		InPlacement:  pgtype.Text{String: "header", Valid: true},
+		EnvVariables: []string{"UPSTREAM_API_KEY"},
+	})
+
+	w, err := servePublicHTTP(t, t.Context(), ti, result.Toolset.McpSlug.String, makeUpstreamToolCallBody(t), "valid-oauth-token", map[string]string{
+		"MCP-UPSTREAM-API-KEY": "invalid-api-key",
+	})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
+
+	gotKey, _ := upstreamAPIKey.Load().(string)
+	require.Equal(t, "invalid-api-key", gotKey, "the API key must be what the upstream rejected")
+	gotAuth, _ := upstreamAuth.Load().(string)
+	require.Empty(t, gotAuth, "an API-key tool must not carry the caller's bearer")
+
+	var response struct {
+		Result struct {
+			IsError bool `json:"isError"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.True(t, response.Result.IsError)
+}
+
+func makeUpstreamToolCallBody(t *testing.T) []byte {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": "passthrough_tool", "arguments": map[string]any{}},
+	})
+	require.NoError(t, err)
+	return body
+}
+
+// addUpstreamTool attaches an HTTP tool served from serverURL and secured by
+// the given scheme to the toolset.
+func addUpstreamTool(t *testing.T, ctx context.Context, ti *testInstance, toolsetID, projectID uuid.UUID, orgID, serverURL string, security deployments_repo.CreateHTTPSecurityParams) {
+	t.Helper()
+
+	deployments := deployments_repo.New(ti.conn)
+	deploymentID, err := deployments.InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		UserID:         "test-user",
+		IdempotencyKey: uuid.New().String(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, deployments.CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
+		DeploymentID: deploymentID,
+		Status:       "completed",
+	}))
+
+	toolURN := urn.NewTool(urn.ToolKindHTTP, "passthrough", uuid.New().String()[:8])
+	_, err = deployments.CreateOpenAPIv3ToolDefinition(ctx, deployments_repo.CreateOpenAPIv3ToolDefinitionParams{
+		ProjectID:           projectID,
+		DeploymentID:        deploymentID,
+		Openapiv3DocumentID: uuid.NullUUID{},
+		ToolUrn:             toolURN,
+		Name:                "passthrough_tool",
+		UntruncatedName:     pgtype.Text{},
+		Openapiv3Operation:  pgtype.Text{},
+		Summary:             "Passthrough tool",
+		Description:         "A tool calling the upstream API",
+		Tags:                []string{},
+		Confirm:             pgtype.Text{},
+		ConfirmPrompt:       pgtype.Text{},
+		XGram:               pgtype.Bool{},
+		OriginalName:        pgtype.Text{},
+		OriginalSummary:     pgtype.Text{},
+		OriginalDescription: pgtype.Text{},
+		Security:            []byte(`[{"` + security.Key + `": []}]`),
+		HttpMethod:          "GET",
+		Path:                "/items",
+		SchemaVersion:       "3.0.0",
+		Schema:              []byte(`{}`),
+		HeaderSettings:      []byte(`{}`),
+		QuerySettings:       []byte(`{}`),
+		PathSettings:        []byte(`{}`),
+		ServerEnvVar:        "PASSTHROUGH_SERVER_URL",
+		DefaultServerUrl:    pgtype.Text{String: serverURL, Valid: true},
+		RequestContentType:  pgtype.Text{},
+		ResponseFilter:      nil,
+		ReadOnlyHint:        pgtype.Bool{},
+		DestructiveHint:     pgtype.Bool{},
+		IdempotentHint:      pgtype.Bool{},
+		OpenWorldHint:       pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	security.DeploymentID = deploymentID
+	security.ProjectID = uuid.NullUUID{UUID: projectID, Valid: true}
+	_, err = deployments.CreateHTTPSecurity(ctx, security)
+	require.NoError(t, err)
+
+	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
+		ToolsetID:     toolsetID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{toolURN},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
 }
