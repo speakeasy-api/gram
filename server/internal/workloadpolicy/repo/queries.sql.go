@@ -635,6 +635,47 @@ func (q *Queries) GetWorkloadAgentAssignmentForSubject(ctx context.Context, arg 
 	return items, nil
 }
 
+const getWorkloadDeviceJoinToken = `-- name: GetWorkloadDeviceJoinToken :one
+SELECT id, agent_id, created_by_user_id, created_at, expires_at, consumed_at, consumed_by_subject, deleted_at
+FROM workload_device_join_tokens
+WHERE organization_id = $1
+  AND id = $2
+`
+
+type GetWorkloadDeviceJoinTokenParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type GetWorkloadDeviceJoinTokenRow struct {
+	ID                uuid.UUID
+	AgentID           uuid.UUID
+	CreatedByUserID   string
+	CreatedAt         pgtype.Timestamptz
+	ExpiresAt         pgtype.Timestamptz
+	ConsumedAt        pgtype.Timestamptz
+	ConsumedBySubject pgtype.Text
+	DeletedAt         pgtype.Timestamptz
+}
+
+// One join token, revoked or not, so a refused revocation can say why. Never
+// selects token_hash.
+func (q *Queries) GetWorkloadDeviceJoinToken(ctx context.Context, arg GetWorkloadDeviceJoinTokenParams) (GetWorkloadDeviceJoinTokenRow, error) {
+	row := q.db.QueryRow(ctx, getWorkloadDeviceJoinToken, arg.OrganizationID, arg.ID)
+	var i GetWorkloadDeviceJoinTokenRow
+	err := row.Scan(
+		&i.ID,
+		&i.AgentID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.ConsumedBySubject,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const getWorkloadIssuer = `-- name: GetWorkloadIssuer :one
 SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
@@ -777,6 +818,73 @@ func (q *Queries) ListWorkloadAdmissions(ctx context.Context, arg ListWorkloadAd
 	return items, nil
 }
 
+const listWorkloadDeviceJoinTokens = `-- name: ListWorkloadDeviceJoinTokens :many
+SELECT id, agent_id, created_by_user_id, created_at, expires_at, consumed_at, consumed_by_subject, deleted_at
+FROM workload_device_join_tokens
+WHERE organization_id = $1
+  AND ($2::uuid IS NULL OR agent_id = $2::uuid)
+  AND ($3::uuid IS NULL OR id < $3::uuid)
+ORDER BY id DESC
+LIMIT $4
+`
+
+type ListWorkloadDeviceJoinTokensParams struct {
+	OrganizationID string
+	AgentID        uuid.NullUUID
+	CursorID       uuid.NullUUID
+	PageLimit      int32
+}
+
+type ListWorkloadDeviceJoinTokensRow struct {
+	ID                uuid.UUID
+	AgentID           uuid.UUID
+	CreatedByUserID   string
+	CreatedAt         pgtype.Timestamptz
+	ExpiresAt         pgtype.Timestamptz
+	ConsumedAt        pgtype.Timestamptz
+	ConsumedBySubject pgtype.Text
+	DeletedAt         pgtype.Timestamptz
+}
+
+// An organization's join tokens, newest first, revoked ones included so an
+// administrator can see what was withdrawn. Ids are UUIDv7, so id order is
+// creation order and the cursor is the last id of the previous page. Never
+// selects token_hash. Filtering by agent uses
+// workload_device_join_tokens_agent_idx.
+func (q *Queries) ListWorkloadDeviceJoinTokens(ctx context.Context, arg ListWorkloadDeviceJoinTokensParams) ([]ListWorkloadDeviceJoinTokensRow, error) {
+	rows, err := q.db.Query(ctx, listWorkloadDeviceJoinTokens,
+		arg.OrganizationID,
+		arg.AgentID,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorkloadDeviceJoinTokensRow
+	for rows.Next() {
+		var i ListWorkloadDeviceJoinTokensRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.CreatedByUserID,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.ConsumedAt,
+			&i.ConsumedBySubject,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkloadIssuers = `-- name: ListWorkloadIssuers :many
 
 SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
@@ -867,6 +975,53 @@ func (q *Queries) LockWorkloadIssuerForWrite(ctx context.Context, arg LockWorklo
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const revokeWorkloadDeviceJoinToken = `-- name: RevokeWorkloadDeviceJoinToken :one
+UPDATE workload_device_join_tokens
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND id = $2
+  AND agent_id = $3
+  AND consumed_at IS NULL
+  AND deleted IS FALSE
+RETURNING id, agent_id, created_by_user_id, created_at, expires_at, consumed_at, consumed_by_subject, deleted_at
+`
+
+type RevokeWorkloadDeviceJoinTokenParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+	AgentID        uuid.UUID
+}
+
+type RevokeWorkloadDeviceJoinTokenRow struct {
+	ID                uuid.UUID
+	AgentID           uuid.UUID
+	CreatedByUserID   string
+	CreatedAt         pgtype.Timestamptz
+	ExpiresAt         pgtype.Timestamptz
+	ConsumedAt        pgtype.Timestamptz
+	ConsumedBySubject pgtype.Text
+	DeletedAt         pgtype.Timestamptz
+}
+
+// Revokes a token only while it is unspent and live, in the statement that
+// checks it, so a revocation racing a redemption or a second revocation
+// updates nothing. Scoped by the agent the caller was authorized against.
+func (q *Queries) RevokeWorkloadDeviceJoinToken(ctx context.Context, arg RevokeWorkloadDeviceJoinTokenParams) (RevokeWorkloadDeviceJoinTokenRow, error) {
+	row := q.db.QueryRow(ctx, revokeWorkloadDeviceJoinToken, arg.OrganizationID, arg.ID, arg.AgentID)
+	var i RevokeWorkloadDeviceJoinTokenRow
+	err := row.Scan(
+		&i.ID,
+		&i.AgentID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.ConsumedBySubject,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const softDeleteWorkloadAdmission = `-- name: SoftDeleteWorkloadAdmission :one

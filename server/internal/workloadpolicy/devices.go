@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -78,6 +79,23 @@ func (s *Service) requireDeviceEnrollmentGrant(ctx context.Context, db accessrep
 	return nil
 }
 
+// requireDeviceJoinAgentAuthority holds a person to the authority over an agent
+// that issuing or revoking its join tokens needs. An enrolled device acts under
+// the agent's whole policy, which is what authorizing the agent means; owning
+// it is the other way to hold that. ownerUserID is empty when the agent is no
+// longer readable, which leaves agent:authorize as the only way through.
+func (s *Service) requireDeviceJoinAgentAuthority(ctx context.Context, userID string, agentID uuid.UUID, ownerUserID string) error {
+	if ownerUserID != "" && ownerUserID == userID {
+		return nil
+	}
+	return s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeAgentAuthorize,
+		ResourceKind: authz.ResourceKindAgent,
+		ResourceID:   agentID.String(),
+		Dimensions:   nil,
+	})
+}
+
 func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.CreateDeviceJoinTokenPayload) (*gen.WorkloadDeviceJoinToken, error) {
 	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
 	if err != nil {
@@ -106,17 +124,8 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 		return nil, oops.E(oops.CodeFailedPrecondition, nil, "the agent is suspended, revoked, or awaiting a new owner, so no device can enroll under it")
 	}
 
-	// An enrolled device acts under the agent's whole policy, which is what
-	// authorizing the agent means. Owning it is the other way to hold that.
-	if agent.OwnerUserID != authCtx.UserID {
-		if err := s.authz.Require(ctx, authz.Check{
-			Scope:        authz.ScopeAgentAuthorize,
-			ResourceKind: authz.ResourceKindAgent,
-			ResourceID:   agent.ID.String(),
-			Dimensions:   nil,
-		}); err != nil {
-			return nil, err
-		}
+	if err := s.requireDeviceJoinAgentAuthority(ctx, authCtx.UserID, agent.ID, agent.OwnerUserID); err != nil {
+		return nil, err
 	}
 
 	if err := s.requireDeviceEnrollmentGrant(ctx, s.db, t.organizationID, agent.ID); err != nil {
@@ -171,6 +180,158 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 		Token:     token,
 		ExpiresAt: row.ExpiresAt.Time.UTC().Format(time.RFC3339),
 	}, nil
+}
+
+func (s *Service) ListDeviceJoinTokens(ctx context.Context, payload *gen.ListDeviceJoinTokensPayload) (*gen.WorkloadDeviceJoinTokenList, error) {
+	t, err := s.resolve(ctx, authz.ScopeWorkloadRead)
+	if err != nil {
+		return nil, err
+	}
+
+	agentID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if payload.AgentID != nil && *payload.AgentID != "" {
+		parsed, err := uuid.Parse(*payload.AgentID)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "agent_id is not a valid uuid")
+		}
+		agentID = uuid.NullUUID{UUID: parsed, Valid: true}
+	}
+
+	cursor := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if payload.Cursor != nil && *payload.Cursor != "" {
+		parsed, err := uuid.Parse(*payload.Cursor)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid cursor")
+		}
+		cursor = uuid.NullUUID{UUID: parsed, Valid: true}
+	}
+
+	// The design bounds limit to [1,200] and Goa fills in its default.
+	limit := payload.Limit
+
+	rows, err := s.repo.ListWorkloadDeviceJoinTokens(ctx, repo.ListWorkloadDeviceJoinTokensParams{
+		OrganizationID: t.organizationID,
+		AgentID:        agentID,
+		CursorID:       cursor,
+		PageLimit:      int32(limit), //nolint:gosec // design bounds limit to [1,200]
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing join tokens").LogError(ctx, s.logger)
+	}
+
+	var nextCursor *string
+	if len(rows) == limit {
+		nextCursor = new(rows[len(rows)-1].ID.String())
+	}
+
+	return &gen.WorkloadDeviceJoinTokenList{
+		Items:      mv.BuildWorkloadDeviceJoinTokenListView(rows, time.Now()),
+		NextCursor: nextCursor,
+	}, nil
+}
+
+func (s *Service) RevokeDeviceJoinToken(ctx context.Context, payload *gen.RevokeDeviceJoinTokenPayload) (*gen.WorkloadDeviceJoinTokenSummary, error) {
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	if err != nil {
+		return nil, err
+	}
+	// As for creation: the revocation is recorded against a person, and a
+	// principal-backed key carries none.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeForbidden, nil, "a device join token must be revoked by a person, not an agent credential")
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "id is not a valid uuid")
+	}
+
+	joinToken, err := s.repo.GetWorkloadDeviceJoinToken(ctx, repo.GetWorkloadDeviceJoinTokenParams{OrganizationID: t.organizationID, ID: id})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "join token not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading join token").LogError(ctx, s.logger)
+	}
+
+	// The agent may since have been deleted. Its tokens can still be revoked,
+	// by someone with agent:authorize on it, since its owner is no longer known.
+	agentName := joinToken.AgentID.String()
+	ownerUserID := ""
+	agent, err := s.repo.GetDeviceJoinAgent(ctx, repo.GetDeviceJoinAgentParams{OrganizationID: t.organizationID, ID: joinToken.AgentID})
+	switch {
+	case err == nil:
+		agentName, ownerUserID = agent.Name, agent.OwnerUserID
+	case !errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
+	}
+	if err := s.requireDeviceJoinAgentAuthority(ctx, authCtx.UserID, joinToken.AgentID, ownerUserID); err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error starting transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	q := repo.New(dbtx)
+
+	revoked, err := q.RevokeWorkloadDeviceJoinToken(ctx, repo.RevokeWorkloadDeviceJoinTokenParams{
+		OrganizationID: t.organizationID,
+		ID:             joinToken.ID,
+		AgentID:        joinToken.AgentID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Read again rather than trusting the earlier read: a redemption or
+		// revocation may have landed in between.
+		current, err := q.GetWorkloadDeviceJoinToken(ctx, repo.GetWorkloadDeviceJoinTokenParams{OrganizationID: t.organizationID, ID: joinToken.ID})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error reading join token").LogError(ctx, s.logger)
+		}
+		return nil, unrevokableDeviceJoinToken(current)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error revoking join token").LogError(ctx, s.logger)
+	}
+
+	if err := s.audit.LogWorkloadDeviceJoinTokenRevoke(ctx, dbtx, audit.LogWorkloadDeviceJoinTokenRevokeEvent{
+		OrganizationID:       t.organizationID,
+		Actor:                t.actor,
+		ActorDisplayName:     t.actorEmail,
+		ActorSlug:            nil,
+		JoinTokenURN:         urn.NewWorkloadDeviceJoinToken(revoked.ID),
+		JoinTokenDisplayName: agentName,
+		JoinTokenSnapshotBefore: &audit.WorkloadDeviceJoinTokenSnapshot{
+			AgentID:       revoked.AgentID.String(),
+			ExpiresAt:     revoked.ExpiresAt.Time.UTC().Format(time.RFC3339),
+			DeviceSubject: "",
+			Hostname:      "",
+		},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error recording join token revocation").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error committing transaction").LogError(ctx, s.logger)
+	}
+
+	return mv.BuildWorkloadDeviceJoinTokenView(repo.GetWorkloadDeviceJoinTokenRow(revoked), time.Now()), nil
+}
+
+// unrevokableDeviceJoinToken explains why a token that exists could not be
+// revoked. Both cases are a failed precondition rather than not found: the
+// token is there, it is just past the point revoking can change anything.
+func unrevokableDeviceJoinToken(row repo.GetWorkloadDeviceJoinTokenRow) error {
+	switch {
+	case row.DeletedAt.Valid:
+		return oops.E(oops.CodeFailedPrecondition, nil, "the join token is already revoked")
+	case row.ConsumedAt.Valid:
+		return oops.E(oops.CodeFailedPrecondition, nil, "the join token was already redeemed; revoking it would not remove the device it enrolled, so withdraw that device instead")
+	default:
+		return oops.E(oops.CodeFailedPrecondition, nil, "the join token can no longer be revoked")
+	}
 }
 
 func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevicePayload) (*gen.WorkloadDeviceRegistration, error) {

@@ -231,6 +231,40 @@ type CreateDeviceJoinTokenResponseBody struct {
 	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
 }
 
+// ListDeviceJoinTokensResponseBody is the type of the "workloadIdentities"
+// service "listDeviceJoinTokens" endpoint HTTP response body.
+type ListDeviceJoinTokensResponseBody struct {
+	// Join tokens, newest first.
+	Items []*WorkloadDeviceJoinTokenSummaryResponseBody `form:"items" json:"items" xml:"items"`
+	// Cursor for the next page. Omitted on the last page.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// RevokeDeviceJoinTokenResponseBody is the type of the "workloadIdentities"
+// service "revokeDeviceJoinToken" endpoint HTTP response body.
+type RevokeDeviceJoinTokenResponseBody struct {
+	// The join token id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The agent a device enrolled with this token inherits its policy from.
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+	// The person who created the token.
+	CreatedByUserID string `form:"created_by_user_id" json:"created_by_user_id" xml:"created_by_user_id"`
+	CreatedAt       string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the token stops being redeemable.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+	// When a device redeemed the token. Absent until redeemed.
+	ConsumedAt *string `form:"consumed_at,omitempty" json:"consumed_at,omitempty" xml:"consumed_at,omitempty"`
+	// The workload subject, device:<uuid>, of the device that redeemed the token.
+	// Absent until redeemed.
+	ConsumedBySubject *string `form:"consumed_by_subject,omitempty" json:"consumed_by_subject,omitempty" xml:"consumed_by_subject,omitempty"`
+	// When the token was revoked. Absent unless revoked.
+	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
+	// Derived in this order: revoked when revoked_at is set, redeemed when
+	// consumed_at is set, expired when expires_at has passed, otherwise active.
+	// Only an active token can enroll a device.
+	Status string `form:"status" json:"status" xml:"status"`
+}
+
 // RegisterDeviceResponseBody is the type of the "workloadIdentities" service
 // "registerDevice" endpoint HTTP response body.
 type RegisterDeviceResponseBody struct {
@@ -2311,6 +2345,386 @@ type CreateDeviceJoinTokenGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListDeviceJoinTokensUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "listDeviceJoinTokens" endpoint HTTP response
+// body for the "unauthorized" error.
+type ListDeviceJoinTokensUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDeviceJoinTokensForbiddenResponseBody is the type of the
+// "workloadIdentities" service "listDeviceJoinTokens" endpoint HTTP response
+// body for the "forbidden" error.
+type ListDeviceJoinTokensForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDeviceJoinTokensBadRequestResponseBody is the type of the
+// "workloadIdentities" service "listDeviceJoinTokens" endpoint HTTP response
+// body for the "bad_request" error.
+type ListDeviceJoinTokensBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDeviceJoinTokensNotFoundResponseBody is the type of the
+// "workloadIdentities" service "listDeviceJoinTokens" endpoint HTTP response
+// body for the "not_found" error.
+type ListDeviceJoinTokensNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDeviceJoinTokensConflictResponseBody is the type of the
+// "workloadIdentities" service "listDeviceJoinTokens" endpoint HTTP response
+// body for the "conflict" error.
+type ListDeviceJoinTokensConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDeviceJoinTokensUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "listDeviceJoinTokens" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ListDeviceJoinTokensUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDeviceJoinTokensInvalidResponseBody is the type of the
+// "workloadIdentities" service "listDeviceJoinTokens" endpoint HTTP response
+// body for the "invalid" error.
+type ListDeviceJoinTokensInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDeviceJoinTokensInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "listDeviceJoinTokens" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListDeviceJoinTokensInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDeviceJoinTokensUnexpectedResponseBody is the type of the
+// "workloadIdentities" service "listDeviceJoinTokens" endpoint HTTP response
+// body for the "unexpected" error.
+type ListDeviceJoinTokensUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDeviceJoinTokensGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "listDeviceJoinTokens" endpoint HTTP response
+// body for the "gateway_error" error.
+type ListDeviceJoinTokensGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeDeviceJoinTokenUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "revokeDeviceJoinToken" endpoint HTTP response
+// body for the "unauthorized" error.
+type RevokeDeviceJoinTokenUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeDeviceJoinTokenForbiddenResponseBody is the type of the
+// "workloadIdentities" service "revokeDeviceJoinToken" endpoint HTTP response
+// body for the "forbidden" error.
+type RevokeDeviceJoinTokenForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeDeviceJoinTokenBadRequestResponseBody is the type of the
+// "workloadIdentities" service "revokeDeviceJoinToken" endpoint HTTP response
+// body for the "bad_request" error.
+type RevokeDeviceJoinTokenBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeDeviceJoinTokenNotFoundResponseBody is the type of the
+// "workloadIdentities" service "revokeDeviceJoinToken" endpoint HTTP response
+// body for the "not_found" error.
+type RevokeDeviceJoinTokenNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeDeviceJoinTokenConflictResponseBody is the type of the
+// "workloadIdentities" service "revokeDeviceJoinToken" endpoint HTTP response
+// body for the "conflict" error.
+type RevokeDeviceJoinTokenConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeDeviceJoinTokenUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "revokeDeviceJoinToken" endpoint HTTP response
+// body for the "unsupported_media" error.
+type RevokeDeviceJoinTokenUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeDeviceJoinTokenInvalidResponseBody is the type of the
+// "workloadIdentities" service "revokeDeviceJoinToken" endpoint HTTP response
+// body for the "invalid" error.
+type RevokeDeviceJoinTokenInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeDeviceJoinTokenInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "revokeDeviceJoinToken" endpoint HTTP response
+// body for the "invariant_violation" error.
+type RevokeDeviceJoinTokenInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeDeviceJoinTokenUnexpectedResponseBody is the type of the
+// "workloadIdentities" service "revokeDeviceJoinToken" endpoint HTTP response
+// body for the "unexpected" error.
+type RevokeDeviceJoinTokenUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeDeviceJoinTokenGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "revokeDeviceJoinToken" endpoint HTTP response
+// body for the "gateway_error" error.
+type RevokeDeviceJoinTokenGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RegisterDeviceUnauthorizedResponseBody is the type of the
 // "workloadIdentities" service "registerDevice" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -2743,6 +3157,31 @@ type WorkloadTokenEndpointResponseBody struct {
 	McpHost string `form:"mcp_host" json:"mcp_host" xml:"mcp_host"`
 }
 
+// WorkloadDeviceJoinTokenSummaryResponseBody is used to define fields on
+// response body types.
+type WorkloadDeviceJoinTokenSummaryResponseBody struct {
+	// The join token id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The agent a device enrolled with this token inherits its policy from.
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+	// The person who created the token.
+	CreatedByUserID string `form:"created_by_user_id" json:"created_by_user_id" xml:"created_by_user_id"`
+	CreatedAt       string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the token stops being redeemable.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+	// When a device redeemed the token. Absent until redeemed.
+	ConsumedAt *string `form:"consumed_at,omitempty" json:"consumed_at,omitempty" xml:"consumed_at,omitempty"`
+	// The workload subject, device:<uuid>, of the device that redeemed the token.
+	// Absent until redeemed.
+	ConsumedBySubject *string `form:"consumed_by_subject,omitempty" json:"consumed_by_subject,omitempty" xml:"consumed_by_subject,omitempty"`
+	// When the token was revoked. Absent unless revoked.
+	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
+	// Derived in this order: revoked when revoked_at is set, redeemed when
+	// consumed_at is set, expired when expires_at has passed, otherwise active.
+	// Only an active token can enroll a device.
+	Status string `form:"status" json:"status" xml:"status"`
+}
+
 // NewListResponseBody builds the HTTP response body from the result of the
 // "list" endpoint of the "workloadIdentities" service.
 func NewListResponseBody(res *workloadidentities.WorkloadIdentityPolicy) *ListResponseBody {
@@ -3025,6 +3464,46 @@ func NewCreateDeviceJoinTokenResponseBody(res *workloadidentities.WorkloadDevice
 	body := &CreateDeviceJoinTokenResponseBody{
 		Token:     res.Token,
 		ExpiresAt: res.ExpiresAt,
+	}
+	return body
+}
+
+// NewListDeviceJoinTokensResponseBody builds the HTTP response body from the
+// result of the "listDeviceJoinTokens" endpoint of the "workloadIdentities"
+// service.
+func NewListDeviceJoinTokensResponseBody(res *workloadidentities.WorkloadDeviceJoinTokenList) *ListDeviceJoinTokensResponseBody {
+	body := &ListDeviceJoinTokensResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Items != nil {
+		body.Items = make([]*WorkloadDeviceJoinTokenSummaryResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalWorkloadidentitiesWorkloadDeviceJoinTokenSummaryToWorkloadDeviceJoinTokenSummaryResponseBody(val)
+		}
+	} else {
+		body.Items = []*WorkloadDeviceJoinTokenSummaryResponseBody{}
+	}
+	return body
+}
+
+// NewRevokeDeviceJoinTokenResponseBody builds the HTTP response body from the
+// result of the "revokeDeviceJoinToken" endpoint of the "workloadIdentities"
+// service.
+func NewRevokeDeviceJoinTokenResponseBody(res *workloadidentities.WorkloadDeviceJoinTokenSummary) *RevokeDeviceJoinTokenResponseBody {
+	body := &RevokeDeviceJoinTokenResponseBody{
+		ID:                res.ID,
+		AgentID:           res.AgentID,
+		CreatedByUserID:   res.CreatedByUserID,
+		CreatedAt:         res.CreatedAt,
+		ExpiresAt:         res.ExpiresAt,
+		ConsumedAt:        res.ConsumedAt,
+		ConsumedBySubject: res.ConsumedBySubject,
+		RevokedAt:         res.RevokedAt,
+		Status:            res.Status,
 	}
 	return body
 }
@@ -4651,6 +5130,306 @@ func NewCreateDeviceJoinTokenGatewayErrorResponseBody(res *goa.ServiceError) *Cr
 	return body
 }
 
+// NewListDeviceJoinTokensUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listDeviceJoinTokens" endpoint of the
+// "workloadIdentities" service.
+func NewListDeviceJoinTokensUnauthorizedResponseBody(res *goa.ServiceError) *ListDeviceJoinTokensUnauthorizedResponseBody {
+	body := &ListDeviceJoinTokensUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDeviceJoinTokensForbiddenResponseBody builds the HTTP response body
+// from the result of the "listDeviceJoinTokens" endpoint of the
+// "workloadIdentities" service.
+func NewListDeviceJoinTokensForbiddenResponseBody(res *goa.ServiceError) *ListDeviceJoinTokensForbiddenResponseBody {
+	body := &ListDeviceJoinTokensForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDeviceJoinTokensBadRequestResponseBody builds the HTTP response body
+// from the result of the "listDeviceJoinTokens" endpoint of the
+// "workloadIdentities" service.
+func NewListDeviceJoinTokensBadRequestResponseBody(res *goa.ServiceError) *ListDeviceJoinTokensBadRequestResponseBody {
+	body := &ListDeviceJoinTokensBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDeviceJoinTokensNotFoundResponseBody builds the HTTP response body
+// from the result of the "listDeviceJoinTokens" endpoint of the
+// "workloadIdentities" service.
+func NewListDeviceJoinTokensNotFoundResponseBody(res *goa.ServiceError) *ListDeviceJoinTokensNotFoundResponseBody {
+	body := &ListDeviceJoinTokensNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDeviceJoinTokensConflictResponseBody builds the HTTP response body
+// from the result of the "listDeviceJoinTokens" endpoint of the
+// "workloadIdentities" service.
+func NewListDeviceJoinTokensConflictResponseBody(res *goa.ServiceError) *ListDeviceJoinTokensConflictResponseBody {
+	body := &ListDeviceJoinTokensConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDeviceJoinTokensUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listDeviceJoinTokens" endpoint of the
+// "workloadIdentities" service.
+func NewListDeviceJoinTokensUnsupportedMediaResponseBody(res *goa.ServiceError) *ListDeviceJoinTokensUnsupportedMediaResponseBody {
+	body := &ListDeviceJoinTokensUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDeviceJoinTokensInvalidResponseBody builds the HTTP response body
+// from the result of the "listDeviceJoinTokens" endpoint of the
+// "workloadIdentities" service.
+func NewListDeviceJoinTokensInvalidResponseBody(res *goa.ServiceError) *ListDeviceJoinTokensInvalidResponseBody {
+	body := &ListDeviceJoinTokensInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDeviceJoinTokensInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listDeviceJoinTokens" endpoint of the
+// "workloadIdentities" service.
+func NewListDeviceJoinTokensInvariantViolationResponseBody(res *goa.ServiceError) *ListDeviceJoinTokensInvariantViolationResponseBody {
+	body := &ListDeviceJoinTokensInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDeviceJoinTokensUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listDeviceJoinTokens" endpoint of the
+// "workloadIdentities" service.
+func NewListDeviceJoinTokensUnexpectedResponseBody(res *goa.ServiceError) *ListDeviceJoinTokensUnexpectedResponseBody {
+	body := &ListDeviceJoinTokensUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDeviceJoinTokensGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listDeviceJoinTokens" endpoint of the
+// "workloadIdentities" service.
+func NewListDeviceJoinTokensGatewayErrorResponseBody(res *goa.ServiceError) *ListDeviceJoinTokensGatewayErrorResponseBody {
+	body := &ListDeviceJoinTokensGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeDeviceJoinTokenUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "revokeDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewRevokeDeviceJoinTokenUnauthorizedResponseBody(res *goa.ServiceError) *RevokeDeviceJoinTokenUnauthorizedResponseBody {
+	body := &RevokeDeviceJoinTokenUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeDeviceJoinTokenForbiddenResponseBody builds the HTTP response body
+// from the result of the "revokeDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewRevokeDeviceJoinTokenForbiddenResponseBody(res *goa.ServiceError) *RevokeDeviceJoinTokenForbiddenResponseBody {
+	body := &RevokeDeviceJoinTokenForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeDeviceJoinTokenBadRequestResponseBody builds the HTTP response body
+// from the result of the "revokeDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewRevokeDeviceJoinTokenBadRequestResponseBody(res *goa.ServiceError) *RevokeDeviceJoinTokenBadRequestResponseBody {
+	body := &RevokeDeviceJoinTokenBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeDeviceJoinTokenNotFoundResponseBody builds the HTTP response body
+// from the result of the "revokeDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewRevokeDeviceJoinTokenNotFoundResponseBody(res *goa.ServiceError) *RevokeDeviceJoinTokenNotFoundResponseBody {
+	body := &RevokeDeviceJoinTokenNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeDeviceJoinTokenConflictResponseBody builds the HTTP response body
+// from the result of the "revokeDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewRevokeDeviceJoinTokenConflictResponseBody(res *goa.ServiceError) *RevokeDeviceJoinTokenConflictResponseBody {
+	body := &RevokeDeviceJoinTokenConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeDeviceJoinTokenUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "revokeDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewRevokeDeviceJoinTokenUnsupportedMediaResponseBody(res *goa.ServiceError) *RevokeDeviceJoinTokenUnsupportedMediaResponseBody {
+	body := &RevokeDeviceJoinTokenUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeDeviceJoinTokenInvalidResponseBody builds the HTTP response body
+// from the result of the "revokeDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewRevokeDeviceJoinTokenInvalidResponseBody(res *goa.ServiceError) *RevokeDeviceJoinTokenInvalidResponseBody {
+	body := &RevokeDeviceJoinTokenInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeDeviceJoinTokenInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "revokeDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewRevokeDeviceJoinTokenInvariantViolationResponseBody(res *goa.ServiceError) *RevokeDeviceJoinTokenInvariantViolationResponseBody {
+	body := &RevokeDeviceJoinTokenInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeDeviceJoinTokenUnexpectedResponseBody builds the HTTP response body
+// from the result of the "revokeDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewRevokeDeviceJoinTokenUnexpectedResponseBody(res *goa.ServiceError) *RevokeDeviceJoinTokenUnexpectedResponseBody {
+	body := &RevokeDeviceJoinTokenUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeDeviceJoinTokenGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "revokeDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewRevokeDeviceJoinTokenGatewayErrorResponseBody(res *goa.ServiceError) *RevokeDeviceJoinTokenGatewayErrorResponseBody {
+	body := &RevokeDeviceJoinTokenGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRegisterDeviceUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "registerDevice" endpoint of the "workloadIdentities"
 // service.
@@ -4983,6 +5762,32 @@ func NewCreateDeviceJoinTokenPayload(body *CreateDeviceJoinTokenRequestBody, ses
 	if body.ExpiresInSeconds == nil {
 		v.ExpiresInSeconds = 3600
 	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListDeviceJoinTokensPayload builds a workloadIdentities service
+// listDeviceJoinTokens endpoint payload.
+func NewListDeviceJoinTokensPayload(agentID *string, cursor *string, limit int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListDeviceJoinTokensPayload {
+	v := &workloadidentities.ListDeviceJoinTokensPayload{}
+	v.AgentID = agentID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewRevokeDeviceJoinTokenPayload builds a workloadIdentities service
+// revokeDeviceJoinToken endpoint payload.
+func NewRevokeDeviceJoinTokenPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.RevokeDeviceJoinTokenPayload {
+	v := &workloadidentities.RevokeDeviceJoinTokenPayload{}
+	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

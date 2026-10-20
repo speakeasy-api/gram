@@ -312,6 +312,72 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateWorkloadDeviceJoinToken"}`)
 	})
 
+	Method("listDeviceJoinTokens", func() {
+		Description("List the organization's device join tokens, newest first, optionally for one agent. Revoked tokens are included. Each carries its status but never the token or its hash, which cannot be shown again. Requires workload:read.")
+
+		Payload(func() {
+			Attribute("agent_id", String, "Only tokens that enroll devices under this agent.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("cursor", String, "Pagination cursor from a previous page.")
+			Attribute("limit", Int, "Page size. Defaults to 50, maximum 200.", func() {
+				Minimum(1)
+				Maximum(200)
+				Default(50)
+			})
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadDeviceJoinTokenList)
+
+		HTTP(func() {
+			GET("/rpc/workloadIdentities.listDeviceJoinTokens")
+			Param("agent_id")
+			Param("cursor")
+			Param("limit")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listWorkloadDeviceJoinTokens")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDeviceJoinTokens")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkloadDeviceJoinTokens"}`)
+	})
+
+	Method("revokeDeviceJoinToken", func() {
+		Description("Revoke a device join token that has not been redeemed, so it can no longer enroll a device. A token that was already redeemed or revoked returns a failed precondition; revoking stops future enrollments only and leaves a device the token already enrolled in place. Only a person can revoke one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the token's agent or agent:authorize on it, as creating one does.")
+
+		Payload(func() {
+			Attribute("id", String, "The join token id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadDeviceJoinTokenSummary)
+
+		HTTP(func() {
+			DELETE("/rpc/workloadIdentities.revokeDeviceJoinToken")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revokeWorkloadDeviceJoinToken")
+		Meta("openapi:extension:x-speakeasy-name-override", "revokeDeviceJoinToken")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeWorkloadDeviceJoinToken"}`)
+	})
+
 	Method("registerDevice", func() {
 		Description("Enroll a device with its public key, redeeming a join token. No session or API key: the single-use join token is the credential, and an unknown, expired, or already redeemed token returns 401. A key already registered to another device returns 409, and an agent whose policy no longer grants org:device_agent_sync returns a failed precondition without spending the token. In one transaction the device's key is registered, the device is admitted under the organization's Speakeasy device issuer, and it is assigned the token's agent.")
 
@@ -350,6 +416,43 @@ var WorkloadDeviceJoinToken = Type("WorkloadDeviceJoinToken", func() {
 		Format(FormatDateTime)
 	})
 	Required("token", "expires_at")
+})
+
+var WorkloadDeviceJoinTokenSummary = Type("WorkloadDeviceJoinTokenSummary", func() {
+	Description("A device join token as an administrator sees it after creation. The token and its hash are never included.")
+
+	Attribute("id", String, "The join token id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("agent_id", String, "The agent a device enrolled with this token inherits its policy from.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("created_by_user_id", String, "The person who created the token.")
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("expires_at", String, "When the token stops being redeemable.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("consumed_at", String, "When a device redeemed the token. Absent until redeemed.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("consumed_by_subject", String, "The workload subject, device:<uuid>, of the device that redeemed the token. Absent until redeemed.")
+	Attribute("revoked_at", String, "When the token was revoked. Absent unless revoked.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("status", String, "Derived in this order: revoked when revoked_at is set, redeemed when consumed_at is set, expired when expires_at has passed, otherwise active. Only an active token can enroll a device.", func() {
+		Enum("active", "redeemed", "expired", "revoked")
+	})
+
+	Required("id", "agent_id", "created_by_user_id", "created_at", "expires_at", "status")
+})
+
+var WorkloadDeviceJoinTokenList = Type("WorkloadDeviceJoinTokenList", func() {
+	Attribute("items", ArrayOf(WorkloadDeviceJoinTokenSummary), "Join tokens, newest first.")
+	Attribute("next_cursor", String, "Cursor for the next page. Omitted on the last page.")
+
+	Required("items")
 })
 
 var WorkloadDeviceRegistration = Type("WorkloadDeviceRegistration", func() {

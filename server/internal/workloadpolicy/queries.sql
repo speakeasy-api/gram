@@ -277,6 +277,41 @@ WHERE token_hash = @token_hash
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: ListWorkloadDeviceJoinTokens :many
+-- An organization's join tokens, newest first, revoked ones included so an
+-- administrator can see what was withdrawn. Ids are UUIDv7, so id order is
+-- creation order and the cursor is the last id of the previous page. Never
+-- selects token_hash. Filtering by agent uses
+-- workload_device_join_tokens_agent_idx.
+SELECT id, agent_id, created_by_user_id, created_at, expires_at, consumed_at, consumed_by_subject, deleted_at
+FROM workload_device_join_tokens
+WHERE organization_id = @organization_id
+  AND (sqlc.narg('agent_id')::uuid IS NULL OR agent_id = sqlc.narg('agent_id')::uuid)
+  AND (sqlc.narg('cursor_id')::uuid IS NULL OR id < sqlc.narg('cursor_id')::uuid)
+ORDER BY id DESC
+LIMIT @page_limit;
+
+-- name: GetWorkloadDeviceJoinToken :one
+-- One join token, revoked or not, so a refused revocation can say why. Never
+-- selects token_hash.
+SELECT id, agent_id, created_by_user_id, created_at, expires_at, consumed_at, consumed_by_subject, deleted_at
+FROM workload_device_join_tokens
+WHERE organization_id = @organization_id
+  AND id = @id;
+
+-- name: RevokeWorkloadDeviceJoinToken :one
+-- Revokes a token only while it is unspent and live, in the statement that
+-- checks it, so a revocation racing a redemption or a second revocation
+-- updates nothing. Scoped by the agent the caller was authorized against.
+UPDATE workload_device_join_tokens
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND agent_id = @agent_id
+  AND consumed_at IS NULL
+  AND deleted IS FALSE
+RETURNING id, agent_id, created_by_user_id, created_at, expires_at, consumed_at, consumed_by_subject, deleted_at;
+
 -- name: GetReplayedDeviceRegistration :one
 -- The enrollment a spent token produced, for the same key retrying after a crash.
 -- Only within the token's lifetime, while the device is still enrolled under its agent.
