@@ -222,11 +222,13 @@ trackedFiles:
   src/models/components/adminstripecustomer.ts: {}
   src/models/components/adminstripesubscription.ts: {}
   src/models/components/adminstripesubscriptioncandidate.ts: {}
+  src/models/components/adminupstreamoauthmigrationauthclients.ts: {}
   src/models/components/adminupstreamoauthmigrationorganization.ts: {}
   src/models/components/adminupstreamoauthmigrationorganizations.ts: {}
   src/models/components/adminupstreamoauthmigrationrun.ts: {}
   src/models/components/adminupstreamoauthmigrationserver.ts: {}
   src/models/components/adminupstreamoauthmigrationstatus.ts: {}
+  src/models/components/adminupstreamoauthmigrationunresolvedassociation.ts: {}
   src/models/components/adminuser.ts: {}
   src/models/components/adminuserorganization.ts: {}
   src/models/components/asset.ts: {}

@@ -2400,6 +2400,10 @@ type GetUpstreamOAuthMigrationStatusResponseBody struct {
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials int64 `form:"reconnect_credentials" json:"reconnect_credentials" xml:"reconnect_credentials"`
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
 }
 
 // RunUpstreamOAuthMigrationResponseBody is the type of the "admin" service
@@ -2412,6 +2416,16 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	AssociationsSkipped int64 `form:"associations_skipped" json:"associations_skipped" xml:"associations_skipped"`
 	// Credential choices recorded.
 	SelectionsWritten int64 `form:"selections_written" json:"selections_written" xml:"selections_written"`
+	// Typed auth clients recorded.
+	AuthClientsWritten *int64 `form:"auth_clients_written,omitempty" json:"auth_clients_written,omitempty" xml:"auth_clients_written,omitempty"`
+	// Server to auth client links recorded.
+	AuthClientLinksWritten *int64 `form:"auth_client_links_written,omitempty" json:"auth_client_links_written,omitempty" xml:"auth_client_links_written,omitempty"`
+	// Servers marked as needing upstream authentication because they offer a
+	// backfilled auth client.
+	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
+	// Why recording typed auth clients failed, when it did. The upstream OAuth
+	// migration itself is unaffected.
+	AuthClientsError *string `form:"auth_clients_error,omitempty" json:"auth_clients_error,omitempty" xml:"auth_clients_error,omitempty"`
 	// The organization's status after the run.
 	Status *AdminUpstreamOAuthMigrationStatusResponseBody `form:"status" json:"status" xml:"status"`
 }
@@ -21784,6 +21798,46 @@ type AdminUpstreamOAuthMigrationServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 }
 
+// AdminUpstreamOAuthMigrationAuthClientsResponseBody is used to define fields
+// on response body types.
+type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
+	// Whether every association has its auth client and server link recorded, no
+	// backfilled record is left to retire, and no server offering one is left
+	// undecided.
+	Complete bool `form:"complete" json:"complete" xml:"complete"`
+	// Live server to upstream OAuth client associations decided.
+	Associations int64 `form:"associations" json:"associations" xml:"associations"`
+	// Auth clients not yet recorded.
+	PendingClients int64 `form:"pending_clients" json:"pending_clients" xml:"pending_clients"`
+	// Server to auth client links not yet recorded.
+	PendingLinks int64 `form:"pending_links" json:"pending_links" xml:"pending_links"`
+	// Backfilled auth clients and server links whose association or upstream
+	// client is gone, not yet retired.
+	PendingRetirements int64 `form:"pending_retirements" json:"pending_retirements" xml:"pending_retirements"`
+	// Servers offering a backfilled auth client whose need for upstream
+	// authentication is still undecided, not yet marked as needing it.
+	PendingMarkedServers int64 `form:"pending_marked_servers" json:"pending_marked_servers" xml:"pending_marked_servers"`
+	// Associations whose client cannot be typed and need attention.
+	Unresolved int64 `form:"unresolved" json:"unresolved" xml:"unresolved"`
+	// The associations counted in unresolved.
+	UnresolvedAssociations []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"unresolved_associations" json:"unresolved_associations" xml:"unresolved_associations"`
+}
+
+// AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody is used to
+// define fields on response body types.
+type AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody struct {
+	// The server to upstream OAuth client association ID.
+	AssociationID string `form:"association_id" json:"association_id" xml:"association_id"`
+	// The MCP server ID.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The server's project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The upstream OAuth client ID.
+	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
+	// The auth client already recorded for the client, if any.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
 // AdminUpstreamOAuthMigrationStatusResponseBody is used to define fields on
 // response body types.
 type AdminUpstreamOAuthMigrationStatusResponseBody struct {
@@ -21806,6 +21860,10 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials int64 `form:"reconnect_credentials" json:"reconnect_credentials" xml:"reconnect_credentials"`
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -24092,6 +24150,9 @@ func NewGetUpstreamOAuthMigrationStatusResponseBody(res *admin.AdminUpstreamOAut
 	} else {
 		body.UnresolvedServers = []*AdminUpstreamOAuthMigrationServerResponseBody{}
 	}
+	if res.AuthClients != nil {
+		body.AuthClients = marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(res.AuthClients)
+	}
 	return body
 }
 
@@ -24100,9 +24161,13 @@ func NewGetUpstreamOAuthMigrationStatusResponseBody(res *admin.AdminUpstreamOAut
 // service.
 func NewRunUpstreamOAuthMigrationResponseBody(res *admin.AdminUpstreamOAuthMigrationRun) *RunUpstreamOAuthMigrationResponseBody {
 	body := &RunUpstreamOAuthMigrationResponseBody{
-		AssociationsWritten: res.AssociationsWritten,
-		AssociationsSkipped: res.AssociationsSkipped,
-		SelectionsWritten:   res.SelectionsWritten,
+		AssociationsWritten:                res.AssociationsWritten,
+		AssociationsSkipped:                res.AssociationsSkipped,
+		SelectionsWritten:                  res.SelectionsWritten,
+		AuthClientsWritten:                 res.AuthClientsWritten,
+		AuthClientLinksWritten:             res.AuthClientLinksWritten,
+		ServersMarkedRequiringUpstreamAuth: res.ServersMarkedRequiringUpstreamAuth,
+		AuthClientsError:                   res.AuthClientsError,
 	}
 	if res.Status != nil {
 		body.Status = marshalAdminAdminUpstreamOAuthMigrationStatusToAdminUpstreamOAuthMigrationStatusResponseBody(res.Status)

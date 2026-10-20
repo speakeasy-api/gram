@@ -9914,6 +9914,51 @@ components:
         - id
         - customer_id
         - status
+    AdminUpstreamOAuthMigrationAuthClients:
+      type: object
+      properties:
+        associations:
+          type: integer
+          description: Live server to upstream OAuth client associations decided.
+          format: int64
+        complete:
+          type: boolean
+          description: Whether every association has its auth client and server link recorded, no backfilled record is left to retire, and no server offering one is left undecided.
+        pending_clients:
+          type: integer
+          description: Auth clients not yet recorded.
+          format: int64
+        pending_links:
+          type: integer
+          description: Server to auth client links not yet recorded.
+          format: int64
+        pending_marked_servers:
+          type: integer
+          description: Servers offering a backfilled auth client whose need for upstream authentication is still undecided, not yet marked as needing it.
+          format: int64
+        pending_retirements:
+          type: integer
+          description: Backfilled auth clients and server links whose association or upstream client is gone, not yet retired.
+          format: int64
+        unresolved:
+          type: integer
+          description: Associations whose client cannot be typed and need attention.
+          format: int64
+        unresolved_associations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUpstreamOAuthMigrationUnresolvedAssociation'
+          description: The associations counted in unresolved.
+      description: Where one organization stands in recording a typed auth client for every upstream OAuth client its servers are associated with, and in retiring backfilled records whose association or client is gone. Nothing reads these records yet.
+      required:
+        - complete
+        - associations
+        - pending_clients
+        - pending_links
+        - pending_retirements
+        - pending_marked_servers
+        - unresolved
+        - unresolved_associations
     AdminUpstreamOAuthMigrationOrganization:
       type: object
       properties:
@@ -9957,9 +10002,24 @@ components:
           type: integer
           description: Server to client associations recorded.
           format: int64
+        auth_client_links_written:
+          type: integer
+          description: Server to auth client links recorded.
+          format: int64
+        auth_clients_error:
+          type: string
+          description: Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.
+        auth_clients_written:
+          type: integer
+          description: Typed auth clients recorded.
+          format: int64
         selections_written:
           type: integer
           description: Credential choices recorded.
+          format: int64
+        servers_marked_requiring_upstream_auth:
+          type: integer
+          description: Servers marked as needing upstream authentication because they offer a backfilled auth client.
           format: int64
         status:
           $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
@@ -9987,6 +10047,8 @@ components:
     AdminUpstreamOAuthMigrationStatus:
       type: object
       properties:
+        auth_clients:
+          $ref: '#/components/schemas/AdminUpstreamOAuthMigrationAuthClients'
         credentials:
           type: integer
           description: Live user session credentials scanned.
@@ -10018,7 +10080,7 @@ components:
           items:
             $ref: '#/components/schemas/AdminUpstreamOAuthMigrationServer'
           description: Servers whose upstream OAuth client must be associated by an administrator.
-      description: 'Where one organization stands in the upstream OAuth migration, read from a dry run of both backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices.'
+      description: 'Where one organization stands in the upstream OAuth migration, read from a dry run of its backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices. Typed auth clients are reported separately in auth_clients and never affect migrated.'
       required:
         - organization_id
         - migrated
@@ -10028,6 +10090,35 @@ components:
         - credentials
         - pending_selections
         - reconnect_credentials
+    AdminUpstreamOAuthMigrationUnresolvedAssociation:
+      type: object
+      properties:
+        association_id:
+          type: string
+          description: The server to upstream OAuth client association ID.
+          format: uuid
+        auth_client_id:
+          type: string
+          description: The auth client already recorded for the client, if any.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The MCP server ID.
+          format: uuid
+        project_id:
+          type: string
+          description: The server's project ID.
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The upstream OAuth client ID.
+          format: uuid
+      description: 'A server to upstream OAuth client association the typed auth client backfill cannot decide: the client''s owner is unknown, or the auth client already recorded for it has another type or belongs to another project.'
+      required:
+        - association_id
+        - mcp_server_id
+        - project_id
+        - remote_session_client_id
     AdminUser:
       type: object
       properties:
