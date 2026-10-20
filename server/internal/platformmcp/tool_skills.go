@@ -140,12 +140,19 @@ func dismissSkillSuggestionAnnotations() *mcp.ToolAnnotations {
 	return &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(true), IdempotentHint: true, OpenWorldHint: new(false)}
 }
 
-// skillWriteAnnotations are for create_skill, add_skill_version,
-// update_skill_metadata, and distribute_skill. Each adds or renames rather
-// than removes, and a repeat with the same idempotency key settles on the same
-// state.
+// skillWriteAnnotations are for create_skill, add_skill_version, and
+// distribute_skill. Each adds a skill, a version, or a distribution and does
+// not remove one. A repeat with identical content returns the existing
+// version, and a repeat distribution settles on the existing one.
 func skillWriteAnnotations() *mcp.ToolAnnotations {
 	return writeAnnotations(false, true, false)
+}
+
+// updateSkillMetadataAnnotations is for update_skill_metadata. clear_summary
+// removes the existing summary. A repeat with the same arguments settles on
+// the same metadata.
+func updateSkillMetadataAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, true, false)
 }
 
 // undistributeSkillAnnotations is for undistribute_skill, which stops agents
@@ -340,7 +347,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		Name:        "update_skill_metadata",
 		Title:       "Rename a Skill",
 		Description: "Rename a skill, or change how it is described in the list — its canonical name, display name, and summary. Nothing here changes what the skill tells an agent to do; that lives in its versions. Constraints: pass the version you read as expected_latest_version_id.",
-		Annotations: skillWriteAnnotations(),
+		Annotations: updateSkillMetadataAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpdateSkillMetadataToolInput) (*mcp.CallToolResult, UpdateSkillMetadataOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (UpdateSkillMetadataOutput, error) {
 			return skills.UpdateSkillMetadata(ctx, principal, UpdateSkillMetadataInput(input))
@@ -431,6 +438,8 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 			manifest.Annotations = approveSkillSuggestionAnnotations()
 		case tool.name == "dismiss_skill_suggestion":
 			manifest.Annotations = dismissSkillSuggestionAnnotations()
+		case tool.name == "update_skill_metadata":
+			manifest.Annotations = updateSkillMetadataAnnotations()
 		case tool.name == "undistribute_skill":
 			manifest.Annotations = undistributeSkillAnnotations()
 		default:

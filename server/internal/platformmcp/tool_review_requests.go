@@ -164,9 +164,11 @@ func reviewRequestToolResult(err error) (*mcp.CallToolResult, bool) {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}, IsError: true}, true
 }
 
-// Every call records a new review request.
+// Every call records a new review request. Before it does, it gathers
+// evidence from package registries, the source repository, and advisory
+// databases inside the same call.
 func requestMCPReviewAnnotations() *mcp.ToolAnnotations {
-	return writeAnnotations(false, false, false)
+	return writeAnnotations(false, false, true)
 }
 
 func registerUnavailableReviewRequestTools(reg *Registrar) {

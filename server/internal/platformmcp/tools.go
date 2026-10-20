@@ -579,7 +579,7 @@ func registerUnavailableSetupHandoffTool(reg *Registrar) {
 		Name:        "get_setup_handoff",
 		Title:       "Open Setup in the Dashboard",
 		Description: "Open the dashboard to finish setting up an MCP server. This is not switched on for your organization yet.",
-		Annotations: readOnlyOpenWorldAnnotations(),
+		Annotations: setupHandoffAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
 }
 
@@ -714,6 +714,13 @@ func feedbackAnnotations() *mcp.ToolAnnotations {
 // which reach the registry or the user's MCP server.
 func registrationAnnotations() *mcp.ToolAnnotations {
 	return writeAnnotations(false, true, true)
+}
+
+// setupHandoffAnnotations is for get_setup_handoff. A single-use handoff
+// writes a new handoff row, revokes the caller's earlier active handoffs, and
+// records an audit event. The handler also checks the catalogue entry.
+func setupHandoffAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, false, true)
 }
 
 // The plugin distribution tools publish to GitHub before they return.

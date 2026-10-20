@@ -75,7 +75,9 @@ func registerToolExposureTools(reg *Registrar, service *MCPToolExposureService, 
 			"Supply exact tool URNs from list_project_tools, the exposure_version from the page that completes the latest get_mcp read of that server, an idempotency key, and confirmed: true only after the user confirms the exact server and tool list. " +
 			toolExposureBlastRadiusNote + " " +
 			"A tool that is neither produced by this project nor already on this server is refused by name and nothing is changed. A tool the server already exposes is reported as unchanged rather than added. Only a server whose tools come from this project can be changed here, and when another server offers the same tool list the change moves both, so it is allowed only with permission to change every one of them.",
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
+		// Adding a platform tool removes the server's automatic role-plugin
+		// memberships, so an addition can take something away.
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)},
 	}, meta, addTools)
 	addTool(reg, &mcp.Tool{
 		Name:  removeToolsFromMCPToolName,

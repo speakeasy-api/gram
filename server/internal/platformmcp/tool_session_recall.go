@@ -93,13 +93,13 @@ func sessionRecallToolResult(err error) (*mcp.CallToolResult, bool) {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
 }
 
-// Each stub declares the audiences its live counterpart declares, so the tools
-// do not appear on and disappear from a surface as the rollout flips.
 // continue_session writes a lineage edge and an audit event on every call.
 func continueSessionAnnotations() *mcp.ToolAnnotations {
 	return writeAnnotations(false, false, false)
 }
 
+// Each stub declares the audiences its live counterpart declares, so the tools
+// do not appear on and disappear from a surface as the rollout flips.
 func registerUnavailableSessionRecallTools(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_my_sessions",

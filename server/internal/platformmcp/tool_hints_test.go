@@ -18,6 +18,11 @@ import (
 // tool must set the hints from its real behaviour. A tool keeps the same
 // hints whether it is switched on or not, so a rollout flag never changes
 // what a client sees.
+//
+// The test checks three things: each tool sets all three hints, a read-only
+// tool is not destructive, and a tool has the same hints in both branches. It
+// does not check that each openWorldHint value is correct. Each tool sets that
+// value from what its handler does.
 func TestEveryAdvertisedToolDeclaresExplicitHints(t *testing.T) {
 	t.Parallel()
 

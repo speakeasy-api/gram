@@ -80,6 +80,10 @@ func TestMCPReviewRequestToolsAreExternalMemberTools(t *testing.T) {
 	}
 	require.NotNil(t, request.Annotations)
 	require.False(t, request.Annotations.ReadOnlyHint)
+	require.NotNil(t, request.Annotations.DestructiveHint)
+	require.False(t, *request.Annotations.DestructiveHint)
+	require.NotNil(t, request.Annotations.OpenWorldHint)
+	require.True(t, *request.Annotations.OpenWorldHint)
 	require.NotNil(t, status.Annotations)
 	require.True(t, status.Annotations.ReadOnlyHint)
 }
