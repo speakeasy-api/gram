@@ -89,6 +89,16 @@ func (q *Queries) AcquireAssistantAdvisoryLock(ctx context.Context, assistantID 
 	return err
 }
 
+const acquireAssistantSessionLock = `-- name: AcquireAssistantSessionLock :exec
+SELECT pg_advisory_lock(hashtext('asst:' || $1::text))
+`
+
+// Pin the connection until ReleaseAssistantSessionLock completes.
+func (q *Queries) AcquireAssistantSessionLock(ctx context.Context, assistantID string) error {
+	_, err := q.db.Exec(ctx, acquireAssistantSessionLock, assistantID)
+	return err
+}
+
 type AddAssistantMcpServersParams struct {
 	AssistantID   uuid.UUID
 	McpServerID   uuid.UUID
@@ -1706,6 +1716,17 @@ func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg Get
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getAssistantTransactionIsolationForTest = `-- name: GetAssistantTransactionIsolationForTest :one
+SELECT current_setting('transaction_isolation')::text AS isolation
+`
+
+func (q *Queries) GetAssistantTransactionIsolationForTest(ctx context.Context) (string, error) {
+	row := q.db.QueryRow(ctx, getAssistantTransactionIsolationForTest)
+	var isolation string
+	err := row.Scan(&isolation)
+	return isolation, err
 }
 
 const getKitInterruptOutcome = `-- name: GetKitInterruptOutcome :one
@@ -4127,6 +4148,17 @@ func (q *Queries) RecordAssistantSkillObservation(ctx context.Context, arg Recor
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const releaseAssistantSessionLock = `-- name: ReleaseAssistantSessionLock :one
+SELECT pg_advisory_unlock(hashtext('asst:' || $1::text))::boolean AS unlocked
+`
+
+func (q *Queries) ReleaseAssistantSessionLock(ctx context.Context, assistantID string) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseAssistantSessionLock, assistantID)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
 }
 
 const requestKitInterrupt = `-- name: RequestKitInterrupt :one

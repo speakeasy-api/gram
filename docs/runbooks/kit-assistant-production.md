@@ -123,7 +123,8 @@ and that source and restore node versions and container images satisfy Google's
 [rootfs-only snapshot matching requirements](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/pod-snapshots#snapshot-matching).
 A control-plane upgrade alone does not establish node compatibility.
 
-The CLI installs the managed snapshot driver. Whole-pod snapshots, the default
+Install the managed GKE snapshot driver/controller separately before enabling snapshots.
+The runtime only validates its API; the CLI does not install the controller. Whole-pod snapshots, the default
 whole-pod scope, ambiguous policies, stale controller status, and unsupported
 status schemas fail closed. Merely deploying the snapshot CRDs is not sufficient.
 
@@ -139,7 +140,6 @@ management:
 
 | API group            | Resource                    | Required verbs            | Purpose                                                                |
 | -------------------- | --------------------------- | ------------------------- | ---------------------------------------------------------------------- |
-| Core (`""`)          | `configmaps`                | `create`, `get`, `update` | UID/resourceVersion-fenced lifecycle authority                         |
 | Core (`""`)          | `pods`                      | `get`, `list`, `delete`   | Discover claim Pods, verify source/restore identity, and reap runtimes |
 | `podsnapshot.gke.io` | `podsnapshotpolicies`       | `get`, `list`             | Select and validate the manual rootfs-only policy                      |
 | `podsnapshot.gke.io` | `podsnapshotmanualtriggers` | `create`, `get`, `delete` | Request, observe, and clean up checkpoints                             |

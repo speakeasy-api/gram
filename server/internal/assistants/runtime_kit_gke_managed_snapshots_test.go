@@ -16,6 +16,7 @@ func kitManagedPolicy(identity KitGKEIdentity, scope string) *unstructured.Unstr
 	p := kitObject("PodSnapshotPolicy", "podsnapshot.gke.io/v1", "kit-manual", identity)
 	p.SetUID("policy-uid")
 	p.SetGeneration(1)
+	p.Object["status"] = map[string]any{"observedGeneration": int64(1)}
 	p.Object["spec"] = map[string]any{"triggerConfig": map[string]any{"type": "manual"}, "selector": map[string]any{"matchLabels": map[string]any{"gram.ai/runtime-version": "3"}}}
 	if scope != "" {
 		_ = unstructured.SetNestedField(p.Object, scope, "spec", "snapshotScope")
@@ -184,6 +185,9 @@ func TestKitGKEManagedRootfsReady(t *testing.T) {
 	_, err = client.Resource(kitGKESnapshotGVR).Namespace(identity.Namespace).Update(t.Context(), snapshot, metav1.UpdateOptions{})
 	require.NoError(t, err)
 	require.ErrorContains(t, driver.VerifyAvailable(t.Context(), snapshot, binding), "not Ready")
-	snapshot.SetUID("replacement")
+	replacement := snapshot.DeepCopy()
+	replacement.SetUID("replacement")
+	_, err = client.Resource(kitGKESnapshotGVR).Namespace(identity.Namespace).Update(t.Context(), replacement, metav1.UpdateOptions{})
+	require.NoError(t, err)
 	require.ErrorContains(t, driver.VerifyAvailable(t.Context(), snapshot, binding), "UID changed")
 }

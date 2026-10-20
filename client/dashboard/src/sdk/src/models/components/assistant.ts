@@ -35,6 +35,18 @@ export const IdentityState = {
 export type IdentityState = ClosedEnum<typeof IdentityState>;
 
 /**
+ * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.
+ */
+export const RuntimeVersion = {
+  Two: 2,
+  Three: 3,
+} as const;
+/**
+ * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.
+ */
+export type RuntimeVersion = ClosedEnum<typeof RuntimeVersion>;
+
+/**
  * The assistant status.
  */
 export const AssistantStatus = {
@@ -94,7 +106,7 @@ export type Assistant = {
   /**
    * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.
    */
-  runtimeVersion: number;
+  runtimeVersion: RuntimeVersion;
   /**
    * Skills attached to the assistant.
    */
@@ -122,6 +134,11 @@ export const IdentityState$inboundSchema: z.ZodMiniEnum<typeof IdentityState> =
   z.enum(IdentityState);
 
 /** @internal */
+export const RuntimeVersion$inboundSchema: z.ZodMiniEnum<
+  typeof RuntimeVersion
+> = z.enum(RuntimeVersion);
+
+/** @internal */
 export const AssistantStatus$inboundSchema: z.ZodMiniEnum<
   typeof AssistantStatus
 > = z.enum(AssistantStatus);
@@ -144,7 +161,7 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
       model: z.string(),
       name: z.string(),
       project_id: z.string(),
-      runtime_version: z.int(),
+      runtime_version: RuntimeVersion$inboundSchema,
       skills: z.array(AssistantSkillRef$inboundSchema),
       status: AssistantStatus$inboundSchema,
       toolsets: z.array(AssistantToolsetRef$inboundSchema),

@@ -120,7 +120,13 @@ func (s *ServiceCore) InstallKitLocalRuntime(c KitLocalCompositionConfig) error 
 	if err != nil {
 		return err
 	}
-	return s.installKitRuntime(backend)
+	if err := s.installKitRuntime(backend); err != nil {
+		return err
+	}
+	// Local installation explicitly opts new assistants into this backend.
+	// Existing assistants retain their persisted runtime selection.
+	s.newAssistantRuntimeVersion = 3
+	return nil
 }
 
 // kitProtocolFactory shares the canonical transcript projector and persisted

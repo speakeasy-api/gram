@@ -50,6 +50,7 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		{"HTTP inference", func(c *KitGKECompositionConfig) { c.AllowInsecureInference = true }},
 		{"missing Kubernetes", func(c *KitGKECompositionConfig) { c.GKE.Dynamic = nil }},
 		{"missing namespace", func(c *KitGKECompositionConfig) { c.GKE.Namespace = "" }},
+		{"invalid network bounds", func(c *KitGKECompositionConfig) { c.GKE.RunnerCIDRBlocks = []string{"10.0.0.0/16", "garbage"} }},
 		{"missing network bounds", func(c *KitGKECompositionConfig) { c.GKE.RunnerCIDRBlocks = nil }},
 		{"missing issuer", func(c *KitGKECompositionConfig) { c.MCPUserSessionIssuerID = uuid.Nil }},
 		{"missing provisioner", func(c *KitGKECompositionConfig) { c.ProvisionMCP = nil }},

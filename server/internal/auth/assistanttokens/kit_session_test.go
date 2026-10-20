@@ -10,6 +10,8 @@ import (
 
 func TestKitProviderSessionID(t *testing.T) {
 	t.Parallel()
+	// Released Kit 2c4a35e adapter.rs sends this UUIDv5 as the native chat header.
+	require.Equal(t, "15f428a5-735e-5088-9e50-5210f6365e50", kitProviderSessionID("speakeasy-contract").String())
 	require.Equal(t, "0b3a60e2-f08b-5ddd-9bcb-f3732f6a3322", kitProviderSessionID("claude-session-1").String())
 	const id = "550e8400-e29b-41d4-a716-446655440000"
 	require.Equal(t, uuid.MustParse(id), kitProviderSessionID(id))

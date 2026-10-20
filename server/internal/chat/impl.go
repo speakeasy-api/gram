@@ -1965,6 +1965,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
+	// Released Kit 2c4a35e maps its provider session ID to this header in
+	// SpeakeasyProvider::preprocess_request; it is not a canonical chat UUID.
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
 	if assistanttokens.InferenceTranscriptOwned(ctx) {
 		id, err := uuid.Parse(chatIDHeader)

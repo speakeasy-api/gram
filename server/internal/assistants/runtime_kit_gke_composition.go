@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
+	"net/netip"
 	"net/url"
 	"time"
 
@@ -41,6 +42,11 @@ func validateKitGKEComposition(c KitGKECompositionConfig) error {
 	}
 	if c.GKE.Dynamic == nil || c.GKE.Namespace == "" || len(c.GKE.RunnerCIDRBlocks) == 0 {
 		return errors.New("kit GKE composition requires Kubernetes, namespace and explicit gateway CIDRs")
+	}
+	for _, cidr := range c.GKE.RunnerCIDRBlocks {
+		if _, err := netip.ParsePrefix(cidr); err != nil {
+			return fmt.Errorf("invalid Kit GKE gateway CIDR %q: %w", cidr, err)
+		}
 	}
 	return nil
 }

@@ -251,6 +251,44 @@ func (q *Queries) GetCustomDomainByDomain(ctx context.Context, domain string) (C
 	return i, err
 }
 
+const getCustomDomainByDomainAndOrganization = `-- name: GetCustomDomainByDomainAndOrganization :one
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted FROM custom_domains
+WHERE domain = $1 AND organization_id = $2 AND deleted IS FALSE
+`
+
+type GetCustomDomainByDomainAndOrganizationParams struct {
+	Domain         string
+	OrganizationID string
+}
+
+func (q *Queries) GetCustomDomainByDomainAndOrganization(ctx context.Context, arg GetCustomDomainByDomainAndOrganizationParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainByDomainAndOrganization, arg.Domain, arg.OrganizationID)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getCustomDomainByID = `-- name: GetCustomDomainByID :one
 SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains

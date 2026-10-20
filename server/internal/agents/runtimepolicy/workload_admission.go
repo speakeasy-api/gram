@@ -49,7 +49,9 @@ func AdmitWorkloadSession(ctx context.Context, db *pgxpool.Pool) (authz.Workload
 }
 
 // AdmitWorkloadSessionInTx evaluates live workload policy on a caller-owned
-// lifecycle transaction. The caller owns the snapshot and commit/rollback.
+// lifecycle transaction. The caller must begin with REPEATABLE READ or
+// SERIALIZABLE before any reads, and owns commit/rollback. READ COMMITTED is
+// not supported: its per-statement snapshots can combine inconsistent authority.
 func AdmitWorkloadSessionInTx(ctx context.Context, tx pgx.Tx) (authz.WorkloadSessionAdmission, error) {
 	if tx == nil || !hasWorkloadSessionAdmissionContext(ctx) {
 		return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)

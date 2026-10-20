@@ -2087,3 +2087,13 @@ WHERE id = @id AND project_id = @project_id;
 -- name: DisableAttachedMCPServerForTest :exec
 UPDATE mcp_servers SET visibility = 'disabled'
 WHERE id = @id AND project_id = @project_id;
+
+-- name: AcquireAssistantSessionLock :exec
+-- Pin the connection until ReleaseAssistantSessionLock completes.
+SELECT pg_advisory_lock(hashtext('asst:' || @assistant_id::text));
+
+-- name: ReleaseAssistantSessionLock :one
+SELECT pg_advisory_unlock(hashtext('asst:' || @assistant_id::text))::boolean AS unlocked;
+
+-- name: GetAssistantTransactionIsolationForTest :one
+SELECT current_setting('transaction_isolation')::text AS isolation;

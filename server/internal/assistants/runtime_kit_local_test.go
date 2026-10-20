@@ -22,13 +22,14 @@ import (
 )
 
 type fakeKitLocalEngine struct {
-	info      kitLocalContainerInfo
-	volume    map[string]string
-	calls     []string
-	spec      kitLocalContainerSpec
-	bootstrap KitLocalBootstrap
-	failCopy  bool
-	nextPort  int
+	info       kitLocalContainerInfo
+	volume     map[string]string
+	calls      []string
+	spec       kitLocalContainerSpec
+	bootstrap  KitLocalBootstrap
+	failCopy   bool
+	stoppedIDs []string
+	nextPort   int
 }
 
 func (f *fakeKitLocalEngine) ImageID(context.Context, string) (string, error) {
@@ -71,7 +72,8 @@ func (f *fakeKitLocalEngine) Start(context.Context, string) error {
 	f.info.HostPort = f.nextPort
 	return nil
 }
-func (f *fakeKitLocalEngine) Stop(context.Context, string) error {
+func (f *fakeKitLocalEngine) Stop(_ context.Context, id string) error {
+	f.stoppedIDs = append(f.stoppedIDs, id)
 	f.calls = append(f.calls, "stop")
 	f.info.Running = false
 	f.info.HostPort = 0
@@ -410,6 +412,7 @@ func TestKitLocalCABundlePreservesTrustAndArgv(t *testing.T) {
 	child := `printf '%s\n%s' "$SSL_CERT_FILE" "$1"`
 	arg := "spaces ; $(false) '"
 	cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", kitLocalCABundleScript, "kit-ca-bundle", public, extra, "/bin/sh", "-c", child, "child", arg)
+	cmd.Env = append(os.Environ(), "TMPDIR="+dir)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 	path, gotArg, ok := strings.Cut(string(out), "\n")
@@ -422,6 +425,17 @@ func TestKitLocalCABundlePreservesTrustAndArgv(t *testing.T) {
 	info, err := os.Stat(path)
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	// A second gateway exec replaces one bounded bundle instead of leaking
+	// another mktemp file into the persistent container layer.
+	require.NoError(t, os.WriteFile(extra, []byte("replacement root\n"), 0600))
+	again := exec.CommandContext(t.Context(), "/bin/sh", "-c", kitLocalCABundleScript, "kit-ca-bundle", public, extra, "/bin/sh", "-c", child, "child", arg)
+	again.Env = cmd.Env
+	out, err = again.CombinedOutput()
+	require.NoError(t, err, string(out))
+	require.Equal(t, path+"\n"+arg, string(out))
+	bundle, err = os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "public roots\nreplacement root\n", string(bundle))
 }
 
 func TestKitLocalCABundleFailsClosed(t *testing.T) {
@@ -436,9 +450,52 @@ func TestKitLocalCABundleFailsClosed(t *testing.T) {
 			paths[missing] = filepath.Join(dir, "missing.pem")
 			marker := filepath.Join(dir, "started")
 			cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", kitLocalCABundleScript, "kit-ca-bundle", paths[0], paths[1], "touch", marker)
+			cmd.Env = append(os.Environ(), "TMPDIR="+dir)
 			require.Error(t, cmd.Run())
 			_, err := os.Stat(marker)
 			require.True(t, os.IsNotExist(err))
+		})
+	}
+}
+
+func TestKitLocalCredentialReplacementRemovesOmittedFiles(t *testing.T) {
+	t.Parallel()
+	info := kitLocalContainerInfo{ID: "exact-container", ImageID: "sha256:exact-image", HomeVolume: "exact-home"}
+	args, err := kitLocalCredentialResetArgs(info)
+	require.NoError(t, err)
+	require.Contains(t, args, "type=volume,src=exact-home,dst=/kit-home")
+	require.Contains(t, args, "sha256:exact-image")
+	require.Contains(t, args, "none")
+	info.Running = true
+	_, err = kitLocalCredentialResetArgs(info)
+	require.Error(t, err)
+	for _, symlink := range []bool{false, true} {
+		t.Run(fmt.Sprint(symlink), func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			outside := t.TempDir()
+			require.NoError(t, os.Mkdir(filepath.Join(home, ".kit"), 0700))
+			credentials := filepath.Join(home, ".kit", "credentials")
+			if symlink {
+				require.NoError(t, os.Symlink(outside, credentials))
+			} else {
+				require.NoError(t, os.Mkdir(credentials, 0700))
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(credentials, "revoked-key"), []byte("old-fixture-secret"), 0600))
+			require.NoError(t, os.WriteFile(filepath.Join(home, "keep-history"), []byte("history"), 0600))
+			cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", kitLocalCredentialResetScript, "reset", home)
+			require.NoError(t, cmd.Run())
+			entries, err := os.ReadDir(credentials)
+			require.NoError(t, err)
+			require.Empty(t, entries)
+			stat, err := os.Lstat(credentials)
+			require.NoError(t, err)
+			require.True(t, stat.IsDir())
+			require.Equal(t, os.FileMode(0700), stat.Mode().Perm())
+			require.FileExists(t, filepath.Join(home, "keep-history"))
+			if symlink {
+				require.FileExists(t, filepath.Join(outside, "revoked-key"))
+			}
 		})
 	}
 }

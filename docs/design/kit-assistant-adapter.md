@@ -71,16 +71,22 @@ replacement of the server set. Verify support in the runtime image before using
 this API; this contract does not change or establish support in the image pinned
 above.
 
-| Operation                                                      | Required behavior                                                                                     |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Initial session creation or cold restore                       | Supply the initial MCP servers. This does not establish transcript deduplication across cold restore. |
-| Resident reconnect with `mcpServers` omitted or `[]`           | Retain the resident server configuration.                                                             |
-| Resident reconnect with nonempty `mcpServers`                  | Reject the request; reconnect is not a configuration update.                                          |
-| `_kit/session/update_mcp` with a new client-owned name         | Add that server.                                                                                      |
-| `_kit/session/update_mcp` with an existing client-owned name   | Update only that named server.                                                                        |
-| Server names omitted from an update                            | Retain those servers unchanged.                                                                       |
-| `_kit/session/update_mcp` with `[]`                            | No-op; retain all servers.                                                                            |
-| A submitted name colliding with a host- or plugin-owned server | Reject the collision; host/plugin servers and built-ins remain protected.                             |
+| Operation                                                             | Required behavior                                                                                     |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Initial session creation or cold restore                              | Supply the initial MCP servers. This does not establish transcript deduplication across cold restore. |
+| Adapter resident reconnect with `mcpServers` omitted                  | Retain the resident server configuration.                                                             |
+| Adapter resident reconnect with explicit `mcpServers`, including `[]` | Reject the desired-set request; reconnect cannot reconcile or remove resident servers.                |
+| `_kit/session/update_mcp` with a new client-owned name                | Add that server.                                                                                      |
+| `_kit/session/update_mcp` with an existing client-owned name          | Update only that named server.                                                                        |
+| Server names omitted from an update                                   | Retain those servers unchanged.                                                                       |
+| `_kit/session/update_mcp` with `[]`                                   | No-op; retain all servers.                                                                            |
+| A submitted name colliding with a host- or plugin-owned server        | Reject the collision; host/plugin servers and built-ins remain protected.                             |
+
+The pinned Kit gateway itself accepts omitted or empty `mcpServers` as retention
+(`src/gateway.rs`, released Kit `v0.2.17`, commit `90a1805`; unchanged from the
+image pin `2c4a35e`). The Speakeasy adapter is deliberately stricter:
+an explicit list represents a desired set, and `[]` must not silently retain
+servers the caller intended to remove. Omission is the adapter's only retain form.
 
 For example, if the client owns `inventory` and `tickets`, an update containing
 only `inventory` changes only `inventory`; `tickets` remains configured. An update

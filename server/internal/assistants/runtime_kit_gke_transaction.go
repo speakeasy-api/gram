@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 )
 
 // kitLifecycleTransaction keeps the same connection and session advisory fence
@@ -23,7 +24,7 @@ func (t *kitLifecycleTransaction) Publish(ctx context.Context) error {
 	if err := t.Commit(ctx); err != nil {
 		return fmt.Errorf("publish Kit lifecycle phase: %w", err)
 	}
-	next, err := t.conn.Begin(ctx)
+	next, err := t.conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		return fmt.Errorf("resume Kit lifecycle transaction: %w", err)
 	}
@@ -45,8 +46,7 @@ func beginKitLifecycleTransaction(ctx context.Context, pool *pgxpool.Pool, assis
 		}
 		// Always attempt unlock, including a canceled acquisition with uncertain
 		// completion. Never return a connection with session locks to the pool.
-		var unlocked bool
-		err := conn.QueryRow(cleanupCtx, "SELECT pg_advisory_unlock(hashtext('asst:' || $1::text))", assistantID).Scan(&unlocked)
+		_, err := assistantrepo.New(conn).ReleaseAssistantSessionLock(cleanupCtx, assistantID)
 		if err != nil {
 			raw := conn.Hijack()
 			_ = raw.Close(cleanupCtx)
@@ -54,11 +54,11 @@ func beginKitLifecycleTransaction(ctx context.Context, pool *pgxpool.Pool, assis
 		}
 		conn.Release()
 	}
-	if _, err = conn.Exec(ctx, "SELECT pg_advisory_lock(hashtext('asst:' || $1::text))", assistantID); err != nil {
+	if err = assistantrepo.New(conn).AcquireAssistantSessionLock(ctx, assistantID); err != nil {
 		cleanup()
 		return nil, nil, fmt.Errorf("lock Kit lifecycle: %w", err)
 	}
-	tx, err := conn.Begin(ctx)
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		cleanup()
 		return nil, nil, fmt.Errorf("begin Kit lifecycle transaction: %w", err)

@@ -31,14 +31,16 @@ export type ExpectedRuntimeVersion = ClosedEnum<typeof ExpectedRuntimeVersion>;
 /**
  * Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.
  */
-export const RuntimeVersion = {
+export const UpdateAssistantFormRuntimeVersion = {
   Two: 2,
   Three: 3,
 } as const;
 /**
  * Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.
  */
-export type RuntimeVersion = ClosedEnum<typeof RuntimeVersion>;
+export type UpdateAssistantFormRuntimeVersion = ClosedEnum<
+  typeof UpdateAssistantFormRuntimeVersion
+>;
 
 /**
  * The assistant status.
@@ -86,7 +88,7 @@ export type UpdateAssistantForm = {
   /**
    * Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.
    */
-  runtimeVersion?: RuntimeVersion | undefined;
+  runtimeVersion?: UpdateAssistantFormRuntimeVersion | undefined;
   /**
    * The assistant status.
    */
@@ -107,9 +109,9 @@ export const ExpectedRuntimeVersion$outboundSchema: z.ZodMiniEnum<
 > = z.enum(ExpectedRuntimeVersion);
 
 /** @internal */
-export const RuntimeVersion$outboundSchema: z.ZodMiniEnum<
-  typeof RuntimeVersion
-> = z.enum(RuntimeVersion);
+export const UpdateAssistantFormRuntimeVersion$outboundSchema: z.ZodMiniEnum<
+  typeof UpdateAssistantFormRuntimeVersion
+> = z.enum(UpdateAssistantFormRuntimeVersion);
 
 /** @internal */
 export const UpdateAssistantFormStatus$outboundSchema: z.ZodMiniEnum<
@@ -144,7 +146,9 @@ export const UpdateAssistantForm$outboundSchema: z.ZodMiniType<
     mcpServers: z.optional(z.array(AssistantMCPServerRef$outboundSchema)),
     model: z.optional(z.string()),
     name: z.optional(z.string()),
-    runtimeVersion: z.optional(RuntimeVersion$outboundSchema),
+    runtimeVersion: z.optional(
+      UpdateAssistantFormRuntimeVersion$outboundSchema,
+    ),
     status: z.optional(UpdateAssistantFormStatus$outboundSchema),
     toolsets: z.optional(z.array(AssistantToolsetRef$outboundSchema)),
     warmTtlSeconds: z.optional(z.int()),

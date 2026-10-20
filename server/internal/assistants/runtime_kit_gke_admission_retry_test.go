@@ -29,12 +29,13 @@ func TestKitGKEColdAdmissionRetry(t *testing.T) {
 		bootstraps++
 		return bootstrap(ctx, r)
 	}
+	attempt, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	k.config.Protocol = func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error) {
 		require.NotEmpty(t, persisted, "ownership must precede network readiness")
+		cancel()
 		return &kitGKEFailedStatusProtocol{}, nil
 	}
-	attempt, cancel := context.WithTimeout(ctx, 30*time.Millisecond)
-	defer cancel()
 	_, err := k.Ensure(attempt, r)
 	require.ErrorContains(t, err, "wait for authenticated Kit gateway")
 	require.Zero(t, *fences, "resumable readiness failure retains the owned process credentials")
@@ -64,11 +65,13 @@ func TestKitGKEColdAdmissionPodWaitRetryRejectsReplacement(t *testing.T) {
 				persisted = append([]byte(nil), raw...)
 				return nil
 			}))
+			attempt, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
 			client.PrependReactor("list", "pods", func(ktesting.Action) (bool, runtime.Object, error) {
+				require.NotEmpty(t, persisted, "ownership must precede pod readiness")
+				cancel()
 				return true, &unstructured.UnstructuredList{}, nil
 			})
-			attempt, cancel := context.WithTimeout(ctx, 30*time.Millisecond)
-			defer cancel()
 			_, err := k.Ensure(attempt, r)
 			require.Error(t, err)
 			require.Zero(t, *fences)

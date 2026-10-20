@@ -49,10 +49,10 @@ func TestInferenceCredentialStorageFencing(t *testing.T) {
 			Backend: "local", BackendMetadataJson: []byte(`{}`), State: "running",
 			WarmUntil: now, LastHeartbeatAt: now, UpdatedAt: now, EndedAt: pgtype.Timestamptz{}, DeletedAt: pgtype.Timestamptz{},
 		}))
+		require.NoError(t, chatrepo.New(f.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: id, ProjectID: f.projectID, RuntimeVersion: 3}))
 	}
 	require.NoError(t, runtimes.SetAssistantDesiredRuntimeVersionForTest(ctx, assistantsrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: f.projectID, AssistantID: f.assistantID, RuntimeVersion: 3}))
 	createRuntime(runtimeID)
-	require.NoError(t, chatrepo.New(f.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: f.projectID, RuntimeVersion: 3}))
 	q := tokenrepo.New(f.conn)
 	issue := func(seed string) uuid.UUID {
 		t.Helper()

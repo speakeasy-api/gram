@@ -22,6 +22,7 @@ func TestReviewLocalReadinessFailureStopsStartedIncarnation(t *testing.T) {
 	require.ErrorIs(t, err, failure)
 	require.False(t, engine.info.Running)
 	require.Contains(t, engine.calls, "stop")
+	require.Equal(t, []string{engine.info.ID}, engine.stoppedIDs)
 	require.NoError(t, k.ReapStoppedMachine(t.Context(), r))
 	require.Empty(t, engine.info.ID)
 	require.Nil(t, engine.volume)

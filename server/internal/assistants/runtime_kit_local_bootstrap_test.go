@@ -69,7 +69,7 @@ func TestKitLocalStartupBootstrapRotatesCredential(t *testing.T) {
 	require.NoError(t, err)
 	runtime := row.ID
 	manager := assistanttokens.New("test", db, nil, nil, nil)
-	in := KitStartupBootstrapInput{Identity: *resolved.Identity, RuntimeID: runtime, Lifetime: 24 * time.Hour, Origin: "https://api.example.invalid", AgentsMD: []byte("global instructions"), MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("test-token")}
+	in := KitStartupBootstrapInput{Environment: "local", Identity: *resolved.Identity, RuntimeID: runtime, Lifetime: 24 * time.Hour, Origin: "https://api.example.invalid", AgentsMD: []byte("global instructions"), MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("test-token")}
 	first, id, err := PrepareKitStartupBootstrap(t.Context(), manager, in)
 	require.NoError(t, err)
 	second, next, err := PrepareKitStartupBootstrap(t.Context(), manager, in)
@@ -122,8 +122,12 @@ func TestKitLocalStartupBootstrapRotatesCredential(t *testing.T) {
 	require.NoError(t, err)
 	txInput := in
 	txInput.LifecycleTx = tx
-	_, pendingKeyID, err := PrepareKitStartupBootstrap(txCtx, manager, txInput)
+	txInput.Environment = "production"
+	production, pendingKeyID, err := PrepareKitStartupBootstrap(txCtx, manager, txInput)
 	require.NoError(t, err)
+	var productionFile kitInferenceFile
+	require.NoError(t, json.Unmarshal(production.InferenceJSON, &productionFile))
+	require.True(t, strings.HasPrefix(productionFile.APIKey, "gram_live_"), "production bootstrap must preserve its environment")
 	_, err = tokenrepo.New(tx).ReadKitAPIKeyBinding(txCtx, pendingKeyID)
 	require.NoError(t, err)
 	_, err = tokenrepo.New(tx).ReadKitAPIKeyBinding(txCtx, next)
@@ -209,7 +213,7 @@ func TestKitLocalExactImageGatewaySmoke(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
-	raw, err := client.Call(ctx, "session/new", map[string]any{"cwd": KitWorkspacePath, "mcpServers": []any{}, "_meta": map[string]string{"ai.speakeasy/gram-chat-id": uuid.NewString()}}, "")
+	raw, err := client.Call(ctx, "session/new", map[string]any{"cwd": KitWorkspacePath, "mcpServers": []any{}}, "")
 	require.NoError(t, err)
 	var session struct {
 		SessionID string `json:"sessionId"`
@@ -235,6 +239,13 @@ func TestKitLocalExactImageGatewaySmoke(t *testing.T) {
 	_, err = client.Call(ctx, "session/close", map[string]string{"sessionId": session.SessionID}, session.SessionID)
 	require.NoError(t, err)
 	stats := fixture.stats(t)
+	// Pinned Kit derives native inference attribution from its ACP session ID;
+	// it does not accept canonical dashboard chat identity through _meta.
+	providerChatID, parseErr := uuid.Parse(session.SessionID)
+	if parseErr != nil {
+		providerChatID = uuid.NewSHA1(uuid.NameSpaceDNS, []byte(session.SessionID))
+	}
+	require.Equal(t, providerChatID.String(), stats.ChatID)
 	require.Positive(t, stats.Completions, "Kit must authenticate fixed HTTPS completion with native API key and project")
 	require.Zero(t, stats.Rejected, "all provider requests must carry native authentication")
 	require.Zero(t, stats.Unexpected, "session lifecycle must not call unexpected provider endpoints")

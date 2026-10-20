@@ -18,9 +18,12 @@ import (
 // the gateway command are positional arguments, never shell source.
 const kitLocalCABundleScript = `set -eu
 umask 077
-bundle=$(mktemp /tmp/kit-ca-bundle.XXXXXX)
+bundle="${TMPDIR:-/tmp}/kit-ca-bundle.pem"
+rm -f "$bundle"
+set -C
 trap 'rm -f "$bundle"' EXIT
 cat "$1" > "$bundle"
+set +C
 printf '\n' >> "$bundle"
 cat "$2" >> "$bundle"
 shift 2
@@ -146,10 +149,43 @@ func (d *dockerCLIEngine) CreateKitVolume(ctx context.Context, name string, labe
 	return nil
 }
 
+// The stopped HOME volume is the only writable mount. Replacing this directory
+// removes credentials omitted by the new bootstrap, including dangling symlinks.
+//
+//nolint:gosec // G101: fixed filesystem cleanup commands, not a credential or embedded secret.
+const kitLocalCredentialResetScript = `set -eu
+umask 077
+test ! -L "$1/.kit"
+mkdir -p "$1/.kit"
+rm -rf "$1/.kit/credentials"
+mkdir -m 700 "$1/.kit/credentials"
+`
+
+func kitLocalCredentialResetArgs(info kitLocalContainerInfo) ([]string, error) {
+	if info.Running || info.ID == "" || info.ImageID == "" || info.HomeVolume == "" {
+		return nil, fmt.Errorf("credential replacement requires a stopped Kit HOME volume")
+	}
+	return []string{"run", "--rm", "--network", "none", "--read-only", "--user", "1000:1000", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--mount", "type=volume,src=" + info.HomeVolume + ",dst=/kit-home", "--entrypoint", "/bin/sh", info.ImageID, "-c", kitLocalCredentialResetScript, "kit-credentials-reset", "/kit-home"}, nil
+}
+
 func (d *dockerCLIEngine) CopyKitBootstrap(ctx context.Context, id string, b KitLocalBootstrap) error {
 	archive, err := kitLocalBootstrapArchive(b)
 	if err != nil {
 		return err
+	}
+	info, err := d.InspectKit(ctx, id)
+	if err != nil {
+		return err
+	}
+	if info.ID != id {
+		return fmt.Errorf("credential replacement container identity changed")
+	}
+	args, err := kitLocalCredentialResetArgs(info)
+	if err != nil {
+		return err
+	}
+	if _, err := d.exec(ctx, args...); err != nil {
+		return fmt.Errorf("replace kit credentials directory: %w", err)
 	}
 	// -a preserves UID/GID from fixed archive headers. No secret is placed in
 	// argv, environment, a host file, logs, or returned Docker stderr.

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/clientcred"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -88,6 +91,9 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 		return reject("invalid_scope")
 	}
 	scopes := strings.Split(rawScopes[0], " ")
+	if len(scopes) != 1 || scopes[0] != "mcp:connect" {
+		return reject("invalid_scope")
+	}
 	result, err := s.assistantWorkloadTokens.IssueAssistantWorkloadToken(ctx, AssistantWorkloadTokenRequest{
 		endpoint: endpoint, baseURL: baseURL, client: client,
 		ClientRegistrationID: client.ID, ClientID: client.ClientID,
@@ -95,7 +101,20 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 		ProjectID: endpoint.ProjectID, Resource: resource, Scopes: scopes,
 	})
 	if err != nil {
-		return reject("unauthorized_client")
+		if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
+			switch refusal.outcome {
+			case workloadGrantRefused:
+				return reject("unauthorized_client")
+			case workloadGrantRateLimited:
+				w.Header().Set("Retry-After", retryAfterSeconds(refusal.retryAfter))
+				return writeTokenError(ctx, w, logger, http.StatusTooManyRequests, "temporarily_unavailable", "workload token issuance unavailable")
+			case workloadGrantUnavailable:
+				w.Header().Set("Retry-After", retryAfterSeconds(refusal.retryAfter))
+			}
+		} else if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, assistantidentity.ErrInvalidIdentity) {
+			return reject("unauthorized_client")
+		}
+		return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "workload token issuance unavailable")
 	}
 	lifetime := time.Until(result.ExpiresAt)
 	if result.AssistantID == uuid.Nil || result.AccessToken == "" || lifetime < time.Second || lifetime > 15*time.Minute {

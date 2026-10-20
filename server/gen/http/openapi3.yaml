@@ -91705,6 +91705,9 @@ components:
                 runtime_version:
                     type: integer
                     description: 'Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.'
+                    enum:
+                        - 2
+                        - 3
                     format: int64
                 skills:
                     type: array

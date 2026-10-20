@@ -51,7 +51,7 @@ func (s *AssistantIdentityService) selectRuntime(ctx context.Context, principal 
 		return zero, oops.C(oops.CodeBadRequest)
 	}
 	assistantID, err := uuid.Parse(input.AssistantID)
-	if err != nil || assistantID == uuid.Nil || (input.RuntimeVersion != 2 && input.RuntimeVersion != 3) || (input.Confirmed && (input.ExpectedRuntimeVersion < 2 || input.ExpectedRuntimeVersion > 3)) {
+	if err != nil || assistantID == uuid.Nil || (input.RuntimeVersion != 2 && input.RuntimeVersion != 3) || ((input.Confirmed || input.ExpectedRuntimeVersion != 0) && (input.ExpectedRuntimeVersion < 2 || input.ExpectedRuntimeVersion > 3)) {
 		return zero, oops.C(oops.CodeBadRequest)
 	}
 	// Preserve the canonical actor, session and live grants established by the

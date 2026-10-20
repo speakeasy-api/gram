@@ -49,6 +49,9 @@ func kitGKEObserved(obj *unstructured.Unstructured) error {
 }
 
 func kitGKEManagedScope(policy *unstructured.Unstructured) error {
+	if err := kitGKEObserved(policy); err != nil {
+		return err
+	}
 	if policy.GetAPIVersion() != "podsnapshot.gke.io/v1" || policy.GetKind() != "PodSnapshotPolicy" || policy.GetDeletionTimestamp() != nil {
 		return fmt.Errorf("%w: invalid PodSnapshotPolicy", ErrKitGKEManagedSnapshotSchema)
 	}

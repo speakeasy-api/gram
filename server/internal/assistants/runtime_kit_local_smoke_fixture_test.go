@@ -32,10 +32,11 @@ type kitNativeCatalogFixture struct {
 }
 
 type kitNativeCatalogStats struct {
-	Catalog     int64 `json:"Catalog"`
-	Completions int64 `json:"Completions"`
-	Rejected    int64 `json:"Rejected"`
-	Unexpected  int64 `json:"Unexpected"`
+	Catalog     int64  `json:"Catalog"`
+	Completions int64  `json:"Completions"`
+	Rejected    int64  `json:"Rejected"`
+	Unexpected  int64  `json:"Unexpected"`
+	ChatID      string `json:"ChatID"`
 }
 
 func newKitNativeCatalogFixture(t *testing.T, image string) kitNativeCatalogFixture {
@@ -65,7 +66,7 @@ func newKitNativeCatalogFixture(t *testing.T, image string) kitNativeCatalogFixt
 		require.NoError(t, exec.CommandContext(ctx, "docker", "network", "remove", f.network).Run())
 	})
 	// Bind 443 as root in this throwaway fixture only; Kit itself stays UID 1000.
-	output, err = exec.CommandContext(ctx, "docker", "create", "--network", f.network, "--network-alias", "ai.speakeasy.com", "--user", "0:0", "--read-only", "--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE", "--security-opt", "no-new-privileges", "--volume", dir+":/fixture:ro", "--entrypoint", "/fixture/catalog", image).Output()
+	output, err = exec.CommandContext(ctx, "docker", "create", "--network", f.network, "--network-alias", "ai.speakeasy.com", "--user", "0:0", "--read-only", "--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE", "--security-opt", "no-new-privileges", "--volume", dir+":/fixture:ro", "--entrypoint", "/fixture/catalog", image, "serve").Output()
 	require.NoError(t, err)
 	f.container = strings.TrimSpace(string(output))
 	t.Cleanup(func() {
@@ -128,7 +129,7 @@ import (
  "time"
 )
 func main() {
- if len(os.Args) > 1 {
+ if len(os.Args) == 2 && os.Args[1] == "stats" {
   client := &http.Client{Timeout: 2*time.Second}
   r, err := client.Get("http://127.0.0.1:8082")
   if err != nil { os.Exit(1) }
@@ -138,6 +139,8 @@ func main() {
   return
  }
  var catalog, completions, rejected, unexpected atomic.Int64
+ var chatID atomic.Value
+ chatID.Store("")
  mux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
   if r.Host != "ai.speakeasy.com" || !((r.URL.Path == "/chat/models" && r.Method == "GET") || (r.URL.Path == "/chat/completions" && r.Method == "POST")) {
    unexpected.Add(1); http.NotFound(w,r); return
@@ -147,6 +150,7 @@ func main() {
   }
   if r.URL.Path == "/chat/completions" {
    completions.Add(1)
+   chatID.Store(r.Header.Get("Gram-Chat-ID"))
    w.Header().Set("Content-Type", "text/event-stream")
    io.WriteString(w, "data: {\"id\":\"smoke\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"openai/gpt-4o-mini\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"smoke-ok\"},\"finish_reason\":null}]}\n\n")
    io.WriteString(w, "data: {\"id\":\"smoke\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"openai/gpt-4o-mini\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
@@ -165,7 +169,7 @@ func main() {
   if server.Serve(tls.NewListener(listener, &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}})) != nil { os.Exit(1) }
  }()
  stats := &http.Server{Addr: "127.0.0.1:8082", ReadHeaderTimeout: 5*time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-  json.NewEncoder(w).Encode(map[string]int64{"Catalog":catalog.Load(), "Completions":completions.Load(), "Rejected":rejected.Load(), "Unexpected":unexpected.Load()})
+  json.NewEncoder(w).Encode(map[string]any{"Catalog":catalog.Load(), "Completions":completions.Load(), "Rejected":rejected.Load(), "Unexpected":unexpected.Load(), "ChatID":chatID.Load()})
  })}
  if stats.ListenAndServe() != nil { os.Exit(1) }
 }

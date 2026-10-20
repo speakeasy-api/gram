@@ -33,7 +33,7 @@ func (m *Manager) IssueKitAPIKey(ctx context.Context, in InferenceIssueInput, en
 	if in.RuntimeID == uuid.Nil || in.Lifetime <= 0 || in.Lifetime > MaxInferenceLifetime {
 		return KitAPIKey{}, fmt.Errorf("invalid Kit API-key runtime or lifetime")
 	}
-	tx, err := m.db.Begin(ctx)
+	tx, err := m.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		return KitAPIKey{}, fmt.Errorf("begin Kit API-key issuance: %w", err)
 	}
@@ -49,7 +49,8 @@ func (m *Manager) IssueKitAPIKey(ctx context.Context, in InferenceIssueInput, en
 }
 
 // IssueKitAPIKeyInTx issues a native key on the caller's lifecycle transaction.
-// The caller owns commit/rollback and must not publish the key before commit.
+// The caller must use REPEATABLE READ or SERIALIZABLE, owns commit/rollback,
+// and must not publish the key before commit.
 func (m *Manager) IssueKitAPIKeyInTx(ctx context.Context, tx pgx.Tx, in InferenceIssueInput, environment string) (KitAPIKey, error) {
 	if tx == nil || in.RuntimeID == uuid.Nil || in.Lifetime <= 0 || in.Lifetime > MaxInferenceLifetime {
 		return KitAPIKey{}, fmt.Errorf("invalid Kit API-key transaction, runtime or lifetime")

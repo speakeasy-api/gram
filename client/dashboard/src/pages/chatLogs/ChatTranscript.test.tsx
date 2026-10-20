@@ -94,7 +94,11 @@ function show(message: ChatMessage, grouped = false) {
       ]
     : rows.map((row) => ({ type: "row", id: row.id, row }));
   return render(
-    <ChatTranscript items={items} ctx={{}} pagination={pagination} />,
+    <ChatTranscript
+      items={items}
+      ctx={{ dimNonRisk: false }}
+      pagination={pagination}
+    />,
   );
 }
 afterEach(cleanup);

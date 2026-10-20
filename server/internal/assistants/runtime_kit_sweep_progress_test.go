@@ -57,6 +57,7 @@ func TestKitIdleSweepProgressAcrossBatches(t *testing.T) {
 	require.True(t, resumed.WarmUntil.Valid)
 	require.True(t, resumed.WarmUntil.Time.After(now))
 	require.Zero(t, core.sweepIdleKitRuntimes(t.Context(), now))
-	require.EqualValues(t, 1, core.sweepIdleKitRuntimes(t.Context(), resumed.WarmUntil.Time.Add(time.Second)))
+	require.Zero(t, core.sweepIdleKitRuntimes(t.Context(), resumed.WarmUntil.Time.Add(time.Second)), "re-armed runtime retains idle-sweep grace")
+	require.EqualValues(t, 1, core.sweepIdleKitRuntimes(t.Context(), resumed.WarmUntil.Time.Add(runtimeIdleSweepGrace+time.Second)))
 	require.Equal(t, 2, calls[firstRuntime])
 }

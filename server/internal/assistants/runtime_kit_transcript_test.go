@@ -12,6 +12,7 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
@@ -39,6 +40,14 @@ func TestKitTranscriptContentPatchSemantics(t *testing.T) {
 	_, apply, _, _, err := translateKitMessage(b, id, u, nil, old)
 	require.NoError(t, err)
 	require.False(t, apply, "omitted leaves content untouched")
+	for _, reason := range []string{"", "end_turn"} {
+		u.StopReason = reason
+		_, apply, _, _, err = translateKitMessage(b, id, u, nil, nil)
+		require.NoError(t, err)
+		require.False(t, apply, "omitted content cannot create a message")
+	}
+	u.StopReason = ""
+
 	for _, raw := range []string{"null", "[]"} {
 		u.Content = json.RawMessage(raw)
 		w, apply, _, _, err := translateKitMessage(b, id, u, nil, old)
@@ -106,6 +115,16 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	notification := func(update string) kitacp.Notification {
 		return kitacp.Notification{SessionID: b.SessionID, Method: "session/update", Params: json.RawMessage(`{"sessionId":"session","update":` + update + `}`)}
 	}
+	beforeOmitted, err := testrepo.New(db).CountPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	omitted, err := projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"agent_message","messageId":"omitted","stopReason":"end_turn"}`))
+	require.NoError(t, err)
+	require.False(t, omitted.Changed)
+	_, err = chatrepo.New(db).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ID: KitTranscriptMessageID(b, "agent_message", "omitted")})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	afterOmitted, err := testrepo.New(db).CountPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, beforeOmitted, afterOmitted, "omitted content must not enqueue storage or metering events")
 	first := notification(`{"sessionUpdate":"agent_message","messageId":"reply","content":[{"type":"text","text":"one"}]}`)
 	result, err := projector.Handle(t.Context(), b, first)
 	require.NoError(t, err)
@@ -126,6 +145,7 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	result, err = projector.Handle(t.Context(), b, first)
 	require.NoError(t, err)
 	require.False(t, result.Changed)
+	require.NoError(t, riskrepo.New(db).MarkMessagesRiskAnalyzed(t.Context(), riskrepo.MarkMessagesRiskAnalyzedParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, MessageIds: []uuid.UUID{KitTranscriptMessageID(b, "agent_message", "reply")}}))
 	result, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"agent_message","messageId":"reply","content":[{"type":"text","text":"two"}]}`))
 	require.NoError(t, err)
 	require.True(t, result.Changed)
@@ -133,6 +153,13 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
 	require.Equal(t, "two", messages[0].Content)
+	require.False(t, messages[0].RiskAnalyzedAt.Valid, "replacement must be scanned again")
+	require.NoError(t, riskrepo.New(db).MarkMessagesRiskAnalyzed(t.Context(), riskrepo.MarkMessagesRiskAnalyzedParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, MessageIds: []uuid.UUID{KitTranscriptMessageID(b, "agent_message", "reply")}}))
+
+	beforeTerminal, err := chatrepo.New(db).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ID: KitTranscriptMessageID(b, "agent_message", "reply")})
+	require.NoError(t, err)
+	require.True(t, beforeTerminal.RiskAnalyzedAt.Valid, "analysis marker must be set before terminal projection")
+
 	// A reason-only terminal update must update the same canonical row, even
 	// though content is unchanged. Replaying it must be idempotent.
 	reducer := newKitTranscriptReducer()
@@ -150,6 +177,23 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "two", row.Content)
 	require.Equal(t, "cancelled", row.FinishReason.String)
+	require.Equal(t, beforeTerminal.ContentRaw, row.ContentRaw, "reason-only projection must preserve raw content")
+	require.Equal(t, beforeTerminal.ToolCalls, row.ToolCalls, "reason-only projection must preserve tool calls")
+	require.True(t, row.RiskAnalyzedAt.Valid, "reason-only updates preserve completed risk analysis")
+	for _, field := range []string{"raw content", "tool calls"} {
+		patch := chatrepo.PatchKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ChatID: chatID, ID: row.ID, Content: row.Content, ContentRaw: row.ContentRaw, ToolCalls: row.ToolCalls, ContentHash: row.ContentHash, FinishReason: row.FinishReason}
+		if field == "raw content" {
+			patch.ContentRaw = []byte(`[{"type":"text","text":"updated raw"}]`)
+		} else {
+			patch.ToolCalls = []byte(`[{"id":"new-call"}]`)
+		}
+		_, err := chatrepo.New(db).PatchKitProjectionMessage(t.Context(), patch)
+		require.NoError(t, err)
+		row, err = chatrepo.New(db).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ID: row.ID})
+		require.NoError(t, err)
+		require.False(t, row.RiskAnalyzedAt.Valid, field)
+		require.NoError(t, riskrepo.New(db).MarkMessagesRiskAnalyzed(t.Context(), riskrepo.MarkMessagesRiskAnalyzedParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, MessageIds: []uuid.UUID{row.ID}}))
+	}
 
 	// Idle alone is not an authoritative completion reason, and terminal output
 	// without a matching message must not create an empty canonical row.
@@ -165,6 +209,9 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	row, err = chatrepo.New(db).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ID: row.ID})
 	require.NoError(t, err)
 	require.Equal(t, "cancelled", row.FinishReason.String)
+	// This replay replaces the raw-content/tool-call mutations above, so it
+	// preserves the terminal reason but must invalidate their completed scan.
+	require.False(t, row.RiskAnalyzedAt.Valid, "content replay must invalidate risk analysis")
 
 	readings, err := testrepo.New(db).CountPublishOutboxRows(t.Context())
 	require.NoError(t, err)

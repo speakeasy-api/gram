@@ -60,7 +60,7 @@ func (s *ServiceCore) sweepIdleKitRuntimes(ctx context.Context, now time.Time) i
 	var stopped int64
 	attempted := 0
 	for _, row := range rows {
-		if !kitProductionRuntime(row.RuntimeVersion, row.Backend) || !row.WarmUntil.Valid || row.WarmUntil.Time.After(now) {
+		if !kitProductionRuntime(row.RuntimeVersion, row.Backend) || !row.WarmUntil.Valid || row.WarmUntil.Time.After(now.Add(-runtimeIdleSweepGrace)) {
 			continue
 		}
 		if attempted >= runtimeIdleSweepBatch {
@@ -103,7 +103,7 @@ func (s *ServiceCore) checkpointIdleKitRuntime(ctx context.Context, projectID, a
 		if err != nil {
 			return fmt.Errorf("reload Kit checkpoint authority: %w", err)
 		}
-		if row.AssistantID != assistantID || !kitProductionRuntime(row.RuntimeVersion, row.Backend) || row.State != runtimeStateActive || row.Deleted || row.Ended || !row.WarmUntil.Valid || row.WarmUntil.Time.After(now) {
+		if row.AssistantID != assistantID || !kitProductionRuntime(row.RuntimeVersion, row.Backend) || row.State != runtimeStateActive || row.Deleted || row.Ended || !row.WarmUntil.Valid || row.WarmUntil.Time.After(now.Add(-runtimeIdleSweepGrace)) {
 			return nil
 		}
 		inFlight, err := q.CountInFlightAssistantThreadEvents(ctx, assistantrepo.CountInFlightAssistantThreadEventsParams{ProjectID: projectID, AssistantID: assistantID, PendingStatus: eventStatusPending, ProcessingStatus: eventStatusProcessing})

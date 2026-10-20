@@ -4005,7 +4005,8 @@ func (q *Queries) MarkClaudeTagMessages(ctx context.Context, arg MarkClaudeTagMe
 
 const patchKitProjectionMessage = `-- name: PatchKitProjectionMessage :execrows
 UPDATE chat_messages SET content = $1, content_raw = $2,
- tool_calls = $3, content_hash = $4, finish_reason = $5
+ tool_calls = $3, content_hash = $4, finish_reason = $5,
+ risk_analyzed_at = CASE WHEN content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3 THEN NULL ELSE risk_analyzed_at END
 WHERE project_id = $6 AND chat_id = $7 AND id = $8 AND source = 'kit'
 AND (content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3 OR finish_reason IS DISTINCT FROM $5)
 `

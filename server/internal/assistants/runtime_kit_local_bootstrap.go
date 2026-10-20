@@ -126,6 +126,16 @@ type KitStartupBootstrapInput struct {
 // for the row before issuing a replacement; no snapshot credential is reused.
 // The caller must likewise refresh/revoke its MCP machine credentials separately.
 func PrepareKitStartupBootstrap(ctx context.Context, manager *assistanttokens.Manager, in KitStartupBootstrapInput) (KitLocalBootstrap, uuid.UUID, error) {
+	// Native API keys recognize canonical deployment names. Never let an
+	// unknown non-local environment fall through to the local key prefix.
+	environment := in.Environment
+	switch environment {
+	case "local", "dev", "prod":
+	case "production":
+		environment = "prod"
+	default:
+		return KitLocalBootstrap{}, uuid.Nil, fmt.Errorf("unsupported Kit startup environment")
+	}
 	b := KitLocalBootstrap{Model: in.Model, InferenceJSON: nil, AgentsMD: in.AgentsMD, MCPJSON: in.MCPJSON, GatewayToken: in.GatewayToken, MCPFiles: in.MCPFiles}
 	b.InferenceJSON, _ = json.Marshal(kitInferenceFile{Email: nil, OrganizationID: nil, APIKey: "gram_local_" + strings.Repeat("a", 64), Project: "validation"})
 	if err := validateKitBootstrap(b); err != nil {
@@ -146,9 +156,9 @@ func PrepareKitStartupBootstrap(ctx context.Context, manager *assistanttokens.Ma
 	issue := assistanttokens.InferenceIssueInput{Identity: in.Identity, RuntimeID: in.RuntimeID, Lifetime: in.Lifetime}
 	var credential assistanttokens.KitAPIKey
 	if in.LifecycleTx != nil {
-		credential, err = manager.IssueKitAPIKeyInTx(ctx, in.LifecycleTx, issue, in.Environment)
+		credential, err = manager.IssueKitAPIKeyInTx(ctx, in.LifecycleTx, issue, environment)
 	} else {
-		credential, err = manager.IssueKitAPIKey(ctx, issue, in.Environment)
+		credential, err = manager.IssueKitAPIKey(ctx, issue, environment)
 	}
 	if err != nil {
 		return KitLocalBootstrap{}, uuid.Nil, fmt.Errorf("issue kit inference credential: %w", err)

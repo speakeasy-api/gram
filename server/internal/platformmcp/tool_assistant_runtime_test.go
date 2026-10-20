@@ -88,6 +88,8 @@ func TestAssistantRuntimeSelection(t *testing.T) {
 	require.Equal(t, before, calls)
 
 	for _, invalid := range []SelectAssistantRuntimeInput{
+		{ProjectID: input.ProjectID, AssistantID: input.AssistantID, RuntimeVersion: 3, ExpectedRuntimeVersion: 1},
+		{ProjectID: input.ProjectID, AssistantID: input.AssistantID, RuntimeVersion: 3, ExpectedRuntimeVersion: 4},
 		{ProjectID: input.ProjectID, AssistantID: "invalid", RuntimeVersion: 3, ExpectedRuntimeVersion: 2},
 		{ProjectID: input.ProjectID, AssistantID: input.AssistantID, RuntimeVersion: 1, ExpectedRuntimeVersion: 2, Confirmed: true},
 		{ProjectID: input.ProjectID, AssistantID: input.AssistantID, RuntimeVersion: 3, Confirmed: true},

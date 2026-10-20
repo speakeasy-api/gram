@@ -4419,6 +4419,11 @@ func ValidateGetAssistantResponseBody(body *GetAssistantResponseBody) (err error
 			}
 		}
 	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
+		}
+	}
 	if body.Status != nil {
 		if !(*body.Status == "active" || *body.Status == "paused") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
@@ -4511,6 +4516,11 @@ func ValidateCreateAssistantResponseBody(body *CreateAssistantResponseBody) (err
 			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
 		}
 	}
 	if body.Status != nil {
@@ -4607,6 +4617,11 @@ func ValidateUpgradeAssistantIdentityResponseBody(body *UpgradeAssistantIdentity
 			}
 		}
 	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
+		}
+	}
 	if body.Status != nil {
 		if !(*body.Status == "active" || *body.Status == "paused") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
@@ -4699,6 +4714,11 @@ func ValidateUpdateAssistantResponseBody(body *UpdateAssistantResponseBody) (err
 			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
 		}
 	}
 	if body.Status != nil {
@@ -4828,6 +4848,11 @@ func ValidateGetManagedAssistantResponseBody(body *GetManagedAssistantResponseBo
 			}
 		}
 	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
+		}
+	}
 	if body.Status != nil {
 		if !(*body.Status == "active" || *body.Status == "paused") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
@@ -4920,6 +4945,11 @@ func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResp
 			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
 		}
 	}
 	if body.Status != nil {
@@ -7417,6 +7447,11 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
 		}
 	}
 	if body.Status != nil {

@@ -46,12 +46,14 @@ func TestKitLifecycleCheckpointAdmissionFence(t *testing.T) {
 		backend     string
 		eventStatus string
 		warm        bool
+		grace       bool
 		stopError   error
 		wantStop    bool
 	}{
 		{name: "settled checkpoint preserves authority", backend: runtimeBackendGKE, eventStatus: eventStatusCompleted, wantStop: true},
 		{name: "pending admission", backend: runtimeBackendGKE, eventStatus: eventStatusPending},
 		{name: "processing admission", backend: runtimeBackendGKE, eventStatus: eventStatusProcessing},
+		{name: "idle grace", backend: runtimeBackendGKE, eventStatus: eventStatusCompleted, grace: true},
 		{name: "warm process", backend: runtimeBackendGKE, eventStatus: eventStatusCompleted, warm: true},
 		{name: "local unchanged", backend: runtimeBackendLocal, eventStatus: eventStatusCompleted},
 		{name: "unknown settlement fails closed", backend: runtimeBackendGKE, eventStatus: eventStatusCompleted, stopError: errors.New("settlement unavailable"), wantStop: true},
@@ -73,6 +75,9 @@ func TestKitLifecycleCheckpointAdmissionFence(t *testing.T) {
 			require.NoError(t, q.SetAssistantThreadEventStatus(t.Context(), assistantrepo.SetAssistantThreadEventStatusParams{Status: tc.eventStatus, UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, ID: event.ID, ProjectID: project}))
 			now := time.Now()
 			warmUntil := now.Add(-time.Hour)
+			if tc.grace {
+				warmUntil = now.Add(-runtimeIdleSweepGrace / 2)
+			}
 			if tc.warm {
 				warmUntil = now.Add(time.Hour)
 			}

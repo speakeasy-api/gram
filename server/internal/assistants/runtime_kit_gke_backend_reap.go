@@ -65,6 +65,11 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 		if state.Phase != "stopped" {
 			return fmt.Errorf("kit idle cleanup requires stopped authority")
 		}
+		if exists[0] {
+			if err = k.deleteOwned(ctx, steps[0].gvr, steps[0].name, steps[0].uid); err != nil {
+				return err
+			}
+		}
 		_, _, err = k.gcSupersededCheckpoints(ctx, state, authority)
 		return err
 	}
@@ -166,4 +171,39 @@ func (k *KitGKERuntimeBackend) RuntimeExists(ctx context.Context, r assistantRun
 		return false, nil
 	}
 	return err == nil, err
+}
+
+// verifyStoppedSwitchSource runs under the caller's assistant lifecycle fence.
+// A failed row alone is not settlement evidence: require durable stopped
+// authority and the absence of both the process and its recreating claim.
+func (k *KitGKERuntimeBackend) verifyStoppedSwitchSource(ctx context.Context, r assistantRuntimeRecord) error {
+	if r.State != runtimeStateStopped && r.State != runtimeStateFailed {
+		return errRuntimeSwitchUnavailable
+	}
+	state, _, err := k.loadAuthority(ctx, r)
+	if err != nil {
+		return fmt.Errorf("%w: inspect stopped Kit authority: %w", errRuntimeSwitchUnavailable, err)
+	}
+	if state.Phase != "stopped" && state.Phase != "retired" {
+		return errRuntimeSwitchUnavailable
+	}
+	for _, resource := range []struct {
+		gvr  schema.GroupVersionResource
+		name string
+	}{
+		{gkeSandboxClaimGVR, kitGKEName(r)},
+		{gkePodGVR, state.Metadata.PodName},
+	} {
+		if resource.name == "" {
+			return errRuntimeSwitchUnavailable
+		}
+		_, err := k.config.GKE.Dynamic.Resource(resource.gvr).Namespace(k.config.GKE.Namespace).Get(ctx, resource.name, metav1.GetOptions{})
+		if !apierrors.IsNotFound(err) {
+			if err != nil {
+				return fmt.Errorf("%w: inspect stopped Kit resource: %w", errRuntimeSwitchUnavailable, err)
+			}
+			return errRuntimeSwitchBusy
+		}
+	}
+	return nil
 }

@@ -15,6 +15,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -37,16 +38,16 @@ func validateKitMCPBinding(ctx context.Context, db toolsetsrepo.DBTX, request as
 		if resourceURL.Port() != "" {
 			return errors.New("kit MCP resource origin is not served")
 		}
-		domain, err := customdomainsrepo.New(db).GetCustomDomainByDomain(ctx, resourceURL.Hostname())
+		domain, err := customdomainsrepo.New(db).GetCustomDomainByDomainAndOrganization(ctx, customdomainsrepo.GetCustomDomainByDomainAndOrganizationParams{Domain: resourceURL.Hostname(), OrganizationID: request.OrganizationID})
 		if err != nil {
 			return fmt.Errorf("resolve Kit MCP resource origin: %w", err)
 		}
-		if domain.OrganizationID != request.OrganizationID || !domain.Verified || !domain.Activated {
+		if domain.Domain != resourceURL.Hostname() || domain.OrganizationID != request.OrganizationID || !domain.Verified || !domain.Activated {
 			return errors.New("kit MCP resource domain is not active for this organization")
 		}
 		domainID = uuid.NullUUID{UUID: domain.ID, Valid: true}
 	}
-	endpoint, err := mcpendpointsrepo.New(db).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{CustomDomainID: domainID, Slug: slug})
+	endpoint, err := mcpendpointsrepo.New(db).GetMCPEndpointByProjectAndCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByProjectAndCustomDomainAndSlugParams{ProjectID: request.ProjectID, CustomDomainID: domainID, Slug: slug})
 	if err == nil && endpoint.ProjectID != request.ProjectID {
 		return errors.New("kit MCP endpoint belongs to another project")
 	}
@@ -60,6 +61,10 @@ func validateKitMCPBinding(ctx context.Context, db toolsetsrepo.DBTX, request as
 		if server.Visibility == "disabled" || (server.TunneledMcpServerID.Valid && server.Visibility == "public") || server.UnproxiedMcpServerID.Valid {
 			return errors.New("kit MCP resource does not serve workload OAuth")
 		}
+		mode, err := networkaccess.Effective(server.NetworkAccessMode)
+		if err != nil || !mode.Allows(networkaccess.SurfacePublic) {
+			return errors.New("kit MCP resource does not allow public network access")
+		}
 		boundIssuer = server.UserSessionIssuerID
 	case err == nil && endpoint.MetaMcpServerID.Valid:
 		server, err := metamcprepo.New(db).GetMetaMCPServerByIDAndProjectID(ctx, metamcprepo.GetMetaMCPServerByIDAndProjectIDParams{ID: endpoint.MetaMcpServerID.UUID, ProjectID: request.ProjectID})
@@ -69,19 +74,18 @@ func validateKitMCPBinding(ctx context.Context, db toolsetsrepo.DBTX, request as
 		if server.Visibility == "disabled" {
 			return errors.New("kit MCP resource is disabled")
 		}
+		mode, err := networkaccess.Effective(server.NetworkAccessMode)
+		if err != nil || !mode.Allows(networkaccess.SurfacePublic) {
+			return errors.New("kit MCP resource does not allow public network access")
+		}
 		boundIssuer = server.UserSessionIssuerID
 	case errors.Is(err, pgx.ErrNoRows):
 		// Match the public route's legacy toolset fallback without crossing domains.
-		var toolset toolsetsrepo.Toolset
-		if domainID.Valid {
-			toolset, err = toolsetsrepo.New(db).GetToolsetByMcpSlugAndCustomDomain(ctx, toolsetsrepo.GetToolsetByMcpSlugAndCustomDomainParams{McpSlug: pgtype.Text{String: slug, Valid: true}, CustomDomainID: domainID})
-		} else {
-			toolset, err = toolsetsrepo.New(db).GetToolsetByPlatformMcpSlug(ctx, pgtype.Text{String: slug, Valid: true})
-		}
+		toolset, err := toolsetsrepo.New(db).GetToolsetByMcpSlugAndProjectAndCustomDomain(ctx, toolsetsrepo.GetToolsetByMcpSlugAndProjectAndCustomDomainParams{CustomDomainID: domainID, McpSlug: pgtype.Text{String: slug, Valid: true}, ProjectID: request.ProjectID})
 		if err != nil {
 			return fmt.Errorf("resolve Kit MCP toolset: %w", err)
 		}
-		if toolset.ProjectID != request.ProjectID || !toolset.McpEnabled {
+		if toolset.ProjectID != request.ProjectID || toolset.CustomDomainID != domainID || !toolset.McpEnabled {
 			return errors.New("kit MCP resource is not enabled in this project")
 		}
 		boundIssuer = toolset.UserSessionIssuerID
@@ -94,14 +98,12 @@ func validateKitMCPBinding(ctx context.Context, db toolsetsrepo.DBTX, request as
 	if !boundIssuer.Valid || boundIssuer.UUID != request.UserSessionIssuerID {
 		return errors.New("kit MCP resource does not use the configured user-session issuer")
 	}
-	row, err := usersessionsrepo.New(db).GetSharedUserSessionIssuerByID(ctx, boundIssuer.UUID)
+	row, err := usersessionsrepo.New(db).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{ID: boundIssuer.UUID, ProjectID: request.ProjectID, OrganizationID: request.OrganizationID})
 	if err != nil {
 		return fmt.Errorf("resolve Kit MCP issuer: %w", err)
 	}
-	if row.ResolvedOrganizationID != request.OrganizationID || (row.UserSessionIssuer.ProjectID.Valid && row.UserSessionIssuer.ProjectID.UUID != request.ProjectID) {
-		return errors.New("kit MCP issuer tenancy does not match the runtime")
-	}
-	return validateKitMCPIssuerURL(resourceURL, issuerURL, row.UserSessionIssuer, hosts, domainID.Valid)
+
+	return validateKitMCPIssuerURL(resourceURL, issuerURL, row, hosts, domainID.Valid)
 }
 
 func kitMCPPlatformOrigin(origin string, hosts authserver.Hosts, localOrigin *url.URL) bool {

@@ -323,7 +323,10 @@ func (k *KitGKERuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assista
 			return result, err
 		}
 		if row.State != runtimeStateActive {
-			return result, errRuntimeSwitchUnavailable
+			if err := k.verifyStoppedSwitchSource(ctx, row); err != nil {
+				return result, err
+			}
+			continue
 		}
 		protocol, err := k.protocol(ctx, row)
 		if err != nil {

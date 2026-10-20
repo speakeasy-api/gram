@@ -54,6 +54,9 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	if config.GKE.Dynamic == nil || config.GKE.Namespace == "" || config.GKE.ServerURL == nil || config.Bootstrap == nil || config.Protocol == nil || config.Fence == nil || config.AuthorityStore == nil {
 		return nil, fmt.Errorf("kit GKE requires dynamic client, namespace, server URL, bootstrap, fence, authority store and ACP protocol")
 	}
+	if config.GKE.ServerURL.Scheme != "https" || config.GKE.ServerURL.Host == "" {
+		return nil, fmt.Errorf("kit GKE requires an HTTPS management URL")
+	}
 	p := config.Provision
 	if p.GuestPort == 0 {
 		if config.GKE.GuestPort < 0 || config.GKE.GuestPort > 65535 {

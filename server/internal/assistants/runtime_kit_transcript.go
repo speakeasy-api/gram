@@ -269,8 +269,8 @@ func translateKitMessage(b KitTranscriptBinding, id uuid.UUID, u kitTranscriptUp
 		content, _ = json.Marshal([]map[string]string{{"type": "text", "text": text}})
 		write.Params.ToolCallID = pgtype.Text{String: u.ToolCallID, Valid: true}
 	} else {
-		if len(u.Content) == 0 && old != nil {
-			if role != "assistant" || u.StopReason == "" {
+		if len(u.Content) == 0 {
+			if old == nil || role != "assistant" || u.StopReason == "" {
 				return write, false, "", nil, nil
 			}
 			write.Params.Content, write.Params.ContentRaw = old.Content, old.ContentRaw

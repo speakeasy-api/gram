@@ -229,7 +229,9 @@ func TestApplyIssuerGate_WorkloadSessionActsThroughItsAssignedAgent(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind(), "even an already admitted context must fail closed after suspension")
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time), ti.serverURL.String(), endpoint)
-	require.Error(t, err, "fresh admission must also reject the suspended assigned agent")
+	var suspended *oops.ShareableError
+	require.ErrorAs(t, err, &suspended)
+	require.Equal(t, oops.CodeUnauthorized, suspended.Code)
 }
 
 func TestApplyIssuerGate_WorkloadSessionFollowsLiveOwnerPermissions(t *testing.T) {

@@ -14,6 +14,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -24,6 +25,7 @@ type kitBindingDB struct {
 	toolsetsrepo.DBTX
 	endpoint     mcpendpointsrepo.McpEndpoint
 	server       mcpserversrepo.McpServer
+	meta         metamcprepo.MetaMcpServer
 	issuer       usersessionsrepo.UserSessionIssuer
 	organization string
 	toolset      *toolsetsrepo.Toolset
@@ -54,25 +56,30 @@ func kitBindingValues(row any) []any {
 }
 func (db *kitBindingDB) QueryRow(_ context.Context, query string, _ ...any) pgx.Row {
 	switch {
-	case strings.Contains(query, "-- name: GetMCPEndpointByCustomDomainAndSlug"):
+	case strings.Contains(query, "-- name: GetMCPEndpointByProjectAndCustomDomainAndSlug"):
 		if db.toolset != nil {
 			return kitBindingRow{err: pgx.ErrNoRows}
 		}
 		return kitBindingRow{values: kitBindingValues(db.endpoint)}
+	case strings.Contains(query, "-- name: GetMetaMCPServerByIDAndProjectID"):
+		return kitBindingRow{values: kitBindingValues(db.meta)}
 	case strings.Contains(query, "-- name: GetMCPServerByIDAndProjectID"):
 		return kitBindingRow{values: kitBindingValues(db.server)}
-	case strings.Contains(query, "-- name: GetToolsetByPlatformMcpSlug"):
+	case strings.Contains(query, "-- name: GetToolsetByMcpSlugAndProjectAndCustomDomain"):
 		if db.toolset != nil {
 			return kitBindingRow{values: kitBindingValues(*db.toolset)}
 		}
 		return kitBindingRow{err: pgx.ErrNoRows}
-	case strings.Contains(query, "-- name: GetCustomDomainByDomain"):
+	case strings.Contains(query, "-- name: GetCustomDomainByDomainAndOrganization"):
 		if db.domain != nil {
 			return kitBindingRow{values: kitBindingValues(*db.domain)}
 		}
 		return kitBindingRow{err: pgx.ErrNoRows}
-	case strings.Contains(query, "-- name: GetSharedUserSessionIssuerByID"):
-		return kitBindingRow{values: append(kitBindingValues(db.issuer), db.organization)}
+	case strings.Contains(query, "-- name: GetUserSessionIssuerByID"):
+		if db.organization == "other-org" {
+			return kitBindingRow{err: pgx.ErrNoRows}
+		}
+		return kitBindingRow{values: kitBindingValues(db.issuer)}
 	default:
 		return kitBindingRow{err: pgx.ErrNoRows}
 	}
@@ -86,7 +93,7 @@ func kitBindingURL(t *testing.T, raw string) *url.URL {
 
 func TestKitMCPAuthoritativeBinding(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"valid", "wrong-issuer-id", "wrong-issuer-url", "foreign-origin", "ungated", "disabled", "public-tunnel", "foreign-project", "foreign-issuer-tenant", "shared", "wrong-shared-pin", "auth-host", "local-relay", "escaped-path", "legacy", "legacy-disabled", "custom-domain", "inactive-domain"} {
+	for _, scenario := range []string{"valid", "wrong-issuer-id", "wrong-issuer-url", "foreign-origin", "ungated", "disabled", "meta-private-network", "meta-invalid-network", "meta-dual-network", "private-network", "invalid-network", "dual-network", "public-tunnel", "foreign-project", "foreign-issuer-tenant", "shared", "wrong-shared-pin", "auth-host", "local-relay", "escaped-path", "legacy", "legacy-disabled", "custom-domain", "inactive-domain"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			project, issuer, serverID := uuid.New(), uuid.New(), uuid.New()
@@ -115,6 +122,15 @@ func TestKitMCPAuthoritativeBinding(t *testing.T) {
 				db.server.UserSessionIssuerID.Valid = false
 			case "disabled":
 				db.server.Visibility = "disabled"
+			case "meta-private-network", "meta-invalid-network", "meta-dual-network":
+				db.endpoint.McpServerID = uuid.NullUUID{}
+				db.endpoint.MetaMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+				db.meta.UserSessionIssuerID = db.server.UserSessionIssuerID
+				db.meta.NetworkAccessMode = pgtype.Text{String: map[string]string{"meta-private-network": "private_only", "meta-invalid-network": "invalid", "meta-dual-network": "dual"}[scenario], Valid: true}
+				good = scenario == "meta-dual-network"
+			case "private-network", "invalid-network", "dual-network":
+				db.server.NetworkAccessMode = pgtype.Text{String: map[string]string{"private-network": "private_only", "invalid-network": "invalid", "dual-network": "dual"}[scenario], Valid: true}
+				good = scenario == "dual-network"
 			case "public-tunnel":
 				db.server.Visibility = "public"
 				db.server.TunneledMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
@@ -146,7 +162,7 @@ func TestKitMCPAuthoritativeBinding(t *testing.T) {
 			case "custom-domain", "inactive-domain":
 				resource = kitBindingURL(t, "https://mcp.customer.example/mcp/attached")
 				expected = resource
-				db.domain = &customdomainsrepo.CustomDomain{ID: uuid.New(), OrganizationID: request.OrganizationID, Verified: true, Activated: scenario == "custom-domain"}
+				db.domain = &customdomainsrepo.CustomDomain{ID: uuid.New(), OrganizationID: request.OrganizationID, Domain: resource.Hostname(), Verified: true, Activated: scenario == "custom-domain"}
 				db.issuer.UseAuthenticationHost = true
 				good = scenario == "custom-domain"
 			case "escaped-path":
