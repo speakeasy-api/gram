@@ -18,12 +18,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
-	mcpskillsrepo "github.com/speakeasy-api/gram/server/internal/mcp/mcpskills/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -366,7 +366,7 @@ func TestServePublic_Skills_ReadServesMarkdownAndRecordsOneActivationPerSession(
 		require.Equal(t, rawSHA256(content), rawSHA256(contents[0].Text), "the served bytes are the ones the digest covers")
 	}
 
-	observations, err := mcpskillsrepo.New(ti.conn).ListMCPSkillObservations(ctx, mcpskillsrepo.ListMCPSkillObservationsParams{
+	observations, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
 		ProjectID: f.projectID, Provider: mcpskills.ObservationProvider,
 	})
 	require.NoError(t, err)
@@ -393,7 +393,7 @@ func TestServePublic_Skills_ReadUnknownURIIsInvalidParams(t *testing.T) {
 	require.NoError(t, err)
 	requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
 
-	observations, err := mcpskillsrepo.New(ti.conn).ListMCPSkillObservations(ctx, mcpskillsrepo.ListMCPSkillObservationsParams{
+	observations, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
 		ProjectID: f.projectID, Provider: mcpskills.ObservationProvider,
 	})
 	require.NoError(t, err)
@@ -460,7 +460,7 @@ func TestServePublic_Skills_APIKeyCallerIsServedNothing(t *testing.T) {
 	require.NoError(t, err)
 	requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
 
-	observations, err := mcpskillsrepo.New(ti.conn).ListMCPSkillObservations(ctx, mcpskillsrepo.ListMCPSkillObservationsParams{
+	observations, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
 		ProjectID: f.projectID, Provider: mcpskills.ObservationProvider,
 	})
 	require.NoError(t, err)
@@ -496,7 +496,7 @@ func TestServePublic_Skills_FlagOffAnswersMethodNotFound(t *testing.T) {
 	require.NoError(t, err)
 	requireRPCErrorCode(t, w, oops.MCPCodeResourceNotFound)
 
-	observations, err := mcpskillsrepo.New(ti.conn).ListMCPSkillObservations(ctx, mcpskillsrepo.ListMCPSkillObservationsParams{
+	observations, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
 		ProjectID: f.projectID, Provider: mcpskills.ObservationProvider,
 	})
 	require.NoError(t, err)
