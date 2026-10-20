@@ -195,7 +195,9 @@ function ReviewRow({
     <li className="grid grid-cols-1 items-center gap-3 py-2 pr-1 pl-3 @3xl:grid-cols-[minmax(0,1fr)_28rem]">
       {/* Two columns: the text on the left and a fixed-width controls column
           on the right, so every row lines up the same way. Controls wrap
-          inside their own column; narrow panels stack the two columns. */}
+          inside their own column; narrow panels stack the two columns.
+          Within the controls column, bordered controls sit on the top row
+          and borderless buttons on a second row below them. */}
       <div className="min-w-0">
         <Text className="truncate font-medium">{title}</Text>
         <Text muted small>
@@ -208,7 +210,7 @@ function ReviewRow({
         )}
       </div>
       {missing ? (
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-col items-end gap-1">
           <Button
             variant="secondary"
             size="sm"
@@ -227,59 +229,63 @@ function ReviewRow({
           </Button>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Select
-            value={choice ? choiceValue(choice) : undefined}
-            onValueChange={(value) => setPicked(choiceFromValue(value))}
-            disabled={disabled}
-          >
-            <SelectTrigger className="w-56" aria-label={`Role for ${title}`}>
-              <SelectValue placeholder="Pick a role" />
-            </SelectTrigger>
-            <SelectContent>
-              {proposed?.kind === "create" && (
-                <SelectItem value={choiceValue(proposed)}>
-                  New role: {proposed.name}
-                </SelectItem>
-              )}
-              {roles.map((role) => (
-                <SelectItem
-                  key={role.principalUrn}
-                  value={`reuse:${role.principalUrn}`}
-                >
-                  {role.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={disabled || !choice}
-            onClick={() => onDecide("approve", choice)}
-          >
-            <Button.Text>Map</Button.Text>
-          </Button>
-          <Button
-            variant="tertiary"
-            size="sm"
-            disabled={disabled}
-            onClick={() => onDecide("dismiss")}
-          >
-            <Button.Text>Leave unmapped</Button.Text>
-          </Button>
-          {item.kind === "new_attribute_value" && (
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Select
+              value={choice ? choiceValue(choice) : undefined}
+              onValueChange={(value) => setPicked(choiceFromValue(value))}
+              disabled={disabled}
+            >
+              <SelectTrigger className="w-56" aria-label={`Role for ${title}`}>
+                <SelectValue placeholder="Pick a role" />
+              </SelectTrigger>
+              <SelectContent>
+                {proposed?.kind === "create" && (
+                  <SelectItem value={choiceValue(proposed)}>
+                    New role: {proposed.name}
+                  </SelectItem>
+                )}
+                {roles.map((role) => (
+                  <SelectItem
+                    key={role.principalUrn}
+                    value={`reuse:${role.principalUrn}`}
+                  >
+                    {role.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={disabled || !choice}
+              onClick={() => onDecide("approve", choice)}
+            >
+              <Button.Text>Map</Button.Text>
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               variant="tertiary"
               size="sm"
               disabled={disabled}
-              onClick={() => onDecide("opt_out_key")}
+              onClick={() => onDecide("dismiss")}
             >
-              <Button.Text>
-                Stop asking about {item.item.source.attributeKey}
-              </Button.Text>
+              <Button.Text>Leave unmapped</Button.Text>
             </Button>
-          )}
+            {item.kind === "new_attribute_value" && (
+              <Button
+                variant="tertiary"
+                size="sm"
+                disabled={disabled}
+                onClick={() => onDecide("opt_out_key")}
+              >
+                <Button.Text>
+                  Stop asking about {item.item.source.attributeKey}
+                </Button.Text>
+              </Button>
+            )}
+          </div>
         </div>
       )}
     </li>
