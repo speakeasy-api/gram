@@ -5546,7 +5546,6 @@ CREATE TABLE IF NOT EXISTS assistants (
   instructions TEXT NOT NULL,
   warm_ttl_seconds BIGINT NOT NULL DEFAULT 300 CHECK (warm_ttl_seconds >= 0 AND warm_ttl_seconds <= 3600),
   max_concurrency BIGINT NOT NULL DEFAULT 1 CHECK (max_concurrency >= 1 AND max_concurrency <= 100),
-  runtime_version SMALLINT NOT NULL DEFAULT 2,
   status TEXT NOT NULL DEFAULT 'active',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -5567,7 +5566,6 @@ COMMENT ON COLUMN assistants.model IS '@access: confidential';
 COMMENT ON COLUMN assistants.instructions IS '@access: opaque-restricted';
 COMMENT ON COLUMN assistants.warm_ttl_seconds IS '@access: confidential';
 COMMENT ON COLUMN assistants.max_concurrency IS '@access: confidential';
-COMMENT ON COLUMN assistants.runtime_version IS '@access: confidential';
 COMMENT ON COLUMN assistants.status IS '@access: confidential';
 COMMENT ON COLUMN assistants.created_at IS '@access: confidential';
 COMMENT ON COLUMN assistants.updated_at IS '@access: confidential';
