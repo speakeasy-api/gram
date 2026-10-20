@@ -26,33 +26,42 @@ const inferenceCellSchema = z.object({
   sessions: z.number(),
 });
 
-export const hookClientsSchema = z.object({
+const deviceAgentCellSchema = z.object({
+  organization_id: z.string(),
+  day: z.string(),
+  version: z.string(),
+  machines: z.number(),
+});
+
+export const fleetHealthSchema = z.object({
   window_days: z.number(),
   queried_at: z.string(),
   from_cache: z.boolean(),
   organizations: z.array(organizationSchema),
   sessions: z.array(sessionCellSchema),
   inference: z.array(inferenceCellSchema),
+  device_agents: z.array(deviceAgentCellSchema),
 });
 
-export type HookClients = z.infer<typeof hookClientsSchema>;
+export type FleetHealth = z.infer<typeof fleetHealthSchema>;
 export type SessionCell = z.infer<typeof sessionCellSchema>;
 export type InferenceCell = z.infer<typeof inferenceCellSchema>;
+export type DeviceAgentCell = z.infer<typeof deviceAgentCellSchema>;
 
-export async function fetchHookClients(refresh: boolean): Promise<HookClients> {
+export async function fetchFleetHealth(refresh: boolean): Promise<FleetHealth> {
   const path = refresh
     ? "/admin/hookClients.get?refresh=true"
     : "/admin/hookClients.get";
-  return hookClientsSchema.parse(
+  return fleetHealthSchema.parse(
     await gramAdminFetch<unknown>(path, { cache: "no-store" }),
   );
 }
 
-export const hookClientsQuery = {
-  queryKey: ["hook-clients"],
+export const fleetHealthQuery = {
+  queryKey: ["fleet-health"],
   // The server keeps the grids for an hour, so a reload is cheap. Refresh
   // asks the server for a fresh ClickHouse read instead.
-  queryFn: (): Promise<HookClients> => fetchHookClients(false),
+  queryFn: (): Promise<FleetHealth> => fetchFleetHealth(false),
   staleTime: 5 * 60 * 1000,
   refetchOnWindowFocus: false,
 };
@@ -154,22 +163,26 @@ function stopAt(index: number): [number, string, [number, number, number]] {
   return [at, hex, STOP_LABS[index] ?? hexToOklab(hex)];
 }
 
-function versionParts(version: string): number[] {
-  return version
-    .replace(/^v/, "")
-    .split(/[.-]/)
+function versionCore(version: string): number[] {
+  return (version.replace(/^v/, "").split("-")[0] ?? "")
+    .split(".")
     .map((part) => Number.parseInt(part, 10))
     .map((part) => (Number.isNaN(part) ? 0 : part));
 }
 
+// Semver order: the numeric core first, then a prerelease (1.2.0-rc.1) sorts
+// before its release (1.2.0).
 export function compareVersions(a: string, b: string): number {
-  const left = versionParts(a);
-  const right = versionParts(b);
+  const left = versionCore(a);
+  const right = versionCore(b);
   for (let i = 0; i < Math.max(left.length, right.length); i++) {
     const diff = (left[i] ?? 0) - (right[i] ?? 0);
     if (diff !== 0) return diff;
   }
-  return a.localeCompare(b);
+  const leftPre = a.includes("-");
+  const rightPre = b.includes("-");
+  if (leftPre !== rightPre) return leftPre ? -1 : 1;
+  return a.localeCompare(b, undefined, { numeric: true });
 }
 
 export type Series = { key: string; label: string; color: string };
@@ -192,12 +205,23 @@ export function clientSeries(cells: SessionCell[]): Series[] {
       color: "#9198a1",
     });
   }
-  versions.forEach((version, index) => {
+  series.push(...versionSeries(versions));
+  return series;
+}
+
+// Versions oldest to newest on the blue-to-red part of the scale. The navy
+// end is kept for curl.
+function versionSeries(versions: string[]): Series[] {
+  return versions.map((version, index) => {
     const t =
       versions.length === 1 ? 1 : 0.15 + (0.85 * index) / (versions.length - 1);
-    series.push({ key: version, label: version, color: versionColor(t) });
+    return { key: version, label: version, color: versionColor(t) };
   });
-  return series;
+}
+
+export function agentSeries(cells: DeviceAgentCell[]): Series[] {
+  const versions = [...new Set(cells.map((c) => c.version).filter(Boolean))];
+  return versionSeries(versions.sort(compareVersions));
 }
 
 const SURFACE_COLORS = [
@@ -262,7 +286,7 @@ export type OrgRow = {
   days: Map<string, DayCell>;
 };
 
-type OrganizationNames = HookClients["organizations"];
+type OrganizationNames = FleetHealth["organizations"];
 
 function orgLabel(
   organizations: OrganizationNames,
@@ -278,7 +302,7 @@ function orgLabel(
   return { name: id.slice(0, 8), detail: "organization not found" };
 }
 
-export function sessionRows(data: HookClients): OrgRow[] {
+export function sessionRows(data: FleetHealth): OrgRow[] {
   const rows = new Map<string, OrgRow>();
   const row = (id: string): OrgRow => {
     let found = rows.get(id);
@@ -313,7 +337,7 @@ export function sessionRows(data: HookClients): OrgRow[] {
   return [...rows.values()].sort((a, b) => b.total - a.total);
 }
 
-export function inferenceRows(data: HookClients): OrgRow[] {
+export function inferenceRows(data: FleetHealth): OrgRow[] {
   const rows = new Map<string, OrgRow>();
   for (const cell of data.inference) {
     if (cell.surface) continue;
@@ -345,6 +369,56 @@ export function inferenceRows(data: HookClients): OrgRow[] {
   return [...rows.values()].sort((a, b) => b.total - a.total);
 }
 
+export function deviceAgentRows(data: FleetHealth): OrgRow[] {
+  const rows = new Map<string, OrgRow>();
+  for (const cell of data.device_agents) {
+    if (cell.version) continue;
+    let org = rows.get(cell.organization_id);
+    if (!org) {
+      org = {
+        id: cell.organization_id,
+        ...orgLabel(data.organizations, cell.organization_id),
+        total: 0,
+        days: new Map(),
+      };
+      rows.set(cell.organization_id, org);
+    }
+    org.total += cell.machines;
+    org.days.set(cell.day, {
+      parts: new Map(),
+      label: cell.machines,
+      sessions: cell.machines,
+      machines: cell.machines,
+      stale: false,
+    });
+  }
+  for (const cell of data.device_agents) {
+    if (!cell.version) continue;
+    const day = rows.get(cell.organization_id)?.days.get(cell.day);
+    if (!day) continue;
+    day.parts.set(cell.version, cell.machines);
+  }
+  return [...rows.values()].sort((a, b) => b.total - a.total);
+}
+
+// For an organization's latest day with agent polls: the share of machines on
+// the newest version seen anywhere in the fleet.
+export function latestAgentShare(
+  row: OrgRow,
+  series: Series[],
+): { day: string; version: string; share: number | undefined } | undefined {
+  const day = [...row.days.keys()].sort().pop();
+  const newest = series[series.length - 1];
+  if (!day || !newest) return undefined;
+  const cell = row.days.get(day);
+  if (!cell) return undefined;
+  return {
+    day,
+    version: newest.key,
+    share: share(cell.parts.get(newest.key) ?? 0, cell.machines),
+  };
+}
+
 export type LatestShares = {
   day: string;
   latestVersion: string | undefined;
@@ -361,7 +435,7 @@ function share(part: number, whole: number): number | undefined {
 // the share on the newest binary version and on curl; and the curl share
 // counting machines from every session.
 export function latestShares(
-  data: HookClients,
+  data: FleetHealth,
   organizationID: string,
   series: Series[],
 ): LatestShares | undefined {

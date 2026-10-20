@@ -2,8 +2,10 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -11,6 +13,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -147,4 +150,48 @@ func TestGetHookClients_ServesFromCacheUntilRefresh(t *testing.T) {
 	require.False(t, refreshed.FromCache)
 	require.Equal(t, int32(2), reads.Load())
 	require.Equal(t, int32(2), inferReads.Load())
+}
+
+type stubDeviceAgentVersions struct {
+	rows []deviceagentversions.Row
+	err  error
+}
+
+func (s stubDeviceAgentVersions) Read(context.Context, int, time.Time) ([]deviceagentversions.Row, error) {
+	return s.rows, s.err
+}
+
+func TestGetHookClients_IncludesDeviceAgentsAndSurvivesRedisFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, _ := newTestAdminService(t)
+	svc.hookClients = stubHookClientsReader{
+		sessions:   []telemetry.HookClientSessionRow{},
+		inference:  []telemetry.InferenceHookTrafficRow{},
+		err:        nil,
+		reads:      nil,
+		inferReads: nil,
+	}
+	agentOrg := "org_" + uuid.NewString()
+	svc.SetDeviceAgentVersions(stubDeviceAgentVersions{
+		err: nil,
+		rows: []deviceagentversions.Row{
+			{OrganizationID: agentOrg, Day: "2026-10-19", Version: "", Machines: 3},
+			{OrganizationID: agentOrg, Day: "2026-10-19", Version: "0.3.31", Machines: 3},
+		},
+	})
+
+	result, err := svc.GetHookClients(ctx, &gen.GetHookClientsPayload{AdminSessionToken: nil, WindowDays: 15, Refresh: true})
+	require.NoError(t, err)
+	require.Len(t, result.DeviceAgents, 2)
+	require.Equal(t, "0.3.31", result.DeviceAgents[1].Version)
+	require.Equal(t, int64(3), result.DeviceAgents[1].Machines)
+	require.Len(t, result.Organizations, 1)
+	require.Equal(t, agentOrg, result.Organizations[0].ID)
+
+	// A Redis fault leaves the device agent grid empty instead of failing the page.
+	svc.SetDeviceAgentVersions(stubDeviceAgentVersions{rows: nil, err: errors.New("redis down")})
+	result, err = svc.GetHookClients(ctx, &gen.GetHookClientsPayload{AdminSessionToken: nil, WindowDays: 15, Refresh: true})
+	require.NoError(t, err)
+	require.Empty(t, result.DeviceAgents)
 }

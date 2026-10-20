@@ -21502,6 +21502,20 @@ func marshalAdminAdminInferenceHookCellToAdminInferenceHookCellResponseBody(v *a
 	return res
 }
 
+// marshalAdminAdminDeviceAgentCellToAdminDeviceAgentCellResponseBody builds a
+// value of type *AdminDeviceAgentCellResponseBody from a value of type
+// *admin.AdminDeviceAgentCell.
+func marshalAdminAdminDeviceAgentCellToAdminDeviceAgentCellResponseBody(v *admin.AdminDeviceAgentCell) *AdminDeviceAgentCellResponseBody {
+	res := &AdminDeviceAgentCellResponseBody{
+		OrganizationID: v.OrganizationID,
+		Day:            v.Day,
+		Version:        v.Version,
+		Machines:       v.Machines,
+	}
+
+	return res
+}
+
 // marshalAdminAdminExternalMcpMigrationCandidateToAdminExternalMcpMigrationCandidateResponseBody
 // builds a value of type *AdminExternalMcpMigrationCandidateResponseBody from
 // a value of type *admin.AdminExternalMcpMigrationCandidate.

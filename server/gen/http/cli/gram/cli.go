@@ -29450,7 +29450,7 @@ func telemetryListHooksTracesUsage() {
 // templatesUsage displays the usage of the templates command and its
 // subcommands.
 func templatesUsage() {
-	fmt.Fprintln(os.Stderr, `Manages re-usable prompt templates and higher-order tools for a project.`)
+	fmt.Fprintln(os.Stderr, `Manages re-usable prompt templates for a project.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] templates COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-template: Create a new prompt template.`)
@@ -29485,7 +29485,7 @@ func templatesCreateTemplateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates create-template --body '{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"abc123\",\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"aaa\",\n      \"prompt\": \"abc123\",\n      \"tool_urns_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"tools_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates create-template --body '{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"abc123\",\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"name\": \"aaa\",\n      \"prompt\": \"abc123\",\n      \"tool_urns_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"tools_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func templatesUpdateTemplateUsage() {
@@ -29509,7 +29509,7 @@ func templatesUpdateTemplateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates update-template --body '{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"abc123\",\n      \"engine\": \"mustache\",\n      \"id\": \"abc123\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"tool_urns_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"tools_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates update-template --body '{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"abc123\",\n      \"engine\": \"mustache\",\n      \"id\": \"abc123\",\n      \"kind\": \"prompt\",\n      \"name\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"tool_urns_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"tools_hint\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func templatesGetTemplateUsage() {
@@ -29633,7 +29633,7 @@ func templatesRenderTemplateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates render-template --body '{\n      \"arguments\": {\n         \"abc123\": \"abc123\"\n      },\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"prompt\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "templates render-template --body '{\n      \"arguments\": {\n         \"abc123\": \"abc123\"\n      },\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"prompt\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // tokenExchangeUsage displays the usage of the token-exchange command and its
@@ -31065,7 +31065,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-support-coverage: Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.`)
 	fmt.Fprintln(os.Stderr, `    describe-mcp-server-health: Describes one MCP server's health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-tool-calls: Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.`)
-	fmt.Fprintln(os.Stderr, `    get-hook-clients: Fleet-wide hook client grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, and inference hook traffic per Claude app.`)
+	fmt.Fprintln(os.Stderr, `    get-hook-clients: Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.`)
 	fmt.Fprintln(os.Stderr, `    list-external-mcp-migration-candidates: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.`)
 	fmt.Fprintln(os.Stderr, `    preview-external-mcp-migration: Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.`)
 	fmt.Fprintln(os.Stderr, `    migrate-external-mcp-servers: Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.`)
@@ -32390,7 +32390,7 @@ func adminGetHookClientsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Fleet-wide hook client grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, and inference hook traffic per Claude app.`)
+	fmt.Fprintln(os.Stderr, `Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -window-days INT: `)
