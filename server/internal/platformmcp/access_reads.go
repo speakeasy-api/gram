@@ -335,24 +335,62 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 	if input.Limit > 0 {
 		limit = min(input.Limit, maxAccessMembers)
 	}
-	rows, err := platformrepo.New(s.db).SearchPlatformMCPAccessMembers(ctx, platformrepo.SearchPlatformMCPAccessMembersParams{
-		ResultLimit:    int32(limit),
-		OrganizationID: principal.OrganizationID,
-		RoleID:         roleID,
-		Query:          query,
-	})
+	// Share the dashboard's member roster and effective directory roles. Keep
+	// the MCP's query, masking, and small-cohort policy at this boundary.
+	roster, err := s.roles.ListMembers(ctx, principal.OrganizationID)
 	if err != nil {
-		return ListAccessMembersOutput{}, fmt.Errorf("search platform mcp access members: %w", err)
+		return ListAccessMembersOutput{}, fmt.Errorf("list platform mcp access members: %w", err)
 	}
-	var total int64
-	if len(rows) > 0 {
-		total = rows[0].TotalMatches
+	type memberMatch struct {
+		member     *accessgen.AccessMember
+		roleNames  []string
+		exactEmail bool
+	}
+	matches := make([]memberMatch, 0, len(roster.Members))
+	exactEmailMatches := 0
+	for _, member := range roster.Members {
+		effectiveRoleIDs := slices.Concat(member.RoleIds, member.DirectoryRoleIds)
+		if roleID != "" && !slices.Contains(effectiveRoleIDs, roleID) {
+			continue
+		}
+		names := make([]string, 0, len(effectiveRoleIDs))
+		matchesQuery := query == "" || strings.Contains(normalizeAccessQuery(member.Name), query) || strings.Contains(normalizeAccessQuery(member.Email), query)
+		for _, id := range effectiveRoleIDs {
+			if name := roleNames[id]; name != "" {
+				names = append(names, name)
+				matchesQuery = matchesQuery || strings.Contains(normalizeAccessQuery(name), query)
+			}
+		}
+		if !matchesQuery {
+			continue
+		}
+		slices.Sort(names)
+		exactEmail := query != "" && normalizeAccessQuery(member.Email) == query
+		if exactEmail {
+			exactEmailMatches++
+		}
+		matches = append(matches, memberMatch{member: member, roleNames: slices.Compact(names), exactEmail: exactEmail})
+	}
+	// The shared roster is ordered by email and ID. Prioritize exact matches
+	// before limiting the response, retaining that order within each group.
+	slices.SortStableFunc(matches, func(a, b memberMatch) int {
+		if a.exactEmail == b.exactEmail {
+			return 0
+		}
+		if a.exactEmail {
+			return -1
+		}
+		return 1
+	})
+	total := int64(len(matches))
+	if len(matches) > limit {
+		matches = matches[:limit]
 	}
 	output := ListAccessMembersOutput{
 		Members:         []AccessMember{},
 		TotalMatches:    NewSubjectCount(total),
 		Suppressed:      total > 0 && total < SubjectSuppressionThreshold,
-		Truncated:       total > int64(len(rows)),
+		Truncated:       total > int64(len(matches)),
 		ExactEmailMatch: false,
 		ExpiresAt:       "",
 	}
@@ -367,10 +405,10 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 	// that differ only in case name several members; those stay suppressed so
 	// the caller is never handed a reference to the wrong person.
 	if output.Suppressed {
-		if !rows[0].ExactEmailMatch.Bool || rows[0].ExactEmailMatches != 1 {
+		if !matches[0].exactEmail || exactEmailMatches != 1 {
 			return output, nil
 		}
-		rows = rows[:1]
+		matches = matches[:1]
 		output.TotalMatches = NewSubjectCount(1)
 		output.Suppressed = false
 		output.Truncated = false
@@ -379,25 +417,19 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 
 	now := s.now().UTC()
 	output.ExpiresAt = now.Add(SubjectReferenceTTL).Format(time.RFC3339)
-	for _, row := range rows {
-		reference, err := s.references.Encode(principal, subjectKindAccessMember, row.ID, now)
+	for _, match := range matches {
+		member := match.member
+		reference, err := s.references.Encode(principal, subjectKindAccessMember, member.ID, now)
 		if err != nil {
 			return ListAccessMembersOutput{}, fmt.Errorf("issue access member reference: %w", err)
 		}
-		names := make([]string, 0, len(row.RoleIds))
-		for _, id := range row.RoleIds {
-			if name := roleNames[id]; name != "" {
-				names = append(names, name)
-			}
-		}
-		slices.Sort(names)
-		version, err := accessMemberRoleVersion(s.versionKey, row.ID, row.RoleIds)
+		version, err := accessMemberRoleVersion(s.versionKey, member.ID, member.RoleIds)
 		if err != nil {
 			return ListAccessMembersOutput{}, fmt.Errorf("version access member roles: %w", err)
 		}
 		output.Members = append(output.Members, AccessMember{
-			MaskedIdentity: maskSubject(conv.Default(row.Email, row.DisplayName)),
-			Roles:          slices.Compact(names),
+			MaskedIdentity: maskSubject(conv.Default(member.Email, member.Name)),
+			Roles:          match.roleNames,
 			Reference:      reference,
 			Version:        version,
 		})
