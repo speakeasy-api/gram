@@ -425,3 +425,73 @@ RETURNING id, organization_id, kind, directory_group_id, attribute_key, attribut
 INSERT INTO directory_review_attribute_opt_outs (organization_id, attribute_key)
 VALUES (@organization_id, @attribute_key)
 ON CONFLICT DO NOTHING;
+
+-- name: CountPendingDirectoryReviewItems :one
+SELECT COUNT(*)::bigint
+FROM directory_review_items
+WHERE organization_id = @organization_id
+  AND state = 'pending';
+
+-- name: ListDirectoryReviewEmailCandidates :many
+-- Organizations with pending items and review emails on, with what the email
+-- step needs to decide whether to announce, remind or wait.
+SELECT
+  s.organization_id,
+  o.name AS organization_name,
+  o.slug AS organization_slug,
+  o.default_host,
+  s.last_emailed_at,
+  s.reminders_sent,
+  COUNT(*) FILTER (WHERE i.kind = 'new_group')::bigint AS new_group_count,
+  COUNT(*) FILTER (WHERE i.kind = 'new_attribute_value')::bigint AS new_attribute_value_count,
+  COUNT(*) FILTER (WHERE i.kind = 'source_missing')::bigint AS source_missing_count,
+  COUNT(*) FILTER (WHERE i.notified_at IS NULL)::bigint AS unannounced_count,
+  MAX(i.created_at) FILTER (WHERE i.notified_at IS NULL)::timestamptz AS newest_unannounced_at
+FROM directory_review_org_states AS s
+JOIN organization_metadata AS o ON o.id = s.organization_id
+JOIN directory_review_items AS i ON i.organization_id = s.organization_id AND i.state = 'pending'
+WHERE s.emails_disabled_at IS NULL
+GROUP BY s.organization_id, o.name, o.slug, o.default_host, s.last_emailed_at, s.reminders_sent
+ORDER BY s.organization_id;
+
+-- name: MarkDirectoryReviewItemsAnnounced :exec
+-- Marks the pending items an announcement covered: those not yet announced
+-- and created no later than the newest one it counted.
+UPDATE directory_review_items
+SET notified_at = @notified_at, updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND state = 'pending'
+  AND notified_at IS NULL
+  AND created_at <= @created_up_to;
+
+-- name: RecordDirectoryReviewAnnouncement :exec
+-- An announcement restarts the reminder count.
+UPDATE directory_review_org_states
+SET last_emailed_at = @emailed_at, reminders_sent = 0, updated_at = clock_timestamp()
+WHERE organization_id = @organization_id;
+
+-- name: RecordDirectoryReviewReminder :execrows
+-- Counts a reminder, unless another run already counted it.
+UPDATE directory_review_org_states
+SET last_emailed_at = @emailed_at, reminders_sent = reminders_sent + 1, updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND reminders_sent = @reminders_sent;
+
+-- name: GetDirectoryReviewEmailsDisabledAt :one
+-- When the organization turned directory review emails off. No row, or a NULL
+-- time, means emails are on.
+SELECT emails_disabled_at
+FROM directory_review_org_states
+WHERE organization_id = @organization_id;
+
+-- name: SetDirectoryReviewEmailsDisabled :one
+-- Turns directory review emails off or on. Creates the organization's review
+-- state if the sweep has not yet, with the baseline it would record.
+INSERT INTO directory_review_org_states (organization_id, baseline_at, emails_disabled_at)
+VALUES (@organization_id, clock_timestamp(), CASE WHEN @disabled::boolean THEN clock_timestamp() END)
+ON CONFLICT (organization_id) DO UPDATE
+SET emails_disabled_at = CASE
+      WHEN @disabled::boolean THEN COALESCE(directory_review_org_states.emails_disabled_at, clock_timestamp())
+    END,
+    updated_at = clock_timestamp()
+RETURNING emails_disabled_at;

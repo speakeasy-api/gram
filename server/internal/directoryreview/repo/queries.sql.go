@@ -44,6 +44,20 @@ func (q *Queries) CountOtherLiveAttributeHolders(ctx context.Context, arg CountO
 	return column_1, err
 }
 
+const countPendingDirectoryReviewItems = `-- name: CountPendingDirectoryReviewItems :one
+SELECT COUNT(*)::bigint
+FROM directory_review_items
+WHERE organization_id = $1
+  AND state = 'pending'
+`
+
+func (q *Queries) CountPendingDirectoryReviewItems(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingDirectoryReviewItems, organizationID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getDirectoryGroupIDForReview = `-- name: GetDirectoryGroupIDForReview :one
 SELECT id
 FROM directory_groups
@@ -62,6 +76,21 @@ func (q *Queries) GetDirectoryGroupIDForReview(ctx context.Context, arg GetDirec
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getDirectoryReviewEmailsDisabledAt = `-- name: GetDirectoryReviewEmailsDisabledAt :one
+SELECT emails_disabled_at
+FROM directory_review_org_states
+WHERE organization_id = $1
+`
+
+// When the organization turned directory review emails off. No row, or a NULL
+// time, means emails are on.
+func (q *Queries) GetDirectoryReviewEmailsDisabledAt(ctx context.Context, organizationID string) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getDirectoryReviewEmailsDisabledAt, organizationID)
+	var emails_disabled_at pgtype.Timestamptz
+	err := row.Scan(&emails_disabled_at)
+	return emails_disabled_at, err
 }
 
 const getDirectoryReviewItem = `-- name: GetDirectoryReviewItem :one
@@ -233,6 +262,75 @@ ON CONFLICT (organization_id) DO NOTHING
 func (q *Queries) InsertDirectoryReviewOrgStateIfMissing(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, insertDirectoryReviewOrgStateIfMissing, organizationID)
 	return err
+}
+
+const listDirectoryReviewEmailCandidates = `-- name: ListDirectoryReviewEmailCandidates :many
+SELECT
+  s.organization_id,
+  o.name AS organization_name,
+  o.slug AS organization_slug,
+  o.default_host,
+  s.last_emailed_at,
+  s.reminders_sent,
+  COUNT(*) FILTER (WHERE i.kind = 'new_group')::bigint AS new_group_count,
+  COUNT(*) FILTER (WHERE i.kind = 'new_attribute_value')::bigint AS new_attribute_value_count,
+  COUNT(*) FILTER (WHERE i.kind = 'source_missing')::bigint AS source_missing_count,
+  COUNT(*) FILTER (WHERE i.notified_at IS NULL)::bigint AS unannounced_count,
+  MAX(i.created_at) FILTER (WHERE i.notified_at IS NULL)::timestamptz AS newest_unannounced_at
+FROM directory_review_org_states AS s
+JOIN organization_metadata AS o ON o.id = s.organization_id
+JOIN directory_review_items AS i ON i.organization_id = s.organization_id AND i.state = 'pending'
+WHERE s.emails_disabled_at IS NULL
+GROUP BY s.organization_id, o.name, o.slug, o.default_host, s.last_emailed_at, s.reminders_sent
+ORDER BY s.organization_id
+`
+
+type ListDirectoryReviewEmailCandidatesRow struct {
+	OrganizationID         string
+	OrganizationName       string
+	OrganizationSlug       string
+	DefaultHost            pgtype.Text
+	LastEmailedAt          pgtype.Timestamptz
+	RemindersSent          int32
+	NewGroupCount          int64
+	NewAttributeValueCount int64
+	SourceMissingCount     int64
+	UnannouncedCount       int64
+	NewestUnannouncedAt    pgtype.Timestamptz
+}
+
+// Organizations with pending items and review emails on, with what the email
+// step needs to decide whether to announce, remind or wait.
+func (q *Queries) ListDirectoryReviewEmailCandidates(ctx context.Context) ([]ListDirectoryReviewEmailCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listDirectoryReviewEmailCandidates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectoryReviewEmailCandidatesRow
+	for rows.Next() {
+		var i ListDirectoryReviewEmailCandidatesRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationSlug,
+			&i.DefaultHost,
+			&i.LastEmailedAt,
+			&i.RemindersSent,
+			&i.NewGroupCount,
+			&i.NewAttributeValueCount,
+			&i.SourceMissingCount,
+			&i.UnannouncedCount,
+			&i.NewestUnannouncedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDirectoryUserAttributesForReview = `-- name: ListDirectoryUserAttributesForReview :many
@@ -431,6 +529,28 @@ func (q *Queries) ListPendingDirectoryReviewItems(ctx context.Context, organizat
 		return nil, err
 	}
 	return items, nil
+}
+
+const markDirectoryReviewItemsAnnounced = `-- name: MarkDirectoryReviewItemsAnnounced :exec
+UPDATE directory_review_items
+SET notified_at = $1, updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND state = 'pending'
+  AND notified_at IS NULL
+  AND created_at <= $3
+`
+
+type MarkDirectoryReviewItemsAnnouncedParams struct {
+	NotifiedAt     pgtype.Timestamptz
+	OrganizationID string
+	CreatedUpTo    pgtype.Timestamptz
+}
+
+// Marks the pending items an announcement covered: those not yet announced
+// and created no later than the newest one it counted.
+func (q *Queries) MarkDirectoryReviewItemsAnnounced(ctx context.Context, arg MarkDirectoryReviewItemsAnnouncedParams) error {
+	_, err := q.db.Exec(ctx, markDirectoryReviewItemsAnnounced, arg.NotifiedAt, arg.OrganizationID, arg.CreatedUpTo)
+	return err
 }
 
 const openMissingAttributeItems = `-- name: OpenMissingAttributeItems :many
@@ -793,6 +913,45 @@ func (q *Queries) OpenNewGroupItems(ctx context.Context, arg OpenNewGroupItemsPa
 	return items, nil
 }
 
+const recordDirectoryReviewAnnouncement = `-- name: RecordDirectoryReviewAnnouncement :exec
+UPDATE directory_review_org_states
+SET last_emailed_at = $1, reminders_sent = 0, updated_at = clock_timestamp()
+WHERE organization_id = $2
+`
+
+type RecordDirectoryReviewAnnouncementParams struct {
+	EmailedAt      pgtype.Timestamptz
+	OrganizationID string
+}
+
+// An announcement restarts the reminder count.
+func (q *Queries) RecordDirectoryReviewAnnouncement(ctx context.Context, arg RecordDirectoryReviewAnnouncementParams) error {
+	_, err := q.db.Exec(ctx, recordDirectoryReviewAnnouncement, arg.EmailedAt, arg.OrganizationID)
+	return err
+}
+
+const recordDirectoryReviewReminder = `-- name: RecordDirectoryReviewReminder :execrows
+UPDATE directory_review_org_states
+SET last_emailed_at = $1, reminders_sent = reminders_sent + 1, updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND reminders_sent = $3
+`
+
+type RecordDirectoryReviewReminderParams struct {
+	EmailedAt      pgtype.Timestamptz
+	OrganizationID string
+	RemindersSent  int32
+}
+
+// Counts a reminder, unless another run already counted it.
+func (q *Queries) RecordDirectoryReviewReminder(ctx context.Context, arg RecordDirectoryReviewReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordDirectoryReviewReminder, arg.EmailedAt, arg.OrganizationID, arg.RemindersSent)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const resolveDirectoryReviewItem = `-- name: ResolveDirectoryReviewItem :one
 UPDATE directory_review_items
 SET state = $1::text,
@@ -842,6 +1001,31 @@ func (q *Queries) ResolveDirectoryReviewItem(ctx context.Context, arg ResolveDir
 		&i.State,
 	)
 	return i, err
+}
+
+const setDirectoryReviewEmailsDisabled = `-- name: SetDirectoryReviewEmailsDisabled :one
+INSERT INTO directory_review_org_states (organization_id, baseline_at, emails_disabled_at)
+VALUES ($1, clock_timestamp(), CASE WHEN $2::boolean THEN clock_timestamp() END)
+ON CONFLICT (organization_id) DO UPDATE
+SET emails_disabled_at = CASE
+      WHEN $2::boolean THEN COALESCE(directory_review_org_states.emails_disabled_at, clock_timestamp())
+    END,
+    updated_at = clock_timestamp()
+RETURNING emails_disabled_at
+`
+
+type SetDirectoryReviewEmailsDisabledParams struct {
+	OrganizationID string
+	Disabled       bool
+}
+
+// Turns directory review emails off or on. Creates the organization's review
+// state if the sweep has not yet, with the baseline it would record.
+func (q *Queries) SetDirectoryReviewEmailsDisabled(ctx context.Context, arg SetDirectoryReviewEmailsDisabledParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, setDirectoryReviewEmailsDisabled, arg.OrganizationID, arg.Disabled)
+	var emails_disabled_at pgtype.Timestamptz
+	err := row.Scan(&emails_disabled_at)
+	return emails_disabled_at, err
 }
 
 const supersedeDirectoryReviewItems = `-- name: SupersedeDirectoryReviewItems :many
