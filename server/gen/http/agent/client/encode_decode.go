@@ -2676,6 +2676,26 @@ func unmarshalAgentPollingPrincipalResponseBodyToAgentAgentPollingPrincipal(v *A
 	return res
 }
 
+// unmarshalAgentMCPServerResponseBodyToAgentAgentMCPServer builds a value of
+// type *agent.AgentMCPServer from a value of type *AgentMCPServerResponseBody.
+func unmarshalAgentMCPServerResponseBodyToAgentAgentMCPServer(v *AgentMCPServerResponseBody) *agent.AgentMCPServer {
+	res := &agent.AgentMCPServer{
+		Name:          *v.Name,
+		URL:           *v.URL,
+		TokenEndpoint: v.TokenEndpoint,
+		Audience:      v.Audience,
+		Resource:      v.Resource,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	}
+
+	return res
+}
+
 // unmarshalSyncedAgentUserResponseBodyToAgentSyncedAgentUser builds a value of
 // type *agent.SyncedAgentUser from a value of type
 // *SyncedAgentUserResponseBody.

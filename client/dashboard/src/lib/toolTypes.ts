@@ -152,8 +152,6 @@ export const isPrompt = (template: PromptTemplateEntry): boolean =>
 export const isHttpTool = (
   tool: Tool,
 ): tool is Extract<Tool, { type: "http" }> => tool.type === "http";
-const isPromptTool = (tool: Tool) => tool.type === "prompt";
-const isFunctionTool = (tool: Tool) => tool.type === "function";
 export const toolSupportsAnnotations = (
   tool: Tool,
 ): tool is ToolWithAnnotations =>
@@ -220,22 +218,4 @@ export const getToolTypeLabel = (tool: Tool): string => {
     case "prompt":
       return "Prompt";
   }
-};
-
-export const filterHttpTools = (
-  tools: Tool[] | undefined,
-): HTTPToolDefinition[] => {
-  return tools?.filter(isHttpTool) ?? [];
-};
-
-export const filterPromptTools = (
-  tools: Tool[] | undefined,
-): PromptTemplate[] => {
-  return tools?.filter(isPromptTool) ?? [];
-};
-
-export const filterFunctionTools = (
-  tools: Tool[] | undefined,
-): FunctionToolDefinition[] => {
-  return tools?.filter(isFunctionTool) ?? [];
 };

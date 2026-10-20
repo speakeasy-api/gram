@@ -1,8 +1,11 @@
 import { IdentityWorkIdentities } from "./IdentityWorkIdentities";
 import { AccountRow } from "@/components/observe/account-display";
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { HumanizeDateTime } from "@/lib/dates";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { useState } from "react";
 import { useLocation } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
@@ -188,6 +191,10 @@ export default function IdentityDevices(): JSX.Element {
       met: devices.length > 0,
     },
   ];
+  // The rows answer questions most visits do not ask, so the panel starts
+  // folded to a one-line summary and opens on request.
+  const [statusOpen, setStatusOpen] = useState(false);
+  const metCount = statusSteps.filter((step) => step.met).length;
 
   // Deliberately outside the page's time range. Every other panel reports
   // events, which a window slices; this reports the MDM inventory as it stands
@@ -212,6 +219,21 @@ export default function IdentityDevices(): JSX.Element {
         {/* The facts the identities list filters on, one row each. */}
         <IdentityPanel
           title="Status"
+          action={
+            <Button
+              variant="tertiary"
+              size="sm"
+              aria-expanded={statusOpen}
+              onClick={() => setStatusOpen((open) => !open)}
+            >
+              {statusOpen ? "Hide" : "Show"}
+              {statusOpen ? (
+                <ChevronUp className="size-4" aria-hidden="true" />
+              ) : (
+                <ChevronDown className="size-4" aria-hidden="true" />
+              )}
+            </Button>
+          }
           loading={
             peersPending ||
             devicesQuery.isLoading ||
@@ -232,17 +254,28 @@ export default function IdentityDevices(): JSX.Element {
             knownAllTime,
             membersQuery,
           )}
-          footer="Directory, membership and activity are separate facts. None of them implies another."
+          footer={
+            statusOpen
+              ? "Directory, membership and activity are separate facts. None of them implies another."
+              : undefined
+          }
         >
-          {statusSteps.map((step) => (
+          {statusOpen ? (
+            statusSteps.map((step) => (
+              <IdentityPanelRow
+                key={step.key}
+                accent={step.met ? undefined : "warning"}
+                title={step.title}
+                detail={step.detail}
+                trailing={step.met ? "Yes" : "No"}
+              />
+            ))
+          ) : (
             <IdentityPanelRow
-              key={step.key}
-              accent={step.met ? undefined : "warning"}
-              title={step.title}
-              detail={step.detail}
-              trailing={step.met ? "Yes" : "No"}
+              title={`${metCount} of ${statusSteps.length} met`}
+              detail={statusSteps.map((step) => step.title).join(", ")}
             />
-          ))}
+          )}
         </IdentityPanel>
 
         {/* Accounts lead: which logins someone works through is the question a
