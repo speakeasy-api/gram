@@ -20,7 +20,7 @@ import (
 func newToolsListRequest(t *testing.T, sessionID string) *proxy.ToolsListRequest {
 	t.Helper()
 
-	httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", http.NoBody)
+	httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", http.NoBody)
 	require.NoError(t, err)
 	if sessionID != "" {
 		httpReq.Header.Set("Mcp-Session-Id", sessionID)
@@ -61,7 +61,7 @@ func TestToolsListPostHogEventInterceptor_PassesThrough(t *testing.T) {
 	})
 	ctx = contextvalues.SetRequestContext(ctx, &contextvalues.RequestContext{
 		Host:   "x.example.com",
-		ReqURL: "/x/mcp/" + testServerID,
+		ReqURL: "/mcp/" + testServerID,
 	})
 
 	require.NoError(t, interceptor.InterceptToolsListRequest(ctx, newToolsListRequest(t, "session-tools")))
@@ -88,7 +88,7 @@ func TestToolsListPostHogEventInterceptor_Version20260728RequestMetadataPassesTh
 
 	ctx := contextvalues.SetRequestContext(t.Context(), &contextvalues.RequestContext{
 		Host:   "x.example.com",
-		ReqURL: "/x/mcp/" + testServerID,
+		ReqURL: "/mcp/" + testServerID,
 	})
 
 	require.NoError(t, interceptor.InterceptToolsListRequest(ctx, list))
@@ -101,7 +101,7 @@ func TestToolsListPostHogEventInterceptor_MissingSessionIDPassesThrough(t *testi
 
 	ctx := contextvalues.SetRequestContext(t.Context(), &contextvalues.RequestContext{
 		Host:   "x.example.com",
-		ReqURL: "/x/mcp/" + testServerID,
+		ReqURL: "/mcp/" + testServerID,
 	})
 
 	require.NoError(t, interceptor.InterceptToolsListRequest(ctx, newToolsListRequest(t, "")))

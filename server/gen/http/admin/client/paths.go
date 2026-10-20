@@ -307,6 +307,11 @@ func GetMcpServerToolCallsAdminPath() string {
 	return "/admin/project.mcpServerToolCalls"
 }
 
+// GetHookClientsAdminPath returns the URL path to the admin service getHookClients HTTP endpoint.
+func GetHookClientsAdminPath() string {
+	return "/admin/hookClients.get"
+}
+
 // ListExternalMcpMigrationCandidatesAdminPath returns the URL path to the admin service listExternalMcpMigrationCandidates HTTP endpoint.
 func ListExternalMcpMigrationCandidatesAdminPath() string {
 	return "/admin/externalMcpMigration.listCandidates"

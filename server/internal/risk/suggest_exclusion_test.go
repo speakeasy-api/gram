@@ -16,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -72,6 +74,17 @@ func suggestExclusionResponse(text string) *openrouter.CompletionResponse {
 		Model:     "test-model",
 		Content:   text,
 	}
+}
+func seedSuggestExclusionFinding(t *testing.T, ti *testInstance, projectID uuid.UUID, organizationID string, policyID uuid.UUID, chatID, messageID uuid.UUID, source, ruleID, match string, start int) uuid.UUID {
+	t.Helper()
+	at := time.Now().UTC()
+	finding := chListFinding(t, projectID, organizationID, chatID, messageID, policyID.String(), at, at, source, ruleID, "", "", "", "")
+	finding.StartPos = int32(start)            // #nosec G115 -- fixture offsets are small constants.
+	finding.EndPos = int32(start + len(match)) // #nosec G115 -- fixture offsets are small constants.
+	finding.MatchLen = uint32(len(match))      // #nosec G115 -- fixture matches are bounded literals.
+	finding.Surface = scanners.SurfaceContent
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{finding}))
+	return finding.ID
 }
 
 func TestSuggestExclusion_Unauthorized(t *testing.T) {
@@ -139,14 +152,9 @@ func TestSuggestExclusion_PromptOnly_HeuristicFallback(t *testing.T) {
 	require.Equal(t, "jane.doe@acme.com", result.MatchValue)
 }
 
-// TestSuggestExclusion_FindingIDsOnly_HeuristicFallback guards the batch
-// path end to end: finding_ids must be looked up server-side (not trusted
-// from the client), and the fallback must never surface a finding's raw
-// matched value — a detected secret here ("AKIAIOSFODNN7EXAMPLE") the
-// operator hasn't reviewed or disclosed — since that would bypass the
-// audited risk.unmaskResult path every other raw-match disclosure goes
-// through. It falls back to a rule_id-scoped exclusion instead.
-func TestSuggestExclusion_FindingIDsOnly_HeuristicFallback(t *testing.T) {
+// The batch fallback must never surface a finding's raw match: that would
+// bypass the audited risk.unmaskResult path.
+func TestSuggestExclusion_FindingIDsOnly_UsesClickHouseMetadataAndRejectsForeignProject(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -157,25 +165,29 @@ func TestSuggestExclusion_FindingIDsOnly_HeuristicFallback(t *testing.T) {
 
 	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Suggest Exclusion Batch Test")})
 	require.NoError(t, err)
-	policyID, err := uuid.Parse(policy.ID)
-	require.NoError(t, err)
-
-	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	resultID := seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgID, "gitleaks", "secret.aws_access_token", "AKIAIOSFODNN7EXAMPLE")
+	policyID := uuid.MustParse(policy.ID)
+	chatID, messageID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	findingID := seedSuggestExclusionFinding(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, chatID, messageID, "gitleaks", "secret.generic", "secret", 20)
 
 	result, err := ti.service.SuggestExclusion(ctx, &gen.SuggestExclusionPayload{
-		FindingIds: []string{resultID.String()},
+		FindingIds: []string{findingID.String()},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "rule_id", result.MatchType)
-	require.Equal(t, "secret.aws_access_token", result.MatchValue)
-	require.NotContains(t, result.MatchValue, "AKIAIOSFODNN7EXAMPLE")
+	require.Equal(t, "secret.generic", result.MatchValue)
+	require.Nil(t, result.RuleIDFilter)
+	require.Nil(t, result.SourceFilter)
+
+	foreignID := seedSuggestExclusionFinding(t, ti, uuid.New(), authCtx.ActiveOrganizationID, policyID, chatID, messageID, "gitleaks", "secret.generic", "secret", 20)
+	_, err = ti.service.SuggestExclusion(ctx, &gen.SuggestExclusionPayload{
+		FindingIds: []string{foreignID.String()},
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
 
-// TestSuggestExclusion_FindingIDsOnly_DifferentRuleSameSource_FallsBackToSource
-// covers the batch heuristic's second tier: findings that don't share a
-// rule_id but do share a source fall back to a source-scoped exclusion,
-// still without ever touching the raw matched values.
 func TestSuggestExclusion_FindingIDsOnly_DifferentRuleSameSource_FallsBackToSource(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -187,12 +199,10 @@ func TestSuggestExclusion_FindingIDsOnly_DifferentRuleSameSource_FallsBackToSour
 
 	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Suggest Exclusion Batch Source Test")})
 	require.NoError(t, err)
-	policyID, err := uuid.Parse(policy.ID)
-	require.NoError(t, err)
-
-	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	id1 := seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgID, "presidio", "pii.email_address", "jane.doe@acme.com")
-	id2 := seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgID, "presidio", "pii.phone_number", "555-0100")
+	policyID := uuid.MustParse(policy.ID)
+	chatID, messageID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	id1 := seedSuggestExclusionFinding(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, chatID, messageID, "presidio", "pii.text", "test", 0)
+	id2 := seedSuggestExclusionFinding(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, chatID, messageID, "presidio", "pii.secret", "secret", 20)
 
 	result, err := ti.service.SuggestExclusion(ctx, &gen.SuggestExclusionPayload{
 		FindingIds: []string{id1.String(), id2.String()},

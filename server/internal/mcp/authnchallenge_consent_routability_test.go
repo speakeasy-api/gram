@@ -7,10 +7,12 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,6 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	tunneledmcp_repo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -370,4 +374,26 @@ func TestServeConsent_GatewayListOpensOnlyWhenShort(t *testing.T) {
 	code, html, _ = render(t, fx)
 	require.Equal(t, http.StatusOK, code, html)
 	require.Regexp(t, `data-gateway-list data-state="[^"]+" >`, html)
+}
+
+// Re-consenting to a gateway keeps the discovery mode the subject chose for
+// its previous connection instead of falling back to the gateway default.
+func TestServeConsent_GatewayPrefillsStoredDiscoveryMode(t *testing.T) {
+	t.Parallel()
+	ctx, fx, metaID, _, _ := metaConsent(t, "dm-prefill")
+	directSelected := regexp.MustCompile(`value="direct"\s+selected`)
+
+	code, html, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.Contains(t, html, `name="discovery_mode"`)
+	require.NotRegexp(t, directSelected, html)
+
+	mode := metamcp.DiscoveryModeDirect
+	raw, err := json.Marshal(&toolfilter.SessionPolicy{Resource: "meta_mcp_server:" + metaID.String(), Selection: nil, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: &mode}})
+	require.NoError(t, err)
+	seedSubjectSessionPolicy(t, ctx, fx, raw)
+
+	code, html, _ = render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.Regexp(t, directSelected, html)
 }

@@ -112,9 +112,9 @@ type CreateSessionHandoffRequestBody struct {
 // GetPluginsResponseBody is the type of the "agent" service "getPlugins"
 // endpoint HTTP response body.
 type GetPluginsResponseBody struct {
-	// Opaque revision identifier covering the marketplace, plugin, and
-	// remote-configuration set. The agent stores this to detect changes between
-	// polls.
+	// Opaque revision identifier covering the marketplace, plugin,
+	// remote-configuration, and organization-gateway set. The agent stores this to
+	// detect changes between polls.
 	Etag string `form:"etag" json:"etag" xml:"etag"`
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
@@ -129,6 +129,9 @@ type GetPluginsResponseBody struct {
 	// a configuration, allowing an agent with no cached remote layer to keep using
 	// its local configuration.
 	Configuration *DeviceAgentConfigurationResponseBody `form:"configuration,omitempty" json:"configuration,omitempty" xml:"configuration,omitempty"`
+	// URL of the active organization's gateway. Absent when the organization
+	// gateway is unavailable.
+	OrganizationGatewayURL *string `form:"organization_gateway_url,omitempty" json:"organization_gateway_url,omitempty" xml:"organization_gateway_url,omitempty"`
 	// The non-human principal the plugin set was resolved for. Present only when
 	// the caller authenticated with an agent API key.
 	Principal *AgentPollingPrincipalResponseBody `form:"principal,omitempty" json:"principal,omitempty" xml:"principal,omitempty"`
@@ -2470,7 +2473,8 @@ type AIScanMatchRequestBody struct {
 // the "getPlugins" endpoint of the "agent" service.
 func NewGetPluginsResponseBody(res *agent.GetPluginsResult) *GetPluginsResponseBody {
 	body := &GetPluginsResponseBody{
-		Etag: res.Etag,
+		Etag:                   res.Etag,
+		OrganizationGatewayURL: res.OrganizationGatewayURL,
 	}
 	if res.Marketplaces != nil {
 		body.Marketplaces = make([]*AgentMarketplaceResponseBody, len(res.Marketplaces))
@@ -4200,9 +4204,10 @@ func NewCreateSessionHandoffGatewayErrorResponseBody(res *goa.ServiceError) *Cre
 }
 
 // NewGetPluginsPayload builds a agent service getPlugins endpoint payload.
-func NewGetPluginsPayload(legacyEmail *string, apikeyToken *string, email *string, serialNumber *string, hostname *string, environment *string) *agent.GetPluginsPayload {
+func NewGetPluginsPayload(legacyEmail *string, deviceAgentToken *string, apikeyToken *string, email *string, serialNumber *string, hostname *string, environment *string) *agent.GetPluginsPayload {
 	v := &agent.GetPluginsPayload{}
 	v.LegacyEmail = legacyEmail
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.Email = email
 	v.SerialNumber = serialNumber

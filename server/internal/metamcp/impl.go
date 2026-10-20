@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	gatewaymcp "github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -275,6 +276,10 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, err
 	}
 
+	if payload.DiscoveryMode != nil && !gatewaymcp.DiscoveryMode(*payload.DiscoveryMode).Valid() {
+		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported discovery mode")
+	}
+
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	// Validate the same normalized text that will be persisted, not the raw input.
@@ -391,6 +396,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		NetworkAccessModeSet: payload.NetworkAccessMode != nil,
 		NetworkAccessMode:    storedMode,
 		InstructionsSet:      payload.Instructions != nil,
+		DiscoveryMode:        conv.PtrToPGText(payload.DiscoveryMode),
 		// A blank submission restores the built-in instructions (NULL).
 		Instructions:   instructions,
 		ID:             serverID,
@@ -712,6 +718,11 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// The gateway's members left with it, so resync and prune exactly as
+	// removing each member would.
+	if existing.UserSessionIssuerID.Valid {
+		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{existing.UserSessionIssuerID.UUID})
+	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, len(detached) > 0)
 	resultsCleaner := background.TemporalRiskPolicyResultsCleaner{TemporalEnv: s.temporalEnv, Logger: logger}
 	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, deletedPolicies)
@@ -815,7 +826,7 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	AfterMembershipCommit(ctx, logger, s.db, s.publisher, actor, meta, added.IssuerWired)
+	AfterMembershipCommit(ctx, logger, s.db, s.publisher, actor, meta)
 
 	return mv.BuildMetaMcpMemberViewFromParts(added.Member, added.Server), nil
 }
@@ -935,7 +946,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	}
 
 	actor := actorFromAuthContext(authCtx)
-	_, issuerWired, err := s.writer().RemoveMember(ctx, dbtx, actor, meta, memberID)
+	_, err = s.writer().RemoveMember(ctx, dbtx, actor, meta, memberID)
 	if err != nil {
 		return gatewayWriteError(ctx, logger, err, "remove meta mcp member")
 	}
@@ -946,7 +957,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	AfterMembershipCommit(ctx, logger, s.db, s.publisher, actor, meta, issuerWired)
+	AfterMembershipCommit(ctx, logger, s.db, s.publisher, actor, meta)
 
 	return nil
 }

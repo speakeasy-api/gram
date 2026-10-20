@@ -14561,6 +14561,240 @@ func DecodeGetMcpServerToolCallsResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetHookClientsRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "getHookClients" endpoint
+func (c *Client) BuildGetHookClientsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetHookClientsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getHookClients", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetHookClientsRequest returns an encoder for requests sent to the
+// admin getHookClients server.
+func EncodeGetHookClientsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetHookClientsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getHookClients", "*admin.GetHookClientsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("window_days", fmt.Sprintf("%v", p.WindowDays))
+		values.Add("refresh", fmt.Sprintf("%v", p.Refresh))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetHookClientsResponse returns a decoder for responses returned by the
+// admin getHookClients endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeGetHookClientsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetHookClientsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetHookClientsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			res := NewGetHookClientsAdminHookClientsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetHookClientsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetHookClientsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetHookClientsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetHookClientsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetHookClientsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetHookClientsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetHookClientsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetHookClientsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+				}
+				err = ValidateGetHookClientsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+				}
+				return nil, NewGetHookClientsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetHookClientsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+				}
+				err = ValidateGetHookClientsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+				}
+				return nil, NewGetHookClientsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getHookClients", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetHookClientsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHookClients", err)
+			}
+			err = ValidateGetHookClientsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHookClients", err)
+			}
+			return nil, NewGetHookClientsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getHookClients", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListExternalMcpMigrationCandidatesRequest instantiates a HTTP request
 // object with method and path set to call the "admin" service
 // "listExternalMcpMigrationCandidates" endpoint
@@ -22969,6 +23203,65 @@ func unmarshalAdminMcpServerToolCallBucketResponseBodyToAdminAdminMcpServerToolC
 		BucketStart: *v.BucketStart,
 		Total:       *v.Total,
 		Failed:      *v.Failed,
+	}
+
+	return res
+}
+
+// unmarshalAdminHookClientOrganizationResponseBodyToAdminAdminHookClientOrganization
+// builds a value of type *admin.AdminHookClientOrganization from a value of
+// type *AdminHookClientOrganizationResponseBody.
+func unmarshalAdminHookClientOrganizationResponseBodyToAdminAdminHookClientOrganization(v *AdminHookClientOrganizationResponseBody) *admin.AdminHookClientOrganization {
+	res := &admin.AdminHookClientOrganization{
+		ID:   *v.ID,
+		Name: v.Name,
+		Slug: v.Slug,
+	}
+
+	return res
+}
+
+// unmarshalAdminHookClientSessionCellResponseBodyToAdminAdminHookClientSessionCell
+// builds a value of type *admin.AdminHookClientSessionCell from a value of
+// type *AdminHookClientSessionCellResponseBody.
+func unmarshalAdminHookClientSessionCellResponseBodyToAdminAdminHookClientSessionCell(v *AdminHookClientSessionCellResponseBody) *admin.AdminHookClientSessionCell {
+	res := &admin.AdminHookClientSessionCell{
+		OrganizationID: *v.OrganizationID,
+		Day:            *v.Day,
+		Client:         *v.Client,
+		Machines:       *v.Machines,
+		Sessions:       *v.Sessions,
+		MachinesAll:    *v.MachinesAll,
+	}
+
+	return res
+}
+
+// unmarshalAdminInferenceHookCellResponseBodyToAdminAdminInferenceHookCell
+// builds a value of type *admin.AdminInferenceHookCell from a value of type
+// *AdminInferenceHookCellResponseBody.
+func unmarshalAdminInferenceHookCellResponseBodyToAdminAdminInferenceHookCell(v *AdminInferenceHookCellResponseBody) *admin.AdminInferenceHookCell {
+	res := &admin.AdminInferenceHookCell{
+		OrganizationID: *v.OrganizationID,
+		Day:            *v.Day,
+		Surface:        *v.Surface,
+		Users:          *v.Users,
+		Events:         *v.Events,
+		Sessions:       *v.Sessions,
+	}
+
+	return res
+}
+
+// unmarshalAdminDeviceAgentCellResponseBodyToAdminAdminDeviceAgentCell builds
+// a value of type *admin.AdminDeviceAgentCell from a value of type
+// *AdminDeviceAgentCellResponseBody.
+func unmarshalAdminDeviceAgentCellResponseBodyToAdminAdminDeviceAgentCell(v *AdminDeviceAgentCellResponseBody) *admin.AdminDeviceAgentCell {
+	res := &admin.AdminDeviceAgentCell{
+		OrganizationID: *v.OrganizationID,
+		Day:            *v.Day,
+		Version:        *v.Version,
+		Machines:       *v.Machines,
 	}
 
 	return res

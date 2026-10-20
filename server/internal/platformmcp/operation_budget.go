@@ -184,10 +184,9 @@ const (
 	DrilldownRowsPerConnectionPerWindow          = 1000
 	DrilldownMetricQueriesPerConnectionPerWindow = 20
 
-	// SessionRecallsPer* bound continue_session. Metered separately and lower
-	// than every other read: each allowed call serves an entire session
-	// transcript as a digest, so this allowance must not be fundable by
-	// spending any other budget.
+	// SessionRecallsPer* bound session recall and captured chat search and reads.
+	// These reads share a separate, lower allowance because they return
+	// transcript content; metadata and aggregate reads cannot fund them.
 	SessionRecallsPerConnectionPerMinute   = 10
 	SessionRecallsPerOrganizationPerMinute = 100
 )
@@ -328,8 +327,8 @@ type OperationBudgets struct {
 	// Diagnostics so exhausting it is not possible by spending the summary
 	// allowance, and so it can be tightened on its own.
 	SensitiveDiagnostics OperationBudget
-	// SensitiveSessionRecall meters continue_session — the only operation that
-	// serves whole-transcript content — on its own low allowance.
+	// SensitiveSessionRecall meters continue_session, search_chats and read_chat
+	// together on a low allowance for transcript content.
 	SensitiveSessionRecall OperationBudget
 	// RiskMutations is shared by policy and exclusion writes. Connection-less
 	// assistant calls consume only its organization bucket.

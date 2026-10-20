@@ -35,11 +35,11 @@ const SOURCES: Record<ScopeSource, { line: string; phrase: string } | null> = {
     phrase: "advertised by the MCP server",
   },
   issuer_override: {
-    line: "Set by the identity provider's override.",
-    phrase: "set by the identity provider's override",
+    line: "Set by the authorization server's override.",
+    phrase: "set by the authorization server's override",
   },
   issuer_catalogue: {
-    line: "Every scope the identity provider advertises.",
+    line: "Every scope the authorization server advertises.",
     phrase: "",
   },
   issuer_omitted: null,
@@ -72,7 +72,7 @@ export function issuerLabel(client: RemoteMcpServerClientScopes): string {
     issuerDisplayName({
       name: client.issuerName,
       issuer: client.issuerUrl ?? "",
-    }) || "the identity provider"
+    }) || "the authorization server"
   );
 }
 
@@ -108,7 +108,8 @@ export function requestedSentence(
   if (requestsNothing(client)) {
     sentence = `Sign-ins request no scopes; ${issuerLabel(client)} applies its defaults.`;
   } else if (client.scopeSource === "issuer_catalogue") {
-    sentence = "Sign-ins request every scope the identity provider advertises.";
+    sentence =
+      "Sign-ins request every scope the authorization server advertises.";
   } else {
     const shown = shownScopes(client);
     const phrase = SOURCES[client.scopeSource]?.phrase;

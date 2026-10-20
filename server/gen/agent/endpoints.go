@@ -34,7 +34,7 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetPlugins:           NewGetPluginsEndpoint(s, a.APIKeyAuth),
+		GetPlugins:           NewGetPluginsEndpoint(s, a.JWTAuth, a.APIKeyAuth),
 		ListSyncedUsers:      NewListSyncedUsersEndpoint(s, a.APIKeyAuth),
 		GetConfiguration:     NewGetConfigurationEndpoint(s, a.APIKeyAuth),
 		UpdateConfiguration:  NewUpdateConfigurationEndpoint(s, a.APIKeyAuth),
@@ -65,20 +65,32 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 
 // NewGetPluginsEndpoint returns an endpoint function that calls the method
 // "getPlugins" of service "agent".
-func NewGetPluginsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewGetPluginsEndpoint(s Service, authJWTFn security.AuthJWTFunc, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*GetPluginsPayload)
 		var err error
-		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-			RequiredScopes: []string{"agent_user"},
+		sc := security.JWTScheme{
+			Name:           "device_agent_token",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
-		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		var token string
+		if p.DeviceAgentToken != nil {
+			token = *p.DeviceAgentToken
 		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		ctx, err = authJWTFn(ctx, token, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"agent_user"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}

@@ -13042,6 +13042,234 @@ func EncodeGetMcpServerToolCallsError(encoder func(context.Context, http.Respons
 	}
 }
 
+// EncodeGetHookClientsResponse returns an encoder for responses returned by
+// the admin getHookClients endpoint.
+func EncodeGetHookClientsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminHookClientsResult)
+		enc := encoder(ctx, w)
+		body := NewGetHookClientsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetHookClientsRequest returns a decoder for requests sent to the admin
+// getHookClients endpoint.
+func DecodeGetHookClientsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.GetHookClientsPayload, error) {
+	return func(r *http.Request) (*admin.GetHookClientsPayload, error) {
+		var payload *admin.GetHookClientsPayload
+		var (
+			windowDays        int
+			refresh           bool
+			adminSessionToken *string
+			err               error
+		)
+		qp := r.URL.Query()
+		{
+			windowDaysRaw := qp.Get("window_days")
+			if windowDaysRaw == "" {
+				windowDays = 15
+			} else {
+				v, err2 := strconv.ParseInt(windowDaysRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("window_days", windowDaysRaw, "integer"))
+				}
+				windowDays = int(v)
+			}
+		}
+		if windowDays < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
+		}
+		if windowDays > 30 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 30, false))
+		}
+		{
+			refreshRaw := qp.Get("refresh")
+			if refreshRaw != "" {
+				v, err2 := strconv.ParseBool(refreshRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("refresh", refreshRaw, "boolean"))
+				}
+				refresh = v
+			}
+		}
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetHookClientsPayload(windowDays, refresh, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetHookClientsError returns an encoder for errors returned by the
+// getHookClients admin endpoint.
+func EncodeGetHookClientsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListExternalMcpMigrationCandidatesResponse returns an encoder for
 // responses returned by the admin listExternalMcpMigrationCandidates endpoint.
 func EncodeListExternalMcpMigrationCandidatesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -20614,6 +20842,65 @@ func marshalAdminAdminMcpServerToolCallBucketToAdminMcpServerToolCallBucketRespo
 		BucketStart: v.BucketStart,
 		Total:       v.Total,
 		Failed:      v.Failed,
+	}
+
+	return res
+}
+
+// marshalAdminAdminHookClientOrganizationToAdminHookClientOrganizationResponseBody
+// builds a value of type *AdminHookClientOrganizationResponseBody from a value
+// of type *admin.AdminHookClientOrganization.
+func marshalAdminAdminHookClientOrganizationToAdminHookClientOrganizationResponseBody(v *admin.AdminHookClientOrganization) *AdminHookClientOrganizationResponseBody {
+	res := &AdminHookClientOrganizationResponseBody{
+		ID:   v.ID,
+		Name: v.Name,
+		Slug: v.Slug,
+	}
+
+	return res
+}
+
+// marshalAdminAdminHookClientSessionCellToAdminHookClientSessionCellResponseBody
+// builds a value of type *AdminHookClientSessionCellResponseBody from a value
+// of type *admin.AdminHookClientSessionCell.
+func marshalAdminAdminHookClientSessionCellToAdminHookClientSessionCellResponseBody(v *admin.AdminHookClientSessionCell) *AdminHookClientSessionCellResponseBody {
+	res := &AdminHookClientSessionCellResponseBody{
+		OrganizationID: v.OrganizationID,
+		Day:            v.Day,
+		Client:         v.Client,
+		Machines:       v.Machines,
+		Sessions:       v.Sessions,
+		MachinesAll:    v.MachinesAll,
+	}
+
+	return res
+}
+
+// marshalAdminAdminInferenceHookCellToAdminInferenceHookCellResponseBody
+// builds a value of type *AdminInferenceHookCellResponseBody from a value of
+// type *admin.AdminInferenceHookCell.
+func marshalAdminAdminInferenceHookCellToAdminInferenceHookCellResponseBody(v *admin.AdminInferenceHookCell) *AdminInferenceHookCellResponseBody {
+	res := &AdminInferenceHookCellResponseBody{
+		OrganizationID: v.OrganizationID,
+		Day:            v.Day,
+		Surface:        v.Surface,
+		Users:          v.Users,
+		Events:         v.Events,
+		Sessions:       v.Sessions,
+	}
+
+	return res
+}
+
+// marshalAdminAdminDeviceAgentCellToAdminDeviceAgentCellResponseBody builds a
+// value of type *AdminDeviceAgentCellResponseBody from a value of type
+// *admin.AdminDeviceAgentCell.
+func marshalAdminAdminDeviceAgentCellToAdminDeviceAgentCellResponseBody(v *admin.AdminDeviceAgentCell) *AdminDeviceAgentCellResponseBody {
+	res := &AdminDeviceAgentCellResponseBody{
+		OrganizationID: v.OrganizationID,
+		Day:            v.Day,
+		Version:        v.Version,
+		Machines:       v.Machines,
 	}
 
 	return res
