@@ -343,6 +343,35 @@ func TestAttributeValueChanges(t *testing.T) {
 	require.Empty(t, changes.Opened)
 }
 
+// A whole directory's deletion tombstones its users without a per-user event,
+// so only the sweep sees the mapped value go again.
+func TestMissingAttributeRecursAfterHolderDeletedWithoutEvent(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+
+	mapAttribute(t, conn, "department", "Engineering")
+	seedUser(t, conn, "user_a", `{"department":"Engineering"}`)
+	sweep(t, conn)
+
+	// The value goes, and an admin keeps the mapping.
+	changes := setUserAttributes(t, conn, "user_a", `{}`)
+	require.Len(t, changes.Opened, 1)
+	resolve(t, conn, directoryreview.KindSourceMissing, directoryreview.StateDismissed)
+
+	// It comes back, then its only holder is deleted with no event.
+	seedUser(t, conn, "user_b", `{"department":"Engineering"}`)
+	require.NoError(t, testrepo.New(conn).SetDirectoryUserWorkOSDeletedFixture(t.Context(), "user_b"))
+
+	changes = sweep(t, conn)
+	require.Len(t, changes.Opened, 1)
+	require.Equal(t, int32(2), changes.Opened[0].Occurrence)
+
+	// Keeping the mapping again settles it: the same deletion reopens nothing.
+	resolve(t, conn, directoryreview.KindSourceMissing, directoryreview.StateDismissed)
+	changes = sweep(t, conn)
+	require.Empty(t, changes.Opened)
+}
+
 func TestNewAttributeValueNeedsMappedKey(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
