@@ -1210,9 +1210,9 @@ type ServersInsertServerClientAssociationParams struct {
 	RemoteSessionClientID uuid.UUID
 }
 
-// The Linear server's upstream OAuth client association. The app records it
-// when User Identity is configured on the server, or when the server is the
-// only consumer of its user session issuer; the seed writes it directly.
+// One server's upstream OAuth client association. The app records it when
+// User Identity is configured on the server, or when the server is the only
+// consumer of its user session issuer; the seed writes it directly.
 func (q *Queries) ServersInsertServerClientAssociation(ctx context.Context, arg ServersInsertServerClientAssociationParams) error {
 	_, err := q.db.Exec(ctx, serversInsertServerClientAssociation,
 		arg.ID,

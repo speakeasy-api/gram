@@ -163,7 +163,8 @@ func TestRunDecidesOnlyWhatConfigurationProves(t *testing.T) {
 	soleB := f.client(soleIssuer, "https://as-b.example.com")
 
 	// Two servers share an issuer binding Linear and Notion clients. Each
-	// server's own metadata names its provider; the third advertises nothing.
+	// server's own metadata names its provider; the third has no evidence for
+	// either, so it uses no client.
 	sharedIssuer := f.userIssuer()
 	linear := f.server(sharedIssuer, "https://mcp.linear.example/mcp")
 	notion := f.server(sharedIssuer, "https://mcp.notion.example/mcp")
@@ -180,33 +181,88 @@ func TestRunDecidesOnlyWhatConfigurationProves(t *testing.T) {
 	require.Equal(t, "dry_run", preview.Mode)
 	require.Zero(t, preview.Written)
 	require.Empty(t, f.associations(sole), "a dry run writes nothing")
-	require.Equal(t, 1, preview.Gaps)
+	require.Zero(t, preview.Gaps)
 
 	applied := f.run(true)
 	require.Equal(t, OutcomeSoleConsumer, resultFor(t, applied, sole).Outcome)
 	require.Equal(t, OutcomeMetadataMatch, resultFor(t, applied, linear).Outcome)
 	require.Equal(t, OutcomeMetadataMatch, resultFor(t, applied, notion).Outcome)
-	require.Equal(t, OutcomeAmbiguous, resultFor(t, applied, unknown).Outcome)
+	require.Equal(t, OutcomeNoClient, resultFor(t, applied, unknown).Outcome)
 	require.Equal(t, OutcomeUnbound, resultFor(t, applied, unbound).Outcome)
 	require.Equal(t, 4, applied.Written)
-	require.Equal(t, 1, applied.Gaps)
+	require.Zero(t, applied.Gaps)
 
 	require.ElementsMatch(t, []uuid.UUID{soleA, soleB}, f.associations(sole))
 	require.Equal(t, []uuid.UUID{linearClient}, f.associations(linear))
 	require.Equal(t, []uuid.UUID{notionClient}, f.associations(notion))
-	require.Empty(t, f.associations(unknown), "an ambiguous server must not borrow a sibling's client")
+	require.Empty(t, f.associations(unknown), "a server without evidence must not borrow a sibling's client")
 	require.Empty(t, f.associations(unbound))
 
 	rerun := f.run(true)
 	require.Zero(t, rerun.Written, "the backfill is idempotent")
 	require.Zero(t, rerun.Skipped)
-	require.Equal(t, 1, rerun.Gaps)
+	require.Zero(t, rerun.Gaps)
 
-	// Explicit configuration closes the gap.
+	// Explicit configuration gives it a client.
 	f.associate(unknown, linearClient, false)
 	configured := f.run(true)
 	require.Equal(t, OutcomeConfigured, resultFor(t, configured, unknown).Outcome)
 	require.Zero(t, configured.Gaps)
+}
+
+func TestRunDecidesASharedIssuerServerFromGrantsThenDerivedIssuer(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	// Three servers share an issuer and publish no protected resource
+	// metadata, so only grants and derived issuers can decide them.
+	sharedIssuer := f.userIssuer()
+	granted := f.server(sharedIssuer, "https://granted.example.com/mcp")
+	derived := f.server(sharedIssuer, "https://derived.example.com/mcp")
+	conflicted := f.server(sharedIssuer, "https://conflicted.example.com/mcp")
+	clientA, issuerA := f.gatewayClient(sharedIssuer)
+	clientB, issuerB := f.gatewayClient(sharedIssuer)
+
+	f.grant(sharedIssuer, clientA, "https://granted.example.com/mcp/")
+	f.derive(granted, issuerA)
+	f.derive(derived, issuerB)
+	f.grant(sharedIssuer, clientA, "https://conflicted.example.com/mcp")
+	f.derive(conflicted, issuerB)
+
+	report := f.run(true)
+	require.Equal(t, OutcomeGrant, resultFor(t, report, granted).Outcome)
+	require.Equal(t, OutcomeDerived, resultFor(t, report, derived).Outcome)
+	require.Equal(t, OutcomeAmbiguous, resultFor(t, report, conflicted).Outcome)
+	require.Equal(t, 1, report.Gaps)
+	require.Equal(t, []uuid.UUID{clientA}, f.associations(granted))
+	require.Equal(t, []uuid.UUID{clientB}, f.associations(derived))
+	require.Empty(t, f.associations(conflicted))
+}
+
+func TestRunSkipsAnEvidenceWriteOnceTheServerIsConfigured(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	sharedIssuer := f.userIssuer()
+	server := f.server(sharedIssuer, "https://granted.example.com/mcp")
+	f.server(sharedIssuer, "https://other.example.com/mcp")
+	clientA, _ := f.gatewayClient(sharedIssuer)
+	clientB, _ := f.gatewayClient(sharedIssuer)
+	f.grant(sharedIssuer, clientA, "https://granted.example.com/mcp")
+
+	// An administrator configures the server between the read and the write.
+	f.associate(server, clientB, false)
+
+	n, err := New(f.pool).BackfillUpstreamClientAssociation(t.Context(), BackfillUpstreamClientAssociationParams{
+		RemoteSessionClientID: clientA,
+		McpServerID:           server,
+		UserSessionIssuerID:   sharedIssuer,
+		RespectRemoved:        true,
+		RequireEvidenceMatch:  true,
+	})
+	require.NoError(t, err)
+	require.Zero(t, n, "evidence never adds to a configured server")
+	require.Equal(t, []uuid.UUID{clientB}, f.associations(server))
 }
 
 func TestRunDoesNotUndoAnExplicitDetach(t *testing.T) {
@@ -222,7 +278,7 @@ func TestRunDoesNotUndoAnExplicitDetach(t *testing.T) {
 	f.associate(linear, linearClient, true)
 
 	report := f.run(true)
-	require.Equal(t, OutcomeAmbiguous, resultFor(t, report, linear).Outcome, "a detached match is left for explicit configuration")
+	require.Equal(t, OutcomeDetached, resultFor(t, report, linear).Outcome, "a detached match stays detached")
 	require.Empty(t, f.associations(linear))
 }
 
@@ -316,6 +372,8 @@ func TestDecide(t *testing.T) {
 			LiveAssociations:      liveAssociations,
 			RemoteSessionClientID: uuid.NullUUID{UUID: client, Valid: client != uuid.Nil},
 			MetadataMatch:         match,
+			GrantMatch:            false,
+			DerivedMatch:          false,
 			PairLive:              live,
 			PairRecorded:          recorded,
 		}
@@ -324,6 +382,17 @@ func TestDecide(t *testing.T) {
 	unproxied := func(r ListUpstreamClientBackfillCandidatesRow) ListUpstreamClientBackfillCandidatesRow {
 		r.RemoteBacked, r.Hosted, r.Proxied = false, true, false
 		return r
+	}
+	granted := func(r ListUpstreamClientBackfillCandidatesRow) ListUpstreamClientBackfillCandidatesRow {
+		r.GrantMatch = true
+		return r
+	}
+	derived := func(r ListUpstreamClientBackfillCandidatesRow) ListUpstreamClientBackfillCandidatesRow {
+		r.DerivedMatch = true
+		return r
+	}
+	shared := func(client uuid.UUID) ListUpstreamClientBackfillCandidatesRow {
+		return row(client, 2, false, false, false, false, 0)
 	}
 
 	tests := []struct {
@@ -336,11 +405,23 @@ func TestDecide(t *testing.T) {
 		{"sole consumer takes every client", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 1, false, false, false, false, 0), row(clientB, 1, false, false, false, false, 0)}, OutcomeSoleConsumer, []uuid.UUID{clientA, clientB}},
 		{"sole consumer re-associates a removed pair", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 1, false, false, false, true, 0)}, OutcomeSoleConsumer, []uuid.UUID{clientA}},
 		{"sole consumer already associated", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 1, false, false, true, true, 1)}, OutcomeSoleConsumer, nil},
-		{"a gateway makes the issuer shared", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 1, true, false, false, false, 0)}, OutcomeAmbiguous, nil},
+		{"a gateway makes the issuer shared", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 1, true, false, false, false, 0)}, OutcomeNoClient, nil},
 		{"one metadata match", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 2, false, true, false, false, 0), row(clientB, 2, false, false, false, false, 0)}, OutcomeMetadataMatch, []uuid.UUID{clientA}},
 		{"two metadata matches are ambiguous", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 2, false, true, false, false, 0), row(clientB, 2, false, true, false, false, 0)}, OutcomeAmbiguous, nil},
 		{"shared without evidence but configured", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 2, false, false, true, true, 1)}, OutcomeConfigured, nil},
-		{"shared without evidence", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 2, false, false, false, false, 0)}, OutcomeAmbiguous, nil},
+		{"shared without evidence", []ListUpstreamClientBackfillCandidatesRow{shared(clientA)}, OutcomeNoClient, nil},
+		{"a detached metadata match", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 2, false, true, false, true, 0)}, OutcomeDetached, nil},
+		{"one grant", []ListUpstreamClientBackfillCandidatesRow{granted(shared(clientA)), shared(clientB)}, OutcomeGrant, []uuid.UUID{clientA}},
+		{"a grant and its own derived issuer", []ListUpstreamClientBackfillCandidatesRow{derived(granted(shared(clientA))), shared(clientB)}, OutcomeGrant, []uuid.UUID{clientA}},
+		{"a grant another client's derived issuer contradicts", []ListUpstreamClientBackfillCandidatesRow{granted(shared(clientA)), derived(shared(clientB))}, OutcomeAmbiguous, nil},
+		{"two grants", []ListUpstreamClientBackfillCandidatesRow{granted(shared(clientA)), granted(shared(clientB))}, OutcomeAmbiguous, nil},
+		{"one derived issuer", []ListUpstreamClientBackfillCandidatesRow{shared(clientA), derived(shared(clientB))}, OutcomeDerived, []uuid.UUID{clientB}},
+		{"a detached derived client", []ListUpstreamClientBackfillCandidatesRow{func() ListUpstreamClientBackfillCandidatesRow {
+			r := derived(shared(clientA))
+			r.PairRecorded = true
+			return r
+		}()}, OutcomeDetached, nil},
+		{"evidence never decides an unproxied server", []ListUpstreamClientBackfillCandidatesRow{unproxied(granted(shared(clientA)))}, OutcomeUnproxied, nil},
 		{"shared without evidence but unproxied", []ListUpstreamClientBackfillCandidatesRow{unproxied(row(clientA, 2, false, false, false, false, 0))}, OutcomeUnproxied, nil},
 	}
 	for _, tt := range tests {
