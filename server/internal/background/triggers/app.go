@@ -41,13 +41,14 @@ const (
 	StatusFired         = "fired"
 	StatusCancelled     = "cancelled"
 
-	DefinitionSlugSlack     = "slack"
-	DefinitionSlugMSTeams   = "msteams"
-	DefinitionSlugLinear    = "linear"
-	DefinitionSlugGithub    = "github"
-	DefinitionSlugCron      = "cron"
-	DefinitionSlugWake      = "wake"
-	DefinitionSlugDashboard = "dashboard"
+	DefinitionSlugSlack      = "slack"
+	DefinitionSlugMSTeams    = "msteams"
+	DefinitionSlugGoogleChat = "googlechat"
+	DefinitionSlugLinear     = "linear"
+	DefinitionSlugGithub     = "github"
+	DefinitionSlugCron       = "cron"
+	DefinitionSlugWake       = "wake"
+	DefinitionSlugDashboard  = "dashboard"
 )
 
 var (
@@ -828,6 +829,11 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 	result.Event.Event = a.withSlackBotIdentity(ctx, instance, envMap, result.Event.Event)
 	result.Event.TriggerInstanceID = instance.ID.String()
 	result.Event.DefinitionSlug = instance.DefinitionSlug
+	// Google Chat resource names are shared across apps installed in a space.
+	// Keep each configured connection's conversation independent.
+	if instance.DefinitionSlug == DefinitionSlugGoogleChat {
+		result.Event.CorrelationID = scopeGoogleChatCorrelation(instance.ID.String(), result.Event.CorrelationID)
+	}
 
 	// Scope the dedup event id to this trigger instance now that it's known —
 	// vendor-supplied id or content-hash fallback alike. A delivery targets

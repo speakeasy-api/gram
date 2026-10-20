@@ -275,6 +275,14 @@ WHERE organization_id = @org_id::text AND project_id = @project_id::uuid AND del
 SELECT count(*) FROM trigger_instances
 WHERE organization_id = @org_id::text AND project_id = @project_id::uuid AND deleted IS FALSE;
 
+-- name: PostflightIDPausedGoogleChatTrigger :one
+SELECT count(*) FROM trigger_instances t
+JOIN assistants a ON a.id::text = t.target_ref AND a.organization_id = t.organization_id AND a.project_id = t.project_id
+WHERE t.organization_id = @org_id::text AND t.project_id = @project_id::uuid
+  AND t.deleted IS FALSE AND a.deleted IS FALSE AND a.id = @assistant_id::uuid
+  AND t.definition_slug = 'googlechat' AND t.target_kind = 'assistant'
+  AND t.status = 'paused' AND t.environment_id IS NULL AND t.config_json = '{}'::jsonb;
+
 -- name: PostflightIDAssistantAgentBindings :one
 SELECT count(*) FROM assistant_agent_bindings
 WHERE organization_id = @org_id::text AND project_id = @project_id::uuid;

@@ -234,6 +234,14 @@ VALUES
   (@id, @organization_id::text, @project_id::uuid, 'dashboard', @name::text || ' dashboard', 'assistant',
    @target_ref, @name::text);
 
+-- Paused display fixture: no credentials, environment, or webhook subscription.
+-- name: DeployInsertGoogleChatTrigger :exec
+INSERT INTO trigger_instances
+  (id, organization_id, project_id, definition_slug, name, target_kind, target_ref, target_display, status)
+VALUES
+  (@id, @organization_id::text, @project_id::uuid, 'googlechat', 'Google Chat team assistant',
+   'assistant', @target_ref, @target_display, 'paused');
+
 -- Inert display fixture: runtime provisioning uses GRAM_AUTHZ_ISSUER_URL and
 -- the existing Speakeasy JWKS endpoint; this example cannot sign or run work.
 -- name: DeployInsertAssistantWorkloadIssuer :exec

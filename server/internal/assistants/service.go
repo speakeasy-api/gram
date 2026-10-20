@@ -64,13 +64,14 @@ const (
 	StatusActive = "active"
 	StatusPaused = "paused"
 
-	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
-	sourceKindMSTeams   = bgtriggers.DefinitionSlugMSTeams
-	sourceKindLinear    = bgtriggers.DefinitionSlugLinear
-	sourceKindGithub    = bgtriggers.DefinitionSlugGithub
-	sourceKindCron      = bgtriggers.DefinitionSlugCron
-	sourceKindWake      = bgtriggers.DefinitionSlugWake
-	sourceKindDashboard = bgtriggers.DefinitionSlugDashboard
+	sourceKindSlack      = bgtriggers.DefinitionSlugSlack
+	sourceKindMSTeams    = bgtriggers.DefinitionSlugMSTeams
+	sourceKindGoogleChat = bgtriggers.DefinitionSlugGoogleChat
+	sourceKindLinear     = bgtriggers.DefinitionSlugLinear
+	sourceKindGithub     = bgtriggers.DefinitionSlugGithub
+	sourceKindCron       = bgtriggers.DefinitionSlugCron
+	sourceKindWake       = bgtriggers.DefinitionSlugWake
+	sourceKindDashboard  = bgtriggers.DefinitionSlugDashboard
 	// sourceKindWarmup marks the event-less thread that eager-boots the
 	// runtime at assistant creation. It has no source adapter — adapters are
 	// only consulted while processing events, and this thread never has any.
@@ -2491,6 +2492,16 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 			return "", nil, nil, nil, fmt.Errorf("marshal slack source ref: %w", err)
 		}
 		return sourceKindSlack, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindGoogleChat:
+		var event googlechatEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode Google Chat trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(googlechatSourceRef{SpaceType: event.SpaceType, SpaceName: event.SpaceName, ThreadName: event.ThreadName, MessageName: event.MessageName, UserName: event.UserName})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal Google Chat source ref: %w", err)
+		}
+		return sourceKindGoogleChat, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindMSTeams:
 		var event msteamsEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {

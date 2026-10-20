@@ -593,6 +593,28 @@ func (q *Queries) PostflightIDOrgUserSessionIssuers(ctx context.Context, orgID s
 	return count, err
 }
 
+const postflightIDPausedGoogleChatTrigger = `-- name: PostflightIDPausedGoogleChatTrigger :one
+SELECT count(*) FROM trigger_instances t
+JOIN assistants a ON a.id::text = t.target_ref AND a.organization_id = t.organization_id AND a.project_id = t.project_id
+WHERE t.organization_id = $1::text AND t.project_id = $2::uuid
+  AND t.deleted IS FALSE AND a.deleted IS FALSE AND a.id = $3::uuid
+  AND t.definition_slug = 'googlechat' AND t.target_kind = 'assistant'
+  AND t.status = 'paused' AND t.environment_id IS NULL AND t.config_json = '{}'::jsonb
+`
+
+type PostflightIDPausedGoogleChatTriggerParams struct {
+	OrgID       string
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+func (q *Queries) PostflightIDPausedGoogleChatTrigger(ctx context.Context, arg PostflightIDPausedGoogleChatTriggerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDPausedGoogleChatTrigger, arg.OrgID, arg.ProjectID, arg.AssistantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDProjectAgentSessions = `-- name: PostflightIDProjectAgentSessions :one
 SELECT count(*) FROM user_sessions
 WHERE project_id = $1::uuid AND deleted IS FALSE

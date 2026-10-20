@@ -99,7 +99,9 @@ function TriggerRow({
   const replyMode =
     trigger.definitionSlug === "slack"
       ? slackReplyModeLabel(trigger.config?.routing)
-      : undefined;
+      : trigger.definitionSlug === "googlechat"
+        ? "to direct messages and @mentions"
+        : undefined;
   return (
     <div className="border-border border">
       <button
@@ -118,7 +120,9 @@ function TriggerRow({
               {trigger.name}
             </Text>
             <Badge size="sm" variant="neutral">
-              {trigger.definitionSlug}
+              {trigger.definitionSlug === "googlechat"
+                ? "Google Chat"
+                : trigger.definitionSlug}
             </Badge>
           </Stack>
           {replyMode && (

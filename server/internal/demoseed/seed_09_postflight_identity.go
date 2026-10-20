@@ -227,7 +227,10 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 2, "demo seed postflight: expected 2 assistants, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDTriggerInstances(ctx, repo.PostflightIDTriggerInstancesParams{OrgID: org, ProjectID: proj})
-		}, 2, "demo seed postflight: expected 2 dashboard roots, found %d"},
+		}, 3, "demo seed postflight: expected 2 dashboard roots and 1 Google Chat trigger, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDPausedGoogleChatTrigger(ctx, repo.PostflightIDPausedGoogleChatTriggerParams{OrgID: org, ProjectID: proj, AssistantID: s.det("assistant-bound")})
+		}, 1, "demo seed postflight: expected 1 inert Google Chat trigger, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDAssistantAgentBindings(ctx, repo.PostflightIDAssistantAgentBindingsParams{OrgID: org, ProjectID: proj})
 		}, 1, "demo seed postflight: expected 1 assistant binding, found %d"},

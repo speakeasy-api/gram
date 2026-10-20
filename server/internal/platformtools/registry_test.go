@@ -137,3 +137,18 @@ func TestPlatformToolsetIdentityIsStableAndDistinct(t *testing.T) {
 	require.NotEqual(t, assistantsID, PlatformToolsetID(ManagedAssistantPlatformToolsetSlug))
 	require.Equal(t, "Speakeasy assistant tools", PlatformToolsetName(AssistantsPlatformToolsetSlug))
 }
+
+func TestGoogleChatToolsRegisteredWithoutFeatureGate(t *testing.T) {
+	t.Parallel()
+	executors, gates := BuildExecutors(Dependencies{})
+	for _, handler := range []string{"send_message", "reply_to_thread", "update_message", "delete_message", "list_spaces", "get_message", "list_messages"} {
+		toolURN := urn.NewTool(urn.ToolKindPlatform, "googlechat", handler)
+		require.Contains(t, executors, toolURN.String())
+		require.NotContains(t, gates, toolURN.String())
+		descriptor, ok := FindToolDescriptor(toolURN)
+		require.True(t, ok)
+		require.Equal(t, "platform_googlechat_"+handler, descriptor.Name)
+	}
+	tools := ListTypedTools(t.Context(), "", uuid.New(), "tools:platform:googlechat:", func(context.Context, string, string) bool { return false })
+	require.Len(t, tools, 7)
+}

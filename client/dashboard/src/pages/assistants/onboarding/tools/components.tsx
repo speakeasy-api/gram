@@ -220,7 +220,11 @@ export function RequestEnvironmentSecretsComponent({
               </Text>
             )}
             <Input
-              type={k.sensitive ? "password" : "text"}
+              type={
+                k.sensitive || k.name === "GOOGLE_CHAT_SERVICE_ACCOUNT_JSON"
+                  ? "password"
+                  : "text"
+              }
               value={values[k.name] ?? ""}
               onChange={(v) => setValues((prev) => ({ ...prev, [k.name]: v }))}
               placeholder={k.placeholder ?? ""}
@@ -284,7 +288,12 @@ export function ShowWebhookUrlComponent({
       )}
       <div className="border-border bg-muted/30 flex items-center gap-2 border px-3 py-2">
         <code className="flex-1 truncate font-mono text-xs">{url}</code>
-        <Button size="sm" variant="tertiary" onClick={() => void copy()}>
+        <Button
+          size="sm"
+          variant="tertiary"
+          aria-label="Copy webhook URL"
+          onClick={() => void copy()}
+        >
           {copied ? (
             <Check className="h-3.5 w-3.5" />
           ) : (
@@ -293,6 +302,72 @@ export function ShowWebhookUrlComponent({
         </Button>
       </div>
     </ToolCard>
+  );
+}
+
+/** The customer owns the Cloud app; this card never collects credentials. */
+export function ShowGoogleChatAppGuideComponent(
+  props: ToolCallMessagePartProps,
+): JSX.Element {
+  return (
+    <>
+      <ToolCard
+        title="Connect Google Chat"
+        tone="info"
+        icon={<Icon name="messages-square" className="h-4 w-4" />}
+      >
+        <ol className="list-decimal space-y-2 pl-5 text-sm">
+          <li>
+            Enable Google Chat API in your Cloud project. Configure a Chat app,{" "}
+            <strong>not a Workspace add-on</strong>, with direct messages and
+            spaces enabled.
+          </li>
+          <li>
+            Choose an HTTP endpoint and paste the webhook below. Set{" "}
+            <strong>Authentication Audience → Project Number</strong>, not
+            endpoint URL.
+          </li>
+          <li>
+            Create a service account in the same project and download its JSON
+            key. Enter the complete JSON as{" "}
+            <code>GOOGLE_CHAT_SERVICE_ACCOUNT_JSON</code> in the secure
+            environment form, never in chat. Set{" "}
+            <code>GOOGLE_CHAT_PROJECT_NUMBER</code> to the numeric project
+            number.
+          </li>
+          <li>
+            Use the same environment for the assistant's Google Chat toolset and
+            trigger. Save the Cloud configuration, add the app to a space or DM
+            it, then send a DM or @mention.
+          </li>
+        </ol>
+        <Text small muted className="mt-3">
+          Writes and space listing use chat.bot. Message/thread history uses
+          chat.app.messages.readonly and requires one-time Workspace
+          administrator approval. Create a Marketplace-compatible OAuth client
+          under your service account's Advanced settings; configure Marketplace
+          SDK as Private, Individual + admin install, Chat app, and add only the
+          history scope (not chat.bot). Save draft and have your administrator
+          approve the app scope. No user OAuth or domain-wide delegation.
+        </Text>
+        <Text small muted className="mt-3">
+          Only DMs and explicit @mentions invoke the assistant. Unmentioned
+          thread replies do not. History is read on demand, not ingested
+          automatically. A webhook 401 usually means the project number or
+          audience mode is wrong; a history 403 usually means administrator
+          approval or space access is missing.
+        </Text>
+        <a
+          className="mt-3 inline-block text-sm underline"
+          href="https://developers.google.com/workspace/chat/authenticate-authorize-chat-app"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Google service-account and administrator approval guide
+        </a>
+      </ToolCard>
+      <ShowWebhookUrlComponent {...props} />
+    </>
   );
 }
 
