@@ -247,16 +247,30 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 		attr.UserID(ac.UserID),
 	)
 
-	groupID, err := s.directoryRoleSourceGroupID(ctx, payload.SourceKind, payload.DirectoryGroupID, payload.AttributeKey, payload.AttributeValue)
-	if err != nil {
-		return nil, err
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	mappings, err := s.setDirectoryRoleMappingsTx(ctx, dbtx, ac, payload, legacy)
+	if err != nil {
+		return nil, err
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit directory role mappings").LogError(ctx, s.logger)
+	}
+	return mappings, nil
+}
+
+// setDirectoryRoleMappingsTx locks one source, checks the actor is a live
+// organization admin and replaces the source's role set on dbtx. The caller
+// commits.
+func (s *Service) setDirectoryRoleMappingsTx(ctx context.Context, dbtx pgx.Tx, ac *contextvalues.AuthContext, payload *gen.SetDirectoryRoleMappingsPayload, legacy bool) ([]*gen.DirectoryRoleMapping, error) {
+	groupID, err := s.directoryRoleSourceGroupID(ctx, payload.SourceKind, payload.DirectoryGroupID, payload.AttributeKey, payload.AttributeValue)
+	if err != nil {
+		return nil, err
+	}
 
 	lockKey := directoryRoleSourceLockKey(ac.ActiveOrganizationID, groupID, payload.AttributeKey, payload.AttributeValue)
 	if err := repo.New(dbtx).LockDirectoryRoleMappingSource(ctx, lockKey); err != nil {
@@ -266,15 +280,7 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 		return nil, err
 	}
 
-	mappings, err := s.writeDirectoryRoleSetTx(ctx, dbtx, ac, payload, groupID, legacy)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit directory role mappings").LogError(ctx, s.logger)
-	}
-	return mappings, nil
+	return s.writeDirectoryRoleSetTx(ctx, dbtx, ac, payload, groupID, legacy)
 }
 
 // directoryRoleSourceGroupID checks that a source names exactly one of a group
