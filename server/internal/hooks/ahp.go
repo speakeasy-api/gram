@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +35,7 @@ func AttachAHP(mux goahttp.Muxer, s *Service) error {
 		return err
 	}
 	mux.Handle("POST", "/ahp", h.ServeHTTP)
+	mux.Handle("POST", ahpUploadPath, s.ahpUploadHandler().ServeHTTP)
 	return nil
 }
 
@@ -52,12 +54,20 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 			},
 			UserMessageInbound: func(ctx context.Context, c ahpserver.InterceptContext[ahp.UserMessageInboundEvent, ahp.UserMessageInboundCapabilities]) (ahpserver.UserMessageInboundReply, error) {
 				var reply ahpserver.UserMessageInboundReply
-				payload := ahpUserMessageInboundPayload(c.Event)
+				canDeny := slices.Contains(c.Capabilities.Effects, ahp.UserMessageInboundCapabilitiesEffectsValueItemDeny)
+				attachments, err := s.ahpPromptAttachments(ctx, c.Event)
+				if err != nil {
+					if canDeny && errors.Is(err, errAHPEvidenceSize) {
+						reply.Effects = []*ahp.UserMessageInboundEffect{{DenyEffect: ahp.Some(ahpDeny(err.Error()))}}
+						return reply, nil
+					}
+					return reply, err
+				}
+				payload := ahpUserMessageInboundPayload(c.Event, attachments)
 				if payload == nil {
 					return reply, nil
 				}
-				canDeny := slices.Contains(c.Capabilities.Effects, ahp.UserMessageInboundCapabilitiesEffectsValueItemDeny)
-				reason, err := s.ingestAHP(ctx, payload, !canDeny)
+				reason, err := s.ingestAHPInbound(ctx, payload, !canDeny)
 				if err != nil || reason == "" {
 					return reply, err
 				}
@@ -203,11 +213,15 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				return err
 			},
 			UserMessageInbound: func(ctx context.Context, c ahpserver.ObserveContext[ahp.UserMessageInboundEvent]) error {
-				payload := ahpUserMessageInboundPayload(c.Event)
+				attachments, err := s.ahpPromptAttachments(ctx, c.Event)
+				if err != nil {
+					return err
+				}
+				payload := ahpUserMessageInboundPayload(c.Event, attachments)
 				if payload == nil {
 					return nil
 				}
-				_, err := s.ingestAHP(ctx, payload, true)
+				_, err = s.ingestAHP(ctx, payload, true)
 				return err
 			},
 			ModelResponseAfter: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ModelResponseAfterEvent]) error {
@@ -281,6 +295,42 @@ func (s *Service) ahpAuthenticate(h http.Handler) http.Handler {
 func (s *Service) ingestAHP(ctx context.Context, payload *gen.IngestPayload, observeOnly bool) (string, error) {
 	options := defaultAuthenticatedIngestOptions()
 	options.ObserveOnly = observeOnly
+	return s.ingestAHPWithOptions(ctx, payload, options)
+}
+
+// ingestAHPInbound includes resolved attachments in prompt policy evidence,
+// without adding their contents to the persisted prompt text.
+func (s *Service) ingestAHPInbound(ctx context.Context, payload *gen.IngestPayload, observeOnly bool) (string, error) {
+	if len(payload.Data.PromptAttachments) == 0 {
+		return s.ingestAHP(ctx, payload, observeOnly)
+	}
+	var texts []string
+	if prompt := canonicalPromptText(payload); prompt != "" {
+		texts = append(texts, prompt)
+	}
+	for _, attachment := range payload.Data.PromptAttachments {
+		if attachment != nil {
+			texts = append(texts, attachment.Content)
+		}
+	}
+	evidenceBytes := 0
+	for i, text := range texts {
+		size := len(text)
+		if i > 0 {
+			size++
+		}
+		if size > ahpMaxEvidenceBytes-evidenceBytes {
+			if observeOnly {
+				return "", errAHPEvidenceSize
+			}
+			return errAHPEvidenceSize.Error(), nil
+		}
+		evidenceBytes += size
+	}
+	policyText := strings.Join(texts, "\n")
+	options := defaultAuthenticatedIngestOptions()
+	options.ObserveOnly = observeOnly
+	options.promptPolicyText = &policyText
 	return s.ingestAHPWithOptions(ctx, payload, options)
 }
 
@@ -373,6 +423,7 @@ func ahpToolPermissionPayload(e *ahp.ToolPermissionRequestEvent) *gen.IngestPayl
 func ahpPayload(source string, harness *ahp.Harness, id, rawType, occurredAt, eventType string, session ahp.Optional[*ahp.Session], turnID string) *gen.IngestPayload {
 	payload := &gen.IngestPayload{
 		ApikeyToken:      nil,
+		DeviceAgentToken: nil,
 		ProjectSlugInput: nil,
 		Replayed:         nil,
 		SchemaVersion:    hookIngestSchemaV1,
@@ -431,7 +482,9 @@ func ahpToolAfterPayload(e *ahp.ToolAfterEvent) *gen.IngestPayload {
 }
 
 // Only inbound user envelopes own prompt policy and transcript capture.
-func ahpUserMessageInboundPayload(e *ahp.UserMessageInboundEvent) *gen.IngestPayload {
+// Resolved attachments ride along as prompt attachments, so they persist
+// through the same path as transcript-derived hook attachments.
+func ahpUserMessageInboundPayload(e *ahp.UserMessageInboundEvent, attachments []*gen.HookPromptAttachmentEntry) *gen.IngestPayload {
 	var texts []string
 	for _, message := range e.Message.Messages {
 		if message.Role == "user" {
@@ -440,11 +493,23 @@ func ahpUserMessageInboundPayload(e *ahp.UserMessageInboundEvent) *gen.IngestPay
 			}
 		}
 	}
-	if len(texts) == 0 {
+	if len(texts) == 0 && len(attachments) == 0 {
 		return nil
 	}
 	payload := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "prompt.submitted", e.Session, e.Turn.Value.ID)
-	payload.Data.Prompt = &gen.HookPromptData{Text: new(strings.Join(texts, "\n"))}
+	if len(texts) > 0 {
+		prompt := strings.Join(texts, "\n")
+		payload.Data.Prompt = &gen.HookPromptData{Text: &prompt}
+		// Link attachments to the prompt row this event persists.
+		sum := sha256.Sum256([]byte(strings.TrimSpace(prompt)))
+		promptSHA256 := hex.EncodeToString(sum[:])
+		for _, attachment := range attachments {
+			attachment.PromptSha256 = &promptSHA256
+		}
+	}
+	if len(attachments) > 0 {
+		payload.Data.PromptAttachments = attachments
+	}
 	return payload
 }
 

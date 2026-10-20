@@ -77,6 +77,7 @@ type Endpoints struct {
 	GetSupportCoverage                    goa.Endpoint
 	DescribeMcpServerHealth               goa.Endpoint
 	GetMcpServerToolCalls                 goa.Endpoint
+	GetHookClients                        goa.Endpoint
 	ListExternalMcpMigrationCandidates    goa.Endpoint
 	PreviewExternalMcpMigration           goa.Endpoint
 	MigrateExternalMcpServers             goa.Endpoint
@@ -193,6 +194,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetSupportCoverage:                    NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
 		DescribeMcpServerHealth:               NewDescribeMcpServerHealthEndpoint(s, a.APIKeyAuth),
 		GetMcpServerToolCalls:                 NewGetMcpServerToolCallsEndpoint(s, a.APIKeyAuth),
+		GetHookClients:                        NewGetHookClientsEndpoint(s, a.APIKeyAuth),
 		ListExternalMcpMigrationCandidates:    NewListExternalMcpMigrationCandidatesEndpoint(s, a.APIKeyAuth),
 		PreviewExternalMcpMigration:           NewPreviewExternalMcpMigrationEndpoint(s, a.APIKeyAuth),
 		MigrateExternalMcpServers:             NewMigrateExternalMcpServersEndpoint(s, a.APIKeyAuth),
@@ -289,6 +291,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSupportCoverage = m(e.GetSupportCoverage)
 	e.DescribeMcpServerHealth = m(e.DescribeMcpServerHealth)
 	e.GetMcpServerToolCalls = m(e.GetMcpServerToolCalls)
+	e.GetHookClients = m(e.GetHookClients)
 	e.ListExternalMcpMigrationCandidates = m(e.ListExternalMcpMigrationCandidates)
 	e.PreviewExternalMcpMigration = m(e.PreviewExternalMcpMigration)
 	e.MigrateExternalMcpServers = m(e.MigrateExternalMcpServers)
@@ -1660,6 +1663,29 @@ func NewGetMcpServerToolCallsEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.GetMcpServerToolCalls(ctx, p)
+	}
+}
+
+// NewGetHookClientsEndpoint returns an endpoint function that calls the method
+// "getHookClients" of service "admin".
+func NewGetHookClientsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetHookClientsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetHookClients(ctx, p)
 	}
 }
 

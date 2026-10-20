@@ -726,6 +726,107 @@ var _ = Service("skills", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listDistributions")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillDistributions"}`)
 	})
+
+	Method("link", func() {
+		Description("Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills-over-mcp rollout for the organization.")
+
+		Payload(func() {
+			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+			Attribute("target_kind", String, "The kind of MCP surface that serves the skill.", func() {
+				Enum("mcp_server", "meta_mcp_server", "organization_gateway")
+			})
+			Attribute("mcp_server_id", String, "The MCP server that serves the skill. Required when target_kind is mcp_server.", func() { Format(FormatUUID) })
+			Attribute("meta_mcp_server_id", String, "The gateway that serves the skill. Required when target_kind is meta_mcp_server.", func() { Format(FormatUUID) })
+			Attribute("pinned_version_id", String, "An optional valid version to pin instead of serving the latest valid version.", func() { Format(FormatUUID) })
+			Required("id", "target_kind")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SkillLink)
+
+		HTTP(func() {
+			POST("/rpc/skills.link")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(LinkSkillRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "linkSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "link")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LinkSkill"}`)
+	})
+
+	Method("unlink", func() {
+		Description("Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills-over-mcp rollout for the organization.")
+
+		Payload(func() {
+			Attribute("link_id", String, "The skill link ID.", func() { Format(FormatUUID) })
+			Required("link_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/skills.unlink")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(UnlinkSkillRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "unlinkSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "unlink")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UnlinkSkill"}`)
+	})
+
+	Method("listLinks", func() {
+		Description("List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills-over-mcp rollout for the organization.")
+
+		Payload(func() {
+			Attribute("skill_id", String, "Only return links of this skill.", func() { Format(FormatUUID) })
+			Attribute("mcp_server_id", String, "Only return links to this MCP server.", func() { Format(FormatUUID) })
+			Attribute("meta_mcp_server_id", String, "Only return links to this gateway.", func() { Format(FormatUUID) })
+			Attribute("target_kind", String, "Only return links to this kind of MCP surface.", func() {
+				Enum("mcp_server", "meta_mcp_server", "organization_gateway")
+			})
+			Attribute("cursor", String, "Cursor for the next page of skill links.")
+			Attribute("limit", Int, "The number of skill links to return per page.", func() {
+				Default(20)
+				Minimum(1)
+				Maximum(50)
+			})
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListSkillLinksResult)
+
+		HTTP(func() {
+			GET("/rpc/skills.listLinks")
+			Param("skill_id")
+			Param("mcp_server_id")
+			Param("meta_mcp_server_id")
+			Param("target_kind")
+			Param("cursor")
+			Param("limit")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listSkillLinks")
+		Meta("openapi:extension:x-speakeasy-name-override", "listLinks")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillLinks"}`)
+	})
 })
 
 var CreateSkillRequestBody = Type("CreateSkillRequestBody", func() {
@@ -836,6 +937,34 @@ var UndistributeSkillRequestBody = Type("UndistributeSkillRequestBody", func() {
 	Example(Val{
 		"id":        "550e8400-e29b-41d4-a716-446655440000",
 		"plugin_id": "550e8400-e29b-41d4-a716-446655440001",
+	})
+})
+
+var LinkSkillRequestBody = Type("LinkSkillRequestBody", func() {
+	Meta("openapi:typename", "LinkSkillRequestBody")
+
+	Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+	Attribute("target_kind", String, "The kind of MCP surface that serves the skill.", func() {
+		Enum("mcp_server", "meta_mcp_server", "organization_gateway")
+	})
+	Attribute("mcp_server_id", String, "The MCP server that serves the skill. Required when target_kind is mcp_server.", func() { Format(FormatUUID) })
+	Attribute("meta_mcp_server_id", String, "The gateway that serves the skill. Required when target_kind is meta_mcp_server.", func() { Format(FormatUUID) })
+	Attribute("pinned_version_id", String, "An optional valid version to pin instead of serving the latest valid version.", func() { Format(FormatUUID) })
+	Required("id", "target_kind")
+	Example(Val{
+		"id":            "550e8400-e29b-41d4-a716-446655440000",
+		"target_kind":   "mcp_server",
+		"mcp_server_id": "550e8400-e29b-41d4-a716-446655440001",
+	})
+})
+
+var UnlinkSkillRequestBody = Type("UnlinkSkillRequestBody", func() {
+	Meta("openapi:typename", "UnlinkSkillRequestBody")
+
+	Attribute("link_id", String, "The skill link ID.", func() { Format(FormatUUID) })
+	Required("link_id")
+	Example(Val{
+		"link_id": "550e8400-e29b-41d4-a716-446655440000",
 	})
 })
 
@@ -1197,6 +1326,34 @@ var ListSkillDistributionsResult = Type("ListSkillDistributionsResult", func() {
 	Attribute("distributions", ArrayOf(PluginSkillDistribution), "The active plugin skill distributions in this page.")
 	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
 	Required("distributions")
+})
+
+var SkillLink = Type("SkillLink", func() {
+	Meta("struct:pkg:path", "types")
+	Description("A live link from a project skill to the MCP surface that serves it over MCP.")
+
+	Attribute("id", String, "The link ID.", func() { Format(FormatUUID) })
+	Attribute("skill_id", String, "The linked skill ID.", func() { Format(FormatUUID) })
+	Attribute("skill_name", String, "The canonical name of the linked skill.")
+	Attribute("skill_display_name", String, "The display name of the linked skill.")
+	Attribute("target_kind", String, "The kind of MCP surface that serves the skill.", func() {
+		Enum("mcp_server", "meta_mcp_server", "organization_gateway")
+	})
+	Attribute("mcp_server_id", String, "The MCP server that serves the skill, for an mcp_server link.", func() { Format(FormatUUID) })
+	Attribute("meta_mcp_server_id", String, "The gateway that serves the skill, for a meta_mcp_server link.", func() { Format(FormatUUID) })
+	Attribute("target_name", String, "The name of the MCP server or gateway, absent for the organization gateway.")
+	Attribute("pinned_version_id", String, "The pinned version, absent when serving the latest valid version.", func() { Format(FormatUUID) })
+	Attribute("created_at", String, "When the link was created.", func() { Format(FormatDateTime) })
+
+	Required("id", "skill_id", "skill_name", "skill_display_name", "target_kind", "created_at")
+})
+
+var ListSkillLinksResult = Type("ListSkillLinksResult", func() {
+	Description("A page of live skill links for the current project.")
+
+	Attribute("links", ArrayOf(SkillLink), "The live skill links in this page.")
+	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
+	Required("links")
 })
 
 var RecordSkillResult = Type("RecordSkillResult", func() {

@@ -2217,6 +2217,53 @@ func BuildGetMcpServerToolCallsPayload(adminGetMcpServerToolCallsOrganizationID 
 	return v, nil
 }
 
+// BuildGetHookClientsPayload builds the payload for the admin getHookClients
+// endpoint from CLI flags.
+func BuildGetHookClientsPayload(adminGetHookClientsWindowDays string, adminGetHookClientsRefresh string, adminGetHookClientsAdminSessionToken string) (*admin.GetHookClientsPayload, error) {
+	var err error
+	var windowDays int
+	{
+		if adminGetHookClientsWindowDays != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminGetHookClientsWindowDays, 10, strconv.IntSize)
+			windowDays = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
+			}
+			if windowDays < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
+			}
+			if windowDays > 30 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 30, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var refresh bool
+	{
+		if adminGetHookClientsRefresh != "" {
+			refresh, err = strconv.ParseBool(adminGetHookClientsRefresh)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for refresh, must be BOOL")
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetHookClientsAdminSessionToken != "" {
+			adminSessionToken = &adminGetHookClientsAdminSessionToken
+		}
+	}
+	v := &admin.GetHookClientsPayload{}
+	v.WindowDays = windowDays
+	v.Refresh = refresh
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListExternalMcpMigrationCandidatesPayload builds the payload for the
 // admin listExternalMcpMigrationCandidates endpoint from CLI flags.
 func BuildListExternalMcpMigrationCandidatesPayload(adminListExternalMcpMigrationCandidatesAdminSessionToken string) (*admin.ListExternalMcpMigrationCandidatesPayload, error) {

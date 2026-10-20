@@ -410,7 +410,7 @@ const (
 	// 2026-07-28), otherwise from the observed `initialize` response.
 	McpNegotiatedProtocolVersionKey = attribute.Key("gram.mcp.negotiated_protocol_version")
 	// McpSurfaceKey is the inbound MCP serving surface: "hosting" for the
-	// third-party-facing /mcp/{slug} and /x/mcp/{slug} paths (all backends), or
+	// third-party-facing /mcp/{slug} path (all backends), or
 	// "platform" for the assistant-token-only /platform/mcp/{toolsetSlug} path.
 	McpSurfaceKey = attribute.Key("gram.mcp.surface")
 	// McpRejectionReasonKey is the bounded reason an inbound MCP request was
@@ -419,14 +419,20 @@ const (
 	// validation failure class such as "header_mismatch".
 	McpRejectionReasonKey = attribute.Key("gram.mcp.rejection_reason")
 	// McpSkillOriginKey is the bounded origin of a skill served over MCP:
-	// "distribution" for a managed skill distributed through a plugin, or
+	// "distribution" for a managed skill linked to the MCP surface, or
 	// "embedded" for a reviewed skill compiled into the platform toolset.
 	// Never a skill name or identifier.
 	McpSkillOriginKey = attribute.Key("gram.mcp.skill.origin")
-	// McpSkillPinConflictCountKey is how many pinned distributions lost to a
-	// different pinned version when one hosted endpoint resolved a skill
-	// carried by several plugins.
+	// McpSkillPinConflictCountKey is how many pinned skill links lost to a
+	// different pinned version when one MCP surface resolved a skill linked
+	// several times.
 	McpSkillPinConflictCountKey = attribute.Key("gram.mcp.skill.pin_conflict_count")
+	// McpSkillTargetKindKey is the kind of MCP surface a skill resolution
+	// served: "mcp_server", "meta_mcp_server" or "organization_gateway".
+	McpSkillTargetKindKey = attribute.Key("gram.mcp.skill.target_kind")
+	// McpSkillTargetIDKey is the id of the stored MCP surface a skill
+	// resolution served, or the nil UUID for a row-less surface.
+	McpSkillTargetIDKey = attribute.Key("gram.mcp.skill.target_id")
 	// McpKillswitchSurfaceKey is the kill-switch enforcement surface a covered
 	// MCP tools/call reached: "hosted" or "private_proxy".
 	McpKillswitchSurfaceKey = attribute.Key("gram.mcp.killswitch.surface")
@@ -723,7 +729,7 @@ const (
 	RiskScanLimitBytesKey        = attribute.Key("gram.risk.scan.limit_bytes")
 	RiskScanRequestIDKey         = attribute.Key("gram.risk.scan.request_id")
 	RiskScanEngineKey            = attribute.Key("gram.risk.scan.engine")
-	RiskScanGateReasonKey        = attribute.Key("gram.risk.scan.gate_reason")
+	RiskScanSelectionReasonKey   = attribute.Key("gram.risk.scan.selection_reason")
 	RiskFindingIDKey             = attribute.Key("gram.risk.finding.id")
 	RiskPolicyVersionKey         = attribute.Key("gram.risk.policy.version")
 	RiskConfidenceKey            = attribute.Key("gram.risk.confidence")
@@ -1249,6 +1255,7 @@ func SlogHookServerNameOverrideID(v string) slog.Attr {
 }
 
 func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v) }
+func SlogHookDecision(v string) slog.Attr      { return slog.String(string(HookDecisionKey), v) }
 
 func HookRiskScanned(v bool) attribute.KeyValue { return HookRiskScannedKey.Bool(v) }
 
@@ -2861,12 +2868,12 @@ func SlogRiskScanRequestID(v string) slog.Attr {
 func RiskScanEngine(v string) attribute.KeyValue { return RiskScanEngineKey.String(v) }
 func SlogRiskScanEngine(v string) slog.Attr      { return slog.String(string(RiskScanEngineKey), v) }
 
-func RiskScanGateReason[V ~string](v V) attribute.KeyValue {
-	return RiskScanGateReasonKey.String(string(v))
+func RiskScanSelectionReason[V ~string](v V) attribute.KeyValue {
+	return RiskScanSelectionReasonKey.String(string(v))
 }
 
-func SlogRiskScanGateReason(v string) slog.Attr {
-	return slog.String(string(RiskScanGateReasonKey), v)
+func SlogRiskScanSelectionReason(v string) slog.Attr {
+	return slog.String(string(RiskScanSelectionReasonKey), v)
 }
 
 func RiskFindingID(v string) attribute.KeyValue { return RiskFindingIDKey.String(v) }
@@ -3086,6 +3093,18 @@ func SlogMcpSkillOrigin[V ~string](v V) slog.Attr {
 func McpSkillPinConflictCount(v int) attribute.KeyValue { return McpSkillPinConflictCountKey.Int(v) }
 func SlogMcpSkillPinConflictCount(v int) slog.Attr {
 	return slog.Int(string(McpSkillPinConflictCountKey), v)
+}
+
+func McpSkillTargetKind[V ~string](v V) attribute.KeyValue {
+	return McpSkillTargetKindKey.String(string(v))
+}
+func SlogMcpSkillTargetKind[V ~string](v V) slog.Attr {
+	return slog.String(string(McpSkillTargetKindKey), string(v))
+}
+
+func McpSkillTargetID(v string) attribute.KeyValue { return McpSkillTargetIDKey.String(v) }
+func SlogMcpSkillTargetID(v string) slog.Attr {
+	return slog.String(string(McpSkillTargetIDKey), v)
 }
 
 func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }

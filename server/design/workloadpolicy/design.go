@@ -278,6 +278,88 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "withdrawSubject")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WithdrawWorkloadSubject"}`)
 	})
+
+	Method("createDeviceJoinToken", func() {
+		Description("Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Only a person can create one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent's policy.")
+
+		Payload(func() {
+			Attribute("agent_id", String, "The agent the enrolled device inherits its policy from.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("expires_in_seconds", Int, "How long the token stays redeemable. Defaults to one hour.", func() {
+				Minimum(60)
+				Maximum(86400)
+				Default(3600)
+			})
+			Required("agent_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadDeviceJoinToken)
+
+		HTTP(func() {
+			POST("/rpc/workloadIdentities.createDeviceJoinToken")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createWorkloadDeviceJoinToken")
+		Meta("openapi:extension:x-speakeasy-name-override", "createDeviceJoinToken")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateWorkloadDeviceJoinToken"}`)
+	})
+
+	Method("registerDevice", func() {
+		Description("Enroll a device with its public key, redeeming a join token. No session or API key: the single-use join token is the credential, and an unknown, expired, or already redeemed token returns 401. A key already registered to another device returns 409, and an agent whose policy no longer grants org:device_agent_sync returns a failed precondition without spending the token. In one transaction the device's key is registered, the device is admitted under the organization's Speakeasy device issuer, and it is assigned the token's agent.")
+
+		NoSecurity()
+
+		Payload(func() {
+			Attribute("join_token", String, "The join token from createDeviceJoinToken.", func() {
+				MinLength(1)
+				MaxLength(512)
+			})
+			Attribute("public_jwk", MapOf(String, Any), "The device's public signing key as a JWK: EC P-256 (ES256) or OKP Ed25519 (EdDSA). Private key material is refused.")
+			Attribute("hostname", String, "The device's hostname, shown to administrators. Self-reported.", func() {
+				MaxLength(255)
+			})
+			Attribute("serial", String, "The device's serial number, shown to administrators. Self-reported.", func() {
+				MaxLength(255)
+			})
+			Required("join_token", "public_jwk")
+		})
+
+		Result(WorkloadDeviceRegistration)
+
+		HTTP(func() {
+			POST("/rpc/workloadIdentities.registerDevice")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "registerWorkloadDevice")
+		Meta("openapi:extension:x-speakeasy-name-override", "registerDevice")
+	})
+})
+
+var WorkloadDeviceJoinToken = Type("WorkloadDeviceJoinToken", func() {
+	Attribute("token", String, "The join token. Shown once; only its hash is stored.")
+	Attribute("expires_at", String, "When the token stops being redeemable.", func() {
+		Format(FormatDateTime)
+	})
+	Required("token", "expires_at")
+})
+
+var WorkloadDeviceRegistration = Type("WorkloadDeviceRegistration", func() {
+	Attribute("device_subject", String, "The device's workload subject, device:<uuid>. Its assertions carry this as sub.")
+	Attribute("issuer", String, "The issuer its assertions carry as iss.")
+	Attribute("agent_id", String, "The agent the device inherits its policy from.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("organization_id", String, "The organization the device enrolled in.")
+	Required("device_subject", "issuer", "agent_id", "organization_id")
 })
 
 var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {

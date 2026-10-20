@@ -1,3 +1,7 @@
+-- ClickHouse 26.5+ preserves redundant parentheses in SHOW CREATE. Keep
+-- expression parentheses aligned with the applied migrations so Atlas's
+-- textual comparison does not report formatting-only drift.
+
 CREATE TABLE IF NOT EXISTS telemetry_logs (
     -- OTel Log Record Identity
     id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry.\n@access: confidential',
@@ -656,43 +660,40 @@ WITH
     -- ships it.
     toUnixTimestamp64Nano(toDateTime64('2026-07-14 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
     -- Every persisted Claude OTEL log row carries this URN (stamped at ingest).
-    (gram_urn = 'claude-code:otel:logs') AS is_claude_otel_row,
+    gram_urn = 'claude-code:otel:logs' AS is_claude_otel_row,
     -- Claude emits one api_request row per turn with model, token, cost, and
     -- attribution fields — the sole Claude usage source.
-    (
-        is_claude_otel_row
+    is_claude_otel_row
         AND chat_id != ''
         AND toString(attributes.prompt.id) != ''
         AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
-    ) AS is_claude_api_request,
+    AS is_claude_api_request,
     -- Claude emits one tool_result row per completed tool call (carrying
     -- tool_use_id) — the sole Claude tool-call source; Claude hook rows are
     -- not counted.
-    (
-        is_claude_otel_row
+    is_claude_otel_row
         AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
-    ) AS is_claude_tool_result,
+    AS is_claude_tool_result,
     -- Every persisted Codex OTEL log row carries this URN (stamped at ingest).
-    (gram_urn = 'codex:otel:logs') AS is_codex_otel_row,
+    gram_urn = 'codex:otel:logs' AS is_codex_otel_row,
     -- Codex reports usage on the SSE event that closes a turn; only some
     -- response.completed events carry token counts, signalled by an input or
     -- output count being present. The sole Codex TOKEN source: codex:usage
     -- rows still arrive from the compliance COSTS import but carry cost only
     -- (their token counts ride unmetered codex.compliance.* keys precisely so
     -- they cannot double count against this stream).
-    (
-        is_codex_otel_row
+    is_codex_otel_row
         AND toString(attributes.event.name) = 'codex.sse_event'
         AND toString(attributes.event.kind) = 'response.completed'
         AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')
-    ) AS is_codex_api_request,
+    AS is_codex_api_request,
     -- Codex reports input_token_count INCLUSIVE of cached_token_count (OpenAI
     -- usage semantics: cached tokens are a subset of input), while the
     -- canonical shape is disjoint (input excludes cache reads). Normalize
     -- here, clamping to 0 <= cached <= input so bad client data can never
     -- INCREASE usage. Codex reports no cache writes and no cost.
     least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
-    (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
+    greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens AS codex_input_tokens,
     -- claude_chat:usage rows carry Claude Chat (web/desktop) per-user token
     -- usage and claude_chat:cost rows the matching spend, both polled from the
     -- Anthropic Admin Analytics API — sessionless usage, like Cursor's Admin
@@ -702,14 +703,13 @@ WITH
     -- cost-only since DNO-733: their token counts would duplicate the Codex
     -- OTEL stream above. Deliberately NOT claude-code:usage, which stays
     -- excluded as a duplicate of the OTEL api_request stream.
-    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
+    startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage') AS is_agent_usage_row,
     -- Canonical hooks require ingest-stamped schema/event provenance and no
     -- provider URN. AHP model-attempt usage.reported samples are authoritative,
     -- independent of the harness name. AHP presentation messages/turn totals
     -- are not billable again. Other hooks count assistant.responded usage.
     -- Unstamped legacy opencode/openclaw/Pi turns retain their original source.
-    (
-        (((gram_urn = ''
+    (((gram_urn = ''
             AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')
             AND ((toString(attributes.gram.hook.transport) = 'ahp'
             AND toString(attributes.gram.hook.canonical_event) = 'usage.reported'
@@ -721,29 +721,27 @@ WITH
             AND toString(attributes.gram.hook.source) IN ('opencode', 'openclaw', 'pi')
             AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'))
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
-    ) AS is_hook_turn_usage_row,
+    AS is_hook_turn_usage_row,
     -- LiteLLM usage is authoritative only on normalized client model spans.
     -- The resource URN anchors provenance and the closed event-URN set excludes
     -- guardrail, auth, cache, database, metric, and other operational rows.
-    (
-        gram_urn = 'litellm:otel:traces'
+    gram_urn = 'litellm:otel:traces'
         AND event_urn IN (
             'urn:telemetry:provider_otel:span:chat',
             'urn:telemetry:provider_otel:span:embeddings',
             'urn:telemetry:provider_otel:span:text_completion'
         )
-    ) AS is_litellm_usage_row,
+    AS is_litellm_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
-    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
-    (gram_urn = 'chat:transcript:observed') AS is_transcript_row,
+    is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row AS is_usage_row,
+    gram_urn = 'chat:transcript:observed' AS is_transcript_row,
     -- Codex/Cursor/opencode/openclaw/Pi tool calls arrive as hook rows, one
     -- PostToolUse/PostToolUseFailure row per completed call (Codex raw OTEL
     -- tool events are deliberately not counted — hook rows stay the sole
     -- source). The hook.event guard is required: every call also emits a
     -- PreToolUse row with the same gram.tool.name. Provider names (the
     -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
-    (
-        (((gram_urn = ''
+    (((gram_urn = ''
             AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')
             AND (toString(attributes.gram.hook.source) NOT IN ('claude', 'claude-code', 'cowork')
             OR toString(attributes.gram.hook.transport) = 'ahp')
@@ -753,8 +751,8 @@ WITH
             AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
             AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')))
         AND toString(attributes.gram.tool.name) != ''
-    ) AS is_agent_tool_call,
-    (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
+    AS is_agent_tool_call,
+    is_claude_tool_result OR is_agent_tool_call AS is_counted_tool_call,
     -- Dedup identity per tool call: Claude tool_result rows carry tool_use_id,
     -- Cursor/unified-ingest hook rows carry gen_ai.tool.call.id. Rows with no
     -- call id fall back to the row id, degrading to count-per-row rather than
@@ -769,7 +767,7 @@ WITH
     -- user identity, model, source, and account type). They carry no token
     -- or cost usage of their own -- every usage guard above excludes them --
     -- and feed only the work-units measures at the end of the SELECT.
-    (gram_urn = 'chat_analysis:work_units:score') AS is_work_units_score
+    gram_urn = 'chat_analysis:work_units:score' AS is_work_units_score
 SELECT
     gram_project_id,
     toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
@@ -916,12 +914,11 @@ WITH
     -- without the URN guard a Claude-formatted row arriving through any other
     -- path would count toward enforcement but not the dashboard, warning or
     -- blocking users on inflated spend.
-    (
-        gram_urn = 'claude-code:otel:logs'
+    gram_urn = 'claude-code:otel:logs'
         AND chat_id != ''
         AND toString(attributes.prompt.id) != ''
         AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
-    ) AS is_claude_api_request,
+    AS is_claude_api_request,
     -- Only Codex/Cursor usage-metric rows count. Generic gen_ai chat rows
     -- (Gram-hosted completions and other sources) are deliberately excluded so
     -- spend-rule enforcement reconciles with the cost dashboard's agent
@@ -930,10 +927,9 @@ WITH
     -- attribute_metrics_summaries_mv does count, are also deliberately
     -- excluded for now: spend rules govern agent/CLI spend until a product
     -- decision includes Claude Chat in enforcement budgets.
-    (
-        startsWith(gram_urn, 'codex:usage')
+    startsWith(gram_urn, 'codex:usage')
         OR startsWith(gram_urn, 'cursor:usage')
-    ) AS is_generic_usage_row
+    AS is_generic_usage_row
 SELECT
     gram_project_id,
     user_email,
@@ -1084,38 +1080,34 @@ WITH
     -- place: the runbook's preflight derives the effective boundary from the
     -- MV's actual creation time and repairs the partial buckets below it.
     toUnixTimestamp64Nano(toDateTime64('2026-07-21 22:00:00', 9, 'UTC')) AS chat_session_cutoff_unix_nano,
-    (gram_urn = 'claude-code:otel:logs') AS is_claude_otel_row,
-    (
-        is_claude_otel_row
+    gram_urn = 'claude-code:otel:logs' AS is_claude_otel_row,
+    is_claude_otel_row
         AND chat_id != ''
         AND toString(attributes.prompt.id) != ''
         AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
-    ) AS is_claude_api_request,
-    (
-        is_claude_otel_row
+    AS is_claude_api_request,
+    is_claude_otel_row
         AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
-    ) AS is_claude_tool_result,
-    (gram_urn = 'codex:otel:logs') AS is_codex_otel_row,
+    AS is_claude_tool_result,
+    gram_urn = 'codex:otel:logs' AS is_codex_otel_row,
     -- Codex usage rides on token-bearing response.completed rows of the raw
     -- OTEL log stream; see attribute_metrics_summaries_mv above.
-    (
-        is_codex_otel_row
+    is_codex_otel_row
         AND toString(attributes.event.name) = 'codex.sse_event'
         AND toString(attributes.event.kind) = 'response.completed'
         AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')
-    ) AS is_codex_api_request,
+    AS is_codex_api_request,
     -- Cache-inclusive -> disjoint input normalization, clamped; identical to
     -- attribute_metrics_summaries_mv above.
     least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
-    (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
+    greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens AS codex_input_tokens,
     -- chatgpt:usage / claude_chat:* rows are chat-less and never pass the
     -- chat_id guard below — listed here only to keep this predicate textually
     -- aligned with attribute_metrics_summaries_mv and the Go session path.
-    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
+    startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage') AS is_agent_usage_row,
     -- Same canonical/legacy usage authority as attribute_metrics_summaries_mv.
     -- No historical backfill: these guards affect future inserts only.
-    (
-        (((gram_urn = ''
+    (((gram_urn = ''
             AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')
             AND ((toString(attributes.gram.hook.transport) = 'ahp'
             AND toString(attributes.gram.hook.canonical_event) = 'usage.reported'
@@ -1127,17 +1119,15 @@ WITH
             AND hook_source IN ('opencode', 'openclaw', 'pi')
             AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'))
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
-    ) AS is_hook_turn_usage_row,
-    (
-        gram_urn = 'litellm:otel:traces'
+    AS is_hook_turn_usage_row,
+    gram_urn = 'litellm:otel:traces'
         AND event_urn IN (
             'urn:telemetry:provider_otel:span:chat',
             'urn:telemetry:provider_otel:span:embeddings',
             'urn:telemetry:provider_otel:span:text_completion'
         )
-    ) AS is_litellm_usage_row,
-    (
-        (((gram_urn = ''
+    AS is_litellm_usage_row,
+    (((gram_urn = ''
             AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')
             AND (hook_source NOT IN ('claude', 'claude-code', 'cowork')
             OR toString(attributes.gram.hook.transport) = 'ahp')
@@ -1147,17 +1137,16 @@ WITH
             AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
             AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')))
         AND toString(attributes.gram.tool.name) != ''
-    ) AS is_agent_tool_call,
-    (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
-    (gram_urn = 'chat:transcript:observed') AS is_transcript_row,
+    AS is_agent_tool_call,
+    is_claude_tool_result OR is_agent_tool_call AS is_counted_tool_call,
+    is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row AS is_usage_row,
+    gram_urn = 'chat:transcript:observed' AS is_transcript_row,
     -- A counted tool call that failed: Claude tool_result rows carry
     -- success="false", Codex/Cursor hook rows report PostToolUseFailure or an
     -- HTTP error status.
-    (
-        (is_claude_tool_result AND toString(attributes.success) = 'false')
+    (is_claude_tool_result AND toString(attributes.success) = 'false')
         OR (is_agent_tool_call AND (toString(attributes.gram.hook.canonical_event) = 'tool.failed' OR toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
-    ) AS is_failed_tool_call,
+    AS is_failed_tool_call,
     multiIf(
         toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id),
         toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
@@ -1285,9 +1274,9 @@ CREATE TABLE IF NOT EXISTS billing_meter_readings (
     reading_kind LowCardinality(String) MATERIALIZED if(corrects_reading_id IS NULL, 'usage', 'adjustment') COMMENT 'Derived row kind based on whether the reading corrects an earlier reading.\n@access: confidential',
     attributes Map(String, String) COMMENT 'Additional producer-supplied reading dimensions.\n@access: opaque-restricted',
     tokenizer_codec LowCardinality(String) MATERIALIZED attributes['codec'] COMMENT 'Tokenizer codec promoted from attributes for billing analysis.\n@access: confidential',
-    CONSTRAINT identity_valid CHECK id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id)),
-    CONSTRAINT value_kind_valid CHECK (corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0),
-    CONSTRAINT correction_id_valid CHECK corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id),
+    CONSTRAINT identity_valid CHECK (id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id))),
+    CONSTRAINT value_kind_valid CHECK ((corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0)),
+    CONSTRAINT correction_id_valid CHECK (corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id)),
     INDEX idx_billing_meter_readings_occurred_at occurred_at TYPE minmax GRANULARITY 1
 ) ENGINE = ReplacingMergeTree(produced_at)
 PARTITION BY cityHash64(toString(id)) % 64
@@ -1317,9 +1306,9 @@ CREATE TABLE IF NOT EXISTS billing_meter_readings_by_time (
     reading_kind LowCardinality(String) MATERIALIZED if(corrects_reading_id IS NULL, 'usage', 'adjustment') COMMENT 'Derived row kind based on whether the reading corrects an earlier reading.\n@access: confidential',
     attributes Map(String, String) COMMENT 'Additional producer-supplied reading dimensions frozen at acceptance.\n@access: opaque-restricted',
     tokenizer_codec LowCardinality(String) MATERIALIZED attributes['codec'] COMMENT 'Tokenizer codec promoted from attributes for billing analysis.\n@access: confidential',
-    CONSTRAINT identity_valid CHECK id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id)),
-    CONSTRAINT value_kind_valid CHECK (corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0),
-    CONSTRAINT correction_id_valid CHECK corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id)
+    CONSTRAINT identity_valid CHECK (id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id))),
+    CONSTRAINT value_kind_valid CHECK ((corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0)),
+    CONSTRAINT correction_id_valid CHECK (corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id))
 ) ENGINE = ReplacingMergeTree
 PARTITION BY toYYYYMM(occurred_at)
 PRIMARY KEY (organization_id, meter_id, occurred_at)
@@ -2020,9 +2009,9 @@ CREATE TABLE IF NOT EXISTS chat_analysis_scores (
     judge_model LowCardinality(String) COMMENT 'Model used to judge the session.\n@access: confidential',
     judge_prompt_version LowCardinality(String) COMMENT 'Judge prompt version.\n@access: confidential',
 
-    CONSTRAINT score_valid CHECK isFinite(score),
-    CONSTRAINT judge_valid CHECK judge != '',
-    CONSTRAINT detail_valid CHECK isValidJSON(detail)
+    CONSTRAINT score_valid CHECK (isFinite(score)),
+    CONSTRAINT judge_valid CHECK (judge != ''),
+    CONSTRAINT detail_valid CHECK (isValidJSON(detail))
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (organization_id, project_id, judge, created_at, id)

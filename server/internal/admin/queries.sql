@@ -1,13 +1,17 @@
 -- name: AdminGetEnterpriseTrialRetryOperationIDs :one
--- The arm audit id is the immutable generation token. Every production trial
--- creation writes exactly one arm audit in the creation transaction; extension
--- writes neither. seq orders generations; id breaks any equal-seq tie.
+-- The creation audit id is the immutable generation token. Self-service trial
+-- creation records an armed action, while an admin grant records a started
+-- action. Extension writes neither. seq orders generations; id breaks any
+-- equal-seq tie.
 WITH latest_arm AS (
     SELECT armed.id, armed.seq
     FROM audit_logs AS armed
     WHERE armed.organization_id = @target_organization_id
       AND armed.project_id IS NULL
-      AND armed.action = 'organization:enterprise_trial_armed'
+      AND armed.action IN (
+          'organization:enterprise_trial_armed',
+          'organization:enterprise_trial_started'
+      )
       AND armed.subject_id = @target_organization_id
       AND armed.subject_type = 'organization'
     ORDER BY armed.seq DESC, armed.id DESC
@@ -1184,3 +1188,9 @@ RETURNING *;
 UPDATE signup_offers SET name = @name, stripe_promotion_code_id = @stripe_promotion_code_id,
  signup_flow = @signup_flow, enabled = @enabled, updated_at = clock_timestamp()
 WHERE id = @id RETURNING *;
+
+-- name: AdminListOrganizationNamesByIDs :many
+-- Labels the hook client grids, whose rows carry only organization ids.
+SELECT id, name, slug
+FROM organization_metadata
+WHERE id = ANY(@ids::text[]);

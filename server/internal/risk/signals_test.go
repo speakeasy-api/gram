@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -102,8 +101,6 @@ func TestGetRiskSignals_ClickHouse(t *testing.T) {
 		INSERT INTO risk_findings (id, created_at, message_created_at, organization_id, project_id, rule_id, source, category, chat_id, false_positive_at)
 		VALUES (?, ?, ?, ?, ?, 'secret.github_pat', 'gitleaks', 'secrets', ?, ?)
 	`, uuid.Must(uuid.NewV7()), from.Add(43*time.Hour), from.Add(43*time.Hour), orgID, projectID.String(), chatA.String(), from.Add(44*time.Hour)))
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
 		From: new(from.Format(time.RFC3339)),
@@ -213,7 +210,6 @@ func TestGetRiskSignals_MCPServerFilterCanonicalizesAndHidesDismissed(t *testing
 	dismissal.FalsePositiveAt = &dismissedAt
 
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{current, previous, otherServer, dismissed, dismissal}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	nonCanonicalServerID := "{" + serverID + "}"
 	result, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
@@ -359,7 +355,6 @@ func TestGetRiskSignals_PolicyScoreDrivesBase(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{attributed, bare, prevBare}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
 		From: new(from.Format(time.RFC3339)),
@@ -457,7 +452,6 @@ func TestGetRiskSignals_MCPServerFilter(t *testing.T) {
 		finding(41*time.Hour, "secret.github_pat", uuid.NewString(), "ghost"),
 	}
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, rows))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	window := &gen.GetRiskSignalsPayload{
 		From: new(from.Format(time.RFC3339)),

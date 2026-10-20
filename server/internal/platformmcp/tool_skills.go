@@ -113,6 +113,27 @@ type UndistributeSkillToolInput struct {
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key, at most 128 characters; reuse only to retry this exact revocation"`
 }
 
+type LinkSkillToMCPToolInput struct {
+	ProjectSlug     string `json:"project_slug" jsonschema:"explicit project slug that owns both the skill and the MCP server or gateway"`
+	SkillID         string `json:"skill_id" jsonschema:"skill ID returned by list_skills or create_skill"`
+	TargetKind      string `json:"target_kind" jsonschema:"which kind of MCP surface serves the skill: mcp_server, meta_mcp_server (a gateway), or organization_gateway"`
+	MCPServer       string `json:"mcp_server,omitempty" jsonschema:"exact existing MCP server in the project, by ID, slug, or name; required when target_kind is mcp_server and refused otherwise"`
+	Gateway         string `json:"gateway,omitempty" jsonschema:"exact existing gateway in the project, by ID or name; required when target_kind is meta_mcp_server and refused otherwise"`
+	PinnedVersionID string `json:"pinned_version_id,omitempty" jsonschema:"optional valid version ID from list_skill_versions to serve instead of the latest valid version; omit to follow the latest, which also clears an earlier pin"`
+	Confirmed       bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms serving this skill from this exact MCP surface"`
+	IdempotencyKey  string `json:"idempotency_key" jsonschema:"caller-generated idempotency key, at most 128 characters; reuse only to retry this exact link"`
+}
+
+type UnlinkSkillFromMCPToolInput struct {
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns both the skill and the MCP server or gateway"`
+	SkillID        string `json:"skill_id" jsonschema:"skill ID returned by list_skills or list_skill_distributions"`
+	TargetKind     string `json:"target_kind" jsonschema:"which kind of MCP surface stops serving the skill: mcp_server, meta_mcp_server (a gateway), or organization_gateway"`
+	MCPServer      string `json:"mcp_server,omitempty" jsonschema:"exact existing MCP server in the project, by ID, slug, or name; required when target_kind is mcp_server and refused otherwise"`
+	Gateway        string `json:"gateway,omitempty" jsonschema:"exact existing gateway in the project, by ID or name; required when target_kind is meta_mcp_server and refused otherwise"`
+	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms that this exact MCP surface stops serving this skill"`
+	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key, at most 128 characters; reuse only to retry this exact unlink"`
+}
+
 type ListSkillInsightsToolInput struct {
 	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug whose skills to rank"`
 	Window      string `json:"window,omitempty" jsonschema:"how far back to look: 1h, 24h, 7d, or 30d (default and maximum)"`
@@ -137,6 +158,18 @@ func approveSkillSuggestionAnnotations() *mcp.ToolAnnotations {
 }
 
 func dismissSkillSuggestionAnnotations() *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(true), IdempotentHint: true}
+}
+
+// linkSkillToMCPAnnotations and unlinkSkillFromMCPAnnotations are shared by
+// the live and unavailable registrations. A repeated link settles on the same
+// link, and a repeated unlink finds nothing left to remove; only unlinking
+// takes something away.
+func linkSkillToMCPAnnotations() *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), IdempotentHint: true}
+}
+
+func unlinkSkillFromMCPAnnotations() *mcp.ToolAnnotations {
 	return &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(true), IdempotentHint: true}
 }
 
@@ -267,7 +300,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "approve_skill_suggestion",
 		Title:       "Approve a Skill Suggestion",
-		Description: "Take a proposed improvement from list_skill_suggestions: record it as the skill's new version and close the suggestion, exactly as approving it in the dashboard does. Name the reviewed changes in change_ids (every change to take the whole suggestion, or some to take only those and leave the rest proposed), or pass content to record a corrected SKILL.md instead. Tell the user which skill changes and what each taken change does, ask them to confirm out loud, then call this with confirmed: true. Constraints: a change proposed after your review is never taken, because it is not in change_ids. If the skill has moved on since the suggestion was written, nothing is recorded and the suggestion is closed as superseded. The new version reaches the plugins and assistants that already carry the skill and track its latest version; nobody new receives it.",
+		Description: "Take a proposed improvement from list_skill_suggestions: record it as the skill's new version and close the suggestion, exactly as approving it in the dashboard does. Name the reviewed changes in change_ids (every change to take the whole suggestion, or some to take only those and leave the rest proposed), or pass content to record a corrected SKILL.md instead. Tell the user which skill changes and what each taken change does, ask them to confirm out loud, then call this with confirmed: true. Constraints: a change proposed after your review is never taken, because it is not in change_ids. If the skill has moved on since the suggestion was written, nothing is recorded and the suggestion is closed as superseded. The new version reaches the plugins, assistants, and MCP servers or gateways that already carry the skill and track its latest version; nobody new receives it.",
 		Annotations: approveSkillSuggestionAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input ApproveSkillSuggestionToolInput) (*mcp.CallToolResult, ApproveSkillSuggestionOutput, error) {
 		if !input.Confirmed {
@@ -303,7 +336,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "create_skill",
 		Title:       "Create Skill",
-		Description: "Write a new skill in a named project — a set of instructions an agent loads when it applies — from complete SKILL.md content. Writing it alone does nothing: no agent loads it until distribute_skill gives it to a plugin or an assistant. Constraints: an existing active skill with the same normalized name records a new version instead, and identical content returns the existing version unchanged.",
+		Description: "Write a new skill in a named project — a set of instructions an agent loads when it applies — from complete SKILL.md content. Writing it alone does nothing: no agent loads it until distribute_skill gives it to a plugin or an assistant, or link_skill_to_mcp serves it from an MCP server or gateway. Constraints: an existing active skill with the same normalized name records a new version instead, and identical content returns the existing version unchanged.",
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input CreateSkillToolInput) (*mcp.CallToolResult, SkillAuthoringResult, error) {
 		return skillsToolCall(ctx, func(principal Principal) (SkillAuthoringResult, error) {
 			return skills.CreateSkill(ctx, principal, CreateSkillInput(input))
@@ -313,7 +346,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "add_skill_version",
 		Title:       "Add Skill Version",
-		Description: "Change what a skill tells an agent, by recording a new version from complete replacement SKILL.md content. Versions are fixed snapshots, so a correction is a new one rather than an edit. Constraints: pass the version you read as expected_latest_version_id — if the skill has moved on since, the write is refused rather than overwriting someone else's version. Identical content returns the existing version unchanged. Recording a version gives it to nobody new; the plugins and assistants that already carry the skill and track its latest version pick it up. To take a change proposed by list_skill_suggestions, use approve_skill_suggestion where it is offered, or have the user approve it in the AI Control Plane dashboard; either closes the suggestion, which a new version recorded here does not.",
+		Description: "Change what a skill tells an agent, by recording a new version from complete replacement SKILL.md content. Versions are fixed snapshots, so a correction is a new one rather than an edit. Constraints: pass the version you read as expected_latest_version_id — if the skill has moved on since, the write is refused rather than overwriting someone else's version. Identical content returns the existing version unchanged. Recording a version gives it to nobody new; the plugins, assistants, and MCP servers or gateways that already carry the skill and track its latest version pick it up. To take a change proposed by list_skill_suggestions, use approve_skill_suggestion where it is offered, or have the user approve it in the AI Control Plane dashboard; either closes the suggestion, which a new version recorded here does not.",
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input AddSkillVersionToolInput) (*mcp.CallToolResult, SkillAuthoringResult, error) {
 		return skillsToolCall(ctx, func(principal Principal) (SkillAuthoringResult, error) {
 			return skills.AddSkillVersion(ctx, principal, AddSkillVersionInput(input))
@@ -333,7 +366,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "distribute_skill",
 		Title:       "Give a Skill to a Plugin or Assistant",
-		Description: "Give a skill to one plugin or one assistant in the same project, so agents there start loading it. This is the only way a skill takes effect. Constraints: name the target exactly — a name matching nothing is refused as not_found and a name matching more than one target as ambiguous_target, with no fallback to the default plugin. Repeat calls settle on the same result rather than adding it twice.",
+		Description: "Give a skill to one plugin or one assistant in the same project, so agents there start loading it. To serve a skill to agents connected straight to an MCP server or gateway instead, use link_skill_to_mcp. Constraints: name the target exactly — a name matching nothing is refused as not_found and a name matching more than one target as ambiguous_target, with no fallback to the default plugin. Repeat calls settle on the same result rather than adding it twice.",
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input DistributeSkillToolInput) (*mcp.CallToolResult, DistributeSkillOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (DistributeSkillOutput, error) {
 			return skills.DistributeSkill(ctx, principal, DistributeSkillInput(input))
@@ -343,7 +376,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_skill_distributions",
 		Title:       "List Where Skills Are Distributed",
-		Description: "List which plugins carry which skills in a named project — the active distributions, oldest first — with the version each one resolves to and whether it follows the skill's latest version or is pinned. Narrow it to one skill, one plugin, or both. Constraints: this lists plugin distributions; whether an assistant carries a skill is reported per skill by get_skill. Name a plugin exactly — a name matching nothing is refused as not_found and one matching more than one plugin as ambiguous_target.",
+		Description: "List which plugins carry which skills in a named project — the active distributions, oldest first — with the version each one resolves to and whether it follows the skill's latest version or is pinned. Narrow it to one skill, one plugin, or both. On the first page, served_by also lists the MCP servers and gateways that serve the skill (or every skill, when none is named) over MCP, set with link_skill_to_mcp; it is empty when serving skills over MCP is off for the organization. Constraints: this lists plugin distributions; whether an assistant carries a skill is reported per skill by get_skill. Name a plugin exactly — a name matching nothing is refused as not_found and one matching more than one plugin as ambiguous_target.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillDistributionsToolInput) (*mcp.CallToolResult, ListSkillDistributionsOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (ListSkillDistributionsOutput, error) {
@@ -365,6 +398,49 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 				SkillID:        input.SkillID,
 				Plugin:         input.Plugin,
 				Assistant:      input.Assistant,
+				IdempotencyKey: input.IdempotencyKey,
+			})
+		})
+	})
+
+	addTool(reg, &mcp.Tool{
+		Name:        "link_skill_to_mcp",
+		Title:       "Serve a Skill from an MCP Server",
+		Description: "Serve a skill over MCP from one MCP server, one gateway, or the organization gateway in the same project, so agents connected there can load it. This is separate from distribute_skill, which puts a skill in a plugin or gives it to an assistant. Tell the user which skill and which MCP surface, and whether it follows the latest version or a pinned one, ask them to confirm out loud, then call this with confirmed: true. Constraints: name the target exactly — a name matching nothing is refused as not_found and one matching more than one surface as ambiguous_target, with nothing picked by default. Repeating the call for the same skill and surface settles on the same link and only changes its pin. Requires serving skills over MCP to be switched on for the organization.",
+		Annotations: linkSkillToMCPAnnotations(),
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input LinkSkillToMCPToolInput) (*mcp.CallToolResult, LinkSkillToMCPOutput, error) {
+		if !input.Confirmed {
+			return skillsRefusal("confirmation_required", "Tell the user which skill will be served from which MCP server or gateway, ask them to explicitly confirm it, then call this tool again with confirmed: true."), LinkSkillToMCPOutput{}, nil
+		}
+		return skillsToolCall(ctx, func(principal Principal) (LinkSkillToMCPOutput, error) {
+			return skills.LinkSkillToMCP(ctx, principal, LinkSkillToMCPInput{
+				ProjectSlug:     input.ProjectSlug,
+				SkillID:         input.SkillID,
+				TargetKind:      input.TargetKind,
+				MCPServer:       input.MCPServer,
+				Gateway:         input.Gateway,
+				PinnedVersionID: input.PinnedVersionID,
+				IdempotencyKey:  input.IdempotencyKey,
+			})
+		})
+	})
+
+	addTool(reg, &mcp.Tool{
+		Name:        "unlink_skill_from_mcp",
+		Title:       "Stop Serving a Skill from an MCP Server",
+		Description: "Stop one MCP server, gateway, or the organization gateway serving a skill over MCP, undoing link_skill_to_mcp. The skill, its versions, and its plugin and assistant distributions stay. Tell the user which MCP surface stops serving the skill, ask them to confirm out loud, then call this with confirmed: true. Constraints: name the target exactly, on the same terms as link_skill_to_mcp. A surface that is not serving the skill is a no-op reported as removed: false, so a retry with the same idempotency_key is safe.",
+		Annotations: unlinkSkillFromMCPAnnotations(),
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input UnlinkSkillFromMCPToolInput) (*mcp.CallToolResult, UnlinkSkillFromMCPOutput, error) {
+		if !input.Confirmed {
+			return skillsRefusal("confirmation_required", "Tell the user which MCP server or gateway will stop serving this skill, ask them to explicitly confirm it, then call this tool again with confirmed: true."), UnlinkSkillFromMCPOutput{}, nil
+		}
+		return skillsToolCall(ctx, func(principal Principal) (UnlinkSkillFromMCPOutput, error) {
+			return skills.UnlinkSkillFromMCP(ctx, principal, UnlinkSkillFromMCPInput{
+				ProjectSlug:    input.ProjectSlug,
+				SkillID:        input.SkillID,
+				TargetKind:     input.TargetKind,
+				MCPServer:      input.MCPServer,
+				Gateway:        input.Gateway,
 				IdempotencyKey: input.IdempotencyKey,
 			})
 		})
@@ -399,6 +475,8 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 		{"distribute_skill", "Give a Skill to a Plugin or Assistant", "Give a skill to one plugin or assistant. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin, bothAudiences},
 		{"list_skill_distributions", "List Where Skills Are Distributed", "List which plugins carry which skills in a project. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
 		{"undistribute_skill", "Take a Skill Back from a Plugin or Assistant", "Take a skill back from one plugin or assistant. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin, bothAudiences},
+		{"link_skill_to_mcp", "Serve a Skill from an MCP Server", "Serve a skill over MCP from one MCP server or gateway. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin, bothAudiences},
+		{"unlink_skill_from_mcp", "Stop Serving a Skill from an MCP Server", "Stop one MCP server or gateway serving a skill over MCP. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin, bothAudiences},
 	} {
 		manifest := &mcp.Tool{
 			Name:        tool.name,
@@ -412,6 +490,10 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 			manifest.Annotations = approveSkillSuggestionAnnotations()
 		case tool.name == "dismiss_skill_suggestion":
 			manifest.Annotations = dismissSkillSuggestionAnnotations()
+		case tool.name == "link_skill_to_mcp":
+			manifest.Annotations = linkSkillToMCPAnnotations()
+		case tool.name == "unlink_skill_from_mcp":
+			manifest.Annotations = unlinkSkillFromMCPAnnotations()
 		}
 		var discoveryScopes []authz.Scope
 		if tool.authority == ExternalAuthorizationMember {
@@ -445,6 +527,9 @@ func skillsToolCall[Out any](ctx context.Context, call func(principal Principal)
 }
 
 func skillsToolResult(err error) (*mcp.CallToolResult, bool) {
+	if linkResult, ok := skillLinkRefusal(err); ok {
+		return skillsRefusal(linkResult.Code, linkResult.Message), true
+	}
 	var result skillsRefusalResult
 	switch {
 	case errors.Is(err, ErrSkillsUnavailable):

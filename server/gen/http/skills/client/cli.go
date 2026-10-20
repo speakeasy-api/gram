@@ -1289,3 +1289,209 @@ func BuildListDistributionsPayload(skillsListDistributionsSkillID string, skills
 
 	return v, nil
 }
+
+// BuildLinkPayload builds the payload for the skills link endpoint from CLI
+// flags.
+func BuildLinkPayload(skillsLinkBody string, skillsLinkSessionToken string, skillsLinkApikeyToken string, skillsLinkProjectSlugInput string) (*skills.LinkPayload, error) {
+	var err error
+	var body LinkRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsLinkBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440001\",\n      \"target_kind\": \"mcp_server\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if !(body.TargetKind == "mcp_server" || body.TargetKind == "meta_mcp_server" || body.TargetKind == "organization_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", body.TargetKind, []any{"mcp_server", "meta_mcp_server", "organization_gateway"}))
+		}
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
+		if body.MetaMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+		}
+		if body.PinnedVersionID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.pinned_version_id", *body.PinnedVersionID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsLinkSessionToken != "" {
+			sessionToken = &skillsLinkSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsLinkApikeyToken != "" {
+			apikeyToken = &skillsLinkApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsLinkProjectSlugInput != "" {
+			projectSlugInput = &skillsLinkProjectSlugInput
+		}
+	}
+	v := &skills.LinkPayload{
+		ID:              body.ID,
+		TargetKind:      body.TargetKind,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		PinnedVersionID: body.PinnedVersionID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUnlinkPayload builds the payload for the skills unlink endpoint from
+// CLI flags.
+func BuildUnlinkPayload(skillsUnlinkBody string, skillsUnlinkSessionToken string, skillsUnlinkApikeyToken string, skillsUnlinkProjectSlugInput string) (*skills.UnlinkPayload, error) {
+	var err error
+	var body UnlinkRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsUnlinkBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"link_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.link_id", body.LinkID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsUnlinkSessionToken != "" {
+			sessionToken = &skillsUnlinkSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsUnlinkApikeyToken != "" {
+			apikeyToken = &skillsUnlinkApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsUnlinkProjectSlugInput != "" {
+			projectSlugInput = &skillsUnlinkProjectSlugInput
+		}
+	}
+	v := &skills.UnlinkPayload{
+		LinkID: body.LinkID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListLinksPayload builds the payload for the skills listLinks endpoint
+// from CLI flags.
+func BuildListLinksPayload(skillsListLinksSkillID string, skillsListLinksMcpServerID string, skillsListLinksMetaMcpServerID string, skillsListLinksTargetKind string, skillsListLinksCursor string, skillsListLinksLimit string, skillsListLinksSessionToken string, skillsListLinksApikeyToken string, skillsListLinksProjectSlugInput string) (*skills.ListLinksPayload, error) {
+	var err error
+	var skillID *string
+	{
+		if skillsListLinksSkillID != "" {
+			skillID = &skillsListLinksSkillID
+			err = goa.MergeErrors(err, goa.ValidateFormat("skill_id", *skillID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var mcpServerID *string
+	{
+		if skillsListLinksMcpServerID != "" {
+			mcpServerID = &skillsListLinksMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var metaMcpServerID *string
+	{
+		if skillsListLinksMetaMcpServerID != "" {
+			metaMcpServerID = &skillsListLinksMetaMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", *metaMcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var targetKind *string
+	{
+		if skillsListLinksTargetKind != "" {
+			targetKind = &skillsListLinksTargetKind
+			if !(*targetKind == "mcp_server" || *targetKind == "meta_mcp_server" || *targetKind == "organization_gateway") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("target_kind", *targetKind, []any{"mcp_server", "meta_mcp_server", "organization_gateway"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if skillsListLinksCursor != "" {
+			cursor = &skillsListLinksCursor
+		}
+	}
+	var limit int
+	{
+		if skillsListLinksLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(skillsListLinksLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 50 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsListLinksSessionToken != "" {
+			sessionToken = &skillsListLinksSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsListLinksApikeyToken != "" {
+			apikeyToken = &skillsListLinksApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsListLinksProjectSlugInput != "" {
+			projectSlugInput = &skillsListLinksProjectSlugInput
+		}
+	}
+	v := &skills.ListLinksPayload{}
+	v.SkillID = skillID
+	v.McpServerID = mcpServerID
+	v.MetaMcpServerID = metaMcpServerID
+	v.TargetKind = targetKind
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

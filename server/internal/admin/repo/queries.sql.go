@@ -249,7 +249,10 @@ WITH latest_arm AS (
     FROM audit_logs AS armed
     WHERE armed.organization_id = $1
       AND armed.project_id IS NULL
-      AND armed.action = 'organization:enterprise_trial_armed'
+      AND armed.action IN (
+          'organization:enterprise_trial_armed',
+          'organization:enterprise_trial_started'
+      )
       AND armed.subject_id = $1
       AND armed.subject_type = 'organization'
     ORDER BY armed.seq DESC, armed.id DESC
@@ -291,9 +294,10 @@ type AdminGetEnterpriseTrialRetryOperationIDsRow struct {
 	MatchingRearmCount  int64
 }
 
-// The arm audit id is the immutable generation token. Every production trial
-// creation writes exactly one arm audit in the creation transaction; extension
-// writes neither. seq orders generations; id breaks any equal-seq tie.
+// The creation audit id is the immutable generation token. Self-service trial
+// creation records an armed action, while an admin grant records a started
+// action. Extension writes neither. seq orders generations; id breaks any
+// equal-seq tie.
 func (q *Queries) AdminGetEnterpriseTrialRetryOperationIDs(ctx context.Context, targetOrganizationID string) (AdminGetEnterpriseTrialRetryOperationIDsRow, error) {
 	row := q.db.QueryRow(ctx, adminGetEnterpriseTrialRetryOperationIDs, targetOrganizationID)
 	var i AdminGetEnterpriseTrialRetryOperationIDsRow
@@ -1114,6 +1118,39 @@ func (q *Queries) AdminListOrganizationMembersPage(ctx context.Context, arg Admi
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListOrganizationNamesByIDs = `-- name: AdminListOrganizationNamesByIDs :many
+SELECT id, name, slug
+FROM organization_metadata
+WHERE id = ANY($1::text[])
+`
+
+type AdminListOrganizationNamesByIDsRow struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// Labels the hook client grids, whose rows carry only organization ids.
+func (q *Queries) AdminListOrganizationNamesByIDs(ctx context.Context, ids []string) ([]AdminListOrganizationNamesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationNamesByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationNamesByIDsRow
+	for rows.Next() {
+		var i AdminListOrganizationNamesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
