@@ -142,6 +142,13 @@ const (
 	// names differ only in letter case.
 	ReasonDuplicateHeaderNames Reason = "duplicate_header_names"
 
+	// ReasonDeniedSource is a source with a header forwarded from a request
+	// header the proxy refuses as a source, such as Authorization, which on
+	// an issuer-gated endpoint carries the caller's Speakeasy session token.
+	// The proxy drops or refuses that header at request time, so no client is
+	// recorded for it.
+	ReasonDeniedSource Reason = "denied_source"
+
 	// ReasonMixedCredentialHeaders is a source with no Authorization header
 	// whose credential headers are partly stored and partly forwarded.
 	ReasonMixedCredentialHeaders Reason = "mixed_credential_headers" // #nosec G101 -- a reason code, not a credential

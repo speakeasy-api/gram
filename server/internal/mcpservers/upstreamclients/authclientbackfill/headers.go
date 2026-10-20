@@ -101,6 +101,10 @@ func decideSource(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, row 
 		result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDuplicateHeaderNames
 		report.add(result)
 		return nil
+	case row.HasDeniedSource:
+		result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDeniedSource
+		report.add(result)
+		return nil
 	}
 
 	servers, err := sourceServers(ctx, q, opts.OrganizationID, row.SourceKind, row.SourceID)
@@ -323,6 +327,10 @@ func copyOntoOAuthClients(ctx context.Context, tx pgx.Tx, q *Queries, opts Optio
 			}
 		case len(used) == 1 && used[0].HasDuplicateNames:
 			result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDuplicateHeaderNames
+			result.SourceIDs = []uuid.UUID{used[0].SourceID}
+			result.ServerIDs = used[0].ServerIds
+		case len(used) == 1 && used[0].HasDeniedSource:
+			result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDeniedSource
 			result.SourceIDs = []uuid.UUID{used[0].SourceID}
 			result.ServerIDs = used[0].ServerIds
 		case len(used) == 1:

@@ -985,6 +985,37 @@ func TestRun_CaseVariantHeadersAreNeverCopiedOntoAnOAuthClient(t *testing.T) {
 	require.Equal(t, []uuid.UUID{source}, ambiguous[0].SourceIDs)
 }
 
+func TestRun_DeniedForwardedSourceRecordsNoClient(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a source forwarding Authorization is ambiguous", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		source := f.source()
+		f.serverOn(source)
+		f.header(source, "Authorization", false, "", "Authorization")
+		report := f.run(true)
+		require.Empty(t, f.live(TypePassThrough), "a legacy row the proxy refuses never becomes a client")
+		ambiguous := results(report, KindHeader, OutcomeAmbiguous)
+		require.Len(t, ambiguous, 1)
+		require.Equal(t, ReasonDeniedSource, ambiguous[0].Reason)
+	})
+
+	t.Run("a denied source is never copied onto an OAuth client", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		source := f.source()
+		f.associate(f.serverOn(source), f.client("subject"))
+		f.header(source, "X-Token", false, "", "authorization")
+		report := f.run(true)
+		oauthID := f.live(TypeRemoteSession)[0].ID
+		require.Empty(t, f.headers(oauthID))
+		ambiguous := results(report, KindOAuth, OutcomeAmbiguous)
+		require.Len(t, ambiguous, 1)
+		require.Equal(t, ReasonDeniedSource, ambiguous[0].Reason)
+	})
+}
+
 func TestRun_EMAServerNotMatchedSkipsServersCoveredOtherwise(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

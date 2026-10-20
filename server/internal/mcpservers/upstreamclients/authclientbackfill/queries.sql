@@ -341,14 +341,17 @@ SELECT pg_advisory_unlock(hashtext('authclientbackfill:' || @organization_id::te
 -- value-free.
 WITH creds AS (
   SELECT 'remote'::text AS source_kind, r.id AS source_id, r.project_id, rh.id AS header_id, rh.name,
-         (rh.value IS NOT NULL) AS is_static
+         (rh.value IS NOT NULL) AS is_static,
+         -- Mirrors proxy.IsDeniedPassThroughSource.
+         (replace(lower(btrim(COALESCE(rh.value_from_request_header, ''))), '_', '-') IN ('authorization', 'cookie', 'set-cookie', 'proxy-authorization')) AS denied_source
   FROM remote_mcp_server_headers AS rh
   JOIN remote_mcp_servers AS r ON r.id = rh.remote_mcp_server_id AND r.deleted IS FALSE
   JOIN projects AS p ON p.id = r.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
   WHERE rh.deleted IS FALSE
     AND (lower(rh.name) = 'authorization' OR rh.value_from_request_header IS NOT NULL OR rh.is_secret)
   UNION ALL
-  SELECT 'tunneled'::text, t.id, t.project_id, th.id, th.name, (th.value IS NOT NULL)
+  SELECT 'tunneled'::text, t.id, t.project_id, th.id, th.name, (th.value IS NOT NULL),
+         (replace(lower(btrim(COALESCE(th.value_from_request_header, ''))), '_', '-') IN ('authorization', 'cookie', 'set-cookie', 'proxy-authorization'))
   FROM tunneled_mcp_server_headers AS th
   JOIN tunneled_mcp_servers AS t ON t.id = th.tunneled_mcp_server_id AND t.deleted IS FALSE
   JOIN projects AS p ON p.id = t.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
@@ -364,6 +367,7 @@ SELECT c.source_kind,
        bool_and(c.is_static)::boolean AS all_static,
        bool_and(NOT c.is_static)::boolean AS all_forwarded,
        (COUNT(DISTINCT lower(c.name)) < COUNT(*))::boolean AS has_duplicate_names,
+       bool_or(c.denied_source)::boolean AS has_denied_source,
        array_agg(c.header_id ORDER BY c.header_id)::uuid[] AS header_ids,
        COALESCE(array_agg(c.header_id ORDER BY c.header_id) FILTER (WHERE lower(c.name) <> 'authorization'), ARRAY[]::uuid[])::uuid[] AS other_header_ids
 FROM creds AS c
@@ -711,19 +715,21 @@ SELECT g.remote_session_client_id::uuid AS remote_session_client_id,
        g.source_id::uuid AS source_id,
        g.server_ids::uuid[] AS server_ids,
        COALESCE(h.ids, ARRAY[]::uuid[])::uuid[] AS header_ids,
-       COALESCE(h.duplicate, FALSE)::boolean AS has_duplicate_names
+       COALESCE(h.duplicate, FALSE)::boolean AS has_duplicate_names,
+       COALESCE(h.denied, FALSE)::boolean AS has_denied_source
 FROM grouped AS g
 LEFT JOIN LATERAL (
   SELECT array_agg(x.id ORDER BY x.id) AS ids,
-         COUNT(DISTINCT lower(x.name)) < COUNT(*) AS duplicate
+         COUNT(DISTINCT lower(x.name)) < COUNT(*) AS duplicate,
+         bool_or(x.denied) AS denied
   FROM (
-    SELECT h.id, h.name FROM remote_mcp_server_headers AS h
+    SELECT h.id, h.name, (replace(lower(btrim(COALESCE(h.value_from_request_header, ''))), '_', '-') IN ('authorization', 'cookie', 'set-cookie', 'proxy-authorization')) AS denied FROM remote_mcp_server_headers AS h
     JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
     JOIN projects AS sp ON sp.id = r.project_id AND sp.organization_id = @organization_id::text AND sp.deleted IS FALSE
     WHERE g.source_kind = 'remote' AND h.remote_mcp_server_id = g.source_id AND h.deleted IS FALSE
       AND lower(h.name) <> 'authorization' AND (h.value_from_request_header IS NOT NULL OR h.is_secret)
     UNION ALL
-    SELECT h.id, h.name FROM tunneled_mcp_server_headers AS h
+    SELECT h.id, h.name, (replace(lower(btrim(COALESCE(h.value_from_request_header, ''))), '_', '-') IN ('authorization', 'cookie', 'set-cookie', 'proxy-authorization')) FROM tunneled_mcp_server_headers AS h
     JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id AND t.deleted IS FALSE
     JOIN projects AS sp ON sp.id = t.project_id AND sp.organization_id = @organization_id::text AND sp.deleted IS FALSE
     WHERE g.source_kind = 'tunneled' AND h.tunneled_mcp_server_id = g.source_id AND h.deleted IS FALSE

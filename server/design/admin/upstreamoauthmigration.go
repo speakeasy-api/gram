@@ -50,7 +50,7 @@ var AdminUpstreamOAuthMigrationUnresolvedAssociation = Type("AdminUpstreamOAuthM
 	Required("kind", "reason", "subject_id", "association_id", "mcp_server_id", "project_id", "remote_session_client_id", "binding_ids", "source_ids", "server_ids")
 
 	Attribute("kind", String, "What was decided: oauth, header or ema.")
-	Attribute("reason", String, "Why it cannot be recorded: unknown_owner, type_mismatch, project_mismatch, multiple_authorization_headers, duplicate_header_names, mixed_credential_headers, oauth_client_shared_across_sources, conflicting_scopes, resource_variants, resource_not_matched, issuer_not_allowed or registration_out_of_reach; for a warning, server_not_matched.")
+	Attribute("reason", String, "Why it cannot be recorded: unknown_owner, type_mismatch, project_mismatch, multiple_authorization_headers, duplicate_header_names, denied_source, mixed_credential_headers, oauth_client_shared_across_sources, conflicting_scopes, resource_variants, resource_not_matched, issuer_not_allowed or registration_out_of_reach; for a warning, server_not_matched.")
 	Attribute("subject_id", String, "The association, source, upstream OAuth client or first binding decided.", func() { Format(FormatUUID) })
 	Attribute("association_id", String, "The server to upstream OAuth client association ID, for an oauth association.", func() { Format(FormatUUID) })
 	Attribute("mcp_server_id", String, "The MCP server ID, when one server is concerned.", func() { Format(FormatUUID) })
