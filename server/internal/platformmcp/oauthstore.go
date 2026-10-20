@@ -883,14 +883,7 @@ func markConnectionTerminal(ctx context.Context, q *platformrepo.Queries, organi
 }
 
 func connectionFromRow(row platformrepo.PlatformMcpConnection, clientID string) platformoauth.Connection {
-	authorizationExpiresAt := row.AuthorizationExpiresAt.Time
-	if !row.AuthorizationExpiresAt.Valid {
-		authorizedAt := row.AuthorizedAt.Time
-		if row.ReauthorizedAt.Valid {
-			authorizedAt = row.ReauthorizedAt.Time
-		}
-		authorizationExpiresAt = authorizedAt.Add(platformoauth.AuthorizationLifetime)
-	}
+	authorizationExpiresAt := connectionAuthorizationExpiry(row.AuthorizationExpiresAt, row.AuthorizedAt, row.ReauthorizedAt)
 	return platformoauth.Connection{ID: row.ID.String(), ClientID: clientID, Subject: row.SubjectUrn, OrganizationID: row.OrganizationID, Generation: row.ActiveGeneration.String(), AuthorizationExpiresAt: authorizationExpiresAt, ReauthorizationRequiredAt: timePointer(row.ReauthorizationRequiredAt), ReauthorizationReason: platformoauth.ReauthorizationReason(row.ReauthorizationReason.String), RevokedAt: timePointer(row.RevokedAt)}
 }
 
@@ -970,4 +963,17 @@ func mapOAuthWriteError(err error) error {
 		return nil
 	}
 	return fmt.Errorf("write platform oauth state: %w", err)
+}
+
+// connectionAuthorizationExpiry applies the same lifetime to connections that
+// predate the explicit expiry column and to newly authorized connections.
+func connectionAuthorizationExpiry(expiresAt, authorizedAt, reauthorizedAt pgtype.Timestamptz) time.Time {
+	if expiresAt.Valid {
+		return expiresAt.Time
+	}
+	start := authorizedAt.Time
+	if reauthorizedAt.Valid {
+		start = reauthorizedAt.Time
+	}
+	return start.Add(platformoauth.AuthorizationLifetime)
 }
