@@ -1,0 +1,14 @@
+server/internal/background/activities/directory_source_lifecycle_test.go
+  h_9630b74bdac540 81,85,237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d99022f5b7c6d1e6b9d5bd165ae063c5c26d4c56",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
