@@ -85,7 +85,7 @@ const OBSERVE_FILTER_BASE = [
     label: "User",
     kind: "multiselect",
     pinned: true,
-    placeholder: "Filter by user email",
+    placeholder: "Filter by user or agent",
   },
   DATE_DIMENSION,
   {

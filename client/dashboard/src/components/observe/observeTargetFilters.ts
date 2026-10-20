@@ -150,7 +150,10 @@ export function selectedUserAgentIds(activeFilters: FilterChip[]): string[] {
     .filter(Boolean);
 }
 
-/** Every selected user filter value, people and agents, as the URL holds them. */
+/**
+ * Every selected user filter value, people and agents, normalized the way the
+ * filter options carry them: emails trimmed and lowercased, agents as `agent:<id>`.
+ */
 export function selectedUserFilterValues(
   activeFilters: FilterChip[],
 ): string[] {
