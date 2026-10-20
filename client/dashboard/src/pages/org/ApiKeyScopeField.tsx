@@ -88,7 +88,7 @@ const PURPOSE_BUILT_SCOPE_OPTIONS: ApiKeyScopeOption[] = [
       "Read a user's assigned plugins and report device scans",
     ],
     excludes: "Project setup, deployments, tool calls",
-    note: "Store it in managed.json as org_token, or hand it to a developer for speakeasyd enroll.",
+    note: "Store it in managed.json as org_token, or have a developer run the enroll command from Device Agent setup.",
   },
 ];
 

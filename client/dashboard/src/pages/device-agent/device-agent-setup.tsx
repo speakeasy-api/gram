@@ -440,6 +440,12 @@ function DownloadStep({ os }: { os: "linux" }) {
       <div className="flex flex-col gap-2">
         <SubLabel>Run the download script</SubLabel>
         {cfg.archNote && <StepNote>{cfg.archNote}</StepNote>}
+        {!inlinableVersion(version) && (
+          <StepNote>
+            Uses bash syntax: in fish or another shell, run <code>bash</code>{" "}
+            first.
+          </StepNote>
+        )}
         <CodeBlock language={cfg.lang}>{cfg.download(version)}</CodeBlock>
       </div>
       <OrDivider />
@@ -1229,13 +1235,13 @@ function buildSteps(platform: PlatformKey): SetupStep[] {
   const cfg = OS_CONFIG[platform];
   const steps: SetupStep[] = [
     {
-      title: "Download the binaries",
+      title: "Download the agent",
       body: <DownloadStep os={platform} />,
     },
   ];
   if (cfg.chmodMove) {
     steps.push({
-      title: "Make them executable and move into your PATH",
+      title: "Make it executable and move it onto your PATH",
       body: <CodeBlock language={cfg.lang}>{cfg.chmodMove}</CodeBlock>,
     });
   }
@@ -1649,18 +1655,18 @@ export function DeviceAgentInstallStep({
       </div>
       <div className="flex flex-col gap-2">
         <SubLabel>
-          {os === "linux" ? "Download the binaries" : "Download the installer"}
+          {os === "linux" ? "Download the agent" : "Download the installer"}
         </SubLabel>
         {os === "macos" && <MacInstallerDownload />}
         {os === "windows" && <WinInstallerDownload />}
         {os === "linux" && (
           <>
             <ManualDownload os="linux" />
-            {/* Linux ships no single installer: the binaries still need to be
+            {/* Linux ships no single installer: the binary still needs to be
                 made executable, moved onto PATH, and registered as a service,
                 which is a walkthrough rather than a box. */}
             <Text small muted>
-              Linux installs from raw binaries — the{" "}
+              Linux installs from a raw binary. The{" "}
               <Link to={deviceAgentHref} className={LINK_CLASS}>
                 Device Agent page
               </Link>{" "}
