@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   }>,
   skillsQuery: vi.fn(),
   mutateAsync: vi.fn(),
+  linkAsync: vi.fn(),
   complete: vi.fn(),
 }));
 const grant = (scope: string, resourceId: string, effect = "allow") => ({
@@ -75,6 +76,9 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
 vi.mock("@gram/client/react-query/distributeSkill.js", () => ({
   useDistributeSkillMutation: () => ({ mutateAsync: state.mutateAsync }),
 }));
+vi.mock("@gram/client/react-query/linkSkill.js", () => ({
+  useLinkSkillMutation: () => ({ mutateAsync: state.linkAsync }),
+}));
 import { SkillPickerDialog } from "./SkillPickerDialog";
 
 const picker = () => (
@@ -96,6 +100,7 @@ afterEach(cleanup);
 beforeEach(() => {
   state.grants = [grant("plugin:write", "project-a"), grant("skill:read", "*")];
   state.mutateAsync.mockReset().mockResolvedValue({});
+  state.linkAsync.mockReset().mockResolvedValue({});
   state.complete.mockReset();
   state.skillsQuery.mockClear();
 });
@@ -190,5 +195,49 @@ describe("plugin skill picker authorization", () => {
     view.rerender(picker());
     fireEvent.click(screen.getByRole("button", { name: "Distribute" }));
     expect(state.mutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+const linkPicker = () => (
+  <MemoryRouter>
+    <SkillPickerDialog
+      open
+      onOpenChange={() => undefined}
+      excludedSkillIds={["skill-b"]}
+      target={{
+        linkTarget: { kind: "meta_mcp_server", metaMcpServerId: "gw" },
+      }}
+      title="Add skills"
+      description="Serve skills"
+      actionLabel="Add"
+      emptyMessage="No skills"
+      onBatchComplete={state.complete}
+    />
+  </MemoryRouter>
+);
+describe("MCP link skill picker", () => {
+  it("links picked skills to the target instead of distributing them", async () => {
+    state.grants = [grant("skill:read", "project-a")];
+    render(linkPicker());
+    expect(screen.queryByText("Second skill")).toBeNull();
+    fireEvent.click(screen.getAllByRole("checkbox")[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() =>
+      expect(state.linkAsync).toHaveBeenCalledWith({
+        request: {
+          linkSkillRequestBody: {
+            id: "skill-a",
+            targetKind: "meta_mcp_server",
+            metaMcpServerId: "gw",
+          },
+        },
+      }),
+    );
+    expect(state.mutateAsync).not.toHaveBeenCalled();
+  });
+  it("does not load the collection without project skill read", () => {
+    state.grants = [grant("skill:read", "skill-a")];
+    render(linkPicker());
+    expect(screen.queryByRole("checkbox")).toBeNull();
   });
 });

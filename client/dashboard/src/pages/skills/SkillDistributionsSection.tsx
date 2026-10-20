@@ -17,19 +17,7 @@ import { Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { usePluginServerQueries } from "@/pages/plugins/usePluginServerQueries";
-import {
-  type HostedServerIndex,
-  hostedPluginServers,
-  hostedPluginServerToolsetId,
-  hostedServerIndex,
-  type ServingPlugin,
-} from "./mcp-served-skills";
 import { SkillDistributionVersionBadge } from "./skill-badges";
-import {
-  useProjectPluginsWithServers,
-  useSkillsOverMcpEnabled,
-} from "./use-skills-over-mcp";
 
 /**
  * Lists the plugins an individual skill is distributed to and lets writers
@@ -50,7 +38,6 @@ export function SkillDistributionsSection({
     { throwOnError: false },
   );
   const undistribute = useUndistributeSkillMutation();
-  const servedOverMcp = useServedOverMcp();
 
   const distributions = useMemo(
     () =>
@@ -123,12 +110,6 @@ export function SkillDistributionsSection({
                 >
                   Distributed <HumanizeDateTime date={distribution.createdAt} />
                 </Text>
-                {servedOverMcp.enabled && (
-                  <ServedOverMcpLine
-                    pluginId={distribution.pluginId}
-                    served={servedOverMcp}
-                  />
-                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <SkillDistributionVersionBadge
@@ -167,130 +148,5 @@ export function SkillDistributionsSection({
         </Button>
       )}
     </div>
-  );
-}
-
-type ServedOverMcp = {
-  enabled: boolean;
-  isLoading: boolean;
-  /** The plugin list failed; the row says nothing rather than waiting. */
-  failed: boolean;
-  pluginsById: Map<string, ServingPlugin> | undefined;
-  toolsetsById: Map<string, { slug: string; name: string }> | undefined;
-  /** Hosted mcp_servers id to the toolset it fronts, for wrapper-keyed servers. */
-  hostedIndex: HostedServerIndex | undefined;
-};
-
-/**
- * What each plugin row needs to say which hosted MCP servers serve the skill:
- * the project's plugins with their servers, the toolsets those servers
- * resolve to for names and links, and the MCP server list that resolves a
- * wrapper-keyed server to its toolset. All stay unfetched while the flag is off.
- */
-function useServedOverMcp(): ServedOverMcp {
-  const enabled = useSkillsOverMcpEnabled();
-  const { plugins, isLoading, canReadPlugins, error } =
-    useProjectPluginsWithServers(enabled);
-  const { toolsetsQuery, serversQuery, canReadServers } =
-    usePluginServerQueries({ enabled });
-  const pluginsById = useMemo(() => {
-    if (!plugins) return undefined;
-    return new Map(plugins.map((plugin) => [plugin.id, plugin]));
-  }, [plugins]);
-  const toolsets = toolsetsQuery.data?.toolsets;
-  const toolsetsById = useMemo(() => {
-    if (!toolsets) return undefined;
-    return new Map(
-      toolsets.map((toolset) => [
-        toolset.id,
-        { slug: toolset.slug, name: toolset.name },
-      ]),
-    );
-  }, [toolsets]);
-  const hostedIndex = useMemo(() => {
-    if (!toolsets) return undefined;
-    return hostedServerIndex(serversQuery.data?.mcpServers, toolsets);
-  }, [serversQuery.data?.mcpServers, toolsets]);
-  return {
-    enabled: enabled && canReadPlugins,
-    failed: !!error && !plugins,
-    isLoading:
-      isLoading ||
-      (enabled &&
-        canReadServers &&
-        ((!toolsetsById && toolsetsQuery.isLoading) ||
-          (!serversQuery.data && serversQuery.isLoading))),
-    pluginsById,
-    toolsetsById,
-    hostedIndex,
-  };
-}
-
-/**
- * One line under the plugin name naming the hosted MCP servers that serve the
- * skill to agents, each linked to its server page. A plugin with no hosted
- * server says so, since adding one is what turns serving on. A server the
- * caller cannot resolve (the server list is filtered by their grants) is
- * counted rather than taken as remote, so the line never denies serving it
- * cannot see.
- */
-function ServedOverMcpLine({
-  pluginId,
-  served,
-}: {
-  pluginId: string;
-  served: ServedOverMcp;
-}): JSX.Element | null {
-  const routes = useRoutes();
-  if (served.failed) return null;
-  if (served.isLoading || !served.pluginsById) {
-    return <Skeleton className="mt-1 h-4 w-48" />;
-  }
-  const plugin = served.pluginsById.get(pluginId);
-  if (!plugin) return null;
-  const { servers, unresolved } = hostedPluginServers(
-    plugin.servers,
-    served.hostedIndex,
-  );
-  const hiddenCount = unresolved.length;
-  const hiddenNoun = hiddenCount === 1 ? "server" : "servers";
-  if (servers.length === 0) {
-    return (
-      <Text small muted className="block text-xs">
-        {hiddenCount > 0
-          ? `May be served over MCP: this plugin includes ${hiddenCount} MCP ${hiddenNoun} you can't view.`
-          : "Not served over MCP: this plugin includes no hosted MCP server."}
-      </Text>
-    );
-  }
-  return (
-    <Text small muted className="block text-xs">
-      Served over MCP by{" "}
-      {servers.map((server, index) => {
-        const toolsetId = hostedPluginServerToolsetId(
-          server,
-          served.hostedIndex,
-        );
-        const toolset = toolsetId
-          ? served.toolsetsById?.get(toolsetId)
-          : undefined;
-        return (
-          <span key={server.id}>
-            {index > 0 && ", "}
-            {toolset ? (
-              <Link
-                to={routes.mcp.details.href(toolset.slug)}
-                className="text-foreground hover:underline"
-              >
-                {toolset.name}
-              </Link>
-            ) : (
-              <span className="text-foreground">{server.displayName}</span>
-            )}
-          </span>
-        );
-      })}
-      {hiddenCount > 0 && `, and ${hiddenCount} ${hiddenNoun} you can't view`}
-    </Text>
   );
 }

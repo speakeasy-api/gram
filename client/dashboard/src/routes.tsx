@@ -569,6 +569,10 @@ const ROUTE_STRUCTURE = {
             title: "Gateway Inspect",
             url: "inspect",
           },
+          skills: {
+            title: "Gateway Skills",
+            url: "skills",
+          },
           teamAccess: {
             title: "Gateway Team Access",
             url: "team-access",
