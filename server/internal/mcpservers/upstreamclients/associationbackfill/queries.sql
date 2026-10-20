@@ -12,6 +12,11 @@
 -- resource whose RFC 9728 authorization_servers list this client's issuer.
 -- Resource identifiers match exactly, as the serve-time lookup does.
 --
+-- grant_match and derived_match are the evidence the gateway candidates
+-- carry, for the server's own issuer: the client holds a live grant, minted
+-- in the server's organization, for the server's remote upstream URL, or the
+-- client's authorization server is the one derived for the server.
+--
 -- pair_live is true when the pair already has a live association.
 -- pair_recorded is true when an association row exists for the pair, live or
 -- removed: a removed row on a shared issuer is an explicit detach the backfill
@@ -23,6 +28,7 @@ WITH page AS (
            s.user_session_issuer_id,
            s.remote_mcp_server_id,
            s.toolset_id,
+           s.remote_session_issuer_id AS derived_issuer_id,
            rms.url AS remote_url,
            EXISTS (
              SELECT 1
@@ -101,6 +107,30 @@ SELECT page.id AS mcp_server_id,
                 OR (i.project_id IS NULL AND i.organization_id IS NULL))
          LIMIT 1
        ), false)::boolean AS metadata_match,
+       (c.id IS NOT NULL AND page.remote_url IS NOT NULL AND EXISTS (
+         SELECT 1
+         FROM remote_sessions AS rs
+         WHERE rs.remote_session_client_id = c.id
+           AND rs.deleted IS FALSE
+           AND rtrim(rs.resource, '/') = rtrim(page.remote_url, '/')
+           AND EXISTS (
+             SELECT 1
+             FROM user_session_issuers AS minted
+             LEFT JOIN projects AS minted_project ON minted_project.id = minted.project_id
+             WHERE minted.id = rs.user_session_issuer_id
+               AND COALESCE(minted.organization_id, minted_project.organization_id) = page.organization_id
+           )
+       ))::boolean AS grant_match,
+       (c.id IS NOT NULL AND EXISTS (
+         SELECT 1
+         FROM remote_session_issuers AS derived
+         WHERE derived.id = page.derived_issuer_id
+           AND derived.id = c.remote_session_issuer_id
+           AND derived.deleted IS FALSE
+           AND (derived.project_id = page.project_id
+                OR (derived.project_id IS NULL AND derived.organization_id = page.organization_id)
+                OR (derived.project_id IS NULL AND derived.organization_id IS NULL))
+       ))::boolean AS derived_match,
        (c.id IS NOT NULL AND EXISTS (
          SELECT 1
          FROM mcp_server_remote_session_clients AS recorded
@@ -132,8 +162,72 @@ ORDER BY page.id, c.id;
 -- still the issuer's only consumer and no gateway fronts it, and with
 -- respect_removed no row was recorded for the pair meanwhile, and with
 -- require_metadata_match the server's upstream still names this client's
--- authorization server and no other client bound to the issuer. A concurrent
--- configuration change therefore wins and the write is skipped.
+-- authorization server and no other client bound to the issuer, and with
+-- require_evidence_match the server still has no live association and the
+-- issuer's clients' grants and derived authorization servers still decide
+-- this client the way Decide does. A concurrent configuration change
+-- therefore wins and the write is skipped.
+WITH target AS (
+    SELECT s.id, s.project_id, p.organization_id, s.remote_session_issuer_id, r.url AS remote_url
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+    LEFT JOIN remote_mcp_servers AS r
+      ON r.id = s.remote_mcp_server_id
+     AND r.project_id = s.project_id
+     AND r.deleted IS FALSE
+    WHERE s.id = @mcp_server_id::uuid
+),
+evidence AS (
+    SELECT ec.id AS client_id,
+           (target.remote_url IS NOT NULL AND EXISTS (
+             SELECT 1
+             FROM remote_sessions AS rs
+             WHERE rs.remote_session_client_id = ec.id
+               AND rs.deleted IS FALSE
+               AND rtrim(rs.resource, '/') = rtrim(target.remote_url, '/')
+               AND EXISTS (
+                 SELECT 1
+                 FROM user_session_issuers AS minted
+                 LEFT JOIN projects AS minted_project ON minted_project.id = minted.project_id
+                 WHERE minted.id = rs.user_session_issuer_id
+                   AND COALESCE(minted.organization_id, minted_project.organization_id) = target.organization_id
+               )
+           )) AS grant_match,
+           EXISTS (
+             SELECT 1
+             FROM remote_session_issuers AS derived
+             WHERE derived.id = target.remote_session_issuer_id
+               AND derived.id = ec.remote_session_issuer_id
+               AND derived.deleted IS FALSE
+               AND (derived.project_id = target.project_id
+                    OR (derived.project_id IS NULL AND derived.organization_id = target.organization_id)
+                    OR (derived.project_id IS NULL AND derived.organization_id IS NULL))
+           ) AS derived_match
+    FROM target
+    JOIN remote_session_client_user_session_issuers AS el
+      ON el.user_session_issuer_id = @user_session_issuer_id::uuid
+    JOIN remote_session_clients AS ec
+      ON ec.id = el.remote_session_client_id
+     AND ec.deleted IS FALSE
+     AND (ec.project_id = target.project_id
+          OR (ec.project_id IS NULL AND ec.organization_id = target.organization_id)
+          OR (ec.project_id IS NULL AND ec.organization_id IS NULL))
+),
+decided AS (
+    SELECT e.client_id
+    FROM evidence AS e
+    WHERE (
+        e.grant_match
+        AND (SELECT count(*) FROM evidence AS g WHERE g.grant_match) = 1
+        AND NOT EXISTS (SELECT 1 FROM evidence AS o WHERE o.derived_match AND o.client_id <> e.client_id)
+      )
+      OR (
+        e.derived_match
+        AND NOT EXISTS (SELECT 1 FROM evidence AS g WHERE g.grant_match)
+        AND (SELECT count(*) FROM evidence AS d WHERE d.derived_match) = 1
+      )
+)
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
 SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
 FROM mcp_servers AS s
@@ -231,6 +325,15 @@ WHERE s.id = @mcp_server_id::uuid
             OR (i.project_id IS NULL AND i.organization_id = p.organization_id)
             OR (i.project_id IS NULL AND i.organization_id IS NULL))
       WHERE other_link.user_session_issuer_id = usi.id
+    )
+  ))
+  AND (NOT @require_evidence_match::boolean OR (
+    c.id IN (SELECT decided.client_id FROM decided)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_server_remote_session_clients AS live
+      WHERE live.mcp_server_id = s.id
+        AND live.deleted IS FALSE
     )
   ))
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING;

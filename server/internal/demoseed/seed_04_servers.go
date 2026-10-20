@@ -531,6 +531,20 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 			return fmt.Errorf("bind demo %s: %w", client, err)
 		}
 	}
+	// The workforce issuer is shared, so each service's server is associated
+	// with the one client of the authorization server its protected resource
+	// names. GitHub, on the same issuer, uses neither client.
+	for _, service := range []string{"tracker", "wiki"} {
+		if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
+			ID:                    s.det("server-client-association-ema-" + service),
+			ProjectID:             proj,
+			OrgID:                 org,
+			McpServerID:           s.det("mcpserver-ema-" + service),
+			RemoteSessionClientID: s.det("ema-client-" + service),
+		}); err != nil {
+			return fmt.Errorf("associate demo ema %s server with its client: %w", service, err)
+		}
+	}
 	if err := s.q.ServersInsertEMAProtectedResources(ctx, repo.ServersInsertEMAProtectedResourcesParams{
 		TrackerID: s.det("protected-resource-ema-tracker"),
 		ProjectID: proj,

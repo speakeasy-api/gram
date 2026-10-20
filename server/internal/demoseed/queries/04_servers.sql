@@ -224,9 +224,9 @@ SET remote_session_issuer_id = @remote_session_issuer_id::uuid
 WHERE id = @mcp_server_id::uuid
   AND project_id = @project_id::uuid;
 
--- The Linear server's upstream OAuth client association. The app records it
--- when User Identity is configured on the server, or when the server is the
--- only consumer of its user session issuer; the seed writes it directly.
+-- One server's upstream OAuth client association. The app records it when
+-- User Identity is configured on the server, or when the server is the only
+-- consumer of its user session issuer; the seed writes it directly.
 -- name: ServersInsertServerClientAssociation :exec
 INSERT INTO mcp_server_remote_session_clients
   (id, project_id, organization_id, mcp_server_id, remote_session_client_id,

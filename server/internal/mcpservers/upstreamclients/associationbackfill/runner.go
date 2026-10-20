@@ -23,8 +23,7 @@ type Outcome string
 
 const (
 	// OutcomeUnbound is a server whose user session issuer binds no client.
-	// Nothing is associated. This is not evidence that the server needs no
-	// upstream authentication.
+	// It uses no client.
 	OutcomeUnbound Outcome = "unbound"
 
 	// OutcomeSoleConsumer is a server that is its issuer's only consumer, so
@@ -39,8 +38,27 @@ const (
 	// explicitly configured association and no further proven one.
 	OutcomeConfigured Outcome = "configured"
 
-	// OutcomeAmbiguous is a server on a shared issuer whose configuration
-	// proves no single client and that has no association. It needs explicit
+	// OutcomeGrant is a server on a shared issuer for whose upstream exactly
+	// one of the issuer's clients holds grants.
+	OutcomeGrant Outcome = "grant"
+
+	// OutcomeDerived is a server on a shared issuer whose derived
+	// authorization server is exactly one of the issuer's clients', with no
+	// grants for its upstream.
+	OutcomeDerived Outcome = "derived"
+
+	// OutcomeDetached is a server on a shared issuer whose proven client an
+	// administrator detached. The detach stands: the server uses no client.
+	OutcomeDetached Outcome = "detached"
+
+	// OutcomeNoClient is a server on a shared issuer with no evidence for any
+	// of the issuer's clients: no metadata, grant or derived authorization
+	// server names one. It uses no client.
+	OutcomeNoClient Outcome = "no_client"
+
+	// OutcomeAmbiguous is a server on a shared issuer whose evidence names
+	// several clients, or whose grants and derived authorization server name
+	// different ones, and that has no association. It needs explicit
 	// configuration before cutover.
 	OutcomeAmbiguous Outcome = "ambiguous"
 
@@ -247,6 +265,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 						RequireSoleConsumer:   result.Outcome == OutcomeSoleConsumer,
 						RespectRemoved:        result.RespectRemoved,
 						RequireMetadataMatch:  result.Outcome == OutcomeMetadataMatch,
+						RequireEvidenceMatch:  result.Outcome == OutcomeGrant || result.Outcome == OutcomeDerived,
 					})
 					if err != nil {
 						return report, fmt.Errorf("write association for server %s: %w", result.MCPServerID, err)
@@ -305,7 +324,7 @@ func Decide(rows []ListUpstreamClientBackfillCandidatesRow) ServerResult {
 		Skipped:        0,
 	}
 
-	var bound, matched []ListUpstreamClientBackfillCandidatesRow
+	var bound, matched, granted, derived []ListUpstreamClientBackfillCandidatesRow
 	for _, row := range rows {
 		if !row.RemoteSessionClientID.Valid {
 			continue
@@ -313,6 +332,12 @@ func Decide(rows []ListUpstreamClientBackfillCandidatesRow) ServerResult {
 		bound = append(bound, row)
 		if row.MetadataMatch {
 			matched = append(matched, row)
+		}
+		if row.GrantMatch {
+			granted = append(granted, row)
+		}
+		if row.DerivedMatch {
+			derived = append(derived, row)
 		}
 	}
 
@@ -328,10 +353,12 @@ func Decide(rows []ListUpstreamClientBackfillCandidatesRow) ServerResult {
 		result.Outcome = OutcomeConfigured
 	case !first.Proxied:
 		result.Outcome = OutcomeUnproxied
-	default:
-		// Includes a metadata match an administrator has since detached: the
-		// server is left for explicit configuration rather than re-associated.
+	case len(matched) > 1:
 		result.Outcome = OutcomeAmbiguous
+	case len(matched) == 1:
+		result.Outcome = OutcomeDetached
+	default:
+		result.Outcome, decided = decideByEvidence(granted, derived)
 	}
 	for _, row := range decided {
 		if !row.PairLive {
@@ -381,6 +408,36 @@ func runGateways(ctx context.Context, q *Queries, opts Options, report *Report) 
 		start = end
 	}
 	return nil
+}
+
+// decideByEvidence decides a proxied server on a shared issuer from its
+// clients' grants, then their derived authorization servers, as
+// DecideGateway does. A proven client whose pair an administrator detached
+// stays detached.
+func decideByEvidence(granted, derived []ListUpstreamClientBackfillCandidatesRow) (Outcome, []ListUpstreamClientBackfillCandidatesRow) {
+	var decided ListUpstreamClientBackfillCandidatesRow
+	var outcome Outcome
+	switch {
+	case len(granted) > 1:
+		return OutcomeAmbiguous, nil
+	case len(granted) == 1:
+		decided, outcome = granted[0], OutcomeGrant
+		for _, row := range derived {
+			if row.RemoteSessionClientID != decided.RemoteSessionClientID {
+				return OutcomeAmbiguous, nil
+			}
+		}
+	case len(derived) > 1:
+		return OutcomeAmbiguous, nil
+	case len(derived) == 1:
+		decided, outcome = derived[0], OutcomeDerived
+	default:
+		return OutcomeNoClient, nil
+	}
+	if decided.PairRecorded {
+		return OutcomeDetached, nil
+	}
+	return outcome, []ListUpstreamClientBackfillCandidatesRow{decided}
 }
 
 // DecideGateway classifies one gateway issuer and server pair from its

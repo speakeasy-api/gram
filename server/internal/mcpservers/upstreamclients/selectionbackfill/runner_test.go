@@ -225,20 +225,21 @@ func TestRecordUpstreamClientSelections(t *testing.T) {
 		linear := f.server(issuer, linearClient)
 		notion := f.server(issuer, notionClient)
 		f.server(issuer, linearClient, otherClient)
-		f.server(issuer)
+		unassociated := f.server(issuer)
 		f.server(uuid.Nil)
 		credential := f.session(issuer)
 
 		f.record(issuer, credential)
 
 		require.Equal(t, map[uuid.UUID]uuid.UUID{
-			linear: linearClient,
-			notion: notionClient,
+			linear:       linearClient,
+			notion:       notionClient,
+			unassociated: uuid.Nil,
 		}, f.selections(credential),
-			"a server with several eligible clients, or none associated while its issuer binds some, is left as a gap; a server off the issuer is not reached")
+			"a server with several eligible clients is left as a gap, one with no associated client uses none whatever its issuer binds, and a server off the issuer is not reached")
 	})
 
-	t.Run("records no-auth only where nothing is configured", func(t *testing.T) {
+	t.Run("records no-auth where no client is associated", func(t *testing.T) {
 		t.Parallel()
 		f := newFixture(t)
 		issuer := f.organizationIssuer()
@@ -287,88 +288,6 @@ func TestRecordUpstreamClientSelections(t *testing.T) {
 		f.record(gatewayIssuer, credential)
 
 		require.Equal(t, map[uuid.UUID]uuid.UUID{member: memberClient}, f.selections(credential))
-	})
-
-	t.Run("a gateway member its gateway's clients make ambiguous is never no-auth", func(t *testing.T) {
-		t.Parallel()
-		f := newFixture(t)
-		gatewayIssuer := f.projectIssuer()
-		// The member's own issuer binds nothing, but two of the gateway's
-		// clients hold grants for its upstream, so neither is decided and the
-		// member is not a server that needs no authentication.
-		member := f.server(f.projectIssuer())
-		first, second := f.client(gatewayIssuer), f.client(gatewayIssuer)
-		for _, client := range []uuid.UUID{first, second} {
-			require.NoError(t, f.q.SeedGrantFixture(t.Context(), SeedGrantFixtureParams{
-				SubjectUrn:            urn.NewUserSubject("user-" + uuid.NewString()[:8]),
-				UserSessionIssuerID:   gatewayIssuer,
-				RemoteSessionClientID: client,
-				Resource:              pgtype.Text{String: "https://upstream.example.com/mcp", Valid: true},
-			}))
-		}
-		gatewayID := uuid.New()
-		require.NoError(t, f.q.SeedMetaMCPServerFixture(t.Context(), SeedMetaMCPServerFixtureParams{
-			ID:                  gatewayID,
-			OrganizationID:      f.orgID,
-			ProjectID:           f.projectID,
-			Name:                "gateway",
-			UserSessionIssuerID: uuid.NullUUID{UUID: gatewayIssuer, Valid: true},
-		}))
-		require.NoError(t, f.q.SeedMetaMCPServerMemberFixture(t.Context(), SeedMetaMCPServerMemberFixtureParams{ProjectID: f.projectID, MetaMcpServerID: gatewayID, McpServerID: member}))
-		credential := f.session(gatewayIssuer)
-
-		require.Zero(t, f.record(gatewayIssuer, credential))
-		require.Empty(t, f.selections(credential))
-
-		report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
-		require.NoError(t, err)
-		require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: member, Outcome: OutcomeUnassociated}}, report.Gaps)
-	})
-
-	t.Run("another project's gateway client does not keep a member from no-auth", func(t *testing.T) {
-		t.Parallel()
-		f := newFixture(t)
-		gatewayIssuer := f.projectIssuer()
-		member := f.server(f.projectIssuer())
-		// A client owned by another project is never one this member uses,
-		// even bound to the gateway's issuer with a grant naming its upstream.
-		other := uuid.New()
-		require.NoError(t, f.q.SeedProjectFixture(t.Context(), SeedProjectFixtureParams{ID: other, Slug: "p-" + other.String()[:8], OrganizationID: f.orgID}))
-		foreignIssuer, foreign := uuid.New(), uuid.New()
-		require.NoError(t, f.q.SeedRemoteSessionIssuerFixture(t.Context(), SeedRemoteSessionIssuerFixtureParams{
-			ID:        foreignIssuer,
-			ProjectID: uuid.NullUUID{UUID: other, Valid: true},
-			Slug:      "rsi-" + foreignIssuer.String()[:8],
-			Issuer:    "https://" + foreignIssuer.String()[:8] + ".example.com",
-		}))
-		require.NoError(t, f.q.SeedRemoteSessionClientFixture(t.Context(), SeedRemoteSessionClientFixtureParams{
-			ID:                    foreign,
-			ProjectID:             uuid.NullUUID{UUID: other, Valid: true},
-			OrganizationID:        pgtype.Text{String: f.orgID, Valid: true},
-			RemoteSessionIssuerID: foreignIssuer,
-			ClientID:              "cid-" + foreign.String()[:8],
-		}))
-		require.NoError(t, f.q.SeedClientBindingFixture(t.Context(), SeedClientBindingFixtureParams{RemoteSessionClientID: foreign, UserSessionIssuerID: gatewayIssuer}))
-		require.NoError(t, f.q.SeedGrantFixture(t.Context(), SeedGrantFixtureParams{
-			SubjectUrn:            urn.NewUserSubject("user-" + uuid.NewString()[:8]),
-			UserSessionIssuerID:   gatewayIssuer,
-			RemoteSessionClientID: foreign,
-			Resource:              pgtype.Text{String: "https://upstream.example.com/mcp", Valid: true},
-		}))
-		gatewayID := uuid.New()
-		require.NoError(t, f.q.SeedMetaMCPServerFixture(t.Context(), SeedMetaMCPServerFixtureParams{
-			ID:                  gatewayID,
-			OrganizationID:      f.orgID,
-			ProjectID:           f.projectID,
-			Name:                "gateway",
-			UserSessionIssuerID: uuid.NullUUID{UUID: gatewayIssuer, Valid: true},
-		}))
-		require.NoError(t, f.q.SeedMetaMCPServerMemberFixture(t.Context(), SeedMetaMCPServerMemberFixtureParams{ProjectID: f.projectID, MetaMcpServerID: gatewayID, McpServerID: member}))
-		credential := f.session(gatewayIssuer)
-
-		f.record(gatewayIssuer, credential)
-
-		require.Equal(t, map[uuid.UUID]uuid.UUID{member: uuid.Nil}, f.selections(credential))
 	})
 
 	t.Run("a choice is kept, never replaced", func(t *testing.T) {
@@ -454,13 +373,11 @@ func TestClassifyMatchesTheRecordedChoice(t *testing.T) {
 		row  ListUpstreamClientSelectionCoverageRow
 		want Outcome
 	}{
-		{"already chosen", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: true, EligibleClients: 2, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeSelected},
-		{"one eligible client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 1, AssociatedClients: 2, IssuerBoundClients: 3}, OutcomeClient},
-		{"several eligible clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeAmbiguous},
-		{"associated but not through this issuer", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 1, IssuerBoundClients: 1}, OutcomeUnreachableClient},
-		{"unassociated with bound clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0, IssuerBoundClients: 1}, OutcomeUnassociated},
-		{"unassociated with a gateway client tied to it", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0, IssuerBoundClients: 0, EvidenceClients: 2}, OutcomeUnassociated},
-		{"nothing configured", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0, IssuerBoundClients: 0}, OutcomeNoAuth},
+		{"already chosen", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: true, EligibleClients: 2, AssociatedClients: 2}, OutcomeSelected},
+		{"one eligible client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 1, AssociatedClients: 2}, OutcomeClient},
+		{"several eligible clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, AssociatedClients: 2}, OutcomeAmbiguous},
+		{"associated but not through this issuer", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 1}, OutcomeUnreachableClient},
+		{"no associated client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0}, OutcomeNoAuth},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -490,42 +407,6 @@ func TestRecordUpstreamClientSelectionsSkipsUnproxiedServers(t *testing.T) {
 	report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
 	require.NoError(t, err)
 	require.Empty(t, report.Gaps, "and is never a gap")
-}
-
-// A grant is one subject's credential for one client, whichever issuer
-// minted it, so grants minted through a sibling issuer for the gateway's
-// clients still keep a member from being recorded as needing no auth.
-func TestRecordUpstreamClientSelectionsCountsGrantsMintedThroughAnotherIssuer(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	gatewayIssuer := f.projectIssuer()
-	siblingIssuer := f.projectIssuer()
-	member := f.server(f.projectIssuer())
-	for _, client := range []uuid.UUID{f.client(gatewayIssuer, siblingIssuer), f.client(gatewayIssuer, siblingIssuer)} {
-		require.NoError(t, f.q.SeedGrantFixture(t.Context(), SeedGrantFixtureParams{
-			SubjectUrn:            urn.NewUserSubject("user-" + uuid.NewString()[:8]),
-			UserSessionIssuerID:   siblingIssuer,
-			RemoteSessionClientID: client,
-			Resource:              pgtype.Text{String: "https://upstream.example.com/mcp", Valid: true},
-		}))
-	}
-	gatewayID := uuid.New()
-	require.NoError(t, f.q.SeedMetaMCPServerFixture(t.Context(), SeedMetaMCPServerFixtureParams{
-		ID:                  gatewayID,
-		OrganizationID:      f.orgID,
-		ProjectID:           f.projectID,
-		Name:                "gateway",
-		UserSessionIssuerID: uuid.NullUUID{UUID: gatewayIssuer, Valid: true},
-	}))
-	require.NoError(t, f.q.SeedMetaMCPServerMemberFixture(t.Context(), SeedMetaMCPServerMemberFixtureParams{ProjectID: f.projectID, MetaMcpServerID: gatewayID, McpServerID: member}))
-	credential := f.session(gatewayIssuer)
-
-	require.Zero(t, f.record(gatewayIssuer, credential))
-	require.Empty(t, f.selections(credential))
-
-	report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
-	require.NoError(t, err)
-	require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: member, Outcome: OutcomeUnassociated}}, report.Gaps)
 }
 
 // beforeSelectionWrite runs a change just before the backfill records a
@@ -562,18 +443,6 @@ func TestRunReportsCoverageFromWhatWasRecorded(t *testing.T) {
 	require.Empty(t, f.selections(credential))
 }
 
-// connect records subject's live grant for clientID, as connecting its card
-// at consent does.
-func (f *fixture) connect(userIssuerID, clientID uuid.UUID, subject urn.SessionSubject) {
-	f.t.Helper()
-	require.NoError(f.t, f.q.SeedGrantFixture(f.t.Context(), SeedGrantFixtureParams{
-		SubjectUrn:            subject,
-		UserSessionIssuerID:   userIssuerID,
-		RemoteSessionClientID: clientID,
-		Resource:              pgtype.Text{String: "https://upstream.example.com/mcp", Valid: true},
-	}))
-}
-
 // When a server offers several clients, the one picked on the consent page is
 // the credential's choice; without a pick, as for a credential the backfill
 // covers, it is left to a reconnection. A pick that is not one of the
@@ -600,51 +469,4 @@ func TestRecordUpstreamClientSelectionsRecordsTheConsentPick(t *testing.T) {
 	require.Equal(t, map[uuid.UUID]uuid.UUID{server: second}, f.selections(picked))
 	require.Empty(t, f.selections(unpicked))
 	require.Empty(t, f.selections(foreign))
-}
-
-// A platform client is shared by every organization, so grants for it minted
-// in another organization never keep this organization's member from no-auth.
-func TestRecordUpstreamClientSelectionsIgnoresGrantsMintedInAnotherOrganization(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	ctx := t.Context()
-	gatewayIssuer := f.projectIssuer()
-	member := f.server(f.projectIssuer())
-	remoteIssuerID, clientID := uuid.New(), uuid.New()
-	require.NoError(t, f.q.SeedRemoteSessionIssuerFixture(ctx, SeedRemoteSessionIssuerFixtureParams{
-		ID:        remoteIssuerID,
-		ProjectID: uuid.NullUUID{},
-		Slug:      "rsi-" + remoteIssuerID.String()[:8],
-		Issuer:    "https://" + remoteIssuerID.String()[:8] + ".example.com",
-	}))
-	require.NoError(t, f.q.SeedRemoteSessionClientFixture(ctx, SeedRemoteSessionClientFixtureParams{
-		ID:                    clientID,
-		ProjectID:             uuid.NullUUID{},
-		OrganizationID:        pgtype.Text{},
-		RemoteSessionIssuerID: remoteIssuerID,
-		ClientID:              "cid-" + clientID.String()[:8],
-	}))
-	require.NoError(t, f.q.SeedClientBindingFixture(ctx, SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: gatewayIssuer}))
-	otherOrg, otherIssuer := "org_"+uuid.NewString(), uuid.New()
-	require.NoError(t, f.q.SeedOrganizationFixture(ctx, otherOrg))
-	require.NoError(t, f.q.SeedUserSessionIssuerFixture(ctx, SeedUserSessionIssuerFixtureParams{
-		ID:             otherIssuer,
-		ProjectID:      uuid.NullUUID{},
-		OrganizationID: pgtype.Text{String: otherOrg, Valid: true},
-		Slug:           "usi-" + otherIssuer.String()[:8],
-	}))
-	f.connect(otherIssuer, clientID, urn.NewUserSubject("elsewhere"))
-	gatewayID := uuid.New()
-	require.NoError(t, f.q.SeedMetaMCPServerFixture(ctx, SeedMetaMCPServerFixtureParams{
-		ID:                  gatewayID,
-		OrganizationID:      f.orgID,
-		ProjectID:           f.projectID,
-		Name:                "gateway",
-		UserSessionIssuerID: uuid.NullUUID{UUID: gatewayIssuer, Valid: true},
-	}))
-	require.NoError(t, f.q.SeedMetaMCPServerMemberFixture(ctx, SeedMetaMCPServerMemberFixtureParams{ProjectID: f.projectID, MetaMcpServerID: gatewayID, McpServerID: member}))
-	credential := f.session(gatewayIssuer)
-
-	f.record(gatewayIssuer, credential)
-	require.Equal(t, map[uuid.UUID]uuid.UUID{member: uuid.Nil}, f.selections(credential))
 }

@@ -4354,21 +4354,13 @@ WITH session_issuer AS (
       AND usi.deleted IS FALSE
 ),
 reachable AS (
-    SELECT s.id, s.project_id, p.organization_id, s.user_session_issuer_id,
-           s.remote_session_issuer_id AS derived_issuer_id,
-           COALESCE(rms.url, tms.resource_identifier, '') AS upstream
+    SELECT s.id, s.project_id
     FROM mcp_servers AS s
     JOIN projects AS p
       ON p.id = s.project_id
      AND p.deleted IS FALSE
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
-    LEFT JOIN remote_mcp_servers AS rms
-      ON rms.id = s.remote_mcp_server_id
-     AND rms.deleted IS FALSE
-    LEFT JOIN tunneled_mcp_servers AS tms
-      ON tms.id = s.tunneled_mcp_server_id
-     AND tms.deleted IS FALSE
     WHERE s.deleted IS FALSE
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
@@ -4424,59 +4416,11 @@ decided AS (
                LIMIT 1
              )
            ) AS remote_session_client_id,
-           (
-             NOT EXISTS (
-               SELECT 1
-               FROM mcp_server_remote_session_clients AS a
-               WHERE a.mcp_server_id = r.id
-                 AND a.deleted IS FALSE
-             )
-             AND NOT EXISTS (
-               SELECT 1
-               FROM remote_session_client_user_session_issuers AS link
-               JOIN remote_session_clients AS c
-                 ON c.id = link.remote_session_client_id
-                AND c.deleted IS FALSE
-               WHERE link.user_session_issuer_id = r.user_session_issuer_id
-             )
-             AND (
-             SELECT count(*)
-             FROM remote_session_client_user_session_issuers AS gateway_link
-             JOIN remote_session_clients AS gateway_client
-               ON gateway_client.id = gateway_link.remote_session_client_id
-              AND gateway_client.deleted IS FALSE
-              AND (gateway_client.project_id = r.project_id
-                   OR (gateway_client.project_id IS NULL AND gateway_client.organization_id = r.organization_id)
-                   OR (gateway_client.project_id IS NULL AND gateway_client.organization_id IS NULL))
-             WHERE gateway_link.user_session_issuer_id = $4
-               AND (
-                 EXISTS (
-                   SELECT 1
-                   FROM remote_session_issuers AS derived
-                   WHERE derived.id = r.derived_issuer_id
-                     AND derived.id = gateway_client.remote_session_issuer_id
-                     AND derived.deleted IS FALSE
-                     AND (derived.project_id = r.project_id
-                          OR (derived.project_id IS NULL AND derived.organization_id = r.organization_id)
-                          OR (derived.project_id IS NULL AND derived.organization_id IS NULL))
-                 )
-                 OR EXISTS (
-                   SELECT 1
-                   FROM remote_sessions AS rs
-                   WHERE rs.remote_session_client_id = gateway_client.id
-                     AND rs.deleted IS FALSE
-                     AND r.upstream <> ''
-                     AND rtrim(rs.resource, '/') = rtrim(r.upstream, '/')
-                     AND EXISTS (
-                       SELECT 1
-                       FROM user_session_issuers AS minted
-                       LEFT JOIN projects AS minted_project ON minted_project.id = minted.project_id
-                       WHERE minted.id = rs.user_session_issuer_id
-                         AND COALESCE(minted.organization_id, minted_project.organization_id) = r.organization_id
-                     )
-                 )
-               )
-           ) = 0
+           NOT EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             WHERE a.mcp_server_id = r.id
+               AND a.deleted IS FALSE
            ) AS no_auth
     FROM reachable AS r
 )
@@ -4542,13 +4486,12 @@ type RecordUpstreamClientSelectionsParams struct {
 // serves today. When the issuer binds several of the server's clients, the
 // one picked on the consent page (picked_mcp_server_ids and picked_client_ids,
 // parallel arrays) is chosen if it is still one of them; without a pick the
-// choice is left to a reconnection. No-auth is chosen only when the server has no associated
-// client, its own issuer binds none, and the credential's issuer binds no
-// client that a grant or the server's derived authorization server ties to
-// it, so a gateway member whose client is ambiguous is never called
-// anonymously. Anything else is left without a row,
-// a gap that coverage reports and that a reconnection or explicit
-// configuration resolves; nothing is guessed.
+// choice is left to a reconnection. No-auth is chosen when the server has no
+// associated client: a server uses exactly the clients associated with it.
+// A server given a client later makes the no-auth choice unusable, so the
+// credential reconnects and records the client. A server whose associated
+// clients the credential's issuer binds none of is left without a row, a gap
+// that coverage reports and that a reconnection resolves; nothing is guessed.
 func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg RecordUpstreamClientSelectionsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, recordUpstreamClientSelections,
 		arg.CredentialKind,
