@@ -55,7 +55,7 @@ var AdminHookClientsResult = Type("AdminHookClientsResult", func() {
 
 	Attribute("window_days", Int, "Length of the window in days.")
 	Attribute("queried_at", String, "When the grids were read from ClickHouse.", func() { Format(FormatDateTime) })
-	Attribute("from_cache", Boolean, "True when the grids came from the one-hour cache rather than a fresh ClickHouse read.")
+	Attribute("from_cache", Boolean, "True when the grids came from the cache rather than a fresh ClickHouse read. Cached grids last 24 hours and refresh in the background once an hour old.")
 	Attribute("organizations", ArrayOf(AdminHookClientOrganization), "Every organization that appears in any grid.")
 	Attribute("sessions", ArrayOf(AdminHookClientSessionCell), "The hook client grid, new sessions only.")
 	Attribute("inference", ArrayOf(AdminInferenceHookCell), "The inference hook traffic grid.")
@@ -80,7 +80,7 @@ func hookClientsMethods() {
 				Maximum(30)
 				Default(15)
 			})
-			Attribute("refresh", Boolean, "Skip the one-hour cache and read ClickHouse now.", func() {
+			Attribute("refresh", Boolean, "Skip the cache and read ClickHouse now.", func() {
 				Default(false)
 			})
 		})
