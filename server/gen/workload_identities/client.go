@@ -16,40 +16,42 @@ import (
 
 // Client is the "workloadIdentities" service client.
 type Client struct {
-	ListEndpoint                  goa.Endpoint
-	ListPlatformsEndpoint         goa.Endpoint
-	GetCustomFlowsEndpoint        goa.Endpoint
-	ListTokenEndpointsEndpoint    goa.Endpoint
-	RegisterIssuerEndpoint        goa.Endpoint
-	UpdateIssuerEndpoint          goa.Endpoint
-	WithdrawIssuerEndpoint        goa.Endpoint
-	AdmitSubjectEndpoint          goa.Endpoint
-	UpdateSubjectEndpoint         goa.Endpoint
-	WithdrawSubjectEndpoint       goa.Endpoint
-	CreateDeviceJoinTokenEndpoint goa.Endpoint
-	ListDeviceJoinTokensEndpoint  goa.Endpoint
-	RevokeDeviceJoinTokenEndpoint goa.Endpoint
-	RegisterDeviceEndpoint        goa.Endpoint
+	ListEndpoint                       goa.Endpoint
+	ListPlatformsEndpoint              goa.Endpoint
+	GetCustomFlowsEndpoint             goa.Endpoint
+	ListTokenEndpointsEndpoint         goa.Endpoint
+	RegisterIssuerEndpoint             goa.Endpoint
+	UpdateIssuerEndpoint               goa.Endpoint
+	WithdrawIssuerEndpoint             goa.Endpoint
+	AdmitSubjectEndpoint               goa.Endpoint
+	UpdateSubjectEndpoint              goa.Endpoint
+	WithdrawSubjectEndpoint            goa.Endpoint
+	CreateDeviceJoinTokenEndpoint      goa.Endpoint
+	CreateDeviceInstallCommandEndpoint goa.Endpoint
+	ListDeviceJoinTokensEndpoint       goa.Endpoint
+	RevokeDeviceJoinTokenEndpoint      goa.Endpoint
+	RegisterDeviceEndpoint             goa.Endpoint
 }
 
 // NewClient initializes a "workloadIdentities" service client given the
 // endpoints.
-func NewClient(list, listPlatforms, getCustomFlows, listTokenEndpoints, registerIssuer, updateIssuer, withdrawIssuer, admitSubject, updateSubject, withdrawSubject, createDeviceJoinToken, listDeviceJoinTokens, revokeDeviceJoinToken, registerDevice goa.Endpoint) *Client {
+func NewClient(list, listPlatforms, getCustomFlows, listTokenEndpoints, registerIssuer, updateIssuer, withdrawIssuer, admitSubject, updateSubject, withdrawSubject, createDeviceJoinToken, createDeviceInstallCommand, listDeviceJoinTokens, revokeDeviceJoinToken, registerDevice goa.Endpoint) *Client {
 	return &Client{
-		ListEndpoint:                  list,
-		ListPlatformsEndpoint:         listPlatforms,
-		GetCustomFlowsEndpoint:        getCustomFlows,
-		ListTokenEndpointsEndpoint:    listTokenEndpoints,
-		RegisterIssuerEndpoint:        registerIssuer,
-		UpdateIssuerEndpoint:          updateIssuer,
-		WithdrawIssuerEndpoint:        withdrawIssuer,
-		AdmitSubjectEndpoint:          admitSubject,
-		UpdateSubjectEndpoint:         updateSubject,
-		WithdrawSubjectEndpoint:       withdrawSubject,
-		CreateDeviceJoinTokenEndpoint: createDeviceJoinToken,
-		ListDeviceJoinTokensEndpoint:  listDeviceJoinTokens,
-		RevokeDeviceJoinTokenEndpoint: revokeDeviceJoinToken,
-		RegisterDeviceEndpoint:        registerDevice,
+		ListEndpoint:                       list,
+		ListPlatformsEndpoint:              listPlatforms,
+		GetCustomFlowsEndpoint:             getCustomFlows,
+		ListTokenEndpointsEndpoint:         listTokenEndpoints,
+		RegisterIssuerEndpoint:             registerIssuer,
+		UpdateIssuerEndpoint:               updateIssuer,
+		WithdrawIssuerEndpoint:             withdrawIssuer,
+		AdmitSubjectEndpoint:               admitSubject,
+		UpdateSubjectEndpoint:              updateSubject,
+		WithdrawSubjectEndpoint:            withdrawSubject,
+		CreateDeviceJoinTokenEndpoint:      createDeviceJoinToken,
+		CreateDeviceInstallCommandEndpoint: createDeviceInstallCommand,
+		ListDeviceJoinTokensEndpoint:       listDeviceJoinTokens,
+		RevokeDeviceJoinTokenEndpoint:      revokeDeviceJoinToken,
+		RegisterDeviceEndpoint:             registerDevice,
 	}
 }
 
@@ -303,6 +305,29 @@ func (c *Client) CreateDeviceJoinToken(ctx context.Context, p *CreateDeviceJoinT
 		return
 	}
 	return ires.(*WorkloadDeviceJoinToken), nil
+}
+
+// CreateDeviceInstallCommand calls the "createDeviceInstallCommand" endpoint
+// of the "workloadIdentities" service.
+// CreateDeviceInstallCommand may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateDeviceInstallCommand(ctx context.Context, p *CreateDeviceInstallCommandPayload) (res *WorkloadDeviceInstallCommand, err error) {
+	var ires any
+	ires, err = c.CreateDeviceInstallCommandEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*WorkloadDeviceInstallCommand), nil
 }
 
 // ListDeviceJoinTokens calls the "listDeviceJoinTokens" endpoint of the

@@ -74,6 +74,16 @@ type Service interface {
 	// Requires workload:write, and either owning the agent or agent:authorize on
 	// it, since an enrolled box acts under the agent's policy.
 	CreateDeviceJoinToken(context.Context, *CreateDeviceJoinTokenPayload) (res *WorkloadDeviceJoinToken, err error)
+	// Create a one-command install for a headless Linux device. Issues a device
+	// join token exactly as createDeviceJoinToken does, with the same
+	// authorization, agent checks and audit event, but never returns it: the token
+	// is held behind a single-use install code that expires after 15 minutes or
+	// with the token, whichever is sooner. The returned command fetches a script
+	// that installs the device agent, writes its managed config with the token,
+	// and starts it. Poll listDeviceJoinTokens for join_token_id to see the device
+	// enroll. Gated by the device-bootstrap-install rollout flag; an organization
+	// without it gets 404.
+	CreateDeviceInstallCommand(context.Context, *CreateDeviceInstallCommandPayload) (res *WorkloadDeviceInstallCommand, err error)
 	// List the organization's device join tokens, newest first, optionally for one
 	// agent. Revoked tokens are included. Each carries its status but never the
 	// token or its hash, which cannot be shown again. Requires workload:read.
@@ -117,7 +127,7 @@ const ServiceName = "workloadIdentities"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"list", "listPlatforms", "getCustomFlows", "listTokenEndpoints", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject", "createDeviceJoinToken", "listDeviceJoinTokens", "revokeDeviceJoinToken", "registerDevice"}
+var MethodNames = [15]string{"list", "listPlatforms", "getCustomFlows", "listTokenEndpoints", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject", "createDeviceJoinToken", "createDeviceInstallCommand", "listDeviceJoinTokens", "revokeDeviceJoinToken", "registerDevice"}
 
 // AdmitSubjectPayload is the payload type of the workloadIdentities service
 // admitSubject method.
@@ -149,6 +159,22 @@ type AdmitSubjectPayload struct {
 	// organization. Requires a caller that names a project; a dashboard session
 	// does not. Defaults to false.
 	ProjectScoped bool
+}
+
+// CreateDeviceInstallCommandPayload is the payload type of the
+// workloadIdentities service createDeviceInstallCommand method.
+type CreateDeviceInstallCommandPayload struct {
+	// The agent the enrolled device inherits its policy from.
+	AgentID string
+	// The project the device's hooks and telemetry are sent to. Must be a project
+	// in the caller's organization.
+	HooksProjectSlug string
+	// How long the join token behind the command stays redeemable. Defaults to one
+	// hour.
+	ExpiresInSeconds int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // CreateDeviceJoinTokenPayload is the payload type of the workloadIdentities
@@ -338,6 +364,23 @@ type WorkloadCustomFlows struct {
 	AllowAccess *WorkloadForm
 	// Edits allowed access; submits updateSubject.
 	EditAccess *WorkloadForm
+}
+
+// WorkloadDeviceInstallCommand is the result type of the workloadIdentities
+// service createDeviceInstallCommand method.
+type WorkloadDeviceInstallCommand struct {
+	// Run on the device as the account that runs its AI tools: fetches the install
+	// script and runs it with sudo.
+	Command string
+	// The same install, saving the script first so it can be read before it runs.
+	DownloadCommand string
+	// When the install code in the commands stops working.
+	CodeExpiresAt string
+	// The join token behind the command. Its status in listDeviceJoinTokens
+	// becomes redeemed once the device enrolls.
+	JoinTokenID string
+	// When the join token stops being redeemable.
+	TokenExpiresAt string
 }
 
 // WorkloadDeviceJoinToken is the result type of the workloadIdentities service

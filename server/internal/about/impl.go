@@ -25,13 +25,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-// deviceAgentReleasesBaseURL is the public, unauthenticated bucket the
+// DeviceAgentReleasesBaseURL is the public, unauthenticated bucket the
 // device-agent release pipeline publishes to (device-agent's release.yml,
 // release-pkg-macos job). The pkg itself has no "latest" alias there, same as
 // the raw daemon/CLI binaries — every consumer resolves the current version
 // off releases.json and builds the versioned URL, which is what this handler
 // does server-side so docs/IT-admin instructions have one stable link.
-const deviceAgentReleasesBaseURL = "https://storage.googleapis.com/speakeasy-device-agent-releases-prod"
+const DeviceAgentReleasesBaseURL = "https://storage.googleapis.com/speakeasy-device-agent-releases-prod"
 
 const installDeviceAgentMacOSPath = "/v1/install/device-agent-macos.pkg"
 const installDeviceAgentWindowsPath = "/v1/install/device-agent-windows.msi"
@@ -71,8 +71,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, guardi
 		logger:                 logger.With(attr.SlogComponent("about")),
 		tracer:                 tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/about"),
 		guardianPolicy:         guardianPolicy,
-		deviceAgentManifestURL: deviceAgentReleasesBaseURL + "/releases.json",
-		deviceAgentReleasesURL: deviceAgentReleasesBaseURL,
+		deviceAgentManifestURL: DeviceAgentReleasesBaseURL + "/releases.json",
+		deviceAgentReleasesURL: DeviceAgentReleasesBaseURL,
 	}
 }
 
