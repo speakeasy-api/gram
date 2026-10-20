@@ -323,7 +323,7 @@ func TestExtractMetricsForClickHouse_BothShapes(t *testing.T) {
 			req, err := decodeMetricsBody(t, body, "")
 			require.NoError(t, err)
 
-			payload := srv.NewMetricsPayload(req, nil, nil)
+			payload := srv.NewMetricsPayload(req, nil, nil, nil)
 			points, err := extractMetricsForClickHouse(payload)
 			require.NoError(t, err)
 			require.Len(t, points, 1)
@@ -376,7 +376,7 @@ func TestExtractMetricsForClickHouse_RejectsCumulative(t *testing.T) {
 			req, err := decodeMetricsBody(t, rewritten, "")
 			require.NoError(t, err, "design must accept non-DELTA temporality at decode time")
 
-			payload := srv.NewMetricsPayload(req, nil, nil)
+			payload := srv.NewMetricsPayload(req, nil, nil, nil)
 			_, err = extractMetricsForClickHouse(payload)
 			require.Error(t, err)
 		})
