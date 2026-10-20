@@ -10,7 +10,11 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
-import { SimpleTooltip } from "@/components/ui/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
 import { Loader2, TriangleAlert } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -326,7 +330,8 @@ export function ServerPickerSheet({
                           </span>
                           {option.badge &&
                             (option.disabled ? (
-                              <SimpleTooltip tooltip={option.description}>
+                              <Tooltip>
+<TooltipTrigger asChild>
                                 <span
                                   role="img"
                                   aria-label={option.badge}
@@ -335,7 +340,9 @@ export function ServerPickerSheet({
                                 >
                                   <TriangleAlert className="size-4" />
                                 </span>
-                              </SimpleTooltip>
+                              </TooltipTrigger>
+<TooltipContent side="left">{option.description}</TooltipContent>
+</Tooltip>
                             ) : (
                               <Badge variant="warning">
                                 <Badge.Text>{option.badge}</Badge.Text>
