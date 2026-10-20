@@ -785,6 +785,7 @@ FROM mcp_endpoints e
 JOIN projects p
   ON p.id = e.project_id
   AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
 WHERE e.project_id = ANY(@project_ids::uuid[])
   AND e.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND e.deleted IS FALSE;

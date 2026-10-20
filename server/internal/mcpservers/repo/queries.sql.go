@@ -845,6 +845,7 @@ FROM mcp_endpoints e
 JOIN projects p
   ON p.id = e.project_id
   AND p.organization_id = $1
+  AND p.deleted IS FALSE
 WHERE e.project_id = ANY($2::uuid[])
   AND e.mcp_server_id = ANY($3::uuid[])
   AND e.deleted IS FALSE
