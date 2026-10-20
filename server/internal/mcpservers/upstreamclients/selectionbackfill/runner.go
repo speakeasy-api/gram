@@ -25,7 +25,8 @@ const defaultPageSize = 200
 type Outcome string
 
 const (
-	// OutcomeSelected is a pair that already has a choice.
+	// OutcomeSelected is a pair that already has a choice that is not a no-auth
+	// choice its server has since been given a client for.
 	OutcomeSelected Outcome = "selected"
 
 	// OutcomeClient is a pair whose server has exactly one associated client

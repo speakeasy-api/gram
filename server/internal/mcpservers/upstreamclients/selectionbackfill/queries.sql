@@ -67,6 +67,17 @@ SELECT r.id AS mcp_server_id,
            AND sel.credential_id = @credential_id::uuid
            AND sel.mcp_server_id = r.id
            AND sel.deleted IS FALSE
+           -- A no-auth choice for a server that has since been given a client
+           -- is unusable; RecordUpstreamClientSelections replaces it.
+           AND NOT (
+             sel.no_auth
+             AND EXISTS (
+               SELECT 1
+               FROM mcp_server_remote_session_clients AS a
+               WHERE a.mcp_server_id = r.id
+                 AND a.deleted IS FALSE
+             )
+           )
        )::boolean AS selected,
        (
          SELECT count(*)

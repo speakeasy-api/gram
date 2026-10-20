@@ -4456,7 +4456,14 @@ LEFT JOIN remote_session_clients AS chosen
       OR (chosen.project_id IS NULL AND chosen.organization_id IS NULL))
 WHERE chosen.id IS NOT NULL
    OR (d.remote_session_client_id IS NULL AND d.no_auth)
-ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING
+ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO UPDATE
+SET remote_session_client_id = EXCLUDED.remote_session_client_id,
+    client_attachment_scope = EXCLUDED.client_attachment_scope,
+    no_auth = FALSE,
+    source = EXCLUDED.source,
+    updated_at = clock_timestamp()
+WHERE upstream_client_selections.no_auth
+  AND EXCLUDED.remote_session_client_id IS NOT NULL
 `
 
 type RecordUpstreamClientSelectionsParams struct {
@@ -4469,8 +4476,11 @@ type RecordUpstreamClientSelectionsParams struct {
 }
 
 // Records, for one inbound credential, the upstream OAuth client it uses for
-// every MCP server it can reach, or an explicit no-auth choice. Existing
-// choices are never replaced.
+// every MCP server it can reach, or an explicit no-auth choice. An existing
+// client choice is never replaced. An existing no-auth choice is replaced
+// only once the server has an associated client and one is decided for the
+// credential: the no-auth choice is unusable by then, and recording the
+// decided client is what reconnecting would record.
 //
 // Reach is a superset of what the credential is audience-bound to: every
 // proxied (remote or tunneled) server on the credential's user session
