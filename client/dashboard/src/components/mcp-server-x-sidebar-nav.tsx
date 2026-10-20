@@ -446,13 +446,13 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     (remoteIdentityMode !== "none" || identityProbeStatus === "available");
 
   let authenticationDescription =
-    "Attach a remote identity provider so users can access the upstream service.";
+    "Attach an authorization server so users can access the upstream service.";
   if (isUnproxied) {
     authenticationDescription =
       "Not applicable — the customer connects directly using the vendor's own credentials.";
   } else if (remoteIdentityMode === "user" && hasRemoteIdentityProvider) {
     authenticationDescription =
-      "A remote identity provider is attached to this server.";
+      "An authorization server is attached to this server.";
   } else if (remoteIdentityMode === "agent" && isRemoteBacked) {
     authenticationDescription =
       "A shared credential is configured for the upstream service.";
@@ -461,7 +461,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       "The upstream service accepts requests without credentials.";
   } else if (isTunneledBacked) {
     authenticationDescription =
-      "Speakeasy authentication is configured; upstream identity providers are optional.";
+      "Speakeasy authentication is configured; upstream authorization servers are optional.";
   }
 
   // Source detail pages are gone; the description still explains the backend,

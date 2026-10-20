@@ -13,6 +13,7 @@ const BASE = `/acme/projects/demo/mcp/gateway/${ID}`;
 const TABS = [
   "overview",
   "inspect",
+  "skills",
   "team-access",
   "sessions",
   "settings",

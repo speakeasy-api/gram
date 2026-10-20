@@ -4,6 +4,8 @@ export const FEATURE_FLAGS = {
   deploymentsPage: "gram-deployments-page",
   deviceAgent: "gram-device-agent",
   deviceIntegrations: "gram-device-integrations",
+  // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
+  emaProviders: "ema-providers",
   experimentalChat: "gram-experimental-chat",
   explore: "gram-explore",
   functions: "gram-functions",
@@ -18,16 +20,15 @@ export const FEATURE_FLAGS = {
   oktaConnections: "okta-connections",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
   promptPolicies: "gram-prompt-policies",
-  rbac: "gram-rbac",
   // Multivariate (`off` | `shadow` | `llm`), org-targeted: which risk engine
   // the organization runs. Read through `useFeatureFlagVariant`; the boolean
   // read is true for every variant, `off` included. `useDetectorMode` maps it
   // to the policy editor mode.
   riskLlmAnalyzer: "gram-risk-llm-analyzer",
   riskWatchdog: "gram-risk-watchdog",
-  // Org-targeted, read server-side under the same key: whether hosted MCP
-  // servers serve distributed skills to connected agents. Gates the MCP
-  // server Skills tab and the served-over-MCP hints on skill and plugin pages.
+  // Org-targeted, read server-side under the same key: whether MCP servers
+  // and gateways serve their linked skills to connected agents. Gates the MCP
+  // server and gateway Skills tabs and the skill page's "Served over MCP".
   skillsOverMcp: "skills-over-mcp",
   tunneledMcp: "gram-tunneled-mcp",
   // UI-only rollout gate for the organization's Speakeasy authorization

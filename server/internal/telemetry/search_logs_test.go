@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -80,30 +79,24 @@ func TestSearchLogs_SortDescending(t *testing.T) {
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
-			Filter: &gen.SearchLogsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 10,
-			// Empty sort should default to desc
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Logs, 5)
-		assert.Nil(c, res.NextCursor)
+	res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 10,
+		// Empty sort should default to desc
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Logs, 5)
+	require.Nil(t, res.NextCursor)
 
-		// Verify descending order
-		for i := 0; i < len(res.Logs)-1; i++ {
-			assert.GreaterOrEqual(c, res.Logs[i].TimeUnixNano, res.Logs[i+1].TimeUnixNano,
-				"logs should be sorted descending by time")
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	// Verify descending order
+	for i := 0; i < len(res.Logs)-1; i++ {
+		require.GreaterOrEqual(t, res.Logs[i].TimeUnixNano, res.Logs[i+1].TimeUnixNano,
+			"logs should be sorted descending by time")
+	}
 }
 
 func TestSearchLogs_SortAscending(t *testing.T) {
@@ -122,30 +115,24 @@ func TestSearchLogs_SortAscending(t *testing.T) {
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
-			Filter: &gen.SearchLogsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 10,
-			Sort:  "asc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Logs, 5)
-		assert.Nil(c, res.NextCursor)
+	res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 10,
+		Sort:  "asc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Logs, 5)
+	require.Nil(t, res.NextCursor)
 
-		// Verify ascending order
-		for i := 0; i < len(res.Logs)-1; i++ {
-			assert.LessOrEqual(c, res.Logs[i].TimeUnixNano, res.Logs[i+1].TimeUnixNano,
-				"logs should be sorted ascending by time")
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	// Verify ascending order
+	for i := 0; i < len(res.Logs)-1; i++ {
+		require.LessOrEqual(t, res.Logs[i].TimeUnixNano, res.Logs[i+1].TimeUnixNano,
+			"logs should be sorted ascending by time")
+	}
 }
 
 func TestSearchLogs_PaginationAscOrder(t *testing.T) {
@@ -164,24 +151,18 @@ func TestSearchLogs_PaginationAscOrder(t *testing.T) {
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// Wait for ClickHouse eventual consistency: all 10 inserted logs visible.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
-			Filter: &gen.SearchLogsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 100,
-			Sort:  "asc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Logs, 10)
-	}, 10*time.Second, 200*time.Millisecond)
+	// All 10 inserted logs are visible.
+	res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 100,
+		Sort:  "asc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Logs, 10)
 
 	// Get first page (limit 4) with ascending sort
 	page1, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
@@ -253,24 +234,18 @@ func TestSearchLogs_CursorTieBreaking(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// Wait for ClickHouse eventual consistency: all 5 inserted logs visible.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
-			Filter: &gen.SearchLogsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 100,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Logs, 5)
-	}, 10*time.Second, 200*time.Millisecond)
+	// All 5 inserted logs are visible.
+	res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Logs, 5)
 
 	// Get first page (limit 2)
 	page1, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
@@ -339,24 +314,18 @@ func TestSearchLogs_Pagination(t *testing.T) {
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// Wait for ClickHouse eventual consistency: all 10 inserted logs visible.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
-			Filter: &gen.SearchLogsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 100,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Logs, 10)
-	}, 10*time.Second, 200*time.Millisecond)
+	// All 10 inserted logs are visible.
+	res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Logs, 10)
 
 	// Get first page (limit 4)
 	page1, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
@@ -427,32 +396,24 @@ func TestSearchLogs_FilterByTraceID(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
-			Filter: &gen.SearchLogsFilter{
-				From:    &from,
-				To:      &to,
-				TraceID: &traceID1,
-			},
-			Limit: 10,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Logs, 2)
+	res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From:    &from,
+			To:      &to,
+			TraceID: &traceID1,
+		},
+		Limit: 10,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Logs, 2)
 
-		// Verify all logs have the correct trace ID
-		for _, log := range res.Logs {
-			if !assert.NotNil(c, log.TraceID) {
-				continue
-			}
-			assert.Equal(c, traceID1, *log.TraceID)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	// Verify all logs have the correct trace ID
+	for _, log := range res.Logs {
+		require.NotNil(t, log.TraceID)
+		require.Equal(t, traceID1, *log.TraceID)
+	}
 }
 
 func TestSearchLogs_AttributesAreJSON(t *testing.T) {
@@ -470,36 +431,28 @@ func TestSearchLogs_AttributesAreJSON(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
-			Filter: &gen.SearchLogsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 10,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Len(c, res.Logs, 1) {
-			return
-		}
+	res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 10,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Logs, 1)
 
-		log := res.Logs[0]
-		assert.NotNil(c, log.Attributes)
-		assert.NotNil(c, log.ResourceAttributes)
+	log := res.Logs[0]
+	require.NotNil(t, log.Attributes)
+	require.NotNil(t, log.ResourceAttributes)
 
-		// Attributes should be parsed as map, not string
-		_, ok := log.Attributes.(map[string]any)
-		assert.True(c, ok, "attributes should be a map[string]any, not a string")
+	// Attributes should be parsed as map, not string
+	_, ok := log.Attributes.(map[string]any)
+	require.True(t, ok, "attributes should be a map[string]any, not a string")
 
-		_, ok = log.ResourceAttributes.(map[string]any)
-		assert.True(c, ok, "resource_attributes should be a map[string]any, not a string")
-	}, 10*time.Second, 200*time.Millisecond)
+	_, ok = log.ResourceAttributes.(map[string]any)
+	require.True(t, ok, "resource_attributes should be a map[string]any, not a string")
 }
 
 func TestSearchLogs_Filters(t *testing.T) {
@@ -656,25 +609,19 @@ func TestSearchLogs_Filters(t *testing.T) {
 	from := baseTime.Add(-10 * time.Minute).Format(time.RFC3339)
 	to := now.Format(time.RFC3339)
 
-	// Wait for ClickHouse eventual consistency: all 10 inserted logs visible
-	// before any subtest issues its filtered query.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
-			Filter: &gen.SearchLogsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 100,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Logs, 10)
-	}, 10*time.Second, 200*time.Millisecond)
+	// All 10 inserted logs are visible before any subtest issues its filtered
+	// query.
+	res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Logs, 10)
 
 	tests := []struct {
 		name          string
@@ -989,23 +936,17 @@ func TestSearchLogs_LogFilters(t *testing.T) {
 	from := baseTime.Add(-10 * time.Minute).Format(time.RFC3339)
 	to := now.Format(time.RFC3339)
 
-	// Wait for ClickHouse eventual consistency: all 4 inserted logs visible
-	// before any subtest issues its filtered query.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
-			From:  &from,
-			To:    &to,
-			Limit: 100,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Logs, 4)
-	}, 10*time.Second, 200*time.Millisecond)
+	// All 4 inserted logs are visible before any subtest issues its filtered
+	// query.
+	res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		From:  &from,
+		To:    &to,
+		Limit: 100,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Logs, 4)
 
 	eq := "eq"
 	notEq := "not_eq"
@@ -1209,46 +1150,38 @@ func TestSearchToolCalls_AggregatesByTraceID(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchToolCalls(ctx, &gen.SearchToolCallsPayload{
-			Filter: &gen.SearchToolCallsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 100,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.ToolCalls, 2)
+	res, err := ti.service.SearchToolCalls(ctx, &gen.SearchToolCallsPayload{
+		Filter: &gen.SearchToolCallsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.ToolCalls, 2)
 
-		// Find both tool calls
-		var toolCall1, toolCall2 *gen.ToolCallSummary
-		for i := range res.ToolCalls {
-			switch res.ToolCalls[i].TraceID {
-			case traceID1:
-				toolCall1 = res.ToolCalls[i]
-			case traceID2:
-				toolCall2 = res.ToolCalls[i]
-			}
+	// Find both tool calls
+	var toolCall1, toolCall2 *gen.ToolCallSummary
+	for i := range res.ToolCalls {
+		switch res.ToolCalls[i].TraceID {
+		case traceID1:
+			toolCall1 = res.ToolCalls[i]
+		case traceID2:
+			toolCall2 = res.ToolCalls[i]
 		}
+	}
 
-		if assert.NotNil(c, toolCall1) {
-			assert.Equal(c, uint64(3), toolCall1.LogCount)
-			assert.Positive(c, toolCall1.StartTimeUnixNano)
-			assert.Equal(c, "urn:gram:test1", toolCall1.GramUrn)
-		}
+	require.NotNil(t, toolCall1)
+	require.Equal(t, uint64(3), toolCall1.LogCount)
+	require.Positive(t, toolCall1.StartTimeUnixNano)
+	require.Equal(t, "urn:gram:test1", toolCall1.GramUrn)
 
-		if assert.NotNil(c, toolCall2) {
-			assert.Equal(c, uint64(2), toolCall2.LogCount)
-			assert.Positive(c, toolCall2.StartTimeUnixNano)
-			assert.Equal(c, "urn:gram:test2", toolCall2.GramUrn)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	require.NotNil(t, toolCall2)
+	require.Equal(t, uint64(2), toolCall2.LogCount)
+	require.Positive(t, toolCall2.StartTimeUnixNano)
+	require.Equal(t, "urn:gram:test2", toolCall2.GramUrn)
 }
 
 func TestSearchToolCalls_FilterByGramURN(t *testing.T) {
@@ -1273,27 +1206,20 @@ func TestSearchToolCalls_FilterByGramURN(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// Wait for ClickHouse materialized view to process and eventual consistency:
-	// all 3 inserted tool calls visible before any subtest issues its query.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		gramUrn := "http"
-		res, err := ti.service.SearchToolCalls(ctx, &gen.SearchToolCallsPayload{
-			Filter: &gen.SearchToolCallsFilter{
-				From:    &from,
-				To:      &to,
-				GramUrn: &gramUrn,
-			},
-			Limit: 100,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.ToolCalls, 3)
-	}, 10*time.Second, 200*time.Millisecond)
+	// All 3 inserted tool calls are visible before any subtest issues its query.
+	gramUrn := "http"
+	res, err := ti.service.SearchToolCalls(ctx, &gen.SearchToolCallsPayload{
+		Filter: &gen.SearchToolCallsFilter{
+			From:    &from,
+			To:      &to,
+			GramUrn: &gramUrn,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.ToolCalls, 3)
 
 	tests := []struct {
 		name          string

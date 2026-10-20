@@ -1967,8 +1967,8 @@ type ListAssistantRuntimesForReapRow struct {
 }
 
 // Returns every runtime row for an assistant that still carries backend
-// metadata, regardless of soft-delete state. A stopped row whose Fly app
-// was not collected leaves its app_name in metadata and would otherwise
+// metadata, regardless of soft-delete state. A stopped row whose resources
+// were not collected retains backend metadata and would otherwise
 // be invisible to deleted-aware queries.
 func (q *Queries) ListAssistantRuntimesForReap(ctx context.Context, arg ListAssistantRuntimesForReapParams) ([]ListAssistantRuntimesForReapRow, error) {
 	rows, err := q.db.Query(ctx, listAssistantRuntimesForReap, arg.AssistantID, arg.ProjectID)
@@ -2509,7 +2509,7 @@ type ListStoppedRuntimesForReapRow struct {
 // indefinitely. The NOT EXISTS guard restricts the candidate to the most
 // recent non-reaped row per thread: ReserveAssistantRuntime copies the latest
 // non-empty metadata into each new row, so a stale older sibling can share
-// `machine_id` with the current owner — destroying it would yank the live
+// resource metadata with the current owner — destroying it would yank the live
 // machine out from under a fresher row that is still inside its own TTL.
 func (q *Queries) ListStoppedRuntimesForReap(ctx context.Context, arg ListStoppedRuntimesForReapParams) ([]ListStoppedRuntimesForReapRow, error) {
 	rows, err := q.db.Query(ctx, listStoppedRuntimesForReap,
@@ -3291,7 +3291,6 @@ func (q *Queries) LookupActiveAssistantRuntimeV2(ctx context.Context, arg Lookup
 const markAssistantRuntimeMachineReaped = `-- name: MarkAssistantRuntimeMachineReaped :execrows
 UPDATE assistant_runtimes
 SET state = $1,
-    backend_metadata_json = backend_metadata_json - 'machine_id' - 'last_boot_id',
     updated_at = clock_timestamp(),
     ended_at = COALESCE(ended_at, clock_timestamp()),
     deleted_at = COALESCE(deleted_at, clock_timestamp())
@@ -3308,12 +3307,10 @@ type MarkAssistantRuntimeMachineReapedParams struct {
 	FailedState  string
 }
 
-// Per-thread reap: strips the machine slot from backend metadata while
-// preserving app-level fields (app_name, app_id, app_url, app_ip, region) so
-// the next admit for the same thread cold-launches into the same Fly app and
-// keeps its allocated IP and secrets. Filters by current state so a row that
-// raced into starting/active between selection and update is left alone — the
-// 0-rows return signals the caller to skip the destructive backend call.
+// Per-thread reap: marks the stopped resource reaped while retaining backend
+// metadata for full cleanup (e.g. local workspace volumes). Filters by current
+// state so a row that raced into starting/active between selection and
+// update is left alone.
 func (q *Queries) MarkAssistantRuntimeMachineReaped(ctx context.Context, arg MarkAssistantRuntimeMachineReapedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markAssistantRuntimeMachineReaped,
 		arg.ReapedState,
@@ -3345,7 +3342,7 @@ type MarkAssistantRuntimeReapedParams struct {
 	ProjectID   uuid.UUID
 }
 
-// Records that the backend resource (e.g. Fly app) for this runtime has
+// Records that the backend resource (e.g. sandbox claim) for this runtime has
 // been torn down. Clearing backend_metadata_json removes it from the reap
 // candidate set so the janitor stops re-scanning it.
 func (q *Queries) MarkAssistantRuntimeReaped(ctx context.Context, arg MarkAssistantRuntimeReapedParams) error {

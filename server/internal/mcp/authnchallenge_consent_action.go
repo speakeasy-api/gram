@@ -42,7 +42,7 @@ func (s *Service) HandleConsentAction(w http.ResponseWriter, r *http.Request) er
 	return s.ServeConsentAction(w, r, endpoint)
 }
 
-// ServeConsentAction is the post-resolution handler, shared with /x/mcp.
+// ServeConsentAction is the post-resolution handler.
 func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
@@ -351,6 +351,9 @@ func (s *Service) buildRemoteConnectURL(
 	challengeURL, hop, berr := s.startRemoteLogin(ctx, challengeState, s.remoteChallengeMgr.RemoteLoginCallbackOrigin(client), parent, func(parent remotesessions.ParentChallenge) (string, error) {
 		return s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, client)
 	})
+	if errors.Is(berr, remotesessions.ErrIssuerNoAuthorizationEndpoint) {
+		return "", false, oops.E(oops.CodeBadRequest, berr, "This service doesn't support signing in from Speakeasy.").LogWarn(ctx, logger)
+	}
 	if berr != nil {
 		return "", false, oops.E(oops.CodeUnexpected, berr, "build authorization url").LogError(ctx, logger)
 	}

@@ -48,6 +48,9 @@ vi.mock("@/components/require-scope", () => ({
     return props.children;
   },
 }));
+vi.mock("./GatewayDiscoverySection", () => ({
+  GatewayDiscoverySection: () => null,
+}));
 vi.mock("@/routes", () => ({ useRoutes: vi.fn() }));
 vi.mock(
   "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection",

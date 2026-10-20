@@ -935,6 +935,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		} else {
 			updated = refreshed
 		}
+	} else {
+		// Without an issuer the server keeps no upstream client associations.
+		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, nil)
 	}
 	afterView, _ := s.buildMcpServerView(ctx, authCtx.ActiveOrganizationID, updated)
 
@@ -1210,6 +1213,13 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+	// Prunes the deleted server's upstream client associations, and lets a
+	// server left alone on the shared issuer pick up its bindings.
+	var releasedIssuers []uuid.UUID
+	if deleted.UserSessionIssuerID.Valid {
+		releasedIssuers = []uuid.UUID{deleted.UserSessionIssuerID.UUID}
+	}
+	remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, releasedIssuers)
 	if tombstoned.DetachedPluginServers > 0 {
 		connected, connectionErr := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(ctx, *authCtx.ProjectID)
 		if connectionErr != nil {

@@ -9,47 +9,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type SkillObservation struct {
+type McpSkillLink struct {
 	// @access: confidential
 	ID uuid.UUID
 	// @access: confidential
+	OrganizationID string
+	// @access: confidential
 	ProjectID uuid.UUID
-	// @access: opaque-confidential
-	IdempotencyKey pgtype.Text
 	// @access: confidential
-	Provider string
+	SkillID uuid.UUID
 	// @access: confidential
-	UserID pgtype.Text
-	// @access: confidential-pii
-	UserEmail pgtype.Text
-	// @access: confidential-pii
-	Hostname pgtype.Text
-	// @access: opaque-confidential
-	SessionID pgtype.Text
+	PinnedVersionID uuid.NullUUID
 	// @access: confidential
-	SkillName string
-	// @access: opaque-confidential
-	Source pgtype.Text
-	// @access: opaque-confidential
-	SourceLevel pgtype.Text
-	// @access: opaque-restricted
-	SourcePath pgtype.Text
+	TargetKind string
 	// @access: confidential
-	RawSha256 pgtype.Text
+	McpServerID uuid.NullUUID
 	// @access: confidential
-	SeenAt pgtype.Timestamptz
+	MetaMcpServerID uuid.NullUUID
 	// @access: confidential
-	SkillID uuid.NullUUID
-	// @access: confidential
-	SkillVersionID uuid.NullUUID
-	// @access: confidential
-	ReconciledAt pgtype.Timestamptz
-	// @access: confidential
-	MetricsSyncedAt pgtype.Timestamptz
-	// @access: confidential
-	EfficacyEnqueuedAt pgtype.Timestamptz
-	// @access: confidential
-	ReconcileErrorCode pgtype.Text
+	CreatedByUserID string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

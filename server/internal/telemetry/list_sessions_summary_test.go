@@ -134,7 +134,7 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 	narrowTo := now.Add(1 * time.Hour).Format(time.RFC3339)
 	wideFrom, wideTo := summaryWindow(now)
 
-	rawRes := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	rawRes := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   narrowFrom,
 		To:     narrowTo,
 		SortBy: "total_cost",
@@ -143,7 +143,7 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 		return len(res.Sessions) == 4
 	})
 
-	summaryRes := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	summaryRes := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   wideFrom,
 		To:     wideTo,
 		SortBy: "total_cost",
@@ -299,7 +299,7 @@ func TestListSessions_SummaryPathFilters(t *testing.T) {
 
 	wideFrom, wideTo := summaryWindow(now)
 
-	deptFiltered := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	deptFiltered := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: wideFrom,
 		To:   wideTo,
 		Filters: []*gen.QueryFilter{
@@ -312,7 +312,7 @@ func TestListSessions_SummaryPathFilters(t *testing.T) {
 	})
 	require.Len(t, deptFiltered.Sessions, 1)
 
-	unsetEmail := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	unsetEmail := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: wideFrom,
 		To:   wideTo,
 		Filters: []*gen.QueryFilter{
@@ -325,7 +325,7 @@ func TestListSessions_SummaryPathFilters(t *testing.T) {
 	})
 	require.Len(t, unsetEmail.Sessions, 1)
 
-	roleFiltered := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	roleFiltered := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: wideFrom,
 		To:   wideTo,
 		Filters: []*gen.QueryFilter{
@@ -338,7 +338,7 @@ func TestListSessions_SummaryPathFilters(t *testing.T) {
 	})
 	require.Len(t, roleFiltered.Sessions, 1)
 
-	coLocated := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	coLocated := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: wideFrom,
 		To:   wideTo,
 		Filters: []*gen.QueryFilter{
@@ -408,7 +408,7 @@ func TestListSessions_SummaryPathDropsPhantomBoundarySessions(t *testing.T) {
 		cost:         2.0,
 	})
 
-	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	res := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   windowStart.Format(time.RFC3339),
 		To:     windowEnd.Format(time.RFC3339),
 		SortBy: "total_cost",
@@ -477,7 +477,7 @@ func TestListSessions_ArrayUnsetFilterAlignedAcrossPaths(t *testing.T) {
 	unsetFilter := []*gen.QueryFilter{{Dimension: "role", Values: []string{""}}}
 	wideFrom, wideTo := summaryWindow(now)
 
-	rawRes := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	rawRes := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:    now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:      now.Add(1 * time.Hour).Format(time.RFC3339),
 		Filters: unsetFilter,
@@ -488,7 +488,7 @@ func TestListSessions_ArrayUnsetFilterAlignedAcrossPaths(t *testing.T) {
 	})
 	require.Len(t, rawRes.Sessions, 1)
 
-	summaryRes := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	summaryRes := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:    wideFrom,
 		To:      wideTo,
 		Filters: unsetFilter,
@@ -538,7 +538,7 @@ func TestListSessions_SummaryPathCursorPagination(t *testing.T) {
 
 	wideFrom, wideTo := summaryWindow(now)
 
-	waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   wideFrom,
 		To:     wideTo,
 		SortBy: "total_cost",

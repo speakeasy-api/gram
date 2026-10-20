@@ -5,17 +5,38 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * A live server backed by an external MCP attachment.
+ * What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset because nothing is left to migrate, along with any server, addresses and plugin entries it still owns. A server already migrated in place is kept and keeps working.
+ */
+export const Action = {
+  Migrate: "migrate",
+  Delete: "delete",
+} as const;
+/**
+ * What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset because nothing is left to migrate, along with any server, addresses and plugin entries it still owns. A server already migrated in place is kept and keeps working.
+ */
+export type Action = ClosedEnum<typeof Action>;
+
+/**
+ * A toolset backed by an external MCP attachment, with what running it does: migrate its server in place, or delete it.
  */
 export type AdminExternalMcpMigrationCandidate = {
+  /**
+   * What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset because nothing is left to migrate, along with any server, addresses and plugin entries it still owns. A server already migrated in place is kept and keeps working.
+   */
+  action: Action;
   /**
    * Why the server cannot be migrated. Empty when it can.
    */
   blockers: Array<string>;
+  /**
+   * Why the candidate is deleted rather than migrated. Empty when it migrates.
+   */
+  deleteReasons: Array<string>;
   /**
    * The slug in the server's /mcp/<slug> address. Absent when the server has none.
    */
@@ -68,7 +89,16 @@ export type AdminExternalMcpMigrationCandidate = {
    * The toolset behind the server.
    */
   toolsetId: string;
+  /**
+   * What migrating the server drops or cannot carry over. Warnings do not stop it.
+   */
+  warnings: Array<string>;
 };
+
+/** @internal */
+export const Action$inboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
+  Action,
+);
 
 /** @internal */
 export const AdminExternalMcpMigrationCandidate$inboundSchema: z.ZodMiniType<
@@ -76,7 +106,9 @@ export const AdminExternalMcpMigrationCandidate$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    action: Action$inboundSchema,
     blockers: z.array(z.string()),
+    delete_reasons: z.array(z.string()),
     mcp_slug: z.optional(z.string()),
     organization_id: z.string(),
     organization_name: z.string(),
@@ -90,9 +122,11 @@ export const AdminExternalMcpMigrationCandidate$inboundSchema: z.ZodMiniType<
     sign_in_provider: z.optional(z.string()),
     tool_calls: z.optional(z.int()),
     toolset_id: z.string(),
+    warnings: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "delete_reasons": "deleteReasons",
       "mcp_slug": "mcpSlug",
       "organization_id": "organizationId",
       "organization_name": "organizationName",
