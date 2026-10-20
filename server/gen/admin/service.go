@@ -533,7 +533,7 @@ type AdminExternalMcpMigrationResult struct {
 	Outcomes []*AdminExternalMcpMigrationOutcome
 }
 
-// An organization that appears in either hook client grid.
+// An organization that appears in any of the fleet health grids.
 type AdminHookClientOrganization struct {
 	// The organization ID.
 	ID string
@@ -571,7 +571,7 @@ type AdminHookClientsResult struct {
 	// True when the grids came from the one-hour cache rather than a fresh
 	// ClickHouse read.
 	FromCache bool
-	// Every organization that appears in either grid.
+	// Every organization that appears in any grid.
 	Organizations []*AdminHookClientOrganization
 	// The hook client grid, new sessions only.
 	Sessions []*AdminHookClientSessionCell

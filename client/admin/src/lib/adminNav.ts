@@ -107,7 +107,7 @@ export const ADMIN_NAV_GROUPS = [
         to: "/fleet-health",
         label: "Fleet health",
         keywords:
-          "hook clients curl binary versions inference device agents speakeasyd rollout",
+          "hook clients curl binary versions sessions inference device agents speakeasyd rollout",
         icon: ActivityIcon,
       },
       {

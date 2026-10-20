@@ -41,10 +41,21 @@ func TestRecordAgentVersion_RecordsSpeakeasydUserAgentOnly(t *testing.T) {
 	svc.recordAgentVersion(otherCtx, "org-a", "m-2")
 	svc.recordAgentVersion(t.Context(), "org-a", "m-3")
 
-	rows, err := store.Read(t.Context(), 1, time.Now())
+	// Two days, so the read still covers the write if the test crosses UTC
+	// midnight; the assertion ignores which day it landed on.
+	rows, err := store.Read(t.Context(), 2, time.Now())
 	require.NoError(t, err)
-	require.Equal(t, []deviceagentversions.Row{
-		{OrganizationID: "org-a", Day: time.Now().UTC().Format(time.DateOnly), Version: "", Machines: 1},
-		{OrganizationID: "org-a", Day: time.Now().UTC().Format(time.DateOnly), Version: "0.3.31", Machines: 1},
-	}, rows)
+	versions := map[string]int64{}
+	for _, row := range rows {
+		versions[row.Version] += row.Machines
+	}
+	require.Equal(t, map[string]int64{"": 1, "0.3.31": 1}, versions)
+}
+
+func TestAgentPrincipalMachine(t *testing.T) {
+	t.Parallel()
+
+	serial := "c02abc"
+	require.Equal(t, "serial:c02abc", agentPrincipalMachine(&gen.GetPluginsPayload{SerialNumber: &serial}, "agent:123"))
+	require.Equal(t, "agent:123", agentPrincipalMachine(&gen.GetPluginsPayload{}, "agent:123"))
 }

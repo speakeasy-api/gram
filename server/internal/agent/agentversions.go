@@ -24,6 +24,16 @@ func agentMachine(payload *gen.GetPluginsPayload, email, environment string) str
 	return environment + ":" + email
 }
 
+// agentPrincipalMachine is the identity for an agent-principal key or a
+// device-agent token, which carry no enrolled email: the hardware serial when
+// reported, otherwise the agent principal itself (already "agent:<id>").
+func agentPrincipalMachine(payload *gen.GetPluginsPayload, agent string) string {
+	if serial := deviceidentity.NormalizeSerial(payload.SerialNumber); serial != "" {
+		return "serial:" + serial
+	}
+	return agent
+}
+
 // recordAgentVersion notes the version in the request's User-Agent. It never
 // fails the poll: a missing or unparseable version is skipped, and a Redis
 // error is only logged.

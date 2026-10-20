@@ -1978,7 +1978,7 @@ type GetHookClientsResponseBody struct {
 	// True when the grids came from the one-hour cache rather than a fresh
 	// ClickHouse read.
 	FromCache bool `form:"from_cache" json:"from_cache" xml:"from_cache"`
-	// Every organization that appears in either grid.
+	// Every organization that appears in any grid.
 	Organizations []*AdminHookClientOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
 	// The hook client grid, new sessions only.
 	Sessions []*AdminHookClientSessionCellResponseBody `form:"sessions" json:"sessions" xml:"sessions"`

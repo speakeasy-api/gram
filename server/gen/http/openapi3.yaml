@@ -88543,7 +88543,7 @@ components:
                 slug:
                     type: string
                     description: The organization slug. Absent when the organization no longer exists.
-            description: An organization that appears in either hook client grid.
+            description: An organization that appears in any of the fleet health grids.
             required:
                 - id
         AdminHookClientSessionCell:
@@ -88599,7 +88599,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AdminHookClientOrganization'
-                    description: Every organization that appears in either grid.
+                    description: Every organization that appears in any grid.
                 queried_at:
                     type: string
                     description: When the grids were read from ClickHouse.
@@ -88613,7 +88613,7 @@ components:
                     type: integer
                     description: Length of the window in days.
                     format: int64
-            description: Fleet-wide hook client grids over a fixed window.
+            description: 'Fleet-wide client health grids over a fixed window: hook clients, inference hook traffic and device agent versions.'
             required:
                 - window_days
                 - queried_at

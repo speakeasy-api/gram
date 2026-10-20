@@ -147,6 +147,14 @@ const data: FleetHealth = {
 };
 
 describe("compareVersions", () => {
+  it("sorts a prerelease before its release", () => {
+    expect(["0.3.31", "0.3.31-rc.1", "0.3.30"].sort(compareVersions)).toEqual([
+      "0.3.30",
+      "0.3.31-rc.1",
+      "0.3.31",
+    ]);
+  });
+
   it("orders numerically, not lexically", () => {
     expect(["0.3.31", "0.3.9", "0.10.0"].sort(compareVersions)).toEqual([
       "0.3.9",

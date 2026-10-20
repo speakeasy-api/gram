@@ -7,7 +7,7 @@ import (
 )
 
 var AdminHookClientOrganization = Type("AdminHookClientOrganization", func() {
-	Description("An organization that appears in either hook client grid.")
+	Description("An organization that appears in any of the fleet health grids.")
 	Required("id")
 
 	Attribute("id", String, "The organization ID.")
@@ -50,13 +50,13 @@ var AdminDeviceAgentCell = Type("AdminDeviceAgentCell", func() {
 })
 
 var AdminHookClientsResult = Type("AdminHookClientsResult", func() {
-	Description("Fleet-wide hook client grids over a fixed window.")
+	Description("Fleet-wide client health grids over a fixed window: hook clients, inference hook traffic and device agent versions.")
 	Required("window_days", "queried_at", "from_cache", "organizations", "sessions", "inference", "device_agents")
 
 	Attribute("window_days", Int, "Length of the window in days.")
 	Attribute("queried_at", String, "When the grids were read from ClickHouse.", func() { Format(FormatDateTime) })
 	Attribute("from_cache", Boolean, "True when the grids came from the one-hour cache rather than a fresh ClickHouse read.")
-	Attribute("organizations", ArrayOf(AdminHookClientOrganization), "Every organization that appears in either grid.")
+	Attribute("organizations", ArrayOf(AdminHookClientOrganization), "Every organization that appears in any grid.")
 	Attribute("sessions", ArrayOf(AdminHookClientSessionCell), "The hook client grid, new sessions only.")
 	Attribute("inference", ArrayOf(AdminInferenceHookCell), "The inference hook traffic grid.")
 	Attribute("device_agents", ArrayOf(AdminDeviceAgentCell), "The device agent version grid. Empty for days before versions were recorded.")

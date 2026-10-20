@@ -237,6 +237,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// An agent-principal key, or a workload acting for its assigned agent, polls
 	// as that agent; the auth step already required the device-sync grant.
 	if agent, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
+		s.recordAgentVersion(ctx, authCtx.ActiveOrganizationID, agentPrincipalMachine(payload, agent.String()))
 		return s.getAgentPlugins(ctx, authCtx, agent)
 	}
 

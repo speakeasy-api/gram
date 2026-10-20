@@ -92,11 +92,20 @@ func (s *Store) Read(ctx context.Context, windowDays int, now time.Time) ([]Row,
 		if err != nil {
 			return nil, fmt.Errorf("list device agent version orgs for %s: %w", day, err)
 		}
-		for _, organizationID := range orgs {
-			machines, err := s.redis.HGetAll(ctx, dayKey(day, organizationID)).Result()
-			if err != nil {
-				return nil, fmt.Errorf("read device agent versions for %s: %w", day, err)
-			}
+		if len(orgs) == 0 {
+			continue
+		}
+		// One round trip per day, however many organizations polled.
+		pipe := s.redis.Pipeline()
+		hashes := make([]*redis.MapStringStringCmd, len(orgs))
+		for i, organizationID := range orgs {
+			hashes[i] = pipe.HGetAll(ctx, dayKey(day, organizationID))
+		}
+		if _, err := pipe.Exec(ctx); err != nil {
+			return nil, fmt.Errorf("read device agent versions for %s: %w", day, err)
+		}
+		for i, organizationID := range orgs {
+			machines := hashes[i].Val()
 			if len(machines) == 0 {
 				continue
 			}

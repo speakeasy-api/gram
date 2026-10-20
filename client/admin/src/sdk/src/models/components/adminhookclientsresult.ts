@@ -25,7 +25,7 @@ import {
 } from "./admininferencehookcell.js";
 
 /**
- * Fleet-wide hook client grids over a fixed window.
+ * Fleet-wide client health grids over a fixed window: hook clients, inference hook traffic and device agent versions.
  */
 export type AdminHookClientsResult = {
   /**
@@ -41,7 +41,7 @@ export type AdminHookClientsResult = {
    */
   inference: Array<AdminInferenceHookCell>;
   /**
-   * Every organization that appears in either grid.
+   * Every organization that appears in any grid.
    */
   organizations: Array<AdminHookClientOrganization>;
   /**

@@ -163,22 +163,26 @@ function stopAt(index: number): [number, string, [number, number, number]] {
   return [at, hex, STOP_LABS[index] ?? hexToOklab(hex)];
 }
 
-function versionParts(version: string): number[] {
-  return version
-    .replace(/^v/, "")
-    .split(/[.-]/)
+function versionCore(version: string): number[] {
+  return (version.replace(/^v/, "").split("-")[0] ?? "")
+    .split(".")
     .map((part) => Number.parseInt(part, 10))
     .map((part) => (Number.isNaN(part) ? 0 : part));
 }
 
+// Semver order: the numeric core first, then a prerelease (1.2.0-rc.1) sorts
+// before its release (1.2.0).
 export function compareVersions(a: string, b: string): number {
-  const left = versionParts(a);
-  const right = versionParts(b);
+  const left = versionCore(a);
+  const right = versionCore(b);
   for (let i = 0; i < Math.max(left.length, right.length); i++) {
     const diff = (left[i] ?? 0) - (right[i] ?? 0);
     if (diff !== 0) return diff;
   }
-  return a.localeCompare(b);
+  const leftPre = a.includes("-");
+  const rightPre = b.includes("-");
+  if (leftPre !== rightPre) return leftPre ? -1 : 1;
+  return a.localeCompare(b, undefined, { numeric: true });
 }
 
 export type Series = { key: string; label: string; color: string };

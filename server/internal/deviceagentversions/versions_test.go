@@ -60,8 +60,14 @@ func TestStore_CountsEachMachineOncePerDayByLatestVersion(t *testing.T) {
 	}, rows)
 
 	// Each day's keys expire on their own, so nothing needs a sweep.
-	require.Positive(t, server.TTL("device_agent_versions:2026-10-20:org-a"))
-	require.Positive(t, server.TTL("device_agent_versions:2026-10-20:orgs"))
+	for _, key := range []string{
+		"device_agent_versions:2026-10-20:org-a",
+		"device_agent_versions:2026-10-20:orgs",
+		"device_agent_versions:2026-10-19:org-a",
+		"device_agent_versions:2026-10-19:orgs",
+	} {
+		require.Equal(t, deviceagentversions.Retention, server.TTL(key), key)
+	}
 }
 
 func TestStore_ReadOutsideWindowIsEmpty(t *testing.T) {
