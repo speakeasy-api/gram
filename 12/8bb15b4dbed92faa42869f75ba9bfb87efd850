@@ -1,0 +1,37 @@
+server/internal/directoryreview/queries.sql
+  h_9630b74bdac540 449-450,459-460,465,480-483
+  s_c66fad0e3cd6ac::t_0860def505b19e 484
+server/internal/platformmcp/tool_directory_review.go
+  h_9630b74bdac540 89,204-205,207-212,220-223,226-227
+server/internal/background/activities/directory_review_emails.go
+  h_9630b74bdac540 143-150,154-156,167,169-184,186,188,193,209,211-212
+  s_c66fad0e3cd6ac::t_a75b9052d2288a 168,185,187,210
+server/internal/access/directory_review.go
+  h_9630b74bdac540 154-158
+server/internal/platformmcp/tool_directory_review_test.go
+  h_9630b74bdac540 19,28-29,147-148,152-187
+  s_c66fad0e3cd6ac::t_93f074559b3841 188-189
+server/internal/directoryreview/repo/queries.sql.go
+  s_c66fad0e3cd6ac::t_53903306c8aae3 279-280,301,327,537-547,553,559,562-563,565
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "128bb15b4dbed92faa42869f75ba9bfb87efd850",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_c66fad0e3cd6ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "426a65ee-b15e-4fd3-9b2c-d843452a4c5a",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
