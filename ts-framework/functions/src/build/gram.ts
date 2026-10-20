@@ -187,7 +187,7 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
   logger.info(`Staging ${zipFilename} with slug: ${slug}`);
   await $`${gramCLI} stage ${stageArgs}`;
 
-  logger.info("Deploying function with the speakeasy CLI");
+  logger.info("Deploying function with the speakeasy-ai CLI");
 
   const pushcmd = $({
     stdio: ["pipe", "pipe", "pipe"],

@@ -48,15 +48,26 @@ func TestWriteLegacyCommandNotice_Speakeasy(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	writeLegacyCommandNotice(&buf, "/usr/local/bin/speakeasy")
+	writeLegacyCommandNotice(&buf, "/opt/homebrew/bin/speakeasy")
+
+	require.Equal(t, sharedCommandNotice+"\n", buf.String())
+	require.Contains(t, buf.String(), "now called speakeasy-ai")
+	require.Contains(t, buf.String(), "brew upgrade speakeasy-api/tap/cli")
+}
+
+func TestWriteLegacyCommandNotice_SpeakeasyAI(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	writeLegacyCommandNotice(&buf, "/usr/local/bin/speakeasy-ai")
 
 	require.Empty(t, buf.String())
 }
 
-func TestNewApp_UsesSpeakeasyName(t *testing.T) {
+func TestNewApp_UsesSpeakeasyAIName(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "speakeasy", newApp().Name)
+	require.Equal(t, "speakeasy-ai", newApp().Name)
 }
 
 func TestNewApp_ControlPlaneMarker(t *testing.T) {
@@ -108,8 +119,18 @@ func TestNewApp_SDKGeneratorCommandNamesTheOtherCLI(t *testing.T) {
 	require.ErrorAs(t, err, &exitCoder)
 	require.Equal(t, unknownCommandExitCode, exitCoder.ExitCode())
 	require.Contains(t, err.Error(), `"run" is a command of the Speakeasy SDK generator`)
-	require.Contains(t, err.Error(), "BINARY_NAME=speakeasy-sdks")
-	require.Contains(t, err.Error(), "Then run: speakeasy-sdks run")
+	require.Contains(t, err.Error(), "Run it with the SDK generator instead: speakeasy run")
+}
+
+func TestSDKGeneratorCommandMessage_RunAsSpeakeasy(t *testing.T) {
+	t.Parallel()
+
+	message, ok := sdkGeneratorCommandMessage("quickstart", "speakeasy")
+
+	require.True(t, ok)
+	require.Contains(t, message, "now called speakeasy-ai")
+	require.Contains(t, message, "BINARY_NAME=speakeasy-sdks")
+	require.Contains(t, message, "Then run: speakeasy-sdks quickstart")
 }
 
 func TestNewApp_UnknownCommandKeepsDefaultError(t *testing.T) {
@@ -134,7 +155,7 @@ func TestSDKGeneratorCommandsSkipSharedAndOwnCommands(t *testing.T) {
 		require.NotContains(t, sdkGeneratorCommands, command.Name, "this CLI has its own %q command", command.Name)
 	}
 	for _, shared := range []string{"auth", "status", "update"} {
-		_, ok := sdkGeneratorCommandMessage(shared)
+		_, ok := sdkGeneratorCommandMessage(shared, commandName)
 		require.False(t, ok, "%q exists in both CLIs", shared)
 	}
 }

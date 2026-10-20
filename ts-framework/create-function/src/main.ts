@@ -60,7 +60,7 @@ async function init(argv: string[]): Promise<void> {
   }
 
   log.warn(
-    "This scaffolder is superseded by `speakeasy functions init`, which creates the same projects. Install the CLI with `brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`.",
+    "This scaffolder is superseded by `speakeasy-ai functions init`, which creates the same projects. Install the CLI with `brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`.",
   );
 
   const template = await selectOrClack<string>({
@@ -149,7 +149,7 @@ async function init(argv: string[]): Promise<void> {
   // The project's build and push scripts run `speakeasy`, so look for the AI
   // Control Plane CLI under that name rather than the old `gram` binary.
   const proc =
-    await $`speakeasy --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli`
+    await $`speakeasy-ai --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli`
       .quiet()
       .nothrow();
   // check exit code and decide if we should prompt
@@ -175,7 +175,7 @@ async function init(argv: string[]): Promise<void> {
 
   tlog.message("Scaffolding");
   const dirname = import.meta.dirname;
-  // The templates come from the speakeasy CLI, which embeds them; the build
+  // The templates come from the speakeasy-ai CLI, which embeds them; the build
   // copies them into this package.
   const templateDir = resolve(join(dirname, "..", "templates", template));
   await fs.cp(templateDir, dir, {
@@ -268,7 +268,7 @@ async function init(argv: string[]): Promise<void> {
     // AI Control Plane CLI marker. The installer puts the CLI in
     // ${INSTALL_DIR:-/usr/local/bin}, so authenticate with that path rather
     // than whatever `speakeasy` comes first on PATH.
-    await $`speakeasy --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli || (curl -fsSL https://ai.speakeasy.com/cli.sh | bash && "\${INSTALL_DIR:-/usr/local/bin}/speakeasy" auth)`;
+    await $`speakeasy-ai --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli || (curl -fsSL https://ai.speakeasy.com/cli.sh | bash && "\${INSTALL_DIR:-/usr/local/bin}/speakeasy-ai" auth)`;
   }
 
   let successMessage = `All done! Run \`cd ${dir} && ${packageManager} run build\` to build your first function.`;

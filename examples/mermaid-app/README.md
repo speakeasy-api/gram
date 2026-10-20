@@ -56,12 +56,12 @@ Runs three steps:
 1. `vite build` → `dist-ui/index.html` (one file, JS/CSS/assets inlined)
 2. `scripts/inline-html.mjs` → writes `src/inlined.ts` exporting the HTML as a
    string constant
-3. `speakeasy functions build` → bundles the Speakeasy Function
+3. `speakeasy-ai functions build` → bundles the Speakeasy Function
 
 ## Deploy
 
 ```bash
-speakeasy auth
+speakeasy-ai auth
 pnpm push
 ```
 

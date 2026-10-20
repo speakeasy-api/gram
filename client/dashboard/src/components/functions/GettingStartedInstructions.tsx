@@ -9,22 +9,21 @@ export function GettingStartedInstructions(): JSX.Element {
       command: "brew install speakeasy-api/tap/cli",
     },
     {
-      // The SDK generator also installs a `speakeasy` binary and rejects
-      // this flag, so the check fails when the wrong CLI is on PATH.
+      // Fails when speakeasy-ai is not on PATH or is not this CLI.
       label: "Check it prints speakeasy-ai-control-plane-cli",
-      command: "speakeasy --control-plane-cli",
+      command: "speakeasy-ai --control-plane-cli",
     },
     {
       label: "Create a new function project",
-      command: "speakeasy functions init",
+      command: "speakeasy-ai functions init",
     },
     {
       label: "Build your functions",
-      command: "speakeasy functions build",
+      command: "speakeasy-ai functions build",
     },
     {
       label: "Deploy your functions",
-      command: "speakeasy functions push",
+      command: "speakeasy-ai functions push",
     },
   ];
 

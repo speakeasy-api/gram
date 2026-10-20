@@ -34,7 +34,7 @@ const (
 	// binary under the legacy gram command name.
 	legacyHomebrewFormula = "speakeasy-api/tap/gram"
 
-	// npmPackage is the npm package that installs the speakeasy command.
+	// npmPackage is the npm package that installs the speakeasy-ai command.
 	npmPackage = "@speakeasy-api/cli"
 )
 
@@ -83,8 +83,8 @@ type githubRelease struct {
 func newUpdateCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "update",
-		Usage: "Update the speakeasy CLI to the latest version",
-		Description: `Update the speakeasy CLI to the latest available version.
+		Usage: "Update the speakeasy-ai CLI to the latest version",
+		Description: `Update the speakeasy-ai CLI to the latest available version.
 
 This command supports multiple installation methods:
   - Homebrew (macOS/Linux): Automatically runs 'brew upgrade speakeasy-api/tap/cli'
@@ -118,7 +118,7 @@ func doUpdate(c *cli.Context) error {
 	currentVersion := Version
 	if currentVersion == "dev" {
 		logger.InfoContext(ctx, "Running development build, skipping update check")
-		fmt.Println("⚠️  You are running a development build of the speakeasy CLI")
+		fmt.Println("⚠️  You are running a development build of the speakeasy-ai CLI")
 		fmt.Println("   Development builds cannot be updated via this command")
 		return nil
 	}
@@ -366,7 +366,7 @@ func updateViaHomebrew(ctx context.Context, logger *slog.Logger) error {
 	}
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
-	fmt.Println(successStyle.Render("✓ Successfully updated the speakeasy CLI via Homebrew"))
+	fmt.Println(successStyle.Render("✓ Successfully updated the speakeasy-ai CLI via Homebrew"))
 	fmt.Println(versionHint())
 	return nil
 }
@@ -383,7 +383,7 @@ func updateViaNPM(ctx context.Context, logger *slog.Logger) error {
 	}
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
-	fmt.Println(successStyle.Render("✓ Successfully updated the speakeasy CLI via npm"))
+	fmt.Println(successStyle.Render("✓ Successfully updated the speakeasy-ai CLI via npm"))
 	fmt.Println(versionHint())
 	return nil
 }
@@ -400,7 +400,7 @@ func updateViaAqua(ctx context.Context, logger *slog.Logger) error {
 	}
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
-	fmt.Println(successStyle.Render("✓ Successfully updated the speakeasy CLI via Aqua"))
+	fmt.Println(successStyle.Render("✓ Successfully updated the speakeasy-ai CLI via Aqua"))
 	fmt.Println(versionHint())
 	return nil
 }
@@ -456,7 +456,7 @@ func updateManual(ctx context.Context, logger *slog.Logger, release *githubRelea
 	}
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
-	fmt.Println(successStyle.Render(fmt.Sprintf("✓ Successfully updated the speakeasy CLI to version %s", version)))
+	fmt.Println(successStyle.Render(fmt.Sprintf("✓ Successfully updated the speakeasy-ai CLI to version %s", version)))
 	fmt.Println(versionHint())
 	return nil
 }
