@@ -2087,7 +2087,7 @@ var DirectoryRoleSetupPreviewItemModel = Type("DirectoryRoleSetupPreviewItem", f
 
 	Attribute("source", DirectoryRoleSetupSourceModel)
 	Attribute("source_name", String, "The group name, or key=value for an attribute value.")
-	Attribute("directory_people", Int64, "Live directory profiles that match the source. These are directory people, not organization members or role members.")
+	Attribute("directory_people", Int64, "People with a live directory profile that matches the source, counted once per email address, so someone with profiles in two directories counts once and a profile with no email is not counted. These are directory people, not organization members or role members.")
 	Attribute("existing_role_urns", ArrayOf(String), "Roles the source already maps to. Empty for an unmapped source.")
 	Attribute("proposed_roles", ArrayOf(DirectoryRoleSetupProposedRoleModel), "The suggested role set. For a mapped source this is its current set; for an unmapped source, one reused or new role.")
 	Attribute("version", String, "Opaque version of the source and its current mappings. Send it back with applyDirectoryRoleSetup.")
