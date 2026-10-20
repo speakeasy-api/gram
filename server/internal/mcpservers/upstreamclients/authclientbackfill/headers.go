@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
 // idNamespace derives the stable ids of clients that have no natural key, so
@@ -101,7 +103,7 @@ func decideSource(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, row 
 		result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDuplicateHeaderNames
 		report.add(result)
 		return nil
-	case row.HasDeniedSource:
+	case refusesASource(row.ForwardedSources):
 		result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDeniedSource
 		report.add(result)
 		return nil
@@ -329,7 +331,7 @@ func copyOntoOAuthClients(ctx context.Context, tx pgx.Tx, q *Queries, opts Optio
 			result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDuplicateHeaderNames
 			result.SourceIDs = []uuid.UUID{used[0].SourceID}
 			result.ServerIDs = used[0].ServerIds
-		case len(used) == 1 && used[0].HasDeniedSource:
+		case len(used) == 1 && refusesASource(used[0].ForwardedSources):
 			result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDeniedSource
 			result.SourceIDs = []uuid.UUID{used[0].SourceID}
 			result.ServerIDs = used[0].ServerIds
@@ -528,4 +530,17 @@ func nullBool(b *bool) pgtype.Bool {
 		return pgtype.Bool{Bool: false, Valid: false}
 	}
 	return pgtype.Bool{Bool: *b, Valid: true}
+}
+
+// refusesASource reports whether the proxy refuses any of these request
+// headers as the source of a forwarded header, as proxy.CheckRemoteHeader
+// does: Authorization and the other denied sources, and every protected
+// inbound header.
+func refusesASource(sources []string) bool {
+	for _, src := range sources {
+		if proxy.IsDeniedPassThroughSource(src) || proxy.IsProtectedInboundHeader(src) {
+			return true
+		}
+	}
+	return false
 }

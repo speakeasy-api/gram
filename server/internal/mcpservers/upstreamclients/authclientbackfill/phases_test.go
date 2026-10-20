@@ -1001,6 +1001,21 @@ func TestRun_DeniedForwardedSourceRecordsNoClient(t *testing.T) {
 		require.Equal(t, ReasonDeniedSource, ambiguous[0].Reason)
 	})
 
+	for _, src := range []string{"Gram-Key", "speakeasy_ai_session", "X-Gram-Tunnel-Id", "Cookie"} {
+		t.Run("a source forwarding the protected "+src+" is ambiguous", func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			source := f.source()
+			f.serverOn(source)
+			f.header(source, "X-Upstream-Token", false, "", src)
+			report := f.run(true)
+			require.Empty(t, f.live(TypePassThrough), "a source the proxy refuses never becomes a client")
+			ambiguous := results(report, KindHeader, OutcomeAmbiguous)
+			require.Len(t, ambiguous, 1)
+			require.Equal(t, ReasonDeniedSource, ambiguous[0].Reason)
+		})
+	}
+
 	t.Run("a denied source is never copied onto an OAuth client", func(t *testing.T) {
 		t.Parallel()
 		f := newFixture(t)
