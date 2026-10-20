@@ -7415,6 +7415,228 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: startTrial
+  /admin/upstreamOAuthMigration.organizations:
+    get:
+      description: Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.
+      operationId: adminListUpstreamOAuthMigrationOrganizations
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationOrganizations'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listUpstreamOAuthMigrationOrganizations admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listUpstreamOAuthMigrationOrganizations
+  /admin/upstreamOAuthMigration.run:
+    post:
+      description: 'Migrates one organization''s upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential''s client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.'
+      operationId: adminRunUpstreamOAuthMigration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunUpstreamOAuthMigrationRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationRun'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: runUpstreamOAuthMigration admin
+      tags:
+        - admin
+      x-speakeasy-name-override: runUpstreamOAuthMigration
+  /admin/upstreamOAuthMigration.status:
+    get:
+      description: Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.
+      operationId: adminGetUpstreamOAuthMigrationStatus
+      parameters:
+        - allowEmptyValue: true
+          description: The organization ID.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: The organization ID.
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getUpstreamOAuthMigrationStatus admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getUpstreamOAuthMigrationStatus
   /admin/users.list:
     get:
       tags:
@@ -9692,6 +9914,120 @@ components:
         - id
         - customer_id
         - status
+    AdminUpstreamOAuthMigrationOrganization:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The organization ID.
+        name:
+          type: string
+          description: The organization name.
+        servers:
+          type: integer
+          description: Live MCP servers in the organization signed in through a user session issuer.
+          format: int64
+        slug:
+          type: string
+          description: The organization slug.
+      description: 'An organization the upstream OAuth migration applies to: it has a live MCP server signed in through a user session issuer.'
+      required:
+        - id
+        - name
+        - slug
+        - servers
+    AdminUpstreamOAuthMigrationOrganizations:
+      type: object
+      properties:
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUpstreamOAuthMigrationOrganization'
+          description: Every organization the migration applies to, by name.
+      required:
+        - organizations
+    AdminUpstreamOAuthMigrationRun:
+      type: object
+      properties:
+        associations_skipped:
+          type: integer
+          description: Associations not recorded because their configuration changed during the run. Run again to pick them up.
+          format: int64
+        associations_written:
+          type: integer
+          description: Server to client associations recorded.
+          format: int64
+        selections_written:
+          type: integer
+          description: Credential choices recorded.
+          format: int64
+        status:
+          $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+      description: What one migration run wrote, and the organization's status after it.
+      required:
+        - associations_written
+        - associations_skipped
+        - selections_written
+        - status
+    AdminUpstreamOAuthMigrationServer:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server ID.
+          format: uuid
+        project_id:
+          type: string
+          description: The server's project ID.
+          format: uuid
+      description: An MCP server whose upstream OAuth client the existing configuration does not prove. An administrator must associate its client before the organization is migrated.
+      required:
+        - mcp_server_id
+        - project_id
+    AdminUpstreamOAuthMigrationStatus:
+      type: object
+      properties:
+        credentials:
+          type: integer
+          description: Live user session credentials scanned.
+          format: int64
+        migrated:
+          type: boolean
+          description: Whether the organization has nothing left to write and no server needing configuration.
+        organization_id:
+          type: string
+          description: The organization ID.
+        pending_associations:
+          type: integer
+          description: Server to client associations the configuration proves that are not yet recorded.
+          format: int64
+        pending_selections:
+          type: integer
+          description: Credential choices the configuration decides that are not yet recorded.
+          format: int64
+        reconnect_credentials:
+          type: integer
+          description: Credentials with at least one server they will be asked to reconnect to, because no single client is decided for them.
+          format: int64
+        servers:
+          type: integer
+          description: MCP servers on a user session issuer that the association backfill decided.
+          format: int64
+        unresolved_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUpstreamOAuthMigrationServer'
+          description: Servers whose upstream OAuth client must be associated by an administrator.
+      description: 'Where one organization stands in the upstream OAuth migration, read from a dry run of both backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices.'
+      required:
+        - organization_id
+        - migrated
+        - servers
+        - pending_associations
+        - unresolved_servers
+        - credentials
+        - pending_selections
+        - reconnect_credentials
     AdminUser:
       type: object
       properties:
@@ -11004,6 +11340,14 @@ components:
           format: uuid
       required:
         - id
+    RunUpstreamOAuthMigrationRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: The organization ID.
+      required:
+        - organization_id
     SaveRegistryEntryRequestBody:
       type: object
       properties:
