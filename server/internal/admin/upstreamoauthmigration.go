@@ -118,7 +118,7 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 
 	return &gen.AdminUpstreamOAuthMigrationStatus{
 		OrganizationID:       organizationID,
-		Migrated:             associations.Decided == 0 && len(unresolved) == 0 && pendingSelections == 0 && selections.Pairs[selectionbackfill.OutcomeUnassociated] == 0,
+		Migrated:             associations.Decided == 0 && len(unresolved) == 0 && pendingSelections == 0,
 		Servers:              int64(associations.Servers),
 		PendingAssociations:  int64(associations.Decided),
 		UnresolvedServers:    unresolved,

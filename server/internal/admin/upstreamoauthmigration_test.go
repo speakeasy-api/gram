@@ -12,6 +12,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -137,9 +138,18 @@ func TestUpstreamOAuthMigration_ReportsServersNeedingConfiguration(t *testing.T)
 	ctx, svc, db := newTestAdminService(t)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
 
+	// Two servers share an issuer whose two clients both hold grants for
+	// their upstream, so neither server's client is proven.
 	org := newMigrationOrg(t, ctx, db, "migrate-shared")
 	issuer := org.issuer()
-	org.client(issuer)
+	for _, clientID := range []uuid.UUID{org.client(issuer), org.client(issuer)} {
+		require.NoError(t, associationbackfill.New(db).SeedGrantFixture(ctx, associationbackfill.SeedGrantFixtureParams{
+			SubjectUrn:            urn.NewUserSubject("user-" + uuid.NewString()[:8]),
+			UserSessionIssuerID:   issuer,
+			RemoteSessionClientID: clientID,
+			Resource:              pgtype.Text{String: "https://upstream.example.com/mcp", Valid: true},
+		}))
+	}
 	first := org.server(issuer)
 	second := org.server(issuer)
 	org.session(issuer)
