@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { BlockList, type BlockRenderers } from "./blockRegistry";
 import { genericBlockRenderers } from "./genericBlocks";
@@ -10,6 +11,7 @@ import {
   SetupLink,
   SetupText,
 } from "./StepBlocks";
+import { splitFencedCode } from "./fencedCode";
 
 afterEach(cleanup);
 
@@ -116,4 +118,32 @@ it("renders each block with the renderer for its type", () => {
   expect(getByText("Hello")).toBeTruthy();
   expect(getByText("Count 3")).toBeTruthy();
   expect(seen).toEqual(["step-1"]);
+});
+
+it("splits fenced code out of definition text", () => {
+  expect(
+    splitFencedCode("Run this:\n\n```sh\ngh api x\n```\n\nThen continue."),
+  ).toEqual([
+    { kind: "markdown", markdown: "Run this:" },
+    { kind: "code", code: "gh api x", language: "sh" },
+    { kind: "markdown", markdown: "Then continue." },
+  ]);
+});
+
+it("keeps an unclosed fence in the markdown", () => {
+  expect(splitFencedCode("Before\n```yaml\nkey: value")).toEqual([
+    { kind: "markdown", markdown: "Before\n```yaml\nkey: value" },
+  ]);
+});
+
+it("shows fenced code in definition text with a copy button", () => {
+  const { container, getByText } = render(
+    <ConfigProvider theme="light" setTheme={() => undefined}>
+      <SetupText
+        markdown={"Paste this:\n\n```yaml\non: workflow_dispatch\n```"}
+      />
+    </ConfigProvider>,
+  );
+  expect(getByText("Paste this:")).toBeTruthy();
+  expect(container.querySelector(".snippet")).not.toBeNull();
 });
