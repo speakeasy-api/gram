@@ -1139,6 +1139,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		ToolSelection:               toolSelection,
 		SignInID:                    nil,
 		GatewayPolicy:               toolPolicy,
+		UpstreamClientPicks:         nil,
 		CreatedAt:                   time.Now(),
 	}
 	// Only a human subject's own session is linked to its sign-in.
