@@ -1,4 +1,3 @@
-import { CodeBlock } from "@/components/code";
 import { SpeakeasyMark } from "@/components/mcp/TeamGatewayCard";
 import {
   GatewayNotServed,
@@ -17,15 +16,10 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
-import {
-  claudeCodeAddCommand,
-  codexAddCommand,
-  codexLoginCommand,
-  cursorInstallLink,
-  openCodeConfig,
-} from "@/lib/mcp-client-install";
-import { ArrowUpRight } from "lucide-react";
-import type { ReactNode } from "react";
+import { AgentPlatformPickerItem } from "@/pages/setup/components/agent-platform-picker-item";
+import { PlatformInstrumentationSheet } from "@/pages/setup/components/platform-instrumentation-sheet";
+import { useMemo, useState } from "react";
+import { teamGatewayInstallPlatforms } from "./team-gateway-install";
 
 /**
  * The Team Gateway: one MCP URL that gives each person every server they can
@@ -180,116 +174,49 @@ function GatewayBody({
         </div>
       </section>
 
-      <section>
-        <h2 className="text-eyebrow">Install</h2>
-        <Text small muted className="mt-1 mb-4">
-          The first time a client connects, it opens your browser to sign in.
-        </Text>
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-          <InstallCard
-            title="Claude Code"
-            description="Run this in your terminal, then open /mcp in Claude Code and choose Authenticate."
-          >
-            <CodeBlock language="bash" copyLabel="command">
-              {claudeCodeAddCommand(serverName, url, { multiline: true })}
-            </CodeBlock>
-          </InstallCard>
-
-          <InstallCard
-            title="Claude"
-            description="In Claude on the web or desktop, open Settings › Connectors › Add custom connector and paste the endpoint above. On Team and Enterprise plans, an owner adds it for the organization first."
-            actions={
-              <ExternalButton href="https://claude.ai/settings/connectors">
-                Open Claude settings
-              </ExternalButton>
-            }
-          />
-
-          <InstallCard
-            title="Cursor"
-            description="Adds the gateway to your Cursor MCP settings in one click."
-            actions={
-              <ExternalButton href={cursorInstallLink(serverName, url)}>
-                Add to Cursor
-              </ExternalButton>
-            }
-          />
-
-          <InstallCard
-            title="OpenAI Codex"
-            description="Run these in your terminal. The second one signs you in."
-          >
-            <CodeBlock language="bash" copyLabel="commands">
-              {`${codexAddCommand(serverName, url, { multiline: true })}\n${codexLoginCommand(serverName)}`}
-            </CodeBlock>
-          </InstallCard>
-
-          <InstallCard
-            title="ChatGPT"
-            description="On the web, turn on developer mode under Settings › Apps › Advanced settings, then create an app with the endpoint above as its URL and OAuth as its authentication."
-          />
-
-          <InstallCard
-            title="OpenCode"
-            description="Add this to your opencode.json."
-          >
-            <CodeBlock language="json" copyLabel="config">
-              {openCodeConfig(serverName, url)}
-            </CodeBlock>
-          </InstallCard>
-
-          <InstallCard
-            title="Other clients"
-            description="Any client that supports remote MCP servers: add the endpoint above as a Streamable HTTP server and sign in when asked."
-          />
-        </div>
-      </section>
+      <TeamGatewayInstall serverName={serverName} url={url} />
     </div>
   );
 }
 
-function InstallCard({
-  title,
-  description,
-  actions,
-  children,
+function TeamGatewayInstall({
+  serverName,
+  url,
 }: {
-  title: string;
-  description: string;
-  actions?: ReactNode;
-  children?: ReactNode;
+  serverName: string;
+  url: string;
 }): JSX.Element {
+  const platforms = useMemo(
+    () => teamGatewayInstallPlatforms(serverName, url),
+    [serverName, url],
+  );
+  const [openPlatformId, setOpenPlatformId] = useState<string | null>(null);
   return (
-    <div className="border-border bg-card flex min-w-0 flex-col gap-3 border p-5">
-      <div>
-        <Text variant="subheading">{title}</Text>
-        <Text small muted className="mt-1">
-          {description}
-        </Text>
+    <section>
+      <h2 className="text-eyebrow">Install</h2>
+      <Text small muted className="mt-1 mb-4">
+        Pick your agent for its steps. The first time it connects, it opens your
+        browser to sign in.
+      </Text>
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+        {platforms.map((platform) => (
+          <AgentPlatformPickerItem
+            key={platform.id}
+            platformId={platform.icon}
+            name={platform.name}
+            description={platform.description}
+            onClick={() => setOpenPlatformId(platform.id)}
+          />
+        ))}
       </div>
-      {children}
-      {actions && (
-        <div className="mt-auto flex items-center gap-2">{actions}</div>
-      )}
-    </div>
-  );
-}
-
-function ExternalButton({
-  href,
-  children,
-}: {
-  href: string;
-  children: ReactNode;
-}): JSX.Element {
-  return (
-    <Button variant="secondary" size="sm" asChild>
-      <a href={href} target="_blank" rel="noopener noreferrer">
-        <Button.Text>{children}</Button.Text>
-        <Button.RightIcon>
-          <ArrowUpRight />
-        </Button.RightIcon>
-      </a>
-    </Button>
+      <PlatformInstrumentationSheet
+        open={openPlatformId !== null}
+        onOpenChange={(open) => {
+          if (!open) setOpenPlatformId(null);
+        }}
+        platforms={platforms}
+        initialPlatformId={openPlatformId}
+      />
+    </section>
   );
 }
