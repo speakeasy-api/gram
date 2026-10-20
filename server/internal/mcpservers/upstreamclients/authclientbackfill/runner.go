@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -449,6 +450,10 @@ type Acquirer interface {
 	Acquire(ctx context.Context) (*pgxpool.Conn, error)
 }
 
+// cleanupTimeout bounds the unlock, close and rollback a run does on its way
+// out, so an unreachable database cannot hold it open.
+const cleanupTimeout = 10 * time.Second
+
 // ErrRunInProgress means another run holds the organization's backfill lock.
 var ErrRunInProgress = errors.New("an auth client backfill is already running for this organization")
 
@@ -495,7 +500,8 @@ func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 	// does not hold is a no-op; a connection that cannot unlock is closed
 	// rather than returned to the pool still holding the lock.
 	defer func() {
-		cleanup := context.WithoutCancel(ctx)
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+		defer cancel()
 		if err := New(conn).UnlockOrganizationBackfill(cleanup, opts.OrganizationID); err != nil {
 			_ = conn.Conn().Close(cleanup)
 		}
@@ -568,7 +574,11 @@ func runPhase(ctx context.Context, db TxStarter, opts Options, p phase, local *R
 	if err != nil {
 		return fmt.Errorf("begin %s phase: %w", p.name, err)
 	}
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+		defer cancel()
+		_ = tx.Rollback(cleanup)
+	}()
 	if err := beforePhase(p.name); err != nil {
 		return err
 	}
