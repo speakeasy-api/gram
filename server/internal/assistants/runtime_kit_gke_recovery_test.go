@@ -3,6 +3,7 @@ package assistants
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -71,7 +72,7 @@ func TestKitGKEReapTombstoneFenceFailurePreservesResources(t *testing.T) {
 func TestKitGKELifecycleSharesAssistantFenceAcrossWorkers(t *testing.T) {
 	t.Parallel()
 	core, db, key, _ := kitSessionFixture(t)
-	_, err := db.Exec(t.Context(), "UPDATE assistant_runtimes SET backend = $1 WHERE id = $2", runtimeBackendGKE, key.RuntimeID)
+	err := assistantrepo.New(db).SetAssistantRuntimeBackendForTest(t.Context(), assistantrepo.SetAssistantRuntimeBackendForTestParams{Backend: runtimeBackendGKE, RuntimeID: key.RuntimeID, ProjectID: key.ProjectID})
 	require.NoError(t, err)
 	r := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3, Backend: runtimeBackendGKE}
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -108,13 +109,13 @@ func TestKitGKELifecycleSharesAssistantFenceAcrossWorkers(t *testing.T) {
 func TestKitGKELifecycleCommitsRecoveryEvidenceAfterFailure(t *testing.T) {
 	t.Parallel()
 	core, db, key, _ := kitSessionFixture(t)
-	_, err := db.Exec(t.Context(), "UPDATE assistant_runtimes SET backend = $1 WHERE id = $2", runtimeBackendGKE, key.RuntimeID)
+	err := assistantrepo.New(db).SetAssistantRuntimeBackendForTest(t.Context(), assistantrepo.SetAssistantRuntimeBackendForTestParams{Backend: runtimeBackendGKE, RuntimeID: key.RuntimeID, ProjectID: key.ProjectID})
 	require.NoError(t, err)
 	r := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3, Backend: runtimeBackendGKE}
 	failure := errors.New("external effect failed")
 	err = core.kitGKELifecycle(t.Context(), r, func(ctx context.Context, locked assistantRuntimeRecord) error {
 		if err := assistantrepo.New(locked.LifecycleTx).UpdateAssistantRuntimeMetadata(ctx, assistantrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: key.ProjectID, RuntimeID: key.RuntimeID, BackendMetadataJson: []byte(`{"checkpoint":{"phase":"closing"}}`)}); err != nil {
-			return err
+			return fmt.Errorf("update recovery evidence: %w", err)
 		}
 		return failure
 	})

@@ -63,7 +63,7 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 		// A stopped reusable lineage still needs its template/bootstrap to restore.
 		// Only permanent retirement may destroy those resources or its latest snapshot.
 		if state.Phase != "stopped" {
-			return fmt.Errorf("Kit idle cleanup requires stopped authority")
+			return fmt.Errorf("kit idle cleanup requires stopped authority")
 		}
 		_, _, err = k.gcSupersededCheckpoints(ctx, state, authority)
 		return err

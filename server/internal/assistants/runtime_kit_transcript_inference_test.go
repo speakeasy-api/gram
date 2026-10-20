@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"context"
+	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
@@ -74,10 +75,13 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 		ctx := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), ac, urn.NewPrincipal(urn.PrincipalTypeAgent, resolution.Identity.AgentID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: row.CreatedByUserID, DelegatedGrants: row.DelegatedGrants, DelegatedGrantsVersion: row.DelegatedGrantsVersion.Int32})
 		ctx, err = engine.PrepareContext(ctx)
 		if err != nil {
-			return ctx, err
+			return ctx, fmt.Errorf("prepare authorization context: %w", err)
 		}
 		ctx, _, err = manager.AuthorizeKitAPIKey(ctx)
-		return ctx, err
+		if err != nil {
+			return ctx, fmt.Errorf("authorize Kit API key: %w", err)
+		}
+		return ctx, nil
 	}
 	credential := issue()
 	ctx, err := authorize(credential)

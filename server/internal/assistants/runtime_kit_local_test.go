@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -118,6 +119,13 @@ func kitLocalFixture(t *testing.T) (*KitLocalRuntimeBackend, *fakeKitLocalEngine
 	}
 	backend, err := newKitLocalRuntimeBackend(config, engine)
 	require.NoError(t, err)
+	// Lifecycle-only tests use a synthetic listening socket; readiness tests
+	// restore the real TCP dialer and exercise authenticated ACP initialization.
+	backend.listenerDial = func(context.Context, string, string) (net.Conn, error) {
+		client, server := net.Pipe()
+		_ = server.Close()
+		return client, nil
+	}
 	r := assistantRuntimeRecord{ID: uuid.New(), AssistantID: uuid.New(), ProjectID: uuid.New(), RuntimeVersion: 3, Backend: "local"}
 	return backend, engine, r, protocol
 }

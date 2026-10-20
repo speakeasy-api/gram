@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -184,15 +185,15 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	q := assistantrepo.New(db)
 	row, err := q.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID})
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("get Kit assistant: %w", err)
 	}
 	assistant := assistantRecordFromGetRow(row)
 	attachments, err := q.LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: r.ProjectID, AssistantIds: []uuid.UUID{r.AssistantID}})
 	for _, attached := range attachments {
-		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug})
+		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{ServerSlug: pgtype.Text{String: "", Valid: false}, ToolsetSlug: pgtype.Text{String: "", Valid: false}, DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, EnvironmentSlug: pgtype.Text{String: "", Valid: false}, MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug})
 	}
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("load Kit assistant MCP servers: %w", err)
 	}
 	if c.PersistedMCP {
 		c.MCPResource, c.MCPUserSessionIssuerID, err = s.kitPersistedMCP(ctx, db, assistant)
@@ -235,7 +236,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	}
 	if c.PersistedMCP {
 		if client.Resource == nil || client.Issuer == nil || client.Resource.String() != c.MCPResource.String() {
-			return zero, errors.New("Kit MCP provisioner returned a mismatched resource")
+			return zero, errors.New("kit MCP provisioner returned a mismatched resource")
 		}
 		c.MCPIssuer = client.Issuer
 	}

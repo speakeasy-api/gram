@@ -8,11 +8,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -303,6 +305,8 @@ func TestReplayBackpressureWithSlowConsumer(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("response on independent stream was not correlated")
 	}
+	consumerTick := time.NewTicker(time.Millisecond)
+	defer consumerTick.Stop()
 	for i := range count {
 		select {
 		case n := <-c.Notifications():
@@ -313,7 +317,11 @@ func TestReplayBackpressureWithSlowConsumer(t *testing.T) {
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
 		}
-		time.Sleep(time.Millisecond)
+		select {
+		case <-consumerTick.C:
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		}
 	}
 	select {
 	case err := <-called:
@@ -346,5 +354,34 @@ func TestNotificationBackpressureUnblocksOnClose(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("backpressured dispatch did not stop on close")
+	}
+}
+
+func TestTransportFailurePreservesSanitizedCause(t *testing.T) {
+	t.Parallel()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := "http://" + listener.Addr().String() + "/acp/v2"
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	_, _, err = Dial(ctx, endpoint, "private-test-token", testHTTPClient(t), struct{}{})
+	if !errors.Is(err, syscall.ECONNREFUSED) {
+		t.Fatalf("connection refusal cause lost: %v", err)
+	}
+	if _, ok := errors.AsType[*TransportError](err); !ok {
+		t.Fatalf("missing typed transport error: %v", err)
+	}
+	if strings.Contains(err.Error(), endpoint) || strings.Contains(err.Error(), "private-test-token") {
+		t.Fatalf("unsanitized transport error: %v", err)
+	}
+	secretCause := errors.New("private remote detail")
+	wrapped := &TransportError{cause: secretCause}
+	if !errors.Is(wrapped, secretCause) || strings.Contains(wrapped.Error(), secretCause.Error()) {
+		t.Fatal("cause must be accessible without leaking into error text")
 	}
 }

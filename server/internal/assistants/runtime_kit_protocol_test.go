@@ -229,7 +229,11 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 	projector := NewKitTranscriptProjector(db, writer, nil, func(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
 		// Exercise transport backpressure with a deliberately slow real consumer.
-		time.Sleep(time.Millisecond)
+		select {
+		case <-time.After(time.Millisecond):
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for slow consumer: %w", ctx.Err())
+		}
 		_, err := core.ValidateKitRuntimeSessionInTx(ctx, tx, key, b.SessionID)
 		return err
 	})

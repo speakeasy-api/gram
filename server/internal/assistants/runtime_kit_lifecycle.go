@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
@@ -96,7 +97,7 @@ func (s *ServiceCore) checkpointIdleKitRuntime(ctx context.Context, projectID, a
 		return false, nil
 	}
 	stopped := false
-	err = s.kitGKELifecycle(ctx, assistantRuntimeRecord{ID: runtimeID, ProjectID: projectID, AssistantID: assistantID}, func(ctx context.Context, record assistantRuntimeRecord) error {
+	err = s.kitGKELifecycle(ctx, assistantRuntimeRecord{LifecycleTx: nil, Retired: false, AssistantThreadID: uuid.Nil, RuntimeVersion: 0, Backend: "", BackendMetadataJSON: nil, State: "", WarmUntil: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, ID: runtimeID, ProjectID: projectID, AssistantID: assistantID}, func(ctx context.Context, record assistantRuntimeRecord) error {
 		q := assistantrepo.New(record.LifecycleTx)
 		row, err := q.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
 		if err != nil {

@@ -22,6 +22,13 @@ const MaxMessageBytes = 8 << 20
 
 var ErrClosed = errors.New("ACP transport closed")
 
+// TransportError preserves the network cause for errors.Is/As without exposing
+// URLs or remote error text in logs. A POST outcome can still be unknown.
+type TransportError struct{ cause error }
+
+func (e *TransportError) Error() string { return "ACP HTTP transport failure (outcome may be unknown)" }
+func (e *TransportError) Unwrap() error { return e.cause }
+
 // RPCError avoids exposing remote messages or data in Error().
 type RPCError struct {
 	Code    int             `json:"code"`
@@ -163,7 +170,7 @@ func (c *Client) request(ctx context.Context, method, session string, body []byt
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("ACP request canceled: %w", ctx.Err())
 		}
-		return nil, errors.New("ACP HTTP transport failure (outcome may be unknown)")
+		return nil, &TransportError{cause: err}
 	}
 	return res, nil
 }

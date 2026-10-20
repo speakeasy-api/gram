@@ -301,7 +301,7 @@ var _ runtimeSwitchCoordinator = (*KitGKERuntimeBackend)(nil)
 // selection. A missing or unverified production process is never proof of idle.
 func (k *KitGKERuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assistant assistantRecord, rows []assistantRuntimeRecord, destination int16) (runtimeSwitchReadiness, error) {
 	releases := make([]func(), 0, len(rows))
-	result := runtimeSwitchReadiness{Release: sync.OnceFunc(func() {
+	result := runtimeSwitchReadiness{DestinationReady: false, Settled: false, Release: sync.OnceFunc(func() {
 		for _, release := range slices.Backward(releases) {
 			release()
 		}
@@ -338,7 +338,7 @@ func (k *KitGKERuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assista
 			releases = append(releases, fence.Release)
 		}
 		if err != nil {
-			return result, err
+			return result, fmt.Errorf("prepare runtime switch: %w", err)
 		}
 		if !fence.Settled || fence.Release == nil {
 			return result, errRuntimeSwitchBusy

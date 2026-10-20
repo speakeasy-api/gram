@@ -3,16 +3,17 @@ package assistants
 import (
 	"context"
 	"errors"
-	"github.com/jackc/pgx/v5/pgtype"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"net/url"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic/fake"
@@ -132,7 +133,7 @@ func TestKitGKERejectsMalformedOCIReferences(t *testing.T) {
 func TestKitGKELifecycleReloadsAndCommitsRecoveryEvidence(t *testing.T) {
 	t.Parallel()
 	core, db, key, _ := kitSessionFixture(t)
-	_, err := db.Exec(t.Context(), "UPDATE assistant_runtimes SET backend = 'gke' WHERE id = $1 AND project_id = $2", key.RuntimeID, key.ProjectID)
+	err := assistantrepo.New(db).SetAssistantRuntimeBackendForTest(t.Context(), assistantrepo.SetAssistantRuntimeBackendForTestParams{Backend: runtimeBackendGKE, RuntimeID: key.RuntimeID, ProjectID: key.ProjectID})
 	require.NoError(t, err)
 	stale := assistantRuntimeRecord{ID: key.RuntimeID, AssistantID: key.AssistantID, ProjectID: key.ProjectID, RuntimeVersion: 3, Backend: runtimeBackendGKE}
 	failure := errors.New("provisioning interrupted")
@@ -150,7 +151,7 @@ func TestKitGKELifecycleReloadsAndCommitsRecoveryEvidence(t *testing.T) {
 	row, err := assistantrepo.New(db).GetAssistantRuntime(t.Context(), assistantrepo.GetAssistantRuntimeParams{ID: key.RuntimeID, ProjectID: key.ProjectID})
 	require.NoError(t, err)
 	require.JSONEq(t, string(progress), string(row.BackendMetadataJson))
-	_, err = db.Exec(t.Context(), "UPDATE assistant_runtimes SET ended_at = clock_timestamp() WHERE id = $1 AND project_id = $2", key.RuntimeID, key.ProjectID)
+	err = assistantrepo.New(db).EndAssistantRuntimeForTest(t.Context(), assistantrepo.EndAssistantRuntimeForTestParams{RuntimeID: key.RuntimeID, ProjectID: key.ProjectID})
 	require.NoError(t, err)
 	require.NoError(t, core.kitGKELifecycle(t.Context(), stale, func(_ context.Context, current assistantRuntimeRecord) error {
 		require.True(t, current.Retired)
@@ -174,8 +175,7 @@ func TestKitGKEEligibilityUsesPersistedAttachmentAndIssuer(t *testing.T) {
 	a := assistantRecord{ID: f.assistant, ProjectID: f.projectID, OrganizationID: "org-test"}
 	check := func(want bool) {
 		t.Helper()
-		tx, err := f.db.Begin(t.Context())
-		require.NoError(t, err)
+		tx := testenv.BeginTx(t, t.Context(), f.db)
 		defer func() { _ = tx.Rollback(t.Context()) }()
 		eligible, err := f.core.kitGKEAssistantEligible(t.Context(), tx, a, c)
 		require.NoError(t, err)
@@ -184,7 +184,7 @@ func TestKitGKEEligibilityUsesPersistedAttachmentAndIssuer(t *testing.T) {
 	check(false)
 	f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
 	check(false)
-	_, err = f.db.Exec(t.Context(), "UPDATE mcp_servers SET user_session_issuer_id = $1 WHERE id = $2 AND project_id = $3", issuer.ID, f.remote.ID, f.projectID)
+	err = assistantrepo.New(f.db).SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, ID: f.remote.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	check(true)
 	c.MCPUserSessionIssuerID = uuid.New()
@@ -198,7 +198,7 @@ func TestKitGKEEligibilityUsesPersistedAttachmentAndIssuer(t *testing.T) {
 	c.MCPResource = nil
 	c.MCPUserSessionIssuerID = uuid.Nil
 	check(true)
-	_, err = f.db.Exec(t.Context(), "UPDATE mcp_servers SET visibility = 'disabled' WHERE id = $1 AND project_id = $2", f.remote.ID, f.projectID)
+	err = assistantrepo.New(f.db).DisableAttachedMCPServerForTest(t.Context(), assistantrepo.DisableAttachedMCPServerForTestParams{ID: f.remote.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	check(false)
 }

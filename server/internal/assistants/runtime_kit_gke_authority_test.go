@@ -47,6 +47,7 @@ func (s *kitGKEAuthorityTestStore) Save(_ context.Context, _ pgx.Tx, r assistant
 }
 
 func TestKitGKEAuthorityIgnoresConfigMap(t *testing.T) {
+	t.Parallel()
 	k, client, r, _ := kitGKEBackendFixture(t)
 	k.config.AuthorityStore = newKitGKEAuthorityTestStore()
 	result, err := k.Ensure(t.Context(), r)
@@ -75,6 +76,7 @@ func TestKitGKEAuthorityIgnoresConfigMap(t *testing.T) {
 	}
 }
 func TestKitGKEAuthorityEnvelopeDoesNotNestMetadata(t *testing.T) {
+	t.Parallel()
 	m, err := kitGKEAuthorityMetadata(kitGKEAuthority{Phase: "stopped", Metadata: kitGKEBackendMetadata{Checkpoint: json.RawMessage(`{"phase":"active"}`)}, SnapshotName: "snapshot", SnapshotUID: "snapshot-uid"})
 	require.NoError(t, err)
 	var fields map[string]json.RawMessage
@@ -84,6 +86,7 @@ func TestKitGKEAuthorityEnvelopeDoesNotNestMetadata(t *testing.T) {
 	require.JSONEq(t, `"snapshot-uid"`, string(fields["snapshot_uid"]))
 }
 func TestKitGKEAuthorityWritesRequireTransaction(t *testing.T) {
+	t.Parallel()
 	err := NewKitGKEPostgresAuthorityStore(nil).Save(t.Context(), nil, assistantRuntimeRecord{}, []byte(`{}`), []byte(`{}`))
 	require.ErrorContains(t, err, "require a lifecycle transaction")
 }
@@ -99,6 +102,7 @@ func (p *kitGKEUncertainCloseProtocol) CloseCheckpointSessions(ctx context.Conte
 	return settleKitCheckpointSessions(ctx, p.transport, "/workspace", map[string]bool{"bound": true}, true)
 }
 func TestKitGKEAuthorityFailedClosePermanentlyFencesCheckpoint(t *testing.T) {
+	t.Parallel()
 	k, client, r, fences := kitGKEBackendFixture(t)
 	result, err := k.Ensure(t.Context(), r)
 	require.NoError(t, err)

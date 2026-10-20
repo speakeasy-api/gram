@@ -96,42 +96,45 @@ func (s *kitGKEPostgresAuthorityStore) Load(ctx context.Context, tx pgx.Tx, r as
 		db = tx
 	}
 	if db == nil {
-		return nil, fmt.Errorf("Kit GKE authority database unavailable")
+		return nil, fmt.Errorf("kit GKE authority database unavailable")
 	}
 	row, err := assistantrepo.New(db).GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ID: r.ID, ProjectID: r.ProjectID})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get Kit GKE authority runtime: %w", err)
 	}
 	if row.AssistantID != r.AssistantID || row.RuntimeVersion != r.RuntimeVersion || row.Backend != r.Backend {
-		return nil, fmt.Errorf("Kit GKE authority identity changed")
+		return nil, fmt.Errorf("kit GKE authority identity changed")
 	}
 	return row.BackendMetadataJson, nil
 }
 func (s *kitGKEPostgresAuthorityStore) Save(ctx context.Context, tx pgx.Tx, r assistantRuntimeRecord, expected, next []byte) error {
 	if tx == nil {
-		return fmt.Errorf("Kit GKE authority writes require a lifecycle transaction")
+		return fmt.Errorf("kit GKE authority writes require a lifecycle transaction")
 	}
 	q := assistantrepo.New(tx)
 	row, err := q.GetAssistantRuntimeForAdmission(ctx, assistantrepo.GetAssistantRuntimeForAdmissionParams{ID: r.ID, ProjectID: r.ProjectID})
 	if err != nil {
-		return err
+		return fmt.Errorf("get Kit GKE authority admission: %w", err)
 	}
 	if row.AssistantID != r.AssistantID || row.RuntimeVersion != r.RuntimeVersion || row.Backend != r.Backend {
-		return fmt.Errorf("Kit GKE authority identity changed")
+		return fmt.Errorf("kit GKE authority identity changed")
 	}
 	if !kitGKEEqualMetadata(row.BackendMetadataJson, expected) {
-		return fmt.Errorf("Kit GKE checkpoint authority changed")
+		return fmt.Errorf("kit GKE checkpoint authority changed")
 	}
 	// Publication must precede the external effect: a process crash cannot
 	// roll back the closing fence or the resource identity needed for cleanup.
 	publisher, ok := tx.(interface{ Publish(context.Context) error })
 	if !ok {
-		return fmt.Errorf("Kit lifecycle authority requires durable phase publication")
+		return fmt.Errorf("kit lifecycle authority requires durable phase publication")
 	}
 	if err := q.UpdateAssistantRuntimeMetadata(ctx, assistantrepo.UpdateAssistantRuntimeMetadataParams{RuntimeID: r.ID, ProjectID: r.ProjectID, BackendMetadataJson: next}); err != nil {
-		return err
+		return fmt.Errorf("update Kit GKE authority metadata: %w", err)
 	}
-	return publisher.Publish(ctx)
+	if err := publisher.Publish(ctx); err != nil {
+		return fmt.Errorf("publish Kit GKE authority: %w", err)
+	}
+	return nil
 }
 func kitGKEEqualMetadata(a, b []byte) bool {
 	var av, bv any
@@ -147,53 +150,59 @@ type kitGKEAuthorityHandle struct {
 // top-level metadata so ordinary metadata updates cannot recursively nest it.
 func kitGKEAuthorityMetadata(state kitGKEAuthority) (kitGKEBackendMetadata, error) {
 	m := state.Metadata
-	state.Metadata = kitGKEBackendMetadata{}
+	state.Metadata = kitGKEBackendMetadata{Checkpoint: nil, TLSCertificate: nil, Provisioning: false, CheckpointMarker: "", ProxyImageDigest: "", ImageDigest: "", ContainerID: "", AuthorityUID: "", AuthorityNotAfter: time.Time{}, RuntimeID: uuid.Nil, AssistantID: uuid.Nil, ProjectID: uuid.Nil, Version: 0, Namespace: "", Fingerprint: "", ClaimUID: "", TemplateUID: "", SecretUID: "", SecretName: "", PodName: "", PodUID: ""}
 	raw, err := json.Marshal(state)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("marshal Kit GKE authority state: %w", err)
 	}
 	var envelope map[string]json.RawMessage
 	if err = json.Unmarshal(raw, &envelope); err != nil {
-		return m, err
+		return m, fmt.Errorf("decode Kit GKE authority envelope: %w", err)
 	}
 	delete(envelope, "metadata")
 	m.Checkpoint, err = json.Marshal(envelope)
-	return m, err
+	if err != nil {
+		return m, fmt.Errorf("marshal Kit GKE checkpoint: %w", err)
+	}
+	return m, nil
 }
 func (k *KitGKERuntimeBackend) createAuthority(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) (kitGKEBackendMetadata, error) {
 	if k.config.AuthorityStore == nil {
-		return m, fmt.Errorf("Kit GKE requires a Postgres authority store")
+		return m, fmt.Errorf("kit GKE requires a Postgres authority store")
 	}
 	expected, err := k.config.AuthorityStore.Load(ctx, r.LifecycleTx, r)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("load prior Kit GKE authority: %w", err)
 	}
 	var prior kitGKEBackendMetadata
 	if err = json.Unmarshal(expected, &prior); err != nil {
-		return m, err
+		return m, fmt.Errorf("decode prior Kit GKE authority: %w", err)
 	}
 	if len(prior.Checkpoint) != 0 {
-		return m, fmt.Errorf("Kit GKE checkpoint authority already exists")
+		return m, fmt.Errorf("kit GKE checkpoint authority already exists")
 	}
 	m.AuthorityUID = types.UID(uuid.NewString())
-	m, err = kitGKEAuthorityMetadata(kitGKEAuthority{Phase: "active", Metadata: m})
+	m, err = kitGKEAuthorityMetadata(kitGKEAuthority{PriorCheckpoints: nil, TriggerName: "", TriggerUID: "", SnapshotName: "", SnapshotUID: "", Source: nil, Phase: "active", Metadata: m})
 	if err != nil {
 		return m, err
 	}
 	raw, err := json.Marshal(m)
 	if err != nil {
-		return m, err
+		return m, fmt.Errorf("marshal new Kit GKE authority: %w", err)
 	}
-	return m, k.config.AuthorityStore.Save(ctx, r.LifecycleTx, r, expected, raw)
+	if err := k.config.AuthorityStore.Save(ctx, r.LifecycleTx, r, expected, raw); err != nil {
+		return m, fmt.Errorf("save new Kit GKE authority: %w", err)
+	}
+	return m, nil
 }
 func (k *KitGKERuntimeBackend) loadAuthority(ctx context.Context, r assistantRuntimeRecord) (kitGKEAuthority, *kitGKEAuthorityHandle, error) {
 	var state kitGKEAuthority
 	if k.config.AuthorityStore == nil {
-		return state, nil, fmt.Errorf("Kit GKE requires a Postgres authority store")
+		return state, nil, fmt.Errorf("kit GKE requires a Postgres authority store")
 	}
 	raw, err := k.config.AuthorityStore.Load(ctx, r.LifecycleTx, r)
 	if err != nil {
-		return state, nil, err
+		return state, nil, fmt.Errorf("load Kit GKE authority: %w", err)
 	}
 	record := r
 	record.BackendMetadataJSON = raw
@@ -202,10 +211,10 @@ func (k *KitGKERuntimeBackend) loadAuthority(ctx context.Context, r assistantRun
 		return state, nil, err
 	}
 	if m.AuthorityUID == "" || len(m.Checkpoint) == 0 {
-		return state, nil, fmt.Errorf("Kit GKE runtime has no persisted checkpoint authority")
+		return state, nil, fmt.Errorf("kit GKE runtime has no persisted checkpoint authority")
 	}
 	if err = json.Unmarshal(m.Checkpoint, &state); err != nil {
-		return state, nil, fmt.Errorf("Kit GKE checkpoint authority malformed: %w", err)
+		return state, nil, fmt.Errorf("kit GKE checkpoint authority malformed: %w", err)
 	}
 	state.Metadata = m
 	switch state.Phase {
@@ -217,7 +226,7 @@ func (k *KitGKERuntimeBackend) loadAuthority(ctx context.Context, r assistantRun
 }
 func (k *KitGKERuntimeBackend) saveAuthority(ctx context.Context, obj *kitGKEAuthorityHandle, state kitGKEAuthority) (*kitGKEAuthorityHandle, error) {
 	if obj == nil || k.config.AuthorityStore == nil {
-		return nil, fmt.Errorf("Kit GKE authority handle unavailable")
+		return nil, fmt.Errorf("kit GKE authority handle unavailable")
 	}
 	m, err := kitGKEAuthorityMetadata(state)
 	if err != nil {
@@ -225,10 +234,10 @@ func (k *KitGKERuntimeBackend) saveAuthority(ctx context.Context, obj *kitGKEAut
 	}
 	raw, err := json.Marshal(m)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal updated Kit GKE authority: %w", err)
 	}
 	if err = k.config.AuthorityStore.Save(ctx, obj.record.LifecycleTx, obj.record, obj.raw, raw); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("save Kit GKE authority: %w", err)
 	}
 	return &kitGKEAuthorityHandle{record: obj.record, raw: raw}, nil
 }
@@ -254,7 +263,7 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 		return err
 	}
 	if state.Phase == "closing" {
-		return fmt.Errorf("Kit GKE session close acknowledgement is uncertain; explicit reconciliation required")
+		return fmt.Errorf("kit GKE session close acknowledgement is uncertain; explicit reconciliation required")
 	}
 	if state.Phase == "restoring" || state.Phase == "retired" {
 		return fmt.Errorf("cannot checkpoint Kit GKE phase %s", state.Phase)
@@ -467,7 +476,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 		}
 		return empty, fmt.Errorf("kit GKE restore requires source claim deletion")
 	}
-	template, err := k.get(ctx, r, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID)
+	_, err = k.get(ctx, r, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID)
 	if err != nil {
 		return empty, err
 	}
@@ -556,7 +565,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if err = k.deleteOwned(ctx, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID); err != nil {
 		return empty, err
 	}
-	template = objects.Template
+	template := objects.Template
 	template.SetLabels(labels)
 	template.SetAnnotations(annotations)
 	if err = unstructured.SetNestedStringMap(template.Object, labels, "spec", "podTemplate", "metadata", "labels"); err != nil {

@@ -1078,6 +1078,21 @@ func (q *Queries) DeleteProjectManagedAssistant(ctx context.Context, projectID u
 	return err
 }
 
+const disableAttachedMCPServerForTest = `-- name: DisableAttachedMCPServerForTest :exec
+UPDATE mcp_servers SET visibility = 'disabled'
+WHERE id = $1 AND project_id = $2
+`
+
+type DisableAttachedMCPServerForTestParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) DisableAttachedMCPServerForTest(ctx context.Context, arg DisableAttachedMCPServerForTestParams) error {
+	_, err := q.db.Exec(ctx, disableAttachedMCPServerForTest, arg.ID, arg.ProjectID)
+	return err
+}
+
 const enableMCPForToolsets = `-- name: EnableMCPForToolsets :many
 UPDATE toolsets
 SET mcp_enabled = TRUE,
@@ -1116,6 +1131,21 @@ func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForTool
 		return nil, err
 	}
 	return items, nil
+}
+
+const endAssistantRuntimeForTest = `-- name: EndAssistantRuntimeForTest :exec
+UPDATE assistant_runtimes SET ended_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2
+`
+
+type EndAssistantRuntimeForTestParams struct {
+	RuntimeID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) EndAssistantRuntimeForTest(ctx context.Context, arg EndAssistantRuntimeForTestParams) error {
+	_, err := q.db.Exec(ctx, endAssistantRuntimeForTest, arg.RuntimeID, arg.ProjectID)
+	return err
 }
 
 const failAssistantThreadEvent = `-- name: FailAssistantThreadEvent :exec
@@ -4909,6 +4939,22 @@ func (q *Queries) SetAssistantRuntimeActive(ctx context.Context, arg SetAssistan
 	return err
 }
 
+const setAssistantRuntimeBackendForTest = `-- name: SetAssistantRuntimeBackendForTest :exec
+UPDATE assistant_runtimes SET backend = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetAssistantRuntimeBackendForTestParams struct {
+	Backend   string
+	RuntimeID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetAssistantRuntimeBackendForTest(ctx context.Context, arg SetAssistantRuntimeBackendForTestParams) error {
+	_, err := q.db.Exec(ctx, setAssistantRuntimeBackendForTest, arg.Backend, arg.RuntimeID, arg.ProjectID)
+	return err
+}
+
 const setAssistantRuntimeStateForTest = `-- name: SetAssistantRuntimeStateForTest :exec
 UPDATE assistant_runtimes
 SET
@@ -4972,6 +5018,22 @@ func (q *Queries) SetAssistantThreadEventStatus(ctx context.Context, arg SetAssi
 		arg.ID,
 		arg.ProjectID,
 	)
+	return err
+}
+
+const setAttachedMCPServerIssuerForTest = `-- name: SetAttachedMCPServerIssuerForTest :exec
+UPDATE mcp_servers SET user_session_issuer_id = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetAttachedMCPServerIssuerForTestParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+func (q *Queries) SetAttachedMCPServerIssuerForTest(ctx context.Context, arg SetAttachedMCPServerIssuerForTestParams) error {
+	_, err := q.db.Exec(ctx, setAttachedMCPServerIssuerForTest, arg.UserSessionIssuerID, arg.ID, arg.ProjectID)
 	return err
 }
 

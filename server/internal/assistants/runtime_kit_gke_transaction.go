@@ -20,7 +20,7 @@ type kitLifecycleTransaction struct {
 }
 
 func (t *kitLifecycleTransaction) Publish(ctx context.Context) error {
-	if err := t.Tx.Commit(ctx); err != nil {
+	if err := t.Commit(ctx); err != nil {
 		return fmt.Errorf("publish Kit lifecycle phase: %w", err)
 	}
 	next, err := t.conn.Begin(ctx)
@@ -34,7 +34,7 @@ func (t *kitLifecycleTransaction) Publish(ctx context.Context) error {
 func beginKitLifecycleTransaction(ctx context.Context, pool *pgxpool.Pool, assistantID string) (*kitLifecycleTransaction, func(), error) {
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("acquire Kit lifecycle connection: %w", err)
 	}
 	var lifecycle *kitLifecycleTransaction
 	cleanup := func() {
@@ -61,7 +61,7 @@ func beginKitLifecycleTransaction(ctx context.Context, pool *pgxpool.Pool, assis
 	tx, err := conn.Begin(ctx)
 	if err != nil {
 		cleanup()
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("begin Kit lifecycle transaction: %w", err)
 	}
 	lifecycle = &kitLifecycleTransaction{Tx: tx, conn: conn}
 	return lifecycle, cleanup, nil

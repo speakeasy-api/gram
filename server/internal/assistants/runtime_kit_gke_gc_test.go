@@ -10,6 +10,7 @@ import (
 )
 
 func TestKitGKECheckpointGC(t *testing.T) {
+	t.Parallel()
 	k, client, r, _ := kitGKEBackendFixture(t)
 	result, err := k.Ensure(t.Context(), r)
 	require.NoError(t, err)
@@ -24,7 +25,8 @@ func TestKitGKECheckpointGC(t *testing.T) {
 	require.NoError(t, err)
 	failSnapshot := true
 	client.PrependReactor("delete", "*", func(action ktesting.Action) (bool, runtime.Object, error) {
-		deletion := action.(ktesting.DeleteAction)
+		deletion, ok := action.(ktesting.DeleteAction)
+		require.True(t, ok)
 		require.NotNil(t, deletion.GetDeleteOptions().Preconditions)
 		require.Equal(t, deletion.GetName()+"-uid", string(*deletion.GetDeleteOptions().Preconditions.UID))
 		if deletion.GetName() == "old-snapshot" && failSnapshot {
@@ -54,6 +56,7 @@ func TestKitGKECheckpointGC(t *testing.T) {
 }
 
 func TestKitGKECheckpointGCGuards(t *testing.T) {
+	t.Parallel()
 	k, client, r, _ := kitGKEBackendFixture(t)
 	result, err := k.Ensure(t.Context(), r)
 	require.NoError(t, err)
@@ -92,7 +95,8 @@ func TestKitGKEStopRetriesSupersededCleanupAfterDurableReplacement(t *testing.T)
 	require.NoError(t, err)
 	fail := true
 	client.PrependReactor("delete", "podsnapshots", func(action ktesting.Action) (bool, runtime.Object, error) {
-		deletion := action.(ktesting.DeleteAction)
+		deletion, ok := action.(ktesting.DeleteAction)
+		require.True(t, ok)
 		if deletion.GetName() != "previous-snapshot" {
 			return false, nil, nil
 		}
@@ -122,7 +126,9 @@ func TestKitGKEStopRetriesSupersededCleanupAfterDurableReplacement(t *testing.T)
 	require.NoError(t, k.ReapStoppedMachine(t.Context(), r))
 	for _, action := range client.Actions() {
 		if action.GetVerb() == "delete" && action.GetResource() == kitGKESnapshotGVR {
-			require.NotEqual(t, "verified-snapshot", action.(ktesting.DeleteAction).GetName())
+			deletion, ok := action.(ktesting.DeleteAction)
+			require.True(t, ok)
+			require.NotEqual(t, "verified-snapshot", deletion.GetName())
 		}
 	}
 	_, err = k.get(t.Context(), r, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID)

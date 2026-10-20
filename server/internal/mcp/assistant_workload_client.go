@@ -73,7 +73,7 @@ func (s *Service) ProvisionAssistantWorkloadClient(ctx context.Context, p Provis
 func (s *Service) provisionAssistantWorkloadClient(ctx context.Context, p ProvisionAssistantWorkloadClientParams, actor urn.Principal) (ProvisionedAssistantWorkloadClient, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return ProvisionedAssistantWorkloadClient{}, err
+		return ProvisionedAssistantWorkloadClient{}, fmt.Errorf("begin assistant workload client transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	result, err := s.provisionAssistantWorkloadClientLocked(ctx, tx, p, actor)
@@ -81,7 +81,7 @@ func (s *Service) provisionAssistantWorkloadClient(ctx context.Context, p Provis
 		return ProvisionedAssistantWorkloadClient{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return ProvisionedAssistantWorkloadClient{}, err
+		return ProvisionedAssistantWorkloadClient{}, fmt.Errorf("commit assistant workload client transaction: %w", err)
 	}
 	return result, nil
 }

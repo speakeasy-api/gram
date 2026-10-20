@@ -131,7 +131,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 			if base.Provider != assistants.RuntimeProviderLocal {
 				resourceURL = r.Resource
 				if resourceURL == nil {
-					return zero, fmt.Errorf("Kit requires a persisted MCP resource")
+					return zero, fmt.Errorf("kit requires a persisted MCP resource")
 				}
 				row, err := usersessionsrepo.New(tx).GetSharedUserSessionIssuerByID(ctx, r.UserSessionIssuerID)
 				if err != nil {
@@ -141,7 +141,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 				if authserver.IssuerInSharedMode(row.UserSessionIssuer) {
 					actual, err = hosts.SharedIssuerURL(row.UserSessionIssuer)
 					if err != nil {
-						return zero, err
+						return zero, fmt.Errorf("resolve shared Kit MCP issuer URL: %w", err)
 					}
 				} else if row.UserSessionIssuer.AuthorizationServerMode != string(authserver.ModeEndpoint) {
 					return zero, fmt.Errorf("unsupported Kit MCP issuer mode")
@@ -150,7 +150,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 				}
 				issuerURL, err = url.Parse(actual)
 				if err != nil {
-					return zero, err
+					return zero, fmt.Errorf("parse Kit MCP issuer URL: %w", err)
 				}
 			}
 			if err := validateKitMCPBinding(ctx, tx, r, resourceURL, issuerURL, hosts, localOrigin); err != nil {
@@ -174,7 +174,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 			}
 			if owned {
 				if err := tx.Commit(ctx); err != nil {
-					return zero, err
+					return zero, fmt.Errorf("commit Kit workload registration: %w", err)
 				}
 			}
 			return assistants.KitMCPProvisionResult{Resource: resourceURL, Issuer: issuerURL, ClientID: client.ClientID, Secret: client.Secret, AuthMethod: authMethod, PrivateKeyPEM: privatePEM}, nil

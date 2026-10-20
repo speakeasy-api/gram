@@ -2071,3 +2071,19 @@ WHERE q.project_id=sqlc.arg(project_id)::uuid AND q.id=sqlc.arg(request_id)::uui
 SELECT EXISTS (SELECT 1 FROM assistant_kit_interrupt_requests
  WHERE project_id = sqlc.arg(project_id)::uuid AND runtime_id = sqlc.arg(runtime_id)::uuid
  AND event_id = sqlc.arg(event_id)::uuid AND attempt = @attempt AND outcome = 'pending');
+
+-- name: SetAssistantRuntimeBackendForTest :exec
+UPDATE assistant_runtimes SET backend = @backend
+WHERE id = @runtime_id AND project_id = @project_id;
+
+-- name: EndAssistantRuntimeForTest :exec
+UPDATE assistant_runtimes SET ended_at = clock_timestamp()
+WHERE id = @runtime_id AND project_id = @project_id;
+
+-- name: SetAttachedMCPServerIssuerForTest :exec
+UPDATE mcp_servers SET user_session_issuer_id = @user_session_issuer_id
+WHERE id = @id AND project_id = @project_id;
+
+-- name: DisableAttachedMCPServerForTest :exec
+UPDATE mcp_servers SET visibility = 'disabled'
+WHERE id = @id AND project_id = @project_id;

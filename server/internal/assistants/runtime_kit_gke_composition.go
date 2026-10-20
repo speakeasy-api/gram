@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -157,7 +158,7 @@ func (s *ServiceCore) kitGKELifecycle(ctx context.Context, r assistantRuntimeRec
 	ctx = context.WithValue(ctx, runtimeSwitchQueriesKey{}, q)
 	ctx = context.WithValue(ctx, kitAdmissionProgressKey{}, kitAdmissionProgressWriter(func(progressCtx context.Context, raw []byte) error {
 		if err := q.UpdateAssistantRuntimeMetadata(progressCtx, assistantrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: r.ProjectID, RuntimeID: r.ID, BackendMetadataJson: raw}); err != nil {
-			return err
+			return fmt.Errorf("update Kit GKE admission progress: %w", err)
 		}
 		return tx.Publish(progressCtx)
 	}))
@@ -193,7 +194,7 @@ var errKitMCPIneligible = errors.New("assistant has no supported persisted machi
 func (s *ServiceCore) kitPersistedMCP(ctx context.Context, db assistantrepo.DBTX, assistant assistantRecord) (*url.URL, uuid.UUID, error) {
 	rows, err := assistantrepo.New(db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: assistant.ProjectID, AssistantIds: []uuid.UUID{assistant.ID}})
 	if err != nil {
-		return nil, uuid.Nil, err
+		return nil, uuid.Nil, fmt.Errorf("load persisted assistant MCP servers: %w", err)
 	}
 	seen := map[uuid.UUID]bool{}
 	var selected assistantMCPServerRow
@@ -202,14 +203,14 @@ func (s *ServiceCore) kitPersistedMCP(ctx context.Context, db assistantrepo.DBTX
 			continue
 		}
 		seen[row.McpServerID] = true
-		selected = assistantMCPServerRow{MCPServerID: row.McpServerID, EndpointSlug: row.EndpointSlug, Visibility: row.Visibility}
+		selected = assistantMCPServerRow{ServerSlug: pgtype.Text{String: "", Valid: false}, ToolsetSlug: pgtype.Text{String: "", Valid: false}, DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, EnvironmentSlug: pgtype.Text{String: "", Valid: false}, MCPServerID: row.McpServerID, EndpointSlug: row.EndpointSlug, Visibility: row.Visibility}
 	}
 	if len(seen) != 1 || selected.EndpointSlug == "" || s.serverURL == nil || s.serverURL.Scheme != "https" {
 		return nil, uuid.Nil, errKitMCPIneligible
 	}
 	server, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: selected.MCPServerID, ProjectID: assistant.ProjectID})
 	if err != nil {
-		return nil, uuid.Nil, err
+		return nil, uuid.Nil, fmt.Errorf("get persisted assistant MCP server: %w", err)
 	}
 	if !server.UserSessionIssuerID.Valid {
 		return nil, uuid.Nil, errKitMCPIneligible
@@ -219,7 +220,7 @@ func (s *ServiceCore) kitPersistedMCP(ctx context.Context, db assistantrepo.DBTX
 		return nil, uuid.Nil, errKitMCPIneligible
 	}
 	if err != nil {
-		return nil, uuid.Nil, err
+		return nil, uuid.Nil, fmt.Errorf("get persisted assistant session issuer: %w", err)
 	}
 	if issuer.ResolvedOrganizationID != assistant.OrganizationID || (issuer.UserSessionIssuer.ProjectID.Valid && issuer.UserSessionIssuer.ProjectID.UUID != assistant.ProjectID) {
 		return nil, uuid.Nil, errKitMCPIneligible

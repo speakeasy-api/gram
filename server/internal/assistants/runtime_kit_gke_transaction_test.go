@@ -3,17 +3,19 @@ package assistants
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
 func TestKitGKEClosingFenceSurvivesTransactionLossBeforeClose(t *testing.T) {
 	t.Parallel()
 	core, db, key, _ := kitSessionFixture(t)
-	_, err := db.Exec(t.Context(), "UPDATE assistant_runtimes SET backend = $1 WHERE id = $2", runtimeBackendGKE, key.RuntimeID)
+	err := assistantrepo.New(db).SetAssistantRuntimeBackendForTest(t.Context(), assistantrepo.SetAssistantRuntimeBackendForTestParams{Backend: runtimeBackendGKE, RuntimeID: key.RuntimeID, ProjectID: key.ProjectID})
 	require.NoError(t, err)
 	record := assistantRuntimeRecord{ID: key.RuntimeID, AssistantID: key.AssistantID, ProjectID: key.ProjectID}
 	interrupted := errors.New("worker lost before close acknowledgement")
@@ -21,14 +23,13 @@ func TestKitGKEClosingFenceSurvivesTransactionLossBeforeClose(t *testing.T) {
 		store := NewKitGKEPostgresAuthorityStore(db)
 		next := []byte(`{"checkpoint":{"phase":"closing"}}`)
 		if err := store.Save(ctx, r.LifecycleTx, r, r.BackendMetadataJSON, next); err != nil {
-			return err
+			return fmt.Errorf("save closing fence: %w", err)
 		}
 		// Publication must already be visible before any external session close.
 		row, err := assistantrepo.New(db).GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ID: r.ID, ProjectID: r.ProjectID})
 		require.NoError(t, err)
 		require.JSONEq(t, string(next), string(row.BackendMetadataJson))
-		contender, err := db.Begin(ctx)
-		require.NoError(t, err)
+		contender := testenv.BeginTx(t, ctx, db)
 		lockCtx, cancel := context.WithTimeout(ctx, 150*time.Millisecond)
 		defer cancel()
 		require.Error(t, assistantrepo.New(contender).AcquireAssistantAdvisoryLock(lockCtx, r.AssistantID.String()), "publication must not release the assistant fence")
@@ -42,8 +43,7 @@ func TestKitGKEClosingFenceSurvivesTransactionLossBeforeClose(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"checkpoint":{"phase":"closing"}}`, string(row.BackendMetadataJson))
 	// Cleanup released the session fence and did not leak it through the pool.
-	tx, err := db.Begin(t.Context())
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), db)
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()

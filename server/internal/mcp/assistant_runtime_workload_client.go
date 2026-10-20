@@ -35,7 +35,7 @@ type AssistantRuntimeWorkloadClientConfig struct {
 func (s *Service) ProvisionAssistantRuntimeWorkloadClient(ctx context.Context, runtimeID uuid.UUID, c AssistantRuntimeWorkloadClientConfig) (ProvisionedAssistantWorkloadClient, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return ProvisionedAssistantWorkloadClient{}, err
+		return ProvisionedAssistantWorkloadClient{}, fmt.Errorf("begin assistant workload client transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	result, err := s.provisionAssistantRuntimeWorkloadClientLocked(ctx, tx, runtimeID, c)
@@ -43,7 +43,7 @@ func (s *Service) ProvisionAssistantRuntimeWorkloadClient(ctx context.Context, r
 		return ProvisionedAssistantWorkloadClient{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return ProvisionedAssistantWorkloadClient{}, err
+		return ProvisionedAssistantWorkloadClient{}, fmt.Errorf("commit assistant workload client transaction: %w", err)
 	}
 	return result, nil
 }

@@ -15,14 +15,14 @@ func (k *KitGKERuntimeBackend) gcSupersededCheckpoints(ctx context.Context, stat
 	switch state.Phase {
 	case "checkpointed", "stopped", "restoring", "active":
 	default:
-		return state, handle, fmt.Errorf("Kit GKE superseded checkpoint cleanup requires durable replacement")
+		return state, handle, fmt.Errorf("kit GKE superseded checkpoint cleanup requires durable replacement")
 	}
 	if state.SnapshotName == "" || state.SnapshotUID == "" {
-		return state, handle, fmt.Errorf("Kit GKE superseded checkpoint cleanup requires replacement snapshot")
+		return state, handle, fmt.Errorf("kit GKE superseded checkpoint cleanup requires replacement snapshot")
 	}
 	for _, ref := range state.PriorCheckpoints {
 		if (ref.SnapshotName != "" && ref.SnapshotName == state.SnapshotName) || (ref.TriggerName != "" && ref.TriggerName == state.TriggerName) {
-			return state, handle, fmt.Errorf("Kit GKE prior checkpoint overlaps current authority")
+			return state, handle, fmt.Errorf("kit GKE prior checkpoint overlaps current authority")
 		}
 	}
 	return k.gcCheckpointRefs(ctx, state, handle)
@@ -48,7 +48,7 @@ func (k *KitGKERuntimeBackend) gcCheckpointRefs(ctx context.Context, state kitGK
 // durable restore point and must remain indefinitely until replaced or retired.
 func (k *KitGKERuntimeBackend) gcRetiredCheckpoints(ctx context.Context, state kitGKEAuthority, handle *kitGKEAuthorityHandle) (kitGKEAuthority, *kitGKEAuthorityHandle, error) {
 	if state.Phase != "retired" {
-		return state, handle, fmt.Errorf("Kit GKE checkpoint cleanup requires permanent retirement")
+		return state, handle, fmt.Errorf("kit GKE checkpoint cleanup requires permanent retirement")
 	}
 	var err error
 	state, handle, err = k.gcCheckpointRefs(ctx, state, handle)
@@ -71,7 +71,7 @@ func (k *KitGKERuntimeBackend) gcRetiredCheckpoints(ctx context.Context, state k
 func (k *KitGKERuntimeBackend) deleteCheckpointRef(ctx context.Context, ref kitGKECheckpointRef) error {
 	// An entirely absent object is valid; a partially recorded identity is not.
 	if (ref.TriggerName == "") != (ref.TriggerUID == "") || (ref.SnapshotName == "") != (ref.SnapshotUID == "") {
-		return fmt.Errorf("Kit GKE checkpoint cleanup requires exact object identities")
+		return fmt.Errorf("kit GKE checkpoint cleanup requires exact object identities")
 	}
 	if ref.TriggerName != "" {
 		if err := k.deleteOwned(ctx, kitGKETriggerGVR, ref.TriggerName, ref.TriggerUID); err != nil {

@@ -20,6 +20,7 @@ import (
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
@@ -115,8 +116,7 @@ func TestKitLocalStartupBootstrapRotatesCredential(t *testing.T) {
 	// Rolling it back must restore the old authority and discard the new key.
 	txCtx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	tx, err := db.Begin(txCtx)
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, txCtx, db)
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	_, err = core.identities.ResolveLocked(txCtx, tx, "org-test", project, assistant.ID, trigger)
 	require.NoError(t, err)

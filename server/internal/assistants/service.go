@@ -507,32 +507,33 @@ func NewServiceCore(
 	}
 
 	return &ServiceCore{
-		newAssistantRuntimeVersion: 0,
-		identities:                 identities,
-		authz:                      authzEngine,
-		logger:                     logger,
-		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		db:                         db,
-		audit:                      auditLogger,
-		guardianPolicy:             guardianPolicy,
-		encryptionClient:           encryptionClient,
-		runtime:                    newTelemetryRuntimeBackend(runtime, telemetryLogger),
-		slackClient:                slackClient,
-		assistantTokens:            assistantTokens,
-		serverURL:                  serverURL,
-		siteURL:                    nil,
-		telemetryLogger:            telemetryLogger,
-		contextWindow:              contextWindow,
-		wakeCanceller:              nil,
-		chatWriter:                 nil,
-		assetStorage:               nil,
-		assetSigningKey:            "",
-		envLoader:                  nil,
-		slackImages:                nil,
-		dashboardIngestor:          nil,
-		featureFlags:               nil,
-		turnClassified:             turnClassified,
-		outboundOrigin:             nil,
+		newAssistantRuntimeVersion:  0,
+		newAssistantRuntimeEligible: nil,
+		identities:                  identities,
+		authz:                       authzEngine,
+		logger:                      logger,
+		tracer:                      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		db:                          db,
+		audit:                       auditLogger,
+		guardianPolicy:              guardianPolicy,
+		encryptionClient:            encryptionClient,
+		runtime:                     newTelemetryRuntimeBackend(runtime, telemetryLogger),
+		slackClient:                 slackClient,
+		assistantTokens:             assistantTokens,
+		serverURL:                   serverURL,
+		siteURL:                     nil,
+		telemetryLogger:             telemetryLogger,
+		contextWindow:               contextWindow,
+		wakeCanceller:               nil,
+		chatWriter:                  nil,
+		assetStorage:                nil,
+		assetSigningKey:             "",
+		envLoader:                   nil,
+		slackImages:                 nil,
+		dashboardIngestor:           nil,
+		featureFlags:                nil,
+		turnClassified:              turnClassified,
+		outboundOrigin:              nil,
 	}
 }
 
@@ -745,6 +746,8 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 				continue
 			}
 			record := assistantRuntimeRecord{
+				LifecycleTx:         nil,
+				Retired:             false,
 				ID:                  row.ID,
 				AssistantThreadID:   row.AssistantThreadID,
 				AssistantID:         row.AssistantID,
@@ -905,6 +908,8 @@ func (s *ServiceCore) sweepIdleRuntimes(ctx context.Context, now time.Time, affe
 
 		rowCtx, cancel := context.WithTimeout(ctx, runtimeIdleSweepRowTimeout)
 		result, err := s.expireRuntime(rowCtx, assistantRuntimeRecord{
+			LifecycleTx:         nil,
+			Retired:             false,
 			ID:                  row.ID,
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
@@ -2012,6 +2017,8 @@ func (s *ServiceCore) ReapAssistantRuntimes(ctx context.Context, projectID, assi
 	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}
 	for _, row := range rows {
 		if s.reapRuntimeRow(ctx, assistantRuntimeRecord{
+			LifecycleTx:         nil,
+			Retired:             false,
 			ID:                  row.ID,
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
@@ -2075,6 +2082,8 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}
 	for _, row := range rows {
 		if s.reapRuntimeRow(ctx, assistantRuntimeRecord{
+			LifecycleTx:         nil,
+			Retired:             false,
 			ID:                  row.ID,
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
@@ -2129,7 +2138,9 @@ func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params R
 	for _, row := range pending {
 		remaining--
 		if err := s.finishRuntimeSwitchRetirement(ctx, assistantRuntimeRecord{
-			ID: row.ID, AssistantThreadID: row.AssistantThreadID, AssistantID: row.AssistantID,
+			LifecycleTx: nil,
+			Retired:     false,
+			ID:          row.ID, AssistantThreadID: row.AssistantThreadID, AssistantID: row.AssistantID,
 			ProjectID: row.ProjectID, RuntimeVersion: row.RuntimeVersion, Backend: row.Backend,
 			BackendMetadataJSON: row.BackendMetadataJson, State: row.State, WarmUntil: row.WarmUntil,
 		}); err != nil {
@@ -2156,6 +2167,8 @@ func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params R
 
 	for _, row := range rows {
 		if s.reapStoppedRuntimeRow(ctx, assistantRuntimeRecord{
+			LifecycleTx:         nil,
+			Retired:             false,
 			ID:                  row.ID,
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
@@ -2209,6 +2222,8 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 	result := RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}
 	for _, row := range rows {
 		record := assistantRuntimeRecord{
+			LifecycleTx:         nil,
+			Retired:             false,
 			ID:                  row.ID,
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
@@ -3942,6 +3957,8 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 	}
 
 	return s.expireRuntime(ctx, assistantRuntimeRecord{
+		LifecycleTx:         nil,
+		Retired:             false,
 		ID:                  row.ID,
 		AssistantThreadID:   row.AssistantThreadID,
 		AssistantID:         row.AssistantID,
@@ -4049,6 +4066,8 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		DeletedAt:       row.DeletedAt,
 	}
 	runtime := assistantRuntimeRecord{
+		LifecycleTx:         nil,
+		Retired:             false,
 		ID:                  row.RuntimeID,
 		AssistantThreadID:   uuid.Nil,
 		AssistantID:         row.RuntimeAssistantID,

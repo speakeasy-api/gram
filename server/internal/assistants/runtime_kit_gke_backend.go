@@ -315,7 +315,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	}
 	maps.Copy(podAnnotations, annotations)
 	_ = unstructured.SetNestedStringMap(objects.Template.Object, podAnnotations, "spec", "podTemplate", "metadata", "annotations")
-	m := kitGKEBackendMetadata{TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ProxyImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
+	m := kitGKEBackendMetadata{Checkpoint: nil, TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ProxyImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
 	for _, step := range []struct {
 		gvr schema.GroupVersionResource
 		obj *unstructured.Unstructured

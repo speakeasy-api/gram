@@ -306,7 +306,10 @@ func TestKitGKEEnsureDoesNotOverwriteExistingSecret(t *testing.T) {
 	t.Parallel()
 	backend, client, record, _ := kitGKEBackendFixture(t)
 	client.PrependReactor("create", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		obj := action.(k8stesting.CreateAction).GetObject().(*unstructured.Unstructured)
+		creation, ok := action.(k8stesting.CreateAction)
+		require.True(t, ok)
+		obj, ok := creation.GetObject().(*unstructured.Unstructured)
+		require.True(t, ok)
 		require.NoError(t, client.Tracker().Create(kitSecretGVR, obj.DeepCopy(), obj.GetNamespace()))
 		return false, nil, nil
 	})

@@ -106,6 +106,7 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 			return nil, errRuntimeSwitchBusy
 		}
 		runtimes = append(runtimes, assistantRuntimeRecord{
+			Retired:     false,
 			LifecycleTx: tx,
 			ID:          row.ID, AssistantThreadID: row.AssistantThreadID, AssistantID: row.AssistantID,
 			ProjectID: row.ProjectID, RuntimeVersion: row.RuntimeVersion, Backend: row.Backend,

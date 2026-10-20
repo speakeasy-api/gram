@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -65,9 +66,8 @@ func TestAssistantWorkloadClientCredentialsEndToEnd(t *testing.T) {
 			defer cancelProvision()
 			client, err := mcp.NewAssistantRuntimeWorkloadProvisioner(ti.conn, ti.audit).ProvisionLocked(provisionCtx, provisionTx, runtime.ID, bootstrapConfig)
 			require.NoError(t, err)
-			var visible bool
-			require.NoError(t, ti.conn.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM user_session_clients WHERE id = $1)", client.RegistrationID).Scan(&visible))
-			require.False(t, visible, "provisioning must not commit its caller's transaction")
+			_, err = usersessionsrepo.New(ti.conn).GetUserSessionClientByID(ctx, usersessionsrepo.GetUserSessionClientByIDParams{ID: client.RegistrationID, ProjectID: fx.target.ProjectID, OrganizationID: fx.orgID})
+			require.ErrorIs(t, err, pgx.ErrNoRows, "provisioning must not commit its caller's transaction")
 			require.NoError(t, provisionTx.Commit(ctx))
 			endpoint := workloadSessionEndpoint(fx)
 			resource, err := endpoint.RootURL(ti.serverURL.String())

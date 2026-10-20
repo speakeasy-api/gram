@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"net/url"
 	"slices"
 	"strconv"
@@ -91,10 +92,11 @@ type kitLocalRuntimeMetadata struct {
 // The caller must retain its shared admission/fencing lock across lifecycle and
 // protocol operations. This mutex only serializes local lifecycle calls.
 type KitLocalRuntimeBackend struct {
-	config   KitLocalRuntimeConfig
-	engine   kitLocalEngine
-	mu       sync.Mutex
-	specHash string
+	config       KitLocalRuntimeConfig
+	engine       kitLocalEngine
+	mu           sync.Mutex
+	specHash     string
+	listenerDial func(context.Context, string, string) (net.Conn, error)
 }
 
 var _ RuntimeBackend = (*KitLocalRuntimeBackend)(nil)
@@ -132,7 +134,7 @@ func newKitLocalRuntimeBackend(config KitLocalRuntimeConfig, engine kitLocalEngi
 	if err != nil {
 		return nil, fmt.Errorf("encode kit local immutable spec: %w", err)
 	}
-	return &KitLocalRuntimeBackend{config: config, engine: engine, mu: sync.Mutex{}, specHash: fmt.Sprintf("%x", sha256.Sum256(encoded))}, nil
+	return &KitLocalRuntimeBackend{config: config, engine: engine, mu: sync.Mutex{}, listenerDial: (&net.Dialer{Timeout: time.Second}).DialContext, specHash: fmt.Sprintf("%x", sha256.Sum256(encoded))}, nil
 }
 func (k *KitLocalRuntimeBackend) Backend() string { return runtimeBackendLocal }
 func (k *KitLocalRuntimeBackend) SupportsBackend(backend string) bool {
@@ -309,11 +311,37 @@ func (k *KitLocalRuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeR
 		return result, err
 	}
 	r.BackendMetadataJSON = payload
-	if err := k.config.Ready(ctx, r, kitLocalEndpoint(info.HostPort)); err != nil {
+	readyCtx, cancelReady := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelReady()
+	endpoint := kitLocalEndpoint(info.HostPort)
+	if err := waitKitLocalListener(readyCtx, endpoint.Host, k.listenerDial); err != nil {
+		return result, fmt.Errorf("wait for kit gateway listener: %w", err)
+	}
+	if err := k.config.Ready(readyCtx, r, endpoint); err != nil {
 		return result, fmt.Errorf("authenticated kit readiness: %w", err)
 	}
 	return RuntimeBackendEnsureResult{ColdStart: created, BackendMetadataJSON: payload}, nil
 }
+
+// waitKitLocalListener sends no application bytes. Only this TCP readiness check
+// may retry; authenticated ACP initialization can have an uncertain POST outcome.
+func waitKitLocalListener(ctx context.Context, address string, dial func(context.Context, string, string) (net.Conn, error)) error {
+	for {
+		conn, err := dial(ctx, "tcp", address)
+		if err == nil {
+			_ = conn.Close()
+			return nil
+		}
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return errors.Join(ctx.Err(), err)
+		case <-timer.C:
+		}
+	}
+}
+
 func validateKitLocalBootstrap(b KitLocalBootstrap) error { return validateKitBootstrap(b) }
 
 func (k *KitLocalRuntimeBackend) endpoint(ctx context.Context, r assistantRuntimeRecord) (*url.URL, error) {

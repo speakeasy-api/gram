@@ -175,6 +175,8 @@ func (s *ServiceCore) interruptThreadRuntime(ctx context.Context, projectID, ass
 	}
 
 	interrupted, err := s.runtime.InterruptTurn(ctx, assistantRuntimeRecord{
+		LifecycleTx:         nil,
+		Retired:             false,
 		ID:                  row.ID,
 		AssistantThreadID:   row.AssistantThreadID,
 		AssistantID:         row.AssistantID,
