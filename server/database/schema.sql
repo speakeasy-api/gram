@@ -16177,3 +16177,99 @@ COMMENT ON COLUMN assistant_kit_interrupt_requests.attempt IS '@access: confiden
 COMMENT ON COLUMN assistant_kit_interrupt_requests.outcome IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_interrupt_requests.created_at IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_interrupt_requests.acknowledged_at IS '@access: confidential';
+
+-- Persistent, connection-bound subscriptions for the experimental MCP Events webhook profile.
+CREATE TABLE IF NOT EXISTS platform_mcp_event_subscriptions (
+  id text NOT NULL PRIMARY KEY,
+  project_id uuid NOT NULL,
+  organization_id text NOT NULL REFERENCES organization_metadata(id) ON DELETE SET NULL,
+  connection_id uuid,
+  connection_generation uuid NOT NULL,
+  client_id text NOT NULL,
+  user_id text NOT NULL,
+  event_name text NOT NULL,
+  callback_url text NOT NULL,
+  signing_secret text NOT NULL,
+  previous_signing_secret text,
+  previous_secret_expires_at timestamptz,
+  generation uuid NOT NULL,
+  subscribed_at timestamptz NOT NULL,
+  expires_at timestamptz NOT NULL,
+  verified_at timestamptz NOT NULL,
+  deleted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT platform_mcp_event_subscriptions_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
+  CONSTRAINT platform_mcp_event_subscriptions_connection_fkey FOREIGN KEY (organization_id, connection_id) REFERENCES platform_mcp_connections (organization_id, id) ON DELETE SET NULL (connection_id)
+);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_event_subscriptions_match_idx
+  ON platform_mcp_event_subscriptions (project_id, event_name, subscribed_at)
+  WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS platform_mcp_event_subscriptions_connection_idx
+  ON platform_mcp_event_subscriptions (connection_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_event_subscriptions_tenant_key
+  ON platform_mcp_event_subscriptions (organization_id, project_id, id);
+
+CREATE TABLE IF NOT EXISTS platform_mcp_event_deliveries (
+  id uuid NOT NULL PRIMARY KEY,
+  project_id uuid NOT NULL,
+  organization_id text NOT NULL REFERENCES organization_metadata(id) ON DELETE SET NULL,
+  subscription_id text,
+  subscription_generation uuid NOT NULL,
+  event_id uuid NOT NULL,
+  event_name text NOT NULL,
+  request_id uuid NOT NULL,
+  payload jsonb NOT NULL,
+  status text NOT NULL,
+  attempts integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT platform_mcp_event_deliveries_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
+  CONSTRAINT platform_mcp_event_deliveries_subscription_fkey FOREIGN KEY (organization_id, project_id, subscription_id) REFERENCES platform_mcp_event_subscriptions (organization_id, project_id, id) ON DELETE SET NULL (subscription_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_event_deliveries_occurrence_idx
+  ON platform_mcp_event_deliveries (subscription_id, subscription_generation, event_id);
+CREATE INDEX IF NOT EXISTS platform_mcp_event_deliveries_project_idx
+  ON platform_mcp_event_deliveries (project_id, created_at);
+COMMENT ON COLUMN platform_mcp_event_subscriptions.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.project_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.connection_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.client_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.user_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.event_name IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.callback_url IS '@access: restricted';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.signing_secret IS 'Encrypted webhook signing key.
+@access: secret-restricted';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.previous_signing_secret IS 'Encrypted webhook signing key.
+@access: secret-restricted';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.previous_secret_expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.subscribed_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.verified_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_subscriptions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.project_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.subscription_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.subscription_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.event_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.event_name IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.request_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.payload IS 'Server-constructed event references only; excludes evidence and user content.
+@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.status IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.attempts IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_event_deliveries.updated_at IS '@access: confidential';
+
+CREATE INDEX IF NOT EXISTS platform_mcp_event_subscriptions_retention_idx ON platform_mcp_event_subscriptions (least(expires_at, deleted_at), id);
+CREATE INDEX IF NOT EXISTS platform_mcp_event_deliveries_retention_idx ON platform_mcp_event_deliveries (created_at, id);
