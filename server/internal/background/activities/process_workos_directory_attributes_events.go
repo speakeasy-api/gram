@@ -29,6 +29,7 @@ import (
 
 type workosDirectoryGroupEventPayload struct {
 	ID             string          `json:"id"`
+	DirectoryID    string          `json:"directory_id"`
 	OrganizationID string          `json:"organization_id"`
 	Name           string          `json:"name"`
 	RawAttributes  json.RawMessage `json:"raw_attributes"`
@@ -38,6 +39,7 @@ type workosDirectoryGroupEventPayload struct {
 
 type workosDirectoryUserEventPayload struct {
 	ID               string          `json:"id"`
+	DirectoryID      string          `json:"directory_id"`
 	OrganizationID   string          `json:"organization_id"`
 	Email            string          `json:"email"`
 	CustomAttributes json.RawMessage `json:"custom_attributes"`
@@ -158,14 +160,25 @@ func applyDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.
 		if payload.State != "" && payload.State != string(directorysync.Active) {
 			return deactivateDirectoryUser(ctx, logger, dbtx, event, payload)
 		}
-		return none, upsertDirectoryUser(ctx, dbtx, event, payload)
+		return none, upsertDirectoryUser(ctx, logger, dbtx, event, payload)
 	case workos.EventKindDirectorySyncUserDeleted:
+		org, err := organizationsrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return none, nil
+		}
+		if err != nil {
+			return none, oops.E(oops.CodeUnexpected, err, "get organization by WorkOS ID")
+		}
 		existing, err := directoryrepo.New(dbtx).GetDirectoryUserSyncStateByWorkOSID(ctx, payload.ID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return none, nil
 		}
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "get directory user sync state")
+		}
+		if existing.OrganizationID != org.ID {
+			logger.WarnContext(ctx, "skipping directory user deletion with conflicting tenant", attr.SlogWorkOSDirectoryUserID(payload.ID))
+			return none, nil
 		}
 		var rowUpdatedAt *time.Time
 		if existing.WorkosUpdatedAt.Valid {
@@ -176,9 +189,11 @@ func applyDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.
 			return none, nil
 		}
 		if _, err := directoryrepo.New(dbtx).DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
+			OrganizationID:        org.ID,
 			WorkosDeletedAt:       conv.ToPGTimestamptz(eventUpdatedAt),
 			WorkosLastEventID:     conv.ToPGText(event.ID),
 			WorkosDirectoryUserID: payload.ID,
+			DirectoryID:           conv.ToPGTextEmpty(payload.DirectoryID),
 		}); err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "delete directory user")
 		}
@@ -199,7 +214,7 @@ func handleDirectoryGroupEvent(ctx context.Context, logger *slog.Logger, dbtx da
 
 	switch workos.EventKind(event.Event) {
 	case workos.EventKindDirectorySyncGroupCreated, workos.EventKindDirectorySyncGroupUpdated:
-		if err := upsertDirectoryGroup(ctx, dbtx, event, payload); err != nil {
+		if err := upsertDirectoryGroup(ctx, logger, dbtx, event, payload); err != nil {
 			return err
 		}
 	case workos.EventKindDirectorySyncGroupDeleted:
@@ -231,7 +246,7 @@ func handleDirectoryGroupMembershipEvent(ctx context.Context, logger *slog.Logge
 	}
 }
 
-func upsertDirectoryGroup(ctx context.Context, dbtx database.DBTX, event events.Event, payload workosDirectoryGroupEventPayload) error {
+func upsertDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryGroupEventPayload) error {
 	org, err := organizationsrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get organization by WorkOS ID")
@@ -242,6 +257,10 @@ func upsertDirectoryGroup(ctx context.Context, dbtx database.DBTX, event events.
 		return oops.E(oops.CodeUnexpected, err, "get directory group sync state")
 	}
 	if err == nil {
+		if existing.OrganizationID != org.ID {
+			logger.WarnContext(ctx, "skipping directory group event with conflicting tenant", attr.SlogWorkOSDirectoryGroupID(payload.ID))
+			return nil
+		}
 		var rowUpdatedAt *time.Time
 		if existing.WorkosUpdatedAt.Valid {
 			rowUpdatedAt = &existing.WorkosUpdatedAt.Time
@@ -258,6 +277,7 @@ func upsertDirectoryGroup(ctx context.Context, dbtx database.DBTX, event events.
 	if _, err := directoryrepo.New(dbtx).UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
 		OrganizationID:         org.ID,
 		WorkosDirectoryGroupID: payload.ID,
+		DirectoryID:            conv.ToPGTextEmpty(payload.DirectoryID),
 		Name:                   payload.Name,
 		// Groups have no custom_attributes equivalent; raw_attributes is the
 		// only attribute payload WorkOS sends for directory groups.
@@ -266,13 +286,17 @@ func upsertDirectoryGroup(ctx context.Context, dbtx database.DBTX, event events.
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(conv.Default(payload.UpdatedAt, event.CreatedAt)),
 		WorkosLastEventID: conv.ToPGText(event.ID),
 	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			logger.WarnContext(ctx, "skipping directory group write with conflicting tenant", attr.SlogWorkOSDirectoryGroupID(payload.ID))
+			return nil
+		}
 		return oops.E(oops.CodeUnexpected, err, "upsert directory group")
 	}
 
 	return nil
 }
 
-func upsertDirectoryUser(ctx context.Context, dbtx database.DBTX, event events.Event, payload workosDirectoryUserEventPayload) error {
+func upsertDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryUserEventPayload) error {
 	org, err := organizationsrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get organization by WorkOS ID")
@@ -283,6 +307,10 @@ func upsertDirectoryUser(ctx context.Context, dbtx database.DBTX, event events.E
 		return oops.E(oops.CodeUnexpected, err, "get directory user sync state")
 	}
 	if err == nil {
+		if existing.OrganizationID != org.ID {
+			logger.WarnContext(ctx, "skipping directory user event with conflicting tenant", attr.SlogWorkOSDirectoryUserID(payload.ID))
+			return nil
+		}
 		var rowUpdatedAt *time.Time
 		if existing.WorkosUpdatedAt.Valid {
 			rowUpdatedAt = &existing.WorkosUpdatedAt.Time
@@ -313,6 +341,7 @@ func upsertDirectoryUser(ctx context.Context, dbtx database.DBTX, event events.E
 		OrganizationID:        org.ID,
 		UserID:                userID,
 		WorkosDirectoryUserID: payload.ID,
+		DirectoryID:           conv.ToPGTextEmpty(payload.DirectoryID),
 		Email:                 conv.ToPGText(email),
 		Attributes:            attributes,
 		// Only an explicitly active state may resurrect a soft-deleted row.
@@ -323,6 +352,10 @@ func upsertDirectoryUser(ctx context.Context, dbtx database.DBTX, event events.E
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(conv.Default(payload.UpdatedAt, event.CreatedAt)),
 		WorkosLastEventID: conv.ToPGText(event.ID),
 	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			logger.WarnContext(ctx, "skipping directory user write with conflicting tenant", attr.SlogWorkOSDirectoryUserID(payload.ID))
+			return nil
+		}
 		return oops.E(oops.CodeUnexpected, err, "upsert directory user")
 	}
 	return nil
@@ -348,6 +381,10 @@ func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx pgx.
 		return none, oops.E(oops.CodeUnexpected, err, "get directory user sync state")
 	}
 	if err == nil {
+		if existing.OrganizationID != org.ID {
+			logger.WarnContext(ctx, "skipping directory user deactivation with conflicting tenant", attr.SlogWorkOSDirectoryUserID(payload.ID))
+			return none, nil
+		}
 		var rowUpdatedAt *time.Time
 		if existing.WorkosUpdatedAt.Valid {
 			rowUpdatedAt = &existing.WorkosUpdatedAt.Time
@@ -382,9 +419,11 @@ func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx pgx.
 	}
 
 	if _, err := directoryrepo.New(dbtx).DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
+		OrganizationID:        org.ID,
 		WorkosDeletedAt:       conv.ToPGTimestamptz(eventUpdatedAt),
 		WorkosLastEventID:     conv.ToPGText(event.ID),
 		WorkosDirectoryUserID: payload.ID,
+		DirectoryID:           conv.ToPGTextEmpty(payload.DirectoryID),
 	}); err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "deactivate directory user")
 	}
@@ -442,6 +481,13 @@ func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx pgx.
 }
 
 func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryGroupEventPayload) error {
+	org, err := organizationsrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get organization by WorkOS ID")
+	}
 	existing, err := directoryrepo.New(dbtx).GetDirectoryGroupSyncStateByWorkOSID(ctx, payload.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		logger.WarnContext(ctx, "skipping directory group deletion for unknown group",
@@ -452,6 +498,10 @@ func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx databas
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get directory group sync state")
 	}
+	if existing.OrganizationID != org.ID {
+		logger.WarnContext(ctx, "skipping directory group deletion with conflicting tenant", attr.SlogWorkOSDirectoryGroupID(payload.ID))
+		return nil
+	}
 	var rowUpdatedAt *time.Time
 	if existing.WorkosUpdatedAt.Valid {
 		rowUpdatedAt = &existing.WorkosUpdatedAt.Time
@@ -461,9 +511,11 @@ func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx databas
 	}
 
 	_, err = directoryrepo.New(dbtx).DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
+		OrganizationID:         org.ID,
 		WorkosDeletedAt:        conv.ToPGTimestamptz(conv.Default(payload.UpdatedAt, event.CreatedAt)),
 		WorkosLastEventID:      conv.ToPGText(event.ID),
 		WorkosDirectoryGroupID: payload.ID,
+		DirectoryID:            conv.ToPGTextEmpty(payload.DirectoryID),
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete directory group")
@@ -480,7 +532,7 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 	// strictly before or after a member reconcile of the same group.
 	groupID, err := directoryrepo.New(dbtx).GetDirectoryGroupIDByWorkOSID(ctx, payload.Group.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		groupID, err = createDirectoryGroupFromMembership(ctx, dbtx, event, payload.Group)
+		groupID, err = createDirectoryGroupFromMembership(ctx, logger, dbtx, event, payload.Group)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		logger.WarnContext(ctx, "skipping directory group membership for unknown group",
@@ -532,7 +584,7 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 // and every membership event for it would be dropped. A group row that exists
 // but is deleted is left alone, so a deletion is never undone here. It
 // returns pgx.ErrNoRows when the group cannot be created.
-func createDirectoryGroupFromMembership(ctx context.Context, dbtx database.DBTX, event events.Event, group workosDirectoryGroupEventPayload) (uuid.UUID, error) {
+func createDirectoryGroupFromMembership(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, group workosDirectoryGroupEventPayload) (uuid.UUID, error) {
 	_, err := directoryrepo.New(dbtx).GetDirectoryGroupSyncStateByWorkOSID(ctx, group.ID)
 	switch {
 	case err == nil:
@@ -544,7 +596,7 @@ func createDirectoryGroupFromMembership(ctx context.Context, dbtx database.DBTX,
 		return uuid.Nil, pgx.ErrNoRows
 	}
 
-	if err := upsertDirectoryGroup(ctx, dbtx, event, group); err != nil {
+	if err := upsertDirectoryGroup(ctx, logger, dbtx, event, group); err != nil {
 		return uuid.Nil, err
 	}
 	if err := reviewDirectoryGroup(ctx, dbtx, group.OrganizationID, group.ID); err != nil {
