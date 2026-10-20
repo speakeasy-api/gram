@@ -563,18 +563,12 @@ type AssistantInferenceCredential struct {
 	AssistantID uuid.UUID
 	// @access: confidential
 	RuntimeID uuid.UUID
-	// @access: opaque-restricted
-	TokenHash []byte
+	// @access: confidential
+	ApiKeyID uuid.UUID
 	// @access: opaque-restricted
 	IdentityJson []byte
-	// @access: opaque-restricted
-	PolicyJson []byte
-	// @access: confidential
-	PolicyVersion int32
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	ExpiresAt pgtype.Timestamptz
 	// @access: confidential
 	RevokedAt pgtype.Timestamptz
 }
