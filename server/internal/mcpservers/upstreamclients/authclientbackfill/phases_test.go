@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -1152,4 +1153,77 @@ func TestRun_AnAssociationOutOfReachLeavesCredentialHeadersTheirOwnClient(t *tes
 	static := f.live(TypeStaticCredential)
 	require.Len(t, static, 1, "the OAuth phase never records a client whose issuer is gone")
 	require.Equal(t, []uuid.UUID{static[0].ID}, f.links(server))
+}
+
+func TestRun_EMABindingWithADeletedRegistrationOrIssuerIsOutOfReach(t *testing.T) {
+	t.Parallel()
+	for name, remove := range map[string]func(f *fixture, clientID uuid.UUID){
+		"registration": func(f *fixture, clientID uuid.UUID) {
+			require.NoError(f.t, f.q.SoftDeleteRemoteSessionClientFixture(f.t.Context(), clientID))
+		},
+		"issuer": func(f *fixture, clientID uuid.UUID) {
+			require.NoError(f.t, f.q.SoftDeleteIssuerOfClientFixture(f.t.Context(), clientID))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			usi := f.userSessionIssuer()
+			clientID, issuerID := f.emaClient()
+			resource := "https://mcp.vendor.example.com/mcp"
+			server := f.serverAt(resource, usi)
+			f.binding(usi, issuerID, clientID, resource, []string{})
+			f.run(true)
+			require.Len(t, f.live(TypeEMA), 1)
+
+			remove(f, clientID)
+			report := f.run(true)
+			ambiguous := results(report, KindEMA, OutcomeAmbiguous)
+			require.Len(t, ambiguous, 1)
+			require.Equal(t, ReasonRegistrationOutOfReach, ambiguous[0].Reason)
+			require.Empty(t, f.live(TypeEMA), "a client backed by a deleted upstream identity is retired")
+			require.Empty(t, f.links(server))
+		})
+	}
+}
+
+func TestRun_AuthorizationHeaderWithNoServerRecordsNoClient(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.staticHeader(f.source(), "Authorization")
+
+	report := f.run(true)
+	require.Zero(t, report.ClientsWritten)
+	require.Empty(t, f.live(TypeStaticCredential))
+}
+
+// TestRun_HoldsTheLockAcrossPhases is not parallel: it swaps beforePhase.
+func TestRun_HoldsTheLockAcrossPhases(t *testing.T) { //nolint:paralleltest // swaps a package seam
+	f := newFixture(t)
+	var lockedElsewhere *bool
+	original := beforePhase
+	beforePhase = func(name string) error {
+		if name != PhaseReconcile {
+			return nil
+		}
+		conn, err := f.pool.Acquire(t.Context())
+		if err != nil {
+			return fmt.Errorf("acquire: %w", err)
+		}
+		defer conn.Release()
+		got, err := New(conn).TryLockOrganizationBackfill(t.Context(), f.orgID)
+		if err != nil {
+			return fmt.Errorf("try lock: %w", err)
+		}
+		if got {
+			_ = New(conn).UnlockOrganizationBackfill(t.Context(), f.orgID)
+		}
+		lockedElsewhere = &got
+		return nil
+	}
+	t.Cleanup(func() { beforePhase = original })
+
+	f.run(true)
+	require.NotNil(t, lockedElsewhere)
+	require.False(t, *lockedElsewhere, "another run cannot take the lock between phases")
 }

@@ -119,6 +119,11 @@ func decideSource(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, row 
 		if row.AuthorizationIsStatic {
 			clientType = TypeStaticCredential
 		}
+		// With no live server to offer it, no client is recorded; an earlier
+		// one is retired.
+		if len(servers) == 0 {
+			return nil
+		}
 		anchor = uuid.NullUUID{UUID: row.AuthorizationHeaderID, Valid: true}
 		id = HeaderClientID(opts.OrganizationID, row.SourceKind, row.SourceID, row.AuthorizationHeaderID, clientType)
 	} else {

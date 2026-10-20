@@ -235,6 +235,7 @@ func TestRun_RemovedAssociationIsSkipped(t *testing.T) {
 	report := Report{Mode: "apply", Outcomes: map[Outcome]int{}, ByKind: map[Kind]*KindCounts{}, PhaseErrors: map[string]string{}, Results: []Result{}}
 	tx, err := f.pool.Begin(t.Context()) //nolint:glint // notestingrawsql: transaction boundary only; the decision uses generated SQLc methods.
 	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) }()
 	result, err := decideAndWrite(t.Context(), tx, New(tx), Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, rows[0], map[clientKey]uuid.UUID{}, &report)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))

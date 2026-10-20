@@ -324,9 +324,14 @@ RETURNING target.id;
 SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || @organization_id::text));
 
 -- name: TryLockOrganizationBackfill :one
--- Takes the organization's backfill lock for the transaction's life without
--- waiting; false means another run holds it.
-SELECT pg_try_advisory_xact_lock(hashtext('authclientbackfill:' || @organization_id::text))::boolean AS locked;
+-- Takes the organization's backfill lock for the session's life without
+-- waiting, so one run holds it across all its phases; false means another run
+-- holds it.
+SELECT pg_try_advisory_lock(hashtext('authclientbackfill:' || @organization_id::text))::boolean AS locked;
+
+-- name: UnlockOrganizationBackfill :exec
+-- Releases the organization's session backfill lock.
+SELECT pg_advisory_unlock(hashtext('authclientbackfill:' || @organization_id::text));
 
 -- name: ListCredentialSources :many
 -- Live remote and tunneled MCP sources in live projects of the organization
@@ -589,12 +594,14 @@ FROM (
          'remote'::text AS source_kind, r.id AS source_id
   FROM remote_mcp_server_headers AS h
   JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
+  JOIN projects AS sp ON sp.id = r.project_id AND sp.organization_id = @organization_id::text AND sp.deleted IS FALSE
   WHERE @src_kind::text = 'remote' AND h.id = @src_id::uuid AND h.deleted IS FALSE
   UNION ALL
   SELECT h.name, h.description, h.is_required, h.is_secret, h.value, h.value_from_request_header,
          'tunneled'::text, t.id
   FROM tunneled_mcp_server_headers AS h
   JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id AND t.deleted IS FALSE
+  JOIN projects AS sp ON sp.id = t.project_id AND sp.organization_id = @organization_id::text AND sp.deleted IS FALSE
   WHERE @src_kind::text = 'tunneled' AND h.id = @src_id::uuid AND h.deleted IS FALSE
 ) AS src
 WHERE c.id = @copy_id::uuid
@@ -711,10 +718,14 @@ LEFT JOIN LATERAL (
          COUNT(DISTINCT lower(x.name)) < COUNT(*) AS duplicate
   FROM (
     SELECT h.id, h.name FROM remote_mcp_server_headers AS h
+    JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
+    JOIN projects AS sp ON sp.id = r.project_id AND sp.organization_id = @organization_id::text AND sp.deleted IS FALSE
     WHERE g.source_kind = 'remote' AND h.remote_mcp_server_id = g.source_id AND h.deleted IS FALSE
       AND lower(h.name) <> 'authorization' AND (h.value_from_request_header IS NOT NULL OR h.is_secret)
     UNION ALL
     SELECT h.id, h.name FROM tunneled_mcp_server_headers AS h
+    JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id AND t.deleted IS FALSE
+    JOIN projects AS sp ON sp.id = t.project_id AND sp.organization_id = @organization_id::text AND sp.deleted IS FALSE
     WHERE g.source_kind = 'tunneled' AND h.tunneled_mcp_server_id = g.source_id AND h.deleted IS FALSE
       AND lower(h.name) <> 'authorization' AND (h.value_from_request_header IS NOT NULL OR h.is_secret)
   ) AS x
@@ -736,6 +747,8 @@ ORDER BY ac.id;
 -- name: ListEMABackfillBindings :many
 -- The organization's ready, client-bound identity chaining bindings in live
 -- projects, as the runtime selects them, with the exact and trimmed resource.
+-- in_reach reports that the binding's registration and its issuer are live
+-- and belong to the binding's project, its organization or the platform.
 SELECT b.id AS binding_id,
        b.project_id,
        b.user_session_issuer_id,
@@ -744,7 +757,16 @@ SELECT b.id AS binding_id,
        rtrim(b.resource, '/')::text AS resource,
        b.requested_scopes,
        b.remote_session_client_id::uuid AS remote_session_client_id,
-       rsi.name AS issuer_name
+       rsi.name AS issuer_name,
+       (rsi.id IS NOT NULL AND EXISTS (
+         SELECT 1 FROM remote_session_clients AS c
+         WHERE c.id = b.remote_session_client_id
+           AND c.remote_session_issuer_id = b.remote_session_issuer_id
+           AND c.deleted IS FALSE
+           AND (c.project_id = b.project_id
+                OR (c.project_id IS NULL AND c.organization_id = b.organization_id)
+                OR (c.project_id IS NULL AND c.organization_id IS NULL))
+       ))::boolean AS in_reach
 FROM remote_session_ema_bindings AS b
 JOIN projects AS p
   ON p.id = b.project_id
@@ -753,6 +775,9 @@ JOIN projects AS p
 LEFT JOIN remote_session_issuers AS rsi
   ON rsi.id = b.remote_session_issuer_id
  AND rsi.deleted IS FALSE
+ AND (rsi.project_id = b.project_id
+      OR (rsi.project_id IS NULL AND rsi.organization_id = b.organization_id)
+      OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
 WHERE b.organization_id = @organization_id::text
   AND b.state = 'ready'
   AND b.remote_session_client_id IS NOT NULL
@@ -775,7 +800,19 @@ SELECT s.id AS mcp_server_id,
              ) THEN 'issuer_not_allowed'
              ELSE 'match' END)::text AS match
 FROM remote_session_ema_bindings AS b
-JOIN remote_session_issuers AS rsi ON rsi.id = b.remote_session_issuer_id
+JOIN remote_session_issuers AS rsi
+  ON rsi.id = b.remote_session_issuer_id
+ AND rsi.deleted IS FALSE
+ AND (rsi.project_id = b.project_id
+      OR (rsi.project_id IS NULL AND rsi.organization_id = b.organization_id)
+      OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
+JOIN remote_session_clients AS rc
+  ON rc.id = b.remote_session_client_id
+ AND rc.remote_session_issuer_id = b.remote_session_issuer_id
+ AND rc.deleted IS FALSE
+ AND (rc.project_id = b.project_id
+      OR (rc.project_id IS NULL AND rc.organization_id = b.organization_id)
+      OR (rc.project_id IS NULL AND rc.organization_id IS NULL))
 JOIN mcp_servers AS s
   ON s.project_id = b.project_id
  AND s.user_session_issuer_id = b.user_session_issuer_id
@@ -907,11 +944,18 @@ WITH base AS (
          OR (c.project_id IS NULL AND c.organization_id IS NULL))
     AND EXISTS (
       SELECT 1 FROM remote_session_ema_bindings AS b
+      JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
       WHERE b.organization_id = @organization_id::text
         AND b.remote_session_issuer_id = c.remote_session_issuer_id
         AND b.remote_session_client_id = c.id
         AND b.resource = @resource::text
         AND b.state = 'ready'
+        AND (c.project_id = b.project_id
+             OR (c.project_id IS NULL AND c.organization_id = b.organization_id)
+             OR (c.project_id IS NULL AND c.organization_id IS NULL))
+        AND (rsi.project_id = b.project_id
+             OR (rsi.project_id IS NULL AND rsi.organization_id = b.organization_id)
+             OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
         AND ARRAY(SELECT DISTINCT btrim(x) FROM unnest(b.requested_scopes) AS x WHERE btrim(x) <> '' ORDER BY 1) = @requested_scopes::text[]
     )
   RETURNING id, organization_id, remote_session_client_id
@@ -938,7 +982,19 @@ JOIN mcp_auth_clients AS ac
  AND ac.deleted IS FALSE
  AND (ac.project_id IS NULL OR ac.project_id = s.project_id)
 JOIN mcp_auth_client_emas AS e ON e.auth_client_id = ac.id AND e.deleted IS FALSE
-JOIN remote_session_issuers AS rsi ON rsi.id = e.remote_session_issuer_id
+JOIN remote_session_issuers AS rsi
+  ON rsi.id = e.remote_session_issuer_id
+ AND rsi.deleted IS FALSE
+ AND (rsi.project_id = s.project_id
+      OR (rsi.project_id IS NULL AND rsi.organization_id = p.organization_id)
+      OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
+JOIN remote_session_clients AS rc
+  ON rc.id = e.remote_session_client_id
+ AND rc.remote_session_issuer_id = e.remote_session_issuer_id
+ AND rc.deleted IS FALSE
+ AND (rc.project_id = s.project_id
+      OR (rc.project_id IS NULL AND rc.organization_id = p.organization_id)
+      OR (rc.project_id IS NULL AND rc.organization_id IS NULL))
 LEFT JOIN remote_mcp_servers AS r ON r.id = s.remote_mcp_server_id AND r.deleted IS FALSE
 LEFT JOIN tunneled_mcp_servers AS t ON t.id = s.tunneled_mcp_server_id AND t.deleted IS FALSE
 LEFT JOIN LATERAL (

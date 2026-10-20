@@ -34,6 +34,23 @@ func runEMA(ctx context.Context, tx pgx.Tx, opts Options, committed *Report, rep
 	groups := map[emaUpstream][]ListEMABackfillBindingsRow{}
 	var order []emaUpstream
 	for _, binding := range bindings {
+		if !binding.InReach {
+			report.add(Result{
+				Kind:                  KindEMA,
+				SubjectID:             binding.BindingID,
+				AssociationID:         uuid.Nil,
+				MCPServerID:           uuid.Nil,
+				ProjectID:             binding.ProjectID,
+				RemoteSessionClientID: binding.RemoteSessionClientID,
+				BindingIDs:            []uuid.UUID{binding.BindingID},
+				SourceIDs:             nil,
+				ServerIDs:             nil,
+				AuthClientID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				Outcome:               OutcomeAmbiguous,
+				Reason:                ReasonRegistrationOutOfReach,
+			})
+			continue
+		}
 		key := emaUpstream{issuerID: binding.RemoteSessionIssuerID, clientID: binding.RemoteSessionClientID, resource: binding.Resource}
 		if _, ok := groups[key]; !ok {
 			order = append(order, key)

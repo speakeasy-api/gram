@@ -24,6 +24,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // defaultPageSize bounds each page read.
@@ -166,6 +167,11 @@ const (
 	// resource matches whose protected resource metadata does not list the
 	// upstream's issuer, so the runtime would refuse the exchange.
 	ReasonIssuerNotAllowed Reason = "issuer_not_allowed"
+
+	// ReasonRegistrationOutOfReach is an identity chaining binding whose
+	// registration or issuer is deleted or belongs to no scope the binding's
+	// project can use.
+	ReasonRegistrationOutOfReach Reason = "registration_out_of_reach"
 
 	// ReasonServerNotMatched is a warning: a server with no other backfilled
 	// auth client at the same origin as an identity chaining upstream, whose
@@ -433,9 +439,14 @@ func (r *Report) merge(o Report) {
 	r.Results = append(r.Results, o.Results...)
 }
 
-// TxStarter begins the transactions a run holds its lock in.
+// TxStarter begins the transactions a run's phases use.
 type TxStarter interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+// Acquirer hands out the one connection a run holds its lock on.
+type Acquirer interface {
+	Acquire(ctx context.Context) (*pgxpool.Conn, error)
 }
 
 // ErrRunInProgress means another run holds the organization's backfill lock.
@@ -463,17 +474,35 @@ type phase struct {
 }
 
 // Run decides every configured upstream identity and, with Apply, writes the
-// decisions. Each phase runs in its own transaction holding the
-// organization's advisory lock, taken without waiting: when another run holds
-// it, Run returns ErrRunInProgress, dry runs included. A phase's report is
+// decisions. The run holds the organization's advisory lock on one connection
+// for all its phases, taken without waiting: when another run holds it, Run
+// returns ErrRunInProgress, dry runs included. Each phase runs in its own
+// transaction on that connection. A phase's report is
 // kept only when it commits; a failed phase is rolled back and named in
 // PhaseErrors, its records are not retired, and the later phases still run.
 // What earlier phases committed stays, so an interrupted apply keeps its
 // progress. Run returns an error only when the run as a whole cannot proceed.
-func Run(ctx context.Context, db TxStarter, opts Options) (Report, error) {
+func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 	if opts.OrganizationID == "" {
 		return Report{}, errors.New("organization id is required")
 	}
+	conn, err := db.Acquire(ctx)
+	if err != nil {
+		return Report{}, fmt.Errorf("acquire connection: %w", err)
+	}
+	defer conn.Release()
+	locked, err := New(conn).TryLockOrganizationBackfill(ctx, opts.OrganizationID)
+	switch {
+	case err != nil:
+		return Report{}, fmt.Errorf("lock organization backfill: %w", err)
+	case !locked:
+		return Report{}, ErrRunInProgress
+	}
+	defer func() { _ = New(conn).UnlockOrganizationBackfill(context.WithoutCancel(ctx), opts.OrganizationID) }()
+	return runLocked(ctx, conn, opts)
+}
+
+func runLocked(ctx context.Context, db TxStarter, opts Options) (Report, error) {
 	pageSize := opts.PageSize
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
@@ -508,8 +537,6 @@ func Run(ctx context.Context, db TxStarter, opts Options) (Report, error) {
 		local := newReport(opts.Apply)
 		err := runPhase(ctx, db, opts, p, &local)
 		switch {
-		case errors.Is(err, ErrRunInProgress):
-			return report, err
 		case err != nil:
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return report, fmt.Errorf("backfill interrupted: %w", ctxErr)
@@ -525,21 +552,14 @@ func Run(ctx context.Context, db TxStarter, opts Options) (Report, error) {
 	return report, nil
 }
 
-// runPhase runs one phase in its own transaction under the organization's
-// lock, committing on apply and rolling back on a dry run.
+// runPhase runs one phase in its own transaction, committing on apply and
+// rolling back on a dry run.
 func runPhase(ctx context.Context, db TxStarter, opts Options, p phase, local *Report) error {
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin %s phase: %w", p.name, err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	locked, err := New(tx).TryLockOrganizationBackfill(ctx, opts.OrganizationID)
-	switch {
-	case err != nil:
-		return fmt.Errorf("lock %s phase: %w", p.name, err)
-	case !locked:
-		return ErrRunInProgress
-	}
 	if err := beforePhase(p.name); err != nil {
 		return err
 	}

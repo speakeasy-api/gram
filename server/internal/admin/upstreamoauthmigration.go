@@ -48,6 +48,9 @@ func (s *Service) GetUpstreamOAuthMigrationStatus(ctx context.Context, p *gen.Ge
 // request so a closed tab does not cut a phase short.
 const authClientRunTimeout = 15 * time.Minute
 
+// authClientStatusTimeout bounds the status read that follows a run.
+const authClientStatusTimeout = 2 * time.Minute
+
 func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstreamOAuthMigrationPayload) (*gen.AdminUpstreamOAuthMigrationRun, error) {
 	auth, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || auth == nil || auth.OIDCSubject == "" {
@@ -104,16 +107,21 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 			)
 		}
 	}
-	status, err := s.upstreamOAuthMigrationStatus(ctx, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	logger.InfoContext(ctx, "upstream oauth migration ran",
+	// The writes above are committed even if the caller has gone, so the
+	// audit line and the status read do not depend on the request.
+	detached := context.WithoutCancel(ctx)
+	logger.InfoContext(detached, "upstream oauth migration ran",
 		attr.SlogAuditAction("upstream_oauth_migration:run"),
 		attr.SlogAuditSubject("organization"),
 		attr.SlogAuditSubjectID(organizationID),
 		attr.SlogAdminOIDCSubject(auth.OIDCSubject),
 	)
+	statusCtx, cancelStatus := context.WithTimeout(detached, authClientStatusTimeout)
+	defer cancelStatus()
+	status, err := s.upstreamOAuthMigrationStatus(statusCtx, organizationID)
+	if err != nil {
+		return nil, err
+	}
 	return &gen.AdminUpstreamOAuthMigrationRun{
 		AssociationsWritten:                int64(associations.Written),
 		AssociationsSkipped:                int64(associations.Skipped),
