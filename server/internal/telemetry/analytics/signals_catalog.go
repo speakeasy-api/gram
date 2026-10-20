@@ -122,15 +122,19 @@ func (e *Engine) DescribeSignals(ctx context.Context, tenant Tenant) (*SignalCat
 		return nil, newError(ErrLimitExceeded, signalquery.Dataset, "configuration", "", "project configuration exceeds the discoverable authoring limit")
 	}
 	out := &SignalCatalog{Dataset: signalquery.Dataset, Unit: "original_message", Population: "answered original-message readings that measured the selected signal or ordered level", Steps: []string{"auto", "minute", "hour", "day", "week", "month"}, Operators: []string{"equals", "in", "exists", "missing"}, SystemDimensions: []string{"source", "role", "actor", "assistant", "definition"}, InitialAttributes: []string{"model_family", "model_provider", "model_name", "department"}, MaxSpanDays: signalquery.MaxSpanDays, MaxGroups: signalquery.MaxGroups, MaxPoints: signalquery.MaxPoints, Sensors: []SignalSensor{}, Signals: []SignalName{}}
+	active := make(map[uuid.UUID]bool, len(labels))
+	for _, label := range labels {
+		active[label.ID] = true
+		out.Signals = append(out.Signals, SignalName{ID: label.ID.String(), Name: label.Name})
+	}
 	for _, sensor := range sensors {
-		ids := make([]string, len(sensor.SignalIds))
-		for i, id := range sensor.SignalIds {
-			ids[i] = id.String()
+		ids := make([]string, 0, len(sensor.SignalIds))
+		for _, id := range sensor.SignalIds {
+			if active[id] {
+				ids = append(ids, id.String())
+			}
 		}
 		out.Sensors = append(out.Sensors, SignalSensor{ID: sensor.ID.String(), Name: sensor.Name, Mode: sensor.Mode, Enabled: sensor.Enabled, SignalIDs: ids})
-	}
-	for _, label := range labels {
-		out.Signals = append(out.Signals, SignalName{ID: label.ID.String(), Name: label.Name})
 	}
 	return out, nil
 }

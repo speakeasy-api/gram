@@ -198,7 +198,9 @@ type AnalyticsSignalDefinition struct {
 type AnalyticsSignalDimension struct {
 	// System dimension from the analytics catalog: source, role, actor, assistant
 	// or definition
-	Field     *string
+	Field *string
+	// Exact label key, at most 256 UTF-8 bytes; the shared query engine enforces
+	// the byte limit.
 	Attribute *string
 }
 

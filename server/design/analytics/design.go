@@ -75,7 +75,7 @@ var QueryPayload = Type("AnalyticsQueryPayload", func() {
 })
 
 var QueryResult = Type("AnalyticsQueryResult", func() {
-	Description("One shape for both modes. Row keys are the requested dimension names plus each measure's alias; time_bucket is present only when grain is set, and time on ungrouped rows.")
+	Description("Composed queries return requested dimensions and measure aliases, with time_bucket for grouped intervals or time for ungrouped rows. The signals dataset instead returns fixed time-series rows: time_bucket, bucket_end, series_id, observed, partial, matched_messages, answered, match_share, matched_sessions, evaluated_sessions, session_breadth, and outcome/definition companions. series_id joins each row to signal_result.groups; signal_result.metadata and signal_result.summary describe the scope and whole-window population. Signal rows remain in the top-level rows field.")
 	Attribute("dataset", String, "The dataset queried")
 	Attribute("plan", String, "A stable diagnostic identifier for how the query was answered. Deliberately not a table name.")
 	Attribute("rows", ArrayOf(MapOf(String, Any)), "Result rows")

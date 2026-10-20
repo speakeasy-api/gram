@@ -234,10 +234,12 @@ func runAnalyticsQuerySchema() *jsonschema.Schema {
 }
 
 func signalDimensionSchema() *jsonschema.Schema {
-	return described(closedObject(map[string]*jsonschema.Schema{
+	schema := described(closedObject(map[string]*jsonschema.Schema{
 		"field":     stringSchema("System dimension advertised by signal_metrics.system_dimensions.", 1, 64),
-		"attribute": stringSchema("Exact arbitrary label key, mutually exclusive with field.", 1, 256),
+		"attribute": {Type: "string", MinLength: new(1), Description: "Exact arbitrary label key, at most 256 UTF-8 bytes; validated by the shared query engine."},
 	}, nil), "Exactly one system field or attribute key.")
+	schema.OneOf = []*jsonschema.Schema{{Required: []string{"field"}}, {Required: []string{"attribute"}}}
+	return schema
 }
 
 func signalScopeSchema() *jsonschema.Schema {
@@ -253,8 +255,9 @@ func signalQuerySchema() *jsonschema.Schema {
 		"sensor_id":     uuidSchema("Contributing sensor from signal_metrics.sensors."),
 		"signal_id":     uuidSchema("Signal for multi-label or exclusive measurements; omit with minimum_level."),
 		"minimum_level": {Type: "integer", Minimum: new(float64(0)), Maximum: new(float64(9)), Description: "Zero-based ordered level; use cumulative probability at or above it, never expected_index."},
-		"threshold":     {Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1)), Description: "Explicit probability threshold greater than zero. Exclusive mode uses the selected signal."},
+		"threshold":     {Type: "number", ExclusiveMinimum: new(float64(0)), Maximum: new(float64(1)), Description: "Explicit probability threshold greater than zero. Exclusive mode uses the selected signal."},
 	}, []string{"sensor_id", "threshold"})
+	selection.OneOf = []*jsonschema.Schema{{Required: []string{"signal_id"}}, {Required: []string{"minimum_level"}}}
 	filter := closedObject(map[string]*jsonschema.Schema{
 		"dimension": signalDimensionSchema(),
 		"operator":  stringSchema("Comparison advertised by signal_metrics.operators.", 1, 64),

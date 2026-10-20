@@ -93125,7 +93125,7 @@ components:
                     description: Result rows
                 signal_result:
                     $ref: '#/components/schemas/AnalyticsSignalResult'
-            description: One shape for both modes. Row keys are the requested dimension names plus each measure's alias; time_bucket is present only when grain is set, and time on ungrouped rows.
+            description: 'Composed queries return requested dimensions and measure aliases, with time_bucket for grouped intervals or time for ungrouped rows. The signals dataset instead returns fixed time-series rows: time_bucket, bucket_end, series_id, observed, partial, matched_messages, answered, match_share, matched_sessions, evaluated_sessions, session_breadth, and outcome/definition companions. series_id joins each row to signal_result.groups; signal_result.metadata and signal_result.summary describe the scope and whole-window population. Signal rows remain in the top-level rows field.'
             required:
                 - dataset
                 - plan
@@ -93208,8 +93208,8 @@ components:
             properties:
                 attribute:
                     type: string
+                    description: Exact label key, at most 256 UTF-8 bytes; the shared query engine enforces the byte limit.
                     minLength: 1
-                    maxLength: 256
                 field:
                     type: string
                     description: 'System dimension from the analytics catalog: source, role, actor, assistant or definition'
@@ -93402,7 +93402,7 @@ components:
                     type: number
                     description: Explicit probability threshold greater than zero. Exclusive results use the selected signal instead.
                     format: double
-                    minimum: 0
+                    exclusiveMinimum: 0
                     maximum: 1
             required:
                 - sensor_id

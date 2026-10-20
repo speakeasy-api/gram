@@ -67,7 +67,7 @@ func (e *Engine) Query(ctx context.Context, tenant Tenant, req Request) (*QueryR
 		if err != nil {
 			return nil, err
 		}
-		return &QueryResult{Dataset: signalquery.Dataset, Plan: "signals.canonical_final", Columns: []Column{{Name: "time_bucket", Kind: ColumnTime}, {Name: "series_id", Kind: ColumnDimension}, {Name: "matched_messages", Kind: ColumnMeasure}, {Name: "match_share", Kind: ColumnMeasure}, {Name: "answered", Kind: ColumnMeasure}, {Name: "matched_sessions", Kind: ColumnMeasure}, {Name: "session_breadth", Kind: ColumnMeasure}}, Rows: result.Rows, SignalResult: result}, nil
+		return &QueryResult{Dataset: signalquery.Dataset, Plan: "signals.canonical_final", Columns: signalColumns(), Rows: result.Rows, SignalResult: result}, nil
 	}
 	if req.SignalQuery != nil {
 		return nil, newError(ErrUnknownDataset, req.Dataset, "signal_query", "", "signal_query is only supported by the signals dataset")
@@ -85,6 +85,19 @@ func (e *Engine) Query(ctx context.Context, tenant Tenant, req Request) (*QueryR
 		return nil, fmt.Errorf("run analytics query: %w", err)
 	}
 	return &QueryResult{Dataset: plan.Dataset, Plan: plan.Name, Columns: plan.Columns, Rows: rows, SignalResult: nil}, nil
+}
+
+// signalColumns describes every time-series field, including outcome and
+// definition companions that explain the measured population.
+func signalColumns() []Column {
+	columns := []Column{{Name: "time_bucket", Kind: ColumnTime}, {Name: "bucket_end", Kind: ColumnTime}, {Name: "latest_inserted_at", Kind: ColumnTime}}
+	for _, name := range []string{"series_id", "partial", "observed", "definition_hashes", "classifier_models", "compiler_versions", "input_strategies"} {
+		columns = append(columns, Column{Name: name, Kind: ColumnDimension})
+	}
+	for _, name := range []string{"observed_outcomes", "answered", "unmeasured", "matched_messages", "failed", "not_applicable", "draft", "evaluated_sessions", "matched_sessions", "definition_count", "probability_bins", "match_share", "session_breadth"} {
+		columns = append(columns, Column{Name: name, Kind: ColumnMeasure})
+	}
+	return columns
 }
 
 // Values lists a dimension's values inside a window, most frequent first,

@@ -16,7 +16,17 @@ func (e *Engine) signalValues(ctx context.Context, tenant Tenant, request Values
 	if limit == 0 {
 		limit = DefaultValuesLimit
 	}
-	query, err := signalquery.CompileValues(signalquery.Context{OrganizationID: tenant.OrganizationID, ProjectID: tenant.ProjectID, From: time.Unix(0, request.FromUnixNano), To: time.Unix(0, request.ToUnixNano), Now: time.Now().UTC(), Step: "auto", RequestedAt: nil}, *request.SignalScope, request.Dimension, request.Attribute, limit)
+	scopeContext, scope, err := signalquery.NormalizeScope(signalquery.Context{OrganizationID: tenant.OrganizationID, ProjectID: tenant.ProjectID, From: time.Unix(0, request.FromUnixNano), To: time.Unix(0, request.ToUnixNano), Now: time.Now().UTC(), Step: "auto", RequestedAt: nil}, *request.SignalScope)
+	if err != nil {
+		return nil, signalFailure(err)
+	}
+	if scope.Trigger == "manual" {
+		scopeContext, err = e.signalManualContext(ctx, scopeContext, scope.RunID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	query, err := signalquery.CompileValues(scopeContext, scope, request.Dimension, request.Attribute, limit)
 	if err != nil {
 		return nil, signalFailure(err)
 	}

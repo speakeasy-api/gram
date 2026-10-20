@@ -8,7 +8,7 @@ import (
 var SignalDimension = Type("AnalyticsSignalDimension", func() {
 	Description("Exactly one system field or arbitrary attribute key.")
 	Attribute("field", String, "System dimension from the analytics catalog: source, role, actor, assistant or definition")
-	Attribute("attribute", String, func() { MinLength(1); MaxLength(256) })
+	Attribute("attribute", String, "Exact label key, at most 256 UTF-8 bytes; the shared query engine enforces the byte limit.", func() { MinLength(1) })
 })
 
 var SignalFilter = Type("AnalyticsSignalFilter", func() {
@@ -22,7 +22,7 @@ var SignalSelection = Type("AnalyticsSignalSelection", func() {
 	Attribute("sensor_id", String, func() { Format(FormatUUID) })
 	Attribute("signal_id", String, "For multi-label or exclusive results; omit when minimum_level is set", func() { Format(FormatUUID) })
 	Attribute("minimum_level", Int, "Zero-based ordered level; matches cumulative probability at or above this level", func() { Minimum(0); Maximum(9) })
-	Attribute("threshold", Float64, "Explicit probability threshold greater than zero. Exclusive results use the selected signal instead.", func() { Minimum(0); Maximum(1) })
+	Attribute("threshold", Float64, "Explicit probability threshold greater than zero. Exclusive results use the selected signal instead.", func() { ExclusiveMinimum(0); Maximum(1) })
 	Required("sensor_id", "threshold")
 })
 

@@ -11,6 +11,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  * Exactly one system field or arbitrary attribute key.
  */
 export type AnalyticsSignalDimension = {
+  /**
+   * Exact label key, at most 256 UTF-8 bytes; the shared query engine enforces the byte limit.
+   */
   attribute?: string | undefined;
   /**
    * System dimension from the analytics catalog: source, role, actor, assistant or definition

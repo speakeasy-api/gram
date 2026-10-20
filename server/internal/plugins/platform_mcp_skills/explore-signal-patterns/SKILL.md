@@ -36,9 +36,10 @@ client's own connection and select the exact project requested by the user.
      Use this semantic request rather than composed measures/dimensions. If a
      physical read is refused, narrow the window. Coarser output alone does not
      reduce the canonical input scanned.
-5. Explain the result using `signal_result.metadata`, `summary`, selected `groups`
-   and complete `rows`. Distinguish matching messages, exact distinct sessions,
-   share among measured answers, failed/outside-scope/draft/unmeasured companions,
+5. Explain the result using `signal_result.metadata`, `signal_result.summary`,
+   `signal_result.groups` and the complete top-level `rows` (joined by `series_id`).
+   Distinguish matching messages, exact distinct sessions, share among measured
+   answers, `failed`/`not_applicable`/`draft`/`unmeasured` companions,
    and unknown census coverage. Gaps are unknown, not supported zeroes. Report
    partial edge buckets and top-group selection. A session can belong to several
    attribute groups, so distinct-session counts are not additive.

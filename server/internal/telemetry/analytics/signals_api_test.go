@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
 	sigintrepo "github.com/speakeasy-api/gram/server/internal/sigint/repo"
+	signalquery "github.com/speakeasy-api/gram/server/internal/telemetry/analytics/signals"
 )
 
 type signalFeaturesStub bool
@@ -79,6 +80,15 @@ func TestSignalAPIUsesSharedMeasurementAndDefinitionContracts(t *testing.T) {
 	shared, err := ti.service.engine.Query(ctx, Tenant{OrganizationID: ti.organizationID, ProjectID: ti.projectID}, req)
 	require.NoError(t, err)
 	require.Equal(t, api.Rows, signalRowsAsMaps(shared.Rows))
+	columns := map[string]bool{}
+	for _, column := range shared.Columns {
+		columns[column.Name] = true
+	}
+	for _, row := range shared.Rows {
+		for key := range row {
+			require.True(t, columns[key], "undocumented signal row key %s", key)
+		}
+	}
 	require.EqualValues(t, 3, api.SignalResult.Summary["matched_messages"])
 	require.EqualValues(t, 1, api.SignalResult.Summary["matched_sessions"], "whole-window distinct sessions cannot be summed across attribute groups")
 	require.True(t, api.SignalResult.Metadata.SeriesComplete)
@@ -96,6 +106,34 @@ func TestSignalAPIUsesSharedMeasurementAndDefinitionContracts(t *testing.T) {
 	}
 	require.True(t, missing)
 	require.True(t, empty)
+	_, err = q.DeleteSignal(ctx, sigintrepo.DeleteSignalParams{ID: label.ID, ProjectID: project})
+	require.NoError(t, err)
+	catalog, err = ti.service.Describe(ctx, &gen.DescribePayload{})
+	require.NoError(t, err)
+	require.Empty(t, catalog.SignalMetrics.Signals)
+	require.Empty(t, catalog.SignalMetrics.Sensors[0].SignalIds)
+}
+
+func TestSignalManualValueDiscoveryRejectsInconsistentRuns(t *testing.T) {
+	t.Parallel()
+	conn := newTestClickhouse(t)
+	engine, err := NewEngine(nil, conn)
+	require.NoError(t, err)
+	now := time.Now().UTC().Truncate(time.Second)
+	project, sensor, run := uuid.New(), uuid.New(), uuid.New()
+	tenant := Tenant{OrganizationID: "manual-values-" + uuid.NewString(), ProjectID: project.String()}
+	row := chrepo.ReadingRow{ID: uuid.New(), OrganizationID: tenant.OrganizationID, ProjectID: project, SensorID: sensor, EventKind: "conversation.message", EventID: uuid.NewString(), TriggerKind: "manual", RunID: run, EvaluationRequestedAt: now, EventOccurredAt: now.Add(-time.Minute), EvaluatedAt: now, InsertedAt: now, Status: "failed", ConversationCaptureKind: "original", Attributes: map[string]string{"department": "engineering"}}
+	require.NoError(t, chrepo.New(conn).InsertReadings(t.Context(), []chrepo.ReadingRow{row}))
+	request := ValuesRequest{Dataset: "signals", Dimension: "attribute", Attribute: "department", FromUnixNano: now.Add(-time.Hour).UnixNano(), ToUnixNano: now.UnixNano(), SignalScope: &signalquery.Scope{SensorID: sensor.String(), Trigger: "manual", RunID: run.String()}}
+	values, err := engine.signalValues(t.Context(), tenant, request)
+	require.NoError(t, err)
+	require.Len(t, values, 1)
+	require.Equal(t, "engineering", values[0].Value)
+	row.ID, row.EventID = uuid.New(), uuid.NewString()
+	row.EvaluationRequestedAt, row.EventOccurredAt = now.Add(-time.Hour), now.Add(-2*time.Hour)
+	require.NoError(t, chrepo.New(conn).InsertReadings(t.Context(), []chrepo.ReadingRow{row}))
+	_, err = engine.signalValues(t.Context(), tenant, request)
+	require.ErrorContains(t, err, "inconsistent request timestamps")
 }
 
 func signalRowsAsMaps(rows []Row) []map[string]any {

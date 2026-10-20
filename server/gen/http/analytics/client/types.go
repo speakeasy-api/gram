@@ -874,7 +874,9 @@ type AnalyticsSignalSelectionRequestBody struct {
 type AnalyticsSignalDimensionRequestBody struct {
 	// System dimension from the analytics catalog: source, role, actor, assistant
 	// or definition
-	Field     *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// Exact label key, at most 256 UTF-8 bytes; the shared query engine enforces
+	// the byte limit.
 	Attribute *string `form:"attribute,omitempty" json:"attribute,omitempty" xml:"attribute,omitempty"`
 }
 
@@ -981,7 +983,9 @@ type AnalyticsSignalFilterResponseBody struct {
 type AnalyticsSignalDimensionResponseBody struct {
 	// System dimension from the analytics catalog: source, role, actor, assistant
 	// or definition
-	Field     *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// Exact label key, at most 256 UTF-8 bytes; the shared query engine enforces
+	// the byte limit.
 	Attribute *string `form:"attribute,omitempty" json:"attribute,omitempty" xml:"attribute,omitempty"`
 }
 
@@ -2958,7 +2962,7 @@ func ValidateAnalyticsSignalSelectionRequestBody(body *AnalyticsSignalSelectionR
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.minimum_level", *body.MinimumLevel, 9, false))
 		}
 	}
-	if body.Threshold < 0 {
+	if body.Threshold <= 0 {
 		err = goa.MergeErrors(err, goa.InvalidRangeError("body.threshold", body.Threshold, 0, true))
 	}
 	if body.Threshold > 1 {
@@ -2973,11 +2977,6 @@ func ValidateAnalyticsSignalDimensionRequestBody(body *AnalyticsSignalDimensionR
 	if body.Attribute != nil {
 		if utf8.RuneCountInString(*body.Attribute) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute", *body.Attribute, utf8.RuneCountInString(*body.Attribute), 1, true))
-		}
-	}
-	if body.Attribute != nil {
-		if utf8.RuneCountInString(*body.Attribute) > 256 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute", *body.Attribute, utf8.RuneCountInString(*body.Attribute), 256, false))
 		}
 	}
 	return
@@ -3167,7 +3166,7 @@ func ValidateAnalyticsSignalSelectionResponseBody(body *AnalyticsSignalSelection
 		}
 	}
 	if body.Threshold != nil {
-		if *body.Threshold < 0 {
+		if *body.Threshold <= 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.threshold", *body.Threshold, 0, true))
 		}
 	}
@@ -3205,11 +3204,6 @@ func ValidateAnalyticsSignalDimensionResponseBody(body *AnalyticsSignalDimension
 	if body.Attribute != nil {
 		if utf8.RuneCountInString(*body.Attribute) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute", *body.Attribute, utf8.RuneCountInString(*body.Attribute), 1, true))
-		}
-	}
-	if body.Attribute != nil {
-		if utf8.RuneCountInString(*body.Attribute) > 256 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute", *body.Attribute, utf8.RuneCountInString(*body.Attribute), 256, false))
 		}
 	}
 	return

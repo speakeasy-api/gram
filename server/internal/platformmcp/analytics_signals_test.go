@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -68,4 +69,10 @@ func TestSignalDefinitionToolHasExactScopeAndUnavailableParity(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(a.InputSchema, &schema))
 	require.ElementsMatch(t, []string{"project_id", "sensor_id", "definition_hash"}, schema.Required)
+	require.Contains(t, b.Description, "unavailable in this deployment")
+	arguments := fmt.Sprintf(`{"project_id":%q,"sensor_id":%q,"definition_hash":%q}`, live.project.ID.String(), uuid.NewString(), strings.Repeat("a", 64))
+	_, err := b.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(arguments))
+	var refusal *ToolRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
 }
