@@ -696,16 +696,10 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnauthorizedNamesAnonymousDial(t *
 	require.True(t, isError)
 	require.Contains(t, text, "holds no credential that routes to it")
 
-	// A grant qualified to the member ties the client to it, so the earlier
-	// credential's no-auth choice no longer holds and it must sign in again.
+	// A grant qualified to the member ties the client to it, and migrating
+	// again replaces the credential's no-auth choice with that client. The
+	// gateway forwards the grant, and the member refuses it.
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-refused", deny.URL)
-	text, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
-	require.True(t, isError)
-	require.Contains(t, text, "signed in to again")
-
-	// A fresh sign-in chooses the client, forwards its grant, and the member
-	// refuses it.
-	bearer = mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
 	text, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
 	require.Contains(t, text, "rejected the user's credential")
