@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/url"
@@ -24,21 +23,6 @@ func TestKitCompositionMachineConfigUsesFiles(t *testing.T) {
 	require.JSONEq(t, `{"mcpServers":{"workload":{"type":"streamable-http","url":"https://mcp.example/mcp/resource","auth":{"type":"client_credentials","client_id":"registered-client","resource":"https://mcp.example/mcp/resource","expected_issuer":"https://issuer.example/oauth/project","scopes":["mcp:connect"],"method":{"type":"client_secret","client_secret_file":"/home/kit/.kit/credentials/mcp-workload-secret"}}}}}`, string(raw))
 	require.NotContains(t, string(raw), "never-in-configuration")
 	require.Equal(t, []byte("never-in-configuration"), files["mcp-workload-secret"])
-	var config map[string]any
-	require.NoError(t, json.Unmarshal(raw, &config))
-	servers, ok := config["mcpServers"].(map[string]any)
-	require.True(t, ok)
-	workload, ok := servers["workload"].(map[string]any)
-	require.True(t, ok)
-	auth, ok := workload["auth"].(map[string]any)
-	require.True(t, ok)
-	method, ok := auth["method"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "client_credentials", auth["type"])
-	require.Equal(t, resource.String(), auth["resource"])
-	require.Equal(t, issuer.String(), auth["expected_issuer"])
-	require.Equal(t, []any{"mcp:connect"}, auth["scopes"])
-	require.Equal(t, "/home/kit/.kit/credentials/mcp-workload-secret", method["client_secret_file"])
 	require.NotContains(t, string(raw), "Authorization")
 }
 
