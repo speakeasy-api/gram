@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -26,9 +27,7 @@ func TestEligibleServerDeliversPriorRoleGrant(t *testing.T) {
 	role := createTestRolePrincipal(t, ctx, ti, "eligibility")
 	server := createTestToolset(t, ctx, ti.conn, "Later enabled")
 	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{ID: server.ID, ProjectID: *ac.ProjectID, McpEnabled: false}))
-	//nolint:glint // notestingrawsql: mirrors hostedmcp.Sync disabling the canonical server.
-	_, err := ti.conn.Exec(ctx, `UPDATE mcp_servers SET visibility = 'disabled' WHERE id = $1`, server.ID)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: visibility.Disabled, ID: server.ID, ProjectID: *ac.ProjectID}))
 	principal, err := urn.ParsePrincipal(role)
 	require.NoError(t, err)
 	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, server.ID.String()).MarshalJSON()
@@ -47,9 +46,7 @@ func TestEligibleServerDeliversPriorRoleGrant(t *testing.T) {
 		require.NoError(t, err)
 		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 		require.NoError(t, toolsetsrepo.New(tx).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{ID: server.ID, ProjectID: *ac.ProjectID, McpEnabled: true}))
-		//nolint:glint // notestingrawsql: mirrors hostedmcp.Sync re-enabling the canonical server.
-		_, err = tx.Exec(ctx, `UPDATE mcp_servers SET visibility = 'private' WHERE id = $1`, server.ID)
-		require.NoError(t, err)
+		require.NoError(t, testrepo.New(tx).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: visibility.Private, ID: server.ID, ProjectID: *ac.ProjectID}))
 		_, err = plugins.AttachToDefaultAndRolePluginsAudited(ctx, tx, audit.NewLogger(), ac, plugins.AttachToDefaultPluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: server.ID, Valid: true}, DisplayName: server.Name}, nil)
 		require.NoError(t, err)
 		require.NoError(t, tx.Commit(ctx))
@@ -74,9 +71,7 @@ func enableToolsetAndAttach(t *testing.T, ctx context.Context, ti *testInstance,
 	require.NoError(t, err)
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	require.NoError(t, toolsetsrepo.New(tx).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{ID: server.ID, ProjectID: *ac.ProjectID, McpEnabled: true}))
-	//nolint:glint // notestingrawsql: mirrors hostedmcp.Sync re-enabling the canonical server.
-	_, err = tx.Exec(ctx, `UPDATE mcp_servers SET visibility = 'private' WHERE id = $1`, server.ID)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(tx).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: visibility.Private, ID: server.ID, ProjectID: *ac.ProjectID}))
 	_, err = plugins.AttachToDefaultAndRolePluginsAudited(ctx, tx, audit.NewLogger(), ac, plugins.AttachToDefaultPluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: server.ID, Valid: true}, DisplayName: server.Name}, nil)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
@@ -90,9 +85,7 @@ func TestEligibleServerRespectsToolsetKeyedRemoval(t *testing.T) {
 	role := createTestRolePrincipal(t, ctx, ti, "eligibility-tombstone")
 	server := createTestToolset(t, ctx, ti.conn, "Removed before")
 	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{ID: server.ID, ProjectID: *ac.ProjectID, McpEnabled: false}))
-	//nolint:glint // notestingrawsql: mirrors hostedmcp.Sync disabling the canonical server.
-	_, err := ti.conn.Exec(ctx, `UPDATE mcp_servers SET visibility = 'disabled' WHERE id = $1`, server.ID)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: visibility.Disabled, ID: server.ID, ProjectID: *ac.ProjectID}))
 	principal, err := urn.ParsePrincipal(role)
 	require.NoError(t, err)
 	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, server.ID.String()).MarshalJSON()

@@ -19,8 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// createCanonicalServer gives a toolset its canonical MCP server and endpoint, as toolset creation does.
-func createCanonicalServer(t *testing.T, f pipelineFixture, toolset toolsetsrepo.Toolset) {
+// createMCPServerAndEndpointForToolset creates the MCP server and endpoint that toolset creation would.
+func createMCPServerAndEndpointForToolset(t *testing.T, f pipelineFixture, toolset toolsetsrepo.Toolset) {
 	t.Helper()
 	ctx := t.Context()
 	_, err := mcpserversrepo.New(f.db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
@@ -46,7 +46,7 @@ func TestRoleDistributionSetup_PopulatesExistingGrants(t *testing.T) {
 		McpSlug: pgtype.Text{String: "existing-server", Valid: true},
 	})
 	require.NoError(t, err)
-	createCanonicalServer(t, f, backing)
+	createMCPServerAndEndpointForToolset(t, f, backing)
 	serverID := backing.ID
 	principal, err := urn.ParsePrincipal(f.roleURN)
 	require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestRoleDistributionSetup_PopulatesOtherProject(t *testing.T) {
 	require.NoError(t, err)
 	backing, err := toolsetsrepo.New(f.db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: org, ProjectID: projectID, Name: "Other server", Slug: "other-server", McpEnabled: true, McpSlug: pgtype.Text{String: "other-server", Valid: true}})
 	require.NoError(t, err)
-	createCanonicalServer(t, f, backing)
+	createMCPServerAndEndpointForToolset(t, f, backing)
 	principal, err := urn.ParsePrincipal(f.roleURN)
 	require.NoError(t, err)
 	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, backing.ID.String()).MarshalJSON()
