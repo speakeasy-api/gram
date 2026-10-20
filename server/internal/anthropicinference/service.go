@@ -119,6 +119,9 @@ func NewService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgx
 // evaluated checkpoint can exempt historical content from another scan.
 func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verdict, error) {
 	ctx = policyflags.WithRequestMemo(ctx)
+	if frame.Type == frameTypeToolCall {
+		return s.processToolCall(ctx, config, frame)
+	}
 	budget, cancel := verdictContext(ctx)
 	defer cancel()
 	messages := conversationMessages(frame.Messages)
@@ -170,7 +173,7 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	}
 	if match := firstDenial(scans[scope.start:]); match != nil {
 		// Denied content is never accepted, so a retry scans it again.
-		return denyVerdict(conv.Default(conv.PtrValOr(match.UserMessage, ""), "This request was blocked by your organization's security policy.")), nil
+		return policyDenial(match), nil
 	}
 	cleanThrough := cleanPrefix(inputs, scans, scope.start, len(messages))
 	verdict := allowVerdict()
@@ -190,6 +193,59 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 		}
 	}
 	return verdict, nil
+}
+
+// processToolCall judges the tool calls Claude just produced, before any of
+// them runs. It stores nothing and leaves the checkpoint alone: the next
+// prompt frame carries the same assistant message, archives it once, and
+// scans it again, since only a prompt frame's transcript can be accepted.
+func (s *Service) processToolCall(ctx context.Context, config Config, frame Frame) (Verdict, error) {
+	budget, cancel := verdictContext(ctx)
+	defer cancel()
+	inputs, err := toolCallInputs(frame.Messages)
+	if err != nil {
+		return Verdict{}, fmt.Errorf("decode inference tool calls: %w", err)
+	}
+	userID, err := s.store.ResolveActor(budget, config, frame)
+	if err != nil {
+		return Verdict{}, fmt.Errorf("resolve inference hook actor: %w", err)
+	}
+	scans, err := s.scanInputs(budget, config, frame, userID, inputs, scanRange{start: 0, live: 0})
+	if err != nil {
+		return Verdict{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
+	}
+	if match := firstDenial(scans); match != nil {
+		return policyDenial(match), nil
+	}
+	if slices.ContainsFunc(scans, func(scan inputScan) bool { return !scan.evaluated }) {
+		s.logger.WarnContext(ctx, "inference tool call verdict budget exhausted",
+			attr.SlogOrganizationID(config.OrganizationID), attr.SlogProjectID(config.ProjectID.String()),
+			attr.SlogInferenceInputCount(len(inputs)))
+		return denyVerdict(unavailableDenyReason), nil
+	}
+	return allowVerdict(), nil
+}
+
+// toolCallInputs are the tool requests in a tool call frame's last message,
+// the assistant message whose calls the verdict gates. Earlier messages the
+// protocol may add were judged by their prompt frame, and the message's text
+// has already been delivered, so neither is scanned here.
+func toolCallInputs(messages []Message) ([]policyInput, error) {
+	if len(messages) == 0 {
+		return nil, nil
+	}
+	inputs, err := policyInputs(messages[len(messages)-1:])
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(inputs, func(input policyInput) bool { return input.kind != message.ToolRequest }), nil
+}
+
+func policyDenial(match *risk.ScanResult) Verdict {
+	return denyVerdict(conv.Default(conv.PtrValOr(match.UserMessage, ""), "This request was blocked by your organization's security policy."))
 }
 
 // verdictContext keeps checkpoint and response headroom before ctx's deadline.
