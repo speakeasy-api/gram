@@ -51,7 +51,7 @@ export function claudeTagSetupInstructions(entry: CatalogEntry): PlatformSetup {
       {
         id: "organization",
         short: "Organization ID",
-        title: "Your Anthropic organization",
+        title: "Anthropic organization",
         // Collecting and saving in one: the only other thing the save needed
         // was the agent, and this wizard is making it. On its own it was a
         // page with a button and a paragraph saying what the button does.
@@ -89,7 +89,7 @@ export function claudeTagSetupInstructions(entry: CatalogEntry): PlatformSetup {
       {
         id: "console",
         short: "Connect in Claude",
-        title: "Connect Speakeasy in Claude Tag",
+        title: "Connect in Claude Tag",
         phase: "connect",
         // One sequence, not two steps: it is a single dialog in Claude's own
         // settings, and splitting it across wizard steps asked the reader to
@@ -207,7 +207,7 @@ export function claudeTagSetupInstructions(entry: CatalogEntry): PlatformSetup {
       {
         id: "apply",
         short: "Pick where",
-        title: "Choose where Claude may use it",
+        title: "Where Claude can use it",
         phase: "connect",
         body: () => (
           <Console

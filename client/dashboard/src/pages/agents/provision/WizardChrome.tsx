@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
+import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
 import { Check } from "lucide-react";
 import type { JSX, ReactNode } from "react";
 
@@ -19,11 +20,18 @@ type WizardStepState = "done" | "current" | "todo";
 export function WizardStepper({
   steps,
   current,
+  settledFrom,
   forward = false,
   onJump,
 }: {
   steps: { label: string; short: string }[];
   current: number;
+  /**
+   * Steps from here on are already settled, however far along the reader
+   * is: editing an agent that already holds a credential has nothing left
+   * to do in the steps that set one up.
+   */
+  settledFrom?: number;
   /** Whether a step ahead of the current one can be jumped to. */
   forward?: boolean;
   onJump: (index: number) => void;
@@ -41,88 +49,108 @@ export function WizardStepper({
     <ol aria-label="Provisioning steps" className="border-border flex border">
       {steps.map(({ label, short }, index) => {
         const state: WizardStepState =
-          index < current ? "done" : index === current ? "current" : "todo";
+          settledFrom !== undefined && index >= settledFrom
+            ? "done"
+            : index < current
+              ? "done"
+              : index === current
+                ? "current"
+                : "todo";
         // A step behind gives up its name once the row is full: it is done,
         // and its name is not what the reader needs. A step ahead keeps a
         // name, shortened, because a column of bare numbers says nothing
         // about what is still to come.
         const collapsed = dense && state === "done";
         const shortened = crowded && state === "todo";
+        // The slack goes to the steps ahead, which still have to be read;
+        // the current one is as wide as its own label.
+        const cell = (
+          <button
+            type="button"
+            aria-current={state === "current" ? "step" : undefined}
+            // Collapsed to a tick, so the step is named here rather than
+            // only in the label it no longer shows.
+            aria-label={
+              collapsed
+                ? `${label}${state === "done" ? " (done)" : ""}`
+                : undefined
+            }
+            // A step ahead is a destination only where nothing later is
+            // built from a choice not yet made.
+            disabled={state === "current" || (state === "todo" && !forward)}
+            onClick={() => onJump(index)}
+            className={cn(
+              "flex h-full min-h-16 w-full items-start gap-3 px-4 py-2.5 text-left",
+              collapsed && "justify-center",
+              state === "current" && "border-information-default border-t-2",
+              // Shaded, so a glance shows how much of the flow is still
+              // ahead rather than one flat strip of cells.
+              state === "todo" && "text-muted-foreground bg-muted/40",
+              // A step that cannot be reached must not read as a control.
+              state === "current" || (state === "todo" && !forward)
+                ? "cursor-default"
+                : "hover:bg-muted/40",
+            )}
+          >
+            <span
+              className={cn(
+                "flex size-6 shrink-0 items-center justify-center font-mono text-xs",
+                state === "current" && "bg-information-default text-white",
+                state === "done" && "text-foreground",
+                state === "todo" && "border-border border",
+              )}
+            >
+              {state === "done" ? (
+                <Check className="size-3.5" />
+              ) : (
+                String(index + 1).padStart(2, "0")
+              )}
+            </span>
+            {!collapsed && (
+              <span className="min-w-0">
+                <span
+                  className={cn(
+                    "block font-mono text-[10px] tracking-[0.08em] uppercase",
+                    state === "current"
+                      ? "text-primary"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {state === "done"
+                    ? "Done"
+                    : state === "current"
+                      ? "Current"
+                      : `${String(index + 1).padStart(2, "0")}/${String(steps.length).padStart(2, "0")}`}
+                </span>
+                {/* Wrapped, not cut with an ellipsis: a step name cut to
+                      "Connect an aut…" names nothing. Where even wrapping
+                      will not fit, the step's own short name is used. */}
+                <span className="line-clamp-2 min-h-10 text-sm">
+                  {shortened ? short : label}
+                </span>
+              </span>
+            )}
+          </button>
+        );
         return (
           <li
             key={label}
             className={cn(
               "border-border flex border-r last:border-r-0",
-              // The slack goes to the steps ahead, which still have to be
-              // read; the current one is as wide as its own label.
               collapsed || shortened ? "shrink-0" : "min-w-0 flex-1",
             )}
           >
-            <button
-              type="button"
-              aria-current={state === "current" ? "step" : undefined}
-              // Collapsed to a tick, so the step is named here rather than
-              // only in the label it no longer shows.
-              aria-label={
-                collapsed
-                  ? `${label}${state === "done" ? " (done)" : ""}`
-                  : undefined
-              }
-              title={collapsed ? label : undefined}
-              // A step ahead is a destination only where nothing later is
-              // built from a choice not yet made.
-              disabled={state === "current" || (state === "todo" && !forward)}
-              onClick={() => onJump(index)}
-              className={cn(
-                "flex h-full w-full items-start gap-3 px-4 py-3 text-left",
-                collapsed && "justify-center",
-                state === "current" && "border-information-default border-t-2",
-                state === "todo" && "text-muted-foreground",
-                // A step that cannot be reached must not read as a control.
-                state === "current" || (state === "todo" && !forward)
-                  ? "cursor-default"
-                  : "hover:bg-muted/40",
-              )}
-            >
-              <span
-                className={cn(
-                  "flex size-6 shrink-0 items-center justify-center font-mono text-xs",
-                  state === "current" && "bg-information-default text-white",
-                  state === "done" && "text-foreground",
-                  state === "todo" && "border-border border",
-                )}
-              >
-                {state === "done" ? (
-                  <Check className="size-3.5" />
-                ) : (
-                  String(index + 1).padStart(2, "0")
-                )}
-              </span>
-              {!collapsed && (
-                <span className="min-w-0">
-                  <span
-                    className={cn(
-                      "block font-mono text-[10px] tracking-[0.08em] uppercase",
-                      state === "current"
-                        ? "text-primary"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {state === "done"
-                      ? "Done"
-                      : state === "current"
-                        ? "Current"
-                        : `${String(index + 1).padStart(2, "0")}/${String(steps.length).padStart(2, "0")}`}
-                  </span>
-                  {/* Wrapped, not cut with an ellipsis: a step name cut to
-                      "Connect an aut…" names nothing. Where even wrapping
-                      will not fit, the step's own short name is used. */}
-                  <span className="line-clamp-3 text-sm">
-                    {shortened ? short : label}
-                  </span>
-                </span>
-              )}
-            </button>
+            {/* A tick alone does not say which step it was, and the native
+                title waits a second before saying so. */}
+            {collapsed ? (
+              // Its own provider: the stepper is rendered on its own in
+              // tests, and a tooltip without one throws rather than degrades.
+              <TooltipProvider>
+                <SimpleTooltip tooltip={label}>{cell}</SimpleTooltip>
+              </TooltipProvider>
+            ) : (
+              cell
+            )}
           </li>
         );
       })}

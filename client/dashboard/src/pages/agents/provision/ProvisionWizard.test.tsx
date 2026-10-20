@@ -27,6 +27,10 @@ const mocks = vi.hoisted(() => ({
   admitSubject: vi.fn(),
   projectId: "project_one",
   canFederate: true,
+  renameAgent: vi.fn(),
+  createGrant: vi.fn(),
+  deleteGrant: vi.fn(),
+  agentList: vi.fn(),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -92,6 +96,25 @@ vi.mock("@gram/client/react-query/registerWorkloadIssuer.js", () => ({
 }));
 vi.mock("@gram/client/react-query/admitWorkloadSubject.js", () => ({
   useAdmitWorkloadSubjectMutation: () => ({ mutateAsync: mocks.admitSubject }),
+}));
+// Editing writes through these three: the name, and the grants that decide
+// which servers the agent reaches.
+vi.mock("@gram/client/react-query/renameAgent.js", () => ({
+  useRenameAgentMutation: () => ({ mutateAsync: mocks.renameAgent }),
+}));
+vi.mock("@gram/client/react-query/agentsCreatePolicyGrant.js", () => ({
+  useAgentsCreatePolicyGrantMutation: () => ({
+    mutateAsync: mocks.createGrant,
+  }),
+}));
+vi.mock("@gram/client/react-query/agentsDeletePolicyGrant.js", () => ({
+  useAgentsDeletePolicyGrantMutation: () => ({
+    mutateAsync: mocks.deleteGrant,
+  }),
+}));
+// Only read to keep a prefilled name from colliding with one in use.
+vi.mock("@gram/client/react-query/agents.js", () => ({
+  useAgents: () => ({ data: { result: { items: mocks.agentList() } } }),
 }));
 vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
   useListMcpServersForOrg: (_r: unknown, _s: unknown, options: object) =>
@@ -163,6 +186,10 @@ beforeEach(() => {
   mocks.projectId = "project_one";
   mocks.canFederate = true;
   mocks.platforms.mockReturnValue([]);
+  mocks.agentList.mockReturnValue([]);
+  mocks.renameAgent.mockResolvedValue({});
+  mocks.createGrant.mockResolvedValue({});
+  mocks.deleteGrant.mockResolvedValue({});
   mocks.registerIssuer.mockResolvedValue({});
   mocks.admitSubject.mockResolvedValue({});
   vi.stubGlobal("fetch", mocks.fetch);
@@ -321,7 +348,7 @@ async function reachPlatformSetup() {
   // The platform's own steps are steps of this wizard, so its first one is
   // simply the next screen.
   return screen.findByRole("heading", {
-    name: "Your Anthropic organization",
+    name: "Anthropic organization",
   });
 }
 
@@ -426,5 +453,178 @@ describe("Agent scope", () => {
         .getByRole("radio", { name: /Organization/ })
         .getAttribute("data-state"),
     ).toBe("checked");
+  });
+});
+
+describe("Editing an agent that already exists", () => {
+  const agent = {
+    id: "agent_one",
+    name: "Release Bot",
+    lifecycle: "active",
+    permissions: { write: true, authorize: true },
+  } as never;
+
+  const grants = [
+    {
+      id: "grant_one",
+      effect: "allow",
+      scope: "mcp:connect",
+      selector: {
+        resourceKind: "mcp",
+        resourceId: "toolset_one",
+        projectId: "project_one",
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ] as never;
+
+  function editing(over: { grants?: unknown } = {}) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const onDone = vi.fn();
+    const view = render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <ProvisionWizard
+            agent={agent}
+            editing
+            grants={(over.grants ?? grants) as never}
+            onDone={(id) => {
+              onDone(id);
+            }}
+            verifyPollMs={20}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    return { ...view, onDone };
+  }
+
+  it("opens on the agent's own name, which it lets you change", () => {
+    editing();
+    const field = screen.getByLabelText("Name") as HTMLInputElement;
+    expect(field.value).toBe("Release Bot");
+    expect(field.disabled).toBe(false);
+  });
+
+  it("ticks off the credential steps, which editing does not revisit", () => {
+    editing();
+    // Marked done rather than ahead: an agent that exists has settled what
+    // it signs in with.
+    expect(
+      screen.getByRole("button", { name: /Credential \(done\)|Credential/ }),
+    ).toBeTruthy();
+  });
+
+  it("checks the servers the agent already reaches", async () => {
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const server = await screen.findByRole("checkbox", { name: "GitHub" });
+    await waitFor(() =>
+      expect(server.getAttribute("data-state")).toBe("checked"),
+    );
+  });
+
+  it("saves a rename and leaves without touching the grants", async () => {
+    const { onDone } = editing();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Renamed Bot" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+
+    await waitFor(() => expect(mocks.renameAgent).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.renameAgent.mock.calls[0]?.[0]?.request?.renameAgentForm,
+    ).toEqual({ id: "agent_one", name: "Renamed Bot" });
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+    expect(mocks.deleteGrant).not.toHaveBeenCalled();
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+  });
+
+  it("writes nothing when neither the name nor the servers changed", async () => {
+    const { onDone } = editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+    expect(mocks.renameAgent).not.toHaveBeenCalled();
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+    expect(mocks.deleteGrant).not.toHaveBeenCalled();
+  });
+
+  it("withdraws the grant for a server that was unchecked", async () => {
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const server = await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(server);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+
+    await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.agentPolicyGrantIDForm,
+    ).toEqual({ agentId: "agent_one", grantId: "grant_one" });
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
+
+  it("grants a server that was not reachable before", async () => {
+    editing({ grants: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const server = await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(server);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+
+    await waitFor(() => expect(mocks.createGrant).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createGrant.mock.calls[0]?.[0]?.request?.createAgentPolicyGrantForm,
+    ).toEqual({
+      agentId: "agent_one",
+      effect: "allow",
+      scope: "mcp:connect",
+      selector: {
+        resourceKind: "mcp",
+        resourceId: "toolset_one",
+        projectId: "project_one",
+      },
+    });
+    expect(mocks.deleteGrant).not.toHaveBeenCalled();
+  });
+
+  it("creates no agent: this one already exists", async () => {
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+
+    await waitFor(() => expect(mocks.renameAgent).not.toHaveBeenCalled());
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+  });
+
+  it("says why a save failed and stays on the step", async () => {
+    mocks.deleteGrant.mockRejectedValueOnce(new Error("Grant is locked"));
+    const { onDone } = editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const server = await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(server);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+
+    expect(await screen.findByText("Grant is locked")).toBeTruthy();
+    expect(onDone).not.toHaveBeenCalled();
   });
 });

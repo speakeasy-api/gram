@@ -6,7 +6,7 @@ import {
   useWorkloadIdentities,
 } from "@gram/client/react-query/workloadIdentities.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { claudeTagSetupInstructions } from "./ClaudeTagSetupInstructions";
 import {
   customSetupInstructions,
@@ -52,6 +52,8 @@ export interface WorkloadSetup {
   canConnect: boolean;
   /** Why connecting failed, or null. */
   error: string | null;
+  /** Whether the rule on screen is one this agent already holds. */
+  connected: boolean;
   /** What the reader has typed, for the summary rail to name. */
   values: Record<string, string>;
 }
@@ -63,6 +65,9 @@ export function useWorkloadSetup({
   ensureAgent,
   onConnected,
   onValueChange,
+  initialValues,
+  connectedSubject,
+  settled = false,
 }: {
   /** The catalog's policy for the platform, absent for a custom one. */
   entry: CatalogEntry | undefined;
@@ -74,6 +79,19 @@ export function useWorkloadSetup({
   ensureAgent: () => Promise<string>;
   /** The platform is trusted and the rule saved, against this agent. */
   onConnected: (agentID: string) => void;
+  /** What the rule already says, when one is being edited rather than made. */
+  initialValues?: VariableValues;
+  /**
+   * The subject this agent is already admitted under. Its own rule is not a
+   * duplicate of itself, and the create step has nothing left to write.
+   */
+  connectedSubject?: string;
+  /**
+   * The rule is not being written here: this flow is editing an agent that
+   * already holds one. Nothing on screen can clash with it, and the create
+   * step has nothing to do.
+   */
+  settled?: boolean;
   /** A value was typed, so the rail can mark what just changed. */
   onValueChange?: (key: string) => void;
 }): WorkloadSetup {
@@ -82,7 +100,18 @@ export function useWorkloadSetup({
   const issuers = identities.data?.issuers ?? [];
   const admissions = identities.data?.admissions ?? [];
 
-  const [values, setValues] = useState<VariableValues>({});
+  const [values, setValues] = useState<VariableValues>(initialValues ?? {});
+  // The rule and the catalog both land after the first render, so what the
+  // rule already says is filled in when it arrives — once, and only while
+  // the reader has typed nothing of their own.
+  const adopted = useRef(false);
+  useEffect(() => {
+    if (adopted.current || initialValues === undefined) return;
+    if (Object.keys(initialValues).length === 0) return;
+    if (Object.keys(values).length > 0) return;
+    adopted.current = true;
+    setValues(initialValues);
+  }, [initialValues, values]);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const setupValues = useSetupValues();
@@ -92,7 +121,9 @@ export function useWorkloadSetup({
   const [trusted, setTrusted] = useState(false);
   // The rule this flow saved, which the refetched list then holds; it is not
   // a duplicate of itself.
-  const [admittedSubject, setAdmittedSubject] = useState<string | null>(null);
+  const [admittedSubject, setAdmittedSubject] = useState<string | null>(
+    connectedSubject ?? null,
+  );
 
   const registerIssuer = useRegisterWorkloadIssuerMutation();
   const admitSubject = useAdmitWorkloadSubjectMutation();
@@ -112,8 +143,17 @@ export function useWorkloadSetup({
   const isTrusted =
     connection !== null &&
     (trusted || connectedIssuer(connection.issuer, issuers) !== undefined);
+  // The rule this flow has already written, or the one the agent being
+  // edited already holds. Read from the prop rather than from state seeded
+  // with it: the admission arrives a render or two after the first one, and
+  // the agent's own rule must never be reported as a clash with itself.
+  const ours =
+    settled ||
+    (connection !== null &&
+      (connection.subject === admittedSubject ||
+        connection.subject === connectedSubject));
   const conflicting =
-    connection === null || connection.subject === admittedSubject
+    connection === null || ours
       ? undefined
       : existingRule(connection.issuer, admissions, connection);
   const ruleConflict =
@@ -212,6 +252,7 @@ export function useWorkloadSetup({
     connect,
     connecting,
     canConnect: connection !== null,
+    connected: connection !== null && connection.subject === admittedSubject,
     error,
     values,
   };

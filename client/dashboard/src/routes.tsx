@@ -84,6 +84,7 @@ import IdentityConnections from "./pages/identities/IdentityConnections";
 import IdentityActivity from "./pages/identities/IdentityActivity";
 import IdentityAgentSection from "./pages/identities/IdentityAgentSection";
 import NewAgentIdentity from "./pages/agents/NewAgentIdentity";
+import EditAgentIdentity from "./pages/agents/EditAgentIdentity";
 import AgentManagementRedirect from "./pages/agents/AgentManagementRedirect";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
@@ -769,6 +770,11 @@ const ROUTE_STRUCTURE = {
             title: "New Agent Identity",
             url: "new",
             component: NewAgentIdentity,
+          },
+          edit: {
+            title: "Edit Agent Identity",
+            url: ":agentId/edit",
+            component: EditAgentIdentity,
           },
         },
       },

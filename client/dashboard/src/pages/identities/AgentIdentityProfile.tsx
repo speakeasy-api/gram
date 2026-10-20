@@ -1,5 +1,6 @@
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
-import { Navigate, useNavigate, useSearchParams } from "react-router";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
+import { Button } from "@/components/ui/Button";
 import { useRoutes } from "@/routes";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
 import {
@@ -8,6 +9,7 @@ import {
   RenameAgentButton,
 } from "@/pages/agents/agent-admin";
 import { AgentFederatedAccess } from "@/pages/agents/AgentFederatedAccess";
+import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import { AgentGatewayInstall } from "@/pages/agents/AgentGatewayInstall";
 import { ManagedAgentSessions } from "@/pages/agents/ManagedAgentSessions";
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
@@ -36,6 +38,9 @@ export function AgentIdentityProfile({
   // section, and because the links that used to name the retired
   // agent-management page carry it.
   const [params, setParams] = useSearchParams();
+  // A federated agent authenticates by exchanging its platform's token, so
+  // the page must not lead with, or insist on, a key it will never hold.
+  const federated = useAgentAdmissions(agent.id).admissions.length > 0;
   const issuing = params.get("credential") === "new";
   const setIssuing = (open: boolean) => {
     const next = new URLSearchParams(params);
@@ -107,7 +112,11 @@ export function AgentIdentityProfile({
       return (
         <IdentitySection
           title="Provisioning"
-          meta="Point the agent's runtime here, then issue it a key"
+          meta={
+            federated
+              ? "Point the agent's runtime here; its platform signs it in"
+              : "Point the agent's runtime here, then issue it a key"
+          }
         >
           <IdentityPanel title="Endpoint" contentClassName="p-4">
             <AgentGatewayInstall agentID={agent.id} secret={null} />
@@ -115,14 +124,17 @@ export function AgentIdentityProfile({
           {/* Issuing is a flow of its own, so the button puts this section
               into it. Without this the control is enabled and does nothing:
               the panel only opens its own wizard in creation mode. */}
+          {/* Whichever way in the agent actually uses comes first: a
+              federated agent never holds a key, and leading with the key
+              panel told it that it could not authenticate. */}
+          {federated && <AgentFederatedAccess agent={agent} />}
           <AgentAPIKeys
             agent={agent}
             variant="bare"
+            federated={federated}
             onCreate={() => setIssuing(true)}
           />
-          {/* A federated platform is the other way in, so it belongs beside
-              the keys rather than on a surface of its own. */}
-          <AgentFederatedAccess agent={agent} />
+          {!federated && <AgentFederatedAccess agent={agent} />}
         </IdentitySection>
       );
     default:
@@ -148,7 +160,18 @@ export function AgentIdentityProfile({
         <IdentitySection
           title="Overview"
           meta="What this identity is, and who answers for it"
-          action={<RenameAgentButton agent={agent} refresh={refresh} />}
+          action={
+            <div className="flex items-center gap-2">
+              {/* Changing what the agent reaches is the same set of
+                  questions it was registered with, so it is the same flow. */}
+              <Button asChild variant="secondary">
+                <Link to={routes.identities.agents.edit.href(agent.id)}>
+                  Edit
+                </Link>
+              </Button>
+              <RenameAgentButton agent={agent} refresh={refresh} />
+            </div>
+          }
         >
           {/* Name, principal, owner, scope and lifecycle — the durable
               facts, from the one component that states them. */}

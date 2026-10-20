@@ -73,7 +73,7 @@ export function customSetupInstructions(): PlatformSetup {
       {
         id: "issuer",
         short: "Issuer URLs",
-        title: "The platform's identity provider",
+        title: "Identity provider",
         phase: "collect",
         complete: ({ values }) =>
           (values["name"] ?? "").trim().length > 0 &&
@@ -111,7 +111,7 @@ export function customSetupInstructions(): PlatformSetup {
       {
         id: "subject",
         short: "Subject",
-        title: "Which workloads may act as this agent",
+        title: "Which workloads",
         phase: "create",
         complete: ({ values }) => (values["subject"] ?? "").trim().length > 0,
         body: ({ values, setValue, agentName, ruleConflict }) => (
@@ -165,7 +165,7 @@ export function customSetupInstructions(): PlatformSetup {
       {
         id: "point",
         short: "Exchange tokens",
-        title: "Point the platform at Speakeasy",
+        title: "Point it at Speakeasy",
         phase: "connect",
         body: ({ computed, issuerPicker }) => (
           <>

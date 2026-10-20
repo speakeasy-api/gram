@@ -24,6 +24,8 @@ export interface TemplateFrameProps {
   resourceId?: string;
   /** Breadcrumb label overrides, e.g. `{ [slug]: entity?.name }`. */
   breadcrumbSubstitutions?: Record<string, string | undefined>;
+  /** Where a crumb points, when its own path is not a page. */
+  breadcrumbUrlSubstitutions?: Record<string, string>;
 }
 
 /** Props for the single, canonical page header. */
@@ -47,6 +49,7 @@ export function TemplateFrame({
   scopeAll,
   resourceId,
   breadcrumbSubstitutions,
+  breadcrumbUrlSubstitutions,
   fullWidth,
   fullHeight,
   noPadding,
@@ -83,6 +86,7 @@ export function TemplateFrame({
         <Page.Header.Breadcrumbs
           fullWidth={fullWidthBreadcrumbs}
           substitutions={breadcrumbSubstitutions}
+          urlSubstitutions={breadcrumbUrlSubstitutions}
         />
       </Page.Header>
       <Page.Body

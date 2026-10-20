@@ -8,7 +8,8 @@ import { useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type JSX } from "react";
+import { useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { useSearchParams } from "react-router";
 import {
   agentPolicyGrantsFromDraft,
   invalidateAgentPolicy,
@@ -23,7 +24,18 @@ import { StepVerify, type VerifyState } from "./StepVerify";
 import { StepWorkload, WorkloadPlatformPicker } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
-import { useCatalogEntries } from "./workloadCatalog";
+import {
+  CONNECT_SCOPE,
+  grantChanges,
+  grantedServers,
+} from "@/pages/agents/agentPolicyEdit";
+import { useAgentsCreatePolicyGrantMutation } from "@gram/client/react-query/agentsCreatePolicyGrant.js";
+import { useAgentsDeletePolicyGrantMutation } from "@gram/client/react-query/agentsDeletePolicyGrant.js";
+import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
+import { useAgents } from "@gram/client/react-query/agents.js";
+import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
+import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
+import { useCatalogEntries, valuesFromSubject } from "./workloadCatalog";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useServerInventory } from "./useServerInventory";
 import {
@@ -59,14 +71,45 @@ type Credential = "api-key" | "workload";
 /** Keys live 90 days unless the agent page rotates them sooner. */
 const KEY_LIFETIME_DAYS = 90;
 
+/**
+ * The preset name, with a number appended while the organization already
+ * has one: the server refuses a duplicate, and a prefilled field that is
+ * refused on submit is worse than no prefill at all.
+ */
+function freeName(base: string, taken: Set<string>): string {
+  if (!taken.has(base)) return base;
+  for (let suffix = 2; suffix < 100; suffix++) {
+    const candidate = `${base} ${suffix}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return base;
+}
+
 type Scope = "project" | "organization";
 
 export function ProvisionWizard({
   agent,
+  initialPlatformKey,
+  editing = false,
+  grants,
   onDone,
   onBusy,
   verifyPollMs = 5000,
 }: {
+  /**
+   * The platform this flow was opened for, from a link that names one. The
+   * credential question is then already answered, and the flow starts where
+   * the reader still has something to decide.
+   */
+  initialPlatformKey?: string;
+  /**
+   * Change what an agent already is — its name, its reach — rather than
+   * provision it again. The credential steps are not part of that: a key is
+   * issued from the agent's own page, and a platform from this flow.
+   */
+  editing?: boolean;
+  /** The servers the agent already reaches, for the editing flow. */
+  grants?: AgentPolicyGrant[];
   /**
    * The agent being provisioned again. While creating one there is no agent:
    * the identity does not exist until the choices are made, so every step
@@ -94,6 +137,19 @@ export function ProvisionWizard({
   // someone who could carry it out.
   const { hasAllScopes } = useRBAC();
   const canFederate = hasAllScopes(["workload:write"]);
+  const renameAgent = useRenameAgentMutation();
+  // Only to keep a prefilled name from colliding, so a failure to read the
+  // list leaves the field empty rather than blocking the flow.
+  const agents = useAgents({}, undefined, { throwOnError: false });
+  const existingNames = useMemo(
+    () =>
+      agents.data === undefined
+        ? undefined
+        : new Set(agents.data.result.items.map((item) => item.name)),
+    [agents.data],
+  );
+  const createGrant = useAgentsCreatePolicyGrantMutation();
+  const deleteGrant = useAgentsDeletePolicyGrantMutation();
 
   // Provisioning an agent that already exists: its name and scope are settled,
   // so the flow is only about which servers this key reaches and how the key
@@ -101,7 +157,31 @@ export function ProvisionWizard({
   // anything until the key is issued.
   const existing = agent !== undefined;
 
-  const [step, setStep] = useState(0);
+  // Opened for a named platform: the credential is settled and the agent is
+  // named after what will be signing in, so the flow starts at the servers —
+  // the first thing still left to decide.
+  const preset =
+    initialPlatformKey === undefined
+      ? undefined
+      : catalog.entries.find((entry) => entry.key === initialPlatformKey);
+  // The step lives in the URL so a step can be linked, reloaded and gone
+  // back to. Replace rather than push: the browser's Back belongs to the
+  // page the reader came from, and the wizard has its own Back.
+  const [params, setParams] = useSearchParams();
+  const defaultStep = initialPlatformKey === undefined ? 0 : 1;
+  const fromUrl = Number(params.get("step"));
+  const step =
+    Number.isInteger(fromUrl) && fromUrl >= 0 ? fromUrl : defaultStep;
+  const setStep = (next: number) => {
+    setParams(
+      (current) => {
+        const updated = new URLSearchParams(current);
+        updated.set("step", String(next));
+        return updated;
+      },
+      { replace: true },
+    );
+  };
   const [name, setName] = useState(agent?.name ?? "");
   // null until the person picks, so the default can follow the project as it
   // resolves. A useState initializer would run once, before useProject has an
@@ -110,8 +190,55 @@ export function ProvisionWizard({
   const [selected, setSelected] = useState<ServerSelection[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [provisioning, setProvisioning] = useState(false);
-  const [credential, setCredential] = useState<Credential>("api-key");
-  const [platformKey, setPlatformKey] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  // The credential the agent already holds, when one is being edited: an
+  // agent that signs in with a platform's tokens must not open on "API key".
+  const admitted = useAgentAdmissions(agent?.id ?? "").admissions[0];
+  const admittedEntry =
+    admitted === undefined
+      ? undefined
+      : catalog.entries.find((entry) => entry.issuer.value === admitted.issuer);
+  const [credential, setCredential] = useState<Credential>(
+    initialPlatformKey === undefined ? "api-key" : "workload",
+  );
+  const [platformKey, setPlatformKey] = useState<string | null>(
+    initialPlatformKey ?? null,
+  );
+  // Applied once the catalog and the admission have both arrived, and only
+  // while the reader has not chosen something else.
+  const adopted = useRef(false);
+  useEffect(() => {
+    if (adopted.current || !editing || admitted === undefined) return;
+    adopted.current = true;
+    setCredential("workload");
+    setPlatformKey(admittedEntry?.key ?? CUSTOM_PLATFORM_KEY);
+  }, [editing, admitted, admittedEntry]);
+  // The catalog loads after the first render, so the preset name is filled
+  // in when it arrives rather than in a state initializer that has nothing
+  // to read yet. Only while the field is still untouched.
+  const named = useRef(false);
+  useEffect(() => {
+    if (named.current || preset === undefined || name !== "") return;
+    if (existingNames === undefined) return;
+    named.current = true;
+    setName(freeName(preset.displayName, existingNames));
+  }, [preset, name, existingNames]);
+
+  // The servers the agent already reaches, filled in once its grants and the
+  // server list have both arrived, and only once: after that the selection
+  // is the reader's.
+  const filled = useRef(false);
+  useEffect(() => {
+    if (filled.current || grants === undefined) return;
+    if (inventory.servers.length === 0) return;
+    filled.current = true;
+    const granted = grantedServers(grants);
+    setSelected(
+      inventory.servers
+        .filter((server) => granted.has(server.resourceId))
+        .map((server) => ({ server })),
+    );
+  }, [grants, inventory.servers]);
 
   // What provisioning produced. The secret is held only while this page is
   // open; nothing writes it to storage or to the query cache.
@@ -245,6 +372,69 @@ export function ProvisionWizard({
     return created.id;
   };
 
+  /**
+   * Write an edit back: the name if it changed, and the difference between
+   * the servers the agent reaches and the ones now chosen.
+   *
+   * A diff rather than a rewrite, because each grant is a row with its own
+   * id and its own line in the audit log: replacing all of them would churn
+   * every one of those on a change to a single server.
+   */
+  const save = async (): Promise<void> => {
+    if (agent === undefined || grants === undefined) return;
+    setSaving(true);
+    setError(null);
+    try {
+      if (name.trim() !== agent.name) {
+        await renameAgent.mutateAsync({
+          request: { renameAgentForm: { id: agent.id, name: name.trim() } },
+        });
+      }
+      const changes = grantChanges(
+        grantedServers(grants),
+        selected.map((entry) => ({
+          resourceId: entry.server.resourceId,
+          projectId: entry.server.projectId,
+        })),
+      );
+      for (const server of changes.add) {
+        await createGrant.mutateAsync({
+          request: {
+            createAgentPolicyGrantForm: {
+              agentId: agent.id,
+              effect: "allow",
+              scope: CONNECT_SCOPE,
+              selector: {
+                resourceKind: "mcp",
+                resourceId: server.resourceId,
+                projectId: server.projectId,
+              },
+            },
+          },
+        });
+      }
+      for (const grantId of changes.remove) {
+        await deleteGrant.mutateAsync({
+          request: { agentPolicyGrantIDForm: { agentId: agent.id, grantId } },
+        });
+      }
+      void queryClient.invalidateQueries({
+        queryKey: ["managed-agents", organization.id],
+      });
+      // Saving is the end of editing: what follows are the platform's own
+      // settings, which this flow only describes.
+      onDone();
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not save this agent. Try again.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // What the reader last decided, marked on the rail. The rail is a growing
   // block of text, and without this it looks the same before and after a
   // click: the mark is how a glance confirms the choice landed.
@@ -256,6 +446,18 @@ export function ProvisionWizard({
     agentName: name.trim(),
     ensureAgent,
     onConnected: setAgentID,
+    // The rule this agent already holds: its own rule is not a duplicate of
+    // itself, and the create step has nothing left to write.
+    connectedSubject: admitted?.subject,
+    // Editing never writes a rule: the agent already holds one, and the
+    // steps after this are the platform's own settings to read.
+    settled: editing,
+    // What the rule already says, so editing shows it rather than an empty
+    // field that would write a second rule.
+    initialValues:
+      admitted !== undefined && admittedEntry !== undefined
+        ? valuesFromSubject(admittedEntry, admitted.subject)
+        : undefined,
     onValueChange: (key) =>
       setHighlight(
         key === "org_id"
@@ -472,19 +674,27 @@ export function ProvisionWizard({
                 }}
                 placeholder="Release Bot"
                 maxLength={120}
-                // An existing agent's name and scope are its own; this flow
-                // issues it a key and does not rewrite its identity.
-                disabled={existing}
+                // An existing agent's name is its own while this flow is only
+                // issuing it a key. Editing is the flow that may change it.
+                disabled={existing && !editing}
                 autoFocus={!existing}
               />
               <Text muted small>
                 {existing
-                  ? "Rename this agent from its own page."
+                  ? editing
+                    ? "Shown in audit logs and session lists."
+                    : "Rename this agent from its own page."
                   : "Shown in audit logs and session lists. You can rename it later."}
               </Text>
             </div>
-            {
-              <div className="space-y-2">
+            {/* Folded away: almost every agent is scoped to the project it
+                is created in, and the choice is undone by the server list on
+                the next step anyway. */}
+            <details className="group">
+              <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm">
+                Advanced settings
+              </summary>
+              <div className="bg-muted/40 border-muted-foreground/30 mt-2 space-y-2 border p-4">
                 <Label>Scope</Label>
                 <Text muted small>
                   {existing
@@ -531,7 +741,7 @@ export function ProvisionWizard({
                   </RadioCard>
                 </RadioCardGroup>
               </div>
-            }
+            </details>
           </div>
         );
       case 1:
@@ -572,6 +782,10 @@ export function ProvisionWizard({
                 setCredential(next as Credential);
                 setHighlight("Credential");
               }}
+              // Settled for an agent that exists: what it signs in with was
+              // decided when it was registered, and changing it here would
+              // mean removing a credential rather than editing one.
+              disabled={editing}
               className="sm:grid-cols-2"
             >
               <RadioCard value="api-key" title="API key" className="p-3">
@@ -612,6 +826,7 @@ export function ProvisionWizard({
                 isError={catalog.isError}
                 onRetry={catalog.refetch}
                 selectedKey={platformKey}
+                disabled={editing}
                 onSelect={(key) => {
                   setPlatformKey(key);
                   setHighlight("Platform");
@@ -657,6 +872,34 @@ export function ProvisionWizard({
         : null;
 
   const footer = () => {
+    // Editing writes on the second step. Past it the flow is the ordinary
+    // one for an agent that exists: adding a credential it does not have.
+    if (editing && step < 2) {
+      return (
+        <WizardFooter
+          note={
+            step === 0
+              ? "Renaming an agent is recorded in the organization audit log."
+              : "Changing what an agent reaches is recorded in the organization audit log."
+          }
+          onBack={step === 0 ? undefined : () => setStep(step - 1)}
+          primary={
+            step === 0 ? (
+              <Button
+                disabled={name.trim().length === 0}
+                onClick={() => setStep(1)}
+              >
+                Continue
+              </Button>
+            ) : (
+              <Button disabled={saving} onClick={() => void save()}>
+                {saving ? "Saving…" : "Save changes and exit"}
+              </Button>
+            )
+          }
+        />
+      );
+    }
     if (workloadStep !== undefined) {
       const last = step - 3 === workload.steps.length - 1;
       const ready = workload.complete(workloadStep);
@@ -672,18 +915,26 @@ export function ProvisionWizard({
           onBack={() => setStep(step - 1)}
           primary={
             workloadStep.phase === "create" ? (
-              <Button
-                disabled={workload.connecting || !workload.canConnect || !ready}
-                onClick={() => {
-                  void workload.connect().then((connected) => {
-                    if (connected) setStep(step + 1);
-                  });
-                }}
-              >
-                {workload.connecting
-                  ? "Connecting…"
-                  : `Connect ${platform?.displayName ?? "platform"}`}
-              </Button>
+              // Already connected under this very rule: there is nothing to
+              // write, so the step is a page to read and move past.
+              workload.connected || editing ? (
+                <Button onClick={() => setStep(step + 1)}>Continue</Button>
+              ) : (
+                <Button
+                  disabled={
+                    workload.connecting || !workload.canConnect || !ready
+                  }
+                  onClick={() => {
+                    void workload.connect().then((connected) => {
+                      if (connected) setStep(step + 1);
+                    });
+                  }}
+                >
+                  {workload.connecting
+                    ? "Connecting…"
+                    : `Connect ${platform?.displayName ?? "platform"}`}
+                </Button>
+              )
             ) : last ? (
               <Button onClick={() => onDone(agentID ?? undefined)}>Done</Button>
             ) : (
@@ -796,6 +1047,8 @@ export function ProvisionWizard({
         // ones ahead are built from choices not yet made. Provisioning an
         // existing agent has no such order, so every step is reachable until
         // the key is issued.
+        // Editing has settled everything a credential step would ask.
+        settledFrom={editing ? 2 : undefined}
         forward={existing && !secret}
         // Verify watches a key being used, so it has nothing to watch until
         // one is issued. Without this an existing agent could jump straight

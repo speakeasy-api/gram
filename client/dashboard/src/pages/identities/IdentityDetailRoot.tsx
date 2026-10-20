@@ -157,6 +157,24 @@ function IdentityDetailContent(): JSX.Element {
           substitutions={
             encodedUrn ? { [encodedUrn]: identity.displayName } : undefined
           }
+          // The identity's own path has no page on it, so its crumb points
+          // at the section the page opens on.
+          urlSubstitutions={
+            encodedUrn
+              ? {
+                  [`/identities/${encodedUrn}`]: `/identities/${encodedUrn}/overview`,
+                }
+              : {}
+          }
+          // The list this identity was opened from. It is a sibling route
+          // rather than a parent, so the path cannot supply the crumb.
+          insertAfter={{
+            segment: "identities",
+            display: identity.agent ? "Agents" : "People",
+            url: identity.agent
+              ? routes.identities.agents.href()
+              : routes.identities.people.href(),
+          }}
         />
       </Page.Header>
       <Page.Body fullWidth fullHeight noPadding className="gap-0">
@@ -187,7 +205,9 @@ function IdentityDetailContent(): JSX.Element {
             // it left the other sub-pages reachable only by editing the URL.
             className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-8 lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"
           />
-          <div className="min-w-0 flex-1">
+          {/* Room under the last section: without it the danger zone and
+              the federated access panel sit flush against the viewport. */}
+          <div className="min-w-0 flex-1 pb-24">
             {identity.agent ? (
               <AgentIdentityProfile
                 key={identity.agent.id}

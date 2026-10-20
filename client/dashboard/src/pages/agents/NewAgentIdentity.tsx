@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 
 import { Button } from "@/components/ui/Button";
 import { InsightsConfig } from "@/components/insights-dock";
@@ -23,6 +23,11 @@ export default function NewAgentIdentity(): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
+  // Opened from a link that names a platform, such as the Claude Tag button
+  // on the agents list. The page then wears that platform's name.
+  const [params] = useSearchParams();
+  const platformKey = params.get("platform") ?? undefined;
+  const claudeTag = platformKey === "claude-tag";
   const done = (agentID?: string) => {
     void navigate(
       agentID
@@ -36,8 +41,25 @@ export default function NewAgentIdentity(): JSX.Element {
   return (
     <FormPage
       width="full"
-      title="New agent identity"
-      description="Name it, choose the servers it can reach, then connect it to its runtime."
+      title={
+        claudeTag ? (
+          <span className="flex items-center gap-3">
+            <img
+              src="/access-hub/claude-tag.svg"
+              alt=""
+              className="size-8 shrink-0"
+            />
+            Set up Claude Tag
+          </span>
+        ) : (
+          "New agent identity"
+        )
+      }
+      description={
+        claudeTag
+          ? "Choose the servers Claude can reach, then connect it to your Anthropic organization."
+          : "Name it, choose the servers it can reach, then connect it to its runtime."
+      }
       primaryAction={
         <Button variant="secondary" disabled={busy} onClick={() => done()}>
           <Button.LeftIcon>
@@ -50,7 +72,11 @@ export default function NewAgentIdentity(): JSX.Element {
       {/* The dock floats over the bottom of the content, which on this page
           is the wizard's own footer and its Continue button. */}
       <InsightsConfig hideTrigger />
-      <ProvisionWizard onDone={done} onBusy={setBusy} />
+      <ProvisionWizard
+        initialPlatformKey={platformKey}
+        onDone={done}
+        onBusy={setBusy}
+      />
     </FormPage>
   );
 }

@@ -80,6 +80,7 @@ export function WorkloadPlatformPicker({
   isError,
   onRetry,
   selectedKey,
+  disabled = false,
   onSelect,
 }: {
   entries: CatalogEntry[];
@@ -87,6 +88,8 @@ export function WorkloadPlatformPicker({
   isError: boolean;
   onRetry: () => void;
   selectedKey: string | null;
+  /** Settled: the agent already signs in with one of these. */
+  disabled?: boolean;
   onSelect: (key: string) => void;
 }): JSX.Element {
   // The catalog's policy is necessary but not sufficient: a platform is
@@ -157,10 +160,12 @@ export function WorkloadPlatformPicker({
             <li key={entry.key}>
               <label
                 className={cn(
-                  "border-border flex h-full cursor-pointer items-start gap-3 border p-3",
+                  "border-border flex h-full items-start gap-3 border p-3",
+                  disabled ? "cursor-default" : "cursor-pointer",
                   chosen
                     ? "border-foreground bg-accent/40"
-                    : "hover:bg-muted/40",
+                    : !disabled && "hover:bg-muted/40",
+                  disabled && !chosen && "opacity-60",
                 )}
               >
                 <input
@@ -168,6 +173,7 @@ export function WorkloadPlatformPicker({
                   name="workload-platform"
                   className="sr-only"
                   checked={chosen}
+                  disabled={disabled}
                   onChange={() => onSelect(entry.key)}
                 />
                 <PlatformMark entry={entry} />

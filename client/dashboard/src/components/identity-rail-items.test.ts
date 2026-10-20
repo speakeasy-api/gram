@@ -16,7 +16,6 @@ function routes(): ReturnType<typeof useRoutes> {
         access: page("access"),
         usage: page("usage"),
         permissions: page("permissions"),
-        provisioning: page("provisioning"),
         sessions: page("sessions"),
         controls: page("controls"),
         security: page("security"),
@@ -54,7 +53,6 @@ describe("identityRailItems", () => {
     expect(keys("agent")).toEqual([
       "overview",
       "permissions",
-      "provisioning",
       "sessions",
       "activity",
       "controls",
@@ -68,7 +66,6 @@ describe("identityRailItems", () => {
       ),
     );
     expect(titles["permissions"]).toBe("Permissions");
-    expect(titles["provisioning"]).toBe("Provisioning");
     expect(titles["sessions"]).toBe("Sessions");
     expect(titles["controls"]).toBe("Controls & Safety");
   });

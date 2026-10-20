@@ -45,14 +45,9 @@ import { useRoles } from "@gram/client/react-query/roles.js";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Bot, Plus, User } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  Link,
-  Navigate,
-  Outlet,
-  useLocation,
-  useNavigate,
-  useParams,
-} from "react-router";
+import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router";
+import { useCatalogEntries } from "@/pages/agents/provision/workloadCatalog";
+import { useWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
 import {
   identityKindOf,
   identityUrnForEmployee,
@@ -83,14 +78,13 @@ export function IdentitiesRoot(): JSX.Element {
  * Hand-typed and truncated links land here.
  */
 export function IdentityDetailIndexRedirect(): JSX.Element {
-  const routes = useRoutes();
+  // Built from the path rather than from the route helper and a param: the
+  // param is empty here, so the helper produced /identities/overview — a
+  // dead address — and the breadcrumb to an identity 404'd.
   const location = useLocation();
-  const { identityUrn = "" } = useParams<{ identityUrn: string }>();
   return (
     <Navigate
-      to={`${routes.identities.detail.overview.href(
-        encodeIdentityUrn(identityUrn),
-      )}${location.search}`}
+      to={`${location.pathname.replace(/\/$/, "")}/overview${location.search}`}
       replace
     />
   );
@@ -836,6 +830,19 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     () => new Map(registeredAgents.map((agent) => [agent.id, agent])),
     [registeredAgents],
   );
+  // How each agent signs in. An agent holds at most one admission in this
+  // flow, so the first one found is the platform the row names.
+  const catalog = useCatalogEntries();
+  const workloads = useWorkloadIdentities({});
+  const admissionsByAgent = useMemo(
+    () =>
+      new Map(
+        (workloads.data?.admissions ?? [])
+          .filter((admission) => admission.agentId !== "")
+          .map((admission) => [admission.agentId, admission]),
+      ),
+    [workloads.data],
+  );
   // An agent has no roles, no linked accounts and no inbox: those columns were
   // an em dash on every row. What it does have is a lifecycle, an owner and a
   // date it was registered, which is what someone scanning this table wants.
@@ -848,6 +855,33 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
         sortable: true,
         sortValue: (identity) => identity.name.toLowerCase(),
         render: (identity) => <IdentityCell identity={identity} />,
+      },
+      {
+        key: "platform",
+        header: "Platform",
+        width: "160px",
+        render: (identity) => {
+          const admission = admissionsByAgent.get(
+            identity.registeredAgentId ?? "",
+          );
+          if (!admission) {
+            return (
+              <Text muted small className="truncate">
+                API key
+              </Text>
+            );
+          }
+          // A catalog platform by its own name; anything else was registered
+          // by hand and carries only the name it was given.
+          const known = catalog.entries.find(
+            (entry) => entry.issuer.value === admission.issuer,
+          );
+          return (
+            <Text small className="truncate">
+              {known?.displayName ?? "Custom"}
+            </Text>
+          );
+        },
       },
       {
         key: "status",
@@ -912,8 +946,40 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
           );
         },
       },
+      {
+        key: "actions",
+        header: "Actions",
+        width: "160px",
+        render: (identity) => {
+          const agentId = identity.registeredAgentId ?? "";
+          if (agentId === "") return null;
+          return (
+            // Stops the row's own click from firing underneath: the row opens
+            // the agent, and Edit is a different destination.
+            <div
+              className="flex items-center justify-end gap-2"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <Button asChild size="sm" variant="primary">
+                <Link to={routes.identities.agents.edit.href(agentId)}>
+                  Edit
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="secondary">
+                <Link
+                  to={routes.identities.detail.overview.href(
+                    encodeIdentityUrn(identityUrnForEmployee(identity)),
+                  )}
+                >
+                  View
+                </Link>
+              </Button>
+            </div>
+          );
+        },
+      },
     ],
-    [agentsById],
+    [agentsById, admissionsByAgent, catalog.entries, routes],
   );
   // One sorted list, split by what the row is. The filters above still narrow
   // both; the Kind column is dropped inside each table because the heading
@@ -977,19 +1043,36 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       <Page.Section.Title>
         {kind === "agent" ? "Agents" : "People"}
       </Page.Section.Title>
-      <Page.Section.Description>
+      <Page.Section.Description className="max-w-2xl pr-8">
         {kind === "agent"
-          ? "The agent identities you register here, each with its own key, its own permissions and its own line in the audit log."
+          ? "Register an agent identity for each agent running on an external platform. What it does through Speakeasy is then attributed to it."
           : "The people your identity provider knows about, and what each of them reached through Speakeasy. Speakeasy does not create them."}
       </Page.Section.Description>
       <Page.Section.CTA>
         {kind === "agent" && agentsEnabled ? (
-          <Button asChild variant="primary">
-            <Link to={routes.identities.agents.new.href()}>
-              <Plus className="size-4" aria-hidden="true" />
-              New agent identity
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* The one platform with a guided setup, offered by name: it is
+                what most people come to this page to do, and the generic
+                flow makes them find it behind two more choices. */}
+            <Button asChild variant="secondary">
+              <Link
+                to={`${routes.identities.agents.new.href()}?platform=claude-tag`}
+              >
+                <img
+                  src="/access-hub/claude-tag.svg"
+                  alt=""
+                  className="size-4"
+                />
+                Set up Claude Tag
+              </Link>
+            </Button>
+            <Button asChild variant="primary">
+              <Link to={routes.identities.agents.new.href()}>
+                <Plus className="size-4" aria-hidden="true" />
+                New agent identity
+              </Link>
+            </Button>
+          </div>
         ) : null}
       </Page.Section.CTA>
       <Page.Section.Body>

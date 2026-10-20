@@ -240,3 +240,33 @@ export function connectedIssuer(
 ): WorkloadIssuer | undefined {
   return issuers.find((candidate) => candidate.issuer === issuer);
 }
+
+/**
+ * The variable values a subject was built from, read back out of it.
+ *
+ * Editing shows what the rule says, and the rule is all there is: the values
+ * someone typed to make it are not stored anywhere else.
+ */
+export function valuesFromSubject(
+  entry: CatalogEntry,
+  subject: string,
+): VariableValues {
+  const keys: string[] = [];
+  const pattern = entry.subject.template.replace(
+    PLACEHOLDER,
+    (_, key: string) => {
+      keys.push(key);
+      return "([^/]+)";
+    },
+  );
+  const escaped = pattern
+    .split("([^/]+)")
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("([^/]+)");
+  const stem = entry.subject.wildcard ? subject.replace(/\*$/, "") : subject;
+  const match = new RegExp(`^${escaped}$`).exec(stem);
+  if (match === null) return {};
+  return Object.fromEntries(
+    keys.map((key, index) => [key, match[index + 1] ?? ""]),
+  );
+}

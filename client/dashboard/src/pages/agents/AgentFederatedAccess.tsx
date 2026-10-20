@@ -8,12 +8,10 @@ import {
 } from "@/pages/identities/IdentityPanel";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
-import {
-  invalidateAllWorkloadIdentities,
-  useWorkloadIdentities,
-} from "@gram/client/react-query/workloadIdentities.js";
+import { invalidateAllWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
 import { useWithdrawWorkloadSubjectMutation } from "@gram/client/react-query/withdrawWorkloadSubject.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAgentAdmissions } from "./agentAdmissions";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -29,7 +27,7 @@ export function AgentFederatedAccess({
   agent: ManagedAgent;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const identities = useWorkloadIdentities({});
+  const identities = useAgentAdmissions(agent.id);
   const [removing, setRemoving] = useState<WorkloadAdmission | null>(null);
 
   const withdraw = useWithdrawWorkloadSubjectMutation({
@@ -47,9 +45,7 @@ export function AgentFederatedAccess({
     },
   });
 
-  const mine = (identities.data?.admissions ?? []).filter(
-    (admission) => admission.agentId === agent.id,
-  );
+  const mine = identities.admissions;
 
   return (
     <>
@@ -57,7 +53,7 @@ export function AgentFederatedAccess({
         title="Federated access"
         loading={identities.isPending}
         error={identities.isError}
-        onRetry={() => void identities.refetch()}
+        onRetry={identities.refetch}
         loadingRows={1}
         footer={
           mine.length === 0

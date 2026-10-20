@@ -24,6 +24,7 @@ export function FormPage({
   scopeAll,
   resourceId,
   breadcrumbSubstitutions,
+  breadcrumbUrlSubstitutions,
   title,
   description,
   stage,
@@ -49,6 +50,7 @@ export function FormPage({
       scopeAll={scopeAll}
       resourceId={resourceId}
       breadcrumbSubstitutions={breadcrumbSubstitutions}
+      breadcrumbUrlSubstitutions={breadcrumbUrlSubstitutions}
     >
       <div
         className={cn(

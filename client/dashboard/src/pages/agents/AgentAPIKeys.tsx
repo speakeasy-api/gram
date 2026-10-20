@@ -51,12 +51,15 @@ export function AgentAPIKeys({
   agent,
   creation = false,
   variant = "section",
+  federated = false,
   onCreate,
   onDone,
   onBusy,
 }: {
   agent: ManagedAgent;
   creation?: boolean;
+  /** The agent signs in with a platform's tokens, so a key is optional. */
+  federated?: boolean;
   /** "bare" drops the section chrome for a caller that supplies its own. */
   variant?: "section" | "bare";
   onCreate?: () => void;
@@ -85,6 +88,7 @@ export function AgentAPIKeys({
       agent={agent}
       organizationId={organization.id}
       userId={user.id}
+      federated={federated}
       onCreate={onCreate}
     />
   );
@@ -139,6 +143,7 @@ function AgentAPIKeysContent({
   organizationId,
   userId,
   creation = false,
+  federated = false,
   onCreate,
   onDone,
   onBusy,
@@ -147,6 +152,7 @@ function AgentAPIKeysContent({
   organizationId: string;
   userId: string;
   creation?: boolean;
+  federated?: boolean;
   onCreate?: () => void;
   onDone?: () => void;
   onBusy?: (busy: boolean) => void;
@@ -621,8 +627,9 @@ function AgentAPIKeysContent({
             // The state that matters most on this page: an identity nothing
             // is holding yet, and the one step that changes that.
             <Text muted small>
-              No key issued yet. The agent cannot authenticate until you issue
-              one and install it where it runs.
+              {federated
+                ? "No key issued. This agent signs in with its platform's own tokens, so it only needs a key for a runtime that cannot do that."
+                : "No key issued yet. The agent cannot authenticate until you issue one and install it where it runs."}
             </Text>
           ) : null}
           {issuanceBlocked && (
