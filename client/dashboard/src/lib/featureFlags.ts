@@ -26,7 +26,6 @@ export const FEATURE_FLAGS = {
   // UI-only rollout gate for the organization's Speakeasy authorization
   // servers page; the APIs behind it are not gated.
   userSessionIssuerDashboard: "gram-user-session-issuer-dashboard",
-  userSessionsDashboard: "user-sessions-dashboard",
 } as const;
 
 export type FeatureFlag = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];

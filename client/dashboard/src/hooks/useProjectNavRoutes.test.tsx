@@ -104,7 +104,6 @@ beforeEach(() => {
     data: { signalsIntelligenceEnabled: false },
   };
   testState.featureFlags = {
-    [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
     [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
   };
@@ -232,7 +231,6 @@ describe("useProjectNavRoutes", () => {
     "keeps standard navigation while rollout flags are %s",
     (status) => {
       testState.featureFlags = {
-        [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
         [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
       };
@@ -266,7 +264,6 @@ describe("useProjectNavRoutes", () => {
 
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
-      [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
       [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },
       [FEATURE_FLAGS.explore]: { status: "enabled" },
     };

@@ -48,7 +48,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isSignalsIntelligenceEnabled =
     productFeatures.isSuccess &&
     productFeatures.data.signalsIntelligenceEnabled === true;
-  const userSessionsFlag = useFeatureFlag(FEATURE_FLAGS.userSessionsDashboard);
   const riskWatchdogFlag = useFeatureFlag(FEATURE_FLAGS.riskWatchdog);
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
@@ -80,15 +79,11 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       // redirects to the people.
       { route: routes.identities.people, scope: observe },
       { route: routes.identities.agents, scope: observe },
-      ...(userSessionsFlag.status === "enabled"
-        ? [
-            {
-              route: routes.mcpSessions,
-              scope: read,
-              resourceId: projectId,
-            },
-          ]
-        : []),
+      {
+        route: routes.mcpSessions,
+        scope: read,
+        resourceId: projectId,
+      },
       {
         route: routes.remoteIdentityProviders,
         scope: ["org:read", "org:admin"],
@@ -142,7 +137,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     ];
   }, [
     routes,
-    userSessionsFlag.status,
     projectId,
     isExploreEnabled,
     isOrgMemoryEnabled,
