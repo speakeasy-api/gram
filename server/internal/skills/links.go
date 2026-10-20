@@ -3,6 +3,7 @@ package skills
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -539,7 +540,7 @@ func (s *Service) readableLinkTargets(ctx context.Context, projectID uuid.UUID, 
 	}
 	matched, err := s.authz.FindMatched(ctx, checks)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("filter skill links by readable target: %w", err)
 	}
 	for j, i := range checkRows {
 		readable[i] = matched[j]

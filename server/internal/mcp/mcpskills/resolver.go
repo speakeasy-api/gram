@@ -130,7 +130,7 @@ func (r *Resolver) Get(ctx context.Context, scope Scope, uri string) (*Entry, er
 
 func (r *Resolver) resolve(ctx context.Context, scope Scope, name pgtype.Text) ([]Entry, error) {
 	if err := scope.Target.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve served skills: %w", err)
 	}
 
 	recipient, err := r.isRecipient(ctx, scope.OrganizationID, scope.UserID)
