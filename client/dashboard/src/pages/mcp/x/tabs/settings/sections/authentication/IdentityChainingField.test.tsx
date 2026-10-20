@@ -612,6 +612,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
     render(speakeasyField());
     expect(screen.getByText("Unknown identity provider")).toBeTruthy();
     expect(screen.getByText(/Unknown availability/)).toBeTruthy();
+    expect(vouchers()).toContain(
+      "Speakeasyfor everyone who logs in to this server",
+    );
   });
 
   it("blocks a pending turn-off confirmation when a refetch reports an unknown state", () => {
