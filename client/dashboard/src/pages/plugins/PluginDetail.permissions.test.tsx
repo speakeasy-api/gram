@@ -350,8 +350,8 @@ describe("plugin detail permission boundary", () => {
       (screen.getByRole("checkbox", { name: "Payroll" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
-    expect(screen.getByText("MCP off")).toBeTruthy();
-    expect(screen.getByText("No MCP address")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "MCP off" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "No MCP address" })).toBeTruthy();
     expect(
       screen.getByText(
         "Set an MCP address for this server before adding it to a plugin.",
@@ -362,7 +362,7 @@ describe("plugin detail permission boundary", () => {
       (screen.getByRole("checkbox", { name: "Ledger" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
-    expect(screen.getByText("No MCP server")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "No MCP server" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Select all" }));
     await act(async () => {
       fireEvent.click(
