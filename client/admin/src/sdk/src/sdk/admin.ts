@@ -342,7 +342,7 @@ export class Admin extends ClientSDK {
    * getHookClients admin
    *
    * @remarks
-   * Fleet-wide hook client grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, and inference hook traffic per Claude app.
+   * Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.
    */
   async getHookClients(
     request?: AdminGetHookClientsRequest | undefined,

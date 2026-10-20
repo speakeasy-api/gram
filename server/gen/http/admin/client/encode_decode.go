@@ -23253,6 +23253,20 @@ func unmarshalAdminInferenceHookCellResponseBodyToAdminAdminInferenceHookCell(v 
 	return res
 }
 
+// unmarshalAdminDeviceAgentCellResponseBodyToAdminAdminDeviceAgentCell builds
+// a value of type *admin.AdminDeviceAgentCell from a value of type
+// *AdminDeviceAgentCellResponseBody.
+func unmarshalAdminDeviceAgentCellResponseBodyToAdminAdminDeviceAgentCell(v *AdminDeviceAgentCellResponseBody) *admin.AdminDeviceAgentCell {
+	res := &admin.AdminDeviceAgentCell{
+		OrganizationID: *v.OrganizationID,
+		Day:            *v.Day,
+		Version:        *v.Version,
+		Machines:       *v.Machines,
+	}
+
+	return res
+}
+
 // unmarshalAdminExternalMcpMigrationCandidateResponseBodyToAdminAdminExternalMcpMigrationCandidate
 // builds a value of type *admin.AdminExternalMcpMigrationCandidate from a
 // value of type *AdminExternalMcpMigrationCandidateResponseBody.

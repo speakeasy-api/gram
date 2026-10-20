@@ -7,20 +7,23 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { errorMessage } from "@/lib/gramAdminApi";
 import {
+  agentSeries,
   cacheAgeLabel,
   clientSeries,
-  fetchHookClients,
-  hookClientsQuery,
+  deviceAgentRows,
+  fetchFleetHealth,
+  fleetHealthQuery,
   inferenceRows,
+  latestAgentShare,
   latestShares,
   sessionRows,
   surfaceSeries,
   windowDays,
   type DayCell,
-  type HookClients as HookClientsData,
+  type FleetHealth as FleetHealthData,
   type OrgRow,
   type Series,
-} from "./hookClientsModel";
+} from "./fleetHealthModel";
 
 type HeightMode = "same" | "sessions" | "machines";
 
@@ -242,7 +245,7 @@ function HeightToggle({
   );
 }
 
-function SessionsSection({ data }: { data: HookClientsData }): JSX.Element {
+function SessionsSection({ data }: { data: FleetHealthData }): JSX.Element {
   const [mode, setMode] = useState<HeightMode>("same");
   const series = useMemo(() => clientSeries(data.sessions), [data]);
   const rows = useMemo(() => sessionRows(data), [data]);
@@ -315,7 +318,7 @@ function SessionsSection({ data }: { data: HookClientsData }): JSX.Element {
   );
 }
 
-function InferenceSection({ data }: { data: HookClientsData }): JSX.Element {
+function InferenceSection({ data }: { data: FleetHealthData }): JSX.Element {
   const [mode, setMode] = useState<HeightMode>("same");
   const series = useMemo(() => surfaceSeries(data.inference), [data]);
   const rows = useMemo(() => inferenceRows(data), [data]);
@@ -378,13 +381,73 @@ function InferenceSection({ data }: { data: HookClientsData }): JSX.Element {
   );
 }
 
-export function HookClients(): JSX.Element {
+function DeviceAgentsSection({ data }: { data: FleetHealthData }): JSX.Element {
+  const [mode, setMode] = useState<HeightMode>("same");
+  const series = useMemo(() => agentSeries(data.device_agents), [data]);
+  const rows = useMemo(() => deviceAgentRows(data), [data]);
+  const days = useMemo(
+    () => windowDays(data.queried_at, data.window_days),
+    [data],
+  );
+  return (
+    <section className="space-y-3">
+      <div className="space-y-1">
+        <h2 className="text-lg font-semibold">
+          Device agent versions by org and day
+        </h2>
+        <p className="text-muted-foreground text-sm">
+          The bar shows the mix of speakeasyd versions, blue for old and red for
+          new. The number under it is the machines whose agent polled that day,
+          counted under the last version each reported.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Legend series={series} />
+        <HeightToggle
+          mode={mode}
+          onChange={setMode}
+          options={[
+            { value: "same", label: "Same" },
+            { value: "machines", label: "Machines" },
+          ]}
+        />
+      </div>
+      <Grid
+        rows={rows}
+        days={days}
+        series={series}
+        mode={mode}
+        emptyText="No device agent polls recorded in this window yet."
+        summary={(row) => {
+          const latest = latestAgentShare(row, series);
+          if (!latest) return <span className="text-muted-foreground">–</span>;
+          return (
+            <>
+              <b>{percent(latest.share)}</b>{" "}
+              <span className="text-muted-foreground">on {latest.version}</span>
+            </>
+          );
+        }}
+      />
+      <p className="text-muted-foreground text-xs">
+        Source: the speakeasyd version in each agent&apos;s User-Agent on
+        agent.getPlugins, recorded per machine per UTC day in Redis and kept for
+        31 days. A machine is its hardware serial, or its environment and
+        enrolled email when there is none. Dev builds are left out. Days before
+        recording started show no data. Orgs are sorted by machine-days in the
+        window.
+      </p>
+    </section>
+  );
+}
+
+export function FleetHealth(): JSX.Element {
   const queryClient = useQueryClient();
-  const query = useQuery(hookClientsQuery);
+  const query = useQuery(fleetHealthQuery);
   const refresh = useMutation({
-    mutationFn: () => fetchHookClients(true),
+    mutationFn: () => fetchFleetHealth(true),
     onSuccess: (data) =>
-      queryClient.setQueryData(hookClientsQuery.queryKey, data),
+      queryClient.setQueryData(fleetHealthQuery.queryKey, data),
   });
   const busy = query.isFetching || refresh.isPending;
 
@@ -392,11 +455,11 @@ export function HookClients(): JSX.Element {
     <div className="space-y-8 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold">Hook clients</h1>
+          <h1 className="text-2xl font-semibold">Fleet health</h1>
           <p className="text-muted-foreground text-sm">
-            Which hook client each organization runs, and how inference hook
-            traffic is spread across Claude apps. Use it to spot orgs still on
-            the legacy curl hooks.
+            Which client versions every organization runs: hook clients,
+            inference hook traffic and device agents. Use it to spot orgs on old
+            or legacy clients.
           </p>
         </div>
         <div className="flex items-center gap-3 text-sm">
@@ -441,6 +504,7 @@ export function HookClients(): JSX.Element {
         <>
           <SessionsSection data={query.data} />
           <InferenceSection data={query.data} />
+          <DeviceAgentsSection data={query.data} />
         </>
       ) : null}
     </div>

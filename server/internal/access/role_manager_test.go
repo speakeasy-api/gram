@@ -107,6 +107,45 @@ func TestRoleManager_MembersAndCounts(t *testing.T) {
 	require.Equal(t, 1, counts["Custom Builder"])
 }
 
+func TestRoleManager_ListMembersFilteredLimitsDistinctMembersWithCompleteRoles(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+	builderID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Custom Builder", "builder", ""))
+	readerID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_reader", "Custom Reader", "reader", ""))
+	for i := range 2 {
+		userID := fmt.Sprintf("local_user_%d", i)
+		workosID := fmt.Sprintf("user_%d", i)
+		membershipID := fmt.Sprintf("membership_%d", i)
+		seedConnectedUser(t, ctx, ti.conn, orgID, userID, fmt.Sprintf("user%d@example.test", i), "Person", workosID, membershipID)
+		for _, slug := range []string{"builder", "reader"} {
+			seedRoleAssignment(t, ctx, ti.conn, orgID, userID, mockMember("", membershipID, workosID, slug))
+		}
+	}
+	page, err := ti.service.roleMgr.ListMembersFiltered(ctx, orgID, MemberListFilter{Query: "  CUSTOM   READER ", RoleID: builderID, Limit: 1})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), page.TotalMatches)
+	require.Zero(t, page.ExactEmailMatches)
+	require.Len(t, page.Members, 1)
+	require.Equal(t, "local_user_0", page.Members[0].ID)
+	require.ElementsMatch(t, []string{builderID, readerID}, page.Members[0].RoleIds)
+
+	all, err := ti.service.roleMgr.ListMembers(ctx, orgID)
+	require.NoError(t, err)
+	require.Len(t, all.Members, 3)
+	for _, member := range all.Members {
+		if member.ID != authCtx.UserID {
+			require.ElementsMatch(t, []string{builderID, readerID}, member.RoleIds)
+		}
+	}
+	literal, err := ti.service.roleMgr.ListMembersFiltered(ctx, orgID, MemberListFilter{Query: "%_", RoleID: "", Limit: 1})
+	require.NoError(t, err)
+	require.Zero(t, literal.TotalMatches)
+	require.Empty(t, literal.Members)
+}
+
 func TestRoleManager_AssignMembersToRoleAcceptsConnectedMemberWithoutAssignment(t *testing.T) {
 	t.Parallel()
 
