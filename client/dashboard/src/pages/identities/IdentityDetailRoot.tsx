@@ -178,10 +178,24 @@ function IdentityDetailContent(): JSX.Element {
           }}
         />
       </Page.Header>
-      <Page.Body fullWidth fullHeight noPadding className="gap-0">
+      {/* `h-auto min-h-full` rather than the `h-full` fullHeight applies:
+          that pins the content box to the viewport, so a page taller than it
+          overflows a box that has already stopped — the recessed ground ends
+          mid-scroll with white under it, and the last panel cannot be
+          reached. Growing with the content keeps the scroll container and
+          the painted ground the same height. */}
+      <Page.Body
+        fullWidth
+        fullHeight
+        noPadding
+        className="h-auto min-h-full gap-0"
+      >
         {/* The person runs the full width of the body: they are the subject of
             the page, not a column in it. */}
-        <div className="bg-card border-border border-b px-8 py-6">
+        {/* Sticky: the rail beside the content already is, and the subject
+            of the page is worth as much as its navigation — scrolling a long
+            activity list otherwise leaves no sign of whose it is. */}
+        <div className="bg-card border-border sticky top-0 z-20 border-b px-8 py-6">
           <IdentityHeader identity={identity} />
         </div>
         {/* Rail beside the content, not in the app sidebar: the reader keeps
@@ -190,7 +204,9 @@ function IdentityDetailContent(): JSX.Element {
         {/* pb-16, not py-8: the body is the scroll container, so a symmetric
             inset leaves the last panel sitting flush against the bottom edge
             of the viewport with nothing under it. */}
-        <div className="bg-background flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 pb-16 lg:flex-row lg:gap-8">
+        {/* No `min-h-0`: that lets this shrink below its content, which is
+            what cut the ground short of the panels standing on it. */}
+        <div className="bg-background flex flex-1 flex-col gap-6 px-8 pt-8 pb-16 lg:flex-row lg:gap-8">
           <IdentityRail
             items={identityRailItems(
               routes,
@@ -204,7 +220,10 @@ function IdentityDetailContent(): JSX.Element {
             )}
             // Narrow, the rail is a scrollable row above the content: hiding
             // it left the other sub-pages reachable only by editing the URL.
-            className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-8 lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"
+            // Sticks clear of the header above it rather than under it: both
+            // are pinned to the same scroll container, and the header wins
+            // on z-index, so a smaller offset parks the rail out of sight.
+            className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-48 lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"
           />
           {/* Room under the last section: without it the danger zone and
               the federated access panel sit flush against the viewport. */}

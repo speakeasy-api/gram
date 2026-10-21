@@ -5,7 +5,7 @@ import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
 import {
-  AgentIdentityPanel,
+  AgentIdentityFacts,
   AgentLifecycle,
   RenameAgentButton,
 } from "@/pages/agents/agent-admin";
@@ -17,6 +17,9 @@ import {
   AgentIdentityAudit,
   AgentIdentityChallenges,
 } from "./AgentIdentityActivity";
+import { AgentIdentityUsage } from "./AgentIdentityUsage";
+import { IdentityPanel } from "./IdentityPanel";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { IdentitySection } from "./IdentitySection";
 
 /** Agent data is keyed by its principal, never by its human owner's identifiers. */
@@ -189,7 +192,7 @@ export function AgentIdentityProfile({
       return (
         <IdentitySection
           title="Overview"
-          meta="What this identity is, and who answers for it"
+          meta="What this agent has been doing, and who answers for it"
           action={
             <div className="flex items-center gap-2">
               {/* Changing what the agent reaches is the same set of
@@ -203,11 +206,26 @@ export function AgentIdentityProfile({
             </div>
           }
         >
-          {/* Name, principal, owner, scope and lifecycle — the durable
-              facts, from the one component that states them. */}
-          <AgentIdentityPanel agent={agent} />
-          <AgentIdentityPermissions agent={agent} />
-          <AgentIdentityChallenges agent={agent} />
+          {/* Who answers for it and whether it may act, as one line. The
+              rest of what this card used to hold is said by the header above
+              or by the Permissions section, and was read twice. */}
+          <AgentIdentityFacts agent={agent} />
+          {/* What the agent has actually been doing, before what it is
+              allowed to do: an overview is opened to find out whether
+              something is wrong, and the policy is where you look next. */}
+          <AgentIdentityUsage agent={agent} />
+          {/* Who is signed in as it right now, capped. The Sessions section
+              owns the full list and the revoking; this says whether anything
+              is live without making the reader go and look. */}
+          <IdentityPanel
+            title="Sessions"
+            handoffLabel="all sessions"
+            handoffHref={`${routes.identities.detail.sessions.href(
+              encodeIdentityUrn(`agent:${agent.id}`),
+            )}`}
+          >
+            <ManagedAgentSessions agent={agent} variant="bare" limit={3} />
+          </IdentityPanel>
           <AgentIdentityAudit agent={agent} subject />
         </IdentitySection>
       );
