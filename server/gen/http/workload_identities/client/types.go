@@ -2996,9 +2996,6 @@ type WorkloadPlatformResponseBody struct {
 	Variables []*WorkloadPlatformVariableResponseBody `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
 	// The access rule it produces.
 	Subject *WorkloadPlatformSubjectResponseBody `form:"subject,omitempty" json:"subject,omitempty" xml:"subject,omitempty"`
-	// The guided setup. Empty for a platform without one, which is listed as
-	// coming soon and cannot be opened.
-	Steps []*WorkloadPlatformStepResponseBody `form:"steps,omitempty" json:"steps,omitempty" xml:"steps,omitempty"`
 }
 
 // WorkloadPlatformConstantResponseBody is used to define fields on response
@@ -3037,47 +3034,6 @@ type WorkloadPlatformSubjectResponseBody struct {
 	Template *string `form:"template,omitempty" json:"template,omitempty" xml:"template,omitempty"`
 	// Whether the rule is the filled template followed by *.
 	Wildcard *bool `form:"wildcard,omitempty" json:"wildcard,omitempty" xml:"wildcard,omitempty"`
-}
-
-// WorkloadPlatformStepResponseBody is used to define fields on response body
-// types.
-type WorkloadPlatformStepResponseBody struct {
-	// Stable within the platform; used in the dashboard URL.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Heads the step.
-	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
-	// collect steps gather values, the create step writes the rows, connect steps
-	// describe the platform's side.
-	Phase *string `form:"phase,omitempty" json:"phase,omitempty" xml:"phase,omitempty"`
-	// Rendered in order.
-	Blocks []*WorkloadPlatformBlockResponseBody `form:"blocks,omitempty" json:"blocks,omitempty" xml:"blocks,omitempty"`
-}
-
-// WorkloadPlatformBlockResponseBody is used to define fields on response body
-// types.
-type WorkloadPlatformBlockResponseBody struct {
-	// The kind of content.
-	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// A text block's Markdown, or what a checklist item without a value asks the
-	// operator to do. Raw HTML in it must not be rendered.
-	Markdown *string `form:"markdown,omitempty" json:"markdown,omitempty" xml:"markdown,omitempty"`
-	// An image's path on the dashboard's origin.
-	Src *string `form:"src,omitempty" json:"src,omitempty" xml:"src,omitempty"`
-	// An image's alternative text.
-	Alt *string `form:"alt,omitempty" json:"alt,omitempty" xml:"alt,omitempty"`
-	// Shown under an image.
-	Caption *string `form:"caption,omitempty" json:"caption,omitempty" xml:"caption,omitempty"`
-	// A link's https target.
-	Href *string `form:"href,omitempty" json:"href,omitempty" xml:"href,omitempty"`
-	// A link's or computed value's label, or the console field or control a
-	// checklist item names.
-	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
-	// The variable key a field collects.
-	Variable *string `form:"variable,omitempty" json:"variable,omitempty" xml:"variable,omitempty"`
-	// The value a computed block or checklist item shows.
-	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
-	// Shown under a computed value or checklist item.
-	Help *string `form:"help,omitempty" json:"help,omitempty" xml:"help,omitempty"`
 }
 
 // WorkloadFormResponseBody is used to define fields on response body types.
@@ -9545,9 +9501,6 @@ func ValidateWorkloadPlatformResponseBody(body *WorkloadPlatformResponseBody) (e
 	if body.Subject == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("subject", "body"))
 	}
-	if body.Steps == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("steps", "body"))
-	}
 	if body.Issuer != nil {
 		if err2 := ValidateWorkloadPlatformConstantResponseBody(body.Issuer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -9568,13 +9521,6 @@ func ValidateWorkloadPlatformResponseBody(body *WorkloadPlatformResponseBody) (e
 	if body.Subject != nil {
 		if err2 := ValidateWorkloadPlatformSubjectResponseBody(body.Subject); err2 != nil {
 			err = goa.MergeErrors(err, err2)
-		}
-	}
-	for _, e := range body.Steps {
-		if e != nil {
-			if err2 := ValidateWorkloadPlatformStepResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
 		}
 	}
 	return
@@ -9637,82 +9583,6 @@ func ValidateWorkloadPlatformSubjectResponseBody(body *WorkloadPlatformSubjectRe
 	}
 	if body.Wildcard == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("wildcard", "body"))
-	}
-	return
-}
-
-// ValidateWorkloadPlatformStepResponseBody runs the validations defined on
-// WorkloadPlatformStepResponseBody
-func ValidateWorkloadPlatformStepResponseBody(body *WorkloadPlatformStepResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Title == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
-	}
-	if body.Phase == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("phase", "body"))
-	}
-	if body.Blocks == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("blocks", "body"))
-	}
-	if body.Phase != nil {
-		if !(*body.Phase == "collect" || *body.Phase == "create" || *body.Phase == "connect") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.phase", *body.Phase, []any{"collect", "create", "connect"}))
-		}
-	}
-	for _, e := range body.Blocks {
-		if e != nil {
-			if err2 := ValidateWorkloadPlatformBlockResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateWorkloadPlatformBlockResponseBody runs the validations defined on
-// WorkloadPlatformBlockResponseBody
-func ValidateWorkloadPlatformBlockResponseBody(body *WorkloadPlatformBlockResponseBody) (err error) {
-	if body.Type == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
-	}
-	if body.Markdown == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("markdown", "body"))
-	}
-	if body.Src == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("src", "body"))
-	}
-	if body.Alt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("alt", "body"))
-	}
-	if body.Caption == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("caption", "body"))
-	}
-	if body.Href == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("href", "body"))
-	}
-	if body.Label == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
-	}
-	if body.Variable == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("variable", "body"))
-	}
-	if body.Value == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
-	}
-	if body.Help == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("help", "body"))
-	}
-	if body.Type != nil {
-		if !(*body.Type == "text" || *body.Type == "image" || *body.Type == "link" || *body.Type == "field" || *body.Type == "subject_rule" || *body.Type == "agent_picker" || *body.Type == "tags" || *body.Type == "computed_status" || *body.Type == "computed" || *body.Type == "checklist_item") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed", "checklist_item"}))
-		}
-	}
-	if body.Value != nil {
-		if !(*body.Value == "" || *body.Value == "token_endpoint" || *body.Value == "issuer_url" || *body.Value == "mcp_host") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.value", *body.Value, []any{"", "token_endpoint", "issuer_url", "mcp_host"}))
-		}
 	}
 	return
 }

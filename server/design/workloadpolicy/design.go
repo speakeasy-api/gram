@@ -50,7 +50,7 @@ var _ = Service("workloadIdentities", func() {
 	})
 
 	Method("listPlatforms", func() {
-		Description("List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.")
+		Description("List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -667,42 +667,8 @@ var WorkloadPlatformSubject = Type("WorkloadPlatformSubject", func() {
 	Required("template", "wildcard")
 })
 
-var WorkloadPlatformBlock = Type("WorkloadPlatformBlock", func() {
-	Description("One piece of a guided setup step. Which fields are set depends on type; the rest are empty.")
-
-	Attribute("type", String, "The kind of content.", func() {
-		Enum("text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed", "checklist_item")
-	})
-	Attribute("markdown", String, "A text block's Markdown, or what a checklist item without a value asks the operator to do. Raw HTML in it must not be rendered.")
-	Attribute("src", String, "An image's path on the dashboard's origin.")
-	Attribute("alt", String, "An image's alternative text.")
-	Attribute("caption", String, "Shown under an image.")
-	Attribute("href", String, "A link's https target.")
-	Attribute("label", String, "A link's or computed value's label, or the console field or control a checklist item names.")
-	Attribute("variable", String, "The variable key a field collects.")
-	Attribute("value", String, "The value a computed block or checklist item shows.", func() {
-		Enum("", "token_endpoint", "issuer_url", "mcp_host")
-	})
-	Attribute("help", String, "Shown under a computed value or checklist item.")
-
-	Required("type", "markdown", "src", "alt", "caption", "href", "label", "variable", "value", "help")
-})
-
-var WorkloadPlatformStep = Type("WorkloadPlatformStep", func() {
-	Description("One screen of a guided setup.")
-
-	Attribute("id", String, "Stable within the platform; used in the dashboard URL.")
-	Attribute("title", String, "Heads the step.")
-	Attribute("phase", String, "collect steps gather values, the create step writes the rows, connect steps describe the platform's side.", func() {
-		Enum("collect", "create", "connect")
-	})
-	Attribute("blocks", ArrayOf(WorkloadPlatformBlock), "Rendered in order.")
-
-	Required("id", "title", "phase", "blocks")
-})
-
 var WorkloadPlatform = Type("WorkloadPlatform", func() {
-	Description("A platform the catalog offers to trust, with what the operator supplies and the guided setup that connects it.")
+	Description("A platform the catalog offers to trust, with what the operator supplies to connect it. How the setup is explained belongs to the dashboard, not to this policy.")
 
 	Attribute("key", String, "Identifies the entry permanently.")
 	Attribute("display_name", String, "What the operator sees.")
@@ -713,9 +679,8 @@ var WorkloadPlatform = Type("WorkloadPlatform", func() {
 	Attribute("jwks_uri", WorkloadPlatformConstant, "Where it publishes its signing keys.")
 	Attribute("variables", ArrayOf(WorkloadPlatformVariable), "What the operator supplies.")
 	Attribute("subject", WorkloadPlatformSubject, "The access rule it produces.")
-	Attribute("steps", ArrayOf(WorkloadPlatformStep), "The guided setup. Empty for a platform without one, which is listed as coming soon and cannot be opened.")
 
-	Required("key", "display_name", "description", "icon", "enabled", "issuer", "jwks_uri", "variables", "subject", "steps")
+	Required("key", "display_name", "description", "icon", "enabled", "issuer", "jwks_uri", "variables", "subject")
 })
 
 var WorkloadPlatformCatalog = Type("WorkloadPlatformCatalog", func() {

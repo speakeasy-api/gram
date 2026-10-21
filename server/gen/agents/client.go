@@ -110,13 +110,13 @@ func (c *Client) RevokeSession(ctx context.Context, p *RevokeSessionPayload) (er
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) List(ctx context.Context, p *ListPayload) (res []*ManagedAgent, err error) {
+func (c *Client) List(ctx context.Context, p *ListPayload) (res *ListAgentsResult, err error) {
 	var ires any
 	ires, err = c.ListEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.([]*ManagedAgent), nil
+	return ires.(*ListAgentsResult), nil
 }
 
 // Create calls the "create" endpoint of the "agents" service.

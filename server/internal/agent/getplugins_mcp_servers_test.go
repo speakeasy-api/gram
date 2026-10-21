@@ -11,6 +11,7 @@ import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -40,6 +41,11 @@ func seedProjectToolsetServer(t *testing.T, ti *testInstance, projectID, pluginI
 		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(t.Context(), mcpserversrepo.CreateMCPServerParams{
+		ID: toolset.ID, ProjectID: projectID, Name: pgtype.Text{String: slug, Valid: true}, Slug: toolset.McpSlug,
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
 	addToolsetServer(t, ti, pluginID, toolset.ID, displayName)
 	return toolset.ID, testServerURL + "/mcp/" + slug
 }
@@ -48,8 +54,7 @@ func addToolsetServer(t *testing.T, ti *testInstance, pluginID, toolsetID uuid.U
 	t.Helper()
 	_, err := pluginsrepo.New(ti.conn).AddPluginServer(t.Context(), pluginsrepo.AddPluginServerParams{
 		PluginID:    pluginID,
-		ToolsetID:   uuid.NullUUID{UUID: toolsetID, Valid: true},
-		McpServerID: uuid.NullUUID{},
+		McpServerID: uuid.NullUUID{UUID: toolsetID, Valid: true},
 		DisplayName: displayName,
 		Policy:      "required",
 		SortOrder:   0,

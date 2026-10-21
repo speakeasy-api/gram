@@ -53,6 +53,9 @@ type McpServer struct {
 	// The public MCP URL of the primary endpoint. Absent when the server has no
 	// addressable endpoint.
 	PrimaryEndpointURL *string
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool
 	// When the MCP server was created
 	CreatedAt string
 	// When the MCP server was last updated

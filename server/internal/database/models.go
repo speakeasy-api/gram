@@ -1733,6 +1733,69 @@ type DirectoryGroup struct {
 	WorkosLastEventID pgtype.Text
 }
 
+type DirectoryReviewAttributeOptOut struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: opaque-confidential
+	AttributeKey string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type DirectoryReviewItem struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	DirectoryGroupID uuid.NullUUID
+	// @access: opaque-confidential
+	AttributeKey pgtype.Text
+	// @access: opaque-restricted
+	AttributeValue pgtype.Text
+	// @access: confidential
+	Occurrence int32
+	// @access: confidential
+	State string
+	// @access: confidential
+	ResolvedAt pgtype.Timestamptz
+	// @access: confidential
+	ResolvedByUserID pgtype.Text
+	// @access: confidential
+	NotifiedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type DirectoryReviewOrgState struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	BaselineAt pgtype.Timestamptz
+	// @access: confidential
+	EmailsDisabledAt pgtype.Timestamptz
+	// @access: confidential
+	LastEmailedAt pgtype.Timestamptz
+	// @access: confidential
+	RemindersSent int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type DirectoryRoleMapping struct {
 	// @access: confidential
 	ID uuid.UUID

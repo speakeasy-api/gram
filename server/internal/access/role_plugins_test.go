@@ -45,13 +45,12 @@ func TestRolePluginsForResource(t *testing.T) {
 	}
 	attach := func(pluginID uuid.UUID, legacy bool) uuid.UUID {
 		t.Helper()
-		params := pluginsrepo.AddPluginServerParams{PluginID: pluginID, DisplayName: "Target", Policy: "required"}
 		if legacy {
-			params.ToolsetID = server.ToolsetID
-		} else {
-			params.McpServerID = uuid.NullUUID{UUID: id, Valid: true}
+			row, err := testrepo.New(ti.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{PluginID: pluginID, ToolsetID: server.ToolsetID, DisplayName: "Target", Policy: "required"})
+			require.NoError(t, err)
+			return row.ID
 		}
-		row, err := pr.AddPluginServer(ctx, params)
+		row, err := pr.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{PluginID: pluginID, McpServerID: uuid.NullUUID{UUID: id, Valid: true}, DisplayName: "Target", Policy: "required"})
 		require.NoError(t, err)
 		return row.ID
 	}

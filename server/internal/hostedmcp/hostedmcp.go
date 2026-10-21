@@ -30,6 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// NoServerMessage is returned when a write names a toolset that has no canonical MCP server.
+const NoServerMessage = "toolset has no hosted MCP server"
+
 // ErrAddressInUse marks a Sync conflict caused by another server holding the hosted address.
 var ErrAddressInUse = errors.New("hosted MCP address is already in use")
 

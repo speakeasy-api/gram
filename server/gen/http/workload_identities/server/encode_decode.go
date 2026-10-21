@@ -3298,18 +3298,6 @@ func marshalWorkloadidentitiesWorkloadPlatformToWorkloadPlatformResponseBody(v *
 	if v.Subject != nil {
 		res.Subject = marshalWorkloadidentitiesWorkloadPlatformSubjectToWorkloadPlatformSubjectResponseBody(v.Subject)
 	}
-	if v.Steps != nil {
-		res.Steps = make([]*WorkloadPlatformStepResponseBody, len(v.Steps))
-		for i, val := range v.Steps {
-			if val == nil {
-				res.Steps[i] = nil
-				continue
-			}
-			res.Steps[i] = marshalWorkloadidentitiesWorkloadPlatformStepToWorkloadPlatformStepResponseBody(val)
-		}
-	} else {
-		res.Steps = []*WorkloadPlatformStepResponseBody{}
-	}
 
 	return res
 }
@@ -3350,51 +3338,6 @@ func marshalWorkloadidentitiesWorkloadPlatformSubjectToWorkloadPlatformSubjectRe
 	res := &WorkloadPlatformSubjectResponseBody{
 		Template: v.Template,
 		Wildcard: v.Wildcard,
-	}
-
-	return res
-}
-
-// marshalWorkloadidentitiesWorkloadPlatformStepToWorkloadPlatformStepResponseBody
-// builds a value of type *WorkloadPlatformStepResponseBody from a value of
-// type *workloadidentities.WorkloadPlatformStep.
-func marshalWorkloadidentitiesWorkloadPlatformStepToWorkloadPlatformStepResponseBody(v *workloadidentities.WorkloadPlatformStep) *WorkloadPlatformStepResponseBody {
-	res := &WorkloadPlatformStepResponseBody{
-		ID:    v.ID,
-		Title: v.Title,
-		Phase: v.Phase,
-	}
-	if v.Blocks != nil {
-		res.Blocks = make([]*WorkloadPlatformBlockResponseBody, len(v.Blocks))
-		for i, val := range v.Blocks {
-			if val == nil {
-				res.Blocks[i] = nil
-				continue
-			}
-			res.Blocks[i] = marshalWorkloadidentitiesWorkloadPlatformBlockToWorkloadPlatformBlockResponseBody(val)
-		}
-	} else {
-		res.Blocks = []*WorkloadPlatformBlockResponseBody{}
-	}
-
-	return res
-}
-
-// marshalWorkloadidentitiesWorkloadPlatformBlockToWorkloadPlatformBlockResponseBody
-// builds a value of type *WorkloadPlatformBlockResponseBody from a value of
-// type *workloadidentities.WorkloadPlatformBlock.
-func marshalWorkloadidentitiesWorkloadPlatformBlockToWorkloadPlatformBlockResponseBody(v *workloadidentities.WorkloadPlatformBlock) *WorkloadPlatformBlockResponseBody {
-	res := &WorkloadPlatformBlockResponseBody{
-		Type:     v.Type,
-		Markdown: v.Markdown,
-		Src:      v.Src,
-		Alt:      v.Alt,
-		Caption:  v.Caption,
-		Href:     v.Href,
-		Label:    v.Label,
-		Variable: v.Variable,
-		Value:    v.Value,
-		Help:     v.Help,
 	}
 
 	return res
