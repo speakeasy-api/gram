@@ -167,17 +167,13 @@ func seedLegacySystemRole(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 func revokeAssistantGrants(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID, slug string, principal urn.Principal) {
 	t.Helper()
 
-	tx, err := pool.Begin(ctx)
+	before, err := authz.PatchRoleGrantsTx(ctx, pool, orgID, slug, principal.String(), nil, nil)
 	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	before, err := authz.PatchRoleGrantsTx(ctx, tx, orgID, slug, principal.String(), nil, nil)
-	require.NoError(t, err)
-	after, err := authz.PatchRoleGrantsTx(ctx, tx, orgID, slug, principal.String(), nil, authz.SystemRoleAssistantGrants(slug))
+	after, err := authz.PatchRoleGrantsTx(ctx, pool, orgID, slug, principal.String(), nil, authz.SystemRoleAssistantGrants(slug))
 	require.NoError(t, err)
 	require.Less(t, len(after), len(before))
 
-	err = audit.NewLogger(audit.WithoutOutbox()).LogAccessRoleUpdate(ctx, tx, audit.LogAccessRoleUpdateEvent{
+	err = audit.NewLogger(audit.WithoutOutbox()).LogAccessRoleUpdate(ctx, pool, audit.LogAccessRoleUpdateEvent{
 		OrganizationID:     orgID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, "org_admin"),
 		ActorDisplayName:   nil,
@@ -189,7 +185,6 @@ func revokeAssistantGrants(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 		RoleSnapshotAfter:  roleSnapshot(principal, slug, after),
 	})
 	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
 }
 
 func roleSnapshot(principal urn.Principal, slug string, grants []*authz.ScopedGrant) *accessgen.Role {
