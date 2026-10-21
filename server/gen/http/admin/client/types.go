@@ -2422,8 +2422,10 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	// Servers marked as needing upstream authentication because they offer a
 	// backfilled auth client.
 	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
-	// Default auth permissions granted for the clients just recorded. The default
-	// auth permissions page reports what is still missing.
+	// Default auth permissions this run granted across the organization: the
+	// personal default and shared client grants for every recorded client, and API
+	// key policies once every client is recorded. The default auth permissions
+	// page reports what is still missing.
 	AuthPermissionGrantsWritten *int64 `form:"auth_permission_grants_written,omitempty" json:"auth_permission_grants_written,omitempty" xml:"auth_permission_grants_written,omitempty"`
 	// Why recording typed auth clients failed, when it did. The upstream OAuth
 	// migration itself is unaffected.

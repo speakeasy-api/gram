@@ -104,7 +104,7 @@ var AdminUpstreamOAuthMigrationRun = Type("AdminUpstreamOAuthMigrationRun", func
 	Attribute("auth_clients_written", Int64, "Typed auth clients recorded.")
 	Attribute("auth_client_links_written", Int64, "Server to auth client links recorded.")
 	Attribute("servers_marked_requiring_upstream_auth", Int64, "Servers marked as needing upstream authentication because they offer a backfilled auth client.")
-	Attribute("auth_permission_grants_written", Int64, "Default auth permissions granted for the clients just recorded. The default auth permissions page reports what is still missing.")
+	Attribute("auth_permission_grants_written", Int64, "Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The default auth permissions page reports what is still missing.")
 	Attribute("auth_clients_error", String, "Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.")
 	Attribute("status", AdminUpstreamOAuthMigrationStatus, "The organization's status after the run.")
 })
