@@ -291,7 +291,10 @@ function ReviewRow({
                   </Button.LeftIcon>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="max-h-72 w-56">
+              <DropdownMenuContent
+                align="end"
+                className="max-h-72 w-56 overflow-y-auto"
+              >
                 <DropdownMenuLabel>Map to</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuRadioGroup
