@@ -324,7 +324,7 @@ function ToolChecklist({
       );
     case "error":
       return (
-        <Alert variant="error" alignTop className="text-sm">
+        <Alert variant="error" className="text-sm">
           <span className="flex flex-wrap items-center gap-2">
             Couldn&rsquo;t load this server&rsquo;s tools.
             <Button variant="tertiary" size="xs" onClick={source.retry}>
@@ -336,7 +336,7 @@ function ToolChecklist({
     case "dynamic":
     case "none":
       return (
-        <Alert variant="default" alignTop className="text-sm">
+        <Alert variant="default" className="text-sm">
           This server resolves its tools when they&rsquo;re called, so it
           can&rsquo;t be limited by tool. Limit it by annotation instead.
         </Alert>

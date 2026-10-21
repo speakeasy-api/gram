@@ -1674,7 +1674,7 @@ export const LLM_ANALYZER_NOTICE =
 
 function LlmAnalyzerNotice(): JSX.Element {
   return (
-    <Alert variant="info" alignTop>
+    <Alert variant="info">
       <AlertDescription>{LLM_ANALYZER_NOTICE}</AlertDescription>
     </Alert>
   );

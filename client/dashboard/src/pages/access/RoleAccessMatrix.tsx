@@ -738,7 +738,7 @@ function McpMatrix({
       )}
 
       {inventory.isError && (
-        <Alert variant="error" alignTop className="m-4 text-sm">
+        <Alert variant="error" className="m-4 text-sm">
           <span className="flex flex-wrap items-center gap-2">
             Could not load this organization&rsquo;s MCP servers.
             <Button variant="tertiary" size="xs" onClick={inventory.refetch}>
