@@ -79,7 +79,7 @@ export function claudeTagSetupInstructions(entry: CatalogEntry): PlatformSetup {
                 it, so it is not shown — except where it decides something,
                 which is when it repeats a rule that already exists. */}
             {ruleConflict !== null && (
-              <Alert variant="error" alignTop>
+              <Alert variant="error">
                 <div className="text-sm">{ruleConflict}</div>
               </Alert>
             )}
