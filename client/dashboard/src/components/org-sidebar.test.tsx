@@ -174,7 +174,6 @@ it.each([
   ["access", "Team"],
   ["identity", "Team"],
   ["auditLogs", "Secure"],
-  ["workloadIssuers", "Secure"],
 ])("selects the correct group for %s", (active, group) => {
   mocks.active = active;
   render(<OrgSidebar />);
@@ -198,15 +197,6 @@ it("lists Speakeasy authorization servers under Settings only once rolled out", 
   ).getByRole("link", { name: "userSessionIssuers" });
   expect(link.textContent).toBe("Authorization Servers");
   expect(link.getAttribute("data-scope")).toBe("org:read org:admin");
-});
-
-it("lists the Access Hub under Secure, gated on the workload scopes", () => {
-  render(<OrgSidebar />);
-  const accessHub = screen.getByRole("link", { name: "workloadIssuers" });
-  expect(accessHub.getAttribute("href")).toBe("/workloadIssuers");
-  expect(accessHub.getAttribute("data-scope")).toBe(
-    "workload:read workload:write",
-  );
 });
 
 it.each([false, true])(

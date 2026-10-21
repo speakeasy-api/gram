@@ -422,6 +422,42 @@ func TestSkillDistributionListPaginates(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+func TestSkillReportsLastLoadOverMCPWithoutDistribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "mcp-linked-skill", "Served over MCP without a plugin.")
+	skillID, err := uuid.Parse(created.Skill.ID)
+	require.NoError(t, err)
+	versionID, err := uuid.Parse(created.Version.ID)
+	require.NoError(t, err)
+
+	seenAt := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+	written, err := mcpskills.NewResolver(testenv.NewLogger(t), ti.conn).RecordRead(ctx, mcpskills.Read{
+		Entry: mcpskills.Entry{
+			SkillID: skillID, ProjectID: ti.projectID, ProjectSlug: *ti.authContext.ProjectSlug, VersionID: versionID,
+			Name: created.Skill.Name, Content: created.Version.Content, RawSHA256: created.Version.RawSha256,
+			Frontmatter: nil,
+		},
+		UserID: ti.authContext.UserID, SessionID: "mcp-session-linked", SeenAt: seenAt,
+	})
+	require.NoError(t, err)
+	require.True(t, written)
+
+	distributions, err := ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{SkillID: &created.Skill.ID, Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Empty(t, distributions.Distributions)
+
+	want := seenAt.Format(time.RFC3339)
+	listed, err := ti.service.List(ctx, &gen.ListPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Skills, 1)
+	require.Equal(t, &want, listed.Skills[0].LastLoadedOverMcpAt)
+	details, err := ti.service.Get(ctx, &gen.GetPayload{ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, &want, details.Skill.LastLoadedOverMcpAt)
+}
+
 func TestSkillDistributionReportsLastLoadOverMCP(t *testing.T) {
 	t.Parallel()
 
@@ -436,6 +472,19 @@ func TestSkillDistributionReportsLastLoadOverMCP(t *testing.T) {
 	distributePayload := func(pluginID uuid.UUID) *gen.DistributePayload {
 		return &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(pluginID.String()), PinnedVersionID: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}
 	}
+
+	// The skill's own list and get report the same per-skill value.
+	requireSkillLoad := func(want *string) {
+		t.Helper()
+		listedSkills, err := ti.service.List(ctx, &gen.ListPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Len(t, listedSkills.Skills, 1)
+		require.Equal(t, want, listedSkills.Skills[0].LastLoadedOverMcpAt)
+		details, err := ti.service.Get(ctx, &gen.GetPayload{ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Equal(t, want, details.Skill.LastLoadedOverMcpAt)
+	}
+	requireSkillLoad(nil)
 
 	distribution, err := ti.service.Distribute(ctx, distributePayload(pluginA.ID))
 	require.NoError(t, err)
@@ -465,20 +514,21 @@ func TestSkillDistributionReportsLastLoadOverMCP(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, listed.Distributions, 1)
 	require.Nil(t, listed.Distributions[0].LastLoadedOverMcpAt, "hook-reported activations do not count as MCP loads")
+	requireSkillLoad(nil)
 
 	// Two hosted MCP reads in different sessions: the newest one is reported.
 	resolver := mcpskills.NewResolver(testenv.NewLogger(t), ti.conn)
 	entry := mcpskills.Entry{
-		SkillID: skillID, VersionID: versionID, PluginID: pluginA.ID,
+		SkillID: skillID, ProjectID: ti.projectID, ProjectSlug: *ti.authContext.ProjectSlug, VersionID: versionID,
 		Name: created.Skill.Name, Content: created.Version.Content, RawSHA256: created.Version.RawSha256,
-		Frontmatter: nil, Pinned: false,
+		Frontmatter: nil,
 	}
 	earlier := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	latest := earlier.Add(2 * time.Hour)
-	written, err := resolver.RecordRead(ctx, mcpskills.Read{ProjectID: ti.projectID, Entry: entry, UserID: ti.authContext.UserID, SessionID: "mcp-session-a", SeenAt: latest})
+	written, err := resolver.RecordRead(ctx, mcpskills.Read{Entry: entry, UserID: ti.authContext.UserID, SessionID: "mcp-session-a", SeenAt: latest})
 	require.NoError(t, err)
 	require.True(t, written)
-	written, err = resolver.RecordRead(ctx, mcpskills.Read{ProjectID: ti.projectID, Entry: entry, UserID: ti.authContext.UserID, SessionID: "mcp-session-b", SeenAt: earlier})
+	written, err = resolver.RecordRead(ctx, mcpskills.Read{Entry: entry, UserID: ti.authContext.UserID, SessionID: "mcp-session-b", SeenAt: earlier})
 	require.NoError(t, err)
 	require.True(t, written)
 
@@ -488,6 +538,7 @@ func TestSkillDistributionReportsLastLoadOverMCP(t *testing.T) {
 	require.Len(t, listed.Distributions, 1)
 	require.NotNil(t, listed.Distributions[0].LastLoadedOverMcpAt)
 	require.Equal(t, want, *listed.Distributions[0].LastLoadedOverMcpAt)
+	requireSkillLoad(&want)
 
 	// The load belongs to the skill, so an unchanged re-distribution and a
 	// fresh distribution to another plugin both report it.

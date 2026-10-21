@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const ProbeURLResultOutcome = {
 /**
  * Probe outcome.
  */
-export type ProbeURLResultOutcome = ClosedEnum<typeof ProbeURLResultOutcome>;
+export type ProbeURLResultOutcome = OpenEnum<typeof ProbeURLResultOutcome>;
 
 /**
  * Structured outcome of probing a remote MCP server URL. Variant-specific fields are populated only when applicable.
@@ -46,9 +47,10 @@ export type ProbeURLResult = {
 };
 
 /** @internal */
-export const ProbeURLResultOutcome$inboundSchema: z.ZodMiniEnum<
-  typeof ProbeURLResultOutcome
-> = z.enum(ProbeURLResultOutcome);
+export const ProbeURLResultOutcome$inboundSchema: z.ZodMiniType<
+  ProbeURLResultOutcome,
+  unknown
+> = openEnums.inboundSchema(ProbeURLResultOutcome);
 
 /** @internal */
 export const ProbeURLResult$inboundSchema: z.ZodMiniType<

@@ -13,9 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
-// waitForSupportCoverage polls until the seeded rows have propagated through
-// the session-summary materialized view, which is eventually consistent.
-func waitForSupportCoverage(
+// requireSupportCoverage reads support coverage and requires ready to accept it.
+func requireSupportCoverage(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
@@ -23,15 +22,10 @@ func waitForSupportCoverage(
 ) *telemetry.SupportCoverageResult {
 	t.Helper()
 
-	var result *telemetry.SupportCoverageResult
-	var err error
-	require.Eventually(t, func() bool {
-		result, err = ti.coverage.SupportCoverageForOrganization(ctx, ti.orgID, 30)
-		return err == nil && result != nil && ready(result)
-	}, 10*time.Second, 200*time.Millisecond, "expected support coverage to become query-ready")
-	// After Eventually, not inside it: the condition runs in its own
-	// goroutine, so a require there would not fail fast.
+	result, err := ti.coverage.SupportCoverageForOrganization(ctx, ti.orgID, 30)
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.NotNil(t, result)
+	require.True(t, ready(result), "support coverage did not match")
 	return result
 }
 
@@ -91,7 +85,7 @@ func TestGetSupportCoverage_SessionAndIdentityEvidence(t *testing.T) {
 		inputTokens: 20, outputTokens: 5, totalTokens: 25,
 	})
 
-	result := waitForSupportCoverage(t, ctx, ti, func(res *telemetry.SupportCoverageResult) bool {
+	result := requireSupportCoverage(t, ctx, ti, func(res *telemetry.SupportCoverageResult) bool {
 		for _, cell := range res.Cells {
 			if cell.Capability == "session" && cell.Surface == "cursor" && cell.Value == 2 {
 				return true
@@ -129,7 +123,7 @@ func TestGetSupportCoverage_ReportsUnmappedHookSources(t *testing.T) {
 	// it only ingests a known set of sources.
 	insertShadowSurfaceSighting(t, ctx, ti.projectID, "https://unknown.example.com/mcp", "some-brand-new-agent", now)
 
-	result := waitForSupportCoverage(t, ctx, ti, func(res *telemetry.SupportCoverageResult) bool {
+	result := requireSupportCoverage(t, ctx, ti, func(res *telemetry.SupportCoverageResult) bool {
 		return len(res.Unmapped) == 1
 	})
 
@@ -177,7 +171,7 @@ func TestGetSupportCoverage_FoldsShadowAliasesToOneServer(t *testing.T) {
 	insertShadowSurfaceSighting(t, ctx, ti.projectID, "https://evil.example.com/mcp", "claude-code", now)
 	insertShadowSurfaceSighting(t, ctx, ti.projectID, "https://evil.example.com/mcp", "claudecode", now)
 
-	result := waitForSupportCoverage(t, ctx, ti, func(res *telemetry.SupportCoverageResult) bool {
+	result := requireSupportCoverage(t, ctx, ti, func(res *telemetry.SupportCoverageResult) bool {
 		return cellStatus(res, "shadow", "claude_code") == "observed"
 	})
 

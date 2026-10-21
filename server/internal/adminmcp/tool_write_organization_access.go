@@ -195,7 +195,7 @@ func (w *organizationAccessWriter) registerPrepare(server *mcp.Server) {
 		title = "Prepare Organization Disable"
 		description = "Prepare disabling access for one exact canonical organization ID. Disabling blocks access according to existing dashboard behaviour, but does not cancel subscriptions, change provider keys or immediately terminate in-flight work. Returns a server-stored before/after preview and a private staff approval URL. Does not make the change. Requires admin:write."
 	}
-	mcp.AddTool(server, &mcp.Tool{Name: name, Title: title, Description: description}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareOrganizationAccessInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	addProposalTool(server, &mcp.Tool{Name: name, Title: title, Description: description}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareOrganizationAccessInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := w.prepare(ctx, input)
 		return nil, out, err
 	})

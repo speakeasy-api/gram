@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"io"
@@ -320,7 +321,7 @@ func mintFirstPartyConsentState(t *testing.T, ctx context.Context, ti *testInsta
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       orgID,
 		ProjectID:            projectID,
-		RouteBase:            "mcp",
+		RouteBase:            mcproute.MCP,
 		Slug:                 slug,
 		ToolsetID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UpstreamResource:     "",
@@ -764,7 +765,7 @@ func TestServeConsentAction_ValidateRefusesUnconnectedAndUnroutable(t *testing.T
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-	require.ErrorContains(t, err, "Connect this service before verifying it.")
+	require.ErrorContains(t, err, "unknown remote session client", "a client no member is associated with is not offered at all")
 	require.Empty(t, w.Header().Get("Location"))
 
 	// A grant qualified to another upstream is unroutable on this gateway.
@@ -1209,7 +1210,7 @@ func TestServeConsentAction_ToolsetEndpointOffersNoRecheck(t *testing.T) {
 
 	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: stateID, subject: subject, member: member, clientID: clientID, name: ""}
 	page := renderConsent(t, fx)
-	require.Contains(t, page, "Connected")
+	require.Contains(t, page, "Service connected")
 	require.NotContains(t, page, "Verify")
 	require.NotContains(t, page, "data-validation")
 

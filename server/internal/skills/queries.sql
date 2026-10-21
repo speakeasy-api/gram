@@ -1289,6 +1289,14 @@ SELECT
     WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
   )::boolean AS has_valid_version,
   (
+    -- Same filter as GetSkillLastLoadedOverMCPAt.
+    SELECT MAX(so.seen_at)
+    FROM skill_observations so
+    WHERE so.project_id = s.project_id
+      AND so.skill_id = s.id
+      AND so.provider = 'mcp'
+  )::timestamptz AS last_loaded_over_mcp_at,
+  (
     SELECT COUNT(*)::bigint
     FROM skill_distributions sd
     JOIN assistants a
@@ -1416,6 +1424,14 @@ SELECT
     SELECT 1 FROM skill_versions sv
     WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
   )::boolean AS has_valid_version,
+  (
+    -- Same filter as GetSkillLastLoadedOverMCPAt.
+    SELECT MAX(so.seen_at)
+    FROM skill_observations so
+    WHERE so.project_id = s.project_id
+      AND so.skill_id = s.id
+      AND so.provider = 'mcp'
+  )::timestamptz AS last_loaded_over_mcp_at,
   (
     SELECT COUNT(*)
     FROM skills counted

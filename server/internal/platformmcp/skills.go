@@ -77,6 +77,9 @@ type SkillsManagement interface {
 	DismissSuggestion(context.Context, *genskills.DismissSuggestionPayload) (*types.SkillEditSuggestion, error)
 	Distribute(context.Context, *genskills.DistributePayload) (*types.SkillDistribution, error)
 	Undistribute(context.Context, *genskills.UndistributePayload) error
+	Link(context.Context, *genskills.LinkPayload) (*types.SkillLink, error)
+	Unlink(context.Context, *genskills.UnlinkPayload) error
+	ListLinks(context.Context, *genskills.ListLinksPayload) (*genskills.ListSkillLinksResult, error)
 }
 
 // SkillTargetInventory names the plugins and assistants a skill may be
@@ -144,6 +147,10 @@ type SkillSummary struct {
 	VersionCount    int64    `json:"version_count"`
 	HasValidVersion bool     `json:"has_valid_version"`
 	UpdatedAt       string   `json:"updated_at"`
+	// LastLoadedOverMcpAt is when an agent last loaded the skill over a hosted
+	// MCP server. Absent when it never has, or when the response was built
+	// from a skill write that does not compute it.
+	LastLoadedOverMcpAt *string `json:"last_loaded_over_mcp_at,omitempty"`
 }
 
 // SkillVersionSummary is one immutable version. Content appears only when the
@@ -182,9 +189,15 @@ type SkillsService struct {
 	skills   SkillsManagement
 	targets  SkillTargetInventory
 	projects SkillProjectResolver
-	grants   SkillAuthorizer
-	gate     CatalogRegistrationGateChecker
-	budget   OperationBudget
+
+	// mcpTargets resolves the MCP servers and gateways a skill is linked to.
+	// It is taken from targets when that inventory also lists them; without
+	// it the link tools refuse as unavailable.
+	mcpTargets SkillMCPTargetInventory
+
+	grants SkillAuthorizer
+	gate   CatalogRegistrationGateChecker
+	budget OperationBudget
 
 	// insights and insightsBudget back the skill insight tools. Both are attached by
 	// WithInsights; a nil reader keeps those tools registered as stubs.
@@ -195,10 +208,12 @@ type SkillsService struct {
 }
 
 func NewSkillsService(skills SkillsManagement, targets SkillTargetInventory, projects SkillProjectResolver, grants SkillAuthorizer, gate CatalogRegistrationGateChecker, budget OperationBudget) *SkillsService {
+	mcpTargets, _ := targets.(SkillMCPTargetInventory)
 	return &SkillsService{
 		skills:         skills,
 		targets:        targets,
 		projects:       projects,
+		mcpTargets:     mcpTargets,
 		grants:         grants,
 		gate:           gate,
 		budget:         budget,
@@ -1021,6 +1036,15 @@ type ListSkillDistributionsOutput struct {
 	ProjectSlug   string                     `json:"project_slug"`
 	Distributions []SkillDistributionSummary `json:"distributions"`
 	NextCursor    string                     `json:"next_cursor,omitempty"`
+
+	// ServedBy is the MCP surfaces that serve the listed skill — or every
+	// skill in the project when none is named — over MCP, from the skill's
+	// live links. It is read on the first page only, and is empty when
+	// serving skills over MCP is off for the organization.
+	ServedBy []SkillMCPLinkSummary `json:"served_by"`
+
+	// ServedByTruncated is true when more links exist than ServedBy holds.
+	ServedByTruncated bool `json:"served_by_truncated,omitempty"`
 }
 
 // ListSkillDistributions reads the active plugin distributions in a project.
@@ -1089,10 +1113,20 @@ func (s *SkillsService) ListSkillDistributions(ctx context.Context, principal Pr
 			LastLoadedOverMcpAt: row.LastLoadedOverMcpAt,
 		})
 	}
+	servedBy := []SkillMCPLinkSummary{}
+	servedByTruncated := false
+	if strings.TrimSpace(input.Cursor) == "" {
+		servedBy, servedByTruncated, err = s.servedBy(ctx, skillID)
+		if err != nil {
+			return ListSkillDistributionsOutput{}, err
+		}
+	}
 	return ListSkillDistributionsOutput{
-		ProjectSlug:   project.Slug,
-		Distributions: distributions,
-		NextCursor:    stringOrEmpty(result.NextCursor),
+		ProjectSlug:       project.Slug,
+		Distributions:     distributions,
+		NextCursor:        stringOrEmpty(result.NextCursor),
+		ServedBy:          servedBy,
+		ServedByTruncated: servedByTruncated,
 	}, nil
 }
 
@@ -1246,7 +1280,7 @@ func (s *SkillsService) authoringResult(ctx context.Context, principal Principal
 		CreatedSkill:        result.CreatedSkill,
 		CreatedVersion:      result.CreatedVersion,
 		Distributed:         false,
-		InertMessage:        "This skill is saved, but no agent loads it yet. Give it to a plugin or an assistant with distribute_skill for it to take effect.",
+		InertMessage:        "This skill is saved, but no agent loads it yet. Give it to a plugin or an assistant with distribute_skill, or serve it from an MCP server or gateway with link_skill_to_mcp, for it to take effect.",
 		NextAction:          "distribute_skill",
 		DistributionTargets: targets,
 	}
@@ -1261,15 +1295,16 @@ func buildSkillSummary(skill *types.Skill) SkillSummary {
 		return SkillSummary{}
 	}
 	return SkillSummary{
-		ID:              skill.ID,
-		Name:            skill.Name,
-		DisplayName:     skill.DisplayName,
-		Summary:         stringOrEmpty(skill.Summary),
-		Tags:            skill.Tags,
-		LatestVersionID: stringOrEmpty(skill.LatestVersionID),
-		VersionCount:    skill.VersionCount,
-		HasValidVersion: skill.HasValidVersion,
-		UpdatedAt:       skill.UpdatedAt,
+		ID:                  skill.ID,
+		Name:                skill.Name,
+		DisplayName:         skill.DisplayName,
+		Summary:             stringOrEmpty(skill.Summary),
+		Tags:                skill.Tags,
+		LatestVersionID:     stringOrEmpty(skill.LatestVersionID),
+		VersionCount:        skill.VersionCount,
+		HasValidVersion:     skill.HasValidVersion,
+		UpdatedAt:           skill.UpdatedAt,
+		LastLoadedOverMcpAt: skill.LastLoadedOverMcpAt,
 	}
 }
 

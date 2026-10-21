@@ -12,7 +12,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type proxiedToolEventParams struct {
@@ -89,8 +88,6 @@ func TestGetMCPOutcomeBreakdown_MatchesProxiedCallsByConfiguredServerID(t *testi
 	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-4 * time.Minute), mcpServerID: selected, toolName: "search", userID: "user-2", statusCode: 502})
 	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-3 * time.Minute), mcpServerID: other, toolName: "quote", userID: "user-3", statusCode: 200})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
 		MCPServerIDs:   []string{selected},
@@ -135,8 +132,6 @@ func TestServerReads_LeaveToolsetRowsOfOtherServers(t *testing.T) {
 	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-5 * time.Minute), toolsetSlug: slug, toolName: "search", userID: "user-1", statusCode: 200})
 	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-4 * time.Minute), mcpServerID: selected, toolsetSlug: slug, toolName: "search", userID: "user-2", statusCode: 502})
 	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-3 * time.Minute), mcpServerID: member, toolsetSlug: slug, toolName: "search", userID: "user-3", statusCode: 200})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	start, end := now.Add(-time.Hour).UnixNano(), now.UnixNano()
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
@@ -209,8 +204,6 @@ func TestGetMCPOutcomeBreakdown_MatchesHookCallsByReportedServerName(t *testing.
 		hookSource: "claude-code", toolSource: "plugin_acme-tools_Shipping", toolName: "quote", result: `"ok"`,
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	// ToolSources is the resolver's spelling set for the server: the configured
 	// casing "External Acme Chat" differs from the inserted row, which matches
 	// through its normalized variant "external_acme_chat" instead.
@@ -273,8 +266,6 @@ func TestListMCPUsageUsers_ScopesByReportedServerName(t *testing.T) {
 		userEmail: "bob@example.com",
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	users, err := ti.chClient.ListMCPUsageUsers(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
 		// The configured casing differs from alice's row; the lower-cased
@@ -307,8 +298,6 @@ func TestGetActiveCounts_ScopesByConfiguredServerID(t *testing.T) {
 	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-3 * time.Minute), mcpServerID: selected, toolName: "search", userID: "user-2", statusCode: 200})
 	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-2 * time.Minute), mcpServerID: other, toolName: "quote", userID: "user-3", statusCode: 200})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	counts, err := ti.chClient.GetActiveCounts(ctx, telemetryRepo.GetActiveCountsParams{
 		GramProjectID: projectID,
 		TimeStart:     now.Add(-time.Hour).UnixNano(),
@@ -334,7 +323,6 @@ func TestGetTopServers_IncludesProxiedServers(t *testing.T) {
 		projectID: projectID, timestamp: now.Add(-time.Minute), mcpServerID: serverID,
 		toolName: "search", userID: "user-1", statusCode: 200,
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	servers, err := ti.chClient.GetTopServers(ctx, telemetryRepo.GetTopServersParams{
 		GramProjectID:     projectID,
@@ -401,8 +389,6 @@ func TestGetActiveCounts_CountsHookObservedUsers(t *testing.T) {
 		hookSource: "claude-code", toolSource: "plugin_acme-tools_Shipping", toolName: "quote", result: `"ok"`,
 		userEmail: "carol@example.com",
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	counts, err := ti.chClient.GetActiveCounts(ctx, telemetryRepo.GetActiveCountsParams{
 		GramProjectID:        projectID,

@@ -307,6 +307,11 @@ func GetMcpServerToolCallsAdminPath() string {
 	return "/admin/project.mcpServerToolCalls"
 }
 
+// GetHookClientsAdminPath returns the URL path to the admin service getHookClients HTTP endpoint.
+func GetHookClientsAdminPath() string {
+	return "/admin/hookClients.get"
+}
+
 // ListExternalMcpMigrationCandidatesAdminPath returns the URL path to the admin service listExternalMcpMigrationCandidates HTTP endpoint.
 func ListExternalMcpMigrationCandidatesAdminPath() string {
 	return "/admin/externalMcpMigration.listCandidates"
@@ -460,4 +465,19 @@ func SetStripeSubscriptionAdminPath() string {
 // ListCustomerUsageAdminPath returns the URL path to the admin service listCustomerUsage HTTP endpoint.
 func ListCustomerUsageAdminPath() string {
 	return "/admin/organizations.customerUsage"
+}
+
+// ListUpstreamOAuthMigrationOrganizationsAdminPath returns the URL path to the admin service listUpstreamOAuthMigrationOrganizations HTTP endpoint.
+func ListUpstreamOAuthMigrationOrganizationsAdminPath() string {
+	return "/admin/upstreamOAuthMigration.organizations"
+}
+
+// GetUpstreamOAuthMigrationStatusAdminPath returns the URL path to the admin service getUpstreamOAuthMigrationStatus HTTP endpoint.
+func GetUpstreamOAuthMigrationStatusAdminPath() string {
+	return "/admin/upstreamOAuthMigration.status"
+}
+
+// RunUpstreamOAuthMigrationAdminPath returns the URL path to the admin service runUpstreamOAuthMigration HTTP endpoint.
+func RunUpstreamOAuthMigrationAdminPath() string {
+	return "/admin/upstreamOAuthMigration.run"
 }

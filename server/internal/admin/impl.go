@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -109,6 +110,15 @@ type Service struct {
 
 	supportCoverage SupportCoverageReader
 	mcpServerHealth MCPServerHealthReader
+	hookClients     HookClientsReader
+	// deviceAgentVersions feeds the device agent grid on the same page.
+	deviceAgentVersions DeviceAgentVersionsReader
+	// hookClientsCache keeps the fleet-wide grids for a day, since each
+	// read scans weeks of telemetry.
+	hookClientsCache cache.TypedCacheObject[hookClientsSnapshot]
+	// hookClientsRefreshing holds the windows with a background refresh in
+	// flight on this replica.
+	hookClientsRefreshing *sync.Map
 
 	// externalMCPMigrator lists and migrates external-MCP-backed servers. Nil
 	// leaves those methods unavailable.
@@ -266,10 +276,18 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:           trialNotifier,
-		billing:         billing,
-		supportCoverage: supportCoverage,
-		mcpServerHealth: mcpServerHealth,
+		trial:                 trialNotifier,
+		billing:               billing,
+		supportCoverage:       supportCoverage,
+		mcpServerHealth:       mcpServerHealth,
+		hookClients:           nil,
+		deviceAgentVersions:   nil,
+		hookClientsRefreshing: &sync.Map{},
+		hookClientsCache: cache.NewTypedObjectCache[hookClientsSnapshot](
+			logger.With(attr.SlogCacheNamespace("admin_hook_clients")),
+			adminCache,
+			cache.SuffixNone,
+		),
 
 		externalMCPMigrator: nil,
 	}
@@ -484,6 +502,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
 	server.CreateSignupOffer = service.strictAdminJSON(server.CreateSignupOffer, func() any { return new(adminserver.CreateSignupOfferRequestBody) })
 	server.UpdateSignupOffer = service.strictAdminJSON(server.UpdateSignupOffer, func() any { return new(adminserver.UpdateSignupOfferRequestBody) })
+	server.ListUpstreamOAuthMigrationOrganizations = service.preauthorizeAdmin(server.ListUpstreamOAuthMigrationOrganizations)
+	server.GetUpstreamOAuthMigrationStatus = service.preauthorizeAdmin(server.GetUpstreamOAuthMigrationStatus)
+	server.RunUpstreamOAuthMigration = service.strictAdminJSON(server.RunUpstreamOAuthMigration, func() any { return new(adminserver.RunUpstreamOAuthMigrationRequestBody) })
 	adminserver.Mount(mux, server)
 
 }

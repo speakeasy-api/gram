@@ -46,6 +46,8 @@ type UserSession struct {
 	// @access: confidential
 	SignInID uuid.NullUUID
 	// @access: confidential
+	CredentialID uuid.NullUUID
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -115,6 +117,36 @@ type UserSessionConsent struct {
 	RemoteSetHash string
 	// @access: confidential
 	ConsentedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type UserSessionConsentResource struct {
+	// @access: confidential
+	ID uuid.UUID
+	// Target resource project, independent of issuer tenancy.
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	UserSessionConsentID uuid.NullUUID
+	// @access: confidential
+	Resource string
+	// Versioned fingerprint of the complete approved tool inventory.
+	// @access: confidential
+	InventoryHash string
+	// Fingerprint of the approved upstream clients, resources and requested permissions.
+	// @access: confidential
+	RemoteSetHash string
+	// @access: opaque-restricted
+	ToolSelection []byte
+	// @access: confidential
+	SessionDurationHours int32
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

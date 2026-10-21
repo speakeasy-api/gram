@@ -495,6 +495,7 @@ var McpServer = Type("McpServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("primary_endpoint_url", String, "The public MCP URL of the primary endpoint. Absent when the server has no addressable endpoint.")
+	Attribute("has_endpoint", Boolean, "Whether any endpoint routes to this server, including one on a custom domain that is not live yet. Absent when it could not be read.")
 	Attribute("created_at", String, func() {
 		Description("When the MCP server was created")
 		Format(FormatDateTime)
@@ -517,6 +518,7 @@ var McpServerToolsetSummary = Type("McpServerToolsetSummary", func() {
 	})
 	Attribute("slug", String, "The slug of the toolset")
 	Attribute("name", String, "The name of the toolset")
+	Attribute("description", String, "The toolset's description, if any")
 	Attribute("tool_count", Int, "The number of distinct configured tools in the latest toolset version, excluding external MCP proxy tools. Counts configured tool URNs, so it may differ from the number of tools that resolve against the active deployment.")
 	Attribute("tool_selection_mode", String, "The toolset's tool selection mode")
 	Attribute("external_mcp_slugs", ArrayOf(String), "The distinct slugs of the external MCP sources the toolset's configured tools come from, sorted")

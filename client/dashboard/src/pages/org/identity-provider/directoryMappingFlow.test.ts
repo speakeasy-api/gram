@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "vitest";
-
 import {
   availableRoleName,
   completeCreateRoleFlow,
@@ -9,6 +8,8 @@ import {
   startCreateRoleFlow,
   suggestedRoleName,
 } from "./directoryMappingFlow";
+
+import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
 
 afterEach(() => {
   window.sessionStorage.clear();
@@ -41,12 +42,63 @@ describe("create role round trip", () => {
     expect(pending?.form).toEqual({
       sourceKind: "group",
       directoryGroupId: "group-1",
-      roleUrn: "role:organization:1",
+      expectedRoleUrns: [],
+      roleUrns: ["role:organization:1"],
     });
 
     const done = finishCreateRoleFlow(back, pending!.key);
     expect(done.toString()).toBe("");
     expect(pendingMappingFromParams(back)).toBeUndefined();
+  });
+
+  it.each([
+    { sourceKind: "group" as const, directoryGroupId: "group-1" },
+    {
+      sourceKind: "attribute" as const,
+      attributeKey: "department",
+      attributeValue: "Engineering",
+    },
+  ])("adds the created role to the current $sourceKind set", (source) => {
+    const back = completeCreateRoleFlow(
+      startCreateRoleFlow(source, "Engineering"),
+      "role:organization:new",
+    );
+    const mapping = (id: string, roleUrn: string): DirectoryRoleMapping => ({
+      ...source,
+      id,
+      roleUrn,
+      sourceStatus: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const mappings = [
+      mapping("mapping-1", "role:organization:base"),
+      mapping("mapping-2", "role:organization:tools"),
+      {
+        ...mapping("other-group", "role:organization:unrelated"),
+        directoryGroupId: "group-2",
+        attributeValue: "Other department",
+      },
+    ];
+    expect(pendingMappingFromParams(back, mappings)?.form).toEqual({
+      ...source,
+      expectedRoleUrns: ["role:organization:base", "role:organization:tools"],
+      roleUrns: [
+        "role:organization:base",
+        "role:organization:tools",
+        "role:organization:new",
+      ],
+    });
+    expect(
+      pendingMappingFromParams(back, [
+        ...mappings,
+        mapping("already-mapped", "role:organization:new"),
+      ])?.form.roleUrns,
+    ).toEqual([
+      "role:organization:base",
+      "role:organization:tools",
+      "role:organization:new",
+    ]);
   });
 
   it("ignores a crafted link with no stored round trip", () => {
@@ -59,6 +111,45 @@ describe("create role round trip", () => {
     expect(
       completeCreateRoleFlow(crafted, "role:global:admin").toString(),
     ).toBe("");
+  });
+
+  it("guards the addition with the source's current roles", () => {
+    const back = completeCreateRoleFlow(
+      startCreateRoleFlow(
+        {
+          sourceKind: "attribute",
+          attributeKey: "department",
+          attributeValue: "Sales",
+        },
+        "Sales",
+      ),
+      "role:organization:new",
+    );
+    const mapping = (
+      roleUrn: string,
+      attributeValue: string,
+    ): DirectoryRoleMapping => ({
+      id: roleUrn,
+      sourceKind: "attribute",
+      attributeKey: "department",
+      attributeValue,
+      roleUrn,
+      sourceStatus: "active",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    expect(
+      pendingMappingFromParams(back, [
+        mapping("role:organization:old", "Sales"),
+        mapping("role:organization:other", "Engineering"),
+      ])?.form,
+    ).toEqual({
+      sourceKind: "attribute",
+      attributeKey: "department",
+      attributeValue: "Sales",
+      roleUrns: ["role:organization:old", "role:organization:new"],
+      expectedRoleUrns: ["role:organization:old"],
+    });
   });
 
   it("does not map before the editor records a created role", () => {

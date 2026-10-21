@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -53,6 +54,10 @@ type recordingSkillsManagement struct {
 	dismissed                 *genskills.DismissSuggestionPayload
 	dismissOut                *types.SkillEditSuggestion
 	pluginDistributions       []*types.PluginSkillDistribution
+	links                     []*types.SkillLink
+	linked                    []*genskills.LinkPayload
+	unlinked                  []string
+	linksErr                  error
 }
 
 func (s *recordingSkillsManagement) Create(_ context.Context, payload *genskills.CreatePayload) (*genskills.RecordSkillResult, error) {
@@ -176,6 +181,95 @@ func (s *recordingSkillsManagement) Undistribute(_ context.Context, payload *gen
 	s.revokedNow = append(s.revokedNow, !s.revokedTargets[key])
 	s.revokedTargets[key] = true
 	return nil
+}
+
+// Link models the skills service's upsert: a repeat for the same skill and
+// target keeps the live link and only moves its pin.
+func (s *recordingSkillsManagement) Link(_ context.Context, payload *genskills.LinkPayload) (*types.SkillLink, error) {
+	s.linked = append(s.linked, payload)
+	if s.linksErr != nil {
+		return nil, s.linksErr
+	}
+	for _, link := range s.links {
+		if link.SkillID == payload.ID && link.TargetKind == payload.TargetKind &&
+			stringOrEmpty(link.McpServerID) == stringOrEmpty(payload.McpServerID) &&
+			stringOrEmpty(link.MetaMcpServerID) == stringOrEmpty(payload.MetaMcpServerID) {
+			link.PinnedVersionID = payload.PinnedVersionID
+			return link, nil
+		}
+	}
+	name := "add-mcp"
+	if s.skill != nil {
+		name = s.skill.Name
+	}
+	var targetName *string
+	switch {
+	case payload.McpServerID != nil:
+		targetName = new("Docs Server")
+	case payload.MetaMcpServerID != nil:
+		targetName = new("Team Gateway")
+	}
+	link := &types.SkillLink{
+		ID: uuid.NewString(), SkillID: payload.ID, SkillName: name, SkillDisplayName: name,
+		TargetKind: payload.TargetKind, McpServerID: payload.McpServerID, MetaMcpServerID: payload.MetaMcpServerID,
+		TargetName: targetName, PinnedVersionID: payload.PinnedVersionID, CreatedAt: "2026-10-20T00:00:00Z",
+	}
+	s.links = append(s.links, link)
+	return link, nil
+}
+
+func (s *recordingSkillsManagement) Unlink(_ context.Context, payload *genskills.UnlinkPayload) error {
+	s.unlinked = append(s.unlinked, payload.LinkID)
+	if s.linksErr != nil {
+		return s.linksErr
+	}
+	kept := s.links[:0]
+	for _, link := range s.links {
+		if link.ID != payload.LinkID {
+			kept = append(kept, link)
+		}
+	}
+	s.links = kept
+	return nil
+}
+
+func (s *recordingSkillsManagement) ListLinks(_ context.Context, payload *genskills.ListLinksPayload) (*genskills.ListSkillLinksResult, error) {
+	if s.linksErr != nil {
+		return nil, s.linksErr
+	}
+	out := []*types.SkillLink{}
+	for _, link := range s.links {
+		if payload.SkillID != nil && link.SkillID != *payload.SkillID {
+			continue
+		}
+		if payload.TargetKind != nil && link.TargetKind != *payload.TargetKind {
+			continue
+		}
+		if payload.McpServerID != nil && stringOrEmpty(link.McpServerID) != *payload.McpServerID {
+			continue
+		}
+		if payload.MetaMcpServerID != nil && stringOrEmpty(link.MetaMcpServerID) != *payload.MetaMcpServerID {
+			continue
+		}
+		out = append(out, link)
+	}
+	// Pages like the skills service: the cursor is the offset of the next
+	// link, and a page holds at most Limit links.
+	start := 0
+	if payload.Cursor != nil {
+		offset, err := strconv.Atoi(*payload.Cursor)
+		if err != nil || offset < 0 || offset > len(out) {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid skill link cursor")
+		}
+		start = offset
+	}
+	out = out[start:]
+	var next *string
+	if payload.Limit > 0 && len(out) > payload.Limit {
+		out = out[:payload.Limit]
+		next = new(strconv.Itoa(start + payload.Limit))
+	}
+	return &genskills.ListSkillLinksResult{Links: out, NextCursor: next}, nil
 }
 
 type stubSkillTargets struct{ targets []SkillTarget }
@@ -760,7 +854,7 @@ func TestSkillsToolResultLeavesUnexpectedFailuresAsErrors(t *testing.T) {
 func TestSkillsToolsAreDeclaredWithAndWithoutTheirDependencies(t *testing.T) {
 	t.Parallel()
 
-	wanted := []string{"list_skills", "get_skill", "list_skill_versions", "create_skill", "add_skill_version", "update_skill_metadata", "distribute_skill", "list_skill_distributions", "undistribute_skill", "list_skill_insights", "compare_skill_versions"}
+	wanted := []string{"list_skills", "get_skill", "list_skill_versions", "create_skill", "add_skill_version", "update_skill_metadata", "distribute_skill", "list_skill_distributions", "undistribute_skill", "link_skill_to_mcp", "unlink_skill_from_mcp", "list_skill_insights", "compare_skill_versions"}
 
 	for _, test := range []struct {
 		name  string
@@ -1214,7 +1308,9 @@ func TestUndistributeSkillToolRefusesWithoutConfirmation(t *testing.T) {
 	}
 	require.Equal(t, "undistribute_skill", descriptor.Name)
 	require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
-	require.Nil(t, descriptor.Annotations, "a revocation is not a read-only tool")
+	require.NotNil(t, descriptor.Annotations)
+	require.False(t, descriptor.Annotations.ReadOnlyHint, "a revocation is not a read-only tool")
+	require.True(t, *descriptor.Annotations.DestructiveHint)
 
 	_, err := descriptor.Invoke(t.Context(), json.RawMessage(fmt.Sprintf(`{"project_slug":%q,"skill_id":%q,"plugin":"marketing","confirmed":false,"idempotency_key":"k"}`, testSkillProjectSlug, testSkillID)))
 

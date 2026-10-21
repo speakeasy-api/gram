@@ -34,29 +34,30 @@ func BuildSkillFeedbackListView(rows []repo.SkillFeedback) []*gen.SkillFeedback 
 	return result
 }
 
-func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount int64, hasValidVersion bool, shareToken pgtype.Text) *types.Skill {
+func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount int64, hasValidVersion bool, shareToken pgtype.Text, lastLoadedOverMCPAt pgtype.Timestamptz) *types.Skill {
 	var latestVersionIDValue *string
 	if latestVersionID != uuid.Nil {
 		latestVersionIDValue = conv.PtrEmpty(latestVersionID.String())
 	}
 	return &types.Skill{
-		ID:              skill.ID.String(),
-		ProjectID:       skill.ProjectID.String(),
-		Name:            skill.Name,
-		DisplayName:     skill.DisplayName,
-		Summary:         conv.FromPGText[string](skill.Summary),
-		SourceKind:      skill.SourceKind,
-		Classification:  skill.Classification,
-		Tags:            skillTagsOrEmpty(skill.Tags),
-		LatestVersionID: latestVersionIDValue,
-		VersionCount:    versionCount,
-		HasValidVersion: hasValidVersion,
-		FirstSeenAt:     conv.PtrEmpty(conv.FromPGTimestamptz(skill.FirstSeenAt)),
-		LastSeenAt:      conv.PtrEmpty(conv.FromPGTimestamptz(skill.LastSeenAt)),
-		SeenCount:       skill.SeenCount,
-		ShareToken:      conv.FromPGText[string](shareToken),
-		CreatedAt:       conv.FromPGTimestamptz(skill.CreatedAt),
-		UpdatedAt:       conv.FromPGTimestamptz(skill.UpdatedAt),
+		ID:                  skill.ID.String(),
+		ProjectID:           skill.ProjectID.String(),
+		Name:                skill.Name,
+		DisplayName:         skill.DisplayName,
+		Summary:             conv.FromPGText[string](skill.Summary),
+		SourceKind:          skill.SourceKind,
+		Classification:      skill.Classification,
+		Tags:                skillTagsOrEmpty(skill.Tags),
+		LatestVersionID:     latestVersionIDValue,
+		VersionCount:        versionCount,
+		HasValidVersion:     hasValidVersion,
+		FirstSeenAt:         conv.PtrEmpty(conv.FromPGTimestamptz(skill.FirstSeenAt)),
+		LastSeenAt:          conv.PtrEmpty(conv.FromPGTimestamptz(skill.LastSeenAt)),
+		SeenCount:           skill.SeenCount,
+		LastLoadedOverMcpAt: conv.PtrEmpty(conv.FromPGTimestamptz(lastLoadedOverMCPAt)),
+		ShareToken:          conv.FromPGText[string](shareToken),
+		CreatedAt:           conv.FromPGTimestamptz(skill.CreatedAt),
+		UpdatedAt:           conv.FromPGTimestamptz(skill.UpdatedAt),
 	}
 }
 
@@ -70,7 +71,7 @@ func skillTagsOrEmpty(tags []string) []string {
 func BuildSkillListView(rows []repo.ListSkillsRow) []*types.Skill {
 	result := make([]*types.Skill, len(rows))
 	for i, row := range rows {
-		result[i] = BuildSkillView(row.Skill, row.LatestVersionID, row.VersionCount, row.HasValidVersion, row.ShareToken)
+		result[i] = BuildSkillView(row.Skill, row.LatestVersionID, row.VersionCount, row.HasValidVersion, row.ShareToken, row.LastLoadedOverMcpAt)
 	}
 
 	return result

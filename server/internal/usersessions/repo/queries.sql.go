@@ -117,6 +117,25 @@ func (q *Queries) CountActiveUserSessionsByClientIDs(ctx context.Context, userSe
 	return items, nil
 }
 
+const countLiveUserSessionConsentResourcesFixture = `-- name: CountLiveUserSessionConsentResourcesFixture :one
+SELECT COUNT(*) FROM user_session_consent_resources
+WHERE project_id = $1::uuid
+  AND user_session_consent_id = ANY($2::uuid[])
+  AND deleted IS FALSE
+`
+
+type CountLiveUserSessionConsentResourcesFixtureParams struct {
+	ProjectID  uuid.UUID
+	ConsentIds []uuid.UUID
+}
+
+func (q *Queries) CountLiveUserSessionConsentResourcesFixture(ctx context.Context, arg CountLiveUserSessionConsentResourcesFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveUserSessionConsentResourcesFixture, arg.ProjectID, arg.ConsentIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOrganizationManagedUserSessionIssuerMCPServers = `-- name: CountOrganizationManagedUserSessionIssuerMCPServers :one
 SELECT (
     (
@@ -679,7 +698,7 @@ WITH issuer AS (
     SELECT issuer.id, issuer.project_id, COALESCE(issuer.organization_id, project.organization_id) AS organization_id
     FROM user_session_issuers AS issuer
     LEFT JOIN projects AS project ON project.id = issuer.project_id
-    WHERE issuer.id = $12
+    WHERE issuer.id = $13
       AND issuer.deleted IS FALSE
     FOR KEY SHARE OF issuer
 ),
@@ -697,8 +716,8 @@ sign_in AS (
         ) AS fenced
     FROM sign_ins AS si
     JOIN issuer ON si.organization_id = issuer.organization_id
-    WHERE si.id = $13
-      AND si.user_id = $14
+    WHERE si.id = $14
+      AND si.user_id = $15
     FOR SHARE OF si
 )
 INSERT INTO user_sessions (
@@ -716,7 +735,8 @@ INSERT INTO user_sessions (
     expires_at,
     tool_selection,
     resource,
-    sign_in_id
+    sign_in_id,
+    credential_id
 )
 SELECT
     issuer.project_id,
@@ -733,7 +753,8 @@ SELECT
     $9,
     $10,
     $11,
-    (SELECT sign_in.id FROM sign_in)
+    (SELECT sign_in.id FROM sign_in),
+    $12
 FROM issuer
 WHERE NOT EXISTS (
     SELECT 1
@@ -741,7 +762,7 @@ WHERE NOT EXISTS (
     WHERE sign_in.fenced
        OR (sign_in.revoked_at IS NOT NULL AND sign_in.revoke_reason IS DISTINCT FROM 'sign_out')
 )
-RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, credential_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionParams struct {
@@ -756,6 +777,7 @@ type CreateUserSessionParams struct {
 	ExpiresAt              pgtype.Timestamptz
 	ToolSelection          []byte
 	Resource               pgtype.Text
+	CredentialID           uuid.NullUUID
 	UserSessionIssuerID    uuid.UUID
 	SignInID               uuid.NullUUID
 	SignInUserID           pgtype.Text
@@ -791,6 +813,7 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.ExpiresAt,
 		arg.ToolSelection,
 		arg.Resource,
+		arg.CredentialID,
 		arg.UserSessionIssuerID,
 		arg.SignInID,
 		arg.SignInUserID,
@@ -814,6 +837,7 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		&i.LastUsedAt,
 		&i.Resource,
 		&i.SignInID,
+		&i.CredentialID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -969,6 +993,62 @@ func (q *Queries) CreateUserSessionConsent(ctx context.Context, arg CreateUserSe
 		&i.UserSessionClientID,
 		&i.RemoteSetHash,
 		&i.ConsentedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createUserSessionConsentResource = `-- name: CreateUserSessionConsentResource :one
+INSERT INTO user_session_consent_resources (
+    project_id, user_session_consent_id, resource, inventory_hash,
+    remote_set_hash, tool_selection, session_duration_hours
+)
+SELECT $1::uuid, c.id, $2, $3,
+       $4, $5, $6
+FROM user_session_consents AS c
+JOIN user_session_clients AS cli ON cli.id = c.user_session_client_id
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE c.id = $7
+  AND (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization_id = $8::text))
+  AND c.deleted IS FALSE AND cli.deleted IS FALSE AND iss.deleted IS FALSE
+RETURNING id, project_id, user_session_consent_id, resource, inventory_hash, remote_set_hash, tool_selection, session_duration_hours, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateUserSessionConsentResourceParams struct {
+	ProjectID            uuid.UUID
+	Resource             string
+	InventoryHash        string
+	RemoteSetHash        string
+	ToolSelection        []byte
+	SessionDurationHours int32
+	UserSessionConsentID uuid.UUID
+	OrganizationID       string
+}
+
+func (q *Queries) CreateUserSessionConsentResource(ctx context.Context, arg CreateUserSessionConsentResourceParams) (UserSessionConsentResource, error) {
+	row := q.db.QueryRow(ctx, createUserSessionConsentResource,
+		arg.ProjectID,
+		arg.Resource,
+		arg.InventoryHash,
+		arg.RemoteSetHash,
+		arg.ToolSelection,
+		arg.SessionDurationHours,
+		arg.UserSessionConsentID,
+		arg.OrganizationID,
+	)
+	var i UserSessionConsentResource
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionConsentID,
+		&i.Resource,
+		&i.InventoryHash,
+		&i.RemoteSetHash,
+		&i.ToolSelection,
+		&i.SessionDurationHours,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1746,8 +1826,98 @@ func (q *Queries) GetSharedUserSessionIssuerByID(ctx context.Context, id uuid.UU
 	return i, err
 }
 
+const getUpstreamClientSelection = `-- name: GetUpstreamClientSelection :one
+SELECT sel.remote_session_client_id,
+       chosen.remote_session_issuer_id AS remote_session_issuer_id,
+       (sel.no_auth OR headers_only.id IS NOT NULL)::boolean AS no_auth,
+       sel.source,
+       (
+         CASE
+           WHEN sel.no_auth OR headers_only.id IS NOT NULL THEN NOT EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.deleted IS FALSE
+           )
+           ELSE EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             JOIN remote_session_clients AS c
+               ON c.id = a.remote_session_client_id
+              AND c.deleted IS FALSE
+             JOIN remote_session_client_user_session_issuers AS link
+               ON link.remote_session_client_id = a.remote_session_client_id
+              AND link.user_session_issuer_id = $1::uuid
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.remote_session_client_id = sel.remote_session_client_id
+               AND a.deleted IS FALSE
+           )
+         END
+       )::boolean AS usable
+FROM upstream_client_selections AS sel
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = sel.remote_session_client_id
+LEFT JOIN mcp_auth_clients AS headers_only
+  ON headers_only.id = sel.auth_client_id
+ AND sel.remote_session_client_id IS NULL
+ AND headers_only.organization_id = sel.organization_id
+ AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
+ AND headers_only.client_type IN ('static_credential', 'pass_through')
+WHERE sel.credential_kind = $2::text
+  AND sel.credential_id = $3::uuid
+  AND sel.mcp_server_id = $4::uuid
+  AND sel.organization_id = $5::text
+  AND sel.deleted IS FALSE
+`
+
+type GetUpstreamClientSelectionParams struct {
+	UserSessionIssuerID uuid.UUID
+	CredentialKind      string
+	CredentialID        uuid.UUID
+	McpServerID         uuid.UUID
+	OrganizationID      string
+}
+
+type GetUpstreamClientSelectionRow struct {
+	RemoteSessionClientID uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+	NoAuth                bool
+	Source                string
+	Usable                bool
+}
+
+// One credential's choice for one MCP server, with whether it can still be
+// used: a chosen client must be live, still associated with the server, and
+// still bound to the credential's user session issuer, and a no-auth choice
+// holds only while the server has no associated client. A choice naming a
+// static_credential or pass_through auth client reads as no-auth, as it did
+// before the choice was mapped onto auth clients, whatever that client's
+// state: the typed resolver fails closed on it, this path does not.
+// An unusable choice is reported as such rather than replaced, so the caller
+// fails closed instead of switching clients.
+// ListUpstreamClientSelections repeats the usable expression; the two must
+// stay identical.
+func (q *Queries) GetUpstreamClientSelection(ctx context.Context, arg GetUpstreamClientSelectionParams) (GetUpstreamClientSelectionRow, error) {
+	row := q.db.QueryRow(ctx, getUpstreamClientSelection,
+		arg.UserSessionIssuerID,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.McpServerID,
+		arg.OrganizationID,
+	)
+	var i GetUpstreamClientSelectionRow
+	err := row.Scan(
+		&i.RemoteSessionClientID,
+		&i.RemoteSessionIssuerID,
+		&i.NoAuth,
+		&i.Source,
+		&i.Usable,
+	)
+	return i, err
+}
+
 const getUserSessionByID = `-- name: GetUserSessionByID :one
-SELECT s.id, s.project_id, s.organization_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.authorizer_user_id, s.delegated_grants, s.delegated_grants_version, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.resource, s.sign_in_id, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.project_id, s.organization_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.authorizer_user_id, s.delegated_grants, s.delegated_grants_version, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.resource, s.sign_in_id, s.credential_id, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 WHERE s.id = $1
@@ -1785,6 +1955,7 @@ func (q *Queries) GetUserSessionByID(ctx context.Context, arg GetUserSessionByID
 		&i.LastUsedAt,
 		&i.Resource,
 		&i.SignInID,
+		&i.CredentialID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1794,7 +1965,7 @@ func (q *Queries) GetUserSessionByID(ctx context.Context, arg GetUserSessionByID
 }
 
 const getUserSessionByJTI = `-- name: GetUserSessionByJTI :one
-SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, credential_id, created_at, updated_at, deleted_at, deleted
 FROM user_sessions
 WHERE user_session_issuer_id = $1
   AND jti = $2
@@ -1831,6 +2002,7 @@ func (q *Queries) GetUserSessionByJTI(ctx context.Context, arg GetUserSessionByJ
 		&i.LastUsedAt,
 		&i.Resource,
 		&i.SignInID,
+		&i.CredentialID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1840,7 +2012,7 @@ func (q *Queries) GetUserSessionByJTI(ctx context.Context, arg GetUserSessionByJ
 }
 
 const getUserSessionByRefreshTokenHash = `-- name: GetUserSessionByRefreshTokenHash :one
-SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, credential_id, created_at, updated_at, deleted_at, deleted
 FROM user_sessions
 WHERE user_session_issuer_id = $1
   AND refresh_token_hash = $2::text
@@ -1878,6 +2050,7 @@ func (q *Queries) GetUserSessionByRefreshTokenHash(ctx context.Context, arg GetU
 		&i.LastUsedAt,
 		&i.Resource,
 		&i.SignInID,
+		&i.CredentialID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -2027,6 +2200,56 @@ func (q *Queries) GetUserSessionConsentByID(ctx context.Context, arg GetUserSess
 	return i, err
 }
 
+const getUserSessionConsentResource = `-- name: GetUserSessionConsentResource :one
+SELECT r.id, r.project_id, r.user_session_consent_id, r.resource, r.inventory_hash, r.remote_set_hash, r.tool_selection, r.session_duration_hours, r.created_at, r.updated_at, r.deleted_at, r.deleted
+FROM user_session_consent_resources AS r
+JOIN user_session_consents AS c ON c.id = r.user_session_consent_id
+JOIN user_session_clients AS cli ON cli.id = c.user_session_client_id
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE r.project_id = $1::uuid
+  AND (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization_id = $2::text))
+  AND c.user_session_client_id = $3
+  AND c.subject_urn = $4
+  AND r.resource = $5
+  AND r.deleted IS FALSE AND c.deleted IS FALSE AND cli.deleted IS FALSE AND iss.deleted IS FALSE
+ORDER BY r.created_at DESC, r.id DESC
+LIMIT 1
+`
+
+type GetUserSessionConsentResourceParams struct {
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	UserSessionClientID uuid.UUID
+	SubjectUrn          urn.SessionSubject
+	Resource            string
+}
+
+func (q *Queries) GetUserSessionConsentResource(ctx context.Context, arg GetUserSessionConsentResourceParams) (UserSessionConsentResource, error) {
+	row := q.db.QueryRow(ctx, getUserSessionConsentResource,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionClientID,
+		arg.SubjectUrn,
+		arg.Resource,
+	)
+	var i UserSessionConsentResource
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionConsentID,
+		&i.Resource,
+		&i.InventoryHash,
+		&i.RemoteSetHash,
+		&i.ToolSelection,
+		&i.SessionDurationHours,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getUserSessionIssuerByID = `-- name: GetUserSessionIssuerByID :one
 SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, use_authentication_host, authorization_server_mode, pinned_issuer_url, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
@@ -2144,7 +2367,8 @@ func (q *Queries) GetUserSessionIssuerCimdClientByID(ctx context.Context, arg Ge
 
 const getUserSessionPolicyByJTI = `-- name: GetUserSessionPolicyByJTI :one
 SELECT tool_selection, expires_at,
-       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable
+       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable,
+       COALESCE(credential_id, id)::uuid AS credential_id
 FROM user_sessions
 WHERE user_session_issuer_id = $1
   AND jti = $2
@@ -2160,6 +2384,7 @@ type GetUserSessionPolicyByJTIRow struct {
 	ToolSelection []byte
 	ExpiresAt     pgtype.Timestamptz
 	Refreshable   bool
+	CredentialID  uuid.UUID
 }
 
 // Serve-path lookup for immutable session policy, keyed the same way
@@ -2173,7 +2398,12 @@ type GetUserSessionPolicyByJTIRow struct {
 func (q *Queries) GetUserSessionPolicyByJTI(ctx context.Context, arg GetUserSessionPolicyByJTIParams) (GetUserSessionPolicyByJTIRow, error) {
 	row := q.db.QueryRow(ctx, getUserSessionPolicyByJTI, arg.UserSessionIssuerID, arg.Jti)
 	var i GetUserSessionPolicyByJTIRow
-	err := row.Scan(&i.ToolSelection, &i.ExpiresAt, &i.Refreshable)
+	err := row.Scan(
+		&i.ToolSelection,
+		&i.ExpiresAt,
+		&i.Refreshable,
+		&i.CredentialID,
+	)
 	return i, err
 }
 
@@ -2978,6 +3208,105 @@ func (q *Queries) ListSharedUserSessionIssuersInOrganization(ctx context.Context
 			&i.UserSessionIssuer.Deleted,
 			&i.ProjectName,
 			&i.ProjectSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUpstreamClientSelections = `-- name: ListUpstreamClientSelections :many
+SELECT sel.mcp_server_id,
+       sel.remote_session_client_id,
+       chosen.remote_session_issuer_id AS remote_session_issuer_id,
+       (sel.no_auth OR headers_only.id IS NOT NULL)::boolean AS no_auth,
+       sel.source,
+       (
+         CASE
+           WHEN sel.no_auth OR headers_only.id IS NOT NULL THEN NOT EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.deleted IS FALSE
+           )
+           ELSE EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             JOIN remote_session_clients AS c
+               ON c.id = a.remote_session_client_id
+              AND c.deleted IS FALSE
+             JOIN remote_session_client_user_session_issuers AS link
+               ON link.remote_session_client_id = a.remote_session_client_id
+              AND link.user_session_issuer_id = $1::uuid
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.remote_session_client_id = sel.remote_session_client_id
+               AND a.deleted IS FALSE
+           )
+         END
+       )::boolean AS usable
+FROM upstream_client_selections AS sel
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = sel.remote_session_client_id
+LEFT JOIN mcp_auth_clients AS headers_only
+  ON headers_only.id = sel.auth_client_id
+ AND sel.remote_session_client_id IS NULL
+ AND headers_only.organization_id = sel.organization_id
+ AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
+ AND headers_only.client_type IN ('static_credential', 'pass_through')
+WHERE sel.credential_kind = $2::text
+  AND sel.credential_id = $3::uuid
+  AND sel.mcp_server_id = ANY($4::uuid[])
+  AND sel.organization_id = $5::text
+  AND sel.deleted IS FALSE
+`
+
+type ListUpstreamClientSelectionsParams struct {
+	UserSessionIssuerID uuid.UUID
+	CredentialKind      string
+	CredentialID        uuid.UUID
+	McpServerIds        []uuid.UUID
+	OrganizationID      string
+}
+
+type ListUpstreamClientSelectionsRow struct {
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+	NoAuth                bool
+	Source                string
+	Usable                bool
+}
+
+// GetUpstreamClientSelection for several MCP servers at once, as a gateway
+// reads its members' choices. Servers without a choice have no row.
+// The usable expression repeats GetUpstreamClientSelection's; the two must
+// stay identical, since both callers fail closed on it.
+func (q *Queries) ListUpstreamClientSelections(ctx context.Context, arg ListUpstreamClientSelectionsParams) ([]ListUpstreamClientSelectionsRow, error) {
+	rows, err := q.db.Query(ctx, listUpstreamClientSelections,
+		arg.UserSessionIssuerID,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.McpServerIds,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUpstreamClientSelectionsRow
+	for rows.Next() {
+		var i ListUpstreamClientSelectionsRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.RemoteSessionClientID,
+			&i.RemoteSessionIssuerID,
+			&i.NoAuth,
+			&i.Source,
+			&i.Usable,
 		); err != nil {
 			return nil, err
 		}
@@ -3898,6 +4227,31 @@ func (q *Queries) LockSignInForGrant(ctx context.Context, arg LockSignInForGrant
 	return i, err
 }
 
+const lockUserSessionConsentClient = `-- name: LockUserSessionConsentClient :one
+SELECT cli.id
+FROM user_session_clients AS cli
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE cli.id = $1
+  AND (iss.project_id = $2::uuid OR (iss.project_id IS NULL AND iss.organization_id = $3::text))
+  AND cli.deleted IS FALSE AND iss.deleted IS FALSE
+FOR UPDATE OF cli
+`
+
+type LockUserSessionConsentClientParams struct {
+	UserSessionClientID uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+}
+
+// Serializes remembered approval, automatic code issuance and withdrawal.
+// Remote inventory requests must finish before acquiring this lock.
+func (q *Queries) LockUserSessionConsentClient(ctx context.Context, arg LockUserSessionConsentClientParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockUserSessionConsentClient, arg.UserSessionClientID, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockUserSessionIssuer = `-- name: LockUserSessionIssuer :one
 SELECT id
 FROM user_session_issuers
@@ -4111,6 +4465,226 @@ func (q *Queries) PurgeUserSessionClientCIMDCache(ctx context.Context, arg Purge
 	return i, err
 }
 
+const recordUpstreamClientSelections = `-- name: RecordUpstreamClientSelections :execrows
+WITH session_issuer AS (
+    SELECT usi.id,
+           usi.project_id,
+           COALESCE(usi.organization_id, p.organization_id) AS organization_id
+    FROM user_session_issuers AS usi
+    LEFT JOIN projects AS p ON p.id = usi.project_id
+    WHERE usi.id = $4
+      AND usi.deleted IS FALSE
+),
+reachable AS (
+    SELECT s.id, s.project_id
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.deleted IS FALSE
+    JOIN session_issuer AS si
+      ON p.organization_id = si.organization_id
+    WHERE s.deleted IS FALSE
+      AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+      AND (
+        s.user_session_issuer_id = si.id
+        OR si.project_id IS NULL
+        OR EXISTS (
+          SELECT 1
+          FROM meta_mcp_server_members AS m
+          JOIN meta_mcp_servers AS g
+            ON g.id = m.meta_mcp_server_id
+           AND g.deleted IS FALSE
+          WHERE m.mcp_server_id = s.id
+            AND m.deleted IS FALSE
+            AND g.user_session_issuer_id = si.id
+        )
+      )
+),
+picked AS (
+    -- The consent page's pick for each server, as parallel arrays.
+    SELECT unnest($5::uuid[]) AS mcp_server_id,
+           unnest($6::uuid[]) AS remote_session_client_id
+),
+eligible AS (
+    SELECT a.mcp_server_id,
+           a.remote_session_client_id
+    FROM mcp_server_remote_session_clients AS a
+    JOIN reachable AS r
+      ON r.id = a.mcp_server_id
+    JOIN remote_session_clients AS c
+      ON c.id = a.remote_session_client_id
+     AND c.deleted IS FALSE
+    JOIN remote_session_client_user_session_issuers AS link
+      ON link.remote_session_client_id = a.remote_session_client_id
+     AND link.user_session_issuer_id = $4
+    WHERE a.deleted IS FALSE
+),
+decided AS (
+    SELECT r.id AS mcp_server_id,
+           r.project_id,
+           COALESCE(
+             (
+               SELECT CASE WHEN count(*) = 1 THEN (array_agg(e.remote_session_client_id))[1] END
+               FROM eligible AS e
+               WHERE e.mcp_server_id = r.id
+             ),
+             (
+               SELECT e.remote_session_client_id
+               FROM eligible AS e
+               JOIN picked AS p
+                 ON p.mcp_server_id = e.mcp_server_id
+                AND p.remote_session_client_id = e.remote_session_client_id
+               WHERE e.mcp_server_id = r.id
+               LIMIT 1
+             )
+           ) AS remote_session_client_id,
+           NOT EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             WHERE a.mcp_server_id = r.id
+               AND a.deleted IS FALSE
+           ) AS no_auth
+    FROM reachable AS r
+)
+INSERT INTO upstream_client_selections (
+    project_id,
+    organization_id,
+    credential_kind,
+    credential_id,
+    mcp_server_id,
+    remote_session_client_id,
+    client_attachment_scope,
+    no_auth,
+    source
+)
+SELECT d.project_id,
+       si.organization_id,
+       $1::text,
+       $2::uuid,
+       d.mcp_server_id,
+       d.remote_session_client_id,
+       chosen.attachment_scope,
+       d.remote_session_client_id IS NULL,
+       $3::text
+FROM decided AS d
+CROSS JOIN session_issuer AS si
+JOIN projects AS server_project
+  ON server_project.id = d.project_id
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = d.remote_session_client_id
+ AND chosen.deleted IS FALSE
+ AND (chosen.project_id = server_project.id
+      OR (chosen.project_id IS NULL AND chosen.organization_id = server_project.organization_id)
+      OR (chosen.project_id IS NULL AND chosen.organization_id IS NULL))
+WHERE chosen.id IS NOT NULL
+   OR (d.remote_session_client_id IS NULL AND d.no_auth)
+ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO UPDATE
+SET remote_session_client_id = EXCLUDED.remote_session_client_id,
+    client_attachment_scope = EXCLUDED.client_attachment_scope,
+    no_auth = FALSE,
+    source = EXCLUDED.source,
+    updated_at = clock_timestamp()
+WHERE upstream_client_selections.no_auth
+  AND EXCLUDED.remote_session_client_id IS NOT NULL
+`
+
+type RecordUpstreamClientSelectionsParams struct {
+	CredentialKind      string
+	CredentialID        uuid.UUID
+	Source              string
+	UserSessionIssuerID uuid.UUID
+	PickedMcpServerIds  []uuid.UUID
+	PickedClientIds     []uuid.UUID
+}
+
+// Records, for one inbound credential, the upstream OAuth client it uses for
+// every MCP server it can reach, or an explicit no-auth choice. An existing
+// client choice is never replaced. An existing no-auth choice is replaced
+// only once the server has an associated client and one is decided for the
+// credential: the no-auth choice is unusable by then, and recording the
+// decided client is what reconnecting would record.
+//
+// Reach is a superset of what the credential is audience-bound to: every
+// proxied (remote or tunneled) server on the credential's user session
+// issuer, every proxied member of a gateway signing in through it, and, for an
+// organization issuer, every proxied server in the organization the
+// organization gateway serves. Hosted and unproxied servers keep serving from
+// the issuer's bindings, so they need no choice. A choice for a server the
+// credential is never presented to grants nothing, since the credential is
+// admitted on its own path before a choice is read.
+//
+// A client is chosen when it is the server's single associated client that
+// the credential's issuer also binds, which is the client the issuer path
+// serves today. When the issuer binds several of the server's clients, the
+// one picked on the consent page (picked_mcp_server_ids and picked_client_ids,
+// parallel arrays) is chosen if it is still one of them; without a pick the
+// choice is left to a reconnection. No-auth is chosen when the server has no
+// associated client: a server uses exactly the clients associated with it.
+// A server given a client later makes the no-auth choice unusable, so the
+// credential reconnects and records the client. A server whose associated
+// clients the credential's issuer binds none of is left without a row, a gap
+// that coverage reports and that a reconnection resolves; nothing is guessed.
+func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg RecordUpstreamClientSelectionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordUpstreamClientSelections,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.Source,
+		arg.UserSessionIssuerID,
+		arg.PickedMcpServerIds,
+		arg.PickedClientIds,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordUserSessionConsent = `-- name: RecordUserSessionConsent :one
+INSERT INTO user_session_consents (project_id, organization_id, subject_urn, user_session_client_id, remote_set_hash)
+SELECT cli.project_id, cli.organization_id, $1, cli.id, $2
+FROM user_session_clients AS cli
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE cli.id = $3
+  AND (iss.project_id = $4::uuid OR (iss.project_id IS NULL AND iss.organization_id = $5::text))
+  AND cli.deleted IS FALSE AND iss.deleted IS FALSE
+ON CONFLICT (subject_urn, user_session_client_id, remote_set_hash) WHERE deleted IS FALSE
+DO UPDATE SET updated_at = clock_timestamp()
+RETURNING id, project_id, organization_id, subject_urn, user_session_client_id, remote_set_hash, consented_at, created_at, updated_at, deleted_at, deleted
+`
+
+type RecordUserSessionConsentParams struct {
+	SubjectUrn          urn.SessionSubject
+	RemoteSetHash       string
+	UserSessionClientID uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+}
+
+func (q *Queries) RecordUserSessionConsent(ctx context.Context, arg RecordUserSessionConsentParams) (UserSessionConsent, error) {
+	row := q.db.QueryRow(ctx, recordUserSessionConsent,
+		arg.SubjectUrn,
+		arg.RemoteSetHash,
+		arg.UserSessionClientID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	var i UserSessionConsent
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.SubjectUrn,
+		&i.UserSessionClientID,
+		&i.RemoteSetHash,
+		&i.ConsentedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const retierUserSessionClients = `-- name: RetierUserSessionClients :execrows
 UPDATE user_session_clients AS client
 SET project_id = $1::uuid,
@@ -4253,7 +4827,7 @@ WHERE s.id = $1
   AND iss.id = s.user_session_issuer_id
   AND (iss.project_id = $2::uuid OR (iss.project_id IS NULL AND iss.organization_id = $3::text))
   AND s.deleted IS FALSE
-RETURNING s.id, s.project_id, s.organization_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.authorizer_user_id, s.delegated_grants, s.delegated_grants_version, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.resource, s.sign_in_id, s.created_at, s.updated_at, s.deleted_at, s.deleted
+RETURNING s.id, s.project_id, s.organization_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.authorizer_user_id, s.delegated_grants, s.delegated_grants_version, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.resource, s.sign_in_id, s.credential_id, s.created_at, s.updated_at, s.deleted_at, s.deleted
 `
 
 type RevokeUserSessionParams struct {
@@ -4288,6 +4862,7 @@ func (q *Queries) RevokeUserSession(ctx context.Context, arg RevokeUserSessionPa
 		&i.LastUsedAt,
 		&i.Resource,
 		&i.SignInID,
+		&i.CredentialID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -4302,7 +4877,7 @@ SET deleted_at = clock_timestamp()
 WHERE user_session_issuer_id = $1
   AND refresh_token_hash = $2::text
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, credential_id, created_at, updated_at, deleted_at, deleted
 `
 
 type RevokeUserSessionByRefreshTokenHashParams struct {
@@ -4336,6 +4911,7 @@ func (q *Queries) RevokeUserSessionByRefreshTokenHash(ctx context.Context, arg R
 		&i.LastUsedAt,
 		&i.Resource,
 		&i.SignInID,
+		&i.CredentialID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -4441,6 +5017,82 @@ func (q *Queries) RevokeUserSessionConsent(ctx context.Context, arg RevokeUserSe
 		&i.UserSessionIssuerID,
 	)
 	return i, err
+}
+
+const revokeUserSessionConsentGroup = `-- name: RevokeUserSessionConsentGroup :many
+WITH revoked AS (
+    UPDATE user_session_consents AS c SET deleted_at = clock_timestamp()
+    FROM user_session_clients AS cli, user_session_issuers AS iss
+    WHERE cli.id = c.user_session_client_id AND iss.id = cli.user_session_issuer_id
+      AND (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization_id = $2::text))
+      AND c.user_session_client_id = $3 AND c.subject_urn = $4
+      AND c.deleted IS FALSE
+    RETURNING c.id, c.project_id, c.organization_id, c.subject_urn, c.user_session_client_id, c.remote_set_hash, c.consented_at, c.created_at, c.updated_at, c.deleted_at, c.deleted
+), resources AS (
+    UPDATE user_session_consent_resources AS r SET deleted_at = clock_timestamp()
+    FROM revoked WHERE r.user_session_consent_id = revoked.id AND r.deleted IS FALSE
+)
+SELECT id, project_id, organization_id, subject_urn, user_session_client_id, remote_set_hash, consented_at, created_at, updated_at, deleted_at, deleted FROM revoked
+`
+
+type RevokeUserSessionConsentGroupParams struct {
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	UserSessionClientID uuid.UUID
+	SubjectUrn          urn.SessionSubject
+}
+
+type RevokeUserSessionConsentGroupRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
+	SubjectUrn          string
+	UserSessionClientID uuid.UUID
+	RemoteSetHash       string
+	ConsentedAt         pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}
+
+// The caller holds the client's approval lock. Every saved variant is
+// withdrawn, without invalidating sessions or already-issued codes.
+func (q *Queries) RevokeUserSessionConsentGroup(ctx context.Context, arg RevokeUserSessionConsentGroupParams) ([]RevokeUserSessionConsentGroupRow, error) {
+	rows, err := q.db.Query(ctx, revokeUserSessionConsentGroup,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionClientID,
+		arg.SubjectUrn,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokeUserSessionConsentGroupRow
+	for rows.Next() {
+		var i RevokeUserSessionConsentGroupRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.SubjectUrn,
+			&i.UserSessionClientID,
+			&i.RemoteSetHash,
+			&i.ConsentedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setOrganizationManagedUserSessionIssuerAuthenticationHost = `-- name: SetOrganizationManagedUserSessionIssuerAuthenticationHost :one
@@ -4657,6 +5309,7 @@ func (q *Queries) SoftDeleteMigratedUserSessionIssuer(ctx context.Context, arg S
 }
 
 const softDeleteUserSessionConsentsByIssuerID = `-- name: SoftDeleteUserSessionConsentsByIssuerID :many
+WITH revoked AS (
 UPDATE user_session_consents AS c
 SET deleted_at = clock_timestamp()
 FROM user_session_clients AS cli
@@ -4664,21 +5317,40 @@ WHERE c.user_session_client_id = cli.id
   AND cli.user_session_issuer_id = $1
   AND c.deleted IS FALSE
 RETURNING c.id, c.project_id, c.organization_id, c.subject_urn, c.user_session_client_id, c.remote_set_hash, c.consented_at, c.created_at, c.updated_at, c.deleted_at, c.deleted
+), resources AS (
+    UPDATE user_session_consent_resources AS r SET deleted_at = clock_timestamp()
+    FROM revoked WHERE r.user_session_consent_id = revoked.id AND r.deleted IS FALSE
+)
+SELECT id, project_id, organization_id, subject_urn, user_session_client_id, remote_set_hash, consented_at, created_at, updated_at, deleted_at, deleted FROM revoked
 `
+
+type SoftDeleteUserSessionConsentsByIssuerIDRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
+	SubjectUrn          string
+	UserSessionClientID uuid.UUID
+	RemoteSetHash       string
+	ConsentedAt         pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}
 
 // Cascading soft-delete of user_session_consents for an issuer being
 // soft-deleted. Joins through user_session_clients since consents are
 // per-client. Tenancy is guaranteed because the parent issuer was already
 // verified to belong to the caller, at whichever tier owns it.
-func (q *Queries) SoftDeleteUserSessionConsentsByIssuerID(ctx context.Context, userSessionIssuerID uuid.UUID) ([]UserSessionConsent, error) {
+func (q *Queries) SoftDeleteUserSessionConsentsByIssuerID(ctx context.Context, userSessionIssuerID uuid.UUID) ([]SoftDeleteUserSessionConsentsByIssuerIDRow, error) {
 	rows, err := q.db.Query(ctx, softDeleteUserSessionConsentsByIssuerID, userSessionIssuerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []UserSessionConsent
+	var items []SoftDeleteUserSessionConsentsByIssuerIDRow
 	for rows.Next() {
-		var i UserSessionConsent
+		var i SoftDeleteUserSessionConsentsByIssuerIDRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -4706,7 +5378,7 @@ const softDeleteUserSessionsByClientID = `-- name: SoftDeleteUserSessionsByClien
 UPDATE user_sessions
 SET deleted_at = clock_timestamp()
 WHERE user_session_client_id = $1 AND deleted IS FALSE
-RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, credential_id, created_at, updated_at, deleted_at, deleted
 `
 
 // Cascading soft-delete of user_sessions issued through a client being revoked.
@@ -4738,6 +5410,7 @@ func (q *Queries) SoftDeleteUserSessionsByClientID(ctx context.Context, userSess
 			&i.LastUsedAt,
 			&i.Resource,
 			&i.SignInID,
+			&i.CredentialID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -4757,7 +5430,7 @@ const softDeleteUserSessionsByIssuerID = `-- name: SoftDeleteUserSessionsByIssue
 UPDATE user_sessions
 SET deleted_at = clock_timestamp()
 WHERE user_session_issuer_id = $1 AND deleted IS FALSE
-RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, credential_id, created_at, updated_at, deleted_at, deleted
 `
 
 // Cascading soft-delete of user_sessions for an issuer being soft-deleted.
@@ -4789,6 +5462,7 @@ func (q *Queries) SoftDeleteUserSessionsByIssuerID(ctx context.Context, userSess
 			&i.LastUsedAt,
 			&i.Resource,
 			&i.SignInID,
+			&i.CredentialID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -4802,6 +5476,40 @@ func (q *Queries) SoftDeleteUserSessionsByIssuerID(ctx context.Context, userSess
 		return nil, err
 	}
 	return items, nil
+}
+
+const supersedeUserSessionConsentResource = `-- name: SupersedeUserSessionConsentResource :exec
+UPDATE user_session_consent_resources AS r
+SET deleted_at = clock_timestamp()
+FROM user_session_consents AS c, user_session_clients AS cli, user_session_issuers AS iss
+WHERE r.user_session_consent_id = c.id
+  AND cli.id = c.user_session_client_id AND iss.id = cli.user_session_issuer_id
+  AND r.project_id = $1::uuid
+  AND (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization_id = $2::text))
+  AND c.user_session_client_id = $3
+  AND c.subject_urn = $4 AND r.resource = $5
+  AND r.deleted IS FALSE
+`
+
+type SupersedeUserSessionConsentResourceParams struct {
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	UserSessionClientID uuid.UUID
+	SubjectUrn          urn.SessionSubject
+	Resource            string
+}
+
+// A new explicit decision supersedes every older variant, including when
+// no complete inventory is available to save reusable evidence.
+func (q *Queries) SupersedeUserSessionConsentResource(ctx context.Context, arg SupersedeUserSessionConsentResourceParams) error {
+	_, err := q.db.Exec(ctx, supersedeUserSessionConsentResource,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionClientID,
+		arg.SubjectUrn,
+		arg.Resource,
+	)
+	return err
 }
 
 const touchUserSessionLastUsed = `-- name: TouchUserSessionLastUsed :exec

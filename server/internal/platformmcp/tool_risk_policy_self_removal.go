@@ -20,7 +20,7 @@ func registerRemoveSelfFromRiskPolicy(reg *Registrar, catalogAvailable bool, han
 		"idempotency_key":  stringSchema("Stable replay key for this confirmed self removal.", 1, 128),
 		"confirmed":        {Type: "boolean", Enum: []any{true}},
 	}, []string{"project_slug", "policy_id", "expected_version", "idempotency_key", "confirmed"})
-	addTool(reg, &mcp.Tool{Meta: nil, OutputSchema: nil, Icons: nil, Name: operationRemoveSelfFromRiskPolicy, Title: "Remove Self From Risk Policy", Description: description, InputSchema: schema, Annotations: &mcp.ToolAnnotations{OpenWorldHint: nil, ReadOnlyHint: false, Title: "", DestructiveHint: new(true), IdempotentHint: true}}, ToolMeta{DiscoveryScopes: nil, Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}, ProjectScope: ProjectScopeExplicit}, instrumentRiskMutation(reg, operationRemoveSelfFromRiskPolicy, handler))
+	addTool(reg, &mcp.Tool{Meta: nil, OutputSchema: nil, Icons: nil, Name: operationRemoveSelfFromRiskPolicy, Title: "Remove Self From Risk Policy", Description: description, InputSchema: schema, Annotations: &mcp.ToolAnnotations{OpenWorldHint: new(false), ReadOnlyHint: false, Title: "", DestructiveHint: new(true), IdempotentHint: true}}, ToolMeta{DiscoveryScopes: nil, Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}, ProjectScope: ProjectScopeExplicit}, instrumentRiskMutation(reg, operationRemoveSelfFromRiskPolicy, handler))
 }
 
 func (s *riskPolicyMutationService) removeSelfFromPolicyTool(ctx context.Context, _ *mcp.CallToolRequest, raw map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {

@@ -27,6 +27,21 @@
       "source": "custom_domain_unhealthy.lmx",
       "variables": ["email", "domain", "issue_message", "domain_link"]
     },
+    "directory_review_pending": {
+      "managed_name": "gram.transactional.v2.directory_review_pending",
+      "subject": "{data.summary} in {data.organization_name}",
+      "preview_text": "Review directory changes that may need a role.",
+      "source": "directory_review_pending.lmx",
+      "variables": [
+        "organization_name",
+        "summary",
+        "new_group_count",
+        "new_attribute_value_count",
+        "source_missing_count",
+        "review_url",
+        "is_reminder"
+      ]
+    },
     "enterprise_admin_onboarding": {
       "managed_name": "gram.transactional.v2.enterprise_admin_onboarding",
       "subject": "Set up your Speakeasy organization",

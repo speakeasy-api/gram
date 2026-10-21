@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -22,7 +23,7 @@ export const AIIntegrationScheduleStateStatus = {
 /**
  * Derived status for the schedule's latest poll state.
  */
-export type AIIntegrationScheduleStateStatus = ClosedEnum<
+export type AIIntegrationScheduleStateStatus = OpenEnum<
   typeof AIIntegrationScheduleStateStatus
 >;
 
@@ -36,7 +37,7 @@ export const StreamKind = {
 /**
  * Whether the stream carries discrete events or aggregated metrics. Omitted for legacy schedules with no registered stream.
  */
-export type StreamKind = ClosedEnum<typeof StreamKind>;
+export type StreamKind = OpenEnum<typeof StreamKind>;
 
 /**
  * Scheduler state for one sync schedule (stream) of a provider integration.
@@ -89,13 +90,14 @@ export type AIIntegrationScheduleState = {
 };
 
 /** @internal */
-export const AIIntegrationScheduleStateStatus$inboundSchema: z.ZodMiniEnum<
-  typeof AIIntegrationScheduleStateStatus
-> = z.enum(AIIntegrationScheduleStateStatus);
+export const AIIntegrationScheduleStateStatus$inboundSchema: z.ZodMiniType<
+  AIIntegrationScheduleStateStatus,
+  unknown
+> = openEnums.inboundSchema(AIIntegrationScheduleStateStatus);
 
 /** @internal */
-export const StreamKind$inboundSchema: z.ZodMiniEnum<typeof StreamKind> = z
-  .enum(StreamKind);
+export const StreamKind$inboundSchema: z.ZodMiniType<StreamKind, unknown> =
+  openEnums.inboundSchema(StreamKind);
 
 /** @internal */
 export const AIIntegrationScheduleState$inboundSchema: z.ZodMiniType<

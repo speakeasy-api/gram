@@ -131,14 +131,15 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
-12a. **Organization gateway** — open **MCP** (`/<org>/projects/default/mcp`).
-The title row shows **Connect all servers**, because `acme-workforce` is the
-organization's only organization-wide authorization server. Clicking it opens
-**Connect all your servers at once** with the URL `<server>/mcp/gateway/<org>`
-and a copy button, where `<org>` is the organization's slug (`acme-demo` in the
-demo org, your own org's slug after `mise run seed`);
-`organizations.getGateway` in the network panel returns `available: true` with
-that URL.
+12a. **Organization Gateway** — open **MCP** (`/<org>/projects/default/mcp`). The
+**Organization Gateway** card leads the MCP Servers grid, because `acme-workforce` is
+the organization's only organization-wide authorization server. Opening it
+shows the endpoint `<server>/mcp/gateway/<org>` with a copy button, where
+`<org>` is the organization's slug (`acme-demo` in the demo org, your own org's
+slug after `mise run seed`); install cards for **Claude Code**, **Claude**,
+**Cursor**, **OpenAI Codex**, **ChatGPT**, **OpenCode** and **Other clients**;
+and an **Enabled** switch. `organizations.getGateway` in the network panel
+returns `available: true` with that URL.
 
 13. **Killswitches on the identity Access tab (local rewritten seed only)** —
     Killswitch management intentionally rejects demo/support sessions. Verify this
@@ -553,6 +554,32 @@ that URL.
       Authorization section: `acme-workforce` does not trust Acme Identity,
       on purpose, so interactive sign-in through it (GitHub, the organization
       gateway) keeps working.
+    - Both servers are seeded disabled. Connect through the organization
+      gateway: its consent page must not list Acme Tracker or Acme Wiki.
+
+31. **Gateway discovery modes**
+    - Open a gateway with tools.
+    - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
+    - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
+    - Select Direct in Inspect and apply/reconnect, then restore the gateway default to Progressive. Confirm the explicit Direct connection stays Direct while a connection using the gateway default follows Progressive.
+    - Connect a client to the organization gateway (`<server>/mcp/gateway/<org>`), choose Direct under Configuration on the consent page, and confirm tools/list shows `server--tool` names from every project you can reach. Reconnect: Direct is pre-selected. A connection that keeps the default lists the Progressive tools.
+
+32. **Skills served over MCP** (needs the `skills-over-mcp` flag on for the
+    organization)
+    - Open **MCP → Acme Support Tools → Skills**. It lists Support Refunds and
+      Triage Incident, each with a Latest badge and a "Last loaded over MCP"
+      value. As a writer, **Add skill** opens a picker without those two and
+      each row has a remove button.
+    - Open **MCP → Acme Agent Gateway → Skills**. It lists Triage Incident and
+      Runbook.
+    - Open **Skills → Runbook → Usage**. "Served over MCP" lists Acme Agent
+      Gateway (opens the gateway's Skills tab) and Organization gateway, and
+      there is no **Add to organization gateway** button. Support Refunds
+      lists only Acme Support Tools and offers the button to project writers.
+    - In the read-only demo org no add or remove control shows. With the flag
+      off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
+      returns to the server or gateway overview, and the skill page has no
+      "Served over MCP" section.
 
 ## On failure
 
