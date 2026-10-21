@@ -2217,6 +2217,53 @@ func BuildGetMcpServerToolCallsPayload(adminGetMcpServerToolCallsOrganizationID 
 	return v, nil
 }
 
+// BuildGetHookClientsPayload builds the payload for the admin getHookClients
+// endpoint from CLI flags.
+func BuildGetHookClientsPayload(adminGetHookClientsWindowDays string, adminGetHookClientsRefresh string, adminGetHookClientsAdminSessionToken string) (*admin.GetHookClientsPayload, error) {
+	var err error
+	var windowDays int
+	{
+		if adminGetHookClientsWindowDays != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminGetHookClientsWindowDays, 10, strconv.IntSize)
+			windowDays = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
+			}
+			if windowDays < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
+			}
+			if windowDays > 30 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 30, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var refresh bool
+	{
+		if adminGetHookClientsRefresh != "" {
+			refresh, err = strconv.ParseBool(adminGetHookClientsRefresh)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for refresh, must be BOOL")
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetHookClientsAdminSessionToken != "" {
+			adminSessionToken = &adminGetHookClientsAdminSessionToken
+		}
+	}
+	v := &admin.GetHookClientsPayload{}
+	v.WindowDays = windowDays
+	v.Refresh = refresh
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListExternalMcpMigrationCandidatesPayload builds the payload for the
 // admin listExternalMcpMigrationCandidates endpoint from CLI flags.
 func BuildListExternalMcpMigrationCandidatesPayload(adminListExternalMcpMigrationCandidatesAdminSessionToken string) (*admin.ListExternalMcpMigrationCandidatesPayload, error) {
@@ -3144,6 +3191,66 @@ func BuildListCustomerUsagePayload(adminListCustomerUsageInterval string, adminL
 	}
 	v := &admin.ListCustomerUsagePayload{}
 	v.Interval = interval
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListUpstreamOAuthMigrationOrganizationsPayload builds the payload for
+// the admin listUpstreamOAuthMigrationOrganizations endpoint from CLI flags.
+func BuildListUpstreamOAuthMigrationOrganizationsPayload(adminListUpstreamOAuthMigrationOrganizationsAdminSessionToken string) (*admin.ListUpstreamOAuthMigrationOrganizationsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListUpstreamOAuthMigrationOrganizationsAdminSessionToken != "" {
+			adminSessionToken = &adminListUpstreamOAuthMigrationOrganizationsAdminSessionToken
+		}
+	}
+	v := &admin.ListUpstreamOAuthMigrationOrganizationsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetUpstreamOAuthMigrationStatusPayload builds the payload for the admin
+// getUpstreamOAuthMigrationStatus endpoint from CLI flags.
+func BuildGetUpstreamOAuthMigrationStatusPayload(adminGetUpstreamOAuthMigrationStatusOrganizationID string, adminGetUpstreamOAuthMigrationStatusAdminSessionToken string) (*admin.GetUpstreamOAuthMigrationStatusPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetUpstreamOAuthMigrationStatusOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetUpstreamOAuthMigrationStatusAdminSessionToken != "" {
+			adminSessionToken = &adminGetUpstreamOAuthMigrationStatusAdminSessionToken
+		}
+	}
+	v := &admin.GetUpstreamOAuthMigrationStatusPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRunUpstreamOAuthMigrationPayload builds the payload for the admin
+// runUpstreamOAuthMigration endpoint from CLI flags.
+func BuildRunUpstreamOAuthMigrationPayload(adminRunUpstreamOAuthMigrationBody string, adminRunUpstreamOAuthMigrationAdminSessionToken string) (*admin.RunUpstreamOAuthMigrationPayload, error) {
+	var err error
+	var body RunUpstreamOAuthMigrationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRunUpstreamOAuthMigrationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRunUpstreamOAuthMigrationAdminSessionToken != "" {
+			adminSessionToken = &adminRunUpstreamOAuthMigrationAdminSessionToken
+		}
+	}
+	v := &admin.RunUpstreamOAuthMigrationPayload{
+		OrganizationID: body.OrganizationID,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

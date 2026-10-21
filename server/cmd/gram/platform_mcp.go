@@ -101,7 +101,10 @@ type platformMCPConfig struct {
 	// MCPServerManagement is the dashboard's mcpServers service. delete_mcp
 	// runs its delete so both surfaces remove a server the same way. Nil keeps
 	// the tool visible as unavailable.
-	MCPServerManagement    *mcpservers.Service
+	MCPServerManagement *mcpservers.Service
+	// DirectoryReview backs the directory review tools with the dashboard's
+	// access service, so they share its authorization, checks and audit.
+	DirectoryReview        platformmcp.DirectoryReviewBackend
 	PluginPublishSignaler  plugins.PluginPublishSignaler
 	NetworkAccessAdmission networkaccess.EligibilityChecker
 	PublicationRequests    plugins.PublicationRequests
@@ -467,6 +470,9 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		pluginInventory.WithServerRemoval(config.PluginManagement)
 	}
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
+	if config.DirectoryReview != nil {
+		accessReads.WithDirectoryReview(config.DirectoryReview)
+	}
 	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission))
 	if accessRoleMutationErr != nil {
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
@@ -517,6 +523,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey).
 			WithRiskFindingsClickHouse(chatfindings.New(config.DB, config.ChatRiskFindings), config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
+		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
@@ -815,7 +822,7 @@ func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp
 	if config.TemporalEnv == nil {
 		config.Logger.WarnContext(context.Background(), "Platform MCP tool exposure cannot schedule toolset indexing; changes will report index_signal unavailable until the periodic sweep runs")
 	}
-	return service.WithFeatureProvider(config.FeatureFlags).WithIndexing(func(ctx context.Context, projectID, toolsetID uuid.UUID) error {
+	return service.WithIndexing(func(ctx context.Context, projectID, toolsetID uuid.UUID) error {
 		return toolsets.TriggerToolsetIndexForVersion(ctx, config.Logger, config.DB, config.TemporalEnv, projectID, toolsetID)
 	})
 }
@@ -1128,6 +1135,9 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		pluginInventory.WithServerRemoval(config.PluginManagement)
 	}
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
+	if config.DirectoryReview != nil {
+		accessReads.WithDirectoryReview(config.DirectoryReview)
+	}
 	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission))
 	if accessRoleMutationErr != nil {
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
@@ -1159,6 +1169,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey).
 			WithRiskFindingsClickHouse(chatfindings.New(config.DB, config.ChatRiskFindings), config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
+		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).

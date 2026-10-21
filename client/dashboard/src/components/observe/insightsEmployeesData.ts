@@ -5,8 +5,6 @@ import type { Role } from "@gram/client/models/components/role.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { allMemberRoleIds } from "@/lib/member-roles";
 
-type EmployeeStatus = "enrolled" | "not_enrolled";
-
 // One linked AI account for an employee. Identity is (provider, email): the same
 // email on two providers is two distinct accounts, so provider is always shown.
 export type EmployeeAccount = {
@@ -26,7 +24,17 @@ export type Employee = {
   name: string;
   email: string;
   role: string;
-  status: EmployeeStatus;
+  // Two of the three separate facts about an identity. None implies another:
+  // a directory profile can exist for someone who never signed in, and
+  // activity can come from someone with no account here. The third fact,
+  // membership, is identityHasAccount() in pages/identities/identityKind.
+  //
+  // Whether the member has a live profile in the synced directory. False for
+  // anyone with no member row.
+  inDirectory: boolean;
+  // Whether activity has been observed for this identity (hook or MCP
+  // telemetry), at any time.
+  seen: boolean;
   tokenCount: number;
   lastActivity: string;
   lastActivityTimestamp: number | null;
@@ -271,8 +279,6 @@ export function buildEmployees(
   const { groups, unmatched } = groupSummariesByMember(members, summaries);
 
   const employees = groups.map(({ member, matched }) => {
-    const status: EmployeeStatus =
-      matched.length > 0 ? "enrolled" : "not_enrolled";
     const tokenCount = matched.reduce(
       (sum, summary) =>
         sum +
@@ -295,7 +301,8 @@ export function buildEmployees(
       name: member.name,
       email: member.email,
       role,
-      status,
+      inDirectory: member.inDirectory ?? false,
+      seen: matched.length > 0,
       tokenCount,
       photoUrl: member.photoUrl,
       lastActivityTimestamp: primary
@@ -322,7 +329,10 @@ export function buildEmployees(
       name: email || summary.userId,
       email,
       role: "-",
-      status: "not_enrolled" as const,
+      // Usage that matched no member: seen, but with no member row there is
+      // no directory profile to read.
+      inDirectory: false,
+      seen: true,
       tokenCount,
       photoUrl: null,
       lastActivityTimestamp: Number(
@@ -340,9 +350,13 @@ export function buildEmployees(
     };
   });
 
+  // Unattributed usage is listed with the members nobody has seen yet, ahead
+  // of the seen members: both are the rows worth a second look.
+  const needsLook = (employee: Employee) =>
+    !employee.seen || isUnattributedEmployee(employee);
   return [...employees, ...unmatchedUsage].sort((a, b) => {
-    if (a.status !== b.status) {
-      return a.status === "not_enrolled" ? -1 : 1;
+    if (needsLook(a) !== needsLook(b)) {
+      return needsLook(a) ? -1 : 1;
     }
 
     return a.name.localeCompare(b.name);

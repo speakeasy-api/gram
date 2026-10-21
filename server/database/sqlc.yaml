@@ -106,6 +106,7 @@ sql:
       - ../internal/testenv/role_distribution_source_queries.sql
       - ../internal/testenv/role_distribution_pipeline_queries.sql
       - ../internal/testenv/role_deletion_queries.sql
+      - ../internal/testenv/directory_source_queries.sql
     engine: postgresql
     gen:
       go:
@@ -657,6 +658,36 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/mcpservers/upstreamclients/selectionbackfill/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "selectionbackfill"
+        out: "../internal/mcpservers/upstreamclients/selectionbackfill"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/mcpservers/upstreamclients/associationbackfill/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "associationbackfill"
+        out: "../internal/mcpservers/upstreamclients/associationbackfill"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/mcpservers/upstreamclients/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/mcpservers/upstreamclients/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/remotesessions/queries.sql
     engine: postgresql
     gen:
@@ -815,6 +846,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/directory/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/directoryreview/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/directoryreview/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

@@ -90,7 +90,10 @@ func seedMappingDirectoryGroupWithWorkOSID(t *testing.T, ctx context.Context, co
 func deleteMappingDirectoryGroup(t *testing.T, ctx context.Context, conn *pgxpool.Pool, workosGroupID string) {
 	t.Helper()
 
-	_, err := directoryrepo.New(conn).DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
+	group, err := directoryrepo.New(conn).GetDirectoryGroupForMembershipByWorkOSID(ctx, workosGroupID)
+	require.NoError(t, err)
+	_, err = directoryrepo.New(conn).DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
+		OrganizationID:         group.OrganizationID,
 		WorkosDeletedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosLastEventID:      conv.ToPGText("event_delete_" + workosGroupID),
 		WorkosDirectoryGroupID: workosGroupID,
@@ -149,6 +152,68 @@ func TestService_ListDirectoryRoleMappings_ForbiddenWithOrgReadOnly(t *testing.T
 
 	_, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestService_ListDirectoryRoleMappings_ReportsMissingSources(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	_, workosDirectoryUserID := seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "", "sales@test.com", `{"department_name":"Sales"}`)
+	// A second profile keeps the attribute key known, so only the value goes.
+	seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "", "ops@test.com", `{"department_name":"Ops"}`)
+	groupID, workosGroupID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
+
+	seedMappingAdministrator(t, ctx, ti)
+	groupIDString := groupID.String()
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind:       directoryRoleMappingSourceGroup,
+		DirectoryGroupID: &groupIDString,
+		RoleUrns:         []string{builder},
+	})
+	require.NoError(t, err)
+	key, value := "department_name", "Sales"
+	_, err = ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind:     directoryRoleMappingSourceAttribute,
+		AttributeKey:   &key,
+		AttributeValue: &value,
+		RoleUrns:       []string{builder},
+	})
+	require.NoError(t, err)
+
+	statuses := func() map[string]*gen.DirectoryRoleMapping {
+		t.Helper()
+		listed, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
+		require.NoError(t, err)
+		require.Len(t, listed.Mappings, 2)
+		bySourceKind := map[string]*gen.DirectoryRoleMapping{}
+		for _, mapping := range listed.Mappings {
+			bySourceKind[mapping.SourceKind] = mapping
+		}
+		return bySourceKind
+	}
+
+	before := statuses()
+	require.Equal(t, directoryRoleMappingSourceActive, before[directoryRoleMappingSourceGroup].SourceStatus)
+	require.Equal(t, directoryRoleMappingSourceActive, before[directoryRoleMappingSourceAttribute].SourceStatus)
+
+	deleteMappingDirectoryGroup(t, ctx, ti.conn, workosGroupID)
+	_, err = directoryrepo.New(ti.conn).DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
+		OrganizationID:        orgID,
+		WorkosDeletedAt:       conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:     conv.ToPGText("event_delete_" + workosDirectoryUserID),
+		WorkosDirectoryUserID: workosDirectoryUserID,
+	})
+	require.NoError(t, err)
+
+	after := statuses()
+	require.Equal(t, directoryRoleMappingSourceMissing, after[directoryRoleMappingSourceGroup].SourceStatus)
+	require.Equal(t, new("Engineering"), after[directoryRoleMappingSourceGroup].DirectoryGroupName, "a missing group keeps its name so it can be recognised")
+	require.Equal(t, directoryRoleMappingSourceMissing, after[directoryRoleMappingSourceAttribute].SourceStatus)
 }
 
 func TestService_SetDirectoryRoleMappings_GroupCreatesAndReplaces(t *testing.T) {
@@ -791,6 +856,7 @@ func TestService_SyncDirectoryGroups_AddsMembersFromBeforeEventCursor(t *testing
 	require.NoError(t, err)
 	require.Equal(t, orgID, unsynced.OrganizationID)
 	require.Equal(t, "unsynced@test.com", unsynced.Email.String)
+	require.Equal(t, "directory_linked", unsynced.DirectoryID.String, "a listed user is attributed to its directory")
 
 	listed, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
 	require.NoError(t, err)

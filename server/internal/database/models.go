@@ -1706,6 +1706,9 @@ type DirectoryGroup struct {
 	OrganizationID string
 	// @access: confidential
 	WorkosDirectoryGroupID string
+	// WorkOS directory ID. NULL until an authoritative directory inventory or entity payload attributes this source.
+	// @access: confidential
+	DirectoryID pgtype.Text
 	// @access: confidential
 	Name string
 	// @access: opaque-restricted
@@ -1728,6 +1731,69 @@ type DirectoryGroup struct {
 	WorkosDeleted bool
 	// @access: confidential
 	WorkosLastEventID pgtype.Text
+}
+
+type DirectoryReviewAttributeOptOut struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: opaque-confidential
+	AttributeKey string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type DirectoryReviewItem struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	DirectoryGroupID uuid.NullUUID
+	// @access: opaque-confidential
+	AttributeKey pgtype.Text
+	// @access: opaque-restricted
+	AttributeValue pgtype.Text
+	// @access: confidential
+	Occurrence int32
+	// @access: confidential
+	State string
+	// @access: confidential
+	ResolvedAt pgtype.Timestamptz
+	// @access: confidential
+	ResolvedByUserID pgtype.Text
+	// @access: confidential
+	NotifiedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type DirectoryReviewOrgState struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	BaselineAt pgtype.Timestamptz
+	// @access: confidential
+	EmailsDisabledAt pgtype.Timestamptz
+	// @access: confidential
+	LastEmailedAt pgtype.Timestamptz
+	// @access: confidential
+	RemindersSent int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type DirectoryRoleMapping struct {
@@ -1764,6 +1830,9 @@ type DirectoryUser struct {
 	UserID pgtype.Text
 	// @access: confidential-pii
 	WorkosDirectoryUserID string
+	// WorkOS directory ID. NULL until an authoritative directory inventory or entity payload attributes this source.
+	// @access: confidential
+	DirectoryID pgtype.Text
 	// @access: confidential-pii
 	Email pgtype.Text
 	// @access: opaque-restricted
@@ -2901,6 +2970,29 @@ type McpServer struct {
 	Visibility string
 	// @access: confidential
 	NetworkAccessMode pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type McpServerRemoteSessionClient struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	RemoteSessionClientID uuid.UUID
+	// @access: confidential
+	ClientAttachmentScope string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -7163,6 +7255,37 @@ type UnproxiedMcpServer struct {
 	Deleted bool
 }
 
+type UpstreamClientSelection struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	CredentialKind string
+	// @access: confidential
+	CredentialID uuid.UUID
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	RemoteSessionClientID uuid.NullUUID
+	// @access: confidential
+	ClientAttachmentScope pgtype.Text
+	// @access: confidential
+	NoAuth bool
+	// @access: confidential
+	Source string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type User struct {
 	// @access: confidential
 	ID string
@@ -7302,6 +7425,8 @@ type UserSession struct {
 	Resource pgtype.Text
 	// @access: confidential
 	SignInID uuid.NullUUID
+	// @access: confidential
+	CredentialID uuid.NullUUID
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

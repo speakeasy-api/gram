@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	agent "github.com/speakeasy-api/gram/server/gen/agent"
 	types "github.com/speakeasy-api/gram/server/gen/types"
@@ -41,6 +42,14 @@ func EncodeGetPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		p, ok := v.(*agent.GetPluginsPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("agent", "getPlugins", "*agent.GetPluginsPayload", v)
+		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			if !strings.Contains(head, " ") {
+				req.Header.Set("Authorization", "Bearer "+head)
+			} else {
+				req.Header.Set("Authorization", head)
+			}
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -2662,6 +2671,26 @@ func unmarshalAgentPollingPrincipalResponseBodyToAgentAgentPollingPrincipal(v *A
 	res := &agent.AgentPollingPrincipal{
 		Urn:         *v.Urn,
 		DisplayName: *v.DisplayName,
+	}
+
+	return res
+}
+
+// unmarshalAgentMCPServerResponseBodyToAgentAgentMCPServer builds a value of
+// type *agent.AgentMCPServer from a value of type *AgentMCPServerResponseBody.
+func unmarshalAgentMCPServerResponseBodyToAgentAgentMCPServer(v *AgentMCPServerResponseBody) *agent.AgentMCPServer {
+	res := &agent.AgentMCPServer{
+		Name:          *v.Name,
+		URL:           *v.URL,
+		TokenEndpoint: v.TokenEndpoint,
+		Audience:      v.Audience,
+		Resource:      v.Resource,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
 	}
 
 	return res

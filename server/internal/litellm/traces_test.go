@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 	"go.opentelemetry.io/otel/metric"
@@ -984,22 +983,17 @@ func TestTracePersistenceKeepsOnlyAllowlistedAttributes(t *testing.T) {
 	require.NoError(t, instance.service.traces.Shutdown(t.Context()))
 
 	query := telemetryrepo.New(instance.chConn)
-	var logs []telemetryrepo.TelemetryLog
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		testenv.FlushClickHouseAsyncInserts(t, instance.chConn)
-		var err error
-		logs, err = query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
-			GramProjectID: authCtx.ProjectID.String(),
-			TimeStart:     time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC).UnixNano(),
-			TimeEnd:       time.Date(2026, time.August, 2, 0, 0, 0, 0, time.UTC).UnixNano(),
-			GramURNs:      []string{litellmOTLPResourceURN},
-			SortOrder:     "asc",
-			Cursor:        "",
-			Limit:         10,
-		})
-		assert.NoError(collect, err)
-		assert.Len(collect, logs, 4)
-	}, 10*time.Second, 50*time.Millisecond)
+	logs, err := query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC).UnixNano(),
+		TimeEnd:       time.Date(2026, time.August, 2, 0, 0, 0, 0, time.UTC).UnixNano(),
+		GramURNs:      []string{litellmOTLPResourceURN},
+		SortOrder:     "asc",
+		Cursor:        "",
+		Limit:         10,
+	})
+	require.NoError(t, err)
+	require.Len(t, logs, 4)
 
 	invalidFound := false
 	for _, log := range logs {

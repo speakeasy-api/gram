@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -85,9 +86,8 @@ type EndpointRef struct {
 	BaseURL string `json:"base_url,omitempty"`
 
 	// McpServerID, when valid, identifies the mcp_servers row that owns
-	// this challenge. Populated by /x/mcp callers whose endpoint
-	// addresses resolve through mcp_endpoints → mcp_servers; zero for
-	// /mcp callers.
+	// this challenge. Populated when the endpoint resolves through
+	// mcp_endpoints → mcp_servers; zero for legacy toolset-keyed callers.
 	McpServerID uuid.NullUUID `json:"mcp_server_id"`
 
 	// MetaMcpServerID, when valid, identifies the meta_mcp_servers row that
@@ -108,15 +108,13 @@ type EndpointRef struct {
 	// denotes a pre-field legacy cached state.
 	ToolsetID uuid.NullUUID `json:"toolset_id,omitzero"`
 
-	// Path of a toolset-backed endpoint. Set for /mcp and toolset-backed
-	// /x/mcp challenges.
+	// Path of a toolset-backed endpoint.
 	McpSlug string `json:"mcp_slug"`
 
-	// RouteBase is the URL path prefix the challenge was minted under
-	// ("mcp" or "x/mcp"). Empty value is treated as "mcp" by callers for
-	// backward compatibility with states minted before this field was
-	// added.
-	RouteBase string `json:"route_base,omitempty"`
+	// RouteBase is the URL path prefix the challenge was minted under. Read
+	// it through Resolve: empty means mcproute.MCP for states minted before
+	// the field existed, and an unserved value fails the flow closed.
+	RouteBase mcproute.Base `json:"route_base,omitempty"`
 
 	// SharedAuthorizationServer marks a challenge or code minted by the
 	// issuer's shared authorization server. BaseURL and Authority then
@@ -142,6 +140,10 @@ type EndpointRef struct {
 // round-trip through the IDP and land on /connect, short enough that
 // abandoned flows don't pile up.
 type AuthnChallengeState struct {
+	// ConsentBrowserHash binds automatic approval to the browser that started
+	// this shared authorization request, independently of IdP callback cookies.
+	ConsentBrowserHash string `json:"consent_browser_hash,omitempty"`
+
 	Browser    *ChallengeBrowserBinding `json:"browser,omitempty"`
 	Federation *FederatedChallenge      `json:"federation,omitempty"`
 	// Preserve only non-secret login binding and retry budget through consent.
@@ -284,7 +286,11 @@ type UserSessionGrant struct {
 	SignInID *uuid.UUID `json:"sign_in_id,omitempty"`
 	// GatewayPolicy is cached only in the versioned gateway grant namespace.
 	GatewayPolicy *toolfilter.SessionPolicy `json:"gateway_policy,omitempty"`
-	CreatedAt     time.Time                 `json:"created_at"`
+	// UpstreamClientPicks is the upstream OAuth client the subject chose on
+	// the consent page for each MCP server offering several, keyed by server.
+	// The credential this grant mints records it as its choice.
+	UpstreamClientPicks map[uuid.UUID]uuid.UUID `json:"upstream_client_picks,omitempty"`
+	CreatedAt           time.Time               `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
@@ -970,7 +976,7 @@ type issuerGateAuthentication struct {
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
-// the toolset-keyed (/mcp) and mcp_server-keyed (/x/mcp) MCP runtime
+// the toolset-keyed and mcp_server-keyed MCP runtime
 // paths. It validates the bearer token as a user-session JWT and falls back
 // to an assistant-runtime JWT scoped to the endpoint's project or an admitted
 // agent principal API key scoped to the endpoint's tenant. Upstream
@@ -982,12 +988,8 @@ type issuerGateAuthentication struct {
 // On failure it writes a 401 + WWW-Authenticate and returns the CodeUnauthorized
 // error from WriteAuthenticateChallenge. The resource_metadata URL is built
 // from baseURL + endpoint.RouteBase +
-// endpoint.Slug so a /x/mcp request gets pointed at /x/mcp's
-// protected-resource metadata, not /mcp's.
-//
-// /x/mcp uses this to gate requests on mcp_servers.user_session_issuer_id
-// before dispatching to its remote backend or delegating to
-// ServeToolsetResolved with the gate skipped.
+// endpoint.Slug so the request is pointed at its own surface's
+// protected-resource metadata.
 func (s *Service) authenticateIssuerGate(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -1008,7 +1010,7 @@ func (s *Service) authenticateIssuerGate(
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		host = requestContext.Host
 	}
-	mcpURL := host + "/" + endpoint.RouteBase + "/" + endpoint.Slug
+	mcpURL := host + "/" + endpoint.RouteBase.String() + "/" + endpoint.Slug
 	surface := mcpmetrics.SurfaceHosting
 	if endpoint.MetaMcpServerID.Valid {
 		surface = mcpmetrics.SurfaceMeta
@@ -1263,9 +1265,8 @@ func oauthAuthorityError(err error) *oops.ShareableError {
 // config today, but any future consumer must either route through here or
 // tolerate an unstamped endpoint, which reads as an unset mode.
 //
-// Exported so /x/mcp's [Service.buildResolvedMcpEndpoint] can include
-// the live-FK check in the same place as the
-// NewResolvedMcpEndpointFromMcpServer construction.
+// Callers run it alongside NewResolvedMcpEndpointFromMcpServer
+// construction.
 func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint) error {
 	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 		ID:             endpoint.UserSessionIssuerID,

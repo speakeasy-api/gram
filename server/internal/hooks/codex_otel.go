@@ -77,6 +77,7 @@ func splitCodexLogsPayload(payload *gen.LogsPayload) (codex, claude *gen.LogsPay
 	if len(codexLogs) > 0 {
 		codex = &gen.LogsPayload{
 			ResourceLogs:     codexLogs,
+			DeviceAgentToken: payload.DeviceAgentToken,
 			ApikeyToken:      payload.ApikeyToken,
 			ProjectSlugInput: payload.ProjectSlugInput,
 		}
@@ -84,6 +85,7 @@ func splitCodexLogsPayload(payload *gen.LogsPayload) (codex, claude *gen.LogsPay
 	if len(claudeLogs) > 0 {
 		claude = &gen.LogsPayload{
 			ResourceLogs:     claudeLogs,
+			DeviceAgentToken: payload.DeviceAgentToken,
 			ApikeyToken:      payload.ApikeyToken,
 			ProjectSlugInput: payload.ProjectSlugInput,
 		}
@@ -110,6 +112,7 @@ func splitCodexMetricsPayload(payload *gen.MetricsPayload) (codex, claude *gen.M
 	if len(codexMetrics) > 0 {
 		codex = &gen.MetricsPayload{
 			ResourceMetrics:  codexMetrics,
+			DeviceAgentToken: payload.DeviceAgentToken,
 			ApikeyToken:      payload.ApikeyToken,
 			ProjectSlugInput: payload.ProjectSlugInput,
 		}
@@ -117,6 +120,7 @@ func splitCodexMetricsPayload(payload *gen.MetricsPayload) (codex, claude *gen.M
 	if len(claudeMetrics) > 0 {
 		claude = &gen.MetricsPayload{
 			ResourceMetrics:  claudeMetrics,
+			DeviceAgentToken: payload.DeviceAgentToken,
 			ApikeyToken:      payload.ApikeyToken,
 			ProjectSlugInput: payload.ProjectSlugInput,
 		}

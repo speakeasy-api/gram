@@ -202,6 +202,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 			})
 		}, 1, "demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %d"},
 		{byProj(s.q.PostflightIDLinearProtectedResource), 1, "demo seed postflight: expected Linear's protected resource pinned to read, found %d matching rows"},
+		// Linear's two clients, and each EMA service's own client.
+		{byProj(s.q.PostflightIDServerClientAssociations), 4, "demo seed postflight: expected 4 MCP server upstream client associations, found %d"},
 		{byProj(s.q.PostflightIDServiceAccountHeaders), 1, "demo seed postflight: expected 1 Remote MCP Service Account header, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.
@@ -290,7 +292,15 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// to write: an undecided overlay row renders as unreviewed and is
 		// indistinguishable on the page from a tool nobody has touched.
 		{byOrg(s.q.PostflightIDUndecidedAITools), 0, "demo seed postflight: %d AI tool rows carry a status other than approved or blocked"},
-		{byOrg(s.q.PostflightIDDirectoryRoleMappings), 4, "demo seed postflight: expected 4 directory role mappings, found %d"},
+		{byOrg(s.q.PostflightIDDirectoryRoleMappings), 5, "demo seed postflight: expected 5 directory role mappings, found %d"},
+		// One mapping's group was deleted from the directory, so the mappings
+		// page has a missing source to show.
+		{byOrg(s.q.PostflightIDDeletedGroupMappings), 1, "demo seed postflight: expected 1 mapping on a deleted directory group, found %d"},
+		// One directory change of each kind waits on the SSO tab's review list.
+		{byOrg(s.q.PostflightIDPendingDirectoryReviewItems), 3, "demo seed postflight: expected 3 pending directory review items, found %d"},
+		// The seeded items return on every reseed, so review emails stay off
+		// rather than emailing the organization's admins each day.
+		{byOrg(s.q.PostflightIDDirectoryReviewEmailsEnabled), 0, "demo seed postflight: directory review emails must be off, found %d organizations with them on"},
 		// One group grants a set of roles, so the mapping page shows two role
 		// chips on a single source.
 		{byOrg(s.q.PostflightIDInfraGroupMappedRoles), 2, "demo seed postflight: expected 2 roles for Infra, found %d"},

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #MISE dir="{{ config_root }}"
-#MISE hide="true"
+#MISE hide=true
 #MISE description="Boot this worktree's stack, publishing a marker while it runs"
 
 set -e
