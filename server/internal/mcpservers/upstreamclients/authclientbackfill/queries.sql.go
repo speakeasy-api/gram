@@ -782,27 +782,34 @@ func (q *Queries) LinkSourceServer(ctx context.Context, arg LinkSourceServerPara
 	return result.RowsAffected(), nil
 }
 
-const listAPIKeyPrincipalsWithGrants = `-- name: ListAPIKeyPrincipalsWithGrants :many
-SELECT DISTINCT principal_urn
+const listAPIKeyGrantRows = `-- name: ListAPIKeyGrantRows :many
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
   AND principal_type = 'api_key'
+ORDER BY principal_urn, scope, id
 `
 
-// Keys that already hold a policy, which is never changed here.
-func (q *Queries) ListAPIKeyPrincipalsWithGrants(ctx context.Context, organizationID string) ([]urn.Principal, error) {
-	rows, err := q.db.Query(ctx, listAPIKeyPrincipalsWithGrants, organizationID)
+type ListAPIKeyGrantRowsRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Selectors    []byte
+}
+
+// Every key policy row, to tell provisioned policies from explicit ones.
+func (q *Queries) ListAPIKeyGrantRows(ctx context.Context, organizationID string) ([]ListAPIKeyGrantRowsRow, error) {
+	rows, err := q.db.Query(ctx, listAPIKeyGrantRows, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []urn.Principal
+	var items []ListAPIKeyGrantRowsRow
 	for rows.Next() {
-		var principal_urn urn.Principal
-		if err := rows.Scan(&principal_urn); err != nil {
+		var i ListAPIKeyGrantRowsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
 			return nil, err
 		}
-		items = append(items, principal_urn)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1148,6 +1155,79 @@ func (q *Queries) ListAuthClientsFixture(ctx context.Context, organizationID str
 			&i.ProjectID,
 			&i.Name,
 			&i.RemoteSessionClientID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthPermissionProvisions = `-- name: ListAuthPermissionProvisions :many
+SELECT principal_urn, scope, selectors
+FROM auth_permission_provisions
+WHERE organization_id = $1
+`
+
+type ListAuthPermissionProvisionsRow struct {
+	PrincipalUrn string
+	Scope        string
+	Selectors    []byte
+}
+
+// Every grant the backfill provisioned in the organization, live or since
+// removed.
+func (q *Queries) ListAuthPermissionProvisions(ctx context.Context, organizationID string) ([]ListAuthPermissionProvisionsRow, error) {
+	rows, err := q.db.Query(ctx, listAuthPermissionProvisions, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthPermissionProvisionsRow
+	for rows.Next() {
+		var i ListAuthPermissionProvisionsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthPermissionProvisionsFixture = `-- name: ListAuthPermissionProvisionsFixture :many
+SELECT principal_urn, scope, selectors, kind
+FROM auth_permission_provisions
+WHERE organization_id = $1
+ORDER BY principal_urn, scope
+`
+
+type ListAuthPermissionProvisionsFixtureRow struct {
+	PrincipalUrn string
+	Scope        string
+	Selectors    []byte
+	Kind         string
+}
+
+func (q *Queries) ListAuthPermissionProvisionsFixture(ctx context.Context, organizationID string) ([]ListAuthPermissionProvisionsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listAuthPermissionProvisionsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthPermissionProvisionsFixtureRow
+	for rows.Next() {
+		var i ListAuthPermissionProvisionsFixtureRow
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
@@ -1818,6 +1898,33 @@ func (q *Queries) ListOAuthClientSources(ctx context.Context, organizationID str
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationIDsForGrants = `-- name: ListOrganizationIDsForGrants :many
+SELECT id
+FROM organization_metadata
+ORDER BY id
+`
+
+// Every organization, for the offline default auth permission backfill.
+func (q *Queries) ListOrganizationIDsForGrants(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listOrganizationIDsForGrants)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2615,6 +2722,32 @@ func (q *Queries) PlanClientHeaders(ctx context.Context, arg PlanClientHeadersPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordAuthPermissionProvision = `-- name: RecordAuthPermissionProvision :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+type RecordAuthPermissionProvisionParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records one grant the backfill wrote.
+func (q *Queries) RecordAuthPermissionProvision(ctx context.Context, arg RecordAuthPermissionProvisionParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionProvision,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
 }
 
 const restoreRemoteHeaderFixture = `-- name: RestoreRemoteHeaderFixture :exec
