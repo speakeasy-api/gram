@@ -1,3 +1,4 @@
+import { NotApplicableReason$inboundSchema } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -216,4 +217,11 @@ describe("buildConfirmRequests", () => {
       `s${XAA_CONFIRM_BATCH}`,
     );
   });
+});
+
+it("parses future not-applicable reasons before rendering the list", () => {
+  expect(NotApplicableReason$inboundSchema.parse("future_reason")).toBe(
+    "future_reason",
+  );
+  expect(NotApplicableReason$inboundSchema.safeParse(42).success).toBe(false);
 });

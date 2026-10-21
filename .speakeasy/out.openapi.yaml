@@ -114883,10 +114883,10 @@ components:
       enum: [security, tools, server]
     KillswitchScopeAllServersType: {type: string, enum: [all_servers]}
     KillswitchScopeSelectedServersType: {type: string, enum: [selected_servers]}
-    KillswitchScheduleStartNow: {type: string, enum: [now]}
-    KillswitchScheduleStartScheduled: {type: string, enum: [scheduled]}
-    KillswitchScheduleEndUntilLifted: {type: string, enum: [until_lifted]}
-    KillswitchScheduleEndBounded: {type: string, enum: [bounded]}
+    KillswitchScheduleStartNow: {type: string, enum: [now], x-speakeasy-unknown-values: disallow}
+    KillswitchScheduleStartScheduled: {type: string, enum: [scheduled], x-speakeasy-unknown-values: disallow}
+    KillswitchScheduleEndUntilLifted: {type: string, enum: [until_lifted], x-speakeasy-unknown-values: disallow}
+    KillswitchScheduleEndBounded: {type: string, enum: [bounded], x-speakeasy-unknown-values: disallow}
     KillswitchScope:
       oneOf:
         - title: KillswitchAllServersScope

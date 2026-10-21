@@ -5348,6 +5348,10 @@ type RemoteSessionEmaCredential struct {
 	SignInID uuid.NullUUID
 	// @access: confidential
 	UserSessionID uuid.NullUUID
+	// @access: confidential
+	AuthClientID uuid.NullUUID
+	// @access: confidential
+	AuthClientAttachmentScope pgtype.Text
 	// @access: opaque-restricted
 	RequestedScopes []string
 	// @access: opaque-restricted
@@ -7480,6 +7484,10 @@ type UpstreamClientSelection struct {
 	NoAuth bool
 	// @access: confidential
 	Source string
+	// @access: confidential
+	AuthClientID uuid.NullUUID
+	// @access: confidential
+	AuthClientAttachmentScope pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

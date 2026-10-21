@@ -45,6 +45,7 @@ function kindLabel(identity: IdentityModel): string {
       // An address is someone's; a bare agent id may name no one.
       return identity.emails.length > 0 ? "Person" : "Agent";
   }
+  return "Unknown identity";
 }
 
 /**

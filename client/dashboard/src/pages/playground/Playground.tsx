@@ -1,3 +1,8 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import {
+  UpdatePromptTemplateFormEngine,
+  UpdatePromptTemplateFormKind,
+} from "@gram/client/models/components/updateprompttemplateform.js";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
@@ -529,7 +534,11 @@ function ToolsetPanel({
         updatePromptTemplateForm: {
           ...tool,
           ...updates,
-          kind: "prompt",
+          engine: requireKnownEnumValue(
+            UpdatePromptTemplateFormEngine,
+            tool.engine,
+          ),
+          kind: requireKnownEnumValue(UpdatePromptTemplateFormKind, tool.kind),
         },
       });
       await invalidateTemplate(queryClient, [{ name: tool.name }]);
@@ -638,7 +647,9 @@ function ToolsetPanel({
             await handleToolUpdate(editingTool, updates);
             toast.success("Tool updated");
           } catch (err) {
-            toast.error("Failed to update tool");
+            toast.error(
+              err instanceof Error ? err.message : "Failed to update tool",
+            );
             throw err;
           }
         }}

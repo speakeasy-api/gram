@@ -9863,82 +9863,6 @@ ON mcp_server_remote_session_clients (mcp_server_id);
 CREATE INDEX IF NOT EXISTS mcp_server_remote_session_clients_project_id_idx
 ON mcp_server_remote_session_clients (project_id);
 
--- The upstream OAuth client one inbound credential uses for one MCP server,
--- or an explicit choice that the server needs none. It is chosen when the
--- credential is issued and kept for the credential's lifetime: refreshing the
--- credential, or the upstream token, never changes it, and nothing pins a
--- token or grant generation. A missing row is not a choice; serving treats it
--- as a gap rather than inferring one.
---
--- credential_kind names the record credential_id identifies; allowed values
--- are validated in application code. The row grants nothing by itself: the
--- credential is resolved and admitted on its own path before this is read.
-CREATE TABLE IF NOT EXISTS upstream_client_selections (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
-  organization_id TEXT NOT NULL,
-  credential_kind TEXT NOT NULL CHECK (credential_kind <> ''),
-  credential_id uuid NOT NULL,
-  mcp_server_id uuid NOT NULL,
-  -- NULL exactly when no_auth: the server needs no upstream authentication.
-  remote_session_client_id uuid,
-  -- The chosen client's attachment_scope, copied by the writer and pinned to
-  -- the client by a composite foreign key.
-  client_attachment_scope TEXT,
-  no_auth boolean NOT NULL DEFAULT FALSE,
-  -- How the choice was made, for coverage reporting; validated in application
-  -- code.
-  source TEXT NOT NULL CHECK (source <> ''),
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
-
-  CONSTRAINT upstream_client_selections_pkey PRIMARY KEY (id),
-  CONSTRAINT upstream_client_selections_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT upstream_client_selections_mcp_server_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE,
-  CONSTRAINT upstream_client_selections_client_scope_fkey FOREIGN KEY (remote_session_client_id, client_attachment_scope) REFERENCES remote_session_clients (id, attachment_scope) ON DELETE CASCADE,
-  CONSTRAINT upstream_client_selections_no_auth_check CHECK (no_auth = (remote_session_client_id IS NULL)),
-  CONSTRAINT upstream_client_selections_client_scope_check CHECK (
-    (remote_session_client_id IS NULL AND client_attachment_scope IS NULL)
-    OR (
-      remote_session_client_id IS NOT NULL
-      AND client_attachment_scope IS NOT NULL
-      AND client_attachment_scope IN ('project:' || project_id::text, 'organization:' || organization_id, 'global')
-    )
-  )
-);
-
-COMMENT ON COLUMN upstream_client_selections.id IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.project_id IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.organization_id IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.credential_kind IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.credential_id IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.mcp_server_id IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.remote_session_client_id IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.client_attachment_scope IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.no_auth IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.source IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.created_at IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.updated_at IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.deleted_at IS '@access: confidential';
-COMMENT ON COLUMN upstream_client_selections.deleted IS '@access: confidential';
-
-CREATE UNIQUE INDEX IF NOT EXISTS upstream_client_selections_credential_server_key
-ON upstream_client_selections (credential_kind, credential_id, mcp_server_id)
-WHERE deleted IS FALSE;
-
--- Unfiltered so the cascading foreign keys find removed rows too.
-CREATE INDEX IF NOT EXISTS upstream_client_selections_client_idx
-ON upstream_client_selections (remote_session_client_id);
-
-CREATE INDEX IF NOT EXISTS upstream_client_selections_mcp_server_idx
-ON upstream_client_selections (mcp_server_id);
-
-CREATE INDEX IF NOT EXISTS upstream_client_selections_project_id_idx
-ON upstream_client_selections (project_id);
-
 -- Typed auth clients: the ways an MCP server can authenticate to its upstream
 -- (RFC: Multiple Upstream Credentials for MCP Servers). One row per client,
 -- shared across servers through mcp_server_auth_clients. OAuth-backed types
@@ -10135,6 +10059,108 @@ ON mcp_server_auth_clients (auth_client_id);
 
 CREATE INDEX IF NOT EXISTS mcp_server_auth_clients_project_id_idx
 ON mcp_server_auth_clients (project_id);
+
+-- The upstream OAuth client one inbound credential uses for one MCP server,
+-- or an explicit choice that the server needs none. It is chosen when the
+-- credential is issued and kept for the credential's lifetime: refreshing the
+-- credential, or the upstream token, never changes it, and nothing pins a
+-- token or grant generation. A missing row is not a choice; serving treats it
+-- as a gap rather than inferring one.
+--
+-- credential_kind names the record credential_id identifies; allowed values
+-- are validated in application code. The row grants nothing by itself: the
+-- credential is resolved and admitted on its own path before this is read.
+CREATE TABLE IF NOT EXISTS upstream_client_selections (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  credential_kind TEXT NOT NULL CHECK (credential_kind <> ''),
+  credential_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  -- NULL when no_auth or when the choice names a non-OAuth auth client.
+  remote_session_client_id uuid,
+  -- The chosen client's attachment_scope, copied by the writer and pinned to
+  -- the client by a composite foreign key.
+  client_attachment_scope TEXT,
+  no_auth boolean NOT NULL DEFAULT FALSE,
+  -- How the choice was made, for coverage reporting; validated in application
+  -- code.
+  source TEXT NOT NULL CHECK (source <> ''),
+  -- Typed auth client the choice names. NULL until the selection is mapped
+  -- onto auth clients; the remote_session_client_id / no_auth pair stays
+  -- authoritative until the auth client resolver is enabled. A choice naming
+  -- any client, OAuth-backed or not, is never no_auth. Deleting the client
+  -- deletes the choice, leaving a gap rather than an implied no-auth.
+  auth_client_id uuid,
+  -- The auth client's attachment_scope, copied by the writer and pinned to the
+  -- auth client by a composite foreign key.
+  auth_client_attachment_scope TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT upstream_client_selections_pkey PRIMARY KEY (id),
+  CONSTRAINT upstream_client_selections_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT upstream_client_selections_mcp_server_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT upstream_client_selections_client_scope_fkey FOREIGN KEY (remote_session_client_id, client_attachment_scope) REFERENCES remote_session_clients (id, attachment_scope) ON DELETE CASCADE,
+  -- CASCADE covers hard deletes only. A soft-deleted (retired) auth client keeps
+  -- its selections; the resolver must treat it as unusable, which reads as a gap.
+  CONSTRAINT upstream_client_selections_auth_client_scope_fkey FOREIGN KEY (auth_client_id, auth_client_attachment_scope) REFERENCES mcp_auth_clients (id, attachment_scope) ON DELETE CASCADE,
+  CONSTRAINT upstream_client_selections_no_auth_check CHECK (no_auth = (remote_session_client_id IS NULL AND auth_client_id IS NULL)),
+  CONSTRAINT upstream_client_selections_client_scope_check CHECK (
+    (remote_session_client_id IS NULL AND client_attachment_scope IS NULL)
+    OR (
+      remote_session_client_id IS NOT NULL
+      AND client_attachment_scope IS NOT NULL
+      AND client_attachment_scope IN ('project:' || project_id::text, 'organization:' || organization_id, 'global')
+    )
+  ),
+  CONSTRAINT upstream_client_selections_auth_client_scope_check CHECK (
+    (auth_client_id IS NULL AND auth_client_attachment_scope IS NULL)
+    OR (
+      auth_client_id IS NOT NULL
+      AND auth_client_attachment_scope IS NOT NULL
+      AND auth_client_attachment_scope IN ('project:' || project_id::text, 'organization:' || organization_id)
+    )
+  )
+);
+
+COMMENT ON COLUMN upstream_client_selections.id IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.project_id IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.organization_id IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.credential_kind IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.credential_id IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.client_attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.no_auth IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.source IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.auth_client_id IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.auth_client_attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.created_at IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.updated_at IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN upstream_client_selections.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS upstream_client_selections_credential_server_key
+ON upstream_client_selections (credential_kind, credential_id, mcp_server_id)
+WHERE deleted IS FALSE;
+
+-- Unfiltered so the cascading foreign keys find removed rows too.
+CREATE INDEX IF NOT EXISTS upstream_client_selections_client_idx
+ON upstream_client_selections (remote_session_client_id);
+
+CREATE INDEX IF NOT EXISTS upstream_client_selections_mcp_server_idx
+ON upstream_client_selections (mcp_server_id);
+
+-- Unfiltered so the auth client foreign key finds removed rows too.
+CREATE INDEX IF NOT EXISTS upstream_client_selections_auth_client_idx
+ON upstream_client_selections (auth_client_id);
+
+CREATE INDEX IF NOT EXISTS upstream_client_selections_project_id_idx
+ON upstream_client_selections (project_id);
 
 -- Meta MCP servers expose an explicitly managed set of MCP servers through a
 -- dedicated runtime. This identity remains separate from mcp_servers so
@@ -14671,6 +14697,13 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   -- Exact authenticated MCP grant used to obtain the vendor access token.
   -- A different grant cannot reuse this token, even for the same human.
   user_session_id uuid,
+  -- ema auth client that acquired this token. Set by the auth client
+  -- resolver, which leaves user_session_issuer_id NULL so one token serves
+  -- every server associated with the client; NULL on sign-in keyed rows.
+  auth_client_id uuid,
+  -- The auth client's attachment_scope, copied by the writer and pinned to the
+  -- auth client by a composite foreign key.
+  auth_client_attachment_scope TEXT,
   requested_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   access_token_encrypted TEXT,
@@ -14697,7 +14730,23 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   CONSTRAINT remote_session_ema_credentials_internal_session_issuer_key_id_fkey FOREIGN KEY (organization_id, internal_session_issuer_key_id) REFERENCES json_web_keys (organization_id, id) ON DELETE SET NULL (internal_session_issuer_key_id),
   CONSTRAINT remote_session_ema_credentials_sign_in_id_fkey FOREIGN KEY (organization_id, sign_in_id) REFERENCES sign_ins (organization_id, id) ON DELETE SET NULL (sign_in_id),
   CONSTRAINT remote_session_ema_credentials_user_session_id_fkey FOREIGN KEY (organization_id, user_session_id) REFERENCES user_sessions (organization_id, id) ON DELETE SET NULL (user_session_id),
-  CONSTRAINT remote_session_ema_credentials_trusted_issuer_session_id_fkey FOREIGN KEY (trusted_issuer_session_id) REFERENCES trusted_issuer_sessions (id) ON DELETE SET NULL
+  CONSTRAINT remote_session_ema_credentials_trusted_issuer_session_id_fkey FOREIGN KEY (trusted_issuer_session_id) REFERENCES trusted_issuer_sessions (id) ON DELETE SET NULL,
+  -- Atlas drops the SET NULL column list here too; preserve it in migrations.
+  CONSTRAINT remote_session_ema_credentials_auth_client_scope_fkey FOREIGN KEY (auth_client_id, auth_client_attachment_scope) REFERENCES mcp_auth_clients (id, attachment_scope) ON DELETE SET NULL (auth_client_id, auth_client_attachment_scope),
+  -- A row with no tenant is an orphan left by project deletion (the project FK
+  -- nulls organization_id and project_id); readers must filter
+  -- organization_id IS NOT NULL.
+  CONSTRAINT remote_session_ema_credentials_auth_client_scope_check CHECK (
+    (auth_client_id IS NULL AND auth_client_attachment_scope IS NULL)
+    OR (
+      auth_client_id IS NOT NULL
+      AND auth_client_attachment_scope IS NOT NULL
+      AND (
+        organization_id IS NULL
+        OR auth_client_attachment_scope IN ('project:' || project_id::text, 'organization:' || organization_id)
+      )
+    )
+  )
 );
 
 COMMENT ON COLUMN remote_session_ema_credentials.id IS '@access: confidential';
@@ -14718,6 +14767,8 @@ COMMENT ON COLUMN remote_session_ema_credentials.internal_session_issuer_updated
 COMMENT ON COLUMN remote_session_ema_credentials.internal_session_issuer_key_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.sign_in_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.user_session_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_credentials.auth_client_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_credentials.auth_client_attachment_scope IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.requested_scopes IS '@access: opaque-restricted';
 COMMENT ON COLUMN remote_session_ema_credentials.granted_scopes IS '@access: opaque-restricted';
 COMMENT ON COLUMN remote_session_ema_credentials.access_token_encrypted IS '@access: secret-restricted';
@@ -14744,6 +14795,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_credentials_speakeasy_subje
 ON remote_session_ema_credentials (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn, user_session_id)
 WHERE deleted IS FALSE AND ema_provider = 'speakeasy';
 
+-- Auth client keyed credentials: one per (auth client, resource, human), not per
+-- sign-in. Sign-in keyed rows leave auth_client_id NULL and stay under the keys
+-- above.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_credentials_ac_external_subject_key
+ON remote_session_ema_credentials (organization_id, auth_client_id, resource, subject_urn)
+WHERE deleted IS FALSE AND auth_client_id IS NOT NULL AND ema_provider = 'external';
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_credentials_ac_speakeasy_subject_key
+ON remote_session_ema_credentials (organization_id, auth_client_id, resource, subject_urn, user_session_id)
+WHERE deleted IS FALSE AND auth_client_id IS NOT NULL AND user_session_id IS NOT NULL AND ema_provider = 'speakeasy';
+
 -- Non-partial indexes support FK actions on live and soft-deleted rows alike.
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_project_id_idx
 ON remote_session_ema_credentials (project_id);
@@ -14755,6 +14817,8 @@ CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_binding_id_idx
 ON remote_session_ema_credentials (remote_session_ema_binding_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_trusted_issuer_session_id_idx
 ON remote_session_ema_credentials (trusted_issuer_session_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_auth_client_id_idx
+ON remote_session_ema_credentials (auth_client_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_org_provider_idx ON remote_session_ema_credentials (organization_id, ema_provider);
 
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_internal_session_issuer_id_idx ON remote_session_ema_credentials (organization_id, internal_session_issuer_id);

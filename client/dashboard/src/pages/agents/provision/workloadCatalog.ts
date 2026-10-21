@@ -1,3 +1,6 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import { WorkloadPlatformConstantVisibility } from "@gram/client/models/components/workloadplatformconstant.js";
+import { WorkloadPlatformVariableTier } from "@gram/client/models/components/workloadplatformvariable.js";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import type { WorkloadPlatform } from "@gram/client/models/components/workloadplatform.js";
@@ -14,12 +17,9 @@ import { useMemo } from "react";
  * instructions beside this file.
  */
 
-/** Whether the operator sees a value the entry supplies. */
-type Visibility = "hidden" | "read-only";
-
 interface CatalogConstant {
   value: string;
-  visibility: Visibility;
+  visibility: WorkloadPlatformConstantVisibility;
 }
 
 /**
@@ -28,7 +28,7 @@ interface CatalogConstant {
  */
 export interface CatalogVariable {
   key: string;
-  tier: "platform" | "rule";
+  tier: WorkloadPlatformVariableTier;
   label: string;
   help?: string;
   placeholder?: string;
@@ -61,6 +61,23 @@ export interface CatalogEntry {
   subject: SubjectTemplate;
   /** A disabled entry stays listed so operators can see it is known. */
   enabled: boolean;
+}
+
+/** Unknown policy metadata stays visible, but cannot drive a guided setup. */
+export function isSupportedCatalogEntry(entry: CatalogEntry): boolean {
+  return (
+    isKnownEnumValue(
+      WorkloadPlatformConstantVisibility,
+      entry.issuer.visibility,
+    ) &&
+    isKnownEnumValue(
+      WorkloadPlatformConstantVisibility,
+      entry.jwksUri.visibility,
+    ) &&
+    entry.variables.every((variable) =>
+      isKnownEnumValue(WorkloadPlatformVariableTier, variable.tier),
+    )
+  );
 }
 
 /**

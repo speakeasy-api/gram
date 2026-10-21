@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import {
   Select,
   SelectContent,
@@ -91,7 +92,10 @@ export function OutcomeBadge({
     allow: { variant: "success", label: "Allowed" },
     error: { variant: "neutral", label: "Error" },
   };
-  const c = config[outcome];
+  const c = enumPresentation(config, outcome, {
+    variant: "neutral",
+    label: "Unknown",
+  });
 
   return (
     <MoonshineBadge variant={c.variant}>

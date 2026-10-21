@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const EMAProviderKind = {
 /**
  * external or speakeasy.
  */
-export type EMAProviderKind = ClosedEnum<typeof EMAProviderKind>;
+export type EMAProviderKind = OpenEnum<typeof EMAProviderKind>;
 
 /**
  * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's sign-in doesn't go through this provider, so it can't vouch for people there: an external issuer other than the sign-in's trusted issuer, or Speakeasy on a sign-in federated through an external issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
@@ -40,7 +41,7 @@ export const UnavailableReason = {
 /**
  * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's sign-in doesn't go through this provider, so it can't vouch for people there: an external issuer other than the sign-in's trusted issuer, or Speakeasy on a sign-in federated through an external issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
  */
-export type UnavailableReason = ClosedEnum<typeof UnavailableReason>;
+export type UnavailableReason = OpenEnum<typeof UnavailableReason>;
 
 /**
  * One EMA provider a vendor accepts.
@@ -69,14 +70,16 @@ export type EMAProvider = {
 };
 
 /** @internal */
-export const EMAProviderKind$inboundSchema: z.ZodMiniEnum<
-  typeof EMAProviderKind
-> = z.enum(EMAProviderKind);
+export const EMAProviderKind$inboundSchema: z.ZodMiniType<
+  EMAProviderKind,
+  unknown
+> = openEnums.inboundSchema(EMAProviderKind);
 
 /** @internal */
-export const UnavailableReason$inboundSchema: z.ZodMiniEnum<
-  typeof UnavailableReason
-> = z.enum(UnavailableReason);
+export const UnavailableReason$inboundSchema: z.ZodMiniType<
+  UnavailableReason,
+  unknown
+> = openEnums.inboundSchema(UnavailableReason);
 
 /** @internal */
 export const EMAProvider$inboundSchema: z.ZodMiniType<EMAProvider, unknown> = z

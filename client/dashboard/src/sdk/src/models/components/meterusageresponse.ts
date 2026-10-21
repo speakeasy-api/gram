@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -26,13 +27,13 @@ export const Family = {
   McpBandwidth: "mcp_bandwidth",
   RiskContentScans: "risk_content_scans",
 } as const;
-export type Family = ClosedEnum<typeof Family>;
+export type Family = OpenEnum<typeof Family>;
 
 export const Unit = {
   Stokens: "stokens",
   Bytes: "bytes",
 } as const;
-export type Unit = ClosedEnum<typeof Unit>;
+export type Unit = OpenEnum<typeof Unit>;
 
 export type MeterUsageResponse = {
   /**
@@ -59,12 +60,12 @@ export type MeterUsageResponse = {
 };
 
 /** @internal */
-export const Family$inboundSchema: z.ZodMiniEnum<typeof Family> = z.enum(
-  Family,
-);
+export const Family$inboundSchema: z.ZodMiniType<Family, unknown> = openEnums
+  .inboundSchema(Family);
 
 /** @internal */
-export const Unit$inboundSchema: z.ZodMiniEnum<typeof Unit> = z.enum(Unit);
+export const Unit$inboundSchema: z.ZodMiniType<Unit, unknown> = openEnums
+  .inboundSchema(Unit);
 
 /** @internal */
 export const MeterUsageResponse$inboundSchema: z.ZodMiniType<
