@@ -229,7 +229,7 @@ func TestOAuthHTTPRejectsUnknownTokenClient(t *testing.T) {
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	service.TokenHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client"`)
 }
 
@@ -273,7 +273,7 @@ func TestOAuthHTTPRejectsConsentBeforeOrganizationSelection(t *testing.T) {
 	response := httptest.NewRecorder()
 	service.ConnectHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/platform-mcp/connect?state=challenge-1", nil))
 
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_request"`)
 }
 
@@ -342,7 +342,7 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 
 	replayed := httptest.NewRecorder()
 	service.ConnectHandler().ServeHTTP(replayed, approveRequest)
-	require.Equal(t, http.StatusUnauthorized, replayed.Code)
+	require.Equal(t, http.StatusBadRequest, replayed.Code)
 }
 
 func TestOAuthPageContentSecurityPolicyOnlyAllowsHTTPRedirectOrigins(t *testing.T) {
@@ -432,7 +432,7 @@ func TestOAuthHTTPNeverRedirectsToUnregisteredURI(t *testing.T) {
 	response := httptest.NewRecorder()
 	service.AuthorizeHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?response_type=token&client_id=unknown&redirect_uri=https%3A%2F%2Fevil.example%2F&organization_id=org-1", nil))
 
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Empty(t, response.Header().Get("Location"))
 }
 
@@ -610,6 +610,41 @@ func TestOAuthHTTPPinsIDPCallbackToOutboundOrigin(t *testing.T) {
 			selection, err := url.Parse(callback.Header().Get("Location"))
 			require.NoError(t, err)
 			require.Equal(t, "ai.example.test", selection.Host)
+		})
+	}
+}
+
+func TestOAuthHTTPClientErrorResponses(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		header    string
+		status    int
+		challenge string
+	}{
+		{name: "form client", status: http.StatusBadRequest},
+		{name: "basic", header: "Basic dW5rbm93bjp3cm9uZw==", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+		{name: "lowercase basic", header: "basic dW5rbm93bjp3cm9uZw==", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+		{name: "malformed basic", header: "Basic invalid", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+		{name: "missing basic credentials", header: "Basic", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+		{name: "unsupported scheme", header: "Bearer token", status: http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			service := newTestOAuthHTTP(t)
+			request := httptest.NewRequest(http.MethodPost, "/platform-mcp/token", strings.NewReader("grant_type=refresh_token&refresh_token=x&client_id=unknown"))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			if tc.header != "" {
+				request.Header.Set("Authorization", tc.header)
+			}
+			response := httptest.NewRecorder()
+			service.TokenHandler().ServeHTTP(response, request)
+			require.Equal(t, tc.status, response.Code, response.Body.String())
+			require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
+			require.Contains(t, response.Body.String(), `"error_description":"client authentication failed"`)
+			require.Equal(t, tc.challenge, response.Header().Get("WWW-Authenticate"))
+			require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 		})
 	}
 }

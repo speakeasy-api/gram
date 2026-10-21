@@ -63,7 +63,7 @@ func TestConsentActionLiveAuthorityUnavailableMetric(t *testing.T) {
 			err = s.ServeConsentAction(response, req, endpoint)
 			var failure *oops.ShareableError
 			require.ErrorAs(t, err, &failure)
-			expectedCode := oops.CodeUnauthorized
+			expectedCode := oops.CodeBadRequest
 			if unavailable {
 				expectedCode = oops.CodeUnavailable
 				require.ErrorIs(t, err, networkingress.ErrAuthorityUnavailable)

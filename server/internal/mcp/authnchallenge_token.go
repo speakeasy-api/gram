@@ -362,7 +362,7 @@ func refuseClientlessTokenGrant(
 	logger *slog.Logger,
 ) error {
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", creds.clientID, creds.method, r.PostForm.Get("grant_type"), "missing_client_id")
-	return writeTokenError(ctx, w, logger, http.StatusUnauthorized, oautherr.CodeInvalidClient, "client_id is required")
+	return writeInvalidClientError(ctx, w, r, logger, "client_id is required")
 }
 
 // authenticateTokenClient resolves and authenticates the client a token
@@ -384,7 +384,7 @@ func (s *Service) authenticateTokenClient(
 	clientID, reason := resolvePresentedClientID(creds)
 	if reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
-		return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
+		return nil, writeInvalidClientError(ctx, w, r, logger, "client_id is required")
 	}
 	// Only a grant that resolves CIMD would fetch a client_id naming this
 	// endpoint. Refused ahead of admission and the fetch, as at /authorize.
@@ -395,18 +395,18 @@ func (s *Service) authenticateTokenClient(
 		}
 		if namesEndpoint {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, clientIDNamesEndpointReason)
-			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, oautherr.CodeInvalidClient, clientIDNamesEndpointDescription)
+			return nil, writeInvalidClientError(ctx, w, r, logger, clientIDNamesEndpointDescription)
 		}
 	}
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_denied")
-			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", admissionErr.Description())
+			return nil, writeInvalidClientError(ctx, w, r, logger, admissionErr.Description())
 		}
 		if _, ok := errors.AsType[*oauthwire.Error](err); ok {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_metadata_invalid")
-			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+			return nil, writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 		}
 		if errors.Is(err, errCIMDFetchFailed) {
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
@@ -414,7 +414,7 @@ func (s *Service) authenticateTokenClient(
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "unknown_client_id")
-			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+			return nil, writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
@@ -446,7 +446,7 @@ func (s *Service) authenticateTokenClient(
 		}
 		if mode == admission.ModeDisabled {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_disabled")
-			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "this server does not accept client ID metadata documents")
+			return nil, writeInvalidClientError(ctx, w, r, logger, "this server does not accept client ID metadata documents")
 		}
 	}
 	// Authentication is decided by the method the row persisted, not by
@@ -458,7 +458,7 @@ func (s *Service) authenticateTokenClient(
 	}
 	if reason := s.authenticateOAuthClient(ctx, logger, endpoint.UserSessionIssuerID, urls, clientAssertionAtToken, clientRow, creds); reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
-		return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+		return nil, writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authenticated", clientID, presentedAuthMethod, grantType, "")
 
@@ -481,7 +481,7 @@ func (s *Service) authenticateTokenClient(
 			if grantType == oauthwire.GrantTypeAuthorizationCode {
 				s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageToken)
 			}
-			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", blockedErr.Description())
+			return nil, writeInvalidClientError(ctx, w, r, logger, blockedErr.Description())
 		}
 		if errors.Is(err, ErrAIToolBlockCheckUnavailable) {
 			return nil, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "cannot determine whether this client is permitted right now")
@@ -2130,6 +2130,16 @@ func writeTokenOAuthError(ctx context.Context, w http.ResponseWriter, logger *sl
 		return writeTokenError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
 	}
 	return writeTokenError(ctx, w, logger, status, "invalid_request", err.Error())
+}
+
+// writeInvalidClientError applies the token and revocation endpoint response
+// policy to a classified client authentication failure.
+func writeInvalidClientError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, description string) error {
+	status, challenge := oauthwire.InvalidClientResponse(r.Header)
+	if challenge != "" {
+		w.Header().Set("WWW-Authenticate", challenge)
+	}
+	return writeTokenError(ctx, w, logger, status, oautherr.CodeInvalidClient, description)
 }
 
 // writeTokenError emits an RFC 6749 §5.2 token error response: 4xx with a

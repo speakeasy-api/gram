@@ -149,7 +149,7 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 			require.ErrorAs(t, err, &denied, "%s: %s", name, action)
 			want := oops.CodeForbidden
 			if name == "missing browser proof" {
-				want = oops.CodeUnauthorized
+				want = oops.CodeBadRequest
 			}
 			require.Equal(t, want, denied.Code, "%s: %s", name, action)
 		}

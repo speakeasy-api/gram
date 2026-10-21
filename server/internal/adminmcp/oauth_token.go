@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -59,14 +60,26 @@ func (s *StaffOAuthTokens) TokenHandler() http.Handler {
 			staffOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse token request")
 			return
 		}
-		presented, ok := staffClientCredentials(r)
-		if !ok {
-			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication method is invalid")
+		presented, credentialError := staffClientCredentials(r)
+		if credentialError != "" {
+			status := http.StatusBadRequest
+			if credentialError == oautherr.CodeInvalidClient {
+				var challenge string
+				status, challenge = oauthwire.InvalidClientResponse(r.Header)
+				if challenge != "" {
+					w.Header().Set("WWW-Authenticate", challenge)
+				}
+			}
+			staffOAuthError(w, status, credentialError, "client authentication method is invalid")
 			return
 		}
 		client, err := s.authenticateClient(r.Context(), presented)
 		if err != nil {
-			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
+			status, challenge := oauthwire.InvalidClientResponse(r.Header)
+			if challenge != "" {
+				w.Header().Set("WWW-Authenticate", challenge)
+			}
+			staffOAuthError(w, status, oautherr.CodeInvalidClient, "client authentication failed")
 			return
 		}
 		switch r.PostForm.Get("grant_type") {
@@ -108,23 +121,29 @@ type staffPresentedClient struct {
 // confidential clients, or a single form client_id with no secret and no
 // Authorization header for public clients. A form client_secret, a Basic
 // header mixed with a form client_id, or any other Authorization header is
-// refused.
-func staffClientCredentials(r *http.Request) (staffPresentedClient, bool) {
+// refused. The returned OAuth error code distinguishes duplicate or mixed
+// credentials from a failed authentication method; an empty code means success.
+func staffClientCredentials(r *http.Request) (staffPresentedClient, string) {
 	authorization := r.Header.Values("Authorization")
-	if r.PostForm.Has("client_secret") || len(authorization) > 1 {
-		return staffPresentedClient{ID: "", Secret: "", Public: false}, false
+	ids := r.PostForm[oauthwire.ParamClientID]
+	secrets := r.PostForm[oauthwire.ParamClientSecret]
+	if len(authorization) > 1 || len(ids) > 1 || len(secrets) > 1 ||
+		(len(authorization) > 0 && (r.PostForm.Has(oauthwire.ParamClientID) || r.PostForm.Has(oauthwire.ParamClientSecret))) {
+		return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidRequest
+	}
+	if r.PostForm.Has(oauthwire.ParamClientSecret) {
+		return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidClient
 	}
 	if id, secret, basic := r.BasicAuth(); basic {
-		if r.PostForm.Has("client_id") || id == "" {
-			return staffPresentedClient{ID: "", Secret: "", Public: false}, false
+		if id == "" {
+			return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidClient
 		}
-		return staffPresentedClient{ID: id, Secret: secret, Public: false}, true
+		return staffPresentedClient{ID: id, Secret: secret, Public: false}, ""
 	}
-	ids := r.PostForm["client_id"]
 	if len(authorization) != 0 || len(ids) != 1 || ids[0] == "" {
-		return staffPresentedClient{ID: "", Secret: "", Public: false}, false
+		return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidClient
 	}
-	return staffPresentedClient{ID: ids[0], Secret: "", Public: true}, true
+	return staffPresentedClient{ID: ids[0], Secret: "", Public: true}, ""
 }
 
 // authenticateClient enforces the method implied by the stored client: a

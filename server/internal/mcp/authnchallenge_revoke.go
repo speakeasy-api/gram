@@ -85,7 +85,7 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 	clientID, reason := resolvePresentedClientID(creds)
 	if reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", reason)
-		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
+		return writeInvalidClientError(ctx, w, r, logger, "client_id is required")
 	}
 	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
 		UserSessionIssuerID: issuerID,
@@ -94,7 +94,7 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", "unknown_client_id")
-			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+			return writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
@@ -106,7 +106,7 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 	// de-admitted should still be able to kill its own outstanding tokens.
 	if reason := s.authenticateOAuthClient(ctx, logger, issuerID, urls, clientAssertionAtRevoke, &clientRow, creds); reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", reason)
-		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+		return writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authenticated", clientID, presentedAuthMethod, "", "")
 

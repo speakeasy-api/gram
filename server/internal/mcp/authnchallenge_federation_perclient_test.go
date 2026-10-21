@@ -111,7 +111,7 @@ func requireUnconsumedRejection(t *testing.T, ctx context.Context, p *perClientF
 	require.Error(t, err)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
 	_, err = p.f.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+p.id)
 	require.NoError(t, err, "a misrouted callback must not consume the state")
 	require.Zero(t, p.f.provider.exchangeCount())
@@ -237,7 +237,7 @@ func TestFederatedLoginPerClientCallbackRejectsOtherClientID(t *testing.T) {
 	require.Error(t, err)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
 	require.Zero(t, p.f.provider.exchangeCount())
 
 	result := httptest.NewRecorder()
@@ -265,7 +265,7 @@ func TestFederatedLoginPerClientCallbackRejectsNonCanonicalClientIDThroughMux(t 
 	id := p.f.clientID.String()
 	for _, variant := range []string{strings.ToUpper(id), strings.ReplaceAll(id, "-", ""), "%7B" + id + "%7D", "urn:uuid:" + id, id + "%2F"} {
 		result := serveOnHost(t, handler, http.MethodGet, canonical.host, "/mcp/idp_callback/"+variant+"?"+query.Encode(), nil, header)
-		require.Equal(t, http.StatusUnauthorized, result.Code, variant)
+		require.Equal(t, http.StatusBadRequest, result.Code, variant)
 		_, err := p.f.ti.authnChallengeCache.Get(context.Background(), "authnChallenge:"+p.id)
 		require.NoError(t, err, "state intact after %s", variant)
 		require.Zero(t, p.f.provider.exchangeCount())
@@ -419,7 +419,7 @@ func TestFederatedLoginPerClientCallbackRejectsOtherHostThroughMux(t *testing.T)
 	query := url.Values{"state": {p.id}, "code": {"one-use-code"}}
 	headers := http.Header{"Sec-Fetch-Site": {"cross-site"}, "Sec-Fetch-Mode": {"navigate"}, "X-Forwarded-Host": {canonical.host}, "X-Forwarded-Proto": {"https"}}
 	result := serveOnHost(t, handler, http.MethodGet, extra.host, p.callbackPath+"?"+query.Encode(), nil, headers)
-	require.Equal(t, http.StatusUnauthorized, result.Code)
+	require.Equal(t, http.StatusBadRequest, result.Code)
 	_, err := p.f.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+p.id)
 	require.NoError(t, err, "wrong-host callback must leave state usable")
 	require.Zero(t, p.f.provider.exchangeCount())

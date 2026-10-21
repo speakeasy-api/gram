@@ -163,12 +163,16 @@ func withAssertion(form url.Values, assertion string) url.Values {
 	return form
 }
 
-// requireInvalidClient asserts the single response every client
-// authentication failure produces.
-func requireInvalidClient(t *testing.T, w *httptest.ResponseRecorder) {
+// requireInvalidClient asserts a client authentication failure and its HTTP status.
+func requireInvalidClient(t *testing.T, w *httptest.ResponseRecorder, status int) {
 	t.Helper()
 
-	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+	require.Equal(t, status, w.Code, w.Body.String())
+	if status == http.StatusUnauthorized {
+		require.Equal(t, `Basic realm="Speakeasy"`, w.Header().Get("WWW-Authenticate"))
+	} else {
+		require.Empty(t, w.Header().Get("WWW-Authenticate"))
+	}
 	require.Contains(t, w.Body.String(), "invalid_client")
 }
 
@@ -187,7 +191,7 @@ func TestHandleToken_PrivateKeyJWT_AuthorizationCodeGrant(t *testing.T) {
 	// however valid its code and PKCE are.
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
 	w := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, verifier))
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 
 	// A secret alongside the assertion is a client that does not match its
 	// registration.
@@ -195,7 +199,7 @@ func TestHandleToken_PrivateKeyJWT_AuthorizationCodeGrant(t *testing.T) {
 	form := withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, advertisedIssuer))
 	form.Set("client_secret", "not-a-thing-this-client-has")
 	w = postForm(t, ti, toolset.McpSlug.String, "token", form)
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, client)
 	w = postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, advertisedIssuer)))
@@ -216,7 +220,7 @@ func TestHandleToken_PrivateKeyJWT_ForeignKeyRejected(t *testing.T) {
 	impostor := newAssertionSigner(t)
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
 	w := postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(client, code, verifier), impostor.assertion(t, client.ClientID, advertisedIssuer)))
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 }
 
 // Both accepted audience forms authenticate, and one naming a different MCP
@@ -239,7 +243,7 @@ func TestHandleToken_PrivateKeyJWT_Audiences(t *testing.T) {
 	// addressed to /revoke does not authenticate a token request.
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, client)
 	w = postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, advertisedIssuer+"/revoke")))
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 
 	// A real neighbour: a second MCP server on the same deployment, with
 	// its own advertised issuer. An assertion minted for it must not verify
@@ -251,7 +255,7 @@ func TestHandleToken_PrivateKeyJWT_Audiences(t *testing.T) {
 	for _, foreign := range []string{neighbourIssuer, neighbourIssuer + "/token"} {
 		code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, client)
 		w = postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, foreign)))
-		requireInvalidClient(t, w)
+		requireInvalidClient(t, w, http.StatusBadRequest)
 	}
 }
 
@@ -279,7 +283,7 @@ func TestHandleToken_PrivateKeyJWT_OmittedClientID(t *testing.T) {
 	form = withAssertion(url.Values{}, signer.assertion(t, publicClient.ClientID, advertisedIssuer))
 	form.Set("grant_type", "authorization_code")
 	w = postForm(t, ti, toolset.McpSlug.String, "token", form)
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 }
 
 // The refresh_token grant is client-authenticated like any other token
@@ -297,7 +301,7 @@ func TestHandleToken_PrivateKeyJWT_RefreshGrant(t *testing.T) {
 	refreshToken := seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, nil)
 
 	w := postRefreshGrant(t, ti, toolset.McpSlug.String, client.ClientID, refreshToken, "")
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
@@ -332,7 +336,7 @@ func TestHandleRevoke_PrivateKeyJWT(t *testing.T) {
 	}
 
 	w := postForm(t, ti, toolset.McpSlug.String, "revoke", revokeForm())
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 
 	// Spend an assertion at /token, then replay it at /revoke.
 	spent := signer.assertion(t, client.ClientID, advertisedIssuer)
@@ -340,13 +344,13 @@ func TestHandleRevoke_PrivateKeyJWT(t *testing.T) {
 	w = postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(client, code, verifier), spent))
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	w = postForm(t, ti, toolset.McpSlug.String, "revoke", withAssertion(revokeForm(), spent))
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 
 	// The revocation endpoint's own URL and the issuer are accepted at
 	// /revoke; the token endpoint's URL is not, since it names a different
 	// endpoint than the one posted to.
 	w = postForm(t, ti, toolset.McpSlug.String, "revoke", withAssertion(revokeForm(), signer.assertion(t, client.ClientID, advertisedIssuer+"/token")))
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 	w = postForm(t, ti, toolset.McpSlug.String, "revoke", withAssertion(revokeForm(), signer.assertion(t, client.ClientID, advertisedIssuer)))
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	w = postForm(t, ti, toolset.McpSlug.String, "revoke", withAssertion(revokeForm(), signer.assertion(t, client.ClientID, advertisedIssuer+"/revoke")))
@@ -367,13 +371,13 @@ func TestHandleToken_PublicClientPresentingCredentialsRejected(t *testing.T) {
 
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
 	w := postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, advertisedIssuer)))
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, client)
 	form := codeGrantForm(client, code, verifier)
 	form.Set("client_secret", "unexpected")
 	w = postForm(t, ti, toolset.McpSlug.String, "token", form)
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 
 	// And nothing presented still works, so the tightening did not break
 	// the ordinary public client.
@@ -422,7 +426,7 @@ func TestHandleToken_LegacyNullMethodRows(t *testing.T) {
 
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, legacyConfidential)
 	w = postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(legacyConfidential, code, verifier))
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, legacyConfidential)
 	form := codeGrantForm(legacyConfidential, code, verifier)
@@ -476,7 +480,7 @@ func TestHandleRevoke_LegacyNullMethodRows(t *testing.T) {
 	form.Set("token_type_hint", "refresh_token")
 	form.Set("client_id", legacyConfidential.ClientID)
 	w = postForm(t, ti, toolset.McpSlug.String, "revoke", form)
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 
 	form.Set("client_secret", secret)
 	w = postForm(t, ti, toolset.McpSlug.String, "revoke", form)
@@ -510,7 +514,7 @@ func TestHandleToken_PrivateKeyJWT_BasicAlongsideAssertionRejected(t *testing.T)
 		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 		w := httptest.NewRecorder()
 		require.NoError(t, ti.service.HandleToken(w, req))
-		requireInvalidClient(t, w)
+		requireInvalidClient(t, w, http.StatusUnauthorized)
 	}
 }
 
@@ -560,7 +564,7 @@ func TestClientAuthFailures_IndistinguishableOnTheWire(t *testing.T) {
 			form.Set("grant_type", "authorization_code")
 			form.Set("token", "irrelevant")
 			w := postForm(t, ti, toolset.McpSlug.String, endpoint, form)
-			require.Equal(t, http.StatusUnauthorized, w.Code, "%s: %s", endpoint, name)
+			require.Equal(t, http.StatusBadRequest, w.Code, "%s: %s", endpoint, name)
 			if canonical == "" {
 				canonical = w.Body.String()
 				require.Contains(t, canonical, "invalid_client")
@@ -595,5 +599,5 @@ func TestHandleToken_UnrecognizedStoredMethodFailsClosed(t *testing.T) {
 
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
 	w := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, verifier))
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 }

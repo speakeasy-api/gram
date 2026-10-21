@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -364,7 +365,7 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			return
 		}
 		if !clientRedirectAllowed(client, request.RedirectURI) {
-			writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "unknown client_id or redirect_uri")
+			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id or redirect_uri")
 			return
 		}
 		if err := request.ValidatePostRedirect(); err != nil {
@@ -399,7 +400,7 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
 		if err != nil {
-			writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
 			return
 		}
 		if idpError := r.URL.Query().Get("error"); idpError != "" {
@@ -413,7 +414,7 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 		}
 		idpUser, err := s.identity.ExchangeCodeForTokens(r.Context(), idpCode)
 		if err != nil {
-			writeOAuthError(w, http.StatusUnauthorized, "access_denied", "login could not be completed")
+			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "login could not be completed")
 			return
 		}
 		login, err := s.identity.CompleteIDPLogin(r.Context(), idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
@@ -448,12 +449,12 @@ func (s *OAuthHTTP) OrganizationSelectionHandler() http.Handler {
 func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Request) {
 	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
 	if err != nil || challenge.Subject == "" {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
 		return
 	}
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
-		writeOAuthError(w, http.StatusUnauthorized, "access_denied", "authorization identity is invalid")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "authorization identity is invalid")
 		return
 	}
 	organizations, err := s.organizations.EligibleOrganizations(r.Context(), subject.ID)
@@ -471,7 +472,7 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 	// since become unreachable.
 	client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 	if err != nil {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable")
 		return
 	}
 	s.renderOAuthPage(w, oauthPageData{
@@ -493,16 +494,16 @@ func (s *OAuthHTTP) organizationSelectionPost(w http.ResponseWriter, r *http.Req
 	}
 	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
 	if err != nil || challenge.Subject == "" {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
 		return
 	}
 	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "organization selection is invalid")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "organization selection is invalid")
 		return
 	}
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
-		writeOAuthError(w, http.StatusUnauthorized, "access_denied", "authorization identity is invalid")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "authorization identity is invalid")
 		return
 	}
 	organizations, err := s.organizations.EligibleOrganizations(r.Context(), subject.ID)
@@ -572,7 +573,7 @@ func (s *OAuthHTTP) ConnectHandler() http.Handler {
 func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID == "" {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or incomplete")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or incomplete")
 		return
 	}
 	// Lookup only: authorize already resolved and persisted any CIMD row,
@@ -580,7 +581,7 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 	// since become unreachable.
 	client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 	if err != nil {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable")
 		return
 	}
 	organization, err := s.selectedOrganization(r.Context(), challenge)
@@ -618,11 +619,11 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 	}
 	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID == "" {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or incomplete")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or incomplete")
 		return
 	}
 	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization confirmation is invalid")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization confirmation is invalid")
 		return
 	}
 	if r.PostForm.Get("action") != "approve" {
@@ -632,7 +633,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 	}
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
-		writeOAuthError(w, http.StatusUnauthorized, "access_denied", "authorization identity is invalid")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "authorization identity is invalid")
 		return
 	}
 	principal := Principal{UserID: subject.ID, OrganizationID: challenge.OrganizationID, ConnectionID: "pending", Generation: "pending", ClientID: challenge.ClientID}
@@ -694,7 +695,11 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 		clientID, clientSecret := clientCredentials(r)
 		client, err := s.authenticateClient(r.Context(), clientID, clientSecret, now)
 		if err != nil {
-			writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
+			status, challenge := oauthwire.InvalidClientResponse(r.Header)
+			if challenge != "" {
+				w.Header().Set("WWW-Authenticate", challenge)
+			}
+			writeOAuthError(w, status, oautherr.CodeInvalidClient, "client authentication failed")
 			return
 		}
 		switch r.PostForm.Get("grant_type") {
@@ -1090,7 +1095,7 @@ func (s *OAuthHTTP) writeClientResolutionError(w http.ResponseWriter, ctx contex
 	if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 		// Policy, not a spec violation, and it carries its own actionable
 		// description. Already logged inside admitCIMDClient.
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", admissionErr.Description())
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, admissionErr.Description())
 		return
 	}
 	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
@@ -1110,7 +1115,7 @@ func (s *OAuthHTTP) writeClientResolutionError(w http.ResponseWriter, ctx contex
 		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
 		return
 	}
-	writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "unknown client_id")
+	writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id")
 }
 
 func clientCredentials(r *http.Request) (string, string) {

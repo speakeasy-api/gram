@@ -394,7 +394,7 @@ func TestHandleAuthorize_InvalidClientID_ReturnsError(t *testing.T) {
 	err := ti.service.HandleAuthorize(w, req)
 	require.NoError(t, err) // error written to response body, not returned
 
-	require.Equal(t, http.StatusUnauthorized, w.Code)
+	require.Equal(t, http.StatusBadRequest, w.Code)
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.Equal(t, "invalid_client", body["error"])

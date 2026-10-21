@@ -510,10 +510,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "invalid consent browser binding")
+		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
@@ -539,7 +539,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogError(ctx, logger)
+				return oops.E(oops.CodeBadRequest, err, "user session client revoked").LogWarn(ctx, logger)
 			}
 			return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 		}
@@ -556,7 +556,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
-		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "authn challenge subject is not resolved").LogWarn(ctx, logger)
 	}
 
 	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
@@ -826,10 +826,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// against the consumed value, which stays the single-use authority.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "invalid consent browser binding")
+		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	issuerID := endpoint.UserSessionIssuerID.String()
@@ -886,7 +886,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// and chose "no" — a decline, not an errant config. A lost consume
 		// race (double submit) reads as expired state.
 		if _, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID); err != nil {
-			return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+			return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
 		}
 		s.evictConsentToolInventory(ctx, stateID)
 		s.retireDeniedConsentCredentials(ctx, logger, endpoint, challengeState)
@@ -915,7 +915,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// Reaching an approved consent POST with no resolved subject is a code
 		// invariant break, not a user action — a config/code-class failure.
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
-		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "authn challenge subject is not resolved").LogWarn(ctx, logger)
 	}
 
 	selectedAgentID := strings.TrimSpace(r.PostForm.Get("agent_id"))
@@ -1024,7 +1024,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// approved flow can't complete.
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogError(ctx, logger)
+			return oops.E(oops.CodeBadRequest, err, "user session client revoked").LogWarn(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
@@ -1040,7 +1040,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return oops.E(oops.CodeUnavailable, err, "capture authorization-code endpoint authority").LogError(ctx, logger)
 		}
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
-		return oops.E(oops.CodeUnauthorized, err, "private OAuth authority is no longer valid").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "private OAuth authority is no longer valid").LogWarn(ctx, logger)
 	}
 	s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, nil)
 
@@ -1081,13 +1081,13 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// the guards against it in case the preflighted copy went stale.
 	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
 	}
 	if err := s.validateConsentChallenge(ctx, endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
 		return err.LogError(ctx, logger)
 	}
 	if reuse && !consentBrowserMatches(r, challengeState, time.Now()) {
-		return oops.E(oops.CodeUnauthorized, nil, "invalid consent browser binding").LogWarn(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "invalid consent browser binding").LogWarn(ctx, logger)
 	}
 	subject := *challengeState.Subject
 
@@ -1204,7 +1204,7 @@ func (s *Service) validateConsentChallenge(ctx context.Context, endpoint *Resolv
 		return oauthAuthorityError(err)
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(csrfToken), []byte(challengeState.CSRFToken)) != 1 {
-		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token")
+		return oops.E(oops.CodeBadRequest, nil, "invalid consent csrf token")
 	}
 	// First-party challenges have no MCP client to grant to: linking the
 	// cards is terminal, so there is no approve/deny POST. The template
@@ -1214,7 +1214,7 @@ func (s *Service) validateConsentChallenge(ctx context.Context, endpoint *Resolv
 		return oops.E(oops.CodeBadRequest, nil, "first-party connect challenges have no approval step")
 	}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
-		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved")
+		return oops.E(oops.CodeBadRequest, nil, "authn challenge subject is not resolved")
 	}
 	return nil
 }

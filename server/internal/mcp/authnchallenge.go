@@ -1269,7 +1269,7 @@ func oauthAuthorityError(err error) *oops.ShareableError {
 	if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 		return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable")
 	}
-	return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server")
+	return oops.E(oops.CodeBadRequest, err, "authn challenge state does not match this MCP server")
 }
 
 // RequireUserSessionIssuer verifies the endpoint's user_session_issuer_id

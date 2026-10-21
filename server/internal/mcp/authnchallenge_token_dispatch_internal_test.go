@@ -219,7 +219,7 @@ func TestServeTokenRefusalsBeforeClientAuthenticationLogReasons(t *testing.T) {
 		{
 			name:      "jwt-bearer without client",
 			form:      url.Values{"grant_type": {oauthwire.GrantTypeJWTBearer}, "assertion": {"header.payload.signature"}},
-			status:    http.StatusUnauthorized,
+			status:    http.StatusBadRequest,
 			body:      `{"error":"invalid_client","error_description":"client_id is required"}`,
 			message:   "oauth token client authentication rejected",
 			reason:    "missing_client_id",
