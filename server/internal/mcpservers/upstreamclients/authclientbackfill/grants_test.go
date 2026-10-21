@@ -232,3 +232,52 @@ func TestRun_KeyPoliciesWaitForEveryClientPhase(t *testing.T) { //nolint:paralle
 	f.run(true)
 	require.NotEmpty(t, f.grantsOf(urn.NewAPIKeyPrincipal(key)))
 }
+
+func TestRunGrants_KeyPoliciesWaitForRecordedClients(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	key := f.apiKey(uuid.NullUUID{}, "consumer")
+	serverID := f.server()
+	registration := f.client("self")
+	f.associate(serverID, registration)
+
+	early, err := RunGrants(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+	require.NoError(t, err)
+	require.True(t, early.APIKeysWaiting)
+	require.Empty(t, f.grantsOf(urn.NewAPIKeyPrincipal(key)), "no key policy before its clients are recorded")
+
+	f.run(true)
+	var clientID uuid.UUID
+	for _, row := range f.authClients() {
+		if row.RemoteSessionClientID == registration {
+			clientID = row.ID
+		}
+	}
+	ctx := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: key.String(), AccountType: "enterprise"})
+	use := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: ""})
+	require.True(t, mandatory(t, ctx, f, authz.MCPCheck(authz.ScopeMCPConnect, serverID.String(), f.projectID.String()), use).Allowed)
+
+	settled, err := RunGrants(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.False(t, settled.APIKeysWaiting)
+	require.Zero(t, settled.PendingGrants)
+}
+
+func TestRun_UserServerGrantsKeepInheritedBlocks(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	serverID, clientID := f.sharedClient()
+	user := urn.NewPrincipal(urn.PrincipalTypeUser, "user_concrete")
+	f.grant(user, authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: serverID.String()})
+	f.run(true)
+
+	session := "session_1"
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, UserID: "user_concrete", SessionID: &session, AccountType: "enterprise"})
+	check := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: ""})
+	require.True(t, mandatory(t, authz.GrantsToContext(ctx, f.grantsOf(user)), f, check).Allowed, "the user keeps today's reach")
+
+	role := urn.NewPrincipal(urn.PrincipalTypeRole, "blocks_concrete")
+	f.grant(role, authz.ScopeMCPBlockedAuth, authz.AuthClientSelector(clientID.String(), ""))
+	grants := append(f.grantsOf(user), f.grantsOf(role)...)
+	require.False(t, mandatory(t, authz.GrantsToContext(ctx, grants), f, check).Allowed, "a role's block still applies")
+}

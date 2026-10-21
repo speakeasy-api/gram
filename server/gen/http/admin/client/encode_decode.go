@@ -25025,10 +25025,10 @@ func unmarshalAdminDefaultAuthPermissionKindResponseBodyToAdminAdminDefaultAuthP
 // of type *AdminDefaultAuthPermissionStatusResponseBody.
 func unmarshalAdminDefaultAuthPermissionStatusResponseBodyToAdminAdminDefaultAuthPermissionStatus(v *AdminDefaultAuthPermissionStatusResponseBody) *admin.AdminDefaultAuthPermissionStatus {
 	res := &admin.AdminDefaultAuthPermissionStatus{
-		Complete:      *v.Complete,
-		InProgress:    *v.InProgress,
-		PendingGrants: *v.PendingGrants,
-		Error:         v.Error,
+		Complete:       *v.Complete,
+		APIKeysWaiting: *v.APIKeysWaiting,
+		PendingGrants:  *v.PendingGrants,
+		Error:          v.Error,
 	}
 	res.Kinds = make([]*admin.AdminDefaultAuthPermissionKind, len(v.Kinds))
 	for i, val := range v.Kinds {

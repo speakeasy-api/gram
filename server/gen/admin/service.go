@@ -472,9 +472,10 @@ type AdminDefaultAuthPermissionRun struct {
 type AdminDefaultAuthPermissionStatus struct {
 	// Whether every default permission is granted and the check succeeded.
 	Complete bool
-	// Whether a run for the organization is underway. The counts are then empty;
-	// check again when it finishes.
-	InProgress bool
+	// Whether API key policies are held back because some of the organization's
+	// auth clients are not recorded yet: a key policy is written once, so it waits
+	// for them. Run the upstream OAuth migration first.
+	APIKeysWaiting bool
 	// Default permissions not yet granted.
 	PendingGrants int64
 	// Pending permissions by kind.

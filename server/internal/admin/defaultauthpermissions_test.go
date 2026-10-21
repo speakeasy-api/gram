@@ -23,6 +23,7 @@ func TestDefaultAuthPermissions_GrantsAnyOrganizationIdempotently(t *testing.T) 
 	before, err := svc.GetDefaultAuthPermissionStatus(ctx, &gen.GetDefaultAuthPermissionStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
 	require.False(t, before.Complete)
+	require.False(t, before.APIKeysWaiting)
 	require.Equal(t, int64(1), before.PendingGrants)
 	pending := map[string]int64{}
 	for _, kind := range before.Kinds {
@@ -64,7 +65,7 @@ func TestDefaultAuthPermissions_RefusesAConcurrentRun(t *testing.T) {
 
 	status, err := svc.GetDefaultAuthPermissionStatus(ctx, &gen.GetDefaultAuthPermissionStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
-	require.False(t, status.InProgress, "checking takes no lock, so it never waits on or blocks a run")
+	require.False(t, status.APIKeysWaiting, "checking takes no lock, so it never waits on or blocks a run")
 	require.Equal(t, int64(1), status.PendingGrants)
 
 	_, err = svc.RunDefaultAuthPermissions(ctx, &gen.RunDefaultAuthPermissionsPayload{OrganizationID: org.id})

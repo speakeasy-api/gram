@@ -15,10 +15,10 @@ var AdminDefaultAuthPermissionKind = Type("AdminDefaultAuthPermissionKind", func
 
 var AdminDefaultAuthPermissionStatus = Type("AdminDefaultAuthPermissionStatus", func() {
 	Description("Where one organization stands in granting the default auth permissions the mandatory auth client check needs, from a dry run that writes nothing. Only clients already recorded are counted.")
-	Required("complete", "in_progress", "pending_grants", "kinds")
+	Required("complete", "api_keys_waiting", "pending_grants", "kinds")
 
 	Attribute("complete", Boolean, "Whether every default permission is granted and the check succeeded.")
-	Attribute("in_progress", Boolean, "Whether a run for the organization is underway. The counts are then empty; check again when it finishes.")
+	Attribute("api_keys_waiting", Boolean, "Whether API key policies are held back because some of the organization's auth clients are not recorded yet: a key policy is written once, so it waits for them. Run the upstream OAuth migration first.")
 	Attribute("pending_grants", Int64, "Default permissions not yet granted.")
 	Attribute("kinds", ArrayOf(AdminDefaultAuthPermissionKind), "Pending permissions by kind.")
 	Attribute("error", String, "Why the check failed, when it did.")

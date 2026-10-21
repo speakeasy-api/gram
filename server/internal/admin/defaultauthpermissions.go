@@ -66,18 +66,14 @@ func (s *Service) RunDefaultAuthPermissions(ctx context.Context, p *gen.RunDefau
 // A failed check is reported in the status rather than failing the request.
 func (s *Service) defaultAuthPermissionStatus(ctx context.Context, organizationID string) *gen.AdminDefaultAuthPermissionStatus {
 	status := &gen.AdminDefaultAuthPermissionStatus{
-		Complete:      false,
-		InProgress:    false,
-		PendingGrants: 0,
-		Kinds:         []*gen.AdminDefaultAuthPermissionKind{},
-		Error:         nil,
+		Complete:       false,
+		APIKeysWaiting: false,
+		PendingGrants:  0,
+		Kinds:          []*gen.AdminDefaultAuthPermissionKind{},
+		Error:          nil,
 	}
 	report, err := authclientbackfill.RunGrants(ctx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0})
-	switch {
-	case errors.Is(err, authclientbackfill.ErrRunInProgress):
-		status.InProgress = true
-		return status
-	case err != nil:
+	if err != nil {
 		s.logger.ErrorContext(ctx, "check default auth permissions", attr.SlogOrganizationID(organizationID), attr.SlogError(err))
 		message := "Checking default auth permissions failed."
 		status.Error = &message
@@ -93,6 +89,7 @@ func (s *Service) defaultAuthPermissionStatus(ctx context.Context, organizationI
 		status.Kinds = append(status.Kinds, &gen.AdminDefaultAuthPermissionKind{Kind: string(kind), Pending: int64(report.PendingGrantsByKind[kind])})
 	}
 	status.PendingGrants = int64(report.PendingGrants)
-	status.Complete = report.PendingGrants == 0
+	status.APIKeysWaiting = report.APIKeysWaiting
+	status.Complete = report.PendingGrants == 0 && !report.APIKeysWaiting
 	return status
 }

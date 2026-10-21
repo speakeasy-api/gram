@@ -89706,15 +89706,15 @@ components:
         AdminDefaultAuthPermissionStatus:
             type: object
             properties:
+                api_keys_waiting:
+                    type: boolean
+                    description: 'Whether API key policies are held back because some of the organization''s auth clients are not recorded yet: a key policy is written once, so it waits for them. Run the upstream OAuth migration first.'
                 complete:
                     type: boolean
                     description: Whether every default permission is granted and the check succeeded.
                 error:
                     type: string
                     description: Why the check failed, when it did.
-                in_progress:
-                    type: boolean
-                    description: Whether a run for the organization is underway. The counts are then empty; check again when it finishes.
                 kinds:
                     type: array
                     items:
@@ -89727,7 +89727,7 @@ components:
             description: Where one organization stands in granting the default auth permissions the mandatory auth client check needs, from a dry run that writes nothing. Only clients already recorded are counted.
             required:
                 - complete
-                - in_progress
+                - api_keys_waiting
                 - pending_grants
                 - kinds
         AdminDeviceAgentCell:
