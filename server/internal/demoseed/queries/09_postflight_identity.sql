@@ -418,6 +418,21 @@ WHERE organization_id = @org_id::text AND status NOT IN ('approved', 'blocked');
 SELECT count(*) FROM directory_role_mappings
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
 
+-- name: PostflightIDPendingDirectoryReviewItems :one
+SELECT count(*) FROM directory_review_items
+WHERE organization_id = @org_id::text AND state = 'pending';
+
+-- name: PostflightIDDirectoryReviewEmailsEnabled :one
+SELECT count(*) FROM directory_review_org_states
+WHERE organization_id = @org_id::text AND emails_disabled_at IS NULL;
+
+-- name: PostflightIDDeletedGroupMappings :one
+SELECT count(*) FROM directory_role_mappings drm
+JOIN directory_groups dg ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+WHERE drm.organization_id = @org_id::text AND drm.deleted IS FALSE
+  AND dg.workos_deleted IS TRUE;
+
 -- name: PostflightIDInfraGroupMappedRoles :one
 SELECT count(DISTINCT drm.role_urn) FROM directory_role_mappings drm
 JOIN directory_groups dg ON dg.id = drm.directory_group_id

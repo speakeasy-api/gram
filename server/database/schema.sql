@@ -7588,6 +7588,166 @@ CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_attribute_role_key
 ON directory_role_mappings (organization_id, attribute_key, attribute_value, role_urn)
 WHERE deleted IS FALSE AND attribute_key IS NOT NULL;
 
+-- Pending decisions raised by directory changes: a group with no mapping
+-- created after the organization's review baseline, a new value of an
+-- attribute key that already has a mapping, or a mapped group or attribute
+-- value that has gone. A source is a directory group (directory_group_id set)
+-- or an attribute value (attribute_key and attribute_value set), as in
+-- directory_role_mappings. Which kinds and states exist is validated in
+-- application code.
+-- Each time the same condition recurs for a source it gets a new row with the
+-- next occurrence, so a resolved row is never reopened or overwritten. At most
+-- one row per organization, kind and source is pending at a time.
+CREATE TABLE IF NOT EXISTS directory_review_items (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- new_group, new_attribute_value or source_missing.
+  kind TEXT NOT NULL,
+  directory_group_id UUID,
+  attribute_key TEXT,
+  attribute_value TEXT,
+
+  -- 1 for the first time a condition is raised for a source, then one more
+  -- each time it recurs.
+  occurrence INTEGER NOT NULL,
+
+  -- pending until resolved, then approved, dismissed or superseded. Delivery
+  -- of notifications never changes it.
+  state TEXT NOT NULL,
+  resolved_at timestamptz,
+  -- The admin who approved or dismissed the item. NULL while pending, and for
+  -- an item superseded by the directory rather than by a person.
+  resolved_by_user_id TEXT,
+
+  -- When an email first included this item. NULL until then, which is how
+  -- the next send finds items that have not been announced yet.
+  notified_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT directory_review_items_pkey PRIMARY KEY (id),
+  CONSTRAINT directory_review_items_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT directory_review_items_directory_group_fkey FOREIGN KEY (organization_id, directory_group_id) REFERENCES directory_groups (organization_id, id) ON DELETE CASCADE,
+  -- Structural shape only, as for directory_role_mappings: an attribute source
+  -- needs both key and value, and a row never names both a group and an
+  -- attribute.
+  CONSTRAINT directory_review_items_source_columns_check CHECK (
+    (attribute_key IS NULL) = (attribute_value IS NULL)
+    AND NOT (directory_group_id IS NOT NULL AND attribute_key IS NOT NULL)
+  )
+);
+
+COMMENT ON COLUMN directory_review_items.id IS '@access: confidential';
+COMMENT ON COLUMN directory_review_items.organization_id IS '@access: confidential';
+COMMENT ON COLUMN directory_review_items.kind IS '@access: confidential';
+COMMENT ON COLUMN directory_review_items.directory_group_id IS '@access: confidential';
+COMMENT ON COLUMN directory_review_items.attribute_key IS '@access: opaque-confidential';
+COMMENT ON COLUMN directory_review_items.attribute_value IS '@access: opaque-restricted';
+COMMENT ON COLUMN directory_review_items.occurrence IS '@access: confidential';
+COMMENT ON COLUMN directory_review_items.state IS '@access: confidential';
+COMMENT ON COLUMN directory_review_items.resolved_at IS '@access: confidential';
+COMMENT ON COLUMN directory_review_items.resolved_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN directory_review_items.notified_at IS '@access: confidential';
+COMMENT ON COLUMN directory_review_items.created_at IS '@access: confidential';
+COMMENT ON COLUMN directory_review_items.updated_at IS '@access: confidential';
+
+-- At most one pending item per organization, kind and source, so a replayed
+-- event or a sweep that races the event handler cannot open a second one.
+CREATE UNIQUE INDEX IF NOT EXISTS directory_review_items_org_group_pending_key
+ON directory_review_items (organization_id, kind, directory_group_id)
+WHERE state = 'pending' AND directory_group_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_review_items_org_attribute_pending_key
+ON directory_review_items (organization_id, kind, attribute_key, attribute_value)
+WHERE state = 'pending' AND attribute_key IS NOT NULL;
+
+-- Each occurrence of a condition for a source is recorded once.
+CREATE UNIQUE INDEX IF NOT EXISTS directory_review_items_org_group_occurrence_key
+ON directory_review_items (organization_id, kind, directory_group_id, occurrence)
+WHERE directory_group_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_review_items_org_attribute_occurrence_key
+ON directory_review_items (organization_id, kind, attribute_key, attribute_value, occurrence)
+WHERE attribute_key IS NOT NULL;
+
+-- The review list and the notification step read an organization's pending
+-- items, oldest first.
+CREATE INDEX IF NOT EXISTS directory_review_items_org_pending_idx
+ON directory_review_items (organization_id, created_at)
+WHERE state = 'pending';
+
+-- Supports foreign-key cascade checks from directory_groups, which see every
+-- row including the ones the partial indexes above exclude.
+CREATE INDEX IF NOT EXISTS directory_review_items_org_group_all_idx
+ON directory_review_items (organization_id, directory_group_id);
+
+-- Per-organization directory review state. The row is created the first time
+-- the reconciliation sweep runs for an organization with directory sync;
+-- groups that already existed then are offered in bulk setup rather than
+-- raised as decisions. It also holds the email opt-out and the state the
+-- notification step needs to coalesce emails and cap reminders.
+CREATE TABLE IF NOT EXISTS directory_review_org_states (
+  organization_id TEXT NOT NULL,
+
+  -- Unmapped groups created after this are raised as new_group decisions.
+  baseline_at timestamptz NOT NULL,
+
+  -- Set while an admin has turned off directory review emails for the
+  -- organization. Webhooks and the review list are unaffected.
+  emails_disabled_at timestamptz,
+
+  -- When the last email (an announcement or a reminder) was sent.
+  last_emailed_at timestamptz,
+  -- Reminders sent since the last announcement of new items.
+  reminders_sent INTEGER NOT NULL DEFAULT 0,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT directory_review_org_states_pkey PRIMARY KEY (organization_id),
+  CONSTRAINT directory_review_org_states_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN directory_review_org_states.organization_id IS '@access: confidential';
+COMMENT ON COLUMN directory_review_org_states.baseline_at IS '@access: confidential';
+COMMENT ON COLUMN directory_review_org_states.emails_disabled_at IS '@access: confidential';
+COMMENT ON COLUMN directory_review_org_states.last_emailed_at IS '@access: confidential';
+COMMENT ON COLUMN directory_review_org_states.reminders_sent IS '@access: confidential';
+COMMENT ON COLUMN directory_review_org_states.created_at IS '@access: confidential';
+COMMENT ON COLUMN directory_review_org_states.updated_at IS '@access: confidential';
+
+-- Attribute keys an admin has opted out of new_attribute_value decisions.
+-- New values of an opted-out key are not raised even when the key has
+-- mappings. Opting back in soft-deletes the row.
+CREATE TABLE IF NOT EXISTS directory_review_attribute_opt_outs (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  attribute_key TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT directory_review_attribute_opt_outs_pkey PRIMARY KEY (id),
+  CONSTRAINT directory_review_attribute_opt_outs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT directory_review_attribute_opt_outs_attribute_key_check CHECK (attribute_key <> '')
+);
+
+COMMENT ON COLUMN directory_review_attribute_opt_outs.id IS '@access: confidential';
+COMMENT ON COLUMN directory_review_attribute_opt_outs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN directory_review_attribute_opt_outs.attribute_key IS '@access: opaque-confidential';
+COMMENT ON COLUMN directory_review_attribute_opt_outs.created_at IS '@access: confidential';
+COMMENT ON COLUMN directory_review_attribute_opt_outs.updated_at IS '@access: confidential';
+COMMENT ON COLUMN directory_review_attribute_opt_outs.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN directory_review_attribute_opt_outs.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_review_attribute_opt_outs_org_key_key
+ON directory_review_attribute_opt_outs (organization_id, attribute_key)
+WHERE deleted IS FALSE;
+
 -- agent_role_assignments stores which roles each agent principal holds within an org.
 -- It is the agent counterpart to organization_role_assignments. Agents have no WorkOS
 -- identity, so membership here is local only and is never reconciled outward.

@@ -1070,6 +1070,58 @@ func (q *Queries) ListUnattributedDirectorySources(ctx context.Context, organiza
 	return items, nil
 }
 
+const listUnmappableDirectoryAttributeKeys = `-- name: ListUnmappableDirectoryAttributeKeys :many
+SELECT
+  attribute.key::text AS attribute_key,
+  COUNT(DISTINCT attribute.value)::bigint AS value_count
+FROM directory_users AS du
+CROSS JOIN LATERAL jsonb_each_text(
+  CASE jsonb_typeof(du.attributes)
+    WHEN 'object' THEN du.attributes
+    ELSE '{}'::jsonb
+  END
+) AS attribute(key, value)
+WHERE du.organization_id = $1
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND attribute.value IS NOT NULL
+GROUP BY attribute.key
+HAVING COUNT(DISTINCT attribute.value) > $2::bigint
+ORDER BY attribute_key
+`
+
+type ListUnmappableDirectoryAttributeKeysParams struct {
+	OrganizationID  string
+	MaxValuesPerKey int64
+}
+
+type ListUnmappableDirectoryAttributeKeysRow struct {
+	AttributeKey string
+	ValueCount   int64
+}
+
+// The attribute keys ListMappableDirectoryAttributeValues leaves out, with
+// how many distinct values each has, so bulk setup can say what it hid.
+func (q *Queries) ListUnmappableDirectoryAttributeKeys(ctx context.Context, arg ListUnmappableDirectoryAttributeKeysParams) ([]ListUnmappableDirectoryAttributeKeysRow, error) {
+	rows, err := q.db.Query(ctx, listUnmappableDirectoryAttributeKeys, arg.OrganizationID, arg.MaxValuesPerKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUnmappableDirectoryAttributeKeysRow
+	for rows.Next() {
+		var i ListUnmappableDirectoryAttributeKeysRow
+		if err := rows.Scan(&i.AttributeKey, &i.ValueCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockOrganizationDirectoryGroupByWorkOSID = `-- name: LockOrganizationDirectoryGroupByWorkOSID :one
 SELECT id
 FROM directory_groups

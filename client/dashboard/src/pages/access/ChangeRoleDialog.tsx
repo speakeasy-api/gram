@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { memberRoleSource, shortMemberRoleSource } from "@/lib/member-roles";
 import {
   addRoleToSelection,
   removeRoleFromSelection,
@@ -204,12 +205,18 @@ export function ChangeRoleDialog({
             {directoryRoles.length > 0 && (
               <Text variant="body" className="text-muted-foreground text-xs">
                 Also granted by directory role mappings:{" "}
-                {directoryRoles.map((role, index) => (
-                  <Fragment key={role.id}>
-                    {index > 0 && ", "}
-                    <RoleLink roleId={role.id}>{role.name}</RoleLink>
-                  </Fragment>
-                ))}
+                {directoryRoles.map((role, index) => {
+                  const source = shortMemberRoleSource(
+                    memberRoleSource(member, role.id),
+                  );
+                  return (
+                    <Fragment key={role.id}>
+                      {index > 0 && ", "}
+                      <RoleLink roleId={role.id}>{role.name}</RoleLink>
+                      {source && ` (${source})`}
+                    </Fragment>
+                  );
+                })}
                 . These follow the member's directory groups and attributes, so
                 they can't be removed here.
               </Text>
