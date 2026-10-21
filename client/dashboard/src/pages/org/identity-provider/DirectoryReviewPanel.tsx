@@ -324,7 +324,7 @@ function ReviewRow({
             >
               <Button.Text>Leave unmapped</Button.Text>
             </Button>
-            {item.kind === "new_attribute_value" ? (
+            {item.kind === "new_attribute_value" && (
               // The Button's own tooltip, unlike a bare trigger, still shows
               // while the button is disabled during a pending decision.
               <Button
@@ -342,10 +342,6 @@ function ReviewRow({
                   Stop asking about {item.item.source.attributeKey}
                 </Button.Text>
               </Button>
-            ) : (
-              // Holds the icon button's space so Map and Leave unmapped line
-              // up with rows that have it.
-              <span aria-hidden className="w-8" />
             )}
           </div>
         </div>
