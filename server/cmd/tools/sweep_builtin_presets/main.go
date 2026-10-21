@@ -40,7 +40,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"slices"
+	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
@@ -52,9 +52,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/cmd/tools/internal/clickhouseconn"
 	"github.com/speakeasy-api/gram/server/cmd/tools/internal/falsepositivesweep"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/uuidv7"
@@ -76,6 +79,8 @@ type candidateSource string
 type config struct {
 	dbURL          string
 	clickhouseURL  string
+	assetsBackend  string
+	assetsURI      string
 	orgID          string
 	projectID      uuid.UUID
 	policyID       uuid.NullUUID
@@ -89,27 +94,29 @@ type config struct {
 }
 
 type report struct {
-	scanned       int64
-	flagged       int64
-	updated       int64
-	skippedPolicy int64
-	bySource      map[string]int64
-	byFilter      map[string]int64
-	byReason      map[string]int64
-	lastCursor    uuid.UUID
+	scanned           int64
+	flagged           int64
+	updated           int64
+	skippedPolicy     int64
+	unreconstructable int64
+	redactionMismatch int64
+	bySource          map[string]int64
+	byFilter          map[string]int64
+	byReason          map[string]int64
+	lastCursor        uuid.UUID
 }
 
 type policySweepFilters struct {
 	disabledRules         risk_analysis.DisabledRuleSet
 	builtinPresetsEnabled bool
-	found                 bool
+	enabled               bool
 }
 
 func emptyPolicySweepFilters() policySweepFilters {
 	return policySweepFilters{
 		disabledRules:         risk_analysis.NewDisabledRuleSet(nil),
 		builtinPresetsEnabled: false,
-		found:                 false,
+		enabled:               false,
 	}
 }
 
@@ -152,7 +159,22 @@ func run() int {
 	}
 	defer func() { _ = chConn.Close() }()
 
-	rep, runErr := sweep(ctx, pool, chrepo.New(chConn), cfg, lib)
+	var assetStorage blobio.Reader
+	closeAssets := func() error { return nil }
+	if cfg.candidates == candidateSourceClickHouse {
+		assetStorage, closeAssets, err = openAssetStorage(ctx, slog.Default(), cfg.assetsBackend, cfg.assetsURI)
+		if err != nil {
+			log.Printf("connect asset storage: %v", err)
+			return 1
+		}
+	}
+	defer func() {
+		if err := closeAssets(); err != nil {
+			log.Printf("close asset storage: %v", err)
+		}
+	}()
+
+	rep, runErr := sweep(ctx, pool, chrepo.New(chConn), cfg, lib, assetStorage)
 	printReport(cfg, rep, lib)
 
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
@@ -166,6 +188,8 @@ func parseFlags() (config, error) {
 	var (
 		dbURL         = flag.String("db", os.Getenv("GRAM_DATABASE_URL"), "Postgres connection string (defaults to $GRAM_DATABASE_URL)")
 		clickhouseURL = flag.String("clickhouse", os.Getenv("GRAM_CLICKHOUSE_URL"), "ClickHouse connection string (defaults to $GRAM_CLICKHOUSE_URL)")
+		assetsBackend = flag.String("assets-backend", os.Getenv("GRAM_ASSETS_BACKEND"), "optional asset backend for content-part reconstruction: fs or gcs (defaults to $GRAM_ASSETS_BACKEND)")
+		assetsURI     = flag.String("assets-uri", os.Getenv("GRAM_ASSETS_URI"), "optional asset storage location for content-part reconstruction (defaults to $GRAM_ASSETS_URI)")
 		orgID         = flag.String("org", "", "organization_id to scope the sweep (required)")
 		projectID     = flag.String("project", "", "project_id (uuid) to scope the sweep (required)")
 		policyID      = flag.String("policy", "", "optional risk_policy_id (uuid) to scope to one policy; all policies if empty")
@@ -181,6 +205,8 @@ func parseFlags() (config, error) {
 	var cfg config
 	cfg.dbURL = *dbURL
 	cfg.clickhouseURL = *clickhouseURL
+	cfg.assetsBackend = *assetsBackend
+	cfg.assetsURI = *assetsURI
 	cfg.orgID = *orgID
 	cfg.dryRun = *dryRun
 	cfg.candidates = candidateSource(*candidates)
@@ -195,6 +221,14 @@ func parseFlags() (config, error) {
 	}
 	if cfg.clickhouseURL == "" {
 		return cfg, errors.New("missing -clickhouse / $GRAM_CLICKHOUSE_URL")
+	}
+	if cfg.candidates == candidateSourceClickHouse {
+		if (cfg.assetsBackend == "") != (cfg.assetsURI == "") {
+			return cfg, errors.New("-assets-backend and -assets-uri must be provided together")
+		}
+		if cfg.assetsBackend != "" && cfg.assetsBackend != "fs" && cfg.assetsBackend != "gcs" {
+			return cfg, errors.New("-assets-backend must be fs or gcs")
+		}
 	}
 	if cfg.orgID == "" {
 		return cfg, errors.New("missing -org")
@@ -247,6 +281,28 @@ func parseFlags() (config, error) {
 	return cfg, nil
 }
 
+func openAssetStorage(ctx context.Context, logger *slog.Logger, backend, uri string) (blobio.Reader, func() error, error) {
+	closeStorage := func() error { return nil }
+	switch backend {
+	case "":
+		return nil, closeStorage, nil
+	case "fs":
+		root, err := os.OpenRoot(filepath.Clean(uri))
+		if err != nil {
+			return nil, closeStorage, fmt.Errorf("open fs assets root: %w", err)
+		}
+		return assets.NewFSBlobStore(logger, root), root.Close, nil
+	case "gcs":
+		store, err := assets.NewGCSBlobStore(ctx, logger, uri)
+		if err != nil {
+			return nil, closeStorage, fmt.Errorf("create gcs blob store: %w", err)
+		}
+		return store, closeStorage, nil
+	default:
+		return nil, closeStorage, fmt.Errorf("invalid assets backend %q", backend)
+	}
+}
+
 // selectPage walks risk_results in id order. It only fetches rows whose rule_id
 // is scoped by the preset catalog — either an exact id (Library.RuleIDs) or a
 // "prefix*" family exposed as a SQL LIKE pattern (Library.RuleIDGlobs, see
@@ -285,16 +341,18 @@ func likeGlobs(globs []string) []string {
 	return out
 }
 
-func sweep(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg config, lib *presetlib.Library) (report, error) {
+func sweep(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg config, lib *presetlib.Library, assetStorage blobio.Reader) (report, error) {
 	rep := report{
-		scanned:       0,
-		flagged:       0,
-		updated:       0,
-		skippedPolicy: 0,
-		bySource:      map[string]int64{},
-		byFilter:      map[string]int64{},
-		byReason:      map[string]int64{},
-		lastCursor:    cfg.cursor,
+		scanned:           0,
+		flagged:           0,
+		updated:           0,
+		skippedPolicy:     0,
+		unreconstructable: 0,
+		redactionMismatch: 0,
+		bySource:          map[string]int64{},
+		byFilter:          map[string]int64{},
+		byReason:          map[string]int64{},
+		lastCursor:        cfg.cursor,
 	}
 	if cfg.candidates == candidateSourceClickHouse && !cfg.cursorProvided {
 		rep.lastCursor = uuid.Nil
@@ -304,7 +362,7 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg conf
 	case candidateSourcePostgres:
 		return sweepPostgres(ctx, pool, ch, cfg, lib, rep)
 	case candidateSourceClickHouse:
-		return sweepClickHouse(ctx, pool, ch, cfg, lib, rep)
+		return sweepClickHouse(ctx, pool, ch, cfg, lib, rep, assetStorage)
 	default:
 		return rep, fmt.Errorf("unsupported candidate source %q", cfg.candidates)
 	}
@@ -384,7 +442,7 @@ func sweepPostgres(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, 
 	}
 }
 
-func sweepClickHouse(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg config, lib *presetlib.Library, rep report) (report, error) {
+func sweepClickHouse(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg config, lib *presetlib.Library, rep report, assetStorage blobio.Reader) (report, error) {
 	cursorTime := cfg.from
 	cursorID := uuid.Nil
 	if cfg.cursorProvided {
@@ -401,10 +459,8 @@ func sweepClickHouse(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries
 		policyID = cfg.policyID.UUID.String()
 	}
 	policyCache := map[uuid.UUID]policySweepFilters{}
-	reveal := risk.NewRevealMatcher(slog.Default(), riskrepo.New(pool), nil)
+	reveal := risk.NewRevealMatcher(slog.Default(), riskrepo.New(pool), assetStorage)
 	provenance := "preset:" + lib.Version() + " "
-	presetRuleIDs := lib.RuleIDs()
-	presetRuleGlobs := lib.RuleIDGlobs()
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -428,16 +484,17 @@ func sweepClickHouse(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries
 		ids := make([]uuid.UUID, 0, len(candidates))
 		reasons := make([]string, 0, len(candidates))
 		anchors := make(map[string]risk.RevealAnchor)
+		missingPolicies := make(map[uuid.UUID]struct{})
 		for i := range candidates {
 			candidate := &candidates[i]
 			cursorTime = candidate.CreatedAt
 			cursorID = candidate.ID
 
-			filters, err := loadPolicySweepFilters(ctx, pool, policyCache, cfg.projectID, candidate.RiskPolicyID)
+			filters, err := loadPolicySweepFilters(ctx, pool, policyCache, missingPolicies, cfg.projectID, candidate.RiskPolicyID)
 			if err != nil {
 				return rep, err
 			}
-			if !filters.found {
+			if !filters.enabled {
 				rep.skippedPolicy++
 				continue
 			}
@@ -450,9 +507,17 @@ func sweepClickHouse(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries
 			case filters.disabledRules.Contains(candidate.RuleID):
 				filter = filterDisabledRule
 				detail = filterDisabledRule + ":" + candidate.RuleID
-			case filters.builtinPresetsEnabled && presetRuleMatches(presetRuleIDs, presetRuleGlobs, candidate.RuleID):
+			case filters.builtinPresetsEnabled:
 				match, ok := reconstructCandidateMatch(ctx, reveal, cfg.projectID, candidate, anchors)
-				if !ok || !risk_analysis.IsBuiltinFalsePositive(lib, candidate.Source, candidate.RuleID, match) {
+				if !ok {
+					rep.unreconstructable++
+					continue
+				}
+				if maskdisplay.Display(candidate.Source, candidate.RuleID, match) != candidate.MatchRedacted {
+					rep.redactionMismatch++
+					continue
+				}
+				if !risk_analysis.IsBuiltinFalsePositive(lib, candidate.Source, candidate.RuleID, match) {
 					continue
 				}
 				reason := lib.Reason(presetlib.Match{Source: candidate.Source, RuleID: candidate.RuleID, Value: match})
@@ -483,7 +548,14 @@ func sweepClickHouse(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries
 	}
 }
 
-func loadPolicySweepFilters(ctx context.Context, pool *pgxpool.Pool, cache map[uuid.UUID]policySweepFilters, projectID uuid.UUID, rawPolicyID string) (policySweepFilters, error) {
+func loadPolicySweepFilters(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	cache map[uuid.UUID]policySweepFilters,
+	missing map[uuid.UUID]struct{},
+	projectID uuid.UUID,
+	rawPolicyID string,
+) (policySweepFilters, error) {
 	policyID, err := uuid.Parse(rawPolicyID)
 	if err != nil {
 		return emptyPolicySweepFilters(), nil
@@ -491,13 +563,16 @@ func loadPolicySweepFilters(ctx context.Context, pool *pgxpool.Pool, cache map[u
 	if filters, ok := cache[policyID]; ok {
 		return filters, nil
 	}
+	if _, ok := missing[policyID]; ok {
+		return emptyPolicySweepFilters(), nil
+	}
 
 	policy, err := riskrepo.New(pool).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
 		ID:        policyID,
 		ProjectID: projectID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		cache[policyID] = emptyPolicySweepFilters()
+		missing[policyID] = struct{}{}
 		return emptyPolicySweepFilters(), nil
 	}
 	if err != nil {
@@ -507,22 +582,10 @@ func loadPolicySweepFilters(ctx context.Context, pool *pgxpool.Pool, cache map[u
 	filters := policySweepFilters{
 		disabledRules:         risk_analysis.NewDisabledRuleSet(policy.DisabledRules),
 		builtinPresetsEnabled: risk_analysis.BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig),
-		found:                 true,
+		enabled:               policy.Enabled,
 	}
 	cache[policyID] = filters
 	return filters, nil
-}
-
-func presetRuleMatches(ruleIDs, ruleIDGlobs []string, ruleID string) bool {
-	if slices.Contains(ruleIDs, ruleID) {
-		return true
-	}
-	for _, glob := range ruleIDGlobs {
-		if strings.HasPrefix(ruleID, strings.TrimSuffix(glob, "*")) {
-			return true
-		}
-	}
-	return false
 }
 
 func reconstructCandidateMatch(ctx context.Context, reveal *risk.RevealMatcher, projectID uuid.UUID, candidate *chrepo.RiskFindingUnmaskRow, anchors map[string]risk.RevealAnchor) (string, bool) {
@@ -555,8 +618,8 @@ func applyBatch(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg
 }
 
 func logProgress(cfg config, rep report) {
-	log.Printf("candidates=%s scanned=%d flagged=%d updated=%d skipped_policy=%d cursor=%s",
-		cfg.candidates, rep.scanned, rep.flagged, rep.updated, rep.skippedPolicy, rep.lastCursor)
+	log.Printf("candidates=%s scanned=%d flagged=%d updated=%d skipped_policy=%d unreconstructable=%d redaction_mismatch=%d cursor=%s",
+		cfg.candidates, rep.scanned, rep.flagged, rep.updated, rep.skippedPolicy, rep.unreconstructable, rep.redactionMismatch, rep.lastCursor)
 }
 
 func printReport(cfg config, rep report, lib *presetlib.Library) {
@@ -576,12 +639,14 @@ func printReport(cfg config, rep report, lib *presetlib.Library) {
 	} else {
 		fmt.Printf("  policy:         (all)\n")
 	}
-	fmt.Printf("  window:         %s .. %s\n", cfg.from.Format(time.RFC3339), cfg.to.Format(time.RFC3339))
-	fmt.Printf("  scanned:        %d\n", rep.scanned)
-	fmt.Printf("  flagged:        %d\n", rep.flagged)
-	fmt.Printf("  updated:        %d\n", rep.updated)
-	fmt.Printf("  skipped policy: %d\n", rep.skippedPolicy)
-	fmt.Printf("  last cursor:    %s\n", rep.lastCursor)
+	fmt.Printf("  window:              %s .. %s\n", cfg.from.Format(time.RFC3339), cfg.to.Format(time.RFC3339))
+	fmt.Printf("  scanned:             %d\n", rep.scanned)
+	fmt.Printf("  flagged:             %d\n", rep.flagged)
+	fmt.Printf("  updated:             %d\n", rep.updated)
+	fmt.Printf("  skipped policy:      %d\n", rep.skippedPolicy)
+	fmt.Printf("  unreconstructable:   %d\n", rep.unreconstructable)
+	fmt.Printf("  redaction mismatch:  %d\n", rep.redactionMismatch)
+	fmt.Printf("  last cursor:         %s\n", rep.lastCursor)
 
 	printCounts("  by source:", rep.bySource)
 	printCounts("  by filter:", rep.byFilter)

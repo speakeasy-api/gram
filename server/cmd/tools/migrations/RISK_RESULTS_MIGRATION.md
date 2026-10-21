@@ -240,15 +240,22 @@ id and version, source, rule id, and span offsets.
 5. For each project, run the policy-filter sweep dry run:
 
    ```bash
-   mise exec -- go run ./server/cmd/tools/sweep_builtin_presets \
-     -candidates clickhouse \
-     -org <ORG_ID> -project <PROJECT_ID> \
-     -from <FROM_RFC3339> -to <TO_RFC3339>
+   GRAM_ASSETS_BACKEND=gcs GRAM_ASSETS_URI=gs://<ASSET_BUCKET> \
+     mise exec -- go run ./server/cmd/tools/sweep_builtin_presets \
+       -candidates clickhouse \
+       -org <ORG_ID> -project <PROJECT_ID> \
+       -from <FROM_RFC3339> -to <TO_RFC3339>
    ```
 
-   Review `scanned`, `skipped policy`, and the per-source and per-filter counts.
-   Missing or deleted policies are skipped. ClickHouse mode honors the current
-   policy's disabled rules and built-in preset toggle.
+   Review `scanned`, `skipped policy`, `unreconstructable`, `redaction
+   mismatch`, and the per-source and per-filter counts. Missing, deleted, and
+   disabled policies are skipped. ClickHouse mode honors each enabled policy's
+   disabled rules and built-in preset toggle. `-assets-backend` and
+   `-assets-uri` default to `GRAM_ASSETS_BACKEND` and `GRAM_ASSETS_URI`; provide
+   both whenever the window may contain content-part findings. Without asset
+   storage, those built-in candidates are counted as `unreconstructable` and
+   left live. A `redaction mismatch` means reconstructed bytes did not reproduce
+   the finding's stored display mask, so the candidate is also left live.
 
 6. Repeat the sweep with `-dry-run=false`, preserving every scope flag. Run the
    dry run once more and confirm `flagged` is zero.

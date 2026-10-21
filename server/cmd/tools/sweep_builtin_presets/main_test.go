@@ -9,13 +9,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -59,10 +65,10 @@ func newSweepFixture(t *testing.T) *sweepFixture {
 	return &sweepFixture{pool: pool, orgID: orgID, projectID: project.ID, chatID: chatID}
 }
 
-func (f *sweepFixture) newPolicy(t *testing.T, analyzerConfig []byte, disabledRules []string) uuid.UUID {
+func (f *sweepFixture) newPolicy(t *testing.T, id uuid.UUID, enabled bool, analyzerConfig []byte, disabledRules []string) uuid.UUID {
 	t.Helper()
 	policy, err := riskrepo.New(f.pool).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
-		ID:                   uuid.Must(uuid.NewV7()),
+		ID:                   id,
 		ProjectID:            f.projectID,
 		OrganizationID:       f.orgID,
 		Name:                 "sweep policy",
@@ -74,7 +80,7 @@ func (f *sweepFixture) newPolicy(t *testing.T, analyzerConfig []byte, disabledRu
 		DisabledRules:        disabledRules,
 		CustomRuleIds:        []string{},
 		McpScope:             nil,
-		Enabled:              true,
+		Enabled:              enabled,
 		Action:               "flag",
 		AudienceType:         "everyone",
 		ShadowMcpDisposition: pgtype.Text{},
@@ -121,7 +127,36 @@ func (f *sweepFixture) newFinding(t *testing.T, policyID uuid.UUID, createdAt ti
 	}
 }
 
-func runCHSweep(t *testing.T, fixture *sweepFixture, from, to time.Time, dryRun bool, batchSize int) report {
+func (f *sweepFixture) newContentPartFinding(
+	t *testing.T,
+	assetStorage assets.BlobStore,
+	policyID uuid.UUID,
+	createdAt time.Time,
+	source string,
+	ruleID string,
+	match string,
+) chrepo.RiskFindingRow {
+	t.Helper()
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), f.pool, assetStorage)
+	t.Cleanup(func() { _ = shutdown(t.Context()) })
+	assetURL, err := writer.WriteContentPartAsset(t.Context(), f.projectID, f.chatID, []byte(match))
+	require.NoError(t, err)
+	partID, err := riskrepo.New(f.pool).CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              f.chatID,
+		ProjectID:           uuid.NullUUID{UUID: f.projectID, Valid: true},
+		Kind:                message.PromptAttachment,
+		ContentAssetUrl:     assetURL,
+		ParentChatMessageID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+
+	finding := f.newFinding(t, policyID, createdAt, source, ruleID, match)
+	finding.ChatMessageID = ""
+	finding.ContentPartID = partID.String()
+	return finding
+}
+
+func runCHSweep(t *testing.T, fixture *sweepFixture, from, to time.Time, dryRun bool, batchSize int, assetStorage blobio.Reader) report {
 	t.Helper()
 	lib, err := presetlib.New()
 	require.NoError(t, err)
@@ -135,7 +170,7 @@ func runCHSweep(t *testing.T, fixture *sweepFixture, from, to time.Time, dryRun 
 		batchSize:  batchSize,
 		dryRun:     dryRun,
 		candidates: candidateSourceClickHouse,
-	}, lib)
+	}, lib, assetStorage)
 	require.NoError(t, err)
 	return rep
 }
@@ -162,7 +197,7 @@ func findingState(t *testing.T, fixture *sweepFixture, id uuid.UUID) chrepo.Fals
 func TestSweepClickHouseDisabledRulesSkipsDismissedAndShadowAndIncludesUnsuppression(t *testing.T) {
 	t.Parallel()
 	fixture := newSweepFixture(t)
-	policyID := fixture.newPolicy(t, nil, []string{"custom.disabled"})
+	policyID := fixture.newPolicy(t, uuid.Must(uuid.NewV7()), true, nil, []string{"custom.disabled"})
 	createdAt := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
 	live := fixture.newFinding(t, policyID, createdAt, "custom", "custom.disabled", "live")
 	dismissed := fixture.newFinding(t, policyID, createdAt, "custom", "custom.disabled", "dismissed")
@@ -178,7 +213,7 @@ func TestSweepClickHouseDisabledRulesSkipsDismissedAndShadowAndIncludesUnsuppres
 	require.NoError(t, queries.AppendFalsePositiveSuppression(t.Context(), fixture.orgID, fixture.projectID.String(), now, now, "manual", []uuid.UUID{dismissed.ID, restored.ID}))
 	require.NoError(t, queries.AppendFalsePositiveReversal(t.Context(), fixture.orgID, fixture.projectID.String(), chrepo.FormatCHTime(time.Now().UTC().Add(time.Second)), []uuid.UUID{restored.ID}))
 
-	rep := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 1)
+	rep := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 1, nil)
 	require.EqualValues(t, 2, rep.scanned)
 	require.EqualValues(t, 2, rep.flagged)
 	require.EqualValues(t, 2, rep.updated)
@@ -202,8 +237,8 @@ func TestSweepClickHouseDisabledRulesSkipsDismissedAndShadowAndIncludesUnsuppres
 func TestSweepClickHouseHonorsBuiltinPresetToggleAndSkipsMissingPolicy(t *testing.T) {
 	t.Parallel()
 	fixture := newSweepFixture(t)
-	enabledPolicy := fixture.newPolicy(t, nil, nil)
-	disabledPolicy := fixture.newPolicy(t, []byte(`{"builtin_presets":{"enabled":false}}`), nil)
+	enabledPolicy := fixture.newPolicy(t, uuid.Must(uuid.NewV7()), true, nil, nil)
+	disabledPolicy := fixture.newPolicy(t, uuid.Must(uuid.NewV7()), true, []byte(`{"builtin_presets":{"enabled":false}}`), nil)
 	createdAt := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
 	const card = "4111111111111111"
 	enabled := fixture.newFinding(t, enabledPolicy, createdAt, "presidio", "pii.credit_card", card)
@@ -214,7 +249,7 @@ func TestSweepClickHouseHonorsBuiltinPresetToggleAndSkipsMissingPolicy(t *testin
 	require.NoError(t, err)
 	require.NoError(t, chrepo.New(conn).InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{enabled, disabled, missing}))
 
-	rep := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10)
+	rep := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10, nil)
 	require.EqualValues(t, 3, rep.scanned)
 	require.EqualValues(t, 1, rep.flagged)
 	require.EqualValues(t, 1, rep.updated)
@@ -228,25 +263,136 @@ func TestSweepClickHouseHonorsBuiltinPresetToggleAndSkipsMissingPolicy(t *testin
 func TestSweepClickHouseDryRunWritesNothingAndRerunChangesNothing(t *testing.T) {
 	t.Parallel()
 	fixture := newSweepFixture(t)
-	policyID := fixture.newPolicy(t, nil, []string{"custom.disabled"})
+	policyID := fixture.newPolicy(t, uuid.Must(uuid.NewV7()), true, nil, []string{"custom.disabled"})
 	createdAt := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
 	finding := fixture.newFinding(t, policyID, createdAt, "custom", "custom.disabled", "candidate")
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	require.NoError(t, chrepo.New(conn).InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{finding}))
 
-	dry := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), true, 10)
+	dry := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), true, 10, nil)
 	require.EqualValues(t, 1, dry.flagged)
 	require.Zero(t, dry.updated)
 	require.EqualValues(t, 1, rawCopyCount(t, finding.ID))
 	require.False(t, findingState(t, fixture, finding.ID).Dismissed)
 
-	applied := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10)
+	applied := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10, nil)
 	require.EqualValues(t, 1, applied.updated)
 	require.EqualValues(t, 2, rawCopyCount(t, finding.ID))
 
-	rerun := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10)
+	rerun := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10, nil)
 	require.Zero(t, rerun.flagged)
 	require.Zero(t, rerun.updated)
 	require.EqualValues(t, 2, rawCopyCount(t, finding.ID))
+}
+
+func TestSweepClickHouseLeavesDisabledPolicyFindingsLive(t *testing.T) {
+	t.Parallel()
+	fixture := newSweepFixture(t)
+	policyID := fixture.newPolicy(t, uuid.Must(uuid.NewV7()), false, nil, []string{"custom.disabled"})
+	createdAt := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	finding := fixture.newFinding(t, policyID, createdAt, "custom", "custom.disabled", "candidate")
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	require.NoError(t, chrepo.New(conn).InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{finding}))
+
+	rep := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10, nil)
+	require.EqualValues(t, 1, rep.scanned)
+	require.EqualValues(t, 1, rep.skippedPolicy)
+	require.Zero(t, rep.flagged)
+	require.False(t, findingState(t, fixture, finding.ID).Dismissed)
+}
+
+func TestSweepClickHouseRejectsRedactionMismatch(t *testing.T) {
+	t.Parallel()
+	fixture := newSweepFixture(t)
+	policyID := fixture.newPolicy(t, uuid.Must(uuid.NewV7()), true, nil, nil)
+	createdAt := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	const card = "4111111111111111"
+	finding := fixture.newFinding(t, policyID, createdAt, "presidio", "pii.credit_card", card)
+	finding.MatchRedacted = maskdisplay.Display("presidio", "pii.credit_card", "4242424242424242")
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	require.NoError(t, chrepo.New(conn).InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{finding}))
+
+	rep := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10, nil)
+	require.EqualValues(t, 1, rep.scanned)
+	require.EqualValues(t, 1, rep.redactionMismatch)
+	require.Zero(t, rep.flagged)
+	require.False(t, findingState(t, fixture, finding.ID).Dismissed)
+}
+
+func TestSweepClickHouseMatchesCatalogRuleWithoutRuleIDScope(t *testing.T) {
+	t.Parallel()
+	fixture := newSweepFixture(t)
+	policyID := fixture.newPolicy(t, uuid.Must(uuid.NewV7()), true, nil, nil)
+	createdAt := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	const exampleSecret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+	finding := fixture.newFinding(t, policyID, createdAt, "gitleaks", "secret.generic-api-key", exampleSecret)
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	require.NoError(t, chrepo.New(conn).InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{finding}))
+
+	rep := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10, nil)
+	require.EqualValues(t, 1, rep.flagged)
+	require.EqualValues(t, 1, rep.byFilter[filterBuiltinPreset])
+	require.True(t, findingState(t, fixture, finding.ID).Dismissed)
+}
+
+func TestLoadPolicySweepFiltersRetriesMissingPolicyOnNextPage(t *testing.T) {
+	t.Parallel()
+	fixture := newSweepFixture(t)
+	policyID := uuid.Must(uuid.NewV7())
+	cache := make(map[uuid.UUID]policySweepFilters)
+	firstPageMissing := make(map[uuid.UUID]struct{})
+
+	filters, err := loadPolicySweepFilters(t.Context(), fixture.pool, cache, firstPageMissing, fixture.projectID, policyID.String())
+	require.NoError(t, err)
+	require.False(t, filters.enabled)
+	require.Contains(t, firstPageMissing, policyID)
+
+	fixture.newPolicy(t, policyID, true, nil, nil)
+	filters, err = loadPolicySweepFilters(t.Context(), fixture.pool, cache, firstPageMissing, fixture.projectID, policyID.String())
+	require.NoError(t, err)
+	require.False(t, filters.enabled)
+
+	filters, err = loadPolicySweepFilters(t.Context(), fixture.pool, cache, make(map[uuid.UUID]struct{}), fixture.projectID, policyID.String())
+	require.NoError(t, err)
+	require.True(t, filters.enabled)
+}
+
+func TestSweepClickHouseReconstructsContentPartWithAssetStorage(t *testing.T) {
+	t.Parallel()
+	fixture := newSweepFixture(t)
+	policyID := fixture.newPolicy(t, uuid.Must(uuid.NewV7()), true, nil, nil)
+	createdAt := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	const card = "4111111111111111"
+	assetStorage := assetstest.NewTestBlobStore(t)
+	finding := fixture.newContentPartFinding(t, assetStorage, policyID, createdAt, "presidio", "pii.credit_card", card)
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	require.NoError(t, chrepo.New(conn).InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{finding}))
+
+	rep := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10, assetStorage)
+	require.Zero(t, rep.unreconstructable)
+	require.EqualValues(t, 1, rep.flagged)
+	require.True(t, findingState(t, fixture, finding.ID).Dismissed)
+}
+
+func TestSweepClickHouseReportsContentPartWithoutAssetStorage(t *testing.T) {
+	t.Parallel()
+	fixture := newSweepFixture(t)
+	policyID := fixture.newPolicy(t, uuid.Must(uuid.NewV7()), true, nil, nil)
+	createdAt := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	const card = "4111111111111111"
+	assetStorage := assetstest.NewTestBlobStore(t)
+	finding := fixture.newContentPartFinding(t, assetStorage, policyID, createdAt, "presidio", "pii.credit_card", card)
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	require.NoError(t, chrepo.New(conn).InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{finding}))
+
+	rep := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10, nil)
+	require.EqualValues(t, 1, rep.unreconstructable)
+	require.Zero(t, rep.flagged)
+	require.False(t, findingState(t, fixture, finding.ID).Dismissed)
 }
