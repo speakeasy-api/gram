@@ -210,18 +210,20 @@ will not join.
 
 ## Gap-fill before an organization cutover
 
-Run gap-fill for each organization before enabling
-`risk-findings-clickhouse-cutover`. The lookup checks ClickHouse in batches
-bounded by organization, project, the batch's UTC partition days, and source.
-It first matches the deterministic migration id, then matches a different live
-id by anchor, policy id and version, source, rule id, and span offsets.
+Run the gap-fill and policy-filter sweep before enabling
+`risk-findings-clickhouse-cutover`. Use one half-open time window for every
+step. The gap-fill lookup checks ClickHouse in batches bounded by organization,
+project, the batch's UTC partition days, and source. It first matches the
+deterministic migration id, then matches a different live id by anchor, policy
+id and version, source, rule id, and span offsets.
 
-1. Run a dry run first:
+1. Run a gap-fill dry run:
 
    ```bash
    mise exec -- go run ./server/cmd/tools/migrations riskfindings \
      -gap-fill -org <ORG_ID> \
      -sources prompt_injection,llm_judge,shadow_mcp,destructive_tool,cli_destructive,account_identity,presidio,gitleaks,custom \
+     -from <FROM_RFC3339> -to <TO_RFC3339> \
      -dry-run=true
    ```
 
@@ -233,15 +235,29 @@ id by anchor, policy id and version, source, rule id, and span offsets.
    missing ClickHouse rows.
 3. Repeat the same command with `-dry-run=false`. Preserve `-org`, `-project`,
    `-policy`, `-sources`, `-from`, and `-to` when resuming with `-cursor`.
-   Pass `-from` explicitly on resume (the failure log prints the effective
-   value), since the gap-fill default is relative to run time.
-4. Run the dry run again. Every source should report zero `state_copies` and
-   zero `inserts`.
-5. Validate per-source counts over the same half-open time window. Expand
+4. Run the gap-fill dry run again. Every source should report zero
+   `state_copies` and zero `inserts`.
+5. For each project, run the policy-filter sweep dry run:
+
+   ```bash
+   mise exec -- go run ./server/cmd/tools/sweep_builtin_presets \
+     -candidates clickhouse \
+     -org <ORG_ID> -project <PROJECT_ID> \
+     -from <FROM_RFC3339> -to <TO_RFC3339>
+   ```
+
+   Review `scanned`, `skipped policy`, and the per-source and per-filter counts.
+   Missing or deleted policies are skipped. ClickHouse mode honors the current
+   policy's disabled rules and built-in preset toggle.
+
+6. Repeat the sweep with `-dry-run=false`, preserving every scope flag. Run the
+   dry run once more and confirm `flagged` is zero.
+7. Validate per-source counts over the same half-open time window. Expand
    Postgres spans with
    `SUM(GREATEST(COALESCE(jsonb_array_length(spans), 1), 1))`. In ClickHouse,
    resolve the latest copy per id and compare `uniqExact(id)` grouped by
    `source`. State copies do not change `uniqExact(id)`.
+8. Enable `risk-findings-clickhouse-cutover` only after the validation passes.
 
 Rows matched under a live ClickHouse id keep that id. Missing Postgres
 exclusion or dismissal state is appended as a suppression copy of the latest

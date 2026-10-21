@@ -1,8 +1,7 @@
 // Command sweep_builtin_presets is an offline operator tool that re-evaluates
-// stored risk findings against the built-in preset false-positive catalog in
-// the internal/risk/presetlib package and marks the known-benign noise (test
-// credit cards, example API keys/tokens, module hashes, placeholder emails,
-// ...) as false positives so the dashboard hides them.
+// stored risk findings against current policy filters. ClickHouse candidate
+// mode applies disabled rules and the built-in preset false-positive catalog.
+// Postgres candidate mode preserves the historical preset-only behavior.
 //
 // It is meant to be run rarely and by hand, against production databases
 // reached through tunnels:
@@ -10,14 +9,17 @@
 //	GRAM_DATABASE_URL=postgres://USER:PASS@127.0.0.1:5432/gram \
 //	GRAM_CLICKHOUSE_URL=clickhouse://USER:PASS@HOST:9440/gram?secure=true \
 //	  go run ./server/cmd/tools/sweep_builtin_presets \
-//	  -org org_123 -project <uuid> \
+//	  -candidates clickhouse -org <ORG_ID> -project <PROJECT_ID> \
 //	  -from 2024-01-01T00:00:00Z -to 2024-06-01T00:00:00Z \
 //	  -dry-run=false
 //
 // Safety properties:
 //   - -dry-run defaults to true: a plain run only reports what it would mark.
-//   - Candidates are paged from Postgres risk_results, so findings that exist
-//     only in ClickHouse are not swept.
+//   - -candidates defaults to postgres, preserving the historical scan and its
+//     unconditional preset matching. clickhouse mode uses each policy's current
+//     disabled rules and built-in preset toggle.
+//   - ClickHouse candidates are latest live, non-shadow copies, keyset-paged by
+//     (created_at, id). The reported id resumes through -cursor.
 //   - Marks are appended to ClickHouse first, then mirrored to Postgres. Every
 //     write is scoped by organization_id + project_id + id and skips findings
 //     already dismissed, so re-runs and resumes are idempotent.
@@ -35,47 +37,80 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/cmd/tools/internal/clickhouseconn"
 	"github.com/speakeasy-api/gram/server/cmd/tools/internal/falsepositivesweep"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/uuidv7"
 )
 
 const (
 	defaultBatchSize = 5000
 	maxBatchSize     = 1_000_000
+
+	candidateSourcePostgres   candidateSource = "postgres"
+	candidateSourceClickHouse candidateSource = "clickhouse"
+
+	filterBuiltinPreset = "builtin_preset"
+	filterDisabledRule  = "disabled_rule"
 )
 
+type candidateSource string
+
 type config struct {
-	dbURL         string
-	clickhouseURL string
-	orgID         string
-	projectID     uuid.UUID
-	policyID      uuid.NullUUID
-	from          time.Time
-	to            time.Time
-	cursor        uuid.UUID
-	batchSize     int32
-	dryRun        bool
+	dbURL          string
+	clickhouseURL  string
+	orgID          string
+	projectID      uuid.UUID
+	policyID       uuid.NullUUID
+	from           time.Time
+	to             time.Time
+	cursor         uuid.UUID
+	cursorProvided bool
+	batchSize      int
+	dryRun         bool
+	candidates     candidateSource
 }
 
 type report struct {
-	scanned    int64
-	flagged    int64
-	updated    int64
-	byReason   map[string]int64
-	lastCursor uuid.UUID
+	scanned       int64
+	flagged       int64
+	updated       int64
+	skippedPolicy int64
+	bySource      map[string]int64
+	byFilter      map[string]int64
+	byReason      map[string]int64
+	lastCursor    uuid.UUID
+}
+
+type policySweepFilters struct {
+	disabledRules         risk_analysis.DisabledRuleSet
+	builtinPresetsEnabled bool
+	found                 bool
+}
+
+func emptyPolicySweepFilters() policySweepFilters {
+	return policySweepFilters{
+		disabledRules:         risk_analysis.NewDisabledRuleSet(nil),
+		builtinPresetsEnabled: false,
+		found:                 false,
+	}
 }
 
 func main() {
@@ -136,9 +171,10 @@ func parseFlags() (config, error) {
 		policyID      = flag.String("policy", "", "optional risk_policy_id (uuid) to scope to one policy; all policies if empty")
 		fromStr       = flag.String("from", "", "lower time bound, RFC3339 (required); findings created at/after this are scanned")
 		toStr         = flag.String("to", "", "upper time bound, RFC3339 (required); findings created before this are scanned")
-		cursorStr     = flag.String("cursor", "", "optional id to resume after (exclusive); overrides -from when set")
+		cursorStr     = flag.String("cursor", "", "optional finding id to resume after (exclusive)")
 		batchSize     = flag.Int("batch-size", defaultBatchSize, "rows fetched and updated per page")
 		dryRun        = flag.Bool("dry-run", true, "when true (default) only report; pass -dry-run=false to write")
+		candidates    = flag.String("candidates", string(candidateSourcePostgres), "candidate source: postgres or clickhouse")
 	)
 	flag.Parse()
 
@@ -147,6 +183,12 @@ func parseFlags() (config, error) {
 	cfg.clickhouseURL = *clickhouseURL
 	cfg.orgID = *orgID
 	cfg.dryRun = *dryRun
+	cfg.candidates = candidateSource(*candidates)
+	switch cfg.candidates {
+	case candidateSourcePostgres, candidateSourceClickHouse:
+	default:
+		return cfg, errors.New("-candidates must be postgres or clickhouse")
+	}
 
 	if cfg.dbURL == "" {
 		return cfg, errors.New("missing -db / $GRAM_DATABASE_URL")
@@ -187,7 +229,7 @@ func parseFlags() (config, error) {
 	if *batchSize <= 0 || *batchSize > maxBatchSize {
 		return cfg, fmt.Errorf("-batch-size must be in [1, %d]", maxBatchSize)
 	}
-	cfg.batchSize = int32(*batchSize)
+	cfg.batchSize = *batchSize
 
 	// The keyset cursor is exclusive (id > cursor). Start just below the lower
 	// time bound so the first real finding at -from is included; -cursor lets a
@@ -197,6 +239,7 @@ func parseFlags() (config, error) {
 		if err != nil {
 			return cfg, fmt.Errorf("invalid -cursor: %w", err)
 		}
+		cfg.cursorProvided = true
 	} else {
 		cfg.cursor = uuidv7.LowerBound(cfg.from)
 	}
@@ -243,10 +286,31 @@ func likeGlobs(globs []string) []string {
 }
 
 func sweep(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg config, lib *presetlib.Library) (report, error) {
-	var rep report
-	rep.byReason = map[string]int64{}
-	rep.lastCursor = cfg.cursor
+	rep := report{
+		scanned:       0,
+		flagged:       0,
+		updated:       0,
+		skippedPolicy: 0,
+		bySource:      map[string]int64{},
+		byFilter:      map[string]int64{},
+		byReason:      map[string]int64{},
+		lastCursor:    cfg.cursor,
+	}
+	if cfg.candidates == candidateSourceClickHouse && !cfg.cursorProvided {
+		rep.lastCursor = uuid.Nil
+	}
 
+	switch cfg.candidates {
+	case candidateSourcePostgres:
+		return sweepPostgres(ctx, pool, ch, cfg, lib, rep)
+	case candidateSourceClickHouse:
+		return sweepClickHouse(ctx, pool, ch, cfg, lib, rep)
+	default:
+		return rep, fmt.Errorf("unsupported candidate source %q", cfg.candidates)
+	}
+}
+
+func sweepPostgres(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg config, lib *presetlib.Library, rep report) (report, error) {
 	ruleIDs := lib.RuleIDs()
 	globs := likeGlobs(lib.RuleIDGlobs())
 	provenance := "preset:" + lib.Version() + " "
@@ -266,7 +330,7 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg conf
 		rows, err := pool.Query(ctx, selectPage,
 			cfg.orgID, cfg.projectID, policyArg, ruleIDs, globs, cursor, upper, cfg.batchSize)
 		if err != nil {
-			return rep, fmt.Errorf("select page after %s: %w", cursor, err)
+			return rep, fmt.Errorf("select Postgres page after %s: %w", cursor, err)
 		}
 
 		var (
@@ -283,53 +347,216 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg conf
 			)
 			if err := rows.Scan(&id, &source, &ruleID, &match); err != nil {
 				rows.Close()
-				return rep, fmt.Errorf("scan row: %w", err)
+				return rep, fmt.Errorf("scan Postgres row: %w", err)
 			}
 			n++
 			cursor = id
 			if match == nil {
 				continue
 			}
-			if reason := lib.Reason(presetlib.Match{Source: source, RuleID: ruleID, Value: *match}); reason != "" {
-				stamped := provenance + reason
-				ids = append(ids, id)
-				reasons = append(reasons, stamped)
-				rep.byReason[reason]++
+			reason := lib.Reason(presetlib.Match{Source: source, RuleID: ruleID, Value: *match})
+			if reason == "" {
+				continue
 			}
+			ids = append(ids, id)
+			reasons = append(reasons, provenance+reason)
+			rep.bySource[source]++
+			rep.byFilter[filterBuiltinPreset]++
+			rep.byReason[reason]++
 		}
 		if err := rows.Err(); err != nil {
 			rows.Close()
-			return rep, fmt.Errorf("iterate page: %w", err)
+			return rep, fmt.Errorf("iterate Postgres page: %w", err)
 		}
 		rows.Close()
 
 		rep.scanned += int64(n)
 		rep.flagged += int64(len(ids))
-
-		if len(ids) > 0 {
-			changed, err := falsepositivesweep.Apply(ctx, pool, ch, cfg.orgID, cfg.projectID, ids, reasons, cfg.dryRun)
-			if !cfg.dryRun {
-				// Earlier chunks may have committed before an error.
-				rep.updated += changed
-			}
-			if err != nil {
-				return rep, fmt.Errorf("apply batch ending at %s: %w", cursor, err)
-			}
+		if err := applyBatch(ctx, pool, ch, cfg, &rep, ids, reasons, cursor); err != nil {
+			return rep, err
 		}
-
-		// Advance the resume cursor only after the batch's write has succeeded
-		// (dry runs perform no write). Advancing earlier would report a cursor
-		// past rows that were never stamped, skipping them on retry.
 		rep.lastCursor = cursor
+		logProgress(cfg, rep)
 
-		log.Printf("scanned=%d flagged=%d updated=%d cursor=%s",
-			rep.scanned, rep.flagged, rep.updated, rep.lastCursor)
-
-		// A short page means we reached the end of the window.
-		if n < int(cfg.batchSize) {
+		if n < cfg.batchSize {
 			return rep, nil
 		}
 	}
+}
+
+func sweepClickHouse(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg config, lib *presetlib.Library, rep report) (report, error) {
+	cursorTime := cfg.from
+	cursorID := uuid.Nil
+	if cfg.cursorProvided {
+		resolved, err := ch.GetPolicyFilterSweepCursorTime(ctx, cfg.orgID, cfg.projectID.String(), cfg.cursor)
+		if err != nil {
+			return rep, fmt.Errorf("resolve ClickHouse resume cursor: %w", err)
+		}
+		cursorTime = resolved
+		cursorID = cfg.cursor
+	}
+
+	policyID := ""
+	if cfg.policyID.Valid {
+		policyID = cfg.policyID.UUID.String()
+	}
+	policyCache := map[uuid.UUID]policySweepFilters{}
+	reveal := risk.NewRevealMatcher(slog.Default(), riskrepo.New(pool), nil)
+	provenance := "preset:" + lib.Version() + " "
+	presetRuleIDs := lib.RuleIDs()
+	presetRuleGlobs := lib.RuleIDGlobs()
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return rep, fmt.Errorf("sweep interrupted at %s: %w", cursorID, err)
+		}
+
+		candidates, err := ch.ListPolicyFilterSweepCandidates(ctx, chrepo.ListPolicyFilterSweepCandidatesParams{
+			OrganizationID: cfg.orgID,
+			ProjectID:      cfg.projectID.String(),
+			PolicyID:       policyID,
+			From:           cfg.from,
+			To:             cfg.to,
+			CursorTime:     cursorTime,
+			CursorID:       cursorID,
+			Limit:          cfg.batchSize,
+		})
+		if err != nil {
+			return rep, fmt.Errorf("select ClickHouse page after %s: %w", cursorID, err)
+		}
+
+		ids := make([]uuid.UUID, 0, len(candidates))
+		reasons := make([]string, 0, len(candidates))
+		anchors := make(map[string]risk.RevealAnchor)
+		for i := range candidates {
+			candidate := &candidates[i]
+			cursorTime = candidate.CreatedAt
+			cursorID = candidate.ID
+
+			filters, err := loadPolicySweepFilters(ctx, pool, policyCache, cfg.projectID, candidate.RiskPolicyID)
+			if err != nil {
+				return rep, err
+			}
+			if !filters.found {
+				rep.skippedPolicy++
+				continue
+			}
+
+			var (
+				filter string
+				detail string
+			)
+			switch {
+			case filters.disabledRules.Contains(candidate.RuleID):
+				filter = filterDisabledRule
+				detail = filterDisabledRule + ":" + candidate.RuleID
+			case filters.builtinPresetsEnabled && presetRuleMatches(presetRuleIDs, presetRuleGlobs, candidate.RuleID):
+				match, ok := reconstructCandidateMatch(ctx, reveal, cfg.projectID, candidate, anchors)
+				if !ok || !risk_analysis.IsBuiltinFalsePositive(lib, candidate.Source, candidate.RuleID, match) {
+					continue
+				}
+				reason := lib.Reason(presetlib.Match{Source: candidate.Source, RuleID: candidate.RuleID, Value: match})
+				filter = filterBuiltinPreset
+				detail = provenance + reason
+				rep.byReason[reason]++
+			default:
+				continue
+			}
+
+			ids = append(ids, candidate.ID)
+			reasons = append(reasons, detail)
+			rep.bySource[candidate.Source]++
+			rep.byFilter[filter]++
+		}
+
+		rep.scanned += int64(len(candidates))
+		rep.flagged += int64(len(ids))
+		if err := applyBatch(ctx, pool, ch, cfg, &rep, ids, reasons, cursorID); err != nil {
+			return rep, err
+		}
+		rep.lastCursor = cursorID
+		logProgress(cfg, rep)
+
+		if len(candidates) < cfg.batchSize {
+			return rep, nil
+		}
+	}
+}
+
+func loadPolicySweepFilters(ctx context.Context, pool *pgxpool.Pool, cache map[uuid.UUID]policySweepFilters, projectID uuid.UUID, rawPolicyID string) (policySweepFilters, error) {
+	policyID, err := uuid.Parse(rawPolicyID)
+	if err != nil {
+		return emptyPolicySweepFilters(), nil
+	}
+	if filters, ok := cache[policyID]; ok {
+		return filters, nil
+	}
+
+	policy, err := riskrepo.New(pool).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
+		ID:        policyID,
+		ProjectID: projectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		cache[policyID] = emptyPolicySweepFilters()
+		return emptyPolicySweepFilters(), nil
+	}
+	if err != nil {
+		return policySweepFilters{}, fmt.Errorf("get risk policy %s: %w", policyID, err)
+	}
+
+	filters := policySweepFilters{
+		disabledRules:         risk_analysis.NewDisabledRuleSet(policy.DisabledRules),
+		builtinPresetsEnabled: risk_analysis.BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig),
+		found:                 true,
+	}
+	cache[policyID] = filters
+	return filters, nil
+}
+
+func presetRuleMatches(ruleIDs, ruleIDGlobs []string, ruleID string) bool {
+	if slices.Contains(ruleIDs, ruleID) {
+		return true
+	}
+	for _, glob := range ruleIDGlobs {
+		if strings.HasPrefix(ruleID, strings.TrimSuffix(glob, "*")) {
+			return true
+		}
+	}
+	return false
+}
+
+func reconstructCandidateMatch(ctx context.Context, reveal *risk.RevealMatcher, projectID uuid.UUID, candidate *chrepo.RiskFindingUnmaskRow, anchors map[string]risk.RevealAnchor) (string, bool) {
+	anchorKey := candidate.ChatMessageID + "\x00" + candidate.ContentPartID
+	anchor, ok := anchors[anchorKey]
+	if !ok {
+		anchor = reveal.LoadAnchor(ctx, projectID, candidate)
+		reveal.HydratePartContent(ctx, &anchor)
+		anchors[anchorKey] = anchor
+	}
+	chatID, attributed := risk.ResolveChatID(candidate, anchor)
+	if !attributed {
+		return "", false
+	}
+	return risk.MatchingReconstruction(candidate.MatchLen, reveal.Candidates(ctx, chatID, candidate, anchor))
+}
+
+func applyBatch(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg config, rep *report, ids []uuid.UUID, reasons []string, cursor uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	changed, err := falsepositivesweep.Apply(ctx, pool, ch, cfg.orgID, cfg.projectID, ids, reasons, cfg.dryRun)
+	if !cfg.dryRun {
+		rep.updated += changed
+	}
+	if err != nil {
+		return fmt.Errorf("apply batch ending at %s: %w", cursor, err)
+	}
+	return nil
+}
+
+func logProgress(cfg config, rep report) {
+	log.Printf("candidates=%s scanned=%d flagged=%d updated=%d skipped_policy=%d cursor=%s",
+		cfg.candidates, rep.scanned, rep.flagged, rep.updated, rep.skippedPolicy, rep.lastCursor)
 }
 
 func printReport(cfg config, rep report, lib *presetlib.Library) {
@@ -338,21 +565,26 @@ func printReport(cfg config, rep report, lib *presetlib.Library) {
 		mode = "APPLIED"
 	}
 	fmt.Println()
-	fmt.Println("preset false-positive sweep summary")
-	fmt.Printf("  catalog:     preset:%s\n", lib.Version())
-	fmt.Printf("  mode:        %s\n", mode)
-	fmt.Printf("  org:         %s\n", cfg.orgID)
-	fmt.Printf("  project:     %s\n", cfg.projectID)
+	fmt.Println("policy filter sweep summary")
+	fmt.Printf("  catalog:        preset:%s\n", lib.Version())
+	fmt.Printf("  mode:           %s\n", mode)
+	fmt.Printf("  candidates:     %s\n", cfg.candidates)
+	fmt.Printf("  org:            %s\n", cfg.orgID)
+	fmt.Printf("  project:        %s\n", cfg.projectID)
 	if cfg.policyID.Valid {
-		fmt.Printf("  policy:      %s\n", cfg.policyID.UUID)
+		fmt.Printf("  policy:         %s\n", cfg.policyID.UUID)
 	} else {
-		fmt.Printf("  policy:      (all)\n")
+		fmt.Printf("  policy:         (all)\n")
 	}
-	fmt.Printf("  window:      %s .. %s\n", cfg.from.Format(time.RFC3339), cfg.to.Format(time.RFC3339))
-	fmt.Printf("  scanned:     %d\n", rep.scanned)
-	fmt.Printf("  flagged:     %d\n", rep.flagged)
-	fmt.Printf("  updated:     %d\n", rep.updated)
-	fmt.Printf("  last cursor: %s\n", rep.lastCursor)
+	fmt.Printf("  window:         %s .. %s\n", cfg.from.Format(time.RFC3339), cfg.to.Format(time.RFC3339))
+	fmt.Printf("  scanned:        %d\n", rep.scanned)
+	fmt.Printf("  flagged:        %d\n", rep.flagged)
+	fmt.Printf("  updated:        %d\n", rep.updated)
+	fmt.Printf("  skipped policy: %d\n", rep.skippedPolicy)
+	fmt.Printf("  last cursor:    %s\n", rep.lastCursor)
+
+	printCounts("  by source:", rep.bySource)
+	printCounts("  by filter:", rep.byFilter)
 
 	if len(rep.byReason) > 0 {
 		fmt.Println("  by reason:")
@@ -373,5 +605,25 @@ func printReport(cfg config, rep report, lib *presetlib.Library) {
 	if cfg.dryRun && rep.flagged > 0 {
 		fmt.Println()
 		fmt.Println("re-run with -dry-run=false to apply.")
+	}
+}
+
+func printCounts(heading string, counts map[string]int64) {
+	if len(counts) == 0 {
+		return
+	}
+	fmt.Println(heading)
+	keys := make([]string, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if counts[keys[i]] != counts[keys[j]] {
+			return counts[keys[i]] > counts[keys[j]]
+		}
+		return keys[i] < keys[j]
+	})
+	for _, key := range keys {
+		fmt.Printf("    %6d  %s\n", counts[key], key)
 	}
 }
