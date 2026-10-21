@@ -29,6 +29,7 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -785,6 +786,96 @@ func TestIngest_HumanAgentPrefixedSessionNeverReachesAgentChat(t *testing.T) {
 	humanMessages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID("user:" + actor.String() + ":x"), ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, humanMessages, 1)
+}
+
+// TestIngest_StampsActingAgentOnChat covers the whole point of chats.agent_id:
+// an agent-driven session blanks every human identity column, so unless capture
+// records the actor the session list has no actor to name. A human's session in
+// the same project must stay unstamped, otherwise a channel session would claim
+// an agent that never touched it.
+func TestIngest_StampsActingAgentOnChat(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	agentCtx := agentKeyContext(t, ctx, ti)
+	actor, ok := contextvalues.AuthenticatedActor(agentCtx)
+	require.True(t, ok)
+
+	agentPrompt := "agent prompt"
+	agentPayload := canonicalIngestPayload("claude", "prompt.submitted", "stamped")
+	agentPayload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &agentPrompt}}
+	_, err := ti.service.Ingest(agentCtx, agentPayload)
+	require.NoError(t, err)
+
+	humanPrompt := "human prompt"
+	humanPayload := canonicalIngestPayload("claude", "prompt.submitted", "unstamped")
+	humanPayload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &humanPrompt}}
+	_, err = ti.service.Ingest(ctx, humanPayload)
+	require.NoError(t, err)
+
+	chats := chatRepo.New(ti.conn)
+	stamped, err := chats.GetChat(t.Context(), chatRepo.GetChatParams{
+		ID:        sessionIDToUUID(agentSessionID(agentCtx, "stamped")),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.True(t, stamped.AgentID.Valid, "an agent-driven session records its agent")
+	require.Equal(t, actor.ID, stamped.AgentID.UUID.String())
+	require.Equal(t, "Hooks agent", stamped.AgentName.String, "the name resolves from the live agents row")
+
+	unstamped, err := chats.GetChat(t.Context(), chatRepo.GetChatParams{
+		ID:        sessionIDToUUID("unstamped"),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.False(t, unstamped.AgentID.Valid, "a human's session records no agent")
+}
+
+// TestIngest_ActingAgentStampIsFillOnce proves a session keeps the agent that
+// first captured it. A chat is created once and reused, so a second agent
+// delivering into the same session must not reassign its attribution.
+func TestIngest_ActingAgentStampIsFillOnce(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	firstCtx := agentKeyContext(t, ctx, ti)
+	first, ok := contextvalues.AuthenticatedActor(firstCtx)
+	require.True(t, ok)
+
+	prompt := "agent prompt"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", "shared")
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	_, err := ti.service.Ingest(firstCtx, payload)
+	require.NoError(t, err)
+
+	// The chat id is derived from the agent-namespaced session id, so the
+	// second agent is pointed at the same chat explicitly rather than by
+	// re-deriving it from its own namespace.
+	chatID := sessionIDToUUID(agentSessionID(firstCtx, "shared"))
+	second, err := agentsrepo.New(ti.conn).CreateAgent(t.Context(), agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Second hooks agent",
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, first.ID, second.ID.String())
+
+	rows, err := ti.service.repo.LinkChatActingAgent(t.Context(), repo.LinkChatActingAgentParams{
+		AgentID:   uuid.NullUUID{UUID: second.ID, Valid: true},
+		ID:        chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Zero(t, rows, "a later agent never reassigns a session that already names one")
+
+	stored, err := chatRepo.New(ti.conn).GetChat(t.Context(), chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, first.ID, stored.AgentID.UUID.String())
 }
 
 func TestMetrics_AgentSessionIDsNamespaced(t *testing.T) {

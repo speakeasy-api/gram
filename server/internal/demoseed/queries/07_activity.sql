@@ -21,10 +21,13 @@ DELETE FROM ai_integration_configs WHERE organization_id = @organization_id AND 
 INSERT INTO ai_integration_configs (id, organization_id, project_id, provider, api_key_encrypted, enabled)
 VALUES (@id, @organization_id, @project_id, 'anthropic_inference', '', false);
 
+-- agent_id names the Speakeasy agent principal that produced the session, as
+-- hook capture stamps it. NULL for the human-driven sessions.
 -- name: ActivityInsertChat :exec
-INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, created_at, updated_at)
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, agent_id, created_at, updated_at)
 VALUES (@id, @project_id, @organization_id, @user_id::text, @external_user_id::text, @title::text,
-        sqlc.narg(session_surface)::text, now() - @created_age::interval, now() - @updated_age::interval);
+        sqlc.narg(session_surface)::text, sqlc.narg(agent_id)::uuid,
+        now() - @created_age::interval, now() - @updated_age::interval);
 
 -- Columns a message does not set (content_raw, tool_calls, source, model) are
 -- passed as NULL, which is what omitting them wrote.
