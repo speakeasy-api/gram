@@ -7,6 +7,10 @@ import type { ReactNode } from "react";
 const state = vi.hoisted(() => ({
   setOn: vi.fn(),
   error: false,
+  admin: true,
+  permissionsLoading: false,
+  gatewayLoading: false,
+  available: true,
   on: false as boolean | undefined,
 }));
 vi.mock("@/components/page-templates", () => ({
@@ -28,7 +32,27 @@ vi.mock("@/components/page-templates", () => ({
   ),
 }));
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+  RequireScope: ({
+    children,
+    scope,
+    level,
+  }: {
+    children: ReactNode;
+    scope: string;
+    level: string;
+  }) =>
+    scope === "org:admin" &&
+    (!state.admin || state.permissionsLoading) &&
+    level === "section" ? null : (
+      <>{children}</>
+    ),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string, organizationId: string) =>
+      scope === "org:admin" && organizationId === "test-org" && state.admin,
+    isLoading: state.permissionsLoading,
+  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "test-org", slug: "test" }),
@@ -40,9 +64,14 @@ vi.mock("@/components/mcp/useOrganizationGatewaySetting", () => ({
   useOrganizationGatewaySetting: () => ({
     features: { data: {}, error: state.error },
     gateway: {
-      data: state.on
-        ? { available: true, url: "https://api.example.test/mcp/gateway/test" }
-        : { available: false, unavailableReason: "turned_off" },
+      isLoading: state.gatewayLoading,
+      data:
+        state.on && state.available
+          ? {
+              available: true,
+              url: "https://api.example.test/mcp/gateway/test",
+            }
+          : { available: false, unavailableReason: "turned_off" },
     },
     on: state.on,
     setOn: state.setOn,
@@ -70,6 +99,10 @@ import OrganizationGateway from "./OrganizationGateway";
 afterEach(cleanup);
 beforeEach(() => {
   state.error = false;
+  state.admin = true;
+  state.permissionsLoading = false;
+  state.gatewayLoading = false;
+  state.available = true;
   state.on = false;
   vi.clearAllMocks();
 });
@@ -132,7 +165,12 @@ it("keeps the copyable endpoint above both tabs", async () => {
   expect(
     screen.getByText("https://api.example.test/mcp/gateway/test"),
   ).toBeTruthy();
-  expect(screen.queryByRole("heading", { name: "Install" })).toBeNull();
+  expect(
+    screen.getByRole("tab", { name: "Install" }).getAttribute("aria-selected"),
+  ).toBe("false");
+  expect(
+    screen.getByRole("button", { name: "Assignments loaded" }),
+  ).toBeTruthy();
 });
 
 it("selects assignments after a disabled setting loads, preserving an explicit tab choice", async () => {
@@ -151,3 +189,51 @@ it("selects assignments after a disabled setting loads, preserving an explicit t
     screen.getByRole("tab", { name: "Install" }).getAttribute("aria-selected"),
   ).toBe("true");
 });
+
+it("keeps non-admin members on install after the disabled setting loads", () => {
+  state.admin = false;
+  state.on = undefined;
+  const { rerender } = render(<OrganizationGateway />);
+  state.on = false;
+  rerender(<OrganizationGateway />);
+  expect(
+    screen.getByRole("tab", { name: "Install" }).getAttribute("aria-selected"),
+  ).toBe("true");
+  expect(screen.getByText(/Enable Organization Gateway to get/)).toBeTruthy();
+  expect(
+    screen.queryByRole("button", { name: "Assignments loaded" }),
+  ).toBeNull();
+});
+
+it("waits for administrator permissions before defaulting to assignments", () => {
+  state.permissionsLoading = true;
+  const { rerender } = render(<OrganizationGateway />);
+  expect(
+    screen.getByRole("tab", { name: "Install" }).getAttribute("aria-selected"),
+  ).toBe("true");
+  state.permissionsLoading = false;
+  rerender(<OrganizationGateway />);
+  expect(
+    screen
+      .getByRole("tab", { name: "View assignments" })
+      .getAttribute("aria-selected"),
+  ).toBe("true");
+});
+
+it.each([true, false])(
+  "shows loading or unavailable installation status while enabled (loading=%s)",
+  async (loading) => {
+    state.on = true;
+    state.gatewayLoading = loading;
+    state.available = false;
+    render(<OrganizationGateway />);
+    expect(screen.queryByText(/Enable Organization Gateway to get/)).toBeNull();
+    expect(
+      screen.getByText(
+        loading
+          ? /Loading Organization Gateway installation/
+          : /installation is unavailable/,
+      ),
+    ).toBeTruthy();
+  },
+);

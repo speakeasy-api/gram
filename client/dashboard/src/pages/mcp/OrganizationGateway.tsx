@@ -28,6 +28,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 import { AgentPlatformPickerItem } from "@/pages/setup/components/agent-platform-picker-item";
 import { PlatformInstrumentationSheet } from "@/pages/setup/components/platform-instrumentation-sheet";
@@ -68,11 +69,24 @@ function OrganizationGatewayContent({
     isPending,
   } = useOrganizationGatewaySetting({ organizationId, isCurrentOrganization });
 
+  const { hasScope, isLoading: permissionsLoading } = useRBAC();
+  const canManage =
+    !permissionsLoading && hasScope("org:admin", organizationId);
   const [reviewing, setReviewing] = useState(false);
   const [selectedTab, setTab] = useState<string>();
-  const tab = selectedTab ?? (isOn === false ? "assignments" : "install");
+  const tab =
+    selectedTab ?? (isOn === false && canManage ? "assignments" : "install");
   const endpointUrl =
     isOn && gateway.data?.available ? gateway.data.url : undefined;
+
+  let installStatus =
+    "Organization Gateway installation is unavailable. Check the gateway status above.";
+  if (isOn === false) {
+    installStatus =
+      "Enable Organization Gateway to get your endpoint and installation steps.";
+  } else if (gateway.isLoading || isOn === undefined) {
+    installStatus = "Loading Organization Gateway installation details…";
+  }
 
   return (
     <SettingsPage
@@ -170,8 +184,7 @@ function OrganizationGatewayContent({
               />
             ) : (
               <Text small muted>
-                Enable Organization Gateway to get your endpoint and
-                installation steps.
+                {installStatus}
               </Text>
             )}
           </TabsContent>
@@ -207,12 +220,7 @@ function GatewayBody({
   isOn: boolean | undefined;
 }): JSX.Element {
   if (gateway.isLoading) {
-    return (
-      <div className="space-y-8">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-72 w-full" />
-      </div>
-    );
+    return <Skeleton className="h-6 w-full" />;
   }
 
   if (gateway.error || !gateway.data) {
