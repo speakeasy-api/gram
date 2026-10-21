@@ -273,6 +273,33 @@ func (q *Queries) PostflightIDConnections(ctx context.Context, projectID uuid.UU
 	return count, err
 }
 
+const postflightIDDeletedGroupMappings = `-- name: PostflightIDDeletedGroupMappings :one
+SELECT count(*) FROM directory_role_mappings drm
+JOIN directory_groups dg ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+WHERE drm.organization_id = $1::text AND drm.deleted IS FALSE
+  AND dg.workos_deleted IS TRUE
+`
+
+func (q *Queries) PostflightIDDeletedGroupMappings(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDDeletedGroupMappings, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDDirectoryReviewEmailsEnabled = `-- name: PostflightIDDirectoryReviewEmailsEnabled :one
+SELECT count(*) FROM directory_review_org_states
+WHERE organization_id = $1::text AND emails_disabled_at IS NULL
+`
+
+func (q *Queries) PostflightIDDirectoryReviewEmailsEnabled(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDDirectoryReviewEmailsEnabled, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDDirectoryRoleMappings = `-- name: PostflightIDDirectoryRoleMappings :one
 SELECT count(*) FROM directory_role_mappings
 WHERE organization_id = $1::text AND deleted IS FALSE
@@ -588,6 +615,18 @@ WHERE organization_id = $1::text AND project_id IS NULL AND deleted IS FALSE
 
 func (q *Queries) PostflightIDOrgUserSessionIssuers(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDOrgUserSessionIssuers, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDPendingDirectoryReviewItems = `-- name: PostflightIDPendingDirectoryReviewItems :one
+SELECT count(*) FROM directory_review_items
+WHERE organization_id = $1::text AND state = 'pending'
+`
+
+func (q *Queries) PostflightIDPendingDirectoryReviewItems(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDPendingDirectoryReviewItems, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

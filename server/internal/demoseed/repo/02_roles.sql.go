@@ -99,6 +99,33 @@ func (q *Queries) RolesDeleteDirectoryGroups(ctx context.Context, organizationID
 	return err
 }
 
+const rolesDeleteDirectoryReviewItems = `-- name: RolesDeleteDirectoryReviewItems :exec
+DELETE FROM directory_review_items WHERE organization_id = $1
+`
+
+func (q *Queries) RolesDeleteDirectoryReviewItems(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, rolesDeleteDirectoryReviewItems, organizationID)
+	return err
+}
+
+const rolesDeleteDirectoryReviewOptOuts = `-- name: RolesDeleteDirectoryReviewOptOuts :exec
+DELETE FROM directory_review_attribute_opt_outs WHERE organization_id = $1
+`
+
+func (q *Queries) RolesDeleteDirectoryReviewOptOuts(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, rolesDeleteDirectoryReviewOptOuts, organizationID)
+	return err
+}
+
+const rolesDeleteDirectoryReviewOrgState = `-- name: RolesDeleteDirectoryReviewOrgState :exec
+DELETE FROM directory_review_org_states WHERE organization_id = $1
+`
+
+func (q *Queries) RolesDeleteDirectoryReviewOrgState(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, rolesDeleteDirectoryReviewOrgState, organizationID)
+	return err
+}
+
 const rolesDeleteDirectoryRoleMappings = `-- name: RolesDeleteDirectoryRoleMappings :exec
 DELETE FROM directory_role_mappings WHERE organization_id = $1
 `
@@ -324,6 +351,34 @@ func (q *Queries) RolesInsertDefaultPlugin(ctx context.Context, arg RolesInsertD
 	return id, err
 }
 
+const rolesInsertDeletedDirectoryGroup = `-- name: RolesInsertDeletedDirectoryGroup :exec
+INSERT INTO directory_groups
+  (organization_id, workos_directory_group_id, name, workos_created_at,
+   workos_updated_at, workos_deleted_at, deleted_at)
+VALUES ($1::text, $2::text || $3::text, $4::text,
+        now() - interval '60 days', now() - interval '3 days',
+        now() - interval '3 days', now() - interval '3 days')
+`
+
+type RolesInsertDeletedDirectoryGroupParams struct {
+	OrganizationID string
+	GroupPrefix    string
+	Slug           string
+	Name           string
+}
+
+// A group the directory has since deleted. Its mapping stays and grants
+// nothing, so the mappings page shows it as a missing source.
+func (q *Queries) RolesInsertDeletedDirectoryGroup(ctx context.Context, arg RolesInsertDeletedDirectoryGroupParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertDeletedDirectoryGroup,
+		arg.OrganizationID,
+		arg.GroupPrefix,
+		arg.Slug,
+		arg.Name,
+	)
+	return err
+}
+
 const rolesInsertDeviceAgentDeviceSync = `-- name: RolesInsertDeviceAgentDeviceSync :exec
 INSERT INTO device_agent_device_syncs
   (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
@@ -421,6 +476,60 @@ type RolesInsertDirectoryGroupsParams struct {
 // lowercased, dashed team name.
 func (q *Queries) RolesInsertDirectoryGroups(ctx context.Context, arg RolesInsertDirectoryGroupsParams) error {
 	_, err := q.db.Exec(ctx, rolesInsertDirectoryGroups, arg.OrganizationID, arg.GroupPrefix, arg.Teams)
+	return err
+}
+
+const rolesInsertDirectoryReviewAttributeItem = `-- name: RolesInsertDirectoryReviewAttributeItem :exec
+INSERT INTO directory_review_items (organization_id, kind, attribute_key, attribute_value, occurrence, state)
+VALUES ($1::text, $2::text, $3::text, $4::text, 1, 'pending')
+`
+
+type RolesInsertDirectoryReviewAttributeItemParams struct {
+	OrganizationID string
+	Kind           string
+	AttributeKey   string
+	AttributeValue string
+}
+
+func (q *Queries) RolesInsertDirectoryReviewAttributeItem(ctx context.Context, arg RolesInsertDirectoryReviewAttributeItemParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertDirectoryReviewAttributeItem,
+		arg.OrganizationID,
+		arg.Kind,
+		arg.AttributeKey,
+		arg.AttributeValue,
+	)
+	return err
+}
+
+const rolesInsertDirectoryReviewGroupItem = `-- name: RolesInsertDirectoryReviewGroupItem :exec
+INSERT INTO directory_review_items (organization_id, kind, directory_group_id, occurrence, state)
+SELECT $1::text, $2::text, dg.id, 1, 'pending'
+FROM directory_groups dg
+WHERE dg.organization_id = $1::text AND dg.name = $3::text
+`
+
+type RolesInsertDirectoryReviewGroupItemParams struct {
+	OrganizationID string
+	Kind           string
+	GroupName      string
+}
+
+func (q *Queries) RolesInsertDirectoryReviewGroupItem(ctx context.Context, arg RolesInsertDirectoryReviewGroupItemParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertDirectoryReviewGroupItem, arg.OrganizationID, arg.Kind, arg.GroupName)
+	return err
+}
+
+const rolesInsertDirectoryReviewOrgState = `-- name: RolesInsertDirectoryReviewOrgState :exec
+INSERT INTO directory_review_org_states (organization_id, baseline_at, emails_disabled_at)
+VALUES ($1::text, clock_timestamp(), clock_timestamp())
+`
+
+// Starts directory review now: groups created before this are offered in
+// bulk setup, groups created after it are raised for review. Review emails
+// are off: the seeded items are recreated on every reseed, so they would
+// otherwise email the organization's admins each day.
+func (q *Queries) RolesInsertDirectoryReviewOrgState(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, rolesInsertDirectoryReviewOrgState, organizationID)
 	return err
 }
 
@@ -562,6 +671,30 @@ func (q *Queries) RolesInsertMDMDevice(ctx context.Context, arg RolesInsertMDMDe
 		arg.UserEmail,
 		arg.UserID,
 		arg.CheckInAgo,
+	)
+	return err
+}
+
+const rolesInsertNewDirectoryGroup = `-- name: RolesInsertNewDirectoryGroup :exec
+INSERT INTO directory_groups
+  (organization_id, workos_directory_group_id, name, workos_created_at, workos_updated_at)
+VALUES ($1::text, $2::text || $3::text, $4::text, now(), now())
+`
+
+type RolesInsertNewDirectoryGroupParams struct {
+	OrganizationID string
+	GroupPrefix    string
+	Slug           string
+	Name           string
+}
+
+// A group first seen after review started.
+func (q *Queries) RolesInsertNewDirectoryGroup(ctx context.Context, arg RolesInsertNewDirectoryGroupParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertNewDirectoryGroup,
+		arg.OrganizationID,
+		arg.GroupPrefix,
+		arg.Slug,
+		arg.Name,
 	)
 	return err
 }

@@ -2396,6 +2396,1296 @@ func EncodeDeleteDirectoryRoleMappingError(encoder func(context.Context, http.Re
 	}
 }
 
+// EncodePreviewDirectoryRoleSetupResponse returns an encoder for responses
+// returned by the access previewDirectoryRoleSetup endpoint.
+func EncodePreviewDirectoryRoleSetupResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.DirectoryRoleSetupPreviewResult)
+		enc := encoder(ctx, w)
+		body := NewPreviewDirectoryRoleSetupResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodePreviewDirectoryRoleSetupRequest returns a decoder for requests sent
+// to the access previewDirectoryRoleSetup endpoint.
+func DecodePreviewDirectoryRoleSetupRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.PreviewDirectoryRoleSetupPayload, error) {
+	return func(r *http.Request) (*access.PreviewDirectoryRoleSetupPayload, error) {
+		var payload *access.PreviewDirectoryRoleSetupPayload
+		var (
+			apikeyToken  *string
+			sessionToken *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewPreviewDirectoryRoleSetupPayload(apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodePreviewDirectoryRoleSetupError returns an encoder for errors returned
+// by the previewDirectoryRoleSetup access endpoint.
+func EncodePreviewDirectoryRoleSetupError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewDirectoryRoleSetupUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewDirectoryRoleSetupForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewDirectoryRoleSetupBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewDirectoryRoleSetupNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewDirectoryRoleSetupConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewDirectoryRoleSetupUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewDirectoryRoleSetupInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewDirectoryRoleSetupInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewDirectoryRoleSetupUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewDirectoryRoleSetupGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeApplyDirectoryRoleSetupResponse returns an encoder for responses
+// returned by the access applyDirectoryRoleSetup endpoint.
+func EncodeApplyDirectoryRoleSetupResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.ApplyDirectoryRoleSetupResult)
+		enc := encoder(ctx, w)
+		body := NewApplyDirectoryRoleSetupResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeApplyDirectoryRoleSetupRequest returns a decoder for requests sent to
+// the access applyDirectoryRoleSetup endpoint.
+func DecodeApplyDirectoryRoleSetupRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.ApplyDirectoryRoleSetupPayload, error) {
+	return func(r *http.Request) (*access.ApplyDirectoryRoleSetupPayload, error) {
+		var payload *access.ApplyDirectoryRoleSetupPayload
+		var (
+			body ApplyDirectoryRoleSetupRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateApplyDirectoryRoleSetupRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken  *string
+			sessionToken *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewApplyDirectoryRoleSetupPayload(&body, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeApplyDirectoryRoleSetupError returns an encoder for errors returned by
+// the applyDirectoryRoleSetup access endpoint.
+func EncodeApplyDirectoryRoleSetupError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyDirectoryRoleSetupUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyDirectoryRoleSetupForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyDirectoryRoleSetupBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyDirectoryRoleSetupNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyDirectoryRoleSetupConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyDirectoryRoleSetupUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyDirectoryRoleSetupInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyDirectoryRoleSetupInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyDirectoryRoleSetupUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyDirectoryRoleSetupGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeListDirectoryReviewItemsResponse returns an encoder for responses
+// returned by the access listDirectoryReviewItems endpoint.
+func EncodeListDirectoryReviewItemsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.ListDirectoryReviewItemsResult)
+		enc := encoder(ctx, w)
+		body := NewListDirectoryReviewItemsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListDirectoryReviewItemsRequest returns a decoder for requests sent to
+// the access listDirectoryReviewItems endpoint.
+func DecodeListDirectoryReviewItemsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.ListDirectoryReviewItemsPayload, error) {
+	return func(r *http.Request) (*access.ListDirectoryReviewItemsPayload, error) {
+		var payload *access.ListDirectoryReviewItemsPayload
+		var (
+			apikeyToken  *string
+			sessionToken *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewListDirectoryReviewItemsPayload(apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListDirectoryReviewItemsError returns an encoder for errors returned
+// by the listDirectoryReviewItems access endpoint.
+func EncodeListDirectoryReviewItemsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryReviewItemsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryReviewItemsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryReviewItemsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryReviewItemsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryReviewItemsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryReviewItemsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryReviewItemsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryReviewItemsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryReviewItemsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryReviewItemsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeResolveDirectoryReviewItemResponse returns an encoder for responses
+// returned by the access resolveDirectoryReviewItem endpoint.
+func EncodeResolveDirectoryReviewItemResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.ResolveDirectoryReviewItemResult)
+		enc := encoder(ctx, w)
+		body := NewResolveDirectoryReviewItemResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeResolveDirectoryReviewItemRequest returns a decoder for requests sent
+// to the access resolveDirectoryReviewItem endpoint.
+func DecodeResolveDirectoryReviewItemRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.ResolveDirectoryReviewItemPayload, error) {
+	return func(r *http.Request) (*access.ResolveDirectoryReviewItemPayload, error) {
+		var payload *access.ResolveDirectoryReviewItemPayload
+		var (
+			body ResolveDirectoryReviewItemRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateResolveDirectoryReviewItemRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken  *string
+			sessionToken *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewResolveDirectoryReviewItemPayload(&body, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeResolveDirectoryReviewItemError returns an encoder for errors returned
+// by the resolveDirectoryReviewItem access endpoint.
+func EncodeResolveDirectoryReviewItemError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewResolveDirectoryReviewItemUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewResolveDirectoryReviewItemForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewResolveDirectoryReviewItemBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewResolveDirectoryReviewItemNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewResolveDirectoryReviewItemConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewResolveDirectoryReviewItemUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewResolveDirectoryReviewItemInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewResolveDirectoryReviewItemInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewResolveDirectoryReviewItemUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewResolveDirectoryReviewItemGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetDirectoryReviewSettingsResponse returns an encoder for responses
+// returned by the access getDirectoryReviewSettings endpoint.
+func EncodeGetDirectoryReviewSettingsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.DirectoryReviewSettings)
+		enc := encoder(ctx, w)
+		body := NewGetDirectoryReviewSettingsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetDirectoryReviewSettingsRequest returns a decoder for requests sent
+// to the access getDirectoryReviewSettings endpoint.
+func DecodeGetDirectoryReviewSettingsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.GetDirectoryReviewSettingsPayload, error) {
+	return func(r *http.Request) (*access.GetDirectoryReviewSettingsPayload, error) {
+		var payload *access.GetDirectoryReviewSettingsPayload
+		var (
+			apikeyToken  *string
+			sessionToken *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewGetDirectoryReviewSettingsPayload(apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetDirectoryReviewSettingsError returns an encoder for errors returned
+// by the getDirectoryReviewSettings access endpoint.
+func EncodeGetDirectoryReviewSettingsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDirectoryReviewSettingsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDirectoryReviewSettingsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDirectoryReviewSettingsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDirectoryReviewSettingsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDirectoryReviewSettingsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDirectoryReviewSettingsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDirectoryReviewSettingsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDirectoryReviewSettingsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDirectoryReviewSettingsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDirectoryReviewSettingsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeUpdateDirectoryReviewSettingsResponse returns an encoder for responses
+// returned by the access updateDirectoryReviewSettings endpoint.
+func EncodeUpdateDirectoryReviewSettingsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.DirectoryReviewSettings)
+		enc := encoder(ctx, w)
+		body := NewUpdateDirectoryReviewSettingsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeUpdateDirectoryReviewSettingsRequest returns a decoder for requests
+// sent to the access updateDirectoryReviewSettings endpoint.
+func DecodeUpdateDirectoryReviewSettingsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.UpdateDirectoryReviewSettingsPayload, error) {
+	return func(r *http.Request) (*access.UpdateDirectoryReviewSettingsPayload, error) {
+		var payload *access.UpdateDirectoryReviewSettingsPayload
+		var (
+			body UpdateDirectoryReviewSettingsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateUpdateDirectoryReviewSettingsRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken  *string
+			sessionToken *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewUpdateDirectoryReviewSettingsPayload(&body, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeUpdateDirectoryReviewSettingsError returns an encoder for errors
+// returned by the updateDirectoryReviewSettings access endpoint.
+func EncodeUpdateDirectoryReviewSettingsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDirectoryReviewSettingsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDirectoryReviewSettingsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDirectoryReviewSettingsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDirectoryReviewSettingsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDirectoryReviewSettingsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDirectoryReviewSettingsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDirectoryReviewSettingsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDirectoryReviewSettingsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDirectoryReviewSettingsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateDirectoryReviewSettingsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListScopesResponse returns an encoder for responses returned by the
 // access listScopes endpoint.
 func EncodeListScopesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -7682,6 +8972,7 @@ func marshalAccessDirectoryRoleMappingToDirectoryRoleMappingResponseBody(v *acce
 		DirectoryGroupName: v.DirectoryGroupName,
 		AttributeKey:       v.AttributeKey,
 		AttributeValue:     v.AttributeValue,
+		SourceStatus:       v.SourceStatus,
 		RoleUrn:            v.RoleUrn,
 		CreatedAt:          v.CreatedAt,
 		UpdatedAt:          v.UpdatedAt,
@@ -7755,9 +9046,174 @@ func marshalAccessDirectoryRoleMappingToDirectoryRoleMappingResponse(v *access.D
 		DirectoryGroupName: v.DirectoryGroupName,
 		AttributeKey:       v.AttributeKey,
 		AttributeValue:     v.AttributeValue,
+		SourceStatus:       v.SourceStatus,
 		RoleUrn:            v.RoleUrn,
 		CreatedAt:          v.CreatedAt,
 		UpdatedAt:          v.UpdatedAt,
+	}
+
+	return res
+}
+
+// marshalAccessDirectoryRoleSetupPreviewItemToDirectoryRoleSetupPreviewItemResponseBody
+// builds a value of type *DirectoryRoleSetupPreviewItemResponseBody from a
+// value of type *access.DirectoryRoleSetupPreviewItem.
+func marshalAccessDirectoryRoleSetupPreviewItemToDirectoryRoleSetupPreviewItemResponseBody(v *access.DirectoryRoleSetupPreviewItem) *DirectoryRoleSetupPreviewItemResponseBody {
+	res := &DirectoryRoleSetupPreviewItemResponseBody{
+		SourceName:      v.SourceName,
+		DirectoryPeople: v.DirectoryPeople,
+		Version:         v.Version,
+	}
+	if v.Source != nil {
+		res.Source = marshalAccessDirectoryRoleSetupSourceToDirectoryRoleSetupSourceResponseBody(v.Source)
+	}
+	if v.ExistingRoleUrns != nil {
+		res.ExistingRoleUrns = make([]string, len(v.ExistingRoleUrns))
+		for i, val := range v.ExistingRoleUrns {
+			res.ExistingRoleUrns[i] = val
+		}
+	} else {
+		res.ExistingRoleUrns = []string{}
+	}
+	if v.ProposedRoles != nil {
+		res.ProposedRoles = make([]*DirectoryRoleSetupProposedRoleResponseBody, len(v.ProposedRoles))
+		for i, val := range v.ProposedRoles {
+			if val == nil {
+				res.ProposedRoles[i] = nil
+				continue
+			}
+			res.ProposedRoles[i] = marshalAccessDirectoryRoleSetupProposedRoleToDirectoryRoleSetupProposedRoleResponseBody(val)
+		}
+	} else {
+		res.ProposedRoles = []*DirectoryRoleSetupProposedRoleResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAccessDirectoryRoleSetupSourceToDirectoryRoleSetupSourceResponseBody
+// builds a value of type *DirectoryRoleSetupSourceResponseBody from a value of
+// type *access.DirectoryRoleSetupSource.
+func marshalAccessDirectoryRoleSetupSourceToDirectoryRoleSetupSourceResponseBody(v *access.DirectoryRoleSetupSource) *DirectoryRoleSetupSourceResponseBody {
+	res := &DirectoryRoleSetupSourceResponseBody{
+		SourceKind:       v.SourceKind,
+		DirectoryGroupID: v.DirectoryGroupID,
+		AttributeKey:     v.AttributeKey,
+		AttributeValue:   v.AttributeValue,
+	}
+
+	return res
+}
+
+// marshalAccessDirectoryRoleSetupProposedRoleToDirectoryRoleSetupProposedRoleResponseBody
+// builds a value of type *DirectoryRoleSetupProposedRoleResponseBody from a
+// value of type *access.DirectoryRoleSetupProposedRole.
+func marshalAccessDirectoryRoleSetupProposedRoleToDirectoryRoleSetupProposedRoleResponseBody(v *access.DirectoryRoleSetupProposedRole) *DirectoryRoleSetupProposedRoleResponseBody {
+	res := &DirectoryRoleSetupProposedRoleResponseBody{
+		RoleAction: v.RoleAction,
+		RoleID:     v.RoleID,
+		RoleUrn:    v.RoleUrn,
+		RoleName:   v.RoleName,
+	}
+	if v.CurrentGrants != nil {
+		res.CurrentGrants = make([]*RoleGrantResponseBody, len(v.CurrentGrants))
+		for i, val := range v.CurrentGrants {
+			if val == nil {
+				res.CurrentGrants[i] = nil
+				continue
+			}
+			res.CurrentGrants[i] = marshalAccessRoleGrantToRoleGrantResponseBody(val)
+		}
+	} else {
+		res.CurrentGrants = []*RoleGrantResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAccessDirectoryRoleSetupHiddenAttributeKeyToDirectoryRoleSetupHiddenAttributeKeyResponseBody
+// builds a value of type *DirectoryRoleSetupHiddenAttributeKeyResponseBody
+// from a value of type *access.DirectoryRoleSetupHiddenAttributeKey.
+func marshalAccessDirectoryRoleSetupHiddenAttributeKeyToDirectoryRoleSetupHiddenAttributeKeyResponseBody(v *access.DirectoryRoleSetupHiddenAttributeKey) *DirectoryRoleSetupHiddenAttributeKeyResponseBody {
+	res := &DirectoryRoleSetupHiddenAttributeKeyResponseBody{
+		Key:        v.Key,
+		ValueCount: v.ValueCount,
+	}
+
+	return res
+}
+
+// unmarshalApplyDirectoryRoleSetupItemRequestBodyToAccessApplyDirectoryRoleSetupItem
+// builds a value of type *access.ApplyDirectoryRoleSetupItem from a value of
+// type *ApplyDirectoryRoleSetupItemRequestBody.
+func unmarshalApplyDirectoryRoleSetupItemRequestBodyToAccessApplyDirectoryRoleSetupItem(v *ApplyDirectoryRoleSetupItemRequestBody) *access.ApplyDirectoryRoleSetupItem {
+	res := &access.ApplyDirectoryRoleSetupItem{
+		Version: *v.Version,
+	}
+	res.Source = unmarshalDirectoryRoleSetupSourceRequestBodyToAccessDirectoryRoleSetupSource(v.Source)
+	res.Roles = make([]*access.ApplyDirectoryRoleSetupRole, len(v.Roles))
+	for i, val := range v.Roles {
+		if val == nil {
+			res.Roles[i] = nil
+			continue
+		}
+		res.Roles[i] = unmarshalApplyDirectoryRoleSetupRoleRequestBodyToAccessApplyDirectoryRoleSetupRole(val)
+	}
+
+	return res
+}
+
+// unmarshalDirectoryRoleSetupSourceRequestBodyToAccessDirectoryRoleSetupSource
+// builds a value of type *access.DirectoryRoleSetupSource from a value of type
+// *DirectoryRoleSetupSourceRequestBody.
+func unmarshalDirectoryRoleSetupSourceRequestBodyToAccessDirectoryRoleSetupSource(v *DirectoryRoleSetupSourceRequestBody) *access.DirectoryRoleSetupSource {
+	res := &access.DirectoryRoleSetupSource{
+		SourceKind:       *v.SourceKind,
+		DirectoryGroupID: v.DirectoryGroupID,
+		AttributeKey:     v.AttributeKey,
+		AttributeValue:   v.AttributeValue,
+	}
+
+	return res
+}
+
+// unmarshalApplyDirectoryRoleSetupRoleRequestBodyToAccessApplyDirectoryRoleSetupRole
+// builds a value of type *access.ApplyDirectoryRoleSetupRole from a value of
+// type *ApplyDirectoryRoleSetupRoleRequestBody.
+func unmarshalApplyDirectoryRoleSetupRoleRequestBodyToAccessApplyDirectoryRoleSetupRole(v *ApplyDirectoryRoleSetupRoleRequestBody) *access.ApplyDirectoryRoleSetupRole {
+	res := &access.ApplyDirectoryRoleSetupRole{
+		RoleUrn:    v.RoleUrn,
+		CreateName: v.CreateName,
+	}
+
+	return res
+}
+
+// marshalAccessDirectoryRoleSetupSideEffectToDirectoryRoleSetupSideEffectResponseBody
+// builds a value of type *DirectoryRoleSetupSideEffectResponseBody from a
+// value of type *access.DirectoryRoleSetupSideEffect.
+func marshalAccessDirectoryRoleSetupSideEffectToDirectoryRoleSetupSideEffectResponseBody(v *access.DirectoryRoleSetupSideEffect) *DirectoryRoleSetupSideEffectResponseBody {
+	res := &DirectoryRoleSetupSideEffectResponseBody{
+		Kind:          v.Kind,
+		RoleID:        v.RoleID,
+		RequestStatus: v.RequestStatus,
+	}
+
+	return res
+}
+
+// marshalAccessDirectoryReviewItemToDirectoryReviewItemResponseBody builds a
+// value of type *DirectoryReviewItemResponseBody from a value of type
+// *access.DirectoryReviewItem.
+func marshalAccessDirectoryReviewItemToDirectoryReviewItemResponseBody(v *access.DirectoryReviewItem) *DirectoryReviewItemResponseBody {
+	res := &DirectoryReviewItemResponseBody{
+		ID:         v.ID,
+		Kind:       v.Kind,
+		Occurrence: v.Occurrence,
+		CreatedAt:  v.CreatedAt,
+	}
+	if v.Item != nil {
+		res.Item = marshalAccessDirectoryRoleSetupPreviewItemToDirectoryRoleSetupPreviewItemResponseBody(v.Item)
 	}
 
 	return res
@@ -7790,6 +9246,7 @@ func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember)
 		PhotoURL:     v.PhotoURL,
 		JoinedAt:     v.JoinedAt,
 		Department:   v.Department,
+		InDirectory:  v.InDirectory,
 	}
 	if v.RoleIds != nil {
 		res.RoleIds = make([]string, len(v.RoleIds))
@@ -7812,6 +9269,58 @@ func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember)
 		for i, val := range v.Groups {
 			res.Groups[i] = val
 		}
+	}
+	if v.DirectoryGroups != nil {
+		res.DirectoryGroups = make([]*AccessMemberDirectoryGroupResponseBody, len(v.DirectoryGroups))
+		for i, val := range v.DirectoryGroups {
+			if val == nil {
+				res.DirectoryGroups[i] = nil
+				continue
+			}
+			res.DirectoryGroups[i] = marshalAccessAccessMemberDirectoryGroupToAccessMemberDirectoryGroupResponseBody(val)
+		}
+	}
+	if v.DirectoryRoleSources != nil {
+		res.DirectoryRoleSources = make([]*AccessMemberDirectoryRoleSourceResponseBody, len(v.DirectoryRoleSources))
+		for i, val := range v.DirectoryRoleSources {
+			if val == nil {
+				res.DirectoryRoleSources[i] = nil
+				continue
+			}
+			res.DirectoryRoleSources[i] = marshalAccessAccessMemberDirectoryRoleSourceToAccessMemberDirectoryRoleSourceResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalAccessAccessMemberDirectoryGroupToAccessMemberDirectoryGroupResponseBody
+// builds a value of type *AccessMemberDirectoryGroupResponseBody from a value
+// of type *access.AccessMemberDirectoryGroup.
+func marshalAccessAccessMemberDirectoryGroupToAccessMemberDirectoryGroupResponseBody(v *access.AccessMemberDirectoryGroup) *AccessMemberDirectoryGroupResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AccessMemberDirectoryGroupResponseBody{
+		ID:   v.ID,
+		Name: v.Name,
+	}
+
+	return res
+}
+
+// marshalAccessAccessMemberDirectoryRoleSourceToAccessMemberDirectoryRoleSourceResponseBody
+// builds a value of type *AccessMemberDirectoryRoleSourceResponseBody from a
+// value of type *access.AccessMemberDirectoryRoleSource.
+func marshalAccessAccessMemberDirectoryRoleSourceToAccessMemberDirectoryRoleSourceResponseBody(v *access.AccessMemberDirectoryRoleSource) *AccessMemberDirectoryRoleSourceResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AccessMemberDirectoryRoleSourceResponseBody{
+		RoleID:           v.RoleID,
+		MappingID:        v.MappingID,
+		SourceKind:       v.SourceKind,
+		DirectoryGroupID: v.DirectoryGroupID,
 	}
 
 	return res
