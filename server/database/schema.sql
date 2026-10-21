@@ -1770,6 +1770,129 @@ COMMENT ON COLUMN device_agent_configurations.config IS '@access: opaque-restric
 COMMENT ON COLUMN device_agent_configurations.created_at IS '@access: confidential';
 COMMENT ON COLUMN device_agent_configurations.updated_at IS '@access: confidential';
 
+-- Global AI client catalog: the AI products Speakeasy knows, what each looks
+-- like on a laptop, and which Client ID Metadata Documents it publishes. Staff
+-- curate it; it is not project-owned configuration, so it carries no
+-- project_id or organization_id. The CIMD admission catalog and the Shadow AI
+-- scan catalog are both projections of it.
+
+-- ai_products is one AI tool as a person deciding about it would mean. The
+-- unit is a product, not a vendor, because a vendor can ship several and a
+-- decision about one must not reach the others.
+--
+-- A product with no signatures is known only as an OAuth client and is never
+-- scanned for. Category and signature shapes are validated in application
+-- code.
+CREATE TABLE IF NOT EXISTS ai_products (
+  id TEXT NOT NULL CHECK (id <> ''),
+  vendor_key TEXT NOT NULL CHECK (vendor_key <> ''),
+  display_name TEXT NOT NULL CHECK (display_name <> ''),
+  category TEXT,
+
+  bundle_ids TEXT[] NOT NULL DEFAULT '{}',
+  binaries TEXT[] NOT NULL DEFAULT '{}',
+  config_dirs TEXT[] NOT NULL DEFAULT '{}',
+  process_names TEXT[] NOT NULL DEFAULT '{}',
+  version_plist_key TEXT,
+  client_info_names TEXT[] NOT NULL DEFAULT '{}',
+
+  created_by TEXT,
+  updated_by TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT ai_products_pkey PRIMARY KEY (id)
+);
+
+COMMENT ON TABLE ai_products IS 'Global AI client catalog of products Speakeasy knows, curated by staff. Shadow AI scan targets and CIMD documents reference it.';
+COMMENT ON COLUMN ai_products.id IS 'Stable product identifier, e.g. claude-code. Shadow AI scan reports key on it and decisions are recorded against it, so it must never change once used. Soft deletion keeps it reserved.
+@access: confidential';
+COMMENT ON COLUMN ai_products.vendor_key IS 'Groups products by vendor. Not unique: a vendor may ship several products. Stable: renaming one is a breaking change. Names a product at the MCP gateway only when exactly one live product carries it.
+@access: confidential';
+COMMENT ON COLUMN ai_products.display_name IS '@access: confidential';
+COMMENT ON COLUMN ai_products.category IS 'Product category (harness, assistant, local_model). Required when any signature is set; null for a product known only as an OAuth client.
+@access: confidential';
+COMMENT ON COLUMN ai_products.bundle_ids IS 'macOS CFBundleIdentifier values that identify the product on a device.
+@access: confidential';
+COMMENT ON COLUMN ai_products.binaries IS 'Bare command names resolved on the device PATH.
+@access: confidential';
+COMMENT ON COLUMN ai_products.config_dirs IS 'Directories whose existence marks the product installed.
+@access: confidential';
+COMMENT ON COLUMN ai_products.process_names IS 'Process names checked for the running signal.
+@access: confidential';
+COMMENT ON COLUMN ai_products.version_plist_key IS 'Info.plist key read for the version on a bundle match; null means CFBundleShortVersionString.
+@access: confidential';
+COMMENT ON COLUMN ai_products.client_info_names IS 'Names the product reports at MCP initialize. Attribution only, never enforcement: they are self-reported, so any client can claim any name.
+@access: opaque-confidential';
+COMMENT ON COLUMN ai_products.created_by IS 'Subject URN of the staff member who created the row; null for seeded rows.
+@access: confidential-pii';
+COMMENT ON COLUMN ai_products.updated_by IS 'Subject URN of the staff member who last changed the row; null for seeded rows.
+@access: confidential-pii';
+COMMENT ON COLUMN ai_products.created_at IS '@access: confidential';
+COMMENT ON COLUMN ai_products.updated_at IS '@access: confidential';
+COMMENT ON COLUMN ai_products.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN ai_products.deleted IS '@access: confidential';
+
+-- ai_product_cimd_documents is one Client ID Metadata Document a product
+-- publishes. Several per product is normal: stable and insiders builds, two
+-- origins, or one per MCP server are all the same product to someone deciding
+-- whether to allow it. A live URL belongs to exactly one product, whether or
+-- not the document is enabled.
+CREATE TABLE IF NOT EXISTS ai_product_cimd_documents (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  ai_product_id TEXT NOT NULL,
+  url TEXT NOT NULL CHECK (url <> ''),
+  display_name TEXT NOT NULL CHECK (display_name <> ''),
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  is_pattern BOOLEAN NOT NULL DEFAULT false,
+
+  verified_at timestamptz,
+  verification_error TEXT,
+
+  created_by TEXT,
+  updated_by TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT ai_product_cimd_documents_pkey PRIMARY KEY (id),
+  CONSTRAINT ai_product_cimd_documents_ai_product_id_fkey FOREIGN KEY (ai_product_id) REFERENCES ai_products (id) ON DELETE RESTRICT
+);
+
+COMMENT ON TABLE ai_product_cimd_documents IS 'CIMD documents each catalog product publishes. Every enabled live row admits its client_id on presets-mode issuers.';
+COMMENT ON COLUMN ai_product_cimd_documents.id IS '@access: confidential';
+COMMENT ON COLUMN ai_product_cimd_documents.ai_product_id IS '@access: confidential';
+COMMENT ON COLUMN ai_product_cimd_documents.url IS 'The client_id the product presents. Matching is exact, case-sensitive string equality with no normalization (so a trailing slash is a different document), and never origin matching. When is_pattern is set, * stands for exactly one complete path segment, and the scheme and host stay literal.
+@access: confidential';
+COMMENT ON COLUMN ai_product_cimd_documents.display_name IS 'How the admission catalog lists this document; per document, since a vendor''s connector and shared documents differ.
+@access: confidential';
+COMMENT ON COLUMN ai_product_cimd_documents.enabled IS 'Gates the document without deleting it. A disabled document is inert for admission but still listed, and still holds its URL. Admission is an OR over documents, so disabling one does not de-admit a URL another enabled document still matches.
+@access: confidential';
+COMMENT ON COLUMN ai_product_cimd_documents.is_pattern IS 'Whether url is a wildcard pattern rather than a literal client_id. Explicit rather than inferred from *, so an exact URL is never read as a pattern.
+@access: confidential';
+COMMENT ON COLUMN ai_product_cimd_documents.verified_at IS 'When the live document was last checked; null if never.
+@access: confidential';
+COMMENT ON COLUMN ai_product_cimd_documents.verification_error IS 'Reason code from the last check; null when it passed or never ran.
+@access: confidential';
+COMMENT ON COLUMN ai_product_cimd_documents.created_by IS 'Subject URN of the staff member who created the row; null for seeded rows.
+@access: confidential-pii';
+COMMENT ON COLUMN ai_product_cimd_documents.updated_by IS 'Subject URN of the staff member who last changed the row; null for seeded rows.
+@access: confidential-pii';
+COMMENT ON COLUMN ai_product_cimd_documents.created_at IS '@access: confidential';
+COMMENT ON COLUMN ai_product_cimd_documents.updated_at IS '@access: confidential';
+COMMENT ON COLUMN ai_product_cimd_documents.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN ai_product_cimd_documents.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS ai_product_cimd_documents_url_key
+ON ai_product_cimd_documents (url)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS ai_product_cimd_documents_ai_product_id_idx
+ON ai_product_cimd_documents (ai_product_id);
+
 -- ai_scan_targets is an organization's overlay on the Shadow AI scan target
 -- catalog its device agents probe for. A row is whatever the organization has
 -- said about one target: an extra tool it added, or its decision about a
@@ -1787,6 +1910,7 @@ COMMENT ON COLUMN device_agent_configurations.updated_at IS '@access: confidenti
 CREATE TABLE IF NOT EXISTS ai_scan_targets (
   organization_id TEXT NOT NULL,
   id TEXT NOT NULL,
+  ai_product_id TEXT,
 
   display_name TEXT,
   category TEXT,
@@ -1806,9 +1930,10 @@ CREATE TABLE IF NOT EXISTS ai_scan_targets (
   -- blocked. Who set it and when is the audit log's job, not a column here.
   --
   -- The only per-organization state there is. Two kinds of row share this
-  -- table and the id alone tells them apart, by whether it names a compiled-in
-  -- default. A built-in's row records only this decision, because the
-  -- definition is compiled in and stays there: display_name, category and
+  -- table: ai_product_id records which, and until it is backfilled readers
+  -- still tell them apart by whether id names a compiled-in default. A
+  -- built-in's row records only this decision, because the definition is
+  -- compiled in and stays there: display_name, category and
   -- version_plist_key stay null, and the list-valued columns stay at their
   -- empty-array default, since they are NOT NULL. An organization's own
   -- target's row carries the full definition as well.
@@ -1824,11 +1949,14 @@ CREATE TABLE IF NOT EXISTS ai_scan_targets (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT ai_scan_targets_pkey PRIMARY KEY (organization_id, id),
-  CONSTRAINT ai_scan_targets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT ai_scan_targets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT ai_scan_targets_ai_product_id_fkey FOREIGN KEY (ai_product_id) REFERENCES ai_products (id) ON DELETE RESTRICT
 );
 
 COMMENT ON COLUMN ai_scan_targets.organization_id IS '@access: confidential';
 COMMENT ON COLUMN ai_scan_targets.id IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.ai_product_id IS 'The catalog product a built-in''s row records a decision about, equal to id; null for a target the organization added. Makes a row''s kind durable rather than inferred from whether id happens to match a product. Deleting a referenced product is refused rather than nulling this, which would silently turn the decision into an empty target of the organization''s own.
+@access: confidential';
 COMMENT ON COLUMN ai_scan_targets.display_name IS '@access: confidential';
 COMMENT ON COLUMN ai_scan_targets.category IS '@access: confidential';
 COMMENT ON COLUMN ai_scan_targets.bundle_ids IS '@access: confidential';
@@ -1843,6 +1971,10 @@ COMMENT ON COLUMN ai_scan_targets.status IS '@access: confidential';
 COMMENT ON COLUMN ai_scan_targets.rationale IS '@access: opaque-restricted';
 COMMENT ON COLUMN ai_scan_targets.created_at IS '@access: confidential';
 COMMENT ON COLUMN ai_scan_targets.updated_at IS '@access: confidential';
+
+CREATE INDEX IF NOT EXISTS ai_scan_targets_ai_product_id_idx
+ON ai_scan_targets (ai_product_id)
+WHERE ai_product_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
