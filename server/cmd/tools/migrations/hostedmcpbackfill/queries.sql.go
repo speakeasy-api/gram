@@ -3047,6 +3047,20 @@ func (q *Queries) SoftDeleteToolsetFixture(ctx context.Context, arg SoftDeleteTo
 	return err
 }
 
+const touchRiskPolicyFixture = `-- name: TouchRiskPolicyFixture :exec
+UPDATE risk_policies SET updated_at = clock_timestamp() WHERE id = $1 AND project_id = $2
+`
+
+type TouchRiskPolicyFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) TouchRiskPolicyFixture(ctx context.Context, arg TouchRiskPolicyFixtureParams) error {
+	_, err := q.db.Exec(ctx, touchRiskPolicyFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const wrapperMembershipsDeletedAt = `-- name: WrapperMembershipsDeletedAt :many
 SELECT m.id, COALESCE(m.deleted_at::text, '')::text AS deleted_at
 FROM meta_mcp_server_members AS m

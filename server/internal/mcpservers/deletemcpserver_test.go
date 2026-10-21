@@ -154,7 +154,7 @@ func TestDeleteMcpServer_CleansUpRiskPolicies(t *testing.T) {
 	})
 	require.NoError(t, err, "a policy with another live target must survive")
 	require.JSONEq(t, `{"servers": [{"mcp_server_id": "`+second.ID+`"}]}`, string(shared.McpScope), "the deleted server must leave the surviving scope")
-	require.Equal(t, multiServerPolicy.Version, shared.Version, "dropping a dead target must not bump the version")
+	requirePrunedPolicy(t, ctx, ti, multiServerPolicy, shared, first.ID)
 	sharedScope := policycore.Project(shared, nil).MCPScope
 	owned, err := queries.ListRiskPolicyMCPScopeServerIDs(ctx, riskrepo.ListRiskPolicyMCPScopeServerIDsParams{
 		ProjectID:    *authCtx.ProjectID,
@@ -175,6 +175,7 @@ func TestDeleteMcpServer_CleansUpRiskPolicies(t *testing.T) {
 	})
 	require.NoError(t, err, "an all-servers policy survives losing its listed server")
 	require.JSONEq(t, `{"all_servers": true, "servers": []}`, string(everyServer.McpScope))
+	requirePrunedPolicy(t, ctx, ti, allServersPolicy, everyServer, first.ID)
 
 	_, err = queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
 		ID:        nullAllServersPolicy.ID,
@@ -702,6 +703,17 @@ func TestDeleteMcpServer_DetachesFromAssistants(t *testing.T) {
 	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, nil, []*types.AssistantMCPServerRef{{McpServerSlug: reloaded.MCPServers[0].ServerSlug.String}}, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, name, updated.Name)
+}
+
+// requirePrunedPolicy checks one policy's own prune: same version, newer updated_at, and an audit row dropping the server.
+func requirePrunedPolicy(t *testing.T, ctx context.Context, ti *testInstance, before, after riskrepo.RiskPolicy, deletedServerID string) {
+	t.Helper()
+	require.Equal(t, before.Version, after.Version, "dropping a dead target must not bump the version")
+	require.True(t, after.UpdatedAt.Time.After(before.UpdatedAt.Time), "the prune must move updated_at so a stale editor conflicts")
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionRiskPolicyUpdate, before.ID.String())
+	require.NoError(t, err)
+	require.Contains(t, string(record.BeforeSnapshot), deletedServerID)
+	require.NotContains(t, string(record.AfterSnapshot), deletedServerID)
 }
 
 func seedMCPScopedRiskPolicy(

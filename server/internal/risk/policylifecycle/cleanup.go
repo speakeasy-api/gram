@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -56,9 +57,11 @@ func NewCleaner(tracerProvider trace.TracerProvider, auditLogger *audit.Logger) 
 
 // ScopeEdit is a surviving policy the deleted server was removed from.
 type ScopeEdit struct {
-	PolicyID    uuid.UUID
-	ScopeBefore []byte
-	ScopeAfter  []byte
+	PolicyID        uuid.UUID
+	ScopeBefore     []byte
+	ScopeAfter      []byte
+	UpdatedAtBefore time.Time
+	UpdatedAtAfter  time.Time
 }
 
 // ServerCleanup is what a server delete did to the project's risk policies.
@@ -157,7 +160,13 @@ func (c *Cleaner) SoftDeleteForMCPServer(
 		}); err != nil {
 			return ServerCleanup{}, fmt.Errorf("log risk policy scope update: %w", err)
 		}
-		edits = append(edits, ScopeEdit{PolicyID: policy.ID, ScopeBefore: policy.McpScope, ScopeAfter: updated.McpScope})
+		edits = append(edits, ScopeEdit{
+			PolicyID:        policy.ID,
+			ScopeBefore:     policy.McpScope,
+			ScopeAfter:      updated.McpScope,
+			UpdatedAtBefore: policy.UpdatedAt.Time,
+			UpdatedAtAfter:  updated.UpdatedAt.Time,
+		})
 	}
 
 	emptiedDeleted, err := c.softDeletePolicies(ctx, tx, organizationID, projectID, emptied, actor)
