@@ -212,7 +212,9 @@ var machineWideAgentPaths = func() []string {
 	case "windows":
 		return []string{`C:\Program Files\Speakeasy\speakeasyd.exe`}
 	default:
-		return []string{"/usr/local/bin/speakeasyd"}
+		// /opt/speakeasy/bin is the root-owned, off-PATH folder for fleet
+		// installs; /usr/local/bin is where older install steps put it.
+		return []string{"/opt/speakeasy/bin/speakeasyd", "/usr/local/bin/speakeasyd"}
 	}
 }()
 
