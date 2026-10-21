@@ -25,6 +25,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -521,10 +522,14 @@ func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 	case !locked:
 		return Report{}, ErrRunInProgress
 	}
-	return runLocked(ctx, conn, opts)
+	startedAt, err := New(conn).BackfillRunStartedAt(ctx)
+	if err != nil {
+		return Report{}, fmt.Errorf("read run start: %w", err)
+	}
+	return runLocked(ctx, conn, opts, startedAt)
 }
 
-func runLocked(ctx context.Context, db TxStarter, opts Options) (Report, error) {
+func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype.Timestamptz) (Report, error) {
 	pageSize := opts.PageSize
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
@@ -548,7 +553,7 @@ func runLocked(ctx context.Context, db TxStarter, opts Options) (Report, error) 
 			return runEMA(ctx, tx, opts, &report, local, want)
 		}},
 		{name: PhaseReconcile, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			return reconcileDerived(ctx, New(tx), opts, local, want, failed)
+			return reconcileDerived(ctx, New(tx), opts, local, want, failed, startedAt)
 		}},
 		{name: PhaseMark, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 			// Last, over every committed phase's servers.
@@ -790,6 +795,7 @@ func recordAuthClient(ctx context.Context, tx pgx.Tx, row ListAuthClientBackfill
 	err := inSavepoint(ctx, tx, func(sp pgx.Tx) error {
 		var err error
 		id, err = New(sp).CreateAuthClient(ctx, CreateAuthClientParams{
+			ID:                    OAuthClientID(row.OrganizationID, row.RemoteSessionClientID, clientType),
 			OrganizationID:        row.OrganizationID,
 			ProjectID:             row.ClientProjectID,
 			ClientType:            clientType,

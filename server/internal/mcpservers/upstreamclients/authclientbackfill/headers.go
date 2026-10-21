@@ -30,6 +30,19 @@ func SourceClientID(organizationID, sourceKind string, sourceID uuid.UUID, clien
 	return uuid.NewSHA1(idNamespace, []byte("source:"+organizationID+":"+sourceKind+":"+sourceID.String()+":"+clientType))
 }
 
+// OAuthClientID is the stable id of the auth client recorded for an upstream
+// OAuth client in an organization as clientType, so a retired client returns
+// under the same id.
+func OAuthClientID(organizationID string, remoteSessionClientID uuid.UUID, clientType string) uuid.UUID {
+	return uuid.NewSHA1(idNamespace, []byte("oauth:"+organizationID+":"+remoteSessionClientID.String()+":"+clientType))
+}
+
+// EMAClientID is the stable id of the EMA auth client recorded for one
+// upstream in an organization, so a retired client returns under the same id.
+func EMAClientID(organizationID string, remoteSessionIssuerID, remoteSessionClientID uuid.UUID, resource string) uuid.UUID {
+	return uuid.NewSHA1(idNamespace, []byte("ema:"+organizationID+":"+remoteSessionIssuerID.String()+":"+remoteSessionClientID.String()+":"+resource))
+}
+
 // Default names for clients whose configuration names none.
 const (
 	staticCredentialName = "Static credential" // #nosec G101 -- a display name, not a credential
