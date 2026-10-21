@@ -191,6 +191,49 @@ func TestService_ApplyDirectoryRoleSetup_StaleVersionChangesNothing(t *testing.T
 	require.Len(t, listed.Mappings, 1)
 }
 
+func TestService_ApplyDirectoryRoleSetup_CapsRolesPerSource(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Platform")
+	preview, err := ti.service.PreviewDirectoryRoleSetup(ctx, &gen.PreviewDirectoryRoleSetupPayload{})
+	require.NoError(t, err)
+	platform := previewItemByName(t, preview, "Platform")
+
+	tooMany := make([]*gen.ApplyDirectoryRoleSetupRole, 0, maxDirectoryRolesPerSource+1)
+	for i := range maxDirectoryRolesPerSource + 1 {
+		tooMany = append(tooMany, &gen.ApplyDirectoryRoleSetupRole{CreateName: new(fmt.Sprintf("Role %d", i))})
+	}
+	_, err = ti.service.ApplyDirectoryRoleSetup(ctx, &gen.ApplyDirectoryRoleSetupPayload{
+		Items: []*gen.ApplyDirectoryRoleSetupItem{{Source: platform.Source, Version: platform.Version, Roles: tooMany}},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	// Refused before any of the new roles was created.
+	roles, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
+	require.NoError(t, err)
+	for _, role := range roles.Roles {
+		require.NotEqual(t, "Role 0", role.Name)
+	}
+}
+
+func TestCountDirectorySetupRoles(t *testing.T) {
+	t.Parallel()
+
+	roleURN := "role:organization:viewer"
+	require.Equal(t, 3, countDirectorySetupRoles([]*gen.ApplyDirectoryRoleSetupRole{
+		{RoleUrn: &roleURN},
+		{RoleUrn: &roleURN},
+		// Names that make the same slug become one role.
+		{CreateName: new("Platform Ops")},
+		{CreateName: new("platform-ops")},
+		{CreateName: new("Finance")},
+		nil,
+	}))
+}
+
 func TestService_ApplyDirectoryRoleSetup_RejectsMalformedItems(t *testing.T) {
 	t.Parallel()
 
@@ -204,16 +247,8 @@ func TestService_ApplyDirectoryRoleSetup_RejectsMalformedItems(t *testing.T) {
 	otherGroupID := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Platform Ops").String()
 	otherSource := &gen.DirectoryRoleSetupSource{SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &otherGroupID}
 	spaced, dashed := "Platform Ops", "platform-ops"
-	tooManyRoles := make([]*gen.ApplyDirectoryRoleSetupRole, 0, maxDirectoryRolesPerSource+1)
-	for i := range maxDirectoryRolesPerSource + 1 {
-		tooManyRoles = append(tooManyRoles, &gen.ApplyDirectoryRoleSetupRole{CreateName: new(fmt.Sprintf("Role %d", i))})
-	}
 
 	for label, items := range map[string][]*gen.ApplyDirectoryRoleSetupItem{
-		// Refused before any of the new roles is created.
-		"more roles than the cap": {
-			{Source: source, Version: "v", Roles: tooManyRoles},
-		},
 		"duplicate source": {
 			{Source: source, Version: "v", Roles: nil},
 			{Source: source, Version: "v", Roles: nil},
