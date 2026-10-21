@@ -49,7 +49,10 @@ import {
   type AccessRow,
 } from "../mcp/access/accessRows";
 import { ownRules, narrowingLabel } from "../mcp/access/serverAudience";
-import { assignmentExclusions } from "./assignmentExclusions";
+import {
+  assignmentExclusions,
+  assignmentWriteEntry,
+} from "./assignmentExclusions";
 import {
   ServerAssignment,
   type PersonServerAccess,
@@ -736,14 +739,7 @@ function ChangeRoleServerAccess({
                                   entry.level,
                                 )),
                         )
-                        .map(
-                          ({ principalUrn, level, tools, dispositions }) => ({
-                            principalUrn,
-                            level,
-                            tools,
-                            dispositions,
-                          }),
-                        )
+                        .map(assignmentWriteEntry)
                     : assignmentExclusions(audience.data.entries, [
                         role.principalUrn,
                       ]),

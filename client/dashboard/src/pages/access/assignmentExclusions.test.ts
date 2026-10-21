@@ -66,3 +66,13 @@ it("blocks only the selected user without altering role grants", () => {
     ),
   ).toMatchObject({ level: "blocked", dispositions: ["destructive"] });
 });
+
+it("rejects unknown annotations instead of broadening a preserved rule", () => {
+  const unknown = {
+    ...entries[1]!,
+    dispositions: ["future_annotation"],
+  } as unknown as ResourceAudienceEntry;
+  expect(() =>
+    assignmentExclusions([unknown], ["role:organization:engineer"]),
+  ).toThrow();
+});
