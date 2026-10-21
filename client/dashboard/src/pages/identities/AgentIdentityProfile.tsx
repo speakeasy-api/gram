@@ -10,6 +10,7 @@ import {
   RenameAgentButton,
 } from "@/pages/agents/agent-admin";
 import { AgentFederatedAccess } from "@/pages/agents/AgentFederatedAccess";
+import { AgentBootstrapTokens } from "@/pages/agents/devices/AgentBootstrapTokens";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import { ManagedAgentSessions } from "@/pages/agents/ManagedAgentSessions";
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
@@ -164,6 +165,9 @@ export function AgentIdentityProfile({
           ) : (
             !federated && <AgentFederatedAccess agent={agent} />
           )}
+          {/* Headless boxes, beside the keys: both are runtimes becoming
+              this agent. */}
+          <AgentBootstrapTokens agent={agent} />
         </IdentitySection>
       );
     default:
