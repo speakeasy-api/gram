@@ -132,7 +132,13 @@ func runAuthPermissionDefaults(args []string, stdout io.Writer, getenv func(stri
 	}
 	defer pool.Close()
 	organizationIDs := []string{cfg.organizationID}
-	if cfg.organizationID == "" {
+	if cfg.organizationID != "" {
+		exists, err := authclientbackfill.New(pool).OrganizationExistsForGrants(ctx, cfg.organizationID)
+		if err != nil || !exists {
+			_, _ = fmt.Fprintln(stdout, "invalid arguments: -organization names no organization")
+			return 2
+		}
+	} else {
 		organizationIDs, err = authclientbackfill.New(pool).ListOrganizationIDsForGrants(ctx)
 		if err != nil {
 			_, _ = fmt.Fprintln(stdout, "migration failed: list organizations")
@@ -160,8 +166,14 @@ func runAuthPermissionDefaults(args []string, stdout io.Writer, getenv func(stri
 		_, _ = fmt.Fprintf(stdout, "migration failed: %v\n", err)
 		return 1
 	}
-	if report.Failed > 0 {
-		_, _ = fmt.Fprintln(stdout, "migration incomplete: some organizations failed; rerun")
+	return authPermissionDefaultsExitCode(stdout, report)
+}
+
+// authPermissionDefaultsExitCode fails a run that left any organization
+// unfinished, so a rerun is never skipped by mistake.
+func authPermissionDefaultsExitCode(stdout io.Writer, report authPermissionDefaultsReport) int {
+	if report.Failed > 0 || report.Busy > 0 {
+		_, _ = fmt.Fprintln(stdout, "migration incomplete: some organizations failed or were busy; rerun")
 		return 1
 	}
 	return 0

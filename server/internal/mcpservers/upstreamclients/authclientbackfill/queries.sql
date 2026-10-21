@@ -1734,15 +1734,12 @@ WHERE organization_id = @organization_id
   AND scope = ANY(@scopes::text[]);
 
 -- name: ListAPIKeyGrantRows :many
--- Every key policy row, to tell provisioned policies from explicit ones. The
--- rows stay locked until the phase commits, so an admin edit to a key's policy
--- waits rather than interleaving with a top-up.
+-- Every key policy row, to tell provisioned policies from explicit ones.
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_type = 'api_key'
-ORDER BY principal_urn, scope, id
-FOR UPDATE;
+ORDER BY principal_urn, scope, id;
 
 -- name: ListActiveLegacyAPIKeys :many
 -- Live legacy keys, matching admission's active predicate.
@@ -1760,6 +1757,9 @@ FROM projects
 WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY id;
+
+-- name: OrganizationExistsForGrants :one
+SELECT EXISTS (SELECT 1 FROM organization_metadata WHERE id = @organization_id)::boolean;
 
 -- name: ListOrganizationIDsForGrants :many
 -- Every organization, for the offline default auth permission backfill.

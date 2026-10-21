@@ -788,7 +788,6 @@ FROM principal_grants
 WHERE organization_id = $1
   AND principal_type = 'api_key'
 ORDER BY principal_urn, scope, id
-FOR UPDATE
 `
 
 type ListAPIKeyGrantRowsRow struct {
@@ -797,9 +796,7 @@ type ListAPIKeyGrantRowsRow struct {
 	Selectors    []byte
 }
 
-// Every key policy row, to tell provisioned policies from explicit ones. The
-// rows stay locked until the phase commits, so an admin edit to a key's policy
-// waits rather than interleaving with a top-up.
+// Every key policy row, to tell provisioned policies from explicit ones.
 func (q *Queries) ListAPIKeyGrantRows(ctx context.Context, organizationID string) ([]ListAPIKeyGrantRowsRow, error) {
 	rows, err := q.db.Query(ctx, listAPIKeyGrantRows, organizationID)
 	if err != nil {
@@ -2642,6 +2639,17 @@ func (q *Queries) MarkServersRequiringUpstreamAuth(ctx context.Context, arg Mark
 		return nil, err
 	}
 	return items, nil
+}
+
+const organizationExistsForGrants = `-- name: OrganizationExistsForGrants :one
+SELECT EXISTS (SELECT 1 FROM organization_metadata WHERE id = $1)::boolean
+`
+
+func (q *Queries) OrganizationExistsForGrants(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, organizationExistsForGrants, organizationID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const planClientHeaders = `-- name: PlanClientHeaders :many

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"testing"
 
@@ -26,6 +27,25 @@ func TestParseAuthPermissionDefaultsFlags(t *testing.T) {
 
 	_, err = parseAuthPermissionDefaultsFlags([]string{"-apply", "-environment=staging", "-confirm-environment=staging", "-confirm-target=other:5432/gram", "-confirm-apply=auth-permission-defaults"}, env)
 	require.Error(t, err, "the target must match the database")
+
+	cfg, err = parseAuthPermissionDefaultsFlags([]string{"-environment=staging", "-organization=org_one"}, env)
+	require.NoError(t, err)
+	require.Equal(t, "org_one", cfg.organizationID)
+}
+
+func TestAuthPermissionDefaultsExitCode(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	clean := newAuthPermissionDefaultsReport()
+	require.Zero(t, authPermissionDefaultsExitCode(&out, clean))
+
+	busy := newAuthPermissionDefaultsReport()
+	busy.Busy = 1
+	require.Equal(t, 1, authPermissionDefaultsExitCode(&out, busy), "a skipped organization still needs a run")
+
+	failed := newAuthPermissionDefaultsReport()
+	failed.Failed = 1
+	require.Equal(t, 1, authPermissionDefaultsExitCode(&out, failed))
 }
 
 func TestBackfillAuthPermissionDefaultsAggregates(t *testing.T) {
