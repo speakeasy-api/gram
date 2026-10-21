@@ -1,4 +1,7 @@
 import { useRoutes } from "@/routes";
+import { useOrganization } from "@/contexts/Auth";
+import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { serializeFilters } from "@/pages/logs/log-filter-url";
 import { Operator } from "@gram/client/models/components/logfilter";
 import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
@@ -19,6 +22,17 @@ export function OverviewTab({
   agentSetupHref: string;
 }): JSX.Element | null {
   const routes = useRoutes();
+  const organization = useOrganization();
+  const canViewToolLogs = useCanViewToolLogs();
+  const features = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { enabled: !!mcpServer.tunneledMcpServerId, throwOnError: false },
+  );
+  // Tool Logs is empty when the organization does not record logs, so the
+  // tunnel view links to it only when it can show something.
+  const toolLogsAvailable =
+    canViewToolLogs && features.data?.logsEnabled === true;
   if (mcpServer.unproxiedMcpServerId) {
     return (
       <UnproxiedMcpOverviewTab
@@ -60,7 +74,9 @@ export function OverviewTab({
       value: mcpServer.tunneledMcpServerId,
     },
   ]);
-  const logsHref = `${routes.logs.href()}?${new URLSearchParams({ af: filters ?? "" })}`;
+  const logsHref = toolLogsAvailable
+    ? `${routes.logs.href()}?${new URLSearchParams({ af: filters ?? "" })}`
+    : undefined;
   return (
     <Stack gap={6}>
       <PluginStatusBanner server={server} />

@@ -10,7 +10,8 @@ export function TunneledMcpConnectionsPanel({
   tunneledMcpServerId: string;
   /** Settings anchor with the agent snippets, offered when nothing is connected. */
   agentSetupHref: string;
-  logsHref: string;
+  /** Tool Logs filtered to this tunnel; omitted when Tool Logs is unavailable. */
+  logsHref?: string;
 }): JSX.Element {
   const { data, isLoading, isError } = useTunneledMcpConnections(
     tunneledMcpServerId,

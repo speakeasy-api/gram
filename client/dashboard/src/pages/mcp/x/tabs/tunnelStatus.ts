@@ -91,10 +91,10 @@ export function tunnelStatus(
     return {
       kind: "no-agents",
       tone: "neutral",
-      title: "No connected agents",
+      title: "No connected tunnel agents",
       detail:
         "Requests to this server fail until a tunnel agent connects from the network that hosts it.",
-      action: { label: "View agent setup", href: links.agentSetupHref },
+      action: { label: "View tunnel agent setup", href: links.agentSetupHref },
     };
   }
   const agents = agentCount(live);
@@ -109,7 +109,10 @@ export function tunnelStatus(
   ).length;
   // A failing check is fixed where the agent's target is configured. Tool Logs
   // cannot show these failures: it records calls, not network checks.
-  const setup = { label: "Review agent setup", href: links.agentSetupHref };
+  const setup = {
+    label: "Review tunnel agent setup",
+    href: links.agentSetupHref,
+  };
   if (failing && failing === live.length) {
     return {
       kind: "unreachable",
@@ -152,12 +155,12 @@ export function tunnelStatus(
     title: checked.length ? "Checks incomplete" : "Not checked",
     detail: checksOff
       ? `${agents} connected. Checks are turned off, so reachability is not reported.`
-      : `${agents} connected. Reachability is reported once each agent runs its network checks.`,
+      : `${agents} connected. Reachability is reported once each tunnel agent runs its network checks.`,
   };
 }
 
 function agentCount(live: TunneledMcpConnection[]): string {
-  return `${live.length} ${live.length === 1 ? "agent" : "agents"}`;
+  return `${live.length} ${live.length === 1 ? "tunnel agent" : "tunnel agents"}`;
 }
 
 // The sidebar readiness item for a tunneled server, judged on the same status
@@ -180,7 +183,7 @@ export function tunnelAgentReadiness({
   if (loading) {
     return {
       ...item,
-      description: "Checking for connected agents.",
+      description: "Checking for connected tunnel agents.",
       ready: null,
       href: overviewHref,
     };
@@ -199,7 +202,7 @@ export function tunnelAgentReadiness({
       return {
         ...item,
         description:
-          "No agent is connected, so requests to this server fail. View agent setup to connect one.",
+          "No tunnel agent is connected, so requests to this server fail. View tunnel agent setup to connect one.",
         ready: false,
         href: agentSetupHref,
       };
@@ -208,7 +211,7 @@ export function tunnelAgentReadiness({
     case "some-checks-failed":
       return {
         ...item,
-        description: `${status.detail} Review agent setup.`,
+        description: `${status.detail} Review tunnel agent setup.`,
         ready: false,
         href: agentSetupHref,
       };

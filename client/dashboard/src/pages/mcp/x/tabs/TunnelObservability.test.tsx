@@ -71,7 +71,9 @@ describe("tunnel status evidence", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Diagnostics unsupported")).toBeTruthy();
-    expect(screen.getByText(/Update the agent and\s+gateway/)).toBeTruthy();
+    expect(
+      screen.getByText(/This tunnel agent does not report network checks/),
+    ).toBeTruthy();
     expect(screen.getByText("Not checked")).toBeTruthy();
     expect(screen.queryByText("Network reachable")).toBeNull();
     expect(screen.getByText("Activity history is unavailable")).toBeTruthy();
@@ -101,7 +103,7 @@ describe("tunnel status evidence", () => {
     );
     expect(screen.getByText("Live status is unavailable")).toBeTruthy();
     expect(screen.queryByText("Network reachable")).toBeNull();
-    expect(screen.queryByText("No connected agents")).toBeNull();
+    expect(screen.queryByText("No connected tunnel agents")).toBeNull();
   });
 
   it("provides setup navigation when the successful snapshot has no agents", () => {
@@ -117,11 +119,11 @@ describe("tunnel status evidence", () => {
         />
       </MemoryRouter>,
     );
-    const setup = screen.getByRole("link", { name: "View agent setup" });
+    const setup = screen.getByRole("link", { name: "View tunnel agent setup" });
     expect(setup.getAttribute("href")).toBe("/settings#agent");
     // One control: the link is styled as a button, not wrapped around one.
     expect(setup.querySelector("button")).toBeNull();
-    expect(screen.getByText("No connected agents")).toBeTruthy();
+    expect(screen.getByText("No connected tunnel agents")).toBeTruthy();
   });
 });
 
@@ -160,12 +162,12 @@ it.each([
       lastHttpStatus: 0,
       httpProgress: { waitingHeaders: 0, openResponses: 0 },
     },
-    "HTTP / MCP: Not observed. No traffic has reached this agent.",
+    "HTTP / MCP: Not observed. No traffic has reached this tunnel agent.",
   ],
   [
     "disabled",
     { state: "disabled" },
-    "Checks are turned off for this agent, so its reachability is not reported.",
+    "Checks are turned off for this tunnel agent, so its reachability is not reported.",
   ],
   [
     "pending",
@@ -175,7 +177,7 @@ it.each([
   [
     "legacy",
     { state: "available", requestsTotal: 2 },
-    "HTTP progress unavailable for this agent.",
+    "HTTP progress unavailable for this tunnel agent.",
   ],
   [
     "stale",
@@ -359,7 +361,7 @@ it("does not claim disconnection when collection is unavailable", () => {
     </MemoryRouter>,
   );
   expect(screen.getByText("Live status is unavailable")).toBeTruthy();
-  expect(screen.queryByText("No connected agents")).toBeNull();
+  expect(screen.queryByText("No connected tunnel agents")).toBeNull();
 });
 
 it("keeps failure guidance visible and reveals dependent checks and HTTP details on demand", () => {
@@ -398,7 +400,7 @@ it("keeps failure guidance visible and reveals dependent checks and HTTP details
   ).toBeNull();
   // A failing check is fixed where the agent is configured. Tool Logs records
   // calls, not network checks, so it stays a separate link in Activity.
-  const setup = screen.getByRole("link", { name: "Review agent setup" });
+  const setup = screen.getByRole("link", { name: "Review tunnel agent setup" });
   expect(setup.getAttribute("href")).toBe("/settings");
   expect(setup.querySelector("button")).toBeNull();
   expect(screen.queryByRole("link", { name: "View tool logs" })).toBeNull();
@@ -496,7 +498,7 @@ it.each([
       within(status).queryByText("Unreachable", { exact: true }),
     ).toBeNull();
     expect(
-      within(status).getByRole("link", { name: "Review agent setup" }),
+      within(status).getByRole("link", { name: "Review tunnel agent setup" }),
     ).toBeTruthy();
   },
 );
@@ -550,6 +552,21 @@ function renderWith(
   );
 }
 
+it("omits the Tool Logs link when Tool Logs is unavailable", () => {
+  render(
+    <MemoryRouter>
+      <TunnelObservability
+        id="source"
+        connections={legacy}
+        loading={false}
+        error={false}
+        agentSetupHref="/settings"
+      />
+    </MemoryRouter>,
+  );
+  expect(screen.queryByRole("link", { name: "View tool calls" })).toBeNull();
+});
+
 it("says checks are off for a disabled agent without suggesting an update", () => {
   renderWith([
     {
@@ -560,12 +577,12 @@ it("says checks are off for a disabled agent without suggesting an update", () =
   expect(screen.getByText("Checks turned off")).toBeTruthy();
   expect(
     screen.getByText(
-      "Checks are turned off for this agent, so its reachability is not reported.",
+      "Checks are turned off for this tunnel agent, so its reachability is not reported.",
     ),
   ).toBeTruthy();
   expect(
     screen.getByText(
-      "1 agent connected. Checks are turned off, so reachability is not reported.",
+      "1 tunnel agent connected. Checks are turned off, so reachability is not reported.",
     ),
   ).toBeTruthy();
   expect(screen.queryByText(/Update the agent/)).toBeNull();

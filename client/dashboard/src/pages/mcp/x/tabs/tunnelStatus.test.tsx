@@ -84,10 +84,10 @@ const cases: {
   {
     name: "no connected agents",
     connections: snapshot([]),
-    overview: "No connected agents",
+    overview: "No connected tunnel agents",
     ready: false,
     description:
-      "No agent is connected, so requests to this server fail. View agent setup to connect one.",
+      "No tunnel agent is connected, so requests to this server fail. View tunnel agent setup to connect one.",
     href: links.agentSetupHref,
   },
   {
@@ -96,7 +96,7 @@ const cases: {
     overview: "Unreachable",
     ready: false,
     description:
-      "1 agent connected, but none can reach the MCP server. Review agent setup.",
+      "1 tunnel agent connected, but none can reach the MCP server. Review tunnel agent setup.",
     href: links.agentSetupHref,
   },
   {
@@ -105,7 +105,7 @@ const cases: {
     overview: "Partially reachable",
     ready: false,
     description:
-      "1 of 2 agents cannot reach the MCP server. Review agent setup.",
+      "1 of 2 tunnel agents cannot reach the MCP server. Review tunnel agent setup.",
     href: links.agentSetupHref,
   },
   {
@@ -114,7 +114,7 @@ const cases: {
     overview: "Some checks failed",
     ready: false,
     description:
-      "1 of 2 agents cannot reach the MCP server; the rest have not reported a check. Review agent setup.",
+      "1 of 2 tunnel agents cannot reach the MCP server; the rest have not reported a check. Review tunnel agent setup.",
     href: links.agentSetupHref,
   },
   {
@@ -122,7 +122,7 @@ const cases: {
     connections: snapshot([agent("a", reachable), agent("b", reachable)]),
     overview: "Reachable",
     ready: true,
-    description: "2 agents connected and can reach the MCP server.",
+    description: "2 tunnel agents connected and can reach the MCP server.",
     href: links.overviewHref,
   },
   {
@@ -131,7 +131,7 @@ const cases: {
     overview: "Not checked",
     ready: null,
     description:
-      "1 agent connected. Reachability is reported once each agent runs its network checks.",
+      "1 tunnel agent connected. Reachability is reported once each tunnel agent runs its network checks.",
     href: links.overviewHref,
   },
   {
@@ -140,7 +140,7 @@ const cases: {
     overview: "Not checked",
     ready: null,
     description:
-      "1 agent connected. Checks are turned off, so reachability is not reported.",
+      "1 tunnel agent connected. Checks are turned off, so reachability is not reported.",
     href: links.overviewHref,
   },
   {
@@ -152,7 +152,7 @@ const cases: {
     overview: "Checks incomplete",
     ready: null,
     description:
-      "2 agents connected. Reachability is reported once each agent runs its network checks.",
+      "2 tunnel agents connected. Reachability is reported once each tunnel agent runs its network checks.",
     href: links.overviewHref,
   },
 ];
@@ -185,7 +185,7 @@ describe("tunnel agent readiness", () => {
       }),
     ).toMatchObject({
       ready: null,
-      description: "Checking for connected agents.",
+      description: "Checking for connected tunnel agents.",
     });
   });
 });

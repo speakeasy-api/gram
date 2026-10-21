@@ -98,7 +98,7 @@ export function TunnelObservability({
   connections?: TunneledMcpServerConnections;
   loading: boolean;
   error: boolean;
-  logsHref: string;
+  logsHref?: string;
   agentSetupHref: string;
 }): JSX.Element {
   const [window, setWindow] = useState<Window>("day");
@@ -132,9 +132,11 @@ export function TunnelObservability({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button asChild variant="tertiary" size="sm">
-              <Link to={logsHref}>View tool calls</Link>
-            </Button>
+            {logsHref ? (
+              <Button asChild variant="tertiary" size="sm">
+                <Link to={logsHref}>View tool calls</Link>
+              </Button>
+            ) : null}
             <SegmentedControl
               value={window}
               onChange={setWindow}
@@ -225,7 +227,7 @@ function TunnelStatus({
       {live.length > 0 && !unavailable && (
         <>
           <dl className="flex flex-wrap gap-x-8 gap-y-2 border-t px-6 py-3 text-sm">
-            <Fact label="Agents" value={live.length} />
+            <Fact label="Tunnel agents" value={live.length} />
             <Fact label="Client sessions" value={sessions} />
             <Fact label="Requests in flight" value={inFlight} />
           </dl>
@@ -295,14 +297,14 @@ function AgentRow({ connection: c }: { connection: TunneledMcpConnection }) {
       </div>
       {!d || d.state === "unsupported" ? (
         <p className="text-muted-foreground text-sm">
-          This agent does not report network checks. Update the agent and
-          gateway to see them; forwarding still works.
+          This tunnel agent does not report network checks. Update it to see
+          them; forwarding still works.
         </p>
       ) : d.state === "disabled" ? (
         // The agent announced that its checks are turned off.
         <p className="text-muted-foreground text-sm">
-          Checks are turned off for this agent, so its reachability is not
-          reported.
+          Checks are turned off for this tunnel agent, so its reachability is
+          not reported.
         </p>
       ) : (
         <DiagnosticDetails value={d} />
@@ -348,7 +350,7 @@ function diagnosticLabel(d?: TunnelDiagnostics) {
 
 const failures: Record<string, string> = {
   dns_not_found: "Hostname was not found. Check DNS and the target hostname.",
-  dns_timeout: "DNS lookup timed out. Check DNS on the agent host.",
+  dns_timeout: "DNS lookup timed out. Check DNS on the tunnel agent's host.",
   dns_error: "DNS lookup failed.",
   tcp_refused:
     "Connection refused. Check the target port and whether the server is running.",
@@ -359,7 +361,7 @@ const failures: Record<string, string> = {
   tls_error: "TLS negotiation failed.",
   proxy:
     "A proxy is configured. Direct network probes are skipped; HTTP reachability is observed from normal traffic.",
-  unknown: "The transport failed. Check the local agent logs.",
+  unknown: "The transport failed. Check the tunnel agent's logs.",
 };
 
 const summaryClass =
@@ -468,9 +470,10 @@ function HttpProgress({ value: d }: { value: TunnelDiagnostics }) {
   if (d.state !== "available") {
     note = "HTTP progress unavailable. Waiting for a fresh report.";
   } else if (!d.httpProgress) {
-    note = "HTTP progress unavailable for this agent.";
+    note = "HTTP progress unavailable for this tunnel agent.";
   } else if (!Number(d.requestsTotal)) {
-    note = "HTTP / MCP: Not observed. No traffic has reached this agent.";
+    note =
+      "HTTP / MCP: Not observed. No traffic has reached this tunnel agent.";
   }
   if (note || !d.httpProgress) {
     return <p className="text-muted-foreground text-sm">{note}</p>;
@@ -697,7 +700,7 @@ function ActivityCharts({
           points={points}
           window={window}
           series={[
-            { key: "connections", label: "Agents" },
+            { key: "connections", label: "Tunnel agents" },
             { key: "consumerSessions", label: "Client sessions" },
             { key: "activeRequests", label: "Requests in flight" },
           ]}
@@ -811,7 +814,7 @@ function AboutTheseNumbers({ points }: { points: TunnelMetricPoint[] }) {
               },
               {
                 key: "connections",
-                header: "Agents",
+                header: "Tunnel agents",
                 render: (p) => p.connections?.toFixed(1) ?? "—",
               },
               {
