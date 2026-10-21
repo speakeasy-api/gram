@@ -1849,11 +1849,6 @@ func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState s
 }
 
 const listAssistantAttachedServerIDs = `-- name: ListAssistantAttachedServerIDs :many
-SELECT at.toolset_id AS mcp_server_id
-FROM assistant_toolsets at
-WHERE at.assistant_id = $1
-  AND at.project_id = $2
-UNION
 SELECT ams.mcp_server_id
 FROM assistant_mcp_servers ams
 WHERE ams.assistant_id = $1
@@ -2601,21 +2596,9 @@ func (q *Queries) ListWarmPendingThreads(ctx context.Context, arg ListWarmPendin
 }
 
 const loadAssistantMcpServers = `-- name: LoadAssistantMcpServers :many
-WITH attachments AS (
-  SELECT at.assistant_id, at.toolset_id AS mcp_server_id, at.environment_id, at.created_at, TRUE AS legacy
-  FROM assistant_toolsets at
-  WHERE at.assistant_id = ANY($2::UUID[])
-    AND at.project_id = $1
-  UNION ALL
-  SELECT ams.assistant_id, ams.mcp_server_id, ams.environment_id, ams.created_at, FALSE AS legacy
-  FROM assistant_mcp_servers ams
-  WHERE ams.assistant_id = ANY($2::UUID[])
-    AND ams.project_id = $1
-)
 SELECT
-  a.assistant_id,
-  a.mcp_server_id,
-  a.legacy::bool AS legacy,
+  ams.assistant_id,
+  ams.mcp_server_id,
   ms.slug AS server_slug,
   t.slug AS toolset_slug,
   CASE WHEN t.id IS NOT NULL THEN CASE
@@ -2634,23 +2617,22 @@ SELECT
     LIMIT 1
   ), '') END::text AS endpoint_slug,
   t.default_environment_slug,
-  a.environment_id,
+  ams.environment_id,
   e.slug AS environment_slug
-FROM attachments a
-LEFT JOIN mcp_servers ms
-  ON ms.id = a.mcp_server_id
+FROM assistant_mcp_servers ams
+JOIN mcp_servers ms
+  ON ms.id = ams.mcp_server_id
   AND ms.project_id = $1
   AND ms.deleted IS FALSE
-  AND (NOT a.legacy OR ms.toolset_id = ms.id)
 LEFT JOIN toolsets t
-  ON t.id = a.mcp_server_id
+  ON t.id = ms.id
+  AND ms.toolset_id = ms.id
   AND t.project_id = $1
   AND t.deleted IS FALSE
-  AND (a.legacy OR ms.toolset_id = ms.id)
-LEFT JOIN environments e ON e.id = a.environment_id AND e.project_id = $1
-WHERE (a.legacy AND t.id IS NOT NULL)
-   OR (NOT a.legacy AND ms.id IS NOT NULL)
-ORDER BY (t.id IS NULL), a.created_at, a.legacy DESC, a.mcp_server_id
+LEFT JOIN environments e ON e.id = ams.environment_id AND e.project_id = $1
+WHERE ams.assistant_id = ANY($2::UUID[])
+  AND ams.project_id = $1
+ORDER BY (t.id IS NULL), ams.created_at, ams.mcp_server_id
 `
 
 type LoadAssistantMcpServersParams struct {
@@ -2661,7 +2643,6 @@ type LoadAssistantMcpServersParams struct {
 type LoadAssistantMcpServersRow struct {
 	AssistantID            uuid.UUID
 	McpServerID            uuid.UUID
-	Legacy                 bool
 	ServerSlug             pgtype.Text
 	ToolsetSlug            pgtype.Text
 	Visibility             string
@@ -2671,10 +2652,9 @@ type LoadAssistantMcpServersRow struct {
 	EnvironmentSlug        pgtype.Text
 }
 
-// Both attachment tables; hosted rows (toolset id = canonical wrapper id) keep
-// the toolset slug, mcp_enabled, /mcp/{mcp_slug} address and default
-// environment, and sort first so they win runtime id collisions. Legacy rows
-// read the toolset whatever the wrapper's current shape.
+// Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug,
+// mcp_enabled, /mcp/{mcp_slug} address and default environment, and sort first
+// so they win runtime id collisions.
 func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantMcpServers, arg.ProjectID, arg.AssistantIds)
 	if err != nil {
@@ -2687,7 +2667,6 @@ func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistant
 		if err := rows.Scan(
 			&i.AssistantID,
 			&i.McpServerID,
-			&i.Legacy,
 			&i.ServerSlug,
 			&i.ToolsetSlug,
 			&i.Visibility,
@@ -2904,7 +2883,7 @@ type LoadAssistantToolsetsRow struct {
 	EnvironmentSlug        pgtype.Text
 }
 
-// Test-only: no production code writes legacy assistant_toolsets rows.
+// Test-only: legacy assistant_toolsets rows are no longer read or written; deletes still clear them until AIM-581.
 func (q *Queries) LoadAssistantToolsets(ctx context.Context, arg LoadAssistantToolsetsParams) ([]LoadAssistantToolsetsRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantToolsets, arg.AssistantIds, arg.ProjectID)
 	if err != nil {

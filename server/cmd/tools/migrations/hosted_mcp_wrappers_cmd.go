@@ -50,9 +50,10 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	project := fs.String("project", "", "project_id (uuid) to scope the run")
 	cursor := fs.String("cursor", "", "resume after this toolset id")
 	limit := fs.Int("limit", 0, "max toolsets to process; 0 means all")
-	reportPath := fs.String("report", "", "per-row JSON report path; -apply refuses an existing file, and -move-dependents or -cleanup-orphans -apply also writes <report>.journal.jsonl")
+	reportPath := fs.String("report", "", "per-row JSON report path; -apply refuses an existing file, and -move-dependents, -cleanup-orphans or -rekey-removal-records -apply also writes <report>.journal.jsonl")
 	moveDependents := fs.Bool("move-dependents", false, "re-key toolset-keyed mcp_metadata, plugin_servers and assistant_toolsets onto the canonical wrapper")
 	cleanupOrphans := fs.Bool("cleanup-orphans", false, "remove toolset-keyed mcp_metadata, plugin_servers and assistant_toolsets whose toolset or project is deleted")
+	rekeyRemovals := fs.Bool("rekey-removal-records", false, "re-key soft-deleted toolset-keyed plugin_servers rows (plugin removal records) onto the canonical server key")
 	emitEnv := getenv("GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED")
 	defaultEmit, err := strconv.ParseBool(emitEnv)
 	if err != nil && emitEnv != "" {
@@ -72,8 +73,8 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	if *limit < 0 {
 		return hostedMCPWrappersConfig{}, errors.New("limit must be nonnegative")
 	}
-	if *moveDependents && *cleanupOrphans {
-		return hostedMCPWrappersConfig{}, errors.New("-move-dependents and -cleanup-orphans are separate phases")
+	if (*moveDependents && *cleanupOrphans) || (*rekeyRemovals && (*moveDependents || *cleanupOrphans)) {
+		return hostedMCPWrappersConfig{}, errors.New("-move-dependents, -cleanup-orphans and -rekey-removal-records are separate phases")
 	}
 	// Readers on main before AIM-16 only find toolset-keyed rows, so a moved row would vanish from them.
 	if *moveDependents && *apply && !*readersCutOver {
@@ -85,6 +86,9 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	}
 	if *cleanupOrphans && *apply && *reportPath == "" {
 		return hostedMCPWrappersConfig{}, errors.New("-cleanup-orphans -apply requires -report")
+	}
+	if *rekeyRemovals && *apply && *reportPath == "" {
+		return hostedMCPWrappersConfig{}, errors.New("-rekey-removal-records -apply requires -report")
 	}
 	if *readersCutOver && !*moveDependents {
 		return hostedMCPWrappersConfig{}, errors.New("-readers-cut-over only applies to -move-dependents")
@@ -102,12 +106,13 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 			Apply:          *apply,
 			MoveDependents: *moveDependents,
 			CleanupOrphans: *cleanupOrphans,
+			RekeyRemovals:  *rekeyRemovals,
 			Publication:    plugins.PublicationRequests{Enabled: *publicationEmit},
 			Journal:        nil,
 			LockTimeout:    0,
 		},
 	}
-	if (*moveDependents || *cleanupOrphans) && *apply {
+	if (*moveDependents || *cleanupOrphans || *rekeyRemovals) && *apply {
 		cfg.journalPath = *reportPath + ".journal.jsonl"
 	}
 	if cfg.dbURL == "" {
@@ -206,6 +211,8 @@ func hostedMCPWrappersModeFlags(options hostedmcpbackfill.Options) string {
 		return "-apply -move-dependents -readers-cut-over"
 	case options.CleanupOrphans:
 		return "-apply -cleanup-orphans"
+	case options.RekeyRemovals:
+		return "-apply -rekey-removal-records"
 	default:
 		return "-apply"
 	}

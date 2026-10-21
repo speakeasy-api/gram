@@ -10,6 +10,7 @@ type CandidateKind =
   | "catalog"
   | "plugin"
   | "marketplace"
+  | "skill"
   | "assistant"
   | "environment"
   | "source"
