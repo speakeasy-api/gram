@@ -1375,6 +1375,26 @@ func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, or
 }
 
 const listToolsetSummariesByIDs = `-- name: ListToolsetSummariesByIDs :many
+WITH active_deployments AS MATERIALIZED (
+  SELECT p.project_id, d.id
+  FROM (
+    SELECT DISTINCT ts.project_id
+    FROM toolsets ts
+    WHERE ts.id = ANY($1::uuid[])
+      AND ts.organization_id = $2
+      AND ts.project_id = ANY($3::uuid[])
+      AND ts.deleted IS FALSE
+  ) p
+  CROSS JOIN LATERAL (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON ds.deployment_id = d.id
+    WHERE d.project_id = p.project_id
+      AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+  ) d
+)
 SELECT
     t.id
   , t.slug
@@ -1385,17 +1405,17 @@ SELECT
   , (
       (
         SELECT COUNT(DISTINCT h.name)
-        FROM (
-          SELECT ad.id
-          UNION ALL
-          SELECT pv.deployment_id
-          FROM deployments_packages dp
-          JOIN package_versions pv ON pv.id = dp.version_id
-          WHERE dp.deployment_id = ad.id
-        ) dep(id)
-        JOIN http_tool_definitions h ON h.deployment_id = dep.id
-        WHERE h.deleted IS FALSE
+        FROM http_tool_definitions h
+        WHERE h.deployment_id = ANY(ARRAY(
+            SELECT ad.id
+            UNION ALL
+            SELECT pv.deployment_id
+            FROM deployments_packages dp
+            JOIN package_versions pv ON pv.id = dp.version_id
+            WHERE dp.deployment_id = ad.id
+          ))
           AND h.tool_urn = ANY(lv.tool_urns)
+          AND h.deleted IS FALSE
       )
       + (
         SELECT COUNT(*)
@@ -1449,15 +1469,7 @@ LEFT JOIN LATERAL (
   ORDER BY tv.version DESC
   LIMIT 1
 ) lv ON TRUE
-LEFT JOIN LATERAL (
-  SELECT d.id
-  FROM deployments d
-  JOIN deployment_statuses ds ON ds.deployment_id = d.id
-  WHERE d.project_id = t.project_id
-    AND ds.status = 'completed'
-  ORDER BY d.seq DESC
-  LIMIT 1
-) ad ON TRUE
+LEFT JOIN active_deployments ad ON ad.project_id = t.project_id
 LEFT JOIN LATERAL (
   SELECT o.origin_registry_specifier
   FROM toolset_origins o

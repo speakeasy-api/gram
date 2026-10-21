@@ -58,7 +58,7 @@ func BuildMcpServerToolsetSummaryView(row repo.ListToolsetSummariesByIDsRow) *ty
 		Slug:                  row.Slug,
 		Name:                  row.Name,
 		Description:           conv.FromPGText[string](row.Description),
-		ToolCount:             int(row.ToolCount) + len(platformtools.FindToolEntries(row.PlatformToolUrns)),
+		ToolCount:             int(row.ToolCount) + platformtools.CountTools(row.PlatformToolUrns),
 		ToolSelectionMode:     row.ToolSelectionMode,
 		ExternalMcpSlugs:      slugs,
 		ExternalMcpProxyOnly:  row.ExternalMcpProxyOnly,

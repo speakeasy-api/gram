@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	templatesrepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -49,6 +51,26 @@ func seedSummaryHTTPTool(t *testing.T, ctx context.Context, ti *testInstance, pr
 		HttpMethod: "GET", Path: "/" + name, SchemaVersion: "3.0.0", Schema: []byte("{}"),
 		HeaderSettings: []byte("{}"), QuerySettings: []byte("{}"), PathSettings: []byte("{}"),
 		ServerEnvVar: "SUMMARY_SERVER_URL",
+	})
+	require.NoError(t, err)
+}
+
+func seedSummaryFunctionTool(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, deploymentID uuid.UUID, toolURN urn.Tool, name string) {
+	t.Helper()
+	asset, err := assetsrepo.New(ti.conn).CreateAsset(ctx, assetsrepo.CreateAssetParams{
+		Name: name + ".zip", Url: "https://example.com/" + name + ".zip", ProjectID: projectID, OrganizationID: organizationID,
+		Sha256: uuid.NewString(), Kind: "functions", ContentType: "application/zip", ContentLength: 1,
+	})
+	require.NoError(t, err)
+	queries := deploymentsrepo.New(ti.conn)
+	function, err := queries.UpsertDeploymentFunctionsAsset(ctx, deploymentsrepo.UpsertDeploymentFunctionsAssetParams{
+		DeploymentID: deploymentID, AssetID: asset.ID, Name: name, Slug: name, Runtime: "nodejs:22",
+	})
+	require.NoError(t, err)
+	_, err = queries.CreateFunctionsTool(ctx, deploymentsrepo.CreateFunctionsToolParams{
+		DeploymentID: deploymentID, FunctionID: function.ID, ToolUrn: toolURN, ProjectID: projectID, Runtime: "nodejs:22",
+		Name: name, Description: name, InputSchema: []byte(`{"type":"object"}`), Variables: []byte("{}"), AuthInput: []byte("{}"),
+		Tags: []string{}, Meta: []byte("{}"),
 	})
 	require.NoError(t, err)
 }
@@ -185,4 +207,36 @@ func TestMcpServerSummary_NoDeploymentCountsOnlyPlatformTools(t *testing.T) {
 
 	require.Equal(t, 1, getSummaryServer(t, ctx, ti, server.ID).Toolset.ToolCount)
 	require.Len(t, describeSummaryToolset(t, ctx, ti, projectID, toolset).Tools, 1)
+}
+
+func TestMcpServerSummary_CountsOnlyLiveFunctionAndUndeletedHTTPTools(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	orgID, projectID := summaryAuth(t, ctx)
+
+	staleFunction := urn.NewTool(urn.ToolKindFunction, "weather", "old_forecast")
+	liveFunction := urn.NewTool(urn.ToolKindFunction, "weather", "forecast")
+	live := urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets")
+	deleted := urn.NewTool(urn.ToolKindHTTP, "petstore", "delete_pet")
+
+	older := seedSummaryDeployment(t, ctx, ti, orgID, projectID)
+	seedSummaryFunctionTool(t, ctx, ti, orgID, projectID, older, staleFunction, "old_forecast")
+
+	latest := seedSummaryDeployment(t, ctx, ti, orgID, projectID)
+	seedSummaryFunctionTool(t, ctx, ti, orgID, projectID, latest, liveFunction, "forecast")
+	seedSummaryHTTPTool(t, ctx, ti, projectID, latest, live, "list_pets")
+	seedSummaryHTTPTool(t, ctx, ti, projectID, latest, deleted, "delete_pet")
+	require.NoError(t, testrepo.New(ti.conn).SoftDeleteHTTPToolDefinitionFixture(ctx, testrepo.SoftDeleteHTTPToolDefinitionFixtureParams{
+		ProjectID: projectID, DeploymentID: latest, ToolUrn: deleted,
+	}))
+
+	toolset := seedSummaryToolset(t, ctx, ti, orgID, projectID, []urn.Tool{staleFunction, liveFunction, live, deleted})
+	server := seedSummaryServer(t, ctx, ti, projectID, toolset.ID)
+
+	const want = 2
+	require.Len(t, describeSummaryToolset(t, ctx, ti, projectID, toolset).Tools, want)
+	require.Equal(t, want, getSummaryServer(t, ctx, ti, server.ID).Toolset.ToolCount)
+	for _, forOrg := range []bool{false, true} {
+		require.Equal(t, want, listSummaryServers(t, ctx, ti, forOrg)[server.ID.String()].Toolset.ToolCount)
+	}
 }

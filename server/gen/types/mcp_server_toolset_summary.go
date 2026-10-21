@@ -17,9 +17,8 @@ type McpServerToolsetSummary struct {
 	Name string
 	// The toolset's description, if any
 	Description *string
-	// The number of distinct configured tools in the latest toolset version,
-	// excluding external MCP proxy tools. Counts configured tool URNs, so it may
-	// differ from the number of tools that resolve against the active deployment.
+	// Number of tools the toolset serves from the project's latest completed
+	// deployment, excluding external MCP proxy tools.
 	ToolCount int
 	// The toolset's tool selection mode
 	ToolSelectionMode string

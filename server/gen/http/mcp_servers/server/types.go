@@ -2841,9 +2841,8 @@ type McpServerToolsetSummaryResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The toolset's description, if any
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The number of distinct configured tools in the latest toolset version,
-	// excluding external MCP proxy tools. Counts configured tool URNs, so it may
-	// differ from the number of tools that resolve against the active deployment.
+	// Number of tools the toolset serves from the project's latest completed
+	// deployment, excluding external MCP proxy tools.
 	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
 	// The toolset's tool selection mode
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
