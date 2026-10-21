@@ -292,7 +292,10 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// to write: an undecided overlay row renders as unreviewed and is
 		// indistinguishable on the page from a tool nobody has touched.
 		{byOrg(s.q.PostflightIDUndecidedAITools), 0, "demo seed postflight: %d AI tool rows carry a status other than approved or blocked"},
-		{byOrg(s.q.PostflightIDDirectoryRoleMappings), 4, "demo seed postflight: expected 4 directory role mappings, found %d"},
+		{byOrg(s.q.PostflightIDDirectoryRoleMappings), 5, "demo seed postflight: expected 5 directory role mappings, found %d"},
+		// One mapping's group was deleted from the directory, so the mappings
+		// page has a missing source to show.
+		{byOrg(s.q.PostflightIDDeletedGroupMappings), 1, "demo seed postflight: expected 1 mapping on a deleted directory group, found %d"},
 		// One group grants a set of roles, so the mapping page shows two role
 		// chips on a single source.
 		{byOrg(s.q.PostflightIDInfraGroupMappedRoles), 2, "demo seed postflight: expected 2 roles for Infra, found %d"},

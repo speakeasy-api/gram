@@ -58,6 +58,7 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { attributeMemberCount } from "@/pages/access/directorySourcesForRole";
+import { memberInDirectoryGroup } from "@/lib/member-roles";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
@@ -67,10 +68,7 @@ import {
   mutationKeyDeleteDirectoryRoleMapping,
   useDeleteDirectoryRoleMappingMutation,
 } from "@gram/client/react-query/deleteDirectoryRoleMapping.js";
-import {
-  invalidateAllDirectoryRoleMappings,
-  useDirectoryRoleMappings,
-} from "@gram/client/react-query/directoryRoleMappings.js";
+import { useDirectoryRoleMappings } from "@gram/client/react-query/directoryRoleMappings.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import {
@@ -111,7 +109,20 @@ type SourceRow = {
   form: MappingSource;
   /** Every live mapping from this source, one per role it grants. */
   mappings: DirectoryRoleMapping[];
+  /**
+   * The source is gone: a group deleted from the directory, or an attribute
+   * value no directory user has. Its mappings grant nothing, so it can only
+   * have roles removed, not added.
+   */
+  missing?: boolean;
 };
+
+/** Why a missing source's row cannot take another role. */
+function missingSourceMessage(row: SourceRow): string {
+  return row.form.sourceKind === "group"
+    ? "This group was deleted from the directory. Its roles grant nothing until it returns. Remove them, or keep them for when it does."
+    : "No directory user has this value now. Its roles grant nothing until someone does. Remove them, or keep them for when they do.";
+}
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -133,28 +144,40 @@ function groupRows(
     mappings.push(mapping);
     byGroup.set(mapping.directoryGroupId, mappings);
   }
-  // Members name their directory groups, not group ids, so match on the name.
-  const membersByGroup = new Map<string, FacepileMember[]>();
-  for (const member of members) {
-    for (const group of member.groups ?? []) {
-      const list = membersByGroup.get(group) ?? [];
-      list.push({
+  const live = data.groups.map((group): SourceRow => ({
+    key: group.id,
+    label: group.name,
+    detail: memberLabel(group.memberCount),
+    // Matched by group ID: two directories can each have a group with the
+    // same name.
+    members: members
+      .filter((member) => memberInDirectoryGroup(member, group))
+      .map((member) => ({
         id: member.id,
         name: member.name,
         email: member.email,
         photoUrl: member.photoUrl,
-      });
-      membersByGroup.set(group, list);
-    }
-  }
-  return data.groups.map((group) => ({
-    key: group.id,
-    label: group.name,
-    detail: memberLabel(group.memberCount),
-    members: membersByGroup.get(group.name),
+      })),
     form: { sourceKind: "group", directoryGroupId: group.id },
     mappings: byGroup.get(group.id) ?? [],
+    missing: (byGroup.get(group.id) ?? []).some(
+      (mapping) => mapping.sourceStatus === "missing",
+    ),
   }));
+  // A group deleted from the directory drops out of the group list but keeps
+  // its mappings, which now grant nothing. List them so they can be removed.
+  const liveIDs = new Set(data.groups.map((group) => group.id));
+  const missing = [...byGroup.entries()]
+    .filter(([groupId]) => !liveIDs.has(groupId))
+    .map(([groupId, mappings]): SourceRow => ({
+      key: groupId,
+      label: mappings[0]?.directoryGroupName || "Removed group",
+      detail: "Deleted from the directory",
+      form: { sourceKind: "group", directoryGroupId: groupId },
+      mappings,
+      missing: true,
+    }));
+  return [...live, ...missing];
 }
 
 /** Attribute mappings that exist, including ones whose value no user has now. */
@@ -167,21 +190,26 @@ function attributeMappingRows(
     const key = mapping.attributeKey ?? "";
     const value = mapping.attributeValue ?? "";
     const sourceKey = JSON.stringify([key, value]);
+    const missing = mapping.sourceStatus === "missing";
     const existing = rows.get(sourceKey);
     if (existing) {
       existing.mappings.push(mapping);
+      existing.missing = existing.missing || missing;
       continue;
     }
     rows.set(sourceKey, {
       key: sourceKey,
       label: `${key} = ${value}`,
-      detail: memberLabel(attributeMemberCount(data, key, value)),
+      detail: missing
+        ? "No directory user has this value"
+        : memberLabel(attributeMemberCount(data, key, value)),
       form: {
         sourceKind: "attribute",
         attributeKey: key,
         attributeValue: value,
       },
       mappings: [mapping],
+      missing,
     });
   }
   return [...rows.values()].sort((a, b) => a.label.localeCompare(b.label));
@@ -281,20 +309,24 @@ export function DirectoryRoleMappings({
 
   const visibleRows = useMemo(() => {
     const needle = deferredSearch.trim().toLowerCase();
-    const wasMapped = (row: SourceRow) =>
-      mappedAtLoad[row.key] ?? row.mappings.length > 0;
+    // Unmapped groups first, then deleted groups that still have roles, then
+    // mapped groups.
+    const rank = (row: SourceRow) =>
+      row.missing
+        ? 1
+        : (mappedAtLoad[row.key] ?? row.mappings.length > 0)
+          ? 2
+          : 0;
     return rows
       .filter(
         (row) => needle === "" || row.label.toLowerCase().includes(needle),
       )
-      .sort(
-        (a, b) =>
-          Number(wasMapped(a)) - Number(wasMapped(b)) ||
-          a.label.localeCompare(b.label),
-      );
+      .sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label));
   }, [rows, deferredSearch, mappedAtLoad]);
 
-  const mappedCount = rows.filter((row) => row.mappings.length > 0).length;
+  const liveRows = rows.filter((row) => !row.missing);
+  const mappedCount = liveRows.filter((row) => row.mappings.length > 0).length;
+  const missingCount = rows.length - liveRows.length;
   const attributeRows = useMemo(
     () => (data ? attributeMappingRows(data) : []),
     [data],
@@ -307,7 +339,9 @@ export function DirectoryRoleMappings({
         <div>
           <div className="text-eyebrow">Configure role mappings</div>
           <Text muted small>
-            {mappedCount} of {rows.length} groups give their members roles.
+            {mappedCount} of {liveRows.length} groups give their members roles.
+            {missingCount > 0 &&
+              ` ${pluralize(missingCount, "deleted group")} still ${missingCount === 1 ? "has" : "have"} roles mapped.`}
           </Text>
         </div>
         <div className="flex items-center gap-2">
@@ -432,7 +466,12 @@ function MappingTable({
       key: "status",
       header: "",
       width: "64px",
-      render: (row) => <MappedMark mapped={row.mappings.length > 0} />,
+      render: (row) =>
+        row.missing ? (
+          <MissingSourceMark message={missingSourceMessage(row)} />
+        ) : (
+          <MappedMark mapped={row.mappings.length > 0} />
+        ),
     },
   ];
 
@@ -448,9 +487,11 @@ function MappingTable({
         cloneElement(rowElement as ReactElement<{ className?: string }>, {
           className: cn(
             (rowElement.props as { className?: string }).className,
-            row.mappings.length > 0
-              ? "bg-muted/25 hover:bg-muted/40"
-              : "hover:bg-muted/10",
+            row.missing
+              ? "text-muted-foreground hover:bg-muted/10"
+              : row.mappings.length > 0
+                ? "bg-muted/25 hover:bg-muted/40"
+                : "hover:bg-muted/10",
           ),
         })
       }
@@ -714,22 +755,26 @@ function RolePicker({
       disabled={saving || !!disabledMessage}
       onRemove={(id) => remove.mutate({ request: { id } })}
     >
-      <Combobox
-        items={items}
-        selected={undefined}
-        onSelectionChange={(item) => pick(item.value)}
-        searchable
-        searchPlaceholder="Search roles…"
-        variant="secondary"
-        className="h-auto justify-start border-dashed py-1 text-left"
-        contentClassName="w-[min(24rem,90vw)]"
-        disabledMessage={saving ? "Saving mapping" : disabledMessage}
-      >
-        <span className="flex items-center gap-2">
-          <Plus className="size-4 shrink-0" />
-          {saving ? "Saving…" : "Add role"}
-        </span>
-      </Combobox>
+      {/* A missing source refuses new roles, so it has no add control; its
+        current roles stay removable, and the row's mark says why. */}
+      {!row.missing && (
+        <Combobox
+          items={items}
+          selected={undefined}
+          onSelectionChange={(item) => pick(item.value)}
+          searchable
+          searchPlaceholder="Search roles…"
+          variant="secondary"
+          className="h-auto justify-start border-dashed py-1 text-left"
+          contentClassName="w-[min(24rem,90vw)]"
+          disabledMessage={saving ? "Saving mapping" : disabledMessage}
+        >
+          <span className="flex items-center gap-2">
+            <Plus className="size-4 shrink-0" />
+            {saving ? "Saving…" : "Add role"}
+          </span>
+        </Combobox>
+      )}
     </RoleChips>
   );
 }
@@ -960,6 +1005,19 @@ function MappedMark({ mapped }: { mapped: boolean }): JSX.Element {
   );
 }
 
+/** Marks a source that is gone, so its roles grant nothing. */
+function MissingSourceMark({ message }: { message: string }): JSX.Element {
+  return (
+    <div className="flex justify-center">
+      <SimpleTooltip tooltip={message}>
+        <span role="img" aria-label={message} className="inline-flex">
+          <TriangleAlert className="text-destructive size-4 shrink-0" />
+        </span>
+      </SimpleTooltip>
+    </div>
+  );
+}
+
 /** Removes one mapping. */
 function RemoveMappingButton({
   label,
@@ -992,7 +1050,9 @@ function SyncGroupsButton(): JSX.Element {
   const queryClient = useQueryClient();
   const sync = useSyncDirectoryGroupsMutation({
     onSuccess: async () => {
-      await invalidateAllDirectoryRoleMappings(queryClient);
+      // A sync also reconciles group memberships, which changes members'
+      // groups and mapped roles, not just the group list.
+      await invalidateDirectoryMappingAccess(queryClient);
       toast.success("Updated directory group list");
     },
     onError: (error) => {

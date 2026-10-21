@@ -164,6 +164,16 @@ INSERT INTO directory_groups
 SELECT @organization_id::text, @group_prefix::text || replace(lower(t), ' ', '-'), t, now(), now()
 FROM (SELECT DISTINCT unnest(@teams::text[]) AS t) g;
 
+-- A group the directory has since deleted. Its mapping stays and grants
+-- nothing, so the mappings page shows it as a missing source.
+-- name: RolesInsertDeletedDirectoryGroup :exec
+INSERT INTO directory_groups
+  (organization_id, workos_directory_group_id, name, workos_created_at,
+   workos_updated_at, workos_deleted_at, deleted_at)
+VALUES (@organization_id::text, @group_prefix::text || @slug::text, @name::text,
+        now() - interval '60 days', now() - interval '3 days',
+        now() - interval '3 days', now() - interval '3 days');
+
 -- name: RolesInsertDirectoryUser :exec
 INSERT INTO directory_users
   (organization_id, user_id, workos_directory_user_id, email, attributes,
