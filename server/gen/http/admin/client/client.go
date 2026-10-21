@@ -396,6 +396,14 @@ type Client struct {
 	// the runUpstreamOAuthMigration endpoint.
 	RunUpstreamOAuthMigrationDoer goahttp.Doer
 
+	// GetDefaultAuthPermissionStatus Doer is the HTTP client used to make requests
+	// to the getDefaultAuthPermissionStatus endpoint.
+	GetDefaultAuthPermissionStatusDoer goahttp.Doer
+
+	// RunDefaultAuthPermissions Doer is the HTTP client used to make requests to
+	// the runDefaultAuthPermissions endpoint.
+	RunDefaultAuthPermissionsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -511,6 +519,8 @@ func NewClient(
 		ListUpstreamOAuthMigrationOrganizationsDoer: doer,
 		GetUpstreamOAuthMigrationStatusDoer:         doer,
 		RunUpstreamOAuthMigrationDoer:               doer,
+		GetDefaultAuthPermissionStatusDoer:          doer,
+		RunDefaultAuthPermissionsDoer:               doer,
 		RestoreResponseBody:                         restoreBody,
 		scheme:                                      scheme,
 		host:                                        host,
@@ -2799,6 +2809,54 @@ func (c *Client) RunUpstreamOAuthMigration() goa.Endpoint {
 		resp, err := c.RunUpstreamOAuthMigrationDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "runUpstreamOAuthMigration", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetDefaultAuthPermissionStatus returns an endpoint that makes HTTP requests
+// to the admin service getDefaultAuthPermissionStatus server.
+func (c *Client) GetDefaultAuthPermissionStatus() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetDefaultAuthPermissionStatusRequest(c.encoder)
+		decodeResponse = DecodeGetDefaultAuthPermissionStatusResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetDefaultAuthPermissionStatusRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDefaultAuthPermissionStatusDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getDefaultAuthPermissionStatus", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RunDefaultAuthPermissions returns an endpoint that makes HTTP requests to
+// the admin service runDefaultAuthPermissions server.
+func (c *Client) RunDefaultAuthPermissions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRunDefaultAuthPermissionsRequest(c.encoder)
+		decodeResponse = DecodeRunDefaultAuthPermissionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRunDefaultAuthPermissionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RunDefaultAuthPermissionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "runDefaultAuthPermissions", err)
 		}
 		return decodeResponse(resp)
 	}

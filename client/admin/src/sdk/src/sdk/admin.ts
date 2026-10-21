@@ -21,6 +21,7 @@ import { adminDisableOrganization } from "../funcs/adminDisableOrganization.js";
 import { adminEnableOrganization } from "../funcs/adminEnableOrganization.js";
 import { adminExtendTrial } from "../funcs/adminExtendTrial.js";
 import { adminFetchGlobalIssuerMetadata } from "../funcs/adminFetchGlobalIssuerMetadata.js";
+import { adminGetDefaultAuthPermissionStatus } from "../funcs/adminGetDefaultAuthPermissionStatus.js";
 import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
@@ -75,6 +76,7 @@ import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
 import { adminRefreshGlobalIssuerMetadata } from "../funcs/adminRefreshGlobalIssuerMetadata.js";
 import { adminRepairInferenceKey } from "../funcs/adminRepairInferenceKey.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
+import { adminRunDefaultAuthPermissions } from "../funcs/adminRunDefaultAuthPermissions.js";
 import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMigration.js";
 import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
@@ -99,6 +101,8 @@ import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulk
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
 import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
+import { AdminDefaultAuthPermissionRun } from "../models/components/admindefaultauthpermissionrun.js";
+import { AdminDefaultAuthPermissionStatus } from "../models/components/admindefaultauthpermissionstatus.js";
 import { AdminExternalMcpMigrationResult } from "../models/components/adminexternalmcpmigrationresult.js";
 import { AdminHookClientsResult } from "../models/components/adminhookclientsresult.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
@@ -174,6 +178,7 @@ import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionis
 import { RepairInferenceKeyRequestBody } from "../models/components/repairinferencekeyrequestbody.js";
 import { ResumeStripeSubscriptionRequestBody } from "../models/components/resumestripesubscriptionrequestbody.js";
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
+import { RunDefaultAuthPermissionsRequestBody } from "../models/components/rundefaultauthpermissionsrequestbody.js";
 import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runupstreamoauthmigrationrequestbody.js";
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
@@ -196,6 +201,7 @@ import { UpdateSupportMatrixRequestBody } from "../models/components/updatesuppo
 import { UploadImageResult } from "../models/components/uploadimageresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
 import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admindescribemcpserverhealth.js";
+import { AdminGetDefaultAuthPermissionStatusRequest } from "../models/operations/admingetdefaultauthpermissionstatus.js";
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
 import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
 import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
@@ -293,6 +299,40 @@ export class Admin extends ClientSDK {
   ): Promise<void> {
     return unwrapAsync(adminLogout(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * runDefaultAuthPermissions admin
+   *
+   * @remarks
+   * Grants one organization the default auth permissions it is missing: everyone's and each agent's use of their own personal connections, shared clients for whoever can connect to a server using them, and policies for legacy API keys. It only adds grants; rerunning restores any default since removed.
+   */
+  async runDefaultAuthPermissions(
+    request: RunDefaultAuthPermissionsRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminDefaultAuthPermissionRun> {
+    return unwrapAsync(adminRunDefaultAuthPermissions(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getDefaultAuthPermissionStatus admin
+   *
+   * @remarks
+   * Reports which default auth permissions one organization is missing, from a dry run that writes nothing.
+   */
+  async getDefaultAuthPermissionStatus(
+    request: AdminGetDefaultAuthPermissionStatusRequest,
+    options?: RequestOptions,
+  ): Promise<AdminDefaultAuthPermissionStatus> {
+    return unwrapAsync(adminGetDefaultAuthPermissionStatus(
+      this,
+      request,
       options,
     ));
   }

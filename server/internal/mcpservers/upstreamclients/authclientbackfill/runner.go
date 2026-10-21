@@ -11,8 +11,10 @@
 // no longer yields, so the records track it, and marks each server it links a
 // client to as needing upstream authentication where that is still
 // undecided. Admin-created records are never
-// read or retired here. Nothing reads these records yet: the existing
-// resolution stays authoritative.
+// read or retired here. Its last phase grants the default auth permissions
+// the mandatory auth client check needs (see grants.go); those grants are live
+// authorization data. The client records themselves are not read yet: the
+// existing resolution stays authoritative.
 package authclientbackfill
 
 import (
@@ -79,6 +81,7 @@ const (
 	PhaseEMA       = "ema"
 	PhaseReconcile = "reconcile"
 	PhaseMark      = "mark"
+	PhaseGrants    = "grants"
 )
 
 // Outcome classifies one decision.
@@ -337,6 +340,18 @@ type Report struct {
 	// ServersMarked counts servers marked as needing upstream authentication.
 	ServersMarked int `json:"servers_marked"`
 
+	// PendingGrants counts default grants the organization is missing, and
+	// PendingGrantsByKind splits them by default.
+	PendingGrants       int               `json:"pending_grants"`
+	PendingGrantsByKind map[GrantKind]int `json:"pending_grants_by_kind"`
+
+	// GrantsWritten counts default grants this run added.
+	GrantsWritten int `json:"grants_written"`
+
+	// APIKeysGranted lists the API keys this run added policy grants to, so
+	// a rollback can find them.
+	APIKeysGranted []string `json:"api_keys_granted"`
+
 	// PhaseErrors names each phase that failed and why. A failed phase's
 	// writes are rolled back and its records are not retired; the other
 	// phases still run.
@@ -401,6 +416,10 @@ func newReport(apply bool) Report {
 		LinksRetired:          0,
 		PendingMarkedServers:  0,
 		ServersMarked:         0,
+		PendingGrants:         0,
+		PendingGrantsByKind:   map[GrantKind]int{},
+		GrantsWritten:         0,
+		APIKeysGranted:        []string{},
 		PhaseErrors:           map[string]string{},
 		Results:               []Result{},
 	}
@@ -444,6 +463,12 @@ func (r *Report) merge(o Report) {
 	r.LinksRetired += o.LinksRetired
 	r.PendingMarkedServers += o.PendingMarkedServers
 	r.ServersMarked += o.ServersMarked
+	r.PendingGrants += o.PendingGrants
+	for kind, n := range o.PendingGrantsByKind {
+		r.PendingGrantsByKind[kind] += n
+	}
+	r.GrantsWritten += o.GrantsWritten
+	r.APIKeysGranted = append(r.APIKeysGranted, o.APIKeysGranted...)
 	r.Results = append(r.Results, o.Results...)
 }
 
@@ -495,6 +520,14 @@ type phase struct {
 // What earlier phases committed stays, so an interrupted apply keeps its
 // progress. Run returns an error only when the run as a whole cannot proceed.
 func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
+	return withOrganizationLock(ctx, db, opts, func(conn *pgxpool.Conn) (Report, error) {
+		return runLocked(ctx, conn, opts)
+	})
+}
+
+// withOrganizationLock runs fn holding the organization's backfill lock on one
+// connection, taken without waiting.
+func withOrganizationLock(ctx context.Context, db Acquirer, opts Options, fn func(conn *pgxpool.Conn) (Report, error)) (Report, error) {
 	if opts.OrganizationID == "" {
 		return Report{}, errors.New("organization id is required")
 	}
@@ -521,7 +554,28 @@ func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 	case !locked:
 		return Report{}, ErrRunInProgress
 	}
-	return runLocked(ctx, conn, opts)
+	return fn(conn)
+}
+
+// RunGrants runs only the grants phase, under the same organization lock as
+// Run, for organizations the rest of the backfill does not apply to.
+func RunGrants(ctx context.Context, db Acquirer, opts Options) (Report, error) {
+	return withOrganizationLock(ctx, db, opts, func(conn *pgxpool.Conn) (Report, error) {
+		report := newReport(opts.Apply)
+		local := newReport(opts.Apply)
+		p := phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+			return runGrants(ctx, tx, opts, local)
+		}}
+		if err := runPhase(ctx, conn, opts, p, &local); err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return report, fmt.Errorf("grants interrupted: %w", ctxErr)
+			}
+			report.PhaseErrors[PhaseGrants] = err.Error()
+			return report, nil
+		}
+		report.merge(local)
+		return report, nil
+	})
 }
 
 func runLocked(ctx context.Context, db TxStarter, opts Options) (Report, error) {
@@ -551,8 +605,11 @@ func runLocked(ctx context.Context, db TxStarter, opts Options) (Report, error) 
 			return reconcileDerived(ctx, New(tx), opts, local, want, failed)
 		}},
 		{name: PhaseMark, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			// Last, over every committed phase's servers.
 			return markRequiringUpstreamAuth(ctx, New(tx), opts, &report, local)
+		}},
+		{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+			// Last, over every committed phase's auth clients.
+			return runGrants(ctx, tx, opts, local)
 		}},
 	}
 	for _, p := range phases {

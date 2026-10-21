@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const createAuthClient = `-- name: CreateAuthClient :one
@@ -710,6 +711,106 @@ func (q *Queries) LinkSourceServer(ctx context.Context, arg LinkSourceServerPara
 	return result.RowsAffected(), nil
 }
 
+const listAPIKeyGrantRows = `-- name: ListAPIKeyGrantRows :many
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = $1
+  AND principal_type = 'api_key'
+ORDER BY principal_urn, scope, id
+`
+
+type ListAPIKeyGrantRowsRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Selectors    []byte
+}
+
+// Every key policy row, to tell explicit policies from provisioned ones.
+func (q *Queries) ListAPIKeyGrantRows(ctx context.Context, organizationID string) ([]ListAPIKeyGrantRowsRow, error) {
+	rows, err := q.db.Query(ctx, listAPIKeyGrantRows, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAPIKeyGrantRowsRow
+	for rows.Next() {
+		var i ListAPIKeyGrantRowsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveLegacyAPIKeys = `-- name: ListActiveLegacyAPIKeys :many
+SELECT id, project_id, scopes
+FROM api_keys
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND subject_urn IS NULL
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
+ORDER BY id
+`
+
+type ListActiveLegacyAPIKeysRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+	Scopes    []string
+}
+
+// Live legacy keys, matching admission's active predicate.
+func (q *Queries) ListActiveLegacyAPIKeys(ctx context.Context, organizationID string) ([]ListActiveLegacyAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, listActiveLegacyAPIKeys, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveLegacyAPIKeysRow
+	for rows.Next() {
+		var i ListActiveLegacyAPIKeysRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.Scopes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentRolePrincipals = `-- name: ListAgentRolePrincipals :many
+SELECT DISTINCT role_urn::text AS role_urn
+FROM agent_role_assignments
+WHERE organization_id = $1
+ORDER BY role_urn
+`
+
+// Roles assigned to agents, whose policies include them.
+func (q *Queries) ListAgentRolePrincipals(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listAgentRolePrincipals, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var role_urn string
+		if err := rows.Scan(&role_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, role_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAuthClientBackfillCandidates = `-- name: ListAuthClientBackfillCandidates :many
 SELECT a.id AS association_id,
        a.project_id,
@@ -822,6 +923,45 @@ func (q *Queries) ListAuthClientBackfillCandidates(ctx context.Context, arg List
 			&i.AuthClientProjectID,
 			&i.LinkLive,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthClientGrantRows = `-- name: ListAuthClientGrantRows :many
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = $1
+  AND scope = ANY($2::text[])
+`
+
+type ListAuthClientGrantRowsParams struct {
+	OrganizationID string
+	Scopes         []string
+}
+
+type ListAuthClientGrantRowsRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Selectors    []byte
+}
+
+// Existing grants of the given scopes, to tell which defaults are missing.
+func (q *Queries) ListAuthClientGrantRows(ctx context.Context, arg ListAuthClientGrantRowsParams) ([]ListAuthClientGrantRowsRow, error) {
+	rows, err := q.db.Query(ctx, listAuthClientGrantRows, arg.OrganizationID, arg.Scopes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthClientGrantRowsRow
+	for rows.Next() {
+		var i ListAuthClientGrantRowsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1444,6 +1584,34 @@ func (q *Queries) ListLiveLinkIDsFixture(ctx context.Context, organizationID str
 	return items, nil
 }
 
+const listLiveProjects = `-- name: ListLiveProjects :many
+SELECT id
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+func (q *Queries) ListLiveProjects(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listLiveProjects, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOAuthClientSources = `-- name: ListOAuthClientSources :many
 WITH used AS (
   SELECT a.remote_session_client_id,
@@ -1608,6 +1776,48 @@ func (q *Queries) ListRemoteSourceServers(ctx context.Context, arg ListRemoteSou
 	return items, nil
 }
 
+const listServerAccessGrants = `-- name: ListServerAccessGrants :many
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = $1
+  AND scope = ANY($2::text[])
+  AND principal_type <> 'api_key'
+ORDER BY principal_urn, scope, id
+`
+
+type ListServerAccessGrantsParams struct {
+	OrganizationID string
+	Scopes         []string
+}
+
+type ListServerAccessGrantsRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Selectors    []byte
+}
+
+// Grants that can satisfy mcp:connect, held by anyone but API keys, whose
+// policies are provisioned separately. Like grant loading, effect is ignored.
+func (q *Queries) ListServerAccessGrants(ctx context.Context, arg ListServerAccessGrantsParams) ([]ListServerAccessGrantsRow, error) {
+	rows, err := q.db.Query(ctx, listServerAccessGrants, arg.OrganizationID, arg.Scopes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServerAccessGrantsRow
+	for rows.Next() {
+		var i ListServerAccessGrantsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServerAuthClientsFixture = `-- name: ListServerAuthClientsFixture :many
 SELECT auth_client_id
 FROM mcp_server_auth_clients
@@ -1628,6 +1838,54 @@ func (q *Queries) ListServerAuthClientsFixture(ctx context.Context, mcpServerID 
 			return nil, err
 		}
 		items = append(items, auth_client_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSharedAuthClientServers = `-- name: ListSharedAuthClientServers :many
+SELECT DISTINCT l.auth_client_id, ac.client_type, l.project_id, s.id AS mcp_server_id, s.toolset_id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac ON ac.id = l.auth_client_id AND ac.organization_id = l.organization_id AND ac.deleted IS FALSE
+JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+JOIN projects AS p ON p.id = l.project_id AND p.organization_id = l.organization_id AND p.deleted IS FALSE
+WHERE l.organization_id = $1
+  AND l.deleted IS FALSE
+  AND ac.client_type <> 'remote_session'
+ORDER BY l.auth_client_id, l.project_id
+`
+
+type ListSharedAuthClientServersRow struct {
+	AuthClientID uuid.UUID
+	ClientType   string
+	ProjectID    uuid.UUID
+	McpServerID  uuid.UUID
+	ToolsetID    uuid.NullUUID
+}
+
+// Every live server link to a shared auth client, with both ids mcp:connect
+// can be checked on: the server, and its toolset when it has one.
+func (q *Queries) ListSharedAuthClientServers(ctx context.Context, organizationID string) ([]ListSharedAuthClientServersRow, error) {
+	rows, err := q.db.Query(ctx, listSharedAuthClientServers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSharedAuthClientServersRow
+	for rows.Next() {
+		var i ListSharedAuthClientServersRow
+		if err := rows.Scan(
+			&i.AuthClientID,
+			&i.ClientType,
+			&i.ProjectID,
+			&i.McpServerID,
+			&i.ToolsetID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

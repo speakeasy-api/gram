@@ -1494,6 +1494,68 @@ VALUES (@project_id, @organization_id, @resource_identifier, @metadata_url, sqlc
 UPDATE remote_session_issuers SET deleted_at = clock_timestamp()
 WHERE id = (SELECT remote_session_issuer_id FROM remote_session_clients WHERE remote_session_clients.id = @client_id);
 
+-- name: ListSharedAuthClientServers :many
+-- Every live server link to a shared auth client, with both ids mcp:connect
+-- can be checked on: the server, and its toolset when it has one.
+SELECT DISTINCT l.auth_client_id, ac.client_type, l.project_id, s.id AS mcp_server_id, s.toolset_id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac ON ac.id = l.auth_client_id AND ac.organization_id = l.organization_id AND ac.deleted IS FALSE
+JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+JOIN projects AS p ON p.id = l.project_id AND p.organization_id = l.organization_id AND p.deleted IS FALSE
+WHERE l.organization_id = @organization_id
+  AND l.deleted IS FALSE
+  AND ac.client_type <> 'remote_session'
+ORDER BY l.auth_client_id, l.project_id;
+
+-- name: ListServerAccessGrants :many
+-- Grants that can satisfy mcp:connect, held by anyone but API keys, whose
+-- policies are provisioned separately. Like grant loading, effect is ignored.
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND scope = ANY(@scopes::text[])
+  AND principal_type <> 'api_key'
+ORDER BY principal_urn, scope, id;
+
+-- name: ListAgentRolePrincipals :many
+-- Roles assigned to agents, whose policies include them.
+SELECT DISTINCT role_urn::text AS role_urn
+FROM agent_role_assignments
+WHERE organization_id = @organization_id
+ORDER BY role_urn;
+
+-- name: ListAuthClientGrantRows :many
+-- Existing grants of the given scopes, to tell which defaults are missing.
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND scope = ANY(@scopes::text[]);
+
+-- name: ListAPIKeyGrantRows :many
+-- Every key policy row, to tell explicit policies from provisioned ones.
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_type = 'api_key'
+ORDER BY principal_urn, scope, id;
+
+-- name: ListActiveLegacyAPIKeys :many
+-- Live legacy keys, matching admission's active predicate.
+SELECT id, project_id, scopes
+FROM api_keys
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND subject_urn IS NULL
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
+ORDER BY id;
+
+-- name: ListLiveProjects :many
+SELECT id
+FROM projects
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+ORDER BY id;
+
 -- name: SeedUpstreamSelectionFixture :exec
 INSERT INTO upstream_client_selections (project_id, organization_id, credential_kind, credential_id, mcp_server_id, no_auth, source, auth_client_id, auth_client_attachment_scope)
 VALUES (

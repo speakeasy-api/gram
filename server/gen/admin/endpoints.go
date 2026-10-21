@@ -112,6 +112,8 @@ type Endpoints struct {
 	ListUpstreamOAuthMigrationOrganizations goa.Endpoint
 	GetUpstreamOAuthMigrationStatus         goa.Endpoint
 	RunUpstreamOAuthMigration               goa.Endpoint
+	GetDefaultAuthPermissionStatus          goa.Endpoint
+	RunDefaultAuthPermissions               goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -232,6 +234,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ListUpstreamOAuthMigrationOrganizations: NewListUpstreamOAuthMigrationOrganizationsEndpoint(s, a.APIKeyAuth),
 		GetUpstreamOAuthMigrationStatus:         NewGetUpstreamOAuthMigrationStatusEndpoint(s, a.APIKeyAuth),
 		RunUpstreamOAuthMigration:               NewRunUpstreamOAuthMigrationEndpoint(s, a.APIKeyAuth),
+		GetDefaultAuthPermissionStatus:          NewGetDefaultAuthPermissionStatusEndpoint(s, a.APIKeyAuth),
+		RunDefaultAuthPermissions:               NewRunDefaultAuthPermissionsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -332,6 +336,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListUpstreamOAuthMigrationOrganizations = m(e.ListUpstreamOAuthMigrationOrganizations)
 	e.GetUpstreamOAuthMigrationStatus = m(e.GetUpstreamOAuthMigrationStatus)
 	e.RunUpstreamOAuthMigration = m(e.RunUpstreamOAuthMigration)
+	e.GetDefaultAuthPermissionStatus = m(e.GetDefaultAuthPermissionStatus)
+	e.RunDefaultAuthPermissions = m(e.RunDefaultAuthPermissions)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -2480,5 +2486,51 @@ func NewRunUpstreamOAuthMigrationEndpoint(s Service, authAPIKeyFn security.AuthA
 			return nil, err
 		}
 		return s.RunUpstreamOAuthMigration(ctx, p)
+	}
+}
+
+// NewGetDefaultAuthPermissionStatusEndpoint returns an endpoint function that
+// calls the method "getDefaultAuthPermissionStatus" of service "admin".
+func NewGetDefaultAuthPermissionStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetDefaultAuthPermissionStatusPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetDefaultAuthPermissionStatus(ctx, p)
+	}
+}
+
+// NewRunDefaultAuthPermissionsEndpoint returns an endpoint function that calls
+// the method "runDefaultAuthPermissions" of service "admin".
+func NewRunDefaultAuthPermissionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunDefaultAuthPermissionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunDefaultAuthPermissions(ctx, p)
 	}
 }
