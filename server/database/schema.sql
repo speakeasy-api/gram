@@ -6862,6 +6862,8 @@ CREATE TABLE IF NOT EXISTS directory_users (
   workos_directory_user_id TEXT NOT NULL,
   directory_id TEXT,
   email TEXT,
+  first_name TEXT,
+  last_name TEXT,
   attributes JSONB NOT NULL DEFAULT '{}'::jsonb,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -6885,6 +6887,10 @@ COMMENT ON COLUMN directory_users.organization_id IS '@access: confidential';
 COMMENT ON COLUMN directory_users.user_id IS '@access: confidential';
 COMMENT ON COLUMN directory_users.workos_directory_user_id IS '@access: confidential-pii';
 COMMENT ON COLUMN directory_users.email IS '@access: confidential-pii';
+COMMENT ON COLUMN directory_users.first_name IS 'Given name from the WorkOS directory user. NULL until a dsync.user event or the name backfill provides it.
+@access: confidential-pii';
+COMMENT ON COLUMN directory_users.last_name IS 'Family name from the WorkOS directory user. NULL until a dsync.user event or the name backfill provides it.
+@access: confidential-pii';
 COMMENT ON COLUMN directory_users.attributes IS '@access: opaque-restricted';
 COMMENT ON COLUMN directory_users.created_at IS '@access: confidential';
 COMMENT ON COLUMN directory_users.updated_at IS '@access: confidential';
