@@ -9366,7 +9366,7 @@ CREATE TABLE IF NOT EXISTS auth_permission_provisions (
   CONSTRAINT auth_permission_provisions_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}')
 );
 
-COMMENT ON TABLE auth_permission_provisions IS 'Default auth permission grants the backfill provisioned, one row per grant, kept after the grant itself is deleted.';
+COMMENT ON TABLE auth_permission_provisions IS 'Default auth permission grants provisioned by the backfill or at organization creation, one row per grant, kept after the grant itself is deleted.';
 COMMENT ON COLUMN auth_permission_provisions.id IS '@access: confidential';
 COMMENT ON COLUMN auth_permission_provisions.organization_id IS 'The organization the grant belongs to.
 @access: confidential';
@@ -9376,7 +9376,7 @@ COMMENT ON COLUMN auth_permission_provisions.scope IS 'The granted scope, mcp:au
 @access: confidential';
 COMMENT ON COLUMN auth_permission_provisions.selectors IS 'The grant''s selector, as in principal_grants.selectors.
 @access: opaque-restricted';
-COMMENT ON COLUMN auth_permission_provisions.kind IS 'Which default the grant belongs to: personal_default, shared_client or api_key. Validated in application code.
+COMMENT ON COLUMN auth_permission_provisions.kind IS 'Which default the grant belongs to: personal_default, shared_client or api_key from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
 @access: confidential';
 COMMENT ON COLUMN auth_permission_provisions.taken_over_at IS 'When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
 @access: confidential';
