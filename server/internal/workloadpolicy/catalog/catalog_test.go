@@ -30,27 +30,6 @@ variables:
 subject:
   template: "wimse://issuer.example.com/org/{org_id}/agent/"
   wildcard: true
-setup:
-  steps:
-    - id: org
-      title: Organization
-      phase: collect
-      blocks:
-        - type: field
-          variable: org_id
-        - type: subject_rule
-    - id: create
-      title: Create
-      phase: create
-      blocks:
-        - type: agent_picker
-    - id: console
-      title: Console
-      phase: connect
-      blocks:
-        - type: computed
-          value: token_endpoint
-          label: Token endpoint
 `
 
 func TestEmbeddedPlatformsAreValid(t *testing.T) {
@@ -78,7 +57,6 @@ func TestEmbeddedClaudeTagPinsOneOrganization(t *testing.T) {
 	require.Equal(t, catalog.VisibilityHidden, claudeTag.Issuer.Visibility)
 	require.Equal(t, "wimse://identity.anthropic.com/org/{org_id}/agent/", claudeTag.Subject.Template)
 	require.True(t, claudeTag.Subject.Wildcard)
-	require.NotNil(t, claudeTag.Setup)
 }
 
 func TestParseAcceptsAValidPlatform(t *testing.T) {
@@ -87,7 +65,6 @@ func TestParseAcceptsAValidPlatform(t *testing.T) {
 	platform, err := catalog.Parse([]byte(validPlatform))
 	require.NoError(t, err)
 	require.Equal(t, "example", platform.Key)
-	require.Len(t, platform.Setup.Steps, 3)
 }
 
 func TestParseRefusesInvalidPlatforms(t *testing.T) {
@@ -100,6 +77,7 @@ func TestParseRefusesInvalidPlatforms(t *testing.T) {
 		wantErr string
 	}{
 		{name: "unknown field", from: "enabled: true", to: "enabled: true\nenabeld: true", wantErr: "enabeld"},
+		{name: "setup block", from: "enabled: true", to: "enabled: true\nsetup:\n  steps: []", wantErr: "setup"},
 		{name: "http issuer", from: "value: https://issuer.example.com\n", to: "value: http://issuer.example.com\n", wantErr: "https"},
 		{name: "bad visibility", from: "visibility: hidden", to: "visibility: secret", wantErr: "visibility"},
 		{name: "undeclared variable", from: "{org_id}/agent/", to: "{tenant}/agent/", wantErr: "undeclared variable"},
@@ -107,29 +85,15 @@ func TestParseRefusesInvalidPlatforms(t *testing.T) {
 		{name: "star in template", from: "{org_id}/agent/\"", to: "{org_id}/agent/*\"", wantErr: `"*"`},
 		{name: "missing pattern", from: "    pattern: \"[a-z0-9-]+\"\n", to: "", wantErr: "pattern is required"},
 		{name: "rule variable in issuer", from: "value: https://issuer.example.com\n", to: "value: https://{org_id}.issuer.example.com\n", wantErr: "platform-tier"},
-		{name: "unknown block", from: "- type: agent_picker", to: "- type: script", wantErr: "unknown block type"},
 		{name: "external icon", from: "icon: /access-hub/example.svg", to: "icon: https://evil.example.com/x.svg", wantErr: "dashboard's origin"},
 		{name: "tab-split icon", from: "icon: /access-hub/example.svg", to: "icon: \"/\\t/evil.example.com/x.svg\"", wantErr: "dashboard's origin"},
-		{name: "external image", from: "- type: agent_picker", to: "- type: image\n          src: https://evil.example.com/x.png\n          alt: x", wantErr: "dashboard's origin"},
-		{name: "unknown computed value", from: "value: token_endpoint", to: "value: client_secret", wantErr: "not one Speakeasy derives"},
-		{name: "connect before create", from: "      title: Organization\n      phase: collect", to: "      title: Organization\n      phase: connect", wantErr: "collect, then create, then connect"},
-		{name: "no create step", from: "phase: create", to: "phase: collect", wantErr: "exactly one create step"},
 		{name: "issuer with a query", from: "value: https://issuer.example.com\n", to: "value: https://issuer.example.com?tenant=x\n", wantErr: "no userinfo, query or fragment"},
 		{name: "jwks_uri with a fragment", from: "value: https://issuer.example.com/jwks.json", to: "value: https://issuer.example.com/jwks.json#keys", wantErr: "no userinfo, query or fragment"},
-		{name: "link with userinfo", from: "- type: agent_picker", to: "- type: link\n          href: https://user@docs.example.com\n          label: Docs", wantErr: "https URL"},
 		{name: "unclosed placeholder", from: "{org_id}/agent/", to: "{org_id/agent/", wantErr: "brace"},
 		{name: "named group in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "(?P<id>[a-z0-9-]+)"`, wantErr: "(?:...) groups"},
 		{name: "flag group in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "(?i)[a-z0-9-]+"`, wantErr: "(?:...) groups"},
 		{name: "unicode class in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "\\pL+"`, wantErr: "Go and JavaScript"},
 		{name: "posix class in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "[[:alnum:]-]+"`, wantErr: "POSIX"},
-		{name: "image in markdown", from: "- type: agent_picker", to: "- type: text\n          markdown: \"![x](https://evil.example.com/px)\"", wantErr: "use an image block"},
-		{name: "checklist item without a label", from: "- type: agent_picker", to: "- type: checklist_item\n          markdown: Leave empty", wantErr: "needs a label"},
-		{name: "checklist item with nothing to do", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource", wantErr: "computed value or markdown"},
-		{name: "checklist item with both", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          value: token_endpoint\n          markdown: Leave empty", wantErr: "not both"},
-		{name: "checklist item with unknown value", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          value: client_secret", wantErr: "not one Speakeasy derives"},
-		{name: "checklist item with an image", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          markdown: \"![x](https://evil.example.com/px)\"", wantErr: "use an image block"},
-		{name: "form control setting on a platform block", from: "- type: agent_picker", to: "- type: agent_picker\n          placeholder: Pick one", wantErr: "belong to custom flows"},
-		{name: "collect after create", from: "      title: Console\n      phase: connect", to: "      title: Console\n      phase: collect", wantErr: "collect, then create, then connect"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

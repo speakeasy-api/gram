@@ -126,6 +126,30 @@ func TestGovernor_DiscoveryFailureGovernsOnlyABoundOrigin(t *testing.T) {
 	}
 }
 
+// After a failed discovery only the chosen client's bindings claim the
+// origin, so a sibling client's chain configuration never takes over this
+// credential's interactive path.
+func TestGovernor_DiscoveryFailureCountsOnlyTheChosenClientsBindings(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	f.setBinding(t, remotesessions.PreparationStateUnlinked)
+	bindResource(t, f.db, f.req, f.sel.remoteIssuerID, f.sel.clientID, "https://bound.example.test", remotesessions.PreparationStateReady)
+	f.req.UpstreamResource = "https://bound.example.test/mcp"
+	f.chainer.SetResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error) {
+		return protectedresource.EndpointResource{}, errors.New("metadata probe timed out")
+	})
+
+	own := f.req
+	own.RemoteSessionClientID = uuid.NullUUID{UUID: f.sel.clientID, Valid: true}
+	_, outcome := f.chainer.selectBinding(t.Context(), f.chainer.logger, own)
+	require.Equal(t, ReasonTransientFailure, outcome.Reason)
+
+	sibling := f.req
+	sibling.RemoteSessionClientID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	_, outcome = f.chainer.selectBinding(t.Context(), f.chainer.logger, sibling)
+	require.Equal(t, ReasonNotApplicable, outcome.Reason, "another client's binding never governs this credential")
+}
+
 func TestGovernor_CandidateLookupFailureKeepsTheInteractivePath(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)

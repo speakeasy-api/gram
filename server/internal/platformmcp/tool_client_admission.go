@@ -67,7 +67,13 @@ func registerUnavailableClientAdmissionTools(reg *Registrar) {
 		Name:        "set_mcp_client_admission",
 		Title:       "Choose Which Apps Can Sign In",
 		Description: "Choose which apps can sign in to an MCP server. This is not switched on for your organization yet.",
+		Annotations: setMCPClientAdmissionAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("client_admission"))
+}
+
+// Choosing a narrower setting stops apps that could sign in before.
+func setMCPClientAdmissionAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, true, false)
 }
 
 // registerClientAdmissionTools serves the CIMD half of MCP Server -> Settings
@@ -99,6 +105,7 @@ func registerClientAdmissionTools(reg *Registrar, registrations *RegistrationSer
 		Name:        "set_mcp_client_admission",
 		Title:       "Choose Which Apps Can Sign In",
 		Description: "Choose which MCP clients may sign in to one MCP server. Show the user the setting in force now, from get_mcp_client_admission, and what the new one would mean, ask them to confirm out loud, then call this with confirmed: true. Constraints: \"known apps only\" turns away every app that is not on the list, with no way through — make sure the user accepts that. This tool never accepts or returns credentials, OAuth codes, tokens, or client secrets.",
+		Annotations: setMCPClientAdmissionAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetMCPClientAdmissionToolInput) (*mcp.CallToolResult, MCPClientAdmissionToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {

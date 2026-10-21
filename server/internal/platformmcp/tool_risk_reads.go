@@ -214,14 +214,14 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 		}
 	}
 	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
-	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create Risk Policy", Description: createPolicyDescription, InputSchema: createPolicySchema}, meta, instrumentRiskMutation(reg, "create_risk_policy", createPolicy))
-	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: updatePolicyDescription, InputSchema: updatePolicySchema}, meta, instrumentRiskMutation(reg, "update_risk_policy", updatePolicy))
-	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: createExclusionDescription, InputSchema: createExclusionSchema}, meta, instrumentRiskMutation(reg, "create_risk_exclusion", createExclusion))
-	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update Risk Exclusion", Description: updateExclusionDescription, InputSchema: updateRiskExclusionSchema()}, meta, instrumentRiskMutation(reg, "update_risk_exclusion", updateExclusion))
+	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create Risk Policy", Description: createPolicyDescription, Annotations: writeAnnotations(false, true, false), InputSchema: createPolicySchema}, meta, instrumentRiskMutation(reg, "create_risk_policy", createPolicy))
+	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: updatePolicyDescription, Annotations: writeAnnotations(true, true, false), InputSchema: updatePolicySchema}, meta, instrumentRiskMutation(reg, "update_risk_policy", updatePolicy))
+	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: createExclusionDescription, Annotations: writeAnnotations(false, true, false), InputSchema: createExclusionSchema}, meta, instrumentRiskMutation(reg, "create_risk_exclusion", createExclusion))
+	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update Risk Exclusion", Description: updateExclusionDescription, Annotations: writeAnnotations(true, true, false), InputSchema: updateRiskExclusionSchema()}, meta, instrumentRiskMutation(reg, "update_risk_exclusion", updateExclusion))
 	// Dismissing hides findings from the active list, so clients should
 	// treat mark as destructive; restoring only re-surfaces them.
-	addTool(reg, &mcp.Tool{Name: operationMarkRiskFindingsFalsePositive, Title: "Mark Risk Findings False Positive", Description: markFindingsDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)}, InputSchema: riskFindingsFalsePositiveSchema(true)}, meta, instrumentRiskMutation(reg, operationMarkRiskFindingsFalsePositive, markFindings))
-	addTool(reg, &mcp.Tool{Name: operationUnmarkRiskFindingsFalsePositive, Title: "Unmark Risk Findings False Positive", Description: unmarkFindingsDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)}, InputSchema: riskFindingsFalsePositiveSchema(false)}, meta, instrumentRiskMutation(reg, operationUnmarkRiskFindingsFalsePositive, unmarkFindings))
+	addTool(reg, &mcp.Tool{Name: operationMarkRiskFindingsFalsePositive, Title: "Mark Risk Findings False Positive", Description: markFindingsDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)}, InputSchema: riskFindingsFalsePositiveSchema(true)}, meta, instrumentRiskMutation(reg, operationMarkRiskFindingsFalsePositive, markFindings))
+	addTool(reg, &mcp.Tool{Name: operationUnmarkRiskFindingsFalsePositive, Title: "Unmark Risk Findings False Positive", Description: unmarkFindingsDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)}, InputSchema: riskFindingsFalsePositiveSchema(false)}, meta, instrumentRiskMutation(reg, operationUnmarkRiskFindingsFalsePositive, unmarkFindings))
 }
 
 const (
@@ -361,12 +361,6 @@ func riskReadToolCall[Out any](ctx context.Context, telemetry RiskTelemetry, too
 		refusal = featureUnavailableResult{Code: "invalid_request", Feature: "risk_reads", Message: "The risk read input or cursor is invalid. Re-read the tool schema and restart pagination."}
 	case errors.Is(err, ErrRiskReadNotFound):
 		refusal = featureUnavailableResult{Code: "not_found", Feature: "risk_reads", Message: "The requested project or risk resource is not available to this organization."}
-	case errors.Is(err, ErrRiskFeatureNotEnabled):
-		capability := "risk_reads"
-		if tool == riskAnalysisStatusToolName {
-			capability = "risk_analysis_status"
-		}
-		refusal = featureUnavailableResult{Code: unavailableCode, Feature: capability, Message: "This is not switched on for your organization yet."}
 	case errors.Is(err, ErrUnavailable):
 		refusal = featureUnavailableResult{Code: unavailableCode, Feature: "risk_reads", Message: "Risk reads are temporarily unavailable."}
 	default:

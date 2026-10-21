@@ -94,7 +94,11 @@ function OwnedSessionBindings({
   };
   const agentsQuery = useQuery({
     queryKey: [...queryKeyAgents({}), ownerScope],
-    queryFn: ({ signal }) => sdk.agents.list(undefined, undefined, { signal }),
+    // Every agent the user may authorize, not the first page of them: the
+    // rows below are one per agent, and a missing agent silently drops the
+    // sessions attached to it.
+    queryFn: ({ signal }) =>
+      collectPageItems(sdk.agents.list(undefined, undefined, { signal })),
     retry: false,
     throwOnError: false,
   });

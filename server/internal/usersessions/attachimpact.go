@@ -105,7 +105,7 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantID.String(), projectID.String())); err != nil {
 			return none, err
 		}
-		endpoints, err := mcpendpointsrepo.New(s.db).ListAddressableMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListAddressableMCPEndpointsByMCPServerIDParams{OrganizationID: organizationID, ProjectID: projectID, McpServerID: server.ID})
+		endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{OrganizationID: organizationID, ProjectID: projectID, McpServerID: server.ID})
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "list MCP server endpoints").LogError(ctx, logger)
 		}

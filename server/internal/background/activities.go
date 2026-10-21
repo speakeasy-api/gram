@@ -144,6 +144,7 @@ type Activities struct {
 	deployFunctionRunners            *activities.DeployFunctionRunners
 	reapFlyApps                      *activities.ReapFlyApps
 	weeklyUsageSummary               *activities.WeeklyUsageSummary
+	directoryReviewEmails            *activities.DirectoryReviewEmails
 	refreshOpenRouterKey             *activities.RefreshOpenRouterKey
 	setOpenRouterSpendCap            *activities.SetOpenRouterSpendCap
 	reconcilePaygOpenRouterChatKey   *activities.ReconcilePaygOpenRouterChatKey
@@ -437,6 +438,7 @@ func NewActivities(
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, orgHosts),
+		directoryReviewEmails:            activities.NewDirectoryReviewEmails(logger, db, emailService, orgHosts),
 		refreshOpenRouterKey:             activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		setOpenRouterSpendCap:            activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
 		reconcilePaygOpenRouterChatKey:   activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
