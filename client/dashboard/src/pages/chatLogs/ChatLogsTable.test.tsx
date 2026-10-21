@@ -155,8 +155,14 @@ describe("ChatLogsTable", () => {
       />,
     );
 
-    expect(screen.getByText(/^Created Jan 1, \d{2}:00$/)).toBeTruthy();
-    expect(screen.getByText(/^Last activity Jan 1, \d{2}:03$/)).toBeTruthy();
+    // The column shows when the session started and how long it ran. Both
+    // timestamps in full wrapped the column mid-date for two values that are
+    // nearly always the same minute, so the exact pair moved to the title.
+    const started = screen.getByText(/^Jan 1, \d{2}:00$/);
+    expect(started).toBeTruthy();
+    expect(started.getAttribute("title")).toMatch(
+      /^Created Jan 1, \d{2}:00 · Last activity Jan 1, \d{2}:03$/,
+    );
   });
 
   it("shows the normalized product surface for a session source", () => {
@@ -282,7 +288,9 @@ describe("ChatLogsTable", () => {
     expect(agentLink.getAttribute("href")).toContain(
       encodeURIComponent("agent:agent-1"),
     );
-    expect(screen.getByText("for")).toBeTruthy();
+    // ActingPrincipal words the relation in full: the agent's name, then
+    // "on behalf of <person>" on its own line.
+    expect(screen.getByText("on behalf of")).toBeTruthy();
     const delegateLink = screen.getByRole("link", { name: "Ada Lovelace" });
     expect(delegateLink.getAttribute("href")).toContain(
       encodeURIComponent("user:gram-user-1"),
@@ -314,6 +322,6 @@ describe("ChatLogsTable", () => {
     expect(assistantLink.getAttribute("href")).toContain(
       "/assistants/assistant-1",
     );
-    expect(screen.queryByText("for")).toBeNull();
+    expect(screen.queryByText("on behalf of")).toBeNull();
   });
 });
