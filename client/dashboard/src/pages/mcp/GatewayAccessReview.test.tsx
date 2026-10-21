@@ -18,8 +18,10 @@ it("requires complete assignments and explicit sign-off before enabling", () => 
   render(
     <GatewayAccessReview
       isPending={false}
-      onEnable={onEnable}
-      onCancel={vi.fn()}
+      onEnable={() => {
+        onEnable();
+      }}
+      onCancel={() => {}}
     />,
   );
   const enable = screen.getByRole("button", {
@@ -40,8 +42,8 @@ it("clears sign-off if the complete review becomes unavailable", () => {
   render(
     <GatewayAccessReview
       isPending={false}
-      onEnable={vi.fn()}
-      onCancel={vi.fn()}
+      onEnable={() => {}}
+      onCancel={() => {}}
     />,
   );
   fireEvent.click(screen.getByRole("button", { name: "Assignments loaded" }));

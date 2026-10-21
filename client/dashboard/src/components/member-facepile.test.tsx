@@ -105,7 +105,9 @@ it("always shows compact search and the edit-role action for a small roster", as
           onEditRole={() => {
             editRole();
           }}
-          onMemberSelect={selectMember}
+          onMemberSelect={(member) => {
+            selectMember(member);
+          }}
         />
       </TooltipProvider>
     </MemoryRouter>,
