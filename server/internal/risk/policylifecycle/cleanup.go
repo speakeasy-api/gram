@@ -54,7 +54,7 @@ func NewCleaner(tracerProvider trace.TracerProvider, auditLogger *audit.Logger) 
 	}
 }
 
-// ScopeEdit is a surviving policy a server delete removed the server from.
+// ScopeEdit is a surviving policy the deleted server was removed from.
 type ScopeEdit struct {
 	PolicyID    uuid.UUID
 	ScopeBefore []byte
@@ -63,16 +63,16 @@ type ScopeEdit struct {
 
 // ServerCleanup is what a server delete did to the project's risk policies.
 type ServerCleanup struct {
-	// Deleted are policies left with no target, whose results the caller cleans post-commit.
+	// Deleted policies' results are the caller's to clean post-commit.
 	Deleted    []uuid.UUID
 	ScopeEdits []ScopeEdit
 }
 
 // SoftDeleteForMCPServer tombstones policies owned exclusively by one server
-// and removes the server from every other policy's scope, so no policy keeps
-// an id that later saves reject. The caller must invoke it after tombstoning
-// the server in the same transaction, and must have taken the Shadow MCP
-// admission lock before the server row lock, as tombstone.Lock does.
+// and removes the server from every other policy's scope, since saves reject
+// dead ids. The caller must invoke it after tombstoning the server in the same
+// transaction, and must have taken the Shadow MCP admission lock before the
+// server row lock, as tombstone.Lock does.
 func (c *Cleaner) SoftDeleteForMCPServer(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -120,15 +120,16 @@ func (c *Cleaner) SoftDeleteForMCPServer(
 	edits := make([]ScopeEdit, 0, len(scoping))
 	var emptied []repo.RiskPolicy
 	for _, policy := range scoping {
-		scope, remaining, allServers, err := withoutServer(policy.McpScope, mcpServerID)
+		scope, err := withoutServer(policy.McpScope, mcpServerID)
 		if err != nil {
 			return ServerCleanup{}, fmt.Errorf("remove server from risk policy %s scope: %w", policy.ID, err)
 		}
-		if remaining == 0 && !allServers {
+		// An unscoped policy applies everywhere, so one that only named dead servers goes instead.
+		if policycore.DecodeMCPScope(scope) == nil {
 			emptied = append(emptied, policy)
 			continue
 		}
-		updated, err := queries.SetRiskPolicyMCPScope(ctx, repo.SetRiskPolicyMCPScopeParams{
+		updated, err := queries.PruneRiskPolicyMCPScope(ctx, repo.PruneRiskPolicyMCPScopeParams{
 			McpScope:  scope,
 			ID:        policy.ID,
 			ProjectID: projectID,
@@ -136,7 +137,7 @@ func (c *Cleaner) SoftDeleteForMCPServer(
 		if err != nil {
 			return ServerCleanup{}, fmt.Errorf("update risk policy scope: %w", err)
 		}
-		audience, err := policycore.AudiencePrincipalURNs(ctx, tx, organizationID, policy.ID.String())
+		audience, err := policycore.New(tx).AudiencePrincipalURNs(ctx, organizationID, policy.ID.String())
 		if err != nil {
 			return ServerCleanup{}, fmt.Errorf("load risk policy audience: %w", err)
 		}
@@ -156,7 +157,6 @@ func (c *Cleaner) SoftDeleteForMCPServer(
 		edits = append(edits, ScopeEdit{PolicyID: policy.ID, ScopeBefore: policy.McpScope, ScopeAfter: updated.McpScope})
 	}
 
-	// A scope that named only this server, repeated, now targets nothing.
 	emptiedDeleted, err := c.softDeletePolicies(ctx, tx, organizationID, projectID, emptied, actor)
 	if err != nil {
 		return ServerCleanup{}, err
@@ -167,17 +167,15 @@ func (c *Cleaner) SoftDeleteForMCPServer(
 	return ServerCleanup{Deleted: deleted, ScopeEdits: edits}, nil
 }
 
-// withoutServer drops every entry for serverID from a scope's servers and
-// keeps the other keys. allServers follows the lifecycle query: only a missing
-// or false all_servers leaves the policy bound to its listed servers.
-func withoutServer(raw []byte, serverID uuid.UUID) (_ []byte, remaining int, allServers bool, _ error) {
+// withoutServer drops serverID's entries from a scope's servers and keeps everything else.
+func withoutServer(raw []byte, serverID uuid.UUID) ([]byte, error) {
 	var scope map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &scope); err != nil {
-		return nil, 0, false, fmt.Errorf("decode scope: %w", err)
+		return nil, fmt.Errorf("decode scope: %w", err)
 	}
 	var servers []json.RawMessage
 	if err := json.Unmarshal(scope["servers"], &servers); err != nil {
-		return nil, 0, false, fmt.Errorf("decode scope servers: %w", err)
+		return nil, fmt.Errorf("decode scope servers: %w", err)
 	}
 	kept := make([]json.RawMessage, 0, len(servers))
 	for _, entry := range servers {
@@ -191,16 +189,14 @@ func withoutServer(raw []byte, serverID uuid.UUID) (_ []byte, remaining int, all
 	}
 	encodedServers, err := json.Marshal(kept)
 	if err != nil {
-		return nil, 0, false, fmt.Errorf("encode scope servers: %w", err)
+		return nil, fmt.Errorf("encode scope servers: %w", err)
 	}
 	scope["servers"] = encodedServers
 	encoded, err := json.Marshal(scope)
 	if err != nil {
-		return nil, 0, false, fmt.Errorf("encode scope: %w", err)
+		return nil, fmt.Errorf("encode scope: %w", err)
 	}
-	flag, ok := scope["all_servers"]
-	allServers = ok && string(flag) != "false"
-	return encoded, len(kept), allServers, nil
+	return encoded, nil
 }
 
 // RepairOrphans tombstones lifecycle-bound policies left by server deletions

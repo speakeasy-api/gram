@@ -265,11 +265,6 @@ func (c *Core) AudiencePrincipalURNs(ctx context.Context, organizationID, policy
 	return audiencePrincipalURNs(ctx, c.db, organizationID, policyID)
 }
 
-// AudiencePrincipalURNs lists the principals a policy's evaluate grants name, for audit snapshots.
-func AudiencePrincipalURNs(ctx context.Context, db repo.DBTX, organizationID, policyID string) ([]string, error) {
-	return audiencePrincipalURNs(ctx, db, organizationID, policyID)
-}
-
 func audiencePrincipalURNs(ctx context.Context, db repo.DBTX, organizationID, policyID string) ([]string, error) {
 	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
 		OrganizationID: organizationID,

@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policylifecycle"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -94,7 +95,7 @@ func TestDeleteMcpServer(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-func TestDeleteMcpServer_SoftDeletesLifecycleBoundRiskPolicy(t *testing.T) {
+func TestDeleteMcpServer_CleansUpRiskPolicies(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -124,6 +125,8 @@ func TestDeleteMcpServer_SoftDeletesLifecycleBoundRiskPolicy(t *testing.T) {
 	repeatedPolicy := seedMCPScopedRiskPolicy(t, ctx, ti, "repeated policy", []uuid.UUID{firstID, firstID})
 	allServersPolicy := seedRiskPolicyWithRawMCPScope(t, ctx, ti, "all servers policy",
 		[]byte(`{"all_servers": true, "servers": [{"mcp_server_id": "`+first.ID+`", "tools": ["search"]}]}`))
+	nullAllServersPolicy := seedRiskPolicyWithRawMCPScope(t, ctx, ti, "null all servers policy",
+		[]byte(`{"all_servers": null, "servers": [{"mcp_server_id": "`+first.ID+`"}]}`))
 	beforeDeletes, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyDelete)
 	require.NoError(t, err)
 	beforeUpdates, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyUpdate)
@@ -152,6 +155,13 @@ func TestDeleteMcpServer_SoftDeletesLifecycleBoundRiskPolicy(t *testing.T) {
 	require.NoError(t, err, "a policy with another live target must survive")
 	require.JSONEq(t, `{"servers": [{"mcp_server_id": "`+second.ID+`"}]}`, string(shared.McpScope), "the deleted server must leave the surviving scope")
 	require.Equal(t, multiServerPolicy.Version, shared.Version, "dropping a dead target must not bump the version")
+	sharedScope := policycore.Project(shared, nil).MCPScope
+	owned, err := queries.ListRiskPolicyMCPScopeServerIDs(ctx, riskrepo.ListRiskPolicyMCPScopeServerIDsParams{
+		ProjectID:    *authCtx.ProjectID,
+		McpServerIds: []uuid.UUID{secondID},
+	})
+	require.NoError(t, err)
+	require.NoError(t, policycore.ValidateMCPScopeOwnership(sharedScope, owned, nil), "the surviving policy must still pass the save-time ownership check")
 
 	_, err = queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
 		ID:        repeatedPolicy.ID,
@@ -166,9 +176,15 @@ func TestDeleteMcpServer_SoftDeletesLifecycleBoundRiskPolicy(t *testing.T) {
 	require.NoError(t, err, "an all-servers policy survives losing its listed server")
 	require.JSONEq(t, `{"all_servers": true, "servers": []}`, string(everyServer.McpScope))
 
+	_, err = queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
+		ID:        nullAllServersPolicy.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a null all_servers reads as false, so the emptied scope would apply everywhere and the policy goes")
+
 	afterDeletes, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyDelete)
 	require.NoError(t, err)
-	require.Equal(t, beforeDeletes+2, afterDeletes)
+	require.Equal(t, beforeDeletes+3, afterDeletes)
 	afterUpdates, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeUpdates+2, afterUpdates)

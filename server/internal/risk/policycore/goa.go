@@ -6,7 +6,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
 
-// ToGoa maps a policy to its API shape, which audit snapshots also use.
+// ToGoa maps a policy to its API shape.
 func ToGoa(policy Policy) *types.RiskPolicy {
 	detectionScopes := make([]*types.RiskDetectionScope, 0, len(policy.DetectionScopes))
 	for _, scope := range policy.DetectionScopes {

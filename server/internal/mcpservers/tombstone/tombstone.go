@@ -78,9 +78,8 @@ type Input struct {
 	TracerProvider trace.TracerProvider
 }
 
-// Result is the tombstoned server, how many plugin attachments it lost, the
-// risk policies deleted with it, whose results the caller cleans post-commit,
-// and the surviving policies whose scope it was removed from.
+// Result is the tombstoned server, how many plugin attachments it lost, and
+// the risk policies deleted with it (results cleaned post-commit) or edited.
 type Result struct {
 	Server                repo.McpServer
 	DetachedPluginServers int

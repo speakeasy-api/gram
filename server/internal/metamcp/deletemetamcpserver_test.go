@@ -323,6 +323,11 @@ func TestDeleteMetaMcpServer_RemovesGatewayFromSharedRiskPolicyScope(t *testing.
 	afterUpdates, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeUpdates+1, afterUpdates)
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRiskPolicyUpdate)
+	require.NoError(t, err)
+	require.Contains(t, string(record.BeforeSnapshot), gateway.ID)
+	require.NotContains(t, string(record.AfterSnapshot), gateway.ID)
+	require.Contains(t, string(record.AfterSnapshot), serverID.String())
 }
 
 // Deleting a gateway removes its members, so a member's association with a

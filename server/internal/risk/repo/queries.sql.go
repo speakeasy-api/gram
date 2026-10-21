@@ -3973,7 +3973,7 @@ type ListRiskPoliciesScopingMCPServerForUpdateParams struct {
 	McpServerID string
 }
 
-// Containment never raises on a malformed scope; a non-array servers value just does not match.
+// Containment never raises on a malformed scope.
 func (q *Queries) ListRiskPoliciesScopingMCPServerForUpdate(ctx context.Context, arg ListRiskPoliciesScopingMCPServerForUpdateParams) ([]RiskPolicy, error) {
 	rows, err := q.db.Query(ctx, listRiskPoliciesScopingMCPServerForUpdate, arg.ProjectID, arg.McpServerID)
 	if err != nil {
@@ -5071,6 +5071,57 @@ func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRisk
 	return items, nil
 }
 
+const pruneRiskPolicyMCPScope = `-- name: PruneRiskPolicyMCPScope :one
+UPDATE risk_policies
+SET mcp_scope = $1::jsonb
+  , updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+`
+
+type PruneRiskPolicyMCPScopeParams struct {
+	McpScope  []byte
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Only for dropping a deleted server: it gets no traffic, so version stays.
+func (q *Queries) PruneRiskPolicyMCPScope(ctx context.Context, arg PruneRiskPolicyMCPScopeParams) (RiskPolicy, error) {
+	row := q.db.QueryRow(ctx, pruneRiskPolicyMCPScope, arg.McpScope, arg.ID, arg.ProjectID)
+	var i RiskPolicy
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Enabled,
+		&i.Name,
+		&i.PolicyType,
+		&i.Sources,
+		&i.PresidioEntities,
+		&i.AnalyzerConfig,
+		&i.McpScope,
+		&i.PromptInjectionRules,
+		&i.DisabledRules,
+		&i.CustomRuleIds,
+		&i.Action,
+		&i.AudienceType,
+		&i.ShadowMcpDisposition,
+		&i.AutoName,
+		&i.UserMessage,
+		&i.Prompt,
+		&i.ModelConfig,
+		&i.Score,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const recordSkillPromptInjectionScan = `-- name: RecordSkillPromptInjectionScan :exec
 INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
 SELECT p.project_id, p.organization_id, p.id, p.version, $1, $2::text, $3::boolean, $4::text, $5::text, $6::text, $7::double precision
@@ -5403,57 +5454,6 @@ type SetChatMessageExternalUserIDForTestParams struct {
 func (q *Queries) SetChatMessageExternalUserIDForTest(ctx context.Context, arg SetChatMessageExternalUserIDForTestParams) error {
 	_, err := q.db.Exec(ctx, setChatMessageExternalUserIDForTest, arg.ExternalUserID, arg.ID, arg.ProjectID)
 	return err
-}
-
-const setRiskPolicyMCPScope = `-- name: SetRiskPolicyMCPScope :one
-UPDATE risk_policies
-SET mcp_scope = $1::jsonb
-  , updated_at = clock_timestamp()
-WHERE id = $2
-  AND project_id = $3
-  AND deleted IS FALSE
-RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
-`
-
-type SetRiskPolicyMCPScopeParams struct {
-	McpScope  []byte
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-// Keeps version: a deleted server gets no traffic, so dropping it changes nothing the policy evaluates.
-func (q *Queries) SetRiskPolicyMCPScope(ctx context.Context, arg SetRiskPolicyMCPScopeParams) (RiskPolicy, error) {
-	row := q.db.QueryRow(ctx, setRiskPolicyMCPScope, arg.McpScope, arg.ID, arg.ProjectID)
-	var i RiskPolicy
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.OrganizationID,
-		&i.Enabled,
-		&i.Name,
-		&i.PolicyType,
-		&i.Sources,
-		&i.PresidioEntities,
-		&i.AnalyzerConfig,
-		&i.McpScope,
-		&i.PromptInjectionRules,
-		&i.DisabledRules,
-		&i.CustomRuleIds,
-		&i.Action,
-		&i.AudienceType,
-		&i.ShadowMcpDisposition,
-		&i.AutoName,
-		&i.UserMessage,
-		&i.Prompt,
-		&i.ModelConfig,
-		&i.Score,
-		&i.Version,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
 }
 
 const setRiskResultExcludedForTest = `-- name: SetRiskResultExcludedForTest :exec

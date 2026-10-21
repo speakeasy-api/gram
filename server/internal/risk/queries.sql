@@ -254,7 +254,7 @@ WHERE project_id = @project_id
 ORDER BY id;
 
 -- name: ListRiskPoliciesScopingMCPServerForUpdate :many
--- Containment never raises on a malformed scope; a non-array servers value just does not match.
+-- Containment never raises on a malformed scope.
 SELECT *
 FROM risk_policies
 WHERE project_id = @project_id
@@ -266,8 +266,8 @@ WHERE project_id = @project_id
 ORDER BY id
 FOR UPDATE;
 
--- name: SetRiskPolicyMCPScope :one
--- Keeps version: a deleted server gets no traffic, so dropping it changes nothing the policy evaluates.
+-- name: PruneRiskPolicyMCPScope :one
+-- Only for dropping a deleted server: it gets no traffic, so version stays.
 UPDATE risk_policies
 SET mcp_scope = @mcp_scope::jsonb
   , updated_at = clock_timestamp()

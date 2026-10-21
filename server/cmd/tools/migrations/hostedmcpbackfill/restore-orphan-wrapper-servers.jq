@@ -20,7 +20,8 @@ def restore($proj):
     (.dependents.assistant_attachments // [] | .[]
       | "INSERT INTO assistant_mcp_servers SELECT (r).* FROM jsonb_populate_record(NULL::assistant_mcp_servers, \(.row | q)::jsonb) AS r JOIN assistants AS a ON a.id = r.assistant_id AND a.project_id = r.project_id WHERE r.project_id = \($proj) AND \(live($proj)) ON CONFLICT DO NOTHING;"),
     (.dependents.risk_policy_scopes // [] | .[]
-      | "UPDATE risk_policies SET mcp_scope = \(.scope_before | q)::jsonb, updated_at = clock_timestamp() WHERE id = \(.policy_id | q) AND project_id = \($proj) AND deleted IS FALSE AND mcp_scope = \(.scope_after | q)::jsonb AND EXISTS (SELECT 1 FROM mcp_servers AS s WHERE s.id = \($id | q) AND s.project_id = \($proj) AND s.deleted IS FALSE);"),
+      | "-- risk_policies \(.policy_id) keeps its scope unless every later edit was restored first; check by hand",
+        "UPDATE risk_policies SET mcp_scope = \(.scope_before | q)::jsonb, updated_at = clock_timestamp() WHERE id = \(.policy_id | q) AND project_id = \($proj) AND deleted IS FALSE AND mcp_scope = \(.scope_after | q)::jsonb AND EXISTS (SELECT 1 FROM mcp_servers AS s WHERE s.id = \($id | q) AND s.project_id = \($proj) AND s.deleted IS FALSE);"),
     (.dependents.session_client_links // [] | .[]
       | "INSERT INTO mcp_server_remote_session_clients (id, project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope, created_at, updated_at, deleted_at) SELECT r.id, r.project_id, r.organization_id, r.mcp_server_id, r.remote_session_client_id, r.client_attachment_scope, r.created_at, r.updated_at, r.deleted_at FROM jsonb_populate_record(NULL::mcp_server_remote_session_clients, \(.row | q)::jsonb) AS r WHERE r.project_id = \($proj) AND \(live($proj)) ON CONFLICT DO NOTHING;")
   end;
