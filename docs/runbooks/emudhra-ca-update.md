@@ -1,5 +1,7 @@
 # eMudhra CA mitigation — 2026-10-20
 
+Last updated: 2026-10-21.
+
 The [incident advisory](https://emudhra.we-have-a-problem.com/) reports compromised
 intermediate CA keys. Most non-browser TLS clients do not consume the browser
 revocation lists. Updating a runtime or an image tag alone does not prove that
@@ -10,7 +12,7 @@ its TLS clients reject these chains.
 | Image/source                                  | Change                                                                                                                                                        | Coverage                                                                                                                                                                                                                 |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `server/Dockerfile`                           | Refresh pinned `static-debian13:nonroot` digest to `516757106de3…`.                                                                                           | Verified bundle excludes the affected roots. Server and tunnel-gateway binaries are built separately with Go 1.27.3.                                                                                                     |
-| `pystreams/Dockerfile.pystreams`              | Move runtime from Debian 12 to pinned `cc-debian13:nonroot` (`b7e81cb1af38…`); Python 3.14.8 and uv 0.13.4 in the builder.                                    | Debian 12's latest bundle still contains both affected Linux roots; Debian 13 removes them. Covers system-store TLS in addition to the workspace's updated certifi.                                                      |
+| `pystreams/Dockerfile.pystreams`              | Move runtime from Debian 12 to pinned `cc-debian13:nonroot` (`b7e81cb1af38…`); Python 3.14.8 and uv 0.13.4 in the builder.                                    | The audited Debian 12 bundle contained both affected Linux roots; the selected Debian 13 bundle excludes them. Covers system-store TLS in addition to the workspace's updated certifi.                                   |
 | `agents/runtime-image/Dockerfile`             | Share a pinned Debian bookworm base (`7c7b2c966bc9…`); filter and fingerprint-check the system store; generate explicit OpenSSL rejection entries for Bun.    | Covers the runtime, dependency install, and Lightpanda download stages. Bun loads the rejection bundle through `SSL_CERT_FILE`; adding a local CA preserves it. The runner also needs the Rust dependency rebuild below. |
 | `otel-collector/Dockerfile`                   | Update upstream collector 0.157.0 → 0.163.1 (`1175b0300305…`); copy the verified Debian 13 bundle into the final image.                                       | Upstream 0.163.1 still uses Go 1.26.9, before Go's fix. Its `/etc/ssl/certs` contains only the bundle, so replacing it removes the affected default trust paths.                                                         |
 | `tunnel/Dockerfile`                           | Go 1.27.3 builder; install full Alpine CA package and apply the distrust workaround at build time.                                                            | Covers the published tunnel agent image and its system trust store.                                                                                                                                                      |
@@ -41,7 +43,11 @@ images and are outside this update.
 ## Toolchain and dependency changes
 
 - Go 1.27.1 → **1.27.3** in mise and all three Go modules; regenerate mise locks.
-- Node.js 24.16.0 → **24.22.0 LTS** in mise and `.node-version`.
+- Node.js 24.16.0 → **24.22.1 LTS** in mise and `.node-version`.
+  The October 21 security release includes the compromised-key blocklist and
+  updated NSS roots; it supersedes the initial 24.22.0 pin.
+  Mise resolved Linux arm64-musl to a checksummed source build because the
+  corresponding prebuilt archive is not yet available.
 - Pin workspace Python to **3.14.8** in `.python-version`. Python 3.15.0 was
   attempted, but locked native dependencies lack 3.15 wheels (including cffi
   and DuckDB), and the existing slim build has no compiler. Python's interpreter
@@ -69,9 +75,14 @@ images and are outside this update.
   duplicate embedded certificates cannot restore trust. Build-time tests check
   this precedence across its TLS APIs. Preserve the auxiliary rejection data:
   converting these entries to ordinary PEM certificates would discard it.
-- **Node.js:** upstream's [CA fix](https://github.com/nodejs/node/pull/66871) is
-  pending. Hosted Functions use the filtered system store via an explicit flag;
-  ordinary local/CI Node 24.22.0 still uses its bundled roots by default.
+- **Node.js:** [24.22.1](https://nodejs.org/en/blog/release/v24.22.1) includes
+  the [CA fix](https://github.com/nodejs/node/pull/66871), and is pinned for local
+  development and CI. [22.23.4](https://nodejs.org/en/blog/release/v22.23.4) also
+  includes the fix. As of October 21, the live Alpine v3.22/v3.23 indexes still
+  supply Node 22.23.2-r0 and 24.18.1-r0 respectively. Functions package upgrades
+  to 22.23.4 and 24.22.1 are deferred until Alpine publishes them; the images
+  retain their filtered system store and explicit `--use-openssl-ca` flag.
+  The mise pin does not select Alpine package versions.
 - **Lightpanda:** version 0.2.8's
   [`Network.loadCerts`](https://github.com/lightpanda-io/browser/blob/0.2.8/src/network/Network.zig)
   scans the system certificate store and passes it to libcurl. The updated
@@ -153,6 +164,9 @@ runtime; a clean OS bundle is insufficient evidence for a bundling client.
   images; the mise LTS pin does not select Alpine package versions.
 - Both apko image safety suites pass. The built Functions runner, server, and
   tunnel-gateway binaries report Go 1.27.3.
+- Node 24.22.1 accepts the control site and rejects both advisory probes with
+  `CERT_REVOKED` using its default TLS configuration. Functions tests and dashboard
+  type-checking pass with the new development/CI runtime.
 - Collector 0.163.1 validates the checked-in configuration with a placeholder
   API key. Its copied bundle is clean, while its binary still reports Go 1.26.9.
 - 82 Functions Go tests pass, including a real TLS test of both Node launch
