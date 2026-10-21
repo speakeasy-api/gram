@@ -1201,7 +1201,7 @@ func (q *Queries) PostflightIDUnregisteredConnections(ctx context.Context, proje
 
 const postflightIDUpstreamClientChoices = `-- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
-  SELECT id, project_id, organization_id, credential_kind, credential_id, mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth, source, created_at, updated_at, deleted_at, deleted FROM upstream_client_selections
+  SELECT id, project_id, organization_id, credential_kind, credential_id, mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth, source, auth_client_id, auth_client_attachment_scope, created_at, updated_at, deleted_at, deleted FROM upstream_client_selections
   WHERE project_id = $6::uuid AND deleted IS FALSE
 )
 SELECT count(*) FROM live
