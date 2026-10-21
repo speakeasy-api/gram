@@ -384,8 +384,9 @@ function ManualDownload({ os }: { os: "linux" }) {
   if (isError || !daemon || !cli) {
     return (
       <ReleaseLookupError>
-        <code>speakeasyd_&lt;version&gt;_linux_amd64</code> and{" "}
-        <code>speakeasy_&lt;version&gt;_linux_amd64</code>
+        <code>speakeasyd_&lt;version&gt;_linux_&lt;arch&gt;</code> and{" "}
+        <code>speakeasy_&lt;version&gt;_linux_&lt;arch&gt;</code> (
+        <code>&lt;arch&gt;</code> is <code>amd64</code> or <code>arm64</code>)
       </ReleaseLookupError>
     );
   }
@@ -1150,36 +1151,33 @@ function MacVerifyStep() {
   return (
     <div className="flex flex-col gap-4">
       <Text muted>
-        The pkg starts the Speakeasy menu bar app right away and at every login.
-        Click its icon in the menu bar: the panel should say{" "}
-        <strong className="font-medium">All checks passed</strong>, and the{" "}
-        <strong className="font-medium">Device</strong> card should show this
-        Mac with the user&apos;s email.
+        Click the Speakeasy icon in your menu bar. A healthy agent looks like
+        this:
       </Text>
       <MenuBarPreview />
-      <Text small muted>
-        <strong className="font-medium">Provisioned by IT</strong> means the
-        email came from <code>managed.json</code>. If the panel says{" "}
-        <strong className="font-medium">The agent isn&apos;t running</strong>,
-        check that Speakeasy is switched on in System Settings → General → Login
-        Items. With the Managed Login Items payload, that switch is dimmed so it
-        can&apos;t be turned off. To check a whole fleet, see{" "}
-        <ExternalLink
-          href={`${DOCS_MDM}#verify-the-rollout-with-agent-coverage`}
-          target="_blank"
-          iconSuffixName="external-link"
-        >
-          agent coverage
-        </ExternalLink>
-        .
-      </Text>
       <details className="text-muted-foreground text-sm">
-        <summary className="cursor-pointer">
-          Check from a terminal instead
-        </summary>
+        <summary className="cursor-pointer">Not seeing it?</summary>
         <div className="mt-3 flex flex-col gap-2">
+          <Text small muted>
+            The pkg starts the menu bar app right away and at every login. If
+            the icon is missing or the panel says{" "}
+            <strong className="font-medium">
+              The agent isn&apos;t running
+            </strong>
+            , check that Speakeasy is switched on in System Settings → General →
+            Login Items. To check a whole fleet, see{" "}
+            <ExternalLink
+              href={`${DOCS_MDM}#verify-the-rollout-with-agent-coverage`}
+              target="_blank"
+              iconSuffixName="external-link"
+            >
+              agent coverage
+            </ExternalLink>
+            .
+          </Text>
           <StepNote>
-            Run these in the user&apos;s own login session, not as root.
+            To check from a terminal, run these in the user&apos;s own login
+            session, not as root:
           </StepNote>
           <CodeBlock language="bash">{`pkgutil --pkg-info com.speakeasy.agent.pkg
 launchctl print "gui/$(id -u)/com.speakeasy.daemon"
@@ -1232,9 +1230,8 @@ msiexec /i speakeasy-agent.msi`;
           centrally.
         </Text>
         <Text small muted>
-          Keep <code>auto_update: "notify"</code> on Windows fleets and re-push
-          the msi for new versions until the msi self-update is validated on
-          real hardware.
+          Keep <code>auto_update: "notify"</code> on Windows fleets for now, and
+          re-push the msi from your MDM for new versions.
         </Text>
       </div>
       <details className="text-muted-foreground text-sm">
