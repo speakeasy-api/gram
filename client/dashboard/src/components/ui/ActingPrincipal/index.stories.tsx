@@ -46,7 +46,7 @@ type Story = StoryObj<typeof ActingPrincipal>;
 export const OnBehalfOf: Story = {
   args: {
     agent: {
-      id: "0717fbba-cfe4-5cb3-8d50-48d0ff8b596e",
+      id: "00000000-0000-4000-a000-000000000001",
       name: "Release assistant",
     },
     authorizer: { id: "user_locl_amara", name: "Amara Okafor" },
@@ -57,7 +57,7 @@ export const OnBehalfOf: Story = {
 export const AgentAlone: Story = {
   args: {
     agent: {
-      id: "0717fbba-cfe4-5cb3-8d50-48d0ff8b596e",
+      id: "00000000-0000-4000-a000-000000000001",
       name: "Release assistant",
     },
   },
@@ -66,7 +66,7 @@ export const AgentAlone: Story = {
 /** Neither name resolved. The identifiers are still true, and still link. */
 export const UnresolvedNames: Story = {
   args: {
-    agent: { id: "0717fbba-cfe4-5cb3-8d50-48d0ff8b596e" },
+    agent: { id: "00000000-0000-4000-a000-000000000001" },
     authorizer: { id: "user_locl_amara" },
   },
 };
@@ -75,7 +75,7 @@ export const UnresolvedNames: Story = {
 export const Unlinked: Story = {
   args: {
     agent: {
-      id: "0717fbba-cfe4-5cb3-8d50-48d0ff8b596e",
+      id: "00000000-0000-4000-a000-000000000001",
       name: "Release assistant",
     },
     authorizer: { id: "user_locl_amara", name: "Amara Okafor" },
@@ -87,7 +87,7 @@ export const Unlinked: Story = {
 export const Truncating: Story = {
   args: {
     agent: {
-      id: "0717fbba-cfe4-5cb3-8d50-48d0ff8b596e",
+      id: "00000000-0000-4000-a000-000000000001",
       name: "Quarterly revenue reconciliation and reporting assistant",
     },
     authorizer: {
