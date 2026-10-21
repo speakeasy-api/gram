@@ -11,6 +11,7 @@ the shared harness. The migrations shipped today:
 | Postgres `risk_results` → ClickHouse `risk_findings`                                | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md)               |
 | `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md)     |
 | Canonical hosted MCP wrappers for legacy toolsets, then their dependent move        | [HOSTED_MCP_WRAPPERS_MIGRATION.md](./HOSTED_MCP_WRAPPERS_MIGRATION.md) |
+| Organization risk failure mode from fail-closed prompt policies                     | [RISK_FAIL_CLOSED_BACKFILL.md](./RISK_FAIL_CLOSED_BACKFILL.md)         |
 
 ## Concepts
 
