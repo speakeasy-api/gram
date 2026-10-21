@@ -53,6 +53,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -99,7 +100,7 @@ func run() error {
 	workosUpstream := flag.String("workos-upstream-url", envOr("GRAM_DEVIDP_WORKOS_UPSTREAM_URL", "https://api.workos.com"), "Real WorkOS API base URL proxied to when --backend=workos")
 	flag.Parse()
 
-	scheme, err := listenerScheme(*sslCertFile, *sslKeyFile)
+	scheme, err := listenerScheme(*sslCertFile, *sslKeyFile, *externalURL)
 	if err != nil {
 		return err
 	}
@@ -286,14 +287,24 @@ func controlMux() http.Handler {
 	return mux
 }
 
-func listenerScheme(certFile, keyFile string) (string, error) {
-	if certFile == "" && keyFile == "" {
-		return "http", nil
-	}
-	if certFile == "" || keyFile == "" {
+func listenerScheme(certFile, keyFile, externalURL string) (string, error) {
+	if (certFile == "") != (keyFile == "") {
 		return "", errors.New("ssl-cert-file and ssl-key-file must be provided together")
 	}
-	return "https", nil
+	scheme := "http"
+	if certFile != "" {
+		scheme = "https"
+	}
+	if externalURL != "" {
+		parsed, err := url.Parse(externalURL)
+		if err != nil || parsed.Hostname() == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return "", errors.New("external-url must be an absolute HTTP(S) URL without credentials")
+		}
+		if parsed.Scheme != scheme {
+			return "", fmt.Errorf("external-url scheme %q does not match listener scheme %q; set or clear both ssl-cert-file and ssl-key-file to match", parsed.Scheme, scheme)
+		}
+	}
+	return scheme, nil
 }
 
 // deriveExternalURL turns a listener address ("host:port" or ":port") and
