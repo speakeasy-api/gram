@@ -848,13 +848,15 @@ func (q *Queries) ListActiveLegacyAPIKeys(ctx context.Context, organizationID st
 }
 
 const listAgentRolePrincipals = `-- name: ListAgentRolePrincipals :many
-SELECT DISTINCT role_urn::text AS role_urn
-FROM agent_role_assignments
-WHERE organization_id = $1
+SELECT DISTINCT ara.role_urn::text AS role_urn
+FROM agent_role_assignments AS ara
+JOIN agents ON agents.organization_id = ara.organization_id AND agents.id = ara.agent_id AND agents.deleted IS FALSE
+WHERE ara.organization_id = $1
+  AND ara.deleted_at IS NULL
 ORDER BY role_urn
 `
 
-// Roles assigned to agents, whose policies include them.
+// Roles live agents hold, whose policies include them.
 func (q *Queries) ListAgentRolePrincipals(ctx context.Context, organizationID string) ([]string, error) {
 	rows, err := q.db.Query(ctx, listAgentRolePrincipals, organizationID)
 	if err != nil {

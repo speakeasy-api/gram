@@ -1718,10 +1718,12 @@ WHERE organization_id = @organization_id
 ORDER BY principal_urn, scope, id;
 
 -- name: ListAgentRolePrincipals :many
--- Roles assigned to agents, whose policies include them.
-SELECT DISTINCT role_urn::text AS role_urn
-FROM agent_role_assignments
-WHERE organization_id = @organization_id
+-- Roles live agents hold, whose policies include them.
+SELECT DISTINCT ara.role_urn::text AS role_urn
+FROM agent_role_assignments AS ara
+JOIN agents ON agents.organization_id = ara.organization_id AND agents.id = ara.agent_id AND agents.deleted IS FALSE
+WHERE ara.organization_id = @organization_id
+  AND ara.deleted_at IS NULL
 ORDER BY role_urn;
 
 -- name: ListAuthClientGrantRows :many
