@@ -41,7 +41,7 @@ type CreatedState = {
   mcpServer: McpServer;
 };
 
-export default function CreateTunneledMcp() {
+export default function CreateTunneledMcp(): JSX.Element {
   const flow = useGatewayCreation();
   const creationLocked = flow.createdServerId !== null || flow.isAttaching;
   const routes = useRoutes();
