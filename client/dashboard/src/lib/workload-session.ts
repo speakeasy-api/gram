@@ -26,6 +26,7 @@ export function workloadAgentLabel(workload: UserSessionWorkload): string {
     case undefined:
       return `Agent ${name}`;
   }
+  return `Agent ${name} (status unknown)`;
 }
 
 function admissionLabel(admission: UserSessionWorkloadAdmission): string {

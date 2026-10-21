@@ -50,7 +50,6 @@ import { useRemovePluginServerMutation } from "@gram/client/react-query/removePl
 import { useAudiences } from "@gram/client/react-query/audiences";
 import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import { Badge } from "@/components/ui/Badge";
@@ -305,13 +304,6 @@ function PluginDetailContent({
 
   const assignmentsVisible = usePluginAssignmentsVisible();
   const showAssignments = canAdmin && assignmentsVisible;
-  const { data: productFeatures } = useProductFeatures(
-    {
-      organizationId: organization.id,
-    },
-    undefined,
-    { enabled: canAdmin },
-  );
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
@@ -529,6 +521,16 @@ function PluginDetailContent({
     return map;
   }, [toolsets]);
 
+  // Hosted toolsets with a canonical MCP server (same id); undefined until servers load.
+  const canonicalToolsetIds = useMemo(() => {
+    if (!mcpServersData?.mcpServers) return undefined;
+    return new Set(
+      mcpServersData.mcpServers
+        .filter((s) => s.toolsetId === s.id)
+        .map((s) => s.id),
+    );
+  }, [mcpServersData]);
+
   const mcpServerById = useMemo(() => {
     const map = new Map<string, McpServer>();
     for (const s of mcpServers) map.set(s.id, s);
@@ -597,6 +599,12 @@ function PluginDetailContent({
       // Mirrors AddPluginServer: a hosted server needs MCP on and an MCP slug.
       const mcpOff = !!toolset && !toolset.mcpEnabled;
       const noMcpAddress = !!toolset && !mcpOff && !toolset.mcpSlug;
+      const noMcpServer =
+        !!toolset &&
+        !mcpOff &&
+        !noMcpAddress &&
+        !!canonicalToolsetIds &&
+        !canonicalToolsetIds.has(toolset.id);
       return {
         value: serverOptionKey(o.kind, o.id),
         label: o.name,
@@ -614,13 +622,21 @@ function PluginDetailContent({
         ),
         slug,
         kindLabel,
-        badge: mcpOff ? "MCP off" : noMcpAddress ? "No MCP address" : undefined,
+        badge: mcpOff
+          ? "MCP off"
+          : noMcpAddress
+            ? "No MCP address"
+            : noMcpServer
+              ? "No MCP server"
+              : undefined,
         description: mcpOff
           ? "Turn on MCP for this server before adding it to a plugin."
           : noMcpAddress
             ? "Set an MCP address for this server before adding it to a plugin."
-            : `${slug ?? "No slug"} · ${kindLabel}`,
-        disabled: mcpOff || noMcpAddress,
+            : noMcpServer
+              ? "This toolset has no MCP server yet, so it cannot be added to a plugin."
+              : `${slug ?? "No slug"} · ${kindLabel}`,
+        disabled: mcpOff || noMcpAddress || noMcpServer,
       };
     });
 
@@ -874,31 +890,6 @@ function PluginDetailContent({
               />
             </RequireScope>
           )}
-
-          {/* Assignments only affect device-agent delivery, so the section is
-              hidden for marketplace-only orgs (see usePluginAssignmentsVisible).
-              Now that it's a route, a bookmark can still land here — say why the
-              page is empty rather than rendering nothing. Wait for
-              productFeatures before doing so, since the visibility flag reads
-              false while it loads. */}
-          {section === PLUGIN_ASSIGNMENTS_SECTION_ID &&
-            canAdmin &&
-            !showAssignments &&
-            !!productFeatures && (
-              <SettingsSection>
-                <SettingsSection.Header>
-                  <SettingsSection.Title>Assignments</SettingsSection.Title>
-                  <SettingsSection.Description>
-                    Assignments control delivery to devices running the
-                    Speakeasy agent.
-                  </SettingsSection.Description>
-                </SettingsSection.Header>
-                <SectionEmptyState
-                  title="Assignments aren't available for this project"
-                  subtitle="Marketplace installs receive every published plugin, so there's nothing to assign."
-                />
-              </SettingsSection>
-            )}
 
           {section === PLUGIN_ASSIGNMENTS_SECTION_ID && showAssignments && (
             <SettingsSection>

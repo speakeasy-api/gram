@@ -28,6 +28,9 @@ func TestServiceLegacyDeletedAttachments(t *testing.T) {
 				McpSlug: pgtype.Text{String: "example-tools-endpoint", Valid: true}, McpEnabled: true,
 			})
 			require.NoError(t, err)
+			if kind == "toolset" {
+				syncCanonicalWrapper(t, conn, ts)
+			}
 			payload := &gen.CreateAssistantPayload{Name: "Assistant", Model: "openai/gpt-4o-mini"}
 			targetID := ts.ID
 			if kind == "toolset" {
@@ -53,6 +56,8 @@ func TestServiceLegacyDeletedAttachments(t *testing.T) {
 			// Reproduce attachments left behind by historical soft deletions.
 			if kind == "toolset" {
 				_, err = toolsetsrepo.New(conn).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{Slug: ts.Slug, ProjectID: projectID})
+				require.NoError(t, err)
+				_, err = mcpserversrepo.New(conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: ts.ID, ProjectID: projectID})
 			} else {
 				_, err = mcpserversrepo.New(conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: targetID, ProjectID: projectID})
 			}

@@ -6,7 +6,9 @@ import { IdentityProviders } from "./IdentityProviders";
 const mocks = vi.hoisted(() => ({
   query: {
     data: {
-      connection: undefined as undefined | { status: string; orgUrl: string },
+      connection: undefined as
+        | undefined
+        | { provider: string; status: string; orgUrl: string },
     },
     error: null as Error | null,
     isPending: false,
@@ -104,6 +106,7 @@ describe("Identity providers", () => {
     "offers management for a %s connection",
     (status) => {
       mocks.query.data.connection = {
+        provider: "okta",
         status,
         orgUrl: "https://example.okta.com",
       };
@@ -116,6 +119,7 @@ describe("Identity providers", () => {
   );
   it("offers reconnection for revoked connections", () => {
     mocks.query.data.connection = {
+      provider: "okta",
       status: "revoked",
       orgUrl: "https://example.okta.com",
     };
@@ -139,6 +143,7 @@ describe("Identity providers", () => {
   });
   it("navigates between the overview and provider workspace", () => {
     mocks.query.data.connection = {
+      provider: "okta",
       status: "pending",
       orgUrl: "https://example.okta.com",
     };

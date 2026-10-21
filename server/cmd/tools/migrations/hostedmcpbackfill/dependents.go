@@ -53,8 +53,9 @@ func twinViolation(table string, err error) (string, bool) {
 	return want, true
 }
 
-// CollapsedTwin is a server-keyed row a move removed in favour of the toolset-keyed row; Row is its to_jsonb image (apply only).
-type CollapsedTwin struct {
+// RowImage names a row a run removed: a move's collapsed server-keyed twin, or a cleaned-up orphan.
+// Row (to_jsonb) and EnvironmentConfigs are carried only where a rollback needs them.
+type RowImage struct {
 	Table string    `json:"table"`
 	ID    uuid.UUID `json:"id"`
 
@@ -62,8 +63,19 @@ type CollapsedTwin struct {
 	Deletion string          `json:"deletion"`
 	Row      json.RawMessage `json:"row,omitempty"`
 
-	// EnvironmentConfigs are the mcp_environment_configs rows deleted with a metadata twin.
+	// EnvironmentConfigs are the mcp_environment_configs rows deleted with a metadata row.
 	EnvironmentConfigs json.RawMessage `json:"environment_configs,omitempty"`
+
+	// SoftDeletedAt is the deleted_at the orphan cleanup set, so a restore undoes only that delete.
+	SoftDeletedAt string `json:"soft_deleted_at,omitempty"`
+}
+
+// withoutImages keeps the row's identity only, for reports.
+func (i *RowImage) withoutImages() *RowImage {
+	if i == nil {
+		return nil
+	}
+	return &RowImage{Table: i.Table, ID: i.ID, Deletion: i.Deletion, Row: nil, EnvironmentConfigs: nil, SoftDeletedAt: ""}
 }
 
 // RowKey names the column a dependent row is keyed by.
@@ -92,9 +104,12 @@ type JournalRecord struct {
 	Outcome   Outcome      `json:"outcome"`
 
 	From RowKey `json:"from"`
-	To   RowKey `json:"to"`
+	To   RowKey `json:"to,omitzero"`
 
-	CollapsedTwin *CollapsedTwin `json:"collapsed_twin,omitempty"`
+	CollapsedTwin *RowImage `json:"collapsed_twin,omitempty"`
+
+	// Removed is the deleted orphan in a -cleanup-orphans journal, with its row image; To is then empty.
+	Removed *RowImage `json:"removed,omitempty"`
 }
 
 // Journal records each dependent row's move durably around its commit.
@@ -132,10 +147,12 @@ func moveKeys(table string, key uuid.UUID) (RowKey, RowKey) {
 	return RowKey{Table: table, Column: "toolset_id", ID: key}, RowKey{Table: table, Column: "mcp_server_id", ID: key}
 }
 
+type dependentProcessor func(ctx context.Context, toolsetID uuid.UUID, dep ListToolsetDependentsRow) (RowReport, error)
+
 // runDependents walks toolsets that still have toolset-keyed dependents; Limit and the cursor count toolsets.
-func (r *Runner) runDependents(ctx context.Context, report Report) (Report, error) {
+func (r *Runner) runDependents(ctx context.Context, report Report, process dependentProcessor) (Report, error) {
 	if r.options.Apply && r.options.Journal == nil {
-		return report, errors.New("applying the dependent move requires a journal")
+		return report, fmt.Errorf("applying the %s phase requires a journal", report.Phase)
 	}
 	after := r.options.Cursor
 	for {
@@ -159,7 +176,7 @@ func (r *Runner) runDependents(ctx context.Context, report Report) (Report, erro
 				return report, fmt.Errorf("toolset %s: list dependents: %w", toolsetID, err)
 			}
 			for _, dep := range deps {
-				row, err := r.moveOne(ctx, toolsetID, dep)
+				row, err := process(ctx, toolsetID, dep)
 				if err != nil && row.Outcome == "" {
 					return report, fmt.Errorf("toolset %s: %s %s: %w", toolsetID, dep.TableName, dep.ID, err)
 				}
@@ -185,7 +202,7 @@ type dependentMove struct {
 	wrapper *GetLiveCanonicalWrapperRow
 	rowID   uuid.UUID
 	actor   urn.Principal
-	twin    *CollapsedTwin
+	twin    *RowImage
 }
 
 // loadWrapper runs after the dependent row is locked, matching the writers' toolset -> dependent -> server order.
@@ -206,7 +223,7 @@ func (m *dependentMove) loadWrapper(ctx context.Context, q *Queries) (Outcome, s
 func (r *Runner) moveOne(ctx context.Context, toolsetID uuid.UUID, dep ListToolsetDependentsRow) (RowReport, error) {
 	row := RowReport{
 		ToolsetID: toolsetID, Table: dep.TableName, RowID: &dep.ID, ProjectID: dep.ProjectID, McpSlug: "", CustomDomainID: nil,
-		Outcome: "", Reason: "", Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil,
+		Outcome: "", Reason: "", Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false,
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -272,7 +289,7 @@ func (r *Runner) moveOne(ctx context.Context, toolsetID uuid.UUID, dep ListTools
 	row.CollapsedTwin = move.twin
 	if move.twin != nil && !r.options.Apply {
 		// A dry-run report may reuse an existing file, so it carries no row snapshot.
-		row.CollapsedTwin = &CollapsedTwin{Table: move.twin.Table, ID: move.twin.ID, Deletion: move.twin.Deletion, Row: nil, EnvironmentConfigs: nil}
+		row.CollapsedTwin = move.twin.withoutImages()
 	}
 	row.Wrote = true
 	if move.twin != nil {
@@ -285,10 +302,14 @@ func (r *Runner) moveOne(ctx context.Context, toolsetID uuid.UUID, dep ListTools
 	}
 
 	from, to := moveKeys(dep.TableName, toolsetID)
-	record := JournalRecord{
+	return r.commitJournaled(ctx, tx, row, JournalRecord{
 		Event: JournalIntent, ProjectID: toolset.ProjectID, ToolsetID: toolsetID, RowID: dep.ID, Outcome: row.Outcome,
-		From: from, To: to, CollapsedTwin: move.twin,
-	}
+		From: from, To: to, CollapsedTwin: move.twin, Removed: nil,
+	})
+}
+
+// commitJournaled syncs the intent, commits, then records whether the commit landed.
+func (r *Runner) commitJournaled(ctx context.Context, tx pgx.Tx, row RowReport, record JournalRecord) (RowReport, error) {
 	if err := r.options.Journal.Append(record); err != nil {
 		row.Outcome, row.Wrote = "", false
 		return row, fmt.Errorf("journal intent: %w", err)
@@ -338,7 +359,7 @@ func (r *Runner) moveMetadata(ctx context.Context, tx pgx.Tx, m *dependentMove) 
 		if deleted != 1 {
 			return "", "", fmt.Errorf("delete metadata twin: %d rows deleted", deleted)
 		}
-		m.twin = &CollapsedTwin{Table: tableMcpMetadata, ID: twin.ID, Deletion: "deleted", Row: twin.RowJson, EnvironmentConfigs: configs}
+		m.twin = &RowImage{Table: tableMcpMetadata, ID: twin.ID, Deletion: "deleted", Row: twin.RowJson, EnvironmentConfigs: configs, SoftDeletedAt: ""}
 	}
 	after, err := q.RekeyMetadata(ctx, RekeyMetadataParams{McpServerID: serverKey, ID: m.rowID, ProjectID: m.toolset.ProjectID})
 	if err != nil {
@@ -454,7 +475,7 @@ func (r *Runner) movePluginServer(ctx context.Context, tx pgx.Tx, m *dependentMo
 		}); err != nil {
 			return "", "", fmt.Errorf("audit plugin server twin removal: %w", err)
 		}
-		m.twin = &CollapsedTwin{Table: tablePluginServers, ID: twin.ID, Deletion: "soft_deleted", Row: twin.RowJson, EnvironmentConfigs: nil}
+		m.twin = &RowImage{Table: tablePluginServers, ID: twin.ID, Deletion: "soft_deleted", Row: twin.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: ""}
 	}
 	moved, err := q.RekeyPluginServer(ctx, RekeyPluginServerParams{McpServerID: serverKey, ID: m.rowID, ProjectID: m.toolset.ProjectID})
 	if err != nil {
@@ -520,7 +541,7 @@ func moveAssistantAttachment(ctx context.Context, tx pgx.Tx, m *dependentMove) (
 		if deleted != 1 {
 			return "", "", fmt.Errorf("delete assistant twin: %d rows deleted", deleted)
 		}
-		m.twin = &CollapsedTwin{Table: tableAssistantMcpServers, ID: twin.ID, Deletion: "deleted", Row: twin.RowJson, EnvironmentConfigs: nil}
+		m.twin = &RowImage{Table: tableAssistantMcpServers, ID: twin.ID, Deletion: "deleted", Row: twin.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: ""}
 	}
 	moved, err := q.MoveAssistantToolset(ctx, MoveAssistantToolsetParams{McpServerID: m.wrapper.ID, ID: m.rowID, ProjectID: m.toolset.ProjectID})
 	if err != nil {

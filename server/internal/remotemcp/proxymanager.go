@@ -42,6 +42,20 @@ type proxyBuildOptions struct {
 	recordIdentityCoverage bool
 	metaMCPServerID        string
 	headerPolicy           proxy.HeaderPolicy
+	// authClientHeaders, when authClientSelected, are the resolved auth
+	// client's headers; the server's credential headers are not sent.
+	authClientHeaders  []proxy.ConfiguredHeader
+	authClientSelected bool
+}
+
+func newProxyBuildOptions(buildOptions []BuildOption) proxyBuildOptions {
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false}
+	for _, option := range buildOptions {
+		if option.apply != nil {
+			option.apply(&options)
+		}
+	}
+	return options
 }
 
 // BuildOption customizes one proxy without changing the defaults used by
@@ -63,6 +77,16 @@ func WithoutToolsCallIdentityCoverage() BuildOption {
 func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.metaMCPServerID = metaMCPServerID
+	}}
+}
+
+// WithAuthClientHeaders sends a resolved auth client's headers in place of the
+// server's credential headers: the server's other headers first, then the
+// client's, then the resolved bearer.
+func WithAuthClientHeaders(headers []proxy.ConfiguredHeader) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.authClientHeaders = headers
+		options.authClientSelected = true
 	}}
 }
 
@@ -213,8 +237,12 @@ func (f *ProxyManager) Build(
 	selection *toolfilter.SessionSelection,
 	options ...BuildOption,
 ) *proxy.Proxy {
+	authClientSelected := newProxyBuildOptions(options).authClientSelected
 	configured := make([]proxy.ConfiguredHeader, 0, len(headers))
 	for _, h := range headers {
+		if authClientSelected && proxy.IsCredentialHeader(h.Name, h.IsSecret, h.ValueFromRequestHeader.String != "") {
+			continue
+		}
 		configured = append(configured, proxy.ConfiguredHeader{
 			Name:                   h.Name,
 			StaticValue:            h.Value.String,
@@ -254,11 +282,9 @@ func (f *ProxyManager) BuildTarget(
 	selection *toolfilter.SessionSelection,
 	buildOptions ...BuildOption,
 ) *proxy.Proxy {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote}
-	for _, option := range buildOptions {
-		if option.apply != nil {
-			option.apply(&options)
-		}
+	options := newProxyBuildOptions(buildOptions)
+	if options.authClientSelected {
+		headers = proxy.MergeAuthClientHeaders(options.headerPolicy, headers, options.authClientHeaders)
 	}
 	if options.metaMCPServerID != "" {
 		identity.MetaMCPServerID = options.metaMCPServerID

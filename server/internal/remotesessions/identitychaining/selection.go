@@ -86,7 +86,7 @@ func (g *Governor) selectBindingWith(ctx context.Context, logger *slog.Logger, r
 		// to select a resource or token.
 		resources, readErr := repo.New(g.db).ListEMAChainingResourceCandidates(ctx, repo.ListEMAChainingResourceCandidatesParams{
 			ProjectID: req.ProjectID, OrganizationID: req.OrganizationID, UserSessionIssuerID: req.UserSessionIssuerID,
-			RemoteSessionIssuerID: req.RemoteSessionIssuerID,
+			RemoteSessionIssuerID: req.RemoteSessionIssuerID, RemoteSessionClientID: req.RemoteSessionClientID,
 		})
 		if readErr != nil {
 			// Unknown configuration keeps the upstream on the interactive path.
@@ -107,6 +107,7 @@ func (g *Governor) selectBindingWith(ctx context.Context, logger *slog.Logger, r
 		UserSessionIssuerID:   req.UserSessionIssuerID,
 		UpstreamResource:      strings.TrimRight(resource.Resource, "/"),
 		RemoteSessionIssuerID: req.RemoteSessionIssuerID,
+		RemoteSessionClientID: req.RemoteSessionClientID,
 	})
 	if err != nil {
 		// Unknown configuration keeps the upstream on the interactive path.
@@ -140,6 +141,10 @@ func (g *Governor) selectBindingWith(ctx context.Context, logger *slog.Logger, r
 		return none, bindingNotReady, fmt.Errorf("read identity chaining binding readiness: %w", err)
 	case result.State != remotesessions.PreparationStateReady || result.BindingID != b.ID || result.ClientID == uuid.Nil || result.ExternalClientID == "":
 		return none, bindingNotReady, nil
+	case req.RemoteSessionClientID.Valid && result.ClientID != req.RemoteSessionClientID.UUID:
+		// The caller chose another client for this server; this binding is
+		// not one it may be served by.
+		return none, notApplicable, nil
 	}
 	if resource.Discovered && !slices.ContainsFunc(resource.AuthorizationServers, func(server string) bool { return sameIssuer(server, result.Issuer) }) {
 		return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false), nil

@@ -62,6 +62,25 @@ type metaMember struct {
 	// records none. Routing accepts a grant qualified to this value; it never
 	// selects across issuers, so it is not an address and is never dialed.
 	tunneledResourceIdentifier string
+
+	// chosenClientID is the upstream client the request's credential chose
+	// for a proxied member, when serving reads credential choices. When set,
+	// remoteSessionIssuerID is that client's issuer rather than the derived
+	// one.
+	chosenClientID uuid.NullUUID
+
+	// upstreamNoAuth reports that the credential chose no upstream
+	// authentication for this member.
+	upstreamNoAuth bool
+
+	// upstreamUnavailable is why the credential cannot reach this member
+	// under its choices, nil otherwise.
+	upstreamUnavailable error
+
+	// associatedClients is a proxied member's associated upstream clients;
+	// nil for a hosted member, which matches clients by authorization server
+	// instead.
+	associatedClients map[uuid.UUID]bool
 }
 
 // memberStatus is the list_servers connection state. Hosted members execute
@@ -171,21 +190,42 @@ func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slo
 	if endpoint.IsOrganizationGateway() {
 		return s.resolveOrganizationMemberSnapshot(ctx, logger, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	}
-	return s.resolveMetaMemberSnapshot(ctx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+	if err != nil {
+		return ctx, nil, err
+	}
+	// Only consent and its validation read a stored gateway's associated
+	// clients, and only a gateway that signs people in has any to match.
+	if endpoint.UserSessionIssuerID != uuid.Nil {
+		if err := s.attachAssociatedClients(ctx, endpoint.OrganizationID, members); err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
+		}
+	}
+	return ctx, members, nil
 }
 
 // resolveGateMemberSnapshot resolves the members a serving request answers
 // from: a derived gateway's from the caller's access, a stored gateway's from
-// its membership rows.
+// its membership rows, each proxied member narrowed to the credential's
+// chosen client.
 func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Logger, gate *metaGateContext, metaServerID, projectID uuid.UUID) (context.Context, []metaMember, error) {
+	var (
+		members []metaMember
+		err     error
+	)
 	if gate.agentID == uuid.Nil && !gate.organizationGateway {
-		return s.resolveMetaMemberSnapshot(ctx, logger, metaServerID, projectID)
+		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServerID, projectID)
+	} else {
+		issuer := uuid.Nil
+		if gate.organizationGateway {
+			issuer = gate.userSessionIssuerID
+		}
+		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID, issuer)
 	}
-	issuer := uuid.Nil
-	if gate.organizationGateway {
-		issuer = gate.userSessionIssuerID
+	if err == nil && gate.memberChoices != nil {
+		gate.memberChoices.apply(ctx, logger, members)
 	}
-	return s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID, issuer)
+	return ctx, members, err
 }
 
 // resolveOrganizationMemberSnapshot derives a gateway's members from the
@@ -267,6 +307,11 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	}
 	var clients []remotesessions.Client
 	if userSessionIssuerID != uuid.Nil {
+		// The agent gateway signs nobody in, so its callers never read
+		// associations and its members keep the derived match.
+		if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
+		}
 		clients, err = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "list gateway sign-in clients").LogError(ctx, logger)
@@ -398,6 +443,10 @@ func (s *Service) admitMetaMembers(
 			toolVariationsGroupID:      candidate.toolVariationsGroupID,
 			remoteSessionIssuerID:      candidate.remoteSessionIssuerID,
 			tunneledResourceIdentifier: candidate.tunneledResourceIdentifier,
+			chosenClientID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			upstreamNoAuth:             false,
+			upstreamUnavailable:        nil,
+			associatedClients:          nil,
 		})
 	}
 

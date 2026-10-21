@@ -1,4 +1,4 @@
-version: v2.13.2
+version: v2.14.0
 
 plugins:
   - module: github.com/speakeasy-api/gram/glint

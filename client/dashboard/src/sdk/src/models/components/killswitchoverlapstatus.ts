@@ -3,17 +3,17 @@
  */
 
 import * as z from "zod/v4-mini";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 
 export const KillswitchOverlapStatus = {
   Active: "active",
   Scheduled: "scheduled",
 } as const;
-export type KillswitchOverlapStatus = ClosedEnum<
-  typeof KillswitchOverlapStatus
->;
+export type KillswitchOverlapStatus = OpenEnum<typeof KillswitchOverlapStatus>;
 
 /** @internal */
-export const KillswitchOverlapStatus$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchOverlapStatus
-> = z.enum(KillswitchOverlapStatus);
+export const KillswitchOverlapStatus$inboundSchema: z.ZodMiniType<
+  KillswitchOverlapStatus,
+  unknown
+> = openEnums.inboundSchema(KillswitchOverlapStatus);

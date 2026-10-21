@@ -1,3 +1,4 @@
+import { isKnownEnumValue } from "@/lib/enum";
 import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
@@ -51,7 +52,20 @@ export function ClientCard({
   // The organization update endpoint requires org:admin; readers get the same
   // fields disabled.
   const { hasAnyScope } = useRBAC();
-  const canEdit = hasAnyScope(["org:admin"]);
+  const supportsAudience =
+    client.tokenEndpointAuthAudienceFormat === undefined ||
+    isKnownEnumValue(
+      UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+      client.tokenEndpointAuthAudienceFormat,
+    );
+  const supportsAuthMethod =
+    client.tokenEndpointAuthMethod === undefined ||
+    narrowTokenEndpointAuthMethod(client.tokenEndpointAuthMethod, true) !==
+      undefined;
+  const supportsEditing =
+    supportsAuthMethod &&
+    (client.tokenEndpointAuthMethod !== "private_key_jwt" || supportsAudience);
+  const canEdit = hasAnyScope(["org:admin"]) && supportsEditing;
   const persistedAuthMethod =
     narrowTokenEndpointAuthMethod(client.tokenEndpointAuthMethod, true) ?? "";
   const [authMethod, setAuthMethod] = useState<
@@ -59,7 +73,14 @@ export function ClientCard({
   >(persistedAuthMethod);
   const [authAudienceFormat, setAuthAudienceFormat] = useState<
     AuthAudienceFormat | undefined
-  >(client.tokenEndpointAuthAudienceFormat);
+  >(
+    isKnownEnumValue(
+      UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+      client.tokenEndpointAuthAudienceFormat,
+    )
+      ? client.tokenEndpointAuthAudienceFormat
+      : undefined,
+  );
   const [scope, setScope] = useState<string[]>(client.scope ?? []);
   const [audience, setAudience] = useState(client.audience ?? "");
   const [clientSecret, setClientSecret] = useState("");
@@ -87,6 +108,15 @@ export function ClientCard({
   const serviceAccount = client.credentialOwner === "self";
   const { entitled: customerManagedKeys } = useCustomerManagedKeys();
   const issuerName = issuer?.name ?? "the authorization server";
+  let privateKeyJwtUnavailable: string | undefined;
+  if (!supportsAudience) {
+    privateKeyJwtUnavailable =
+      "Refresh the page to use this authentication method";
+  } else if (serviceAccount) {
+    privateKeyJwtUnavailable = customerManagedKeys
+      ? "attach a key set first"
+      : "Requires KMS";
+  }
   const privateKeyJwtMissingKeySet =
     privateKeyJwtSelected && client.jsonWebKeySetId == null;
 
@@ -112,6 +142,7 @@ export function ClientCard({
   const handleAuthMethodChange = (
     method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
   ) => {
+    if (isPrivateKeyJwtAuthMethod(method) && !supportsAudience) return;
     setAuthMethod(method);
     if (isPrivateKeyJwtAuthMethod(method)) setClientSecret("");
   };
@@ -141,6 +172,7 @@ export function ClientCard({
     scope.some((s, i) => s !== savedScope[i]);
 
   const handleSave = () => {
+    if (!canEdit || (privateKeyJwtSelected && !supportsAudience)) return;
     update.mutate({
       request: {
         updateRemoteSessionClientForm: {
@@ -167,6 +199,12 @@ export function ClientCard({
     <Card>
       <Card.Header>Client</Card.Header>
       <Card.Content>
+        {!supportsEditing && (
+          <Text small muted>
+            Refresh the page before editing this unsupported client
+            configuration.
+          </Text>
+        )}
         <div className="flex flex-col gap-4">
           <div className="grid items-start gap-x-8 gap-y-4 sm:grid-cols-2">
             <InfoField label="Client ID">
@@ -213,16 +251,13 @@ export function ClientCard({
             <TokenEndpointAuthMethodField
               value={shownAuthMethod}
               onChange={handleAuthMethodChange}
-              allowPrivateKeyJwt={client.jsonWebKeySetId != null}
-              hideNone={serviceAccount}
-              privateKeyJwtUnavailable={
-                serviceAccount
-                  ? customerManagedKeys
-                    ? "attach a key set first"
-                    : "Requires KMS"
-                  : undefined
+              allowPrivateKeyJwt={
+                client.jsonWebKeySetId != null && supportsAudience
               }
+              hideNone={serviceAccount}
+              privateKeyJwtUnavailable={privateKeyJwtUnavailable}
               disabled={!canEdit}
+              unsupported={!supportsAuthMethod}
             />
             {privateKeyJwtSelected && (
               <ClientAssertionAudienceField

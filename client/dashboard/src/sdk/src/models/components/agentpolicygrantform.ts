@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -23,7 +24,7 @@ export const AgentPolicyGrantFormEffect = {
 /**
  * Grant effect; direct agent policy is allow-only
  */
-export type AgentPolicyGrantFormEffect = ClosedEnum<
+export type AgentPolicyGrantFormEffect = OpenEnum<
   typeof AgentPolicyGrantFormEffect
 >;
 
@@ -43,13 +44,15 @@ export type AgentPolicyGrantForm = {
 };
 
 /** @internal */
-export const AgentPolicyGrantFormEffect$inboundSchema: z.ZodMiniEnum<
-  typeof AgentPolicyGrantFormEffect
-> = z.enum(AgentPolicyGrantFormEffect);
+export const AgentPolicyGrantFormEffect$inboundSchema: z.ZodMiniType<
+  AgentPolicyGrantFormEffect,
+  unknown
+> = openEnums.inboundSchema(AgentPolicyGrantFormEffect);
 /** @internal */
-export const AgentPolicyGrantFormEffect$outboundSchema: z.ZodMiniEnum<
-  typeof AgentPolicyGrantFormEffect
-> = AgentPolicyGrantFormEffect$inboundSchema;
+export const AgentPolicyGrantFormEffect$outboundSchema: z.ZodMiniType<
+  string,
+  AgentPolicyGrantFormEffect
+> = openEnums.outboundSchema(AgentPolicyGrantFormEffect);
 
 /** @internal */
 export const AgentPolicyGrantForm$inboundSchema: z.ZodMiniType<
