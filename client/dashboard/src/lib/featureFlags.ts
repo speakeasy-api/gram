@@ -3,7 +3,6 @@ export const FEATURE_FLAGS = {
   // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
   emaProviders: "ema-providers",
   explore: "gram-explore",
-  headlessModeSwitcher: "headless-mode-switcher",
   killswitches: "gram-killswitches",
   mcpResearch: "gram-mcp-research",
   // UI-only rollout gate for the MCP scope picker in the risk policy editor;
