@@ -47,10 +47,10 @@ type grantPlan struct {
 	// taken those an admin took over.
 	history map[string]int
 	taken   map[string]int
-	missing     map[urn.Principal][]*authz.RoleGrant
-	kinds       map[urn.Principal][]GrantKind
-	order       []urn.Principal
-	counts      map[GrantKind]int
+	missing map[urn.Principal][]*authz.RoleGrant
+	kinds   map[urn.Principal][]GrantKind
+	order   []urn.Principal
+	counts  map[GrantKind]int
 }
 
 func grantKey(principalURN string, scope authz.Scope, selector authz.Selector) (string, error) {
