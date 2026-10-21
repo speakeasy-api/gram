@@ -37,7 +37,7 @@ export type AdminUpstreamOAuthMigrationRun = {
    */
   authClientsWritten?: number | undefined;
   /**
-   * Default auth permissions granted for the clients just recorded. The default auth permissions page reports what is still missing.
+   * Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The default auth permissions page reports what is still missing.
    */
   authPermissionGrantsWritten?: number | undefined;
   /**
