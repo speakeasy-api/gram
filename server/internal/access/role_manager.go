@@ -175,7 +175,8 @@ type MemberListPage struct {
 }
 
 // ListMembers returns locally known organization members with their directly
-// assigned role IDs and the role IDs they hold through directory role mappings.
+// assigned role IDs, the role IDs they hold through directory role mappings,
+// and the mappings those roles come from.
 func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.ListMembersResult, error) {
 	page, err := r.ListMembersFiltered(ctx, gramOrgID, MemberListFilter{Query: "", RoleID: "", Limit: 0})
 	if err != nil {
@@ -187,7 +188,17 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 // ListMembersFiltered uses the dashboard member query with optional filtering
 // and a limit. Exact email matches sort first, then members sort by email and ID.
 func (r *RoleManager) ListMembersFiltered(ctx context.Context, gramOrgID string, filter MemberListFilter) (*MemberListPage, error) {
-	rows, err := repo.New(r.db).ListAccessMembers(ctx, repo.ListAccessMembersParams{
+	// Both reads share one snapshot, so a concurrent directory sync or mapping
+	// change cannot leave directory_role_ids and directory_role_sources
+	// disagreeing.
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin member read").LogError(ctx, r.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := repo.New(tx)
+	rows, err := queries.ListAccessMembers(ctx, repo.ListAccessMembersParams{
 		OrganizationID: gramOrgID,
 		QueryText:      strings.ToLower(strings.Join(strings.Fields(filter.Query), " ")),
 		RoleID:         filter.RoleID,
@@ -196,6 +207,21 @@ func (r *RoleManager) ListMembersFiltered(ctx context.Context, gramOrgID string,
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members").LogError(ctx, r.logger)
 	}
+
+	sourceRows, err := queries.ListAccessMemberDirectoryRoleSources(ctx, gramOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list member directory role sources").LogError(ctx, r.logger)
+	}
+	sourcesByMember := make(map[string][]*gen.AccessMemberDirectoryRoleSource)
+	for _, row := range sourceRows {
+		sourcesByMember[row.UserID] = append(sourcesByMember[row.UserID], &gen.AccessMemberDirectoryRoleSource{
+			RoleID:           row.RoleID,
+			MappingID:        row.MappingID.String(),
+			SourceKind:       row.SourceKind,
+			DirectoryGroupID: conv.FromNullableUUID(row.DirectoryGroupID),
+		})
+	}
+
 	page := &MemberListPage{Members: make([]*gen.AccessMember, 0, len(rows)), TotalMatches: 0, ExactEmailMatches: 0}
 	for _, row := range rows {
 		page.TotalMatches = row.TotalMatches
@@ -209,11 +235,32 @@ func (r *RoleManager) ListMembersFiltered(ctx context.Context, gramOrgID string,
 			RoleIds:          row.RoleIds,
 			DirectoryRoleIds: row.DirectoryRoleIds,
 			JoinedAt:         conv.FromPGTimestamptz(row.JoinedAt),
-			Department:       conv.PtrEmpty(row.Department),
-			Groups:           row.GroupNames,
+			// Null when no directory row was matched, or when the row reports
+			// no non-empty department. The query collapses both to an empty
+			// string, so the two cannot be told apart here.
+			Department:      conv.PtrEmpty(row.Department),
+			Groups:          row.GroupNames,
+			DirectoryGroups: memberDirectoryGroups(row.GroupIds, row.GroupIDNames),
+			InDirectory:     new(row.InDirectory),
+			// Never nil, so a member with no mapped roles says so as an empty
+			// list.
+			DirectoryRoleSources: append([]*gen.AccessMemberDirectoryRoleSource{}, sourcesByMember[row.ID]...),
 		})
 	}
 	return page, nil
+}
+
+// memberDirectoryGroups pairs the parallel group ID and name arrays that
+// ListAccessMembers returns.
+func memberDirectoryGroups(ids []uuid.UUID, names []string) []*gen.AccessMemberDirectoryGroup {
+	groups := make([]*gen.AccessMemberDirectoryGroup, 0, len(ids))
+	for i, id := range ids {
+		if i >= len(names) {
+			break
+		}
+		groups = append(groups, &gen.AccessMemberDirectoryGroup{ID: id.String(), Name: names[i]})
+	}
+	return groups
 }
 
 // memberRoleIDs returns every role a member holds, assigned directly or
@@ -952,28 +999,34 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		// roles and nothing the directory owns: a profile this update cannot
 		// alter would read as part of the diff.
 		Before: &gen.AccessMember{
-			ID:               connectedUser.ID,
-			PrincipalUrn:     memberPrincipalURN,
-			Name:             memberName,
-			Email:            connectedUser.Email,
-			PhotoURL:         conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:          existingRoleIDs,
-			JoinedAt:         conv.FromPGTimestamptz(existing.CreatedAt),
-			Department:       nil,
-			Groups:           nil,
-			DirectoryRoleIds: nil,
+			ID:                   connectedUser.ID,
+			PrincipalUrn:         memberPrincipalURN,
+			Name:                 memberName,
+			Email:                connectedUser.Email,
+			PhotoURL:             conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:              existingRoleIDs,
+			JoinedAt:             conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:           nil,
+			Groups:               nil,
+			DirectoryRoleIds:     nil,
+			DirectoryGroups:      nil,
+			InDirectory:          nil,
+			DirectoryRoleSources: nil,
 		},
 		After: &gen.AccessMember{
-			ID:               connectedUser.ID,
-			PrincipalUrn:     memberPrincipalURN,
-			Name:             memberName,
-			Email:            connectedUser.Email,
-			PhotoURL:         conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:          afterRoleIDs,
-			JoinedAt:         conv.FromPGTimestamptz(existing.CreatedAt),
-			Department:       nil,
-			Groups:           nil,
-			DirectoryRoleIds: nil,
+			ID:                   connectedUser.ID,
+			PrincipalUrn:         memberPrincipalURN,
+			Name:                 memberName,
+			Email:                connectedUser.Email,
+			PhotoURL:             conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:              afterRoleIDs,
+			JoinedAt:             conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:           nil,
+			Groups:               nil,
+			DirectoryRoleIds:     nil,
+			DirectoryGroups:      nil,
+			InDirectory:          nil,
+			DirectoryRoleSources: nil,
 		},
 	}
 
@@ -1121,16 +1174,19 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 
 	memberName := conv.Default(connected.DisplayName, connected.Email)
 	after := &gen.AccessMember{
-		ID:               connected.ID,
-		PrincipalUrn:     urn.NewPrincipal(urn.PrincipalTypeUser, connected.ID).String(),
-		Name:             memberName,
-		Email:            connected.Email,
-		PhotoURL:         conv.FromPGText[string](connected.PhotoUrl),
-		RoleIds:          afterRoleIDs,
-		JoinedAt:         conv.FromPGTimestamptz(existing.CreatedAt),
-		Department:       nil,
-		Groups:           nil,
-		DirectoryRoleIds: nil,
+		ID:                   connected.ID,
+		PrincipalUrn:         urn.NewPrincipal(urn.PrincipalTypeUser, connected.ID).String(),
+		Name:                 memberName,
+		Email:                connected.Email,
+		PhotoURL:             conv.FromPGText[string](connected.PhotoUrl),
+		RoleIds:              afterRoleIDs,
+		JoinedAt:             conv.FromPGTimestamptz(existing.CreatedAt),
+		Department:           nil,
+		Groups:               nil,
+		DirectoryRoleIds:     nil,
+		DirectoryGroups:      nil,
+		InDirectory:          nil,
+		DirectoryRoleSources: nil,
 	}
 	safeAfter := MemberRoleState{
 		MemberID:         connected.ID,

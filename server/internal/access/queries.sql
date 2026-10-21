@@ -581,6 +581,11 @@ SELECT
   -- attribute, comes back as an empty string.
   COALESCE(du.attributes ->> 'department_name', '')::text AS department,
   COALESCE(dg_names.group_names, '{}'::text[])::text[] AS group_names,
+  -- The same groups by stable ID. group_ids and group_id_names are parallel
+  -- arrays: entry i of each describes the same group.
+  COALESCE(dg_names.group_ids, '{}'::uuid[])::uuid[] AS group_ids,
+  COALESCE(dg_names.group_id_names, '{}'::text[])::text[] AS group_id_names,
+  (du.id IS NOT NULL)::boolean AS in_directory,
   COALESCE(mapped_roles.role_ids, '{}'::text[])::text[] AS directory_role_ids
 FROM organization_user_relationships AS our
 JOIN users
@@ -603,7 +608,10 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) du ON TRUE
 LEFT JOIN LATERAL (
-  SELECT ARRAY_AGG(DISTINCT dg.name) AS group_names
+  SELECT
+    ARRAY_AGG(DISTINCT dg.name) AS group_names,
+    ARRAY_AGG(dg.id ORDER BY dg.name, dg.id) AS group_ids,
+    ARRAY_AGG(dg.name ORDER BY dg.name, dg.id) AS group_id_names
   FROM directory_user_group_memberships m
   INNER JOIN directory_groups dg
     ON dg.id = m.directory_group_id
@@ -1531,6 +1539,78 @@ WHERE drm.organization_id = @organization_id
   )
 ORDER BY drm.role_urn, drm.source_kind, dg.name, drm.attribute_key, drm.attribute_value, drm.id;
 
+-- name: ListAccessMemberDirectoryRoleSources :many
+-- For every active member, the directory role mappings that currently give
+-- them a role: one row per member and matching mapping, so a role reached
+-- through two groups is listed twice. This is the batch form of
+-- ListUserDirectoryRoleMappingSources: each member's directory profile is
+-- chosen and matched the same way as in ListUserRolePrincipals, and mappings
+-- that point at a deleted role are skipped, as in the mapped half of
+-- ListAccessMembers.
+WITH members AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  JOIN organization_user_relationships AS our
+    ON our.user_id = u.id
+    AND our.organization_id = @organization_id
+    AND our.deleted IS FALSE
+  WHERE u.deleted_at IS NULL
+),
+profiles AS (
+  SELECT members.id AS user_id, p.id AS directory_user_id, p.attributes
+  FROM members
+  CROSS JOIN LATERAL (
+    SELECT d.id, d.attributes
+    FROM directory_users AS d
+    WHERE d.organization_id = @organization_id
+      AND d.deleted IS FALSE
+      AND d.workos_deleted IS FALSE
+      AND (d.user_id = members.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(members.email)))
+    ORDER BY (d.user_id = members.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+    LIMIT 1
+  ) AS p
+)
+SELECT
+  profiles.user_id::text AS user_id,
+  COALESCE(mapped_org_role.id::text, mapped_global_role.id::text)::text AS role_id,
+  drm.id AS mapping_id,
+  drm.source_kind,
+  drm.directory_group_id
+FROM directory_role_mappings AS drm
+JOIN profiles
+  ON (
+    drm.source_kind = 'group'
+    AND EXISTS (
+      SELECT 1
+      FROM directory_user_group_memberships AS m
+      JOIN directory_groups AS dg
+        ON dg.id = m.directory_group_id
+        AND dg.organization_id = drm.organization_id
+        AND dg.deleted IS FALSE
+        AND dg.workos_deleted IS FALSE
+      WHERE m.directory_user_id = profiles.directory_user_id
+        AND m.directory_group_id = drm.directory_group_id
+        AND m.deleted IS FALSE
+    )
+  )
+  OR (
+    drm.source_kind = 'attribute'
+    AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
+  )
+LEFT JOIN organization_roles AS mapped_org_role
+  ON drm.role_urn = 'role:organization:' || mapped_org_role.id::text
+  AND mapped_org_role.organization_id = drm.organization_id
+  AND mapped_org_role.deleted IS FALSE
+  AND mapped_org_role.workos_deleted IS FALSE
+LEFT JOIN global_roles AS mapped_global_role
+  ON drm.role_urn = 'role:global:' || mapped_global_role.id::text
+  AND mapped_global_role.deleted IS FALSE
+  AND mapped_global_role.workos_deleted IS FALSE
+WHERE drm.organization_id = @organization_id
+  AND drm.deleted IS FALSE
+  AND COALESCE(mapped_org_role.id, mapped_global_role.id) IS NOT NULL
+ORDER BY profiles.user_id, role_id, drm.source_kind, drm.id;
+
 -- name: ListDirectoryMappedRoleMemberCounts :many
 -- Per role, the active members who hold it only through a directory role
 -- mapping. Members with a live direct assignment of the same role are left
@@ -1605,6 +1685,23 @@ SELECT
   dg.name AS directory_group_name,
   drm.attribute_key,
   drm.attribute_value,
+  -- A missing source matches nobody: a group mapping whose group is gone or
+  -- tombstoned, or an attribute mapping no live directory user carries. The
+  -- group name is still returned so the mapping can be recognised.
+  (
+    CASE
+      WHEN drm.source_kind = 'group' THEN
+        dg.id IS NULL OR dg.deleted OR dg.workos_deleted
+      ELSE NOT EXISTS (
+        SELECT 1
+        FROM directory_users AS du
+        WHERE du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+          AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    END
+  )::boolean AS source_missing,
   drm.role_urn,
   drm.created_at,
   drm.updated_at

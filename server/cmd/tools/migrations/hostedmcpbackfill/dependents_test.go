@@ -38,14 +38,18 @@ type dependentState struct {
 }
 
 type memJournal struct {
-	mu      sync.Mutex
-	records []JournalRecord
-	failOn  JournalEvent
+	mu       sync.Mutex
+	records  []JournalRecord
+	failOn   JournalEvent
+	onAppend func(JournalRecord)
 }
 
 func (j *memJournal) Append(record JournalRecord) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	if j.onAppend != nil {
+		j.onAppend(record)
+	}
 	if j.failOn != "" && record.Event == j.failOn {
 		return errors.New("journal unavailable")
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -41,7 +42,7 @@ func TestApplyIssuerGate_AssistantFallbackStampsAssistantProvenance(t *testing.T
 		AudienceURN:         urn.NewUserSessionIssuer(uuid.New()).String(),
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		Slug:                "provenance-gate",
 		UserSessionIssuerID: uuid.New(),
 	}
@@ -95,7 +96,7 @@ func TestApplyIssuerGate_RejectedAssistantTokenStampsNothing(t *testing.T) {
 		AudienceURN:         urn.NewUserSessionIssuer(uuid.New()).String(),
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		Slug:                "provenance-gate-reject",
 		UserSessionIssuerID: uuid.New(),
 	}

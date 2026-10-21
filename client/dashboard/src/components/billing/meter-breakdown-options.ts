@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import {
   Bot,
   Building2,
@@ -17,7 +18,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import { type Family } from "@gram/client/models/components/meterusageresponse.js";
+import { type Family } from "@gram/client/models/operations/getmeterusage.js";
 
 export type MeterFamily = Family;
 
@@ -126,11 +127,13 @@ export const METER_FAMILIES: Record<MeterFamily, MeterFamilyDefinition> = {
   },
 };
 
-export function meterBreakdownLabel(
-  family: MeterFamily,
-  value: string,
-): string {
-  for (const group of METER_FAMILIES[family].groups) {
+export function meterBreakdownLabel(family: string, value: string): string {
+  for (const group of enumPresentation(METER_FAMILIES, family, {
+    label: "Unknown",
+    description: "",
+    defaultBreakdown: "",
+    groups: [],
+  }).groups) {
     const option = group.options.find((candidate) => candidate.value === value);
     if (option) return option.label;
   }

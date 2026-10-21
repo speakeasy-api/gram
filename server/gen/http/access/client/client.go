@@ -57,6 +57,30 @@ type Client struct {
 	// the deleteDirectoryRoleMapping endpoint.
 	DeleteDirectoryRoleMappingDoer goahttp.Doer
 
+	// PreviewDirectoryRoleSetup Doer is the HTTP client used to make requests to
+	// the previewDirectoryRoleSetup endpoint.
+	PreviewDirectoryRoleSetupDoer goahttp.Doer
+
+	// ApplyDirectoryRoleSetup Doer is the HTTP client used to make requests to the
+	// applyDirectoryRoleSetup endpoint.
+	ApplyDirectoryRoleSetupDoer goahttp.Doer
+
+	// ListDirectoryReviewItems Doer is the HTTP client used to make requests to
+	// the listDirectoryReviewItems endpoint.
+	ListDirectoryReviewItemsDoer goahttp.Doer
+
+	// ResolveDirectoryReviewItem Doer is the HTTP client used to make requests to
+	// the resolveDirectoryReviewItem endpoint.
+	ResolveDirectoryReviewItemDoer goahttp.Doer
+
+	// GetDirectoryReviewSettings Doer is the HTTP client used to make requests to
+	// the getDirectoryReviewSettings endpoint.
+	GetDirectoryReviewSettingsDoer goahttp.Doer
+
+	// UpdateDirectoryReviewSettings Doer is the HTTP client used to make requests
+	// to the updateDirectoryReviewSettings endpoint.
+	UpdateDirectoryReviewSettingsDoer goahttp.Doer
+
 	// ListScopes Doer is the HTTP client used to make requests to the listScopes
 	// endpoint.
 	ListScopesDoer goahttp.Doer
@@ -179,6 +203,12 @@ func NewClient(
 		SetDirectoryRoleMappingDoer:              doer,
 		SetDirectoryRoleMappingsDoer:             doer,
 		DeleteDirectoryRoleMappingDoer:           doer,
+		PreviewDirectoryRoleSetupDoer:            doer,
+		ApplyDirectoryRoleSetupDoer:              doer,
+		ListDirectoryReviewItemsDoer:             doer,
+		ResolveDirectoryReviewItemDoer:           doer,
+		GetDirectoryReviewSettingsDoer:           doer,
+		UpdateDirectoryReviewSettingsDoer:        doer,
 		ListScopesDoer:                           doer,
 		ListMembersDoer:                          doer,
 		ListGrantsDoer:                           doer,
@@ -445,6 +475,150 @@ func (c *Client) DeleteDirectoryRoleMapping() goa.Endpoint {
 		resp, err := c.DeleteDirectoryRoleMappingDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "deleteDirectoryRoleMapping", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// PreviewDirectoryRoleSetup returns an endpoint that makes HTTP requests to
+// the access service previewDirectoryRoleSetup server.
+func (c *Client) PreviewDirectoryRoleSetup() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePreviewDirectoryRoleSetupRequest(c.encoder)
+		decodeResponse = DecodePreviewDirectoryRoleSetupResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPreviewDirectoryRoleSetupRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PreviewDirectoryRoleSetupDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "previewDirectoryRoleSetup", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ApplyDirectoryRoleSetup returns an endpoint that makes HTTP requests to the
+// access service applyDirectoryRoleSetup server.
+func (c *Client) ApplyDirectoryRoleSetup() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeApplyDirectoryRoleSetupRequest(c.encoder)
+		decodeResponse = DecodeApplyDirectoryRoleSetupResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildApplyDirectoryRoleSetupRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ApplyDirectoryRoleSetupDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "applyDirectoryRoleSetup", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDirectoryReviewItems returns an endpoint that makes HTTP requests to the
+// access service listDirectoryReviewItems server.
+func (c *Client) ListDirectoryReviewItems() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDirectoryReviewItemsRequest(c.encoder)
+		decodeResponse = DecodeListDirectoryReviewItemsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDirectoryReviewItemsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDirectoryReviewItemsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listDirectoryReviewItems", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ResolveDirectoryReviewItem returns an endpoint that makes HTTP requests to
+// the access service resolveDirectoryReviewItem server.
+func (c *Client) ResolveDirectoryReviewItem() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeResolveDirectoryReviewItemRequest(c.encoder)
+		decodeResponse = DecodeResolveDirectoryReviewItemResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildResolveDirectoryReviewItemRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ResolveDirectoryReviewItemDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "resolveDirectoryReviewItem", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetDirectoryReviewSettings returns an endpoint that makes HTTP requests to
+// the access service getDirectoryReviewSettings server.
+func (c *Client) GetDirectoryReviewSettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetDirectoryReviewSettingsRequest(c.encoder)
+		decodeResponse = DecodeGetDirectoryReviewSettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetDirectoryReviewSettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDirectoryReviewSettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "getDirectoryReviewSettings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateDirectoryReviewSettings returns an endpoint that makes HTTP requests
+// to the access service updateDirectoryReviewSettings server.
+func (c *Client) UpdateDirectoryReviewSettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateDirectoryReviewSettingsRequest(c.encoder)
+		decodeResponse = DecodeUpdateDirectoryReviewSettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateDirectoryReviewSettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateDirectoryReviewSettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "updateDirectoryReviewSettings", err)
 		}
 		return decodeResponse(resp)
 	}

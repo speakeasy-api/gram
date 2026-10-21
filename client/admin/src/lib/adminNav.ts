@@ -98,6 +98,12 @@ export const ADMIN_NAV_GROUPS = [
         icon: KeyRoundIcon,
       },
       {
+        to: "/upstream-oauth-migration",
+        label: "Upstream OAuth migration",
+        keywords: "oauth clients associations credentials backfill migrate",
+        icon: KeyRoundIcon,
+      },
+      {
         to: "/external-mcp-migration",
         label: "External MCP migration",
         keywords: "external mcp attachments remote servers migrate cutover",
