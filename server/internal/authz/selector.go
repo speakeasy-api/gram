@@ -236,6 +236,11 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		if k == SelectorKeyClientType && v != WildcardResource && !validAuthClientTypes[v] {
 			return fmt.Errorf("invalid client_type value %q", v)
 		}
+		if k == SelectorKeyConnectionOwner {
+			if clientType, ok := sel[SelectorKeyClientType]; ok && clientType != WildcardResource && clientType != AuthClientTypeRemoteSession {
+				return fmt.Errorf("selector key %q requires client_type %q", k, AuthClientTypeRemoteSession)
+			}
+		}
 		if expectedKind == ResourceKindMCPAuthClient && v == "" {
 			return fmt.Errorf("selector key %q must not be empty", k)
 		}

@@ -265,7 +265,7 @@ func liveOverlaps(policy []authz.Grant, grant authz.Grant, exclusion authz.Scope
 		inherited := !authz.IsDirectGrant(restriction)
 		outranked := inherited &&
 			authz.ExclusionYieldsToDirectGrants(grant.Scope) &&
-			authz.GrantsContainSelector(authz.DirectOverrideGrants(policy), grant.Scope, overlap)
+			authz.GrantsContainSelectorFor(representedUserID, authz.DirectOverrideGrants(policy), grant.Scope, overlap)
 		if !outranked {
 			overlaps = append(overlaps, liveOverlap{selector: overlap, inherited: inherited})
 		}

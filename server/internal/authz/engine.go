@@ -417,8 +417,8 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 // "denial" on every members' page load and mislead admins into granting a scope
 // that was never actually required.
 //
-// Returns true when RBAC is not enforced for the request (matching Require's
-// short-circuit). A non-nil error is returned only for genuine evaluation
+// When RBAC is not enforced it returns true unless a check is an auth-client
+// check, which is always denied there (matching Require's short-circuit). A non-nil error is returned only for genuine evaluation
 // failures (missing prepared grants, invalid check); a merely unsatisfied check
 // yields (false, nil).
 func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
@@ -455,7 +455,8 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 }
 
 // Filter evaluates each check and returns the resource IDs of those the caller
-// is authorized for. When RBAC is not enforced all resource IDs are returned.
+// is authorized for. When RBAC is not enforced all resource IDs are returned
+// except those of auth-client checks, which are omitted.
 func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
@@ -558,7 +559,8 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 // where every check carries the same toolset/server ResourceID and per-tool
 // granularity lives in the Tool dimension.
 //
-// When RBAC is not enforced every entry is true. An empty input returns an
+// When RBAC is not enforced every entry is true except auth-client checks,
+// which are false. An empty input returns an
 // empty slice, no log. A single challenge-log entry is emitted for the batch
 // (same as [Filter]); per-check logs are intentionally avoided so callers can
 // safely use this with large input sets like a full tools/list.
