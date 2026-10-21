@@ -266,6 +266,14 @@ func (s *seeder) chTelemetryChecks() []chCheck {
 			settings: "",
 			msg:      "demo seed postflight: mediated risk findings missing complete MCP-only attribution",
 		},
+		// The dedicated Fleet exposure example survives reseeds exactly once.
+		{
+			cond: `(SELECT count() FROM risk_findings
+   WHERE organization_id = @org
+     AND description = '` + fleetFindingDescription + `') != 1`,
+			settings: "",
+			msg:      "demo seed postflight: expected one Fleet transcript finding",
+		},
 		// Fewer than four distinct rule clusters means the weighted type draw
 		// collapsed and the Watchdog list is a flat rotation again.
 		{

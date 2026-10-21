@@ -3716,6 +3716,7 @@ func marshalAgentsManagedAgentToManagedAgentResponseBody(v *agents.ManagedAgent)
 		Name:                        v.Name,
 		ProjectID:                   v.ProjectID,
 		Lifecycle:                   string(v.Lifecycle),
+		LastCredentialUsedAt:        v.LastCredentialUsedAt,
 		CreatedAt:                   v.CreatedAt,
 		UpdatedAt:                   v.UpdatedAt,
 	}

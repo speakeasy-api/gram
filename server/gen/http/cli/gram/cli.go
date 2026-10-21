@@ -118,7 +118,7 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"external receive-work-os-webhook",
-		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
+		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges|batch-agent-badges)",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
@@ -252,6 +252,8 @@ func ParseEndpoint(
 		killswitchesListFlags             = flag.NewFlagSet("list", flag.ExitOnError)
 		killswitchesListCapabilityKeyFlag = killswitchesListFlags.String("capability-key", "", "")
 		killswitchesListUserIDFlag        = killswitchesListFlags.String("user-id", "", "")
+		killswitchesListAgentIDFlag       = killswitchesListFlags.String("agent-id", "", "")
+		killswitchesListPrincipalKindFlag = killswitchesListFlags.String("principal-kind", "", "")
 		killswitchesListStatusFlag        = killswitchesListFlags.String("status", "", "")
 		killswitchesListLimitFlag         = killswitchesListFlags.String("limit", "", "")
 		killswitchesListCursorFlag        = killswitchesListFlags.String("cursor", "", "")
@@ -280,6 +282,10 @@ func ParseEndpoint(
 		killswitchesBatchUserBadgesFlags            = flag.NewFlagSet("batch-user-badges", flag.ExitOnError)
 		killswitchesBatchUserBadgesBodyFlag         = killswitchesBatchUserBadgesFlags.String("body", "REQUIRED", "")
 		killswitchesBatchUserBadgesSessionTokenFlag = killswitchesBatchUserBadgesFlags.String("session-token", "", "")
+
+		killswitchesBatchAgentBadgesFlags            = flag.NewFlagSet("batch-agent-badges", flag.ExitOnError)
+		killswitchesBatchAgentBadgesBodyFlag         = killswitchesBatchAgentBadgesFlags.String("body", "REQUIRED", "")
+		killswitchesBatchAgentBadgesSessionTokenFlag = killswitchesBatchAgentBadgesFlags.String("session-token", "", "")
 
 		aboutFlags = flag.NewFlagSet("about", flag.ContinueOnError)
 
@@ -5164,6 +5170,7 @@ func ParseEndpoint(
 	killswitchesLiftFlags.Usage = killswitchesLiftUsage
 	killswitchesPreviewOverlapsFlags.Usage = killswitchesPreviewOverlapsUsage
 	killswitchesBatchUserBadgesFlags.Usage = killswitchesBatchUserBadgesUsage
+	killswitchesBatchAgentBadgesFlags.Usage = killswitchesBatchAgentBadgesUsage
 
 	aboutFlags.Usage = aboutUsage
 	aboutOpenapiFlags.Usage = aboutOpenapiUsage
@@ -6499,6 +6506,9 @@ func ParseEndpoint(
 
 			case "batch-user-badges":
 				epf = killswitchesBatchUserBadgesFlags
+
+			case "batch-agent-badges":
+				epf = killswitchesBatchAgentBadgesFlags
 
 			}
 
@@ -9594,7 +9604,7 @@ func ParseEndpoint(
 				data, err = killswitchesc.BuildListMCPServersPayload(*killswitchesListMCPServersSessionTokenFlag)
 			case "list":
 				endpoint = c.List()
-				data, err = killswitchesc.BuildListPayload(*killswitchesListCapabilityKeyFlag, *killswitchesListUserIDFlag, *killswitchesListStatusFlag, *killswitchesListLimitFlag, *killswitchesListCursorFlag, *killswitchesListSessionTokenFlag)
+				data, err = killswitchesc.BuildListPayload(*killswitchesListCapabilityKeyFlag, *killswitchesListUserIDFlag, *killswitchesListAgentIDFlag, *killswitchesListPrincipalKindFlag, *killswitchesListStatusFlag, *killswitchesListLimitFlag, *killswitchesListCursorFlag, *killswitchesListSessionTokenFlag)
 			case "get":
 				endpoint = c.Get()
 				data, err = killswitchesc.BuildGetPayload(*killswitchesGetIDFlag, *killswitchesGetSessionTokenFlag)
@@ -9613,6 +9623,9 @@ func ParseEndpoint(
 			case "batch-user-badges":
 				endpoint = c.BatchUserBadges()
 				data, err = killswitchesc.BuildBatchUserBadgesPayload(*killswitchesBatchUserBadgesBodyFlag, *killswitchesBatchUserBadgesSessionTokenFlag)
+			case "batch-agent-badges":
+				endpoint = c.BatchAgentBadges()
+				data, err = killswitchesc.BuildBatchAgentBadgesPayload(*killswitchesBatchAgentBadgesBodyFlag, *killswitchesBatchAgentBadgesSessionTokenFlag)
 			}
 		case "about":
 			c := aboutc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -12735,7 +12748,7 @@ func externalReceiveWorkOSWebhookUsage() {
 // killswitchesUsage displays the usage of the killswitches command and its
 // subcommands.
 func killswitchesUsage() {
-	fmt.Fprintln(os.Stderr, `Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.`)
+	fmt.Fprintln(os.Stderr, `Manage MCP tool-call killswitches for users and registered agents in the active organization. Requires an ordinary live organization-administrator session.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] killswitches COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-capabilities: ListCapabilities implements listCapabilities.`)
@@ -12747,6 +12760,7 @@ func killswitchesUsage() {
 	fmt.Fprintln(os.Stderr, `    lift: Lift implements lift.`)
 	fmt.Fprintln(os.Stderr, `    preview-overlaps: PreviewOverlaps implements previewOverlaps.`)
 	fmt.Fprintln(os.Stderr, `    batch-user-badges: BatchUserBadges implements batchUserBadges.`)
+	fmt.Fprintln(os.Stderr, `    batch-agent-badges: BatchAgentBadges implements batchAgentBadges.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s killswitches COMMAND --help\n", os.Args[0])
@@ -12792,6 +12806,8 @@ func killswitchesListUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] killswitches list", os.Args[0])
 	fmt.Fprint(os.Stderr, " -capability-key STRING")
 	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -agent-id STRING")
+	fmt.Fprint(os.Stderr, " -principal-kind STRING")
 	fmt.Fprint(os.Stderr, " -status STRING")
 	fmt.Fprint(os.Stderr, " -limit INT32")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
@@ -12805,6 +12821,8 @@ func killswitchesListUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -capability-key STRING: `)
 	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -agent-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -principal-kind STRING: `)
 	fmt.Fprintln(os.Stderr, `    -status STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT32: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
@@ -12812,7 +12830,7 @@ func killswitchesListUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches list --capability-key \"mcp_tool_calls\" --user-id \"abc123\" --status \"scheduled\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches list --capability-key \"mcp_tool_calls\" --user-id \"abc123\" --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --principal-kind \"agent\" --status \"scheduled\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
 }
 
 func killswitchesGetUsage() {
@@ -12852,7 +12870,7 @@ func killswitchesCreateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches create --body '{\n      \"capability_key\": \"mcp_tool_calls\",\n      \"external_note\": \"aaa\",\n      \"internal_note\": \"aaa\",\n      \"operation_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"schedule\": {\n         \"end\": \"bounded\",\n         \"ends_at\": \"1970-01-01T00:00:01Z\",\n         \"start\": \"scheduled\",\n         \"starts_at\": \"1970-01-01T00:00:01Z\"\n      },\n      \"scope\": {\n         \"server_ids\": [\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\"\n         ],\n         \"type\": \"selected_servers\"\n      },\n      \"user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches create --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"capability_key\": \"mcp_tool_calls\",\n      \"external_note\": \"aaa\",\n      \"internal_note\": \"aaa\",\n      \"operation_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"schedule\": {\n         \"end\": \"bounded\",\n         \"ends_at\": \"1970-01-01T00:00:01Z\",\n         \"start\": \"scheduled\",\n         \"starts_at\": \"1970-01-01T00:00:01Z\"\n      },\n      \"scope\": {\n         \"server_ids\": [\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\"\n         ],\n         \"type\": \"selected_servers\"\n      },\n      \"user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func killswitchesEditUsage() {
@@ -12912,7 +12930,7 @@ func killswitchesPreviewOverlapsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches preview-overlaps --body '{\n      \"capability_key\": \"mcp_tool_calls\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"schedule\": {\n         \"end\": \"bounded\",\n         \"ends_at\": \"1970-01-01T00:00:01Z\",\n         \"start\": \"scheduled\",\n         \"starts_at\": \"1970-01-01T00:00:01Z\"\n      },\n      \"scope\": {\n         \"server_ids\": [\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\"\n         ],\n         \"type\": \"selected_servers\"\n      },\n      \"user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches preview-overlaps --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"capability_key\": \"mcp_tool_calls\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"schedule\": {\n         \"end\": \"bounded\",\n         \"ends_at\": \"1970-01-01T00:00:01Z\",\n         \"start\": \"scheduled\",\n         \"starts_at\": \"1970-01-01T00:00:01Z\"\n      },\n      \"scope\": {\n         \"server_ids\": [\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\"\n         ],\n         \"type\": \"selected_servers\"\n      },\n      \"user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func killswitchesBatchUserBadgesUsage() {
@@ -12933,6 +12951,26 @@ func killswitchesBatchUserBadgesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches batch-user-badges --body '{\n      \"user_ids\": [\n         \"abc123\",\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+}
+
+func killswitchesBatchAgentBadgesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] killswitches batch-agent-badges", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `BatchAgentBadges implements batchAgentBadges.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches batch-agent-badges --body '{\n      \"agent_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\",\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 // aboutUsage displays the usage of the about command and its subcommands.

@@ -28,6 +28,7 @@ type Server struct {
 	Lift             http.Handler
 	PreviewOverlaps  http.Handler
 	BatchUserBadges  http.Handler
+	BatchAgentBadges http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -66,6 +67,7 @@ func New(
 			{"Lift", "POST", "/rpc/killswitches.lift"},
 			{"PreviewOverlaps", "POST", "/rpc/killswitches.previewOverlaps"},
 			{"BatchUserBadges", "POST", "/rpc/killswitches.batchUserBadges"},
+			{"BatchAgentBadges", "POST", "/rpc/killswitches.batchAgentBadges"},
 		},
 		ListCapabilities: NewListCapabilitiesHandler(e.ListCapabilities, mux, decoder, encoder, errhandler, formatter),
 		ListMCPServers:   NewListMCPServersHandler(e.ListMCPServers, mux, decoder, encoder, errhandler, formatter),
@@ -76,6 +78,7 @@ func New(
 		Lift:             NewLiftHandler(e.Lift, mux, decoder, encoder, errhandler, formatter),
 		PreviewOverlaps:  NewPreviewOverlapsHandler(e.PreviewOverlaps, mux, decoder, encoder, errhandler, formatter),
 		BatchUserBadges:  NewBatchUserBadgesHandler(e.BatchUserBadges, mux, decoder, encoder, errhandler, formatter),
+		BatchAgentBadges: NewBatchAgentBadgesHandler(e.BatchAgentBadges, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -93,6 +96,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Lift = m(s.Lift)
 	s.PreviewOverlaps = m(s.PreviewOverlaps)
 	s.BatchUserBadges = m(s.BatchUserBadges)
+	s.BatchAgentBadges = m(s.BatchAgentBadges)
 }
 
 // MethodNames returns the methods served.
@@ -109,6 +113,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountLiftHandler(mux, h.Lift)
 	MountPreviewOverlapsHandler(mux, h.PreviewOverlaps)
 	MountBatchUserBadgesHandler(mux, h.BatchUserBadges)
+	MountBatchAgentBadgesHandler(mux, h.BatchAgentBadges)
 }
 
 // Mount configures the mux to serve the killswitches endpoints.
@@ -570,6 +575,59 @@ func NewBatchUserBadgesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "batchUserBadges")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "killswitches")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountBatchAgentBadgesHandler configures the mux to serve the "killswitches"
+// service "batchAgentBadges" endpoint.
+func MountBatchAgentBadgesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/killswitches.batchAgentBadges", f)
+}
+
+// NewBatchAgentBadgesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "killswitches" service "batchAgentBadges" endpoint.
+func NewBatchAgentBadgesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeBatchAgentBadgesRequest(mux, decoder)
+		encodeResponse = EncodeBatchAgentBadgesResponse(encoder)
+		encodeError    = EncodeBatchAgentBadgesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "batchAgentBadges")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "killswitches")
 		payload, err := decodeRequest(r)
 		if err != nil {

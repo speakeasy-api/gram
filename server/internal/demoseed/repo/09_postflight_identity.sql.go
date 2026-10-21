@@ -19,8 +19,10 @@ SELECT count(*) FROM api_keys WHERE organization_id = $1::text
 // Postflight asserts, second half (postgres.sql lines 3693-4302): identity,
 // connections, workloads, Slack, widgets, and sigint. Each query is one
 // count the Go code in seed_09_postflight_identity.go checks.
-// The seed never creates API keys: any row left here was minted by a demo
-// visitor and would grant programmatic access that survives the reseed.
+// The seed writes only three inert agent keys: any other row was minted by a
+// demo visitor and would grant programmatic access that survives the reseed.
+// Local fixtures restore the separate developer key afterwards; it never
+// belongs to the demo org.
 func (q *Queries) PostflightIDAPIKeys(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDAPIKeys, orgID)
 	var count int64
@@ -48,6 +50,51 @@ func (q *Queries) PostflightIDAdmissionsOutreachingIssuer(ctx context.Context, o
 	return count, err
 }
 
+const postflightIDAgentCredentialLifecycleViolations = `-- name: PostflightIDAgentCredentialLifecycleViolations :one
+SELECT count(*) FROM (
+  SELECT a.created_at, a.suspended_at, a.revoked_at,
+    us.last_used_at AS used_at, us.deleted_at
+  FROM agents a JOIN user_sessions us ON us.subject_urn = 'agent:' || a.id::text
+  WHERE a.organization_id = $1::text AND us.organization_id = $1::text
+  UNION ALL
+  SELECT a.created_at, a.suspended_at, a.revoked_at,
+    k.last_accessed_at, k.deleted_at
+  FROM agents a JOIN api_keys k ON k.subject_urn = 'agent:' || a.id::text
+  WHERE a.organization_id = $1::text AND k.organization_id = $1::text
+) evidence
+WHERE used_at > now() OR used_at < created_at
+  OR used_at > suspended_at OR used_at > revoked_at OR used_at > deleted_at
+  OR (revoked_at IS NOT NULL AND deleted_at IS DISTINCT FROM revoked_at)
+`
+
+// No credential is used before its agent exists or after it is suspended,
+// revoked or deleted, and a revoked agent's credentials end with it.
+func (q *Queries) PostflightIDAgentCredentialLifecycleViolations(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDAgentCredentialLifecycleViolations, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDAgentCredentials = `-- name: PostflightIDAgentCredentials :one
+SELECT ((SELECT count(*) FROM user_sessions
+   WHERE organization_id = $1::text AND subject_urn = $2::text)
+  + (SELECT count(*) FROM api_keys
+     WHERE organization_id = $1::text AND subject_urn = $2::text))::bigint AS total
+`
+
+type PostflightIDAgentCredentialsParams struct {
+	OrgID    string
+	AgentUrn string
+}
+
+func (q *Queries) PostflightIDAgentCredentials(ctx context.Context, arg PostflightIDAgentCredentialsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDAgentCredentials, arg.OrgID, arg.AgentUrn)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
+}
+
 const postflightIDAgentGrants = `-- name: PostflightIDAgentGrants :one
 SELECT count(*) FROM principal_grants
 WHERE organization_id = $1::text AND principal_urn LIKE 'agent:%'
@@ -55,6 +102,24 @@ WHERE organization_id = $1::text AND principal_urn LIKE 'agent:%'
 
 func (q *Queries) PostflightIDAgentGrants(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDAgentGrants, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDAgentRestrictions = `-- name: PostflightIDAgentRestrictions :one
+SELECT count(*) FROM killswitch_prescriptions
+WHERE organization_id = $1::text AND principal_kind = 'agent'
+  AND principal_key = ($2::uuid)::text
+`
+
+type PostflightIDAgentRestrictionsParams struct {
+	OrgID   string
+	AgentID uuid.UUID
+}
+
+func (q *Queries) PostflightIDAgentRestrictions(ctx context.Context, arg PostflightIDAgentRestrictionsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDAgentRestrictions, arg.OrgID, arg.AgentID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -338,6 +403,197 @@ func (q *Queries) PostflightIDExternalOAuthMetadata(ctx context.Context, project
 	return count, err
 }
 
+const postflightIDFleetAssistantThreads = `-- name: PostflightIDFleetAssistantThreads :one
+SELECT count(*) FROM assistant_threads
+WHERE project_id = $1::uuid AND assistant_id = ANY($2::uuid[])
+`
+
+type PostflightIDFleetAssistantThreadsParams struct {
+	ProjectID    uuid.UUID
+	AssistantIds []uuid.UUID
+}
+
+func (q *Queries) PostflightIDFleetAssistantThreads(ctx context.Context, arg PostflightIDFleetAssistantThreadsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDFleetAssistantThreads, arg.ProjectID, arg.AssistantIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDFleetAssistants = `-- name: PostflightIDFleetAssistants :one
+SELECT count(*) FROM assistants
+WHERE project_id = $1::uuid AND id = ANY($2::uuid[])
+`
+
+type PostflightIDFleetAssistantsParams struct {
+	ProjectID    uuid.UUID
+	AssistantIds []uuid.UUID
+}
+
+func (q *Queries) PostflightIDFleetAssistants(ctx context.Context, arg PostflightIDFleetAssistantsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDFleetAssistants, arg.ProjectID, arg.AssistantIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDFleetCoverageInvalid = `-- name: PostflightIDFleetCoverageInvalid :one
+WITH evidence AS (
+  SELECT subject_urn, last_used_at AS used_at FROM user_sessions
+  WHERE organization_id = $2::text
+  UNION ALL
+  SELECT subject_urn, last_accessed_at FROM api_keys
+  WHERE organization_id = $2::text
+), recent AS (
+  SELECT a.id, a.project_id, a.owner_user_id FROM agents a
+  JOIN evidence e ON e.subject_urn = 'agent:' || a.id::text
+  WHERE a.organization_id = $2::text
+    AND e.used_at >= now() - interval '24 hours'
+  GROUP BY a.id
+)
+SELECT (CASE WHEN count(*) = 8
+    AND count(*) FILTER (WHERE r.project_id IS NULL) = 4
+    AND count(*) FILTER (WHERE r.project_id = $1::uuid) = 4
+    AND count(DISTINCT d.attributes->>'department_name') = 4
+  THEN 0 ELSE 1 END)::bigint AS stray
+FROM recent r
+JOIN directory_users d
+  ON d.organization_id = $2::text AND d.user_id = r.owner_user_id
+`
+
+type PostflightIDFleetCoverageInvalidParams struct {
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+// Fleet coverage is a contract, not names that happen to populate a table:
+// eight agents with evidence in the last day, four org-wide and four in the
+// project, owned across four directory departments.
+func (q *Queries) PostflightIDFleetCoverageInvalid(ctx context.Context, arg PostflightIDFleetCoverageInvalidParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDFleetCoverageInvalid, arg.ProjectID, arg.OrgID)
+	var stray int64
+	err := row.Scan(&stray)
+	return stray, err
+}
+
+const postflightIDFleetFinding = `-- name: PostflightIDFleetFinding :one
+SELECT count(*) FROM risk_results
+WHERE organization_id = $1::text AND id = $2::uuid
+  AND chat_message_id = $3::uuid AND found IS TRUE
+`
+
+type PostflightIDFleetFindingParams struct {
+	OrgID     string
+	RiskID    uuid.UUID
+	MessageID uuid.UUID
+}
+
+func (q *Queries) PostflightIDFleetFinding(ctx context.Context, arg PostflightIDFleetFindingParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDFleetFinding, arg.OrgID, arg.RiskID, arg.MessageID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDFleetMessages = `-- name: PostflightIDFleetMessages :one
+SELECT count(*) FROM chat_messages
+WHERE project_id = $1::uuid AND chat_id = ANY($2::uuid[])
+`
+
+type PostflightIDFleetMessagesParams struct {
+	ProjectID uuid.UUID
+	ChatIds   []uuid.UUID
+}
+
+func (q *Queries) PostflightIDFleetMessages(ctx context.Context, arg PostflightIDFleetMessagesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDFleetMessages, arg.ProjectID, arg.ChatIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDFleetRecentAssistants = `-- name: PostflightIDFleetRecentAssistants :one
+WITH latest AS (
+  SELECT c.id FROM chats c JOIN chat_messages m ON m.chat_id = c.id
+  WHERE c.organization_id = $3::text AND c.project_id = $1::uuid
+  GROUP BY c.id ORDER BY max(m.created_at) DESC LIMIT 50
+)
+SELECT count(DISTINCT t.assistant_id) FROM assistant_threads t
+JOIN latest ON latest.id = t.chat_id
+WHERE t.project_id = $1::uuid
+  AND t.last_event_at >= now() - interval '24 hours'
+  AND t.assistant_id = ANY($2::uuid[])
+`
+
+type PostflightIDFleetRecentAssistantsParams struct {
+	ProjectID    uuid.UUID
+	AssistantIds []uuid.UUID
+	OrgID        string
+}
+
+// Every Fleet assistant has recent evidence in the first page of captures.
+func (q *Queries) PostflightIDFleetRecentAssistants(ctx context.Context, arg PostflightIDFleetRecentAssistantsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDFleetRecentAssistants, arg.ProjectID, arg.AssistantIds, arg.OrgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDFleetThreadViolations = `-- name: PostflightIDFleetThreadViolations :one
+SELECT count(*) FROM assistant_threads t
+JOIN chats c ON c.id = t.chat_id
+JOIN assistants a ON a.id = t.assistant_id
+WHERE t.project_id = $1::uuid
+  AND t.assistant_id = ANY($2::uuid[])
+  AND (a.project_id <> $1::uuid OR c.project_id <> $1::uuid
+    OR t.last_event_at > now() OR t.last_event_at < a.created_at)
+`
+
+type PostflightIDFleetThreadViolationsParams struct {
+	ProjectID    uuid.UUID
+	AssistantIds []uuid.UUID
+}
+
+func (q *Queries) PostflightIDFleetThreadViolations(ctx context.Context, arg PostflightIDFleetThreadViolationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDFleetThreadViolations, arg.ProjectID, arg.AssistantIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDFleetUnattributedCaptures = `-- name: PostflightIDFleetUnattributedCaptures :one
+SELECT count(*) FROM chats
+WHERE organization_id = $1::text AND user_id IS NULL AND (
+  (id = $2::uuid AND external_user_id = $3::text)
+  OR (id = $4::uuid AND external_user_id = $5::text)
+  OR (id = $6::uuid AND external_user_id IS NULL))
+`
+
+type PostflightIDFleetUnattributedCapturesParams struct {
+	OrgID           string
+	ExternalChatID  uuid.UUID
+	ExternalUserID  string
+	CollisionChatID uuid.UUID
+	CollisionUserID string
+	UnknownChatID   uuid.UUID
+}
+
+// The external, same-string directory-id and unknown captures keep exactly
+// the attribution they were written with.
+func (q *Queries) PostflightIDFleetUnattributedCaptures(ctx context.Context, arg PostflightIDFleetUnattributedCapturesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDFleetUnattributedCaptures,
+		arg.OrgID,
+		arg.ExternalChatID,
+		arg.ExternalUserID,
+		arg.CollisionChatID,
+		arg.CollisionUserID,
+		arg.UnknownChatID,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDGitHubCheckAccessGrants = `-- name: PostflightIDGitHubCheckAccessGrants :one
 SELECT count(*) FROM principal_grants
 WHERE organization_id = $1::text
@@ -358,6 +614,19 @@ func (q *Queries) PostflightIDGitHubCheckAccessGrants(ctx context.Context, arg P
 		arg.DirectGrant,
 		arg.WildcardGrant,
 	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDHistoricalAssistantThreads = `-- name: PostflightIDHistoricalAssistantThreads :one
+SELECT count(*) FROM assistant_threads
+WHERE project_id = $1::uuid
+  AND last_event_at < now() - interval '24 hours'
+`
+
+func (q *Queries) PostflightIDHistoricalAssistantThreads(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDHistoricalAssistantThreads, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -642,6 +911,24 @@ func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Conte
 	return count, err
 }
 
+const postflightIDOldAgentSessions = `-- name: PostflightIDOldAgentSessions :one
+SELECT count(*) FROM user_sessions
+WHERE organization_id = $1::text AND subject_urn = $2::text
+  AND last_used_at < now() - interval '24 hours'
+`
+
+type PostflightIDOldAgentSessionsParams struct {
+	OrgID    string
+	AgentUrn string
+}
+
+func (q *Queries) PostflightIDOldAgentSessions(ctx context.Context, arg PostflightIDOldAgentSessionsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDOldAgentSessions, arg.OrgID, arg.AgentUrn)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDOrgUserSessionIssuers = `-- name: PostflightIDOrgUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers
 WHERE organization_id = $1::text AND project_id IS NULL AND deleted IS FALSE
@@ -732,6 +1019,26 @@ func (q *Queries) PostflightIDReadyEMABindings(ctx context.Context, arg Postflig
 	return count, err
 }
 
+const postflightIDRecentExpiredAgentSession = `-- name: PostflightIDRecentExpiredAgentSession :one
+SELECT count(*) FROM user_sessions
+WHERE organization_id = $1::text AND project_id = $2::uuid
+  AND subject_urn = $3::text
+  AND last_used_at >= now() - interval '24 hours' AND expires_at < now()
+`
+
+type PostflightIDRecentExpiredAgentSessionParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+	AgentUrn  string
+}
+
+func (q *Queries) PostflightIDRecentExpiredAgentSession(ctx context.Context, arg PostflightIDRecentExpiredAgentSessionParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDRecentExpiredAgentSession, arg.OrgID, arg.ProjectID, arg.AgentUrn)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDRemoteIdentityBindings = `-- name: PostflightIDRemoteIdentityBindings :one
 SELECT count(*)
 FROM remote_session_client_user_session_issuers link
@@ -759,6 +1066,31 @@ type PostflightIDRemoteIdentityClientsParams struct {
 
 func (q *Queries) PostflightIDRemoteIdentityClients(ctx context.Context, arg PostflightIDRemoteIdentityClientsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDRemoteIdentityClients, arg.ProjectID, arg.OrgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDRevokedAPIKeys = `-- name: PostflightIDRevokedAPIKeys :one
+SELECT count(*) FROM api_keys
+WHERE organization_id = $1::text AND deleted_at IS NOT NULL
+`
+
+func (q *Queries) PostflightIDRevokedAPIKeys(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDRevokedAPIKeys, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDRevokedAgentSessions = `-- name: PostflightIDRevokedAgentSessions :one
+SELECT count(*) FROM user_sessions
+WHERE organization_id = $1::text AND subject_urn LIKE 'agent:%'
+  AND deleted_at IS NOT NULL
+`
+
+func (q *Queries) PostflightIDRevokedAgentSessions(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDRevokedAgentSessions, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1241,6 +1573,37 @@ func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg Pos
 		arg.SlackServerID,
 		arg.ProjectID,
 	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDUsableAgentKeys = `-- name: PostflightIDUsableAgentKeys :one
+SELECT count(*) FROM api_keys
+WHERE organization_id = $1::text
+  AND (expires_at IS NULL OR expires_at >= now()
+    OR key_hash NOT LIKE 'DEMO-NOT-A-VALID-HASH-%' OR cardinality(scopes) <> 0
+    OR delegated_grants IS DISTINCT FROM '[]'::jsonb
+    OR subject_urn NOT LIKE 'agent:%')
+`
+
+func (q *Queries) PostflightIDUsableAgentKeys(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDUsableAgentKeys, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDUsableAgentSessions = `-- name: PostflightIDUsableAgentSessions :one
+SELECT count(*) FROM user_sessions
+WHERE organization_id = $1::text AND subject_urn LIKE 'agent:%'
+  AND (expires_at >= now() OR refresh_expires_at >= now()
+    OR refresh_token_hash NOT LIKE 'DEMO-NOT-A-VALID-HASH-%'
+    OR delegated_grants IS DISTINCT FROM '[]'::jsonb)
+`
+
+func (q *Queries) PostflightIDUsableAgentSessions(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDUsableAgentSessions, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

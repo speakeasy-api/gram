@@ -20,19 +20,27 @@ import {
 } from "./killswitchscope.js";
 
 export type KillswitchPreviewOverlapsRequest = {
+  /**
+   * Target registered agent, independent of its owner. Applies across all credential sessions in the organization.
+   */
+  agentId?: string | undefined;
   id?: string | undefined;
   schedule: KillswitchSchedule;
   scope: KillswitchScope;
-  userId: string;
+  /**
+   * Target user. Supply exactly one of user_id or agent_id.
+   */
+  userId?: string | undefined;
   capabilityKey: KillswitchCapabilityKey;
 };
 
 /** @internal */
 export type KillswitchPreviewOverlapsRequest$Outbound = {
+  agent_id?: string | undefined;
   id?: string | undefined;
   schedule: KillswitchSchedule$Outbound;
   scope: KillswitchScope$Outbound;
-  user_id: string;
+  user_id?: string | undefined;
   capability_key: string;
 };
 
@@ -42,14 +50,16 @@ export const KillswitchPreviewOverlapsRequest$outboundSchema: z.ZodMiniType<
   KillswitchPreviewOverlapsRequest
 > = z.pipe(
   z.object({
+    agentId: z.optional(z.string()),
     id: z.optional(z.string()),
     schedule: KillswitchSchedule$outboundSchema,
     scope: KillswitchScope$outboundSchema,
-    userId: z.string(),
+    userId: z.optional(z.string()),
     capabilityKey: KillswitchCapabilityKey$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      agentId: "agent_id",
       userId: "user_id",
       capabilityKey: "capability_key",
     });

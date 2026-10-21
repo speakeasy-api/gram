@@ -17,6 +17,7 @@ import {
   KillswitchesListRequest,
   KillswitchesListResponse,
   KillswitchesListSecurity,
+  PrincipalKind,
 } from "../models/operations/killswitcheslist.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -83,6 +84,8 @@ export function buildKillswitchesQuery(
     queryKey: queryKeyKillswitches({
       capabilityKey: request?.capabilityKey,
       userId: request?.userId,
+      agentId: request?.agentId,
+      principalKind: request?.principalKind,
       status: request?.status,
       limit: request?.limit,
       cursor: request?.cursor,
@@ -127,6 +130,8 @@ export function buildKillswitchesInfiniteQuery(
     queryKey: queryKeyKillswitchesInfinite({
       capabilityKey: request?.capabilityKey,
       userId: request?.userId,
+      agentId: request?.agentId,
+      principalKind: request?.principalKind,
       status: request?.status,
       limit: request?.limit,
       cursor: request?.cursor,
@@ -168,6 +173,8 @@ export function queryKeyKillswitches(
   parameters: {
     capabilityKey?: KillswitchCapabilityKey | undefined;
     userId?: string | undefined;
+    agentId?: string | undefined;
+    principalKind?: PrincipalKind | undefined;
     status?: KillswitchListStatus | undefined;
     limit?: number | undefined;
     cursor?: string | undefined;
@@ -181,6 +188,8 @@ export function queryKeyKillswitchesInfinite(
   parameters: {
     capabilityKey?: KillswitchCapabilityKey | undefined;
     userId?: string | undefined;
+    agentId?: string | undefined;
+    principalKind?: PrincipalKind | undefined;
     status?: KillswitchListStatus | undefined;
     limit?: number | undefined;
     cursor?: string | undefined;

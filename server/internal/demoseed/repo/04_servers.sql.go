@@ -44,6 +44,52 @@ func (q *Queries) ServersInsertAgentConnectGrant(ctx context.Context, arg Server
 	return err
 }
 
+const serversInsertAgentKillswitchPrescription = `-- name: ServersInsertAgentKillswitchPrescription :exec
+INSERT INTO killswitch_prescriptions
+  (id, organization_id, definition_key, principal_kind, principal_key,
+   resource_kind, current_version, created_at, updated_at)
+VALUES
+  ($1::uuid, $2::text, 'mcp_tool_execution', 'agent',
+   ($3::uuid)::text, 'mcp_server', 1,
+   now() - interval '2 hours', now() - interval '2 hours')
+`
+
+type ServersInsertAgentKillswitchPrescriptionParams struct {
+	ID      uuid.UUID
+	OrgID   string
+	AgentID uuid.UUID
+}
+
+// A registered-agent restriction. Captured hook sessions carry no
+// registered-agent binding, so these never target a chat owner.
+func (q *Queries) ServersInsertAgentKillswitchPrescription(ctx context.Context, arg ServersInsertAgentKillswitchPrescriptionParams) error {
+	_, err := q.db.Exec(ctx, serversInsertAgentKillswitchPrescription, arg.ID, arg.OrgID, arg.AgentID)
+	return err
+}
+
+const serversInsertAgentKillswitchVersion = `-- name: ServersInsertAgentKillswitchVersion :exec
+INSERT INTO killswitch_prescription_versions
+  (organization_id, prescription_id, version, state, resource_scope,
+   activated_at, internal_note, external_note, created_at)
+VALUES
+  ($1::text, $2::uuid, 1, 'active', $3::text,
+   now() - interval '2 hours',
+   'Synthetic containment exercise. Release each restriction independently.',
+   'Covered MCP tools/call are blocked for this registered agent.',
+   now() - interval '2 hours')
+`
+
+type ServersInsertAgentKillswitchVersionParams struct {
+	OrgID          string
+	PrescriptionID uuid.UUID
+	ResourceScope  string
+}
+
+func (q *Queries) ServersInsertAgentKillswitchVersion(ctx context.Context, arg ServersInsertAgentKillswitchVersionParams) error {
+	_, err := q.db.Exec(ctx, serversInsertAgentKillswitchVersion, arg.OrgID, arg.PrescriptionID, arg.ResourceScope)
+	return err
+}
+
 const serversInsertAttachmentBinding = `-- name: ServersInsertAttachmentBinding :exec
 INSERT INTO principal_remote_session_bindings
   (id, project_id, organization_id, principal_id, user_session_issuer_id,
@@ -835,6 +881,24 @@ func (q *Queries) ServersInsertKillswitchPrescriptions(ctx context.Context, arg 
 		arg.ExpiredID,
 		arg.User5,
 	)
+	return err
+}
+
+const serversInsertKillswitchVersionResource = `-- name: ServersInsertKillswitchVersionResource :exec
+INSERT INTO killswitch_prescription_version_resources
+  (organization_id, prescription_id, version, resource_key)
+VALUES
+  ($1::text, $2::uuid, 1, ($3::uuid)::text)
+`
+
+type ServersInsertKillswitchVersionResourceParams struct {
+	OrgID          string
+	PrescriptionID uuid.UUID
+	ServerID       uuid.UUID
+}
+
+func (q *Queries) ServersInsertKillswitchVersionResource(ctx context.Context, arg ServersInsertKillswitchVersionResourceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertKillswitchVersionResource, arg.OrgID, arg.PrescriptionID, arg.ServerID)
 	return err
 }
 

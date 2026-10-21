@@ -507,6 +507,74 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
+	return s.seedServersAgentKillswitches(ctx)
+}
+
+// agentKillswitch is one active registered-agent restriction. server names
+// the one MCP server a selected restriction covers.
+type agentKillswitch struct {
+	key    string
+	scope  string
+	agent  int
+	server string
+}
+
+// agentKillswitches: two independent restrictions overlap on Release
+// assistant without targeting its owner, and suspended and old identities
+// keep restrictions for recovery. Captured hook sessions deliberately carry
+// no registered-agent binding.
+var agentKillswitches = []agentKillswitch{
+	{"selected", "selected", 1, "mcpserver-linear"},
+	{"all", "all", 1, ""},
+	{"suspended", "all", 2, ""},
+	{"historical", "selected", 9, "mcpserver-support"},
+}
+
+// seedServersAgentKillswitches writes each agent restriction's header, its
+// active first version, its selected server, and the completed activation
+// receipt. seedActivity writes the matching audit events.
+func (s *seeder) seedServersAgentKillswitches(ctx context.Context) error {
+	org := s.orgID()
+	for _, k := range agentKillswitches {
+		id := s.det("killswitch-agent-" + k.key)
+		if err := s.q.ServersInsertAgentKillswitchPrescription(ctx, repo.ServersInsertAgentKillswitchPrescriptionParams{
+			ID:      id,
+			OrgID:   org,
+			AgentID: s.managedAgentID(k.agent),
+		}); err != nil {
+			return fmt.Errorf("insert demo agent killswitch %s: %w", k.key, err)
+		}
+		if err := s.q.ServersInsertAgentKillswitchVersion(ctx, repo.ServersInsertAgentKillswitchVersionParams{
+			OrgID:          org,
+			PrescriptionID: id,
+			ResourceScope:  k.scope,
+		}); err != nil {
+			return fmt.Errorf("insert demo agent killswitch %s version: %w", k.key, err)
+		}
+		if k.server != "" {
+			if err := s.q.ServersInsertKillswitchVersionResource(ctx, repo.ServersInsertKillswitchVersionResourceParams{
+				OrgID:          org,
+				PrescriptionID: id,
+				ServerID:       s.det(k.server),
+			}); err != nil {
+				return fmt.Errorf("insert demo agent killswitch %s resource: %w", k.key, err)
+			}
+		}
+		if err := s.q.ServersInsertKillswitchOperation(ctx, repo.ServersInsertKillswitchOperationParams{
+			OrgID:               org,
+			OperationID:         s.det("killswitch-operation-agent-" + k.key),
+			ActorUserID:         s.userID("lucas"),
+			Operation:           "activate",
+			HashDigit:           "a",
+			PrescriptionID:      id,
+			PrescriptionVersion: 1,
+			State:               "active",
+			ExpiresIn:           "29 days 22 hours",
+			CreatedAgo:          "2 hours",
+		}); err != nil {
+			return fmt.Errorf("insert demo agent killswitch %s operation: %w", k.key, err)
+		}
+	}
 	return nil
 }
 

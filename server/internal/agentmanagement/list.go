@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -35,7 +36,7 @@ const (
 // reads. Runtime eligibility is not a management filter: suspended and revoked
 // agents must remain visible so humans can inspect and manage them.
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListAgentsResult, error) {
-	human, err := s.authorizer.RequireHuman(ctx, s.db)
+	human, demoReadOnly, err := s.authorizer.RequireListReader(ctx, s.db)
 	if err != nil {
 		return nil, s.serviceError(ctx, err, "list managed agents")
 	}
@@ -135,9 +136,12 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		scanned += len(rows)
 
 		for _, agent := range rows {
-			permissions, err := s.authorizer.Permissions(ctx, human, agent)
-			if err != nil {
-				return nil, s.serviceError(ctx, err, "evaluate agent permissions")
+			permissions := AgentPermissions{Read: true, Write: false, Authorize: false, Transfer: false}
+			if !demoReadOnly {
+				permissions, err = s.authorizer.Permissions(ctx, human, agent)
+				if err != nil {
+					return nil, s.serviceError(ctx, err, "evaluate agent permissions")
+				}
 			}
 			if !permissions.Read {
 				continue
@@ -195,11 +199,67 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		}
 	}
 
+	lastUseByAgent, err := s.lastCredentialUse(ctx, human.Auth.ActiveOrganizationID, readable, permissionsByID, demoReadOnly)
+	if err != nil {
+		return nil, err
+	}
+
 	items := make([]*gen.ManagedAgent, 0, len(readable))
 	for _, agent := range readable {
-		items = append(items, managedAgentView(agent, permissionsByID[agent.ID.String()], ownerProfiles[agent.OwnerUserID]))
+		view := managedAgentView(agent, permissionsByID[agent.ID.String()], ownerProfiles[agent.OwnerUserID])
+		if lastUse, ok := lastUseByAgent[agent.ID.String()]; ok {
+			value := lastUse.UTC().Format(time.RFC3339Nano)
+			view.LastCredentialUsedAt = &value
+		}
+		items = append(items, view)
 	}
 	return &gen.ListAgentsResult{Items: items, NextCursor: nextCursor}, nil
+}
+
+// lastCredentialUse is the most recent session or API key use of each agent on
+// the page. Credential timestamps follow ListSessions' OwnedAgentAuthorize
+// gate, independently of permission to see the registered identity.
+// DemoScopeGrants allows browsing synthetic data: it exposes the aggregate
+// timestamp only, while projecting no credential-management capability.
+func (s *Service) lastCredentialUse(
+	ctx context.Context,
+	organizationID string,
+	agents []repo.Agent,
+	permissionsByID map[string]AgentPermissions,
+	demoReadOnly bool,
+) (map[string]time.Time, error) {
+	sessionSubjects := make([]string, 0, len(agents))
+	keySubjects := make([]string, 0, len(agents))
+	subjectAgents := map[string]map[string]string{"session": {}, "key": {}}
+	for _, agent := range agents {
+		if !permissionsByID[agent.ID.String()].Authorize && !demoReadOnly {
+			continue
+		}
+		sessionSubject := urn.NewAgentSubject(agent.ID).String()
+		keySubject := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()
+		sessionSubjects = append(sessionSubjects, sessionSubject)
+		keySubjects = append(keySubjects, keySubject)
+		subjectAgents["session"][sessionSubject] = agent.ID.String()
+		subjectAgents["key"][keySubject] = agent.ID.String()
+	}
+
+	lastUseByAgent := make(map[string]time.Time, len(sessionSubjects))
+	if len(sessionSubjects) == 0 {
+		return lastUseByAgent, nil
+	}
+	uses, err := repo.New(s.db).BatchManagedAgentCredentialLastUsed(ctx, repo.BatchManagedAgentCredentialLastUsedParams{
+		OrganizationID: organizationID, SessionSubjects: sessionSubjects, KeySubjects: keySubjects,
+	})
+	if err != nil {
+		return nil, s.serviceError(ctx, fmt.Errorf("load agent credential activity: %w", err), "list managed agents")
+	}
+	for _, use := range uses {
+		id, ok := subjectAgents[use.Source][use.Subject]
+		if ok && use.LastUsedAt.Valid && use.LastUsedAt.Time.After(lastUseByAgent[id]) {
+			lastUseByAgent[id] = use.LastUsedAt.Time
+		}
+	}
+	return lastUseByAgent, nil
 }
 
 // Goa validates the format; this turns it into the nullable column value the

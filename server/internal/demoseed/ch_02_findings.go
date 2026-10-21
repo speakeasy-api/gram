@@ -20,6 +20,7 @@ func (s *seeder) chDetectionsAndFindings(ctx context.Context, ch driver.Conn) er
 		s.chfAIScanReceipts,
 		s.chfAuthzChallenges,
 		s.chfRiskFindings,
+		s.chfFleetRiskFinding,
 		s.chfSkillSessionVersions,
 		s.chfSkillEfficacyScores,
 		s.chfGatewayDiscovery,
@@ -635,6 +636,57 @@ func (s *seeder) chfRiskFindings(ctx context.Context, ch driver.Conn) error {
 			return fmt.Errorf("append mcp-only risk finding: %w", err)
 		}
 		return nil
+	})
+}
+
+// chfFleetRiskFinding mirrors the Fleet deployment-review finding written by
+// seedActivityFleet. It keeps only the masked match: this is exposure
+// evidence, not an enforcement receipt.
+func (s *seeder) chfFleetRiskFinding(ctx context.Context, ch driver.Conn) error {
+	capture := s.fleetCaptures()[1]
+	var user demoUser
+	for _, u := range demoUsers {
+		if u.handle == capture.user {
+			user = u
+		}
+	}
+	start := int32(riskStrpos(capture.turns[0], fleetFindingMatch)) //nolint:gosec // short fixed strings
+	matchLen := uint32(len(fleetFindingMatch))
+	return chfInsert(ctx, ch, "fleet risk finding", `INSERT INTO risk_findings
+  (id, created_at, organization_id, project_id, chat_message_id, chat_id,
+   assistant_id, user_id, external_user_id, user_email, team, chat_source,
+   risk_policy_id, risk_policy_version, rule_id, description, source, confidence,
+   category, tags, start_pos, end_pos, match_len, match_redacted, surface, field,
+   message_created_at)`, func(b driver.Batch) error {
+		return b.Append(
+			s.det("fleet-risk"),
+			s.now.UTC().Add(-6*time.Minute),
+			s.orgID(),
+			s.projectID().String(),
+			s.det("fleet-message-2-1").String(),
+			s.fleetChatID(capture.n).String(),
+			s.det("fleet-assistant-"+strconv.Itoa(capture.assistant)),
+			s.userID(user.handle),
+			s.email(user.handle),
+			s.email(user.handle),
+			user.department,
+			capture.source,
+			s.policyCD().String(),
+			int64(1),
+			"pii.email_address",
+			fleetFindingDescription,
+			"presidio",
+			0.88,
+			"pii",
+			[]string{"pii"},
+			start,
+			start+int32(matchLen), //nolint:gosec // short fixed string
+			matchLen,
+			"***@example.com",
+			"user",
+			"content",
+			s.now.UTC().Add(-capture.age-3*time.Minute),
+		)
 	})
 }
 

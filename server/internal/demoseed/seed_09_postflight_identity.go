@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -61,10 +62,11 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 	}
 
 	identity := []postflightIDCheck{
-		// The seed never creates API keys: any row left here was minted by a
-		// demo visitor and would grant programmatic access that survives the
-		// reseed. (SQL: IF stray > 0; a count is never negative, so == 0.)
-		{byOrg(s.q.PostflightIDAPIKeys), 0, "demo seed postflight: %d api keys survived the reseed"},
+		// The seed writes only the three inert agent keys: any other row was
+		// minted by a demo visitor and would grant programmatic access that
+		// survives the reseed.
+		{byOrg(s.q.PostflightIDAPIKeys), 3, "demo seed postflight: expected 3 inert agent keys, found %d"},
+		{byOrg(s.q.PostflightIDUsableAgentKeys), 0, "demo seed postflight: agent key fixtures must be unusable"},
 		{byOrg(s.q.PostflightIDAgentGrants), 6, "demo seed postflight: expected 6 scoped agent grants, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDScopedAgentGrants(ctx, repo.PostflightIDScopedAgentGrantsParams{
@@ -88,8 +90,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDInertUpstreamSessions(ctx, s.det("remote-identity-client-linear"))
 		}, 6, "demo seed postflight: expected 6 inert validated-spread upstream sessions, found %d"},
-		{byOrg(s.q.PostflightIDAgents), 5, "demo seed postflight: expected 5 managed agents, found %d"},
-		{byOrg(s.q.PostflightIDAgentSessions), 1, "demo seed postflight: expected 1 managed agent session, found %d"},
+		{byOrg(s.q.PostflightIDAgents), 11, "demo seed postflight: expected 11 managed agents, found %d"},
+		{byOrg(s.q.PostflightIDAgentSessions), 8, "demo seed postflight: expected 8 managed agent sessions, found %d"},
 		// This External OAuth row drives the metadata recommendation. Keep its
 		// count stable so a rerun cannot duplicate it or silently drop the demo
 		// surface.
@@ -227,7 +229,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byProj(s.q.PostflightIDServiceAccountHeaders), 1, "demo seed postflight: expected 1 Remote MCP Service Account header, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.
-		{byProj(s.q.PostflightIDProjectAgentSessions), 1, "demo seed postflight: expected 1 project-scoped managed agent session, found %d"},
+		{byProj(s.q.PostflightIDProjectAgentSessions), 6, "demo seed postflight: expected 6 non-deleted project-scoped managed agent sessions, found %d"},
 		{byProj(s.q.PostflightIDConnections), 11, "demo seed postflight: expected 11 MCP connections, found %d"},
 		// Spread across servers, not pooled on one: the connections tab groups
 		// by MCP server, and a single group makes that view look broken.
@@ -241,17 +243,19 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// be filed under "Unknown client" and carry no credential reading at
 		// all.
 		{byProj(s.q.PostflightIDUnregisteredConnections), 0, "demo seed postflight: %d MCP connections have no registration"},
-		// The legacy assistant stays without a dedicated agent.
+		// The legacy assistant stays without a dedicated agent. Two identity
+		// fixtures plus the three Fleet assistants.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDAssistants(ctx, repo.PostflightIDAssistantsParams{OrgID: org, ProjectID: proj})
-		}, 2, "demo seed postflight: expected 2 assistants, found %d"},
+		}, 5, "demo seed postflight: expected 5 assistants, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDTriggerInstances(ctx, repo.PostflightIDTriggerInstancesParams{OrgID: org, ProjectID: proj})
 		}, 2, "demo seed postflight: expected 2 dashboard roots, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDAssistantAgentBindings(ctx, repo.PostflightIDAssistantAgentBindingsParams{OrgID: org, ProjectID: proj})
 		}, 1, "demo seed postflight: expected 1 assistant binding, found %d"},
-		{byProj(s.q.PostflightIDAssistantThreads), 2, "demo seed postflight: expected 2 assistant threads, found %d"},
+		// Two dashboard threads plus the five Fleet threads.
+		{byProj(s.q.PostflightIDAssistantThreads), 7, "demo seed postflight: expected 7 assistant threads, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDTriggerWorkloadBindings(ctx, repo.PostflightIDTriggerWorkloadBindingsParams{OrgID: org, ProjectID: proj})
 		}, 1, "demo seed postflight: expected 1 root binding, found %d"},
@@ -271,6 +275,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byOrg(s.q.PostflightIDWorkloadAdmissions), 5, "demo seed postflight: expected 5 workload admissions, found %d"},
 	}
 	if err := runPostflightIDChecks(ctx, identity); err != nil {
+		return err
+	}
+	if err := runPostflightIDChecks(ctx, s.postflightFleetChecks()); err != nil {
 		return err
 	}
 
@@ -370,4 +377,85 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byProj(s.q.PostflightIDSigintDanglingMemberships), 0, "demo seed postflight: %d sigint memberships reference missing or deleted resources"},
 	}
 	return runPostflightIDChecks(ctx, rest)
+}
+
+// postflightFleetChecks assert the Fleet contract: registered-agent
+// credential history, agent restrictions, and the assistants and captures.
+func (s *seeder) postflightFleetChecks() []postflightIDCheck {
+	org := s.orgID()
+	proj := s.projectID()
+	byOrg := func(f func(context.Context, string) (int64, error)) func(context.Context) (int64, error) {
+		return func(ctx context.Context) (int64, error) { return f(ctx, org) }
+	}
+	byProj := func(f func(context.Context, uuid.UUID) (int64, error)) func(context.Context) (int64, error) {
+		return func(ctx context.Context) (int64, error) { return f(ctx, proj) }
+	}
+	agentURN := func(n int) string { return "agent:" + s.managedAgentID(n).String() }
+
+	assistantIDs := make([]uuid.UUID, len(fleetAssistants))
+	for i, a := range fleetAssistants {
+		assistantIDs[i] = s.det("fleet-assistant-" + strconv.Itoa(a.n))
+	}
+	captures := s.fleetCaptures()
+	chatIDs := make([]uuid.UUID, len(captures))
+	for i, c := range captures {
+		chatIDs[i] = s.fleetChatID(c.n)
+	}
+
+	return []postflightIDCheck{
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDRecentExpiredAgentSession(ctx, repo.PostflightIDRecentExpiredAgentSessionParams{
+				OrgID: org, ProjectID: proj, AgentUrn: agentURN(1),
+			})
+		}, 1, "demo seed postflight: expected recent expired agent credential history, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDFleetCoverageInvalid(ctx, repo.PostflightIDFleetCoverageInvalidParams{OrgID: org, ProjectID: proj})
+		}, 0, "demo seed postflight: expected 8 recent agents across 4 departments and both scopes"},
+		{byOrg(s.q.PostflightIDAgentCredentialLifecycleViolations), 0, "demo seed postflight: credential history contradicts agent lifecycle"},
+		{byOrg(s.q.PostflightIDUsableAgentSessions), 0, "demo seed postflight: agent sessions must be expired and inert"},
+		// Legacy invoice exporter (9) is old; Nightly report agent (10) has
+		// never authenticated.
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDOldAgentSessions(ctx, repo.PostflightIDOldAgentSessionsParams{OrgID: org, AgentUrn: agentURN(9)})
+		}, 1, "demo seed postflight: old and never-used controls changed"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDAgentCredentials(ctx, repo.PostflightIDAgentCredentialsParams{OrgID: org, AgentUrn: agentURN(10)})
+		}, 0, "demo seed postflight: old and never-used controls changed"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDAgentRestrictions(ctx, repo.PostflightIDAgentRestrictionsParams{OrgID: org, AgentID: s.managedAgentID(9)})
+		}, 1, "demo seed postflight: old agent must retain recovery restriction"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDFleetAssistants(ctx, repo.PostflightIDFleetAssistantsParams{ProjectID: proj, AssistantIds: assistantIDs})
+		}, 3, "demo seed postflight: expected 3 Fleet assistants, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDFleetAssistantThreads(ctx, repo.PostflightIDFleetAssistantThreadsParams{ProjectID: proj, AssistantIds: assistantIDs})
+		}, 5, "demo seed postflight: expected 5 explicitly linked assistant threads, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDFleetRecentAssistants(ctx, repo.PostflightIDFleetRecentAssistantsParams{OrgID: org, ProjectID: proj, AssistantIds: assistantIDs})
+		}, 3, "demo seed postflight: all 3 assistants must have recent evidence in the initial 50 captures"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDFleetThreadViolations(ctx, repo.PostflightIDFleetThreadViolationsParams{ProjectID: proj, AssistantIds: assistantIDs})
+		}, 0, "demo seed postflight: assistant thread tenancy or timestamps disagree"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDFleetMessages(ctx, repo.PostflightIDFleetMessagesParams{ProjectID: proj, ChatIds: chatIDs})
+		}, 32, "demo seed postflight: expected 32 Fleet transcript messages, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDFleetUnattributedCaptures(ctx, repo.PostflightIDFleetUnattributedCapturesParams{
+				OrgID:           org,
+				ExternalChatID:  s.fleetChatID(fleetExternalCapture),
+				ExternalUserID:  s.fleetContractor(),
+				CollisionChatID: s.fleetChatID(fleetCollisionCapture),
+				CollisionUserID: s.userID("priya"),
+				UnknownChatID:   s.fleetChatID(fleetUnknownCapture),
+			})
+		}, 3, "demo seed postflight: external, collision and unknown capture attribution changed"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDFleetFinding(ctx, repo.PostflightIDFleetFindingParams{
+				OrgID: org, RiskID: s.det("fleet-risk"), MessageID: s.det("fleet-message-2-1"),
+			})
+		}, 1, "demo seed postflight: Fleet flagged transcript must carry one real finding"},
+		{byProj(s.q.PostflightIDHistoricalAssistantThreads), 1, "demo seed postflight: expected one historical assistant thread"},
+		{byOrg(s.q.PostflightIDRevokedAgentSessions), 2, "demo seed postflight: expected two revoked agent sessions"},
+		{byOrg(s.q.PostflightIDRevokedAPIKeys), 1, "demo seed postflight: expected one revoked agent key"},
+	}
 }

@@ -157,22 +157,40 @@ VALUES
    now() + (@refresh_expires_in::text)::interval, now() + (@expires_in::text)::interval,
    now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);
 
--- A display-only managed-agent credential: no signing token, an invalid
--- refresh hash, and an empty delegation prevent usable programmatic access.
--- The issuer/project cascade cleans this row on every reseed.
+-- Managed-agent credential evidence is historical, never a runnable
+-- workload: access AND refresh expiry are past, the hash has no valid
+-- preimage, and the delegation is empty. The issuer/project cascade cleans
+-- this row on every reseed.
 -- name: DeployInsertManagedAgentSession :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id,
    user_session_client_id, subject_urn, authorizer_user_id, delegated_grants,
    delegated_grants_version, jti, refresh_token_hash, refresh_expires_at,
-   expires_at, last_used_at, created_at)
+   expires_at, last_used_at, created_at, updated_at, deleted_at)
 VALUES
   (@id, @project_id::uuid, @organization_id::text,
    @user_session_issuer_id::uuid, @user_session_client_id::uuid,
    @subject_urn::text, @authorizer_user_id::text, '[]'::jsonb, 1,
    @jti, @refresh_token_hash::text,
-   now() + interval '7 days', now() - interval '10 minutes',
-   now() - interval '20 minutes', now() - interval '3 days');
+   now() - interval '1 minute', now() - interval '1 minute',
+   @last_used_at::timestamptz, now() - interval '10 days',
+   now() - interval '1 minute', sqlc.narg(deleted_at)::timestamptz);
+
+-- An expired, display-only agent key: the hash has no valid preimage, and
+-- scopes and delegation are empty. The org api_keys delete in the purge
+-- phase cleans it on every reseed.
+-- name: DeployInsertAgentAPIKey :exec
+INSERT INTO api_keys
+  (id, organization_id, project_id, created_by_user_id, name, key_prefix,
+   key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version,
+   expires_at, last_accessed_at, created_at, updated_at, deleted_at)
+VALUES
+  (@id::uuid, @organization_id::text, sqlc.narg(project_id)::uuid,
+   @created_by_user_id::text, @name::text, 'DEMO-INERT', @key_hash::text,
+   '{}'::text[], @subject_urn::text, '[]'::jsonb, 1,
+   now() - interval '1 minute', @last_accessed_at::timestamptz,
+   now() - interval '10 days', now() - interval '1 minute',
+   sqlc.narg(deleted_at)::timestamptz);
 
 -- name: DeployInsertOrgWorkloadIssuer :exec
 INSERT INTO workload_issuers

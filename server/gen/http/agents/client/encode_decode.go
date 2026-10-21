@@ -4026,6 +4026,7 @@ func unmarshalManagedAgentResponseBodyToAgentsManagedAgent(v *ManagedAgentRespon
 		Name:                        *v.Name,
 		ProjectID:                   v.ProjectID,
 		Lifecycle:                   agents.AgentLifecycle(*v.Lifecycle),
+		LastCredentialUsedAt:        v.LastCredentialUsedAt,
 		CreatedAt:                   *v.CreatedAt,
 		UpdatedAt:                   *v.UpdatedAt,
 	}

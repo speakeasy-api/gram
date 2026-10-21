@@ -664,6 +664,34 @@ VALUES
   (@org_id::text, @lifted_id::uuid, 2, (@slack_server_id::uuid)::text),
   (@org_id::text, @expired_id::uuid, 1, (@ops_server_id::uuid)::text);
 
+-- name: ServersInsertAgentKillswitchPrescription :exec
+-- A registered-agent restriction. Captured hook sessions carry no
+-- registered-agent binding, so these never target a chat owner.
+INSERT INTO killswitch_prescriptions
+  (id, organization_id, definition_key, principal_kind, principal_key,
+   resource_kind, current_version, created_at, updated_at)
+VALUES
+  (@id::uuid, @org_id::text, 'mcp_tool_execution', 'agent',
+   (@agent_id::uuid)::text, 'mcp_server', 1,
+   now() - interval '2 hours', now() - interval '2 hours');
+
+-- name: ServersInsertAgentKillswitchVersion :exec
+INSERT INTO killswitch_prescription_versions
+  (organization_id, prescription_id, version, state, resource_scope,
+   activated_at, internal_note, external_note, created_at)
+VALUES
+  (@org_id::text, @prescription_id::uuid, 1, 'active', @resource_scope::text,
+   now() - interval '2 hours',
+   'Synthetic containment exercise. Release each restriction independently.',
+   'Covered MCP tools/call are blocked for this registered agent.',
+   now() - interval '2 hours');
+
+-- name: ServersInsertKillswitchVersionResource :exec
+INSERT INTO killswitch_prescription_version_resources
+  (organization_id, prescription_id, version, resource_key)
+VALUES
+  (@org_id::text, @prescription_id::uuid, 1, (@server_id::uuid)::text);
+
 -- name: ServersInsertKillswitchExpiryEvent :exec
 INSERT INTO killswitch_expiry_events
   (organization_id, prescription_id, version, recorded_at)

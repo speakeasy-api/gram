@@ -55,6 +55,29 @@ LEFT JOIN slack_identity_mappings im ON im.organization_id = @organization_id::t
 INSERT INTO chat_session_links (project_id, organization_id, parent_chat_id, child_chat_id, parent_session_id, child_session_id, kind, target_harness, source_surface)
 VALUES (@project_id, @organization_id, @parent_chat_id::uuid, @child_chat_id::uuid, (@parent_chat_id::uuid)::text, (@child_chat_id::uuid)::text, 'subagent', 'claude-tag', 'claude-tag');
 
+-- name: ActivityInsertFleetAssistant :exec
+-- A configured assistant identity with archived conversations, not a live
+-- runtime: no triggers, deliveries, runs or runtime rows. Project deletion
+-- cascades through assistants, threads, chats and messages.
+INSERT INTO assistants
+  (id, project_id, organization_id, created_by_user_id, name, model,
+   instructions, status, created_at, updated_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @organization_id::text,
+   @created_by_user_id::text, @name::text, 'anthropic/claude-sonnet-4.6',
+   @instructions::text, @status::text, now() - interval '14 days',
+   @updated_at::timestamptz);
+
+-- name: ActivityInsertFleetAssistantThread :exec
+-- The explicit thread is what establishes a capture's assistantId.
+INSERT INTO assistant_threads
+  (id, assistant_id, project_id, correlation_id, chat_id, source_kind,
+   last_event_at, created_at, updated_at)
+VALUES
+  (@id::uuid, @assistant_id::uuid, @project_id::uuid, @correlation_id::text,
+   @chat_id::uuid, 'dashboard', @last_event_at::timestamptz,
+   @created_at::timestamptz, @last_event_at::timestamptz);
+
 -- name: ActivityInsertAssistantThread :exec
 INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, last_event_at)
 VALUES (@id, @assistant_id, @project_id, @correlation_id, @chat_id, 'dashboard', now() - interval '38 minutes');

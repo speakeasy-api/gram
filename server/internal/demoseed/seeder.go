@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
@@ -50,6 +51,20 @@ func (s *seeder) userID(handle string) string { return s.spec.UserPrefix + handl
 
 // email is a seeded user's email: s.email("amara") is "amara@demo.getgram.ai".
 func (s *seeder) email(handle string) string { return handle + s.spec.EmailDomain }
+
+// ago is the timestamp d before the transaction's now().
+func (s *seeder) ago(d time.Duration) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: s.now.Add(-d), InfinityModifier: pgtype.Finite, Valid: true}
+}
+
+// agoOrNull is ago, except that a zero d is NULL: optional lifecycle stamps
+// such as suspended_at and deleted_at.
+func (s *seeder) agoOrNull(d time.Duration) pgtype.Timestamptz {
+	if d == 0 {
+		return pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	}
+	return s.ago(d)
+}
 
 // phase is one step of the Postgres seed, run in order inside one
 // transaction. Each statement gets its own statement_timeout, so no single

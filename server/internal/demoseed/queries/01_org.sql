@@ -347,22 +347,16 @@ INSERT INTO organization_user_relationships
 VALUES (@org_id::text, @user_id::text, @workos_user_id::text,
         @workos_membership_id::text, now() - (interval '40 days' * @position::integer));
 
--- name: OrgInsertManagedAgents :exec
--- Managed identities are distinct from OAuth client registrations. Existing
--- fictional owners exercise name/initials rendering without adding external
--- avatar dependencies. The two active release agents receive only
--- project/server-scoped direct grants alongside their inert attachments.
+-- name: OrgInsertManagedAgent :exec
+-- One registered agent with an explicit owner, independent of captured chats.
 INSERT INTO agents
-  (id, organization_id, owner_user_id, name, suspended_at, revoked_at)
+  (id, organization_id, project_id, owner_user_id, name, suspended_at,
+   revoked_at, created_at, updated_at)
 VALUES
-  (@agent1::uuid, @org_id::text, @owner1::text,
-   'Release assistant', NULL, NULL),
-  (@agent2::uuid, @org_id::text, @owner2::text,
-   'Support triage', now() - interval '2 days', NULL),
-  (@agent3::uuid, @org_id::text, @owner3::text,
-   'Retired documentation bot', NULL, now() - interval '5 days'),
-  (@agent4::uuid, @org_id::text, @owner1::text,
-   'Release notes assistant', NULL, NULL);
+  (@id::uuid, @org_id::text, sqlc.narg(project_id)::uuid, @owner_user_id::text,
+   @name::text, sqlc.narg(suspended_at)::timestamptz,
+   sqlc.narg(revoked_at)::timestamptz, now() - interval '30 days',
+   @updated_at::timestamptz);
 
 -- name: OrgGlobalRoleURN :one
 -- Global roles are synced from WorkOS in real envs; tolerate their absence

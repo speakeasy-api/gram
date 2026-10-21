@@ -2,8 +2,10 @@ package testenv
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
@@ -165,9 +168,8 @@ func NewTemporalEnvironment(t *testing.T, devserver *testsuite.DevServer) (*serv
 	request.Namespace = namespace
 	request.WorkflowExecutionRetentionPeriod = durationpb.New(24 * time.Hour)
 
-	_, err := devserver.Client().WorkflowService().RegisterNamespace(t.Context(), request)
-	if err != nil {
-		return nil, fmt.Errorf("register temporal namespace: %w", err)
+	if err := registerNamespace(t.Context(), devserver, request); err != nil {
+		return nil, err
 	}
 
 	clientOptions := client.Options{}
@@ -185,4 +187,38 @@ func NewTemporalEnvironment(t *testing.T, devserver *testsuite.DevServer) (*serv
 	})
 
 	return servertemporal.NewEnvironment(temporalClient, servertemporal.NamespaceName(namespace), servertemporal.TaskQueueName(queue)), nil
+}
+
+// registerNamespaceAttempts bounds registerNamespace to about six seconds of
+// backoff.
+const registerNamespaceAttempts = 6
+
+// registerNamespace registers a test's namespace, retrying while the dev
+// server sheds load. Every test in a package registers against the one shared
+// dev server, and a busy -race package can exceed its frontend rate limit
+// ("service rate limit exceeded"). That refusal is transient; other errors
+// are returned at once.
+func registerNamespace(ctx context.Context, devserver *testsuite.DevServer, request *workflowservice.RegisterNamespaceRequest) error {
+	backoff := 200 * time.Millisecond
+	for attempt := 1; ; attempt++ {
+		_, err := devserver.Client().WorkflowService().RegisterNamespace(ctx, request)
+		if err == nil {
+			return nil
+		}
+		var exhausted *serviceerror.ResourceExhausted
+		if !errors.As(err, &exhausted) || attempt == registerNamespaceAttempts {
+			return fmt.Errorf("register temporal namespace: %w", err)
+		}
+
+		// Jitter spreads out parallel tests that were refused together.
+		wait := backoff/2 + time.Duration(rand.Int64N(int64(backoff))) // #nosec G404 -- retry jitter is not security-sensitive
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("register temporal namespace: %w", errors.Join(err, ctx.Err()))
+		case <-timer.C:
+		}
+		backoff *= 2
+	}
 }

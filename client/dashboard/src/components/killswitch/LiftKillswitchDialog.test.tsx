@@ -20,6 +20,34 @@ function deferred() {
 }
 
 describe("LiftKillswitchDialog", () => {
+  it("identifies the agent and named servers and keeps release failures visible", async () => {
+    const onLift = vi
+      .fn()
+      .mockRejectedValue(new Error("transport unavailable"));
+    render(
+      <LiftKillswitchDialog
+        open
+        onOpenChange={() => {}}
+        overlaps={[]}
+        serverNames={new Map()}
+        previewStatus="ready"
+        onRetryPreview={vi.fn()}
+        onLift={onLift}
+        targetDescription="Synthetic agent (agent-1)"
+        affectedServers="Tasks (Demo project)"
+      />,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Release MCP restriction" }),
+    ).toBeTruthy();
+    expect(screen.getByText(/Synthetic agent \(agent-1\)/)).toBeTruthy();
+    expect(screen.getByText(/Tasks \(Demo project\)/)).toBeTruthy();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Release restriction" }),
+    );
+    expect(await screen.findByText("Release failed")).toBeTruthy();
+    expect(screen.getByText("transport unavailable")).toBeTruthy();
+  });
   it("states which overlapping Killswitches remain effective before lifting", async () => {
     const onLift = vi.fn().mockResolvedValue(undefined);
     render(

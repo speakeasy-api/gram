@@ -5,6 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -24,16 +26,38 @@ import {
   KillswitchStatus$inboundSchema,
 } from "./killswitchstatus.js";
 
+export const KillswitchSummaryPrincipalKind = {
+  User: "user",
+  Agent: "agent",
+} as const;
+export type KillswitchSummaryPrincipalKind = OpenEnum<
+  typeof KillswitchSummaryPrincipalKind
+>;
+
 export type KillswitchSummary = {
+  /**
+   * Present only for registered-agent restrictions
+   */
+  agentId?: string | undefined;
   capabilityLabel: string;
   id: string;
+  principalKind: KillswitchSummaryPrincipalKind;
   schedule: KillswitchSchedule;
   scope: KillswitchScope;
-  userId: string;
+  /**
+   * Present only for user restrictions
+   */
+  userId?: string | undefined;
   version: number;
   capabilityKey: KillswitchCapabilityKey;
   status: KillswitchStatus;
 };
+
+/** @internal */
+export const KillswitchSummaryPrincipalKind$inboundSchema: z.ZodMiniType<
+  KillswitchSummaryPrincipalKind,
+  unknown
+> = openEnums.inboundSchema(KillswitchSummaryPrincipalKind);
 
 /** @internal */
 export const KillswitchSummary$inboundSchema: z.ZodMiniType<
@@ -41,18 +65,22 @@ export const KillswitchSummary$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    agent_id: z.optional(z.string()),
     capability_label: z.string(),
     id: z.string(),
+    principal_kind: KillswitchSummaryPrincipalKind$inboundSchema,
     schedule: KillswitchSchedule$inboundSchema,
     scope: KillswitchScope$inboundSchema,
-    user_id: z.string(),
+    user_id: z.optional(z.string()),
     version: z.int(),
     capability_key: KillswitchCapabilityKey$inboundSchema,
     status: KillswitchStatus$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      "agent_id": "agentId",
       "capability_label": "capabilityLabel",
+      "principal_kind": "principalKind",
       "user_id": "userId",
       "capability_key": "capabilityKey",
     });

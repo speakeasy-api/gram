@@ -24,10 +24,11 @@ type Client struct {
 	LiftEndpoint             goa.Endpoint
 	PreviewOverlapsEndpoint  goa.Endpoint
 	BatchUserBadgesEndpoint  goa.Endpoint
+	BatchAgentBadgesEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "killswitches" service client given the endpoints.
-func NewClient(listCapabilities, listMCPServers, list, get, create, edit, lift, previewOverlaps, batchUserBadges goa.Endpoint) *Client {
+func NewClient(listCapabilities, listMCPServers, list, get, create, edit, lift, previewOverlaps, batchUserBadges, batchAgentBadges goa.Endpoint) *Client {
 	return &Client{
 		ListCapabilitiesEndpoint: listCapabilities,
 		ListMCPServersEndpoint:   listMCPServers,
@@ -38,6 +39,7 @@ func NewClient(listCapabilities, listMCPServers, list, get, create, edit, lift, 
 		LiftEndpoint:             lift,
 		PreviewOverlapsEndpoint:  previewOverlaps,
 		BatchUserBadgesEndpoint:  batchUserBadges,
+		BatchAgentBadgesEndpoint: batchAgentBadges,
 	}
 }
 
@@ -246,4 +248,27 @@ func (c *Client) BatchUserBadges(ctx context.Context, p *BatchUserBadgesPayload)
 		return
 	}
 	return ires.(*KillswitchBatchUserBadgesResult), nil
+}
+
+// BatchAgentBadges calls the "batchAgentBadges" endpoint of the "killswitches"
+// service.
+// BatchAgentBadges may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) BatchAgentBadges(ctx context.Context, p *BatchAgentBadgesPayload) (res *KillswitchBatchAgentBadgesResult, err error) {
+	var ires any
+	ires, err = c.BatchAgentBadgesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*KillswitchBatchAgentBadgesResult), nil
 }

@@ -104,12 +104,12 @@ WHERE v.organization_id = @org_id::text
 
 -- name: PostflightKillswitchStartSemanticsInvalid :one
 SELECT (CASE WHEN
-    count(*) FILTER (WHERE starts_at IS NULL) = 7
+    count(*) FILTER (WHERE starts_at IS NULL) = 11
     AND count(*) FILTER (WHERE starts_at > clock_timestamp()) = 1
     AND count(*) FILTER (WHERE starts_at IS NOT NULL) = 1
     AND count(*) FILTER (
       WHERE activated_at IS NOT NULL AND activated_at < clock_timestamp()
-    ) = 8
+    ) = 12
   THEN 0 ELSE 1 END)::bigint AS stray
 FROM killswitch_prescription_versions
 WHERE organization_id = @org_id::text;
@@ -138,14 +138,20 @@ SELECT count(*)
 FROM killswitch_prescriptions p
 WHERE p.organization_id = @org_id::text
   AND (p.definition_key <> 'mcp_tool_execution'
-    OR p.principal_kind <> 'user'
+    OR p.principal_kind NOT IN ('user', 'agent')
     OR p.resource_kind <> 'mcp_server'
-    OR NOT EXISTS (
+    OR (p.principal_kind = 'user' AND NOT EXISTS (
       SELECT 1 FROM organization_user_relationships member
       WHERE member.organization_id = p.organization_id
         AND member.user_id = p.principal_key
         AND member.deleted_at IS NULL
-    ));
+    ))
+    OR (p.principal_kind = 'agent' AND NOT EXISTS (
+      SELECT 1 FROM agents agent
+      WHERE agent.organization_id = p.organization_id
+        AND agent.id::text = p.principal_key
+        AND agent.deleted IS FALSE
+    )));
 
 -- name: PostflightCountKillswitchInvalidResources :one
 SELECT count(*)
@@ -162,7 +168,7 @@ WHERE r.organization_id = @org_id::text
 
 -- name: PostflightKillswitchStatusCoverageInvalid :one
 SELECT (CASE WHEN
-    count(*) FILTER (WHERE customer_status = 'active') = 3
+    count(*) FILTER (WHERE customer_status = 'active') = 7
     AND count(*) FILTER (WHERE customer_status = 'scheduled') = 1
     AND count(*) FILTER (WHERE customer_status = 'lifted') = 1
     AND count(*) FILTER (WHERE customer_status = 'expired') = 1
@@ -346,9 +352,11 @@ SELECT count(*)
 FROM chats WHERE project_id = @project_id::uuid AND organization_id <> @org_id::text;
 
 -- name: PostflightCountOwnerlessChats :one
+-- Fleet's external, collision and unknown captures are deliberately exempt.
 SELECT count(*)
 FROM chats WHERE organization_id = @org_id::text
-  AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL);
+  AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL)
+  AND id <> ALL(@exempt_chat_ids::uuid[]);
 
 -- Every table that carries both the demo org id and a project id must agree
 -- with the demo constants: a mismatch means an insert escaped its scoping.
