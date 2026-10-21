@@ -1,3 +1,5 @@
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useEffect, useMemo } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link, useLocation } from "react-router";
@@ -11,10 +13,8 @@ import { Skeleton, SkeletonParagraph } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
 import { useOrganizationUserSessionIssuersInfinite } from "@gram/client/react-query/organizationUserSessionIssuers.js";
 
@@ -94,10 +94,7 @@ export function EmaServiceWorkspace({
   useScrollToSection(Boolean(row));
   const permissions = useAcceptedProviderPermissions();
   const candidates = useProviderCandidates(permissions.canEdit);
-  const oktaFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
-  const connectedOktaId = useOktaIssuerId(oktaFlag.status === "enabled");
-  const oktaIssuerId =
-    oktaFlag.status === "enabled" ? connectedOktaId : undefined;
+  const oktaIssuerId = useOktaIssuerId();
   const name = row?.name ?? "Service";
 
   return (

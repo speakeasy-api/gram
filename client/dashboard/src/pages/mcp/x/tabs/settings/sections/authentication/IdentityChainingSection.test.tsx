@@ -7,10 +7,7 @@ import { IdentityChainingSection } from "./IdentityChainingSection";
 const state = vi.hoisted(() => ({
   issuer: undefined as Record<string, unknown> | undefined,
   speakeasy: undefined as Record<string, unknown> | undefined,
-  flags: { oktaConnections: true, emaProviders: true } as Record<
-    string,
-    boolean
-  >,
+  flags: { emaProviders: true } as Record<string, boolean>,
   clientsLoading: false,
   clientsError: false,
   clientsRefetch: vi.fn(),
@@ -82,7 +79,6 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 }));
 vi.mock("@/lib/featureFlags", () => ({
   FEATURE_FLAGS: {
-    oktaConnections: "oktaConnections",
     emaProviders: "emaProviders",
   },
 }));
@@ -138,7 +134,7 @@ beforeEach(() => {
     state: "enabled",
     issuer: "https://speakeasy.example.com/idp",
   };
-  state.flags = { oktaConnections: true, emaProviders: true };
+  state.flags = { emaProviders: true };
   state.clientsLoading = false;
   state.clientsError = false;
   state.clientsRefetch.mockReset();
@@ -281,7 +277,7 @@ describe("IdentityChainingSection", () => {
       "Speakeasy isn't rolled out and nothing else can vouch",
       () => {
         state.speakeasy = { state: "unavailable" };
-        state.flags = { oktaConnections: true, emaProviders: false };
+        state.flags = { emaProviders: false };
       },
     ],
     [
@@ -310,9 +306,9 @@ describe("IdentityChainingSection", () => {
       },
     ],
     [
-      "the rollouts are off",
+      "the EMA provider rollout is off",
       () => {
-        state.flags = { oktaConnections: false, emaProviders: false };
+        state.flags = { emaProviders: false };
         state.speakeasy = { state: "unavailable" };
       },
     ],
@@ -327,7 +323,7 @@ describe("IdentityChainingSection", () => {
   });
 
   it("stays hidden when Speakeasy's issuer is unavailable even with ema-providers on", () => {
-    state.flags = { oktaConnections: false, emaProviders: true };
+    state.flags = { emaProviders: true };
     state.speakeasy = { state: "unavailable" };
     render(<IdentityChainingSection mcpServer={server} />);
     expect(
@@ -338,7 +334,7 @@ describe("IdentityChainingSection", () => {
   });
 
   it("shows when Speakeasy's issuer is offered while ema-providers is off", () => {
-    state.flags = { oktaConnections: false, emaProviders: false };
+    state.flags = { emaProviders: false };
     render(<IdentityChainingSection mcpServer={server} />);
     expect(
       screen.getByRole("heading", {
@@ -361,18 +357,20 @@ describe("IdentityChainingSection", () => {
         state.sourceError = true;
       },
     ],
-  ])("stays off the page while %s with both rollouts off", (_name, arrange) => {
-    state.flags = { oktaConnections: false, emaProviders: false };
-    state.speakeasy = { state: "unavailable" };
-    arrange();
-    render(<IdentityChainingSection mcpServer={server} />);
-    expect(
-      screen.queryByRole("heading", {
-        name: "Enterprise Managed Authorization",
-      }),
-    ).toBe(null);
-    expect(screen.queryByRole("status")).toBe(null);
-  });
+  ])(
+    "shows the provider section while %s without a Speakeasy issuer",
+    (_name, arrange) => {
+      state.flags = { emaProviders: false };
+      state.speakeasy = { state: "unavailable" };
+      arrange();
+      render(<IdentityChainingSection mcpServer={server} />);
+      expect(
+        screen.queryByRole("heading", {
+          name: "Enterprise Managed Authorization",
+        }),
+      ).toBeTruthy();
+    },
+  );
 
   it.each([
     [

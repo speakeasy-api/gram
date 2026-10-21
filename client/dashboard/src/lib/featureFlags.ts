@@ -8,7 +8,6 @@ export const FEATURE_FLAGS = {
   // UI-only rollout gate for the MCP scope picker in the risk policy editor;
   // not enforced server-side.
   mcpScopedPolicies: "gram-mcp-scoped-policies",
-  oktaConnections: "okta-connections",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
   promptPolicies: "gram-prompt-policies",
   // Multivariate (`off` | `shadow` | `llm`), org-targeted: which risk engine

@@ -195,20 +195,17 @@ describe("identity top-level tabs", () => {
     expect(mocks.features).not.toHaveBeenCalled();
   });
 
-  it.each(["admin", "enabled"] as const)(
-    "requires %s before mounting EMA",
-    (gate) => {
-      mocks[gate] = false;
-      show("?tab=identity-providers&provider=okta&view=setup");
-      expect(
-        screen.queryByRole("link", { name: "Identity providers" }),
-      ).toBeNull();
-      expect(mocks.ema).not.toHaveBeenCalled();
-      expect(mocks.features).toHaveBeenCalled();
-    },
-  );
+  it("requires organization admin before mounting identity providers", () => {
+    mocks.admin = false;
+    show("?tab=identity-providers&provider=okta&view=setup");
+    expect(
+      screen.queryByRole("link", { name: "Identity providers" }),
+    ).toBeNull();
+    expect(mocks.ema).not.toHaveBeenCalled();
+    expect(mocks.features).toHaveBeenCalled();
+  });
 
-  it("lists the Speakeasy provider when the issuer is offered without the Okta rollout", () => {
+  it("lists external and Speakeasy providers when the issuer is offered", () => {
     mocks.enabled = false;
     mocks.issuerAvailable = true;
     show("?tab=identity-providers");
@@ -216,7 +213,7 @@ describe("identity top-level tabs", () => {
       screen.getByRole("link", { name: "Identity providers" }),
     ).toBeTruthy();
     expect(mocks.ema).toHaveBeenCalledWith({
-      showExternal: false,
+      showExternal: true,
       showSpeakeasy: true,
     });
   });
@@ -232,18 +229,18 @@ describe("identity top-level tabs", () => {
     mocks.issuerQuery = query;
     show("?tab=identity-providers");
     expect(mocks.ema).toHaveBeenCalledWith({
-      showExternal: false,
+      showExternal: true,
       showSpeakeasy: true,
     });
   });
 
-  it("hides the Speakeasy provider when the issuer is not offered", () => {
+  it("keeps external providers available when the Speakeasy issuer is not offered", () => {
     mocks.enabled = false;
     mocks.issuerQuery = { data: { state: "unavailable" } };
     show("?tab=identity-providers");
     expect(
       screen.queryByRole("link", { name: "Identity providers" }),
-    ).toBeNull();
+    ).toBeTruthy();
   });
 
   it("keeps the issuer off the Single sign-on tab", () => {

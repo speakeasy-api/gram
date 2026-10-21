@@ -26364,7 +26364,7 @@ paths:
         name: Identity
   /rpc/identityProviderConnections.create:
     post:
-      description: Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.
+      description: Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin. One live connection per organization; creation is rate limited.
       operationId: createIdentityProviderConnection
       parameters:
         - allowEmptyValue: true
@@ -36498,7 +36498,7 @@ paths:
         name: UpdateNetworkIngress
   /rpc/oktaResourceConnections.confirm:
     post:
-      description: Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin and the okta-connections rollout.
+      description: Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin.
       operationId: confirmOktaResourceConnections
       parameters:
         - allowEmptyValue: true
@@ -36800,7 +36800,7 @@ paths:
         name: ResetOktaResourceConnection
   /rpc/oktaServerSuggestions.dismiss:
     post:
-      description: Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin and the okta-connections rollout.
+      description: Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin.
       operationId: dismissOktaServerSuggestion
       parameters:
         - allowEmptyValue: true
@@ -36900,7 +36900,7 @@ paths:
         name: DismissOktaServerSuggestion
   /rpc/oktaServerSuggestions.list:
     get:
-      description: List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.
+      description: List the catalog servers suggested from the Okta applications snapshot. Requires org:admin and a verified identity provider connection.
       operationId: listOktaServerSuggestions
       parameters:
         - allowEmptyValue: true
@@ -37002,7 +37002,7 @@ paths:
         name: OktaServerSuggestions
   /rpc/oktaServerSuggestions.restore:
     post:
-      description: Restore a dismissed suggestion currently made to the organization. Requires org:admin and the okta-connections rollout.
+      description: Restore a dismissed suggestion currently made to the organization. Requires org:admin.
       operationId: restoreOktaServerSuggestion
       parameters:
         - allowEmptyValue: true

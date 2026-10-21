@@ -8,9 +8,7 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
@@ -312,11 +310,8 @@ export default function OrgIdentity(): JSX.Element {
     "tab",
     parseAsStringLiteral(IDENTITY_TABS).withDefault("sso"),
   );
-  // Without the rollout flag (or org:admin) the tab does not exist.
-  const providerFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const { hasScope } = useRBAC();
   const issuer = useEnterpriseIssuer();
-  const showExternalProviders = providerFlag.status === "enabled";
   // Speakeasy's own issuer is listed once the organization is offered it, and
   // whenever one exists or its status failed to load, so Disable and Retry stay
   // reachable.
@@ -324,8 +319,7 @@ export default function OrgIdentity(): JSX.Element {
     issuer.isError ||
     (issuer.data !== undefined &&
       (issuer.data.state !== "unavailable" || !!issuer.data.issuer));
-  const showIdentityProviders =
-    (showExternalProviders || showSpeakeasyProvider) && hasScope("org:admin");
+  const showIdentityProviders = hasScope("org:admin");
 
   const showSlack = hasScope("org:admin");
   let activeTab: IdentityPageTab = requestedTab;
@@ -367,10 +361,7 @@ export default function OrgIdentity(): JSX.Element {
     >
       {activeTab === "sso" && <SingleSignOnTab />}
       {activeTab === "identity-providers" && (
-        <IdentityProviders
-          showExternal={showExternalProviders}
-          showSpeakeasy={showSpeakeasyProvider}
-        />
+        <IdentityProviders showExternal showSpeakeasy={showSpeakeasyProvider} />
       )}
       {activeTab === "slack-workspaces" && <SlackWorkspaces />}
     </TabbedPage>

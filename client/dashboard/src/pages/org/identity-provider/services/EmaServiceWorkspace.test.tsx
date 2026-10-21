@@ -63,7 +63,6 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 vi.mock("@/lib/featureFlags", () => ({
   FEATURE_FLAGS: {
     emaProviders: "ema-providers",
-    oktaConnections: "okta-connections",
   },
 }));
 vi.mock("../useEnterpriseIssuer", () => ({
@@ -909,30 +908,9 @@ describe("one service", () => {
     ).toBeTruthy();
   });
 
-  it("doesn't link to Okta when its view isn't available", () => {
-    mocks.flags = { "okta-connections": "disabled" };
-    mocks.rows = [
-      { ...linear, isDefault: false, providers: [okta, speakeasy] },
-    ];
-    show();
-    expect(within(trustRows()[0]!).queryByRole("link")).toBeNull();
-  });
-
-  it.each([
-    [
-      "the Okta view",
-      "enabled",
-      "Fix in Okta",
-      "/?tab=identity-providers&provider=okta&view=setup",
-    ],
-    [
-      "identity providers without the Okta view",
-      "disabled",
-      "Identity providers",
-      "/?tab=identity-providers",
-    ],
-  ])("links a broken Okta provider's fix to %s", (_name, flag, label, href) => {
-    mocks.flags = { "okta-connections": flag };
+  it("links a broken Okta provider's fix to the Okta view", () => {
+    const label = "Fix in Okta";
+    const href = "/?tab=identity-providers&provider=okta&view=setup";
     mocks.rows = [
       {
         ...linear,

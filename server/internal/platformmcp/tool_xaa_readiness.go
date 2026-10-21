@@ -44,7 +44,6 @@ type xaaReadinessService struct {
 	logger      *slog.Logger
 	connections xaaConnectionsReader
 	signIn      oktaSignInReader
-	enabled     FeatureChecker
 	identity    xaaIdentityInspector
 
 	// emaEnabled and servers report vendors the Okta connection does not
@@ -82,22 +81,20 @@ type xaaIdentityInspector interface {
 }
 
 // WithXAAReadiness reuses the dashboard service's org-admin authorization,
-// MCP visibility filtering and readiness derivation. List itself is not gated,
-// so the agent surface checks the same rollout flag before reading it.
+// MCP visibility filtering and readiness derivation. The separate EMA provider
+// rollout still controls provider-agnostic readiness.
 func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, signIn oktaSignInReader, flags feature.Provider) *PostgresReader {
-	flagChecker := func(flag feature.Flag) FeatureChecker {
-		return func(ctx context.Context, orgID string) (bool, error) {
-			if flags == nil {
-				return false, ErrUnavailable
-			}
-			slug, err := NewPostgresOrganizationSlugResolver(r.db).OrganizationSlug(ctx, orgID)
-			if err != nil {
-				return false, err
-			}
-			return flags.IsFlagEnabled(ctx, flag, orgID, feature.OrgProjectGroups(slug, ""))
+	emaEnabled := func(ctx context.Context, orgID string) (bool, error) {
+		if flags == nil {
+			return false, ErrUnavailable
 		}
+		slug, err := NewPostgresOrganizationSlugResolver(r.db).OrganizationSlug(ctx, orgID)
+		if err != nil {
+			return false, err
+		}
+		return flags.IsFlagEnabled(ctx, feature.FlagEMAProviders, orgID, feature.OrgProjectGroups(slug, ""))
 	}
-	r.xaaReadiness = &xaaReadinessService{logger: r.logger, connections: connections, signIn: signIn, enabled: flagChecker(feature.FlagOktaConnections), identity: nil, emaEnabled: flagChecker(feature.FlagEMAProviders), servers: nil}
+	r.xaaReadiness = &xaaReadinessService{logger: r.logger, connections: connections, signIn: signIn, identity: nil, emaEnabled: emaEnabled, servers: nil}
 	return r
 }
 
@@ -295,18 +292,11 @@ func (s *xaaReadinessService) providerAgnostic() bool {
 // read prefers the Okta resource connection when the organization has one;
 // otherwise readiness comes from identity chaining for any EMA provider.
 func (s *xaaReadinessService) read(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
-	okta := s.connections != nil && s.enabled != nil
+	okta := s.connections != nil
 	if !okta && !s.providerAgnostic() {
 		return xaaReadinessRefusal(unavailableCode, "XAA readiness is unavailable on this server.")
 	}
-	oktaOn, emaOn := false, false
-	if okta {
-		on, err := s.enabled(ctx, organizationID)
-		if err != nil {
-			return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
-		}
-		oktaOn = on
-	}
+	emaOn := false
 	if s.providerAgnostic() {
 		on, err := s.emaEnabled(ctx, organizationID)
 		if err != nil {
@@ -314,10 +304,10 @@ func (s *xaaReadinessService) read(ctx context.Context, organizationID string, p
 		}
 		emaOn = on
 	}
-	if !oktaOn && !emaOn {
-		return xaaReadinessRefusal(unavailableCode, "XAA readiness is not enabled for this organization.")
-	}
-	if !oktaOn {
+	if !okta {
+		if !emaOn {
+			return xaaReadinessRefusal(unavailableCode, "XAA readiness is not enabled for this organization.")
+		}
 		return s.readProviderAgnostic(ctx, organizationID, projectID, serverID)
 	}
 	result, err := s.connections.List(ctx, &srv.ListPayload{IncludeAll: true})

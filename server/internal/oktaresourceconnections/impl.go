@@ -33,14 +33,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oktaissuer"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -61,13 +59,12 @@ var oktaOrgHostSuffixes = []string{"okta.com", "oktapreview.com", "okta-emea.com
 var oktaAppIDPattern = regexp.MustCompile(`^0oa[A-Za-z0-9]{10,40}$`)
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	auth     *auth.Auth
-	authz    *authz.Engine
-	audit    *audit.Logger
-	features feature.Provider
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	auth   *auth.Auth
+	authz  *authz.Engine
+	audit  *audit.Logger
 }
 
 var (
@@ -82,17 +79,15 @@ func NewService(
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("oktaresourceconnections"))
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"),
-		logger:   logger,
-		db:       db,
-		auth:     auth.New(logger, db, sessionManager, authzEngine),
-		authz:    authzEngine,
-		audit:    auditLogger,
-		features: features,
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"),
+		logger: logger,
+		db:     db,
+		auth:   auth.New(logger, db, sessionManager, authzEngine),
+		authz:  authzEngine,
+		audit:  auditLogger,
 	}
 }
 
@@ -183,23 +178,6 @@ func actor(ctx context.Context, authCtx *contextvalues.AuthContext) urn.Principa
 		return p
 	}
 	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-}
-
-// requireEnabled checks the rollout flag; a lookup failure reads as
-// unavailable, never forbidden.
-func (s *Service) requireEnabled(ctx context.Context, logger *slog.Logger, organizationID string) error {
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
-	}
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagOktaConnections, organizationID, feature.OrgProjectGroups(org.Slug, ""))
-	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
-	}
-	if !enabled {
-		return oops.E(oops.CodeForbidden, nil, "okta connections are not enabled for this organization")
-	}
-	return nil
 }
 
 // upstreamKey identifies the resource the administrator connects in Okta.
@@ -676,9 +654,6 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
-		return nil, err
-	}
 	items, err := parseConfirmations(payload.Connections)
 	if err != nil {
 		return nil, err
@@ -823,9 +798,6 @@ func resourceConnectionForUpdate(ctx context.Context, q *repo.Queries, organizat
 func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.OktaResourceConnectionServer, error) {
 	authCtx, logger, err := s.authorize(ctx, true)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.McpServerID)
