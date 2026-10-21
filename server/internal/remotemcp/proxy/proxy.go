@@ -183,6 +183,9 @@ func ChainUpstreamResponseRetryers(retryers ...UpstreamResponseRetryer) Upstream
 // client exchange.
 type Proxy struct {
 	RequestObserver RequestObserver
+	// SessionClients, when set, attributes observed requests to the client
+	// their session reported at initialize. Nil attributes them by User-Agent.
+	SessionClients SessionClients
 	// GuardianPolicy is used to build a fresh, non-pooled HTTP client per
 	// upstream request. Pooling is inappropriate here because each Proxy
 	// instance handles a single upstream host and discards the connection
@@ -567,7 +570,13 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		return oops.E(oops.CodeBadRequest, parseErr, "invalid jsonrpc request").LogError(ctx, p.Logger)
 	}
 
-	ctx, observation := beginObservation(ctx, p.RequestObserver, userReq)
+	// Decoded before the generic chain so the requested version is recorded
+	// even when an interceptor rejects the request. A rejected handshake is
+	// still a handshake worth attributing to a protocol revision.
+	initializeReq, _ := initializeRequestFromUserRequest(userReq)
+	recordRequestedProtocolVersion(span, initializeReq)
+
+	ctx, observation := beginObservation(ctx, p.RequestObserver, p.SessionClients, userReq, initializeReq)
 	defer func() {
 		if observation == nil {
 			return
@@ -596,12 +605,6 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			userReqID = rpcReq.ID
 		}
 	}
-
-	// Decoded before the generic chain so the requested version is recorded
-	// even when an interceptor rejects the request. A rejected handshake is
-	// still a handshake worth attributing to a protocol revision.
-	initializeReq, _ := initializeRequestFromUserRequest(userReq)
-	recordRequestedProtocolVersion(span, initializeReq)
 
 	if err := p.runUserRequestInterceptors(ctx, userReq, p.UserRequestObservationInterceptors); err != nil {
 		return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
@@ -781,6 +784,15 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 				return nil
 			}
 			return fmt.Errorf("upstream response interceptor: %w", err)
+		}
+	}
+
+	// Recorded after the response interceptor so the session id is the one
+	// the client is answered with, and before the relay so a follow-up request
+	// on another replica finds it.
+	if initializeReq != nil && p.SessionClients != nil && upstreamStatus >= 200 && upstreamStatus < 300 {
+		if sessionID := upstreamResp.Header.Get(McpSessionIDHeader); sessionID != "" {
+			p.SessionClients.RecordInitialize(ctx, sessionID, initializeReq.Params)
 		}
 	}
 

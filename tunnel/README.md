@@ -91,8 +91,10 @@ HTTP/MCP stays **Not observed** until normal traffic arrives. HTTP 200 alone doe
 not prove MCP success, and an open SSE response is not itself a failure.
 
 Telemetry includes bounded counters and the configured target's scheme, hostname
-and port. It excludes the target's path, payloads, tool names, raw user agents,
-URL userinfo, query strings and raw errors. Requests are collected in minute buckets and
+and port. It excludes the target's path, payloads, tool names, raw client names and
+user agents, URL userinfo, query strings and raw errors. Requests are grouped by a
+fixed client family classified from the `clientInfo.name` the MCP session reported
+at initialize, falling back to the HTTP User-Agent. Requests are collected in minute buckets and
 gateway connections are sampled every 15 seconds. The Overview groups history
 into 1-minute buckets for 1 hour, 15-minute buckets for 24 hours, and hourly
 buckets for 7 days.

@@ -64,8 +64,10 @@ func Method(value string) string {
 		return "other"
 	}
 }
+
+// ClientFamily classifies an MCP clientInfo.name or an HTTP User-Agent. It
+// inspects only a bounded prefix and retains only a fixed family label.
 func ClientFamily(value string) string {
-	// Inspect only a bounded prefix, retain only a fixed family label.
 	value = strings.ToLower(value[:min(len(value), 256)])
 	switch {
 	case strings.Contains(value, "claude"):
@@ -83,6 +85,24 @@ func ClientFamily(value string) string {
 	default:
 		return "other"
 	}
+}
+
+// PreferredFamily picks between families classified from several sources,
+// most trusted first: the first named family wins, then "other" when any
+// source identified some client, else "unknown". An empty family means the
+// source was absent.
+func PreferredFamily(families ...string) string {
+	result := "unknown"
+	for _, family := range families {
+		switch family {
+		case "", "unknown":
+		case "other":
+			result = "other"
+		default:
+			return family
+		}
+	}
+	return result
 }
 func (c *Collector) Observe(source, server, method, client, outcome string, duration time.Duration) {
 	if c == nil || source == "" {

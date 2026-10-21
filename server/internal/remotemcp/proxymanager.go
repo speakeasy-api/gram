@@ -414,6 +414,7 @@ func (f *ProxyManager) BuildTarget(
 	}
 	return &proxy.Proxy{
 		RequestObserver:             observer,
+		SessionClients:              nil,
 		GuardianPolicy:              f.guardianPolicy,
 		GuardianClientOptions:       nil,
 		Logger:                      logger,

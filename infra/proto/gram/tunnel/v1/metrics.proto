@@ -24,7 +24,7 @@ message MetricsSnapshot {
   string server_id = 6;
   // Requests only: tools/call, tools/list, initialize, resources/read, resources/list, prompts/list, prompts/get, ping, other.
   string method = 7;
-  // Requests only: claude, codex, cursor, chatgpt, inspector, unknown, other, derived from the HTTP User-Agent. Never the raw user agent.
+  // Requests only: claude, codex, cursor, chatgpt, inspector, unknown, other, derived from the MCP client name the session reported at initialize, falling back to the HTTP User-Agent. Never the raw client name or user agent.
   string client_family = 8;
   // Cumulative logical MCP request starts in this bucket.
   uint64 attempts = 9;

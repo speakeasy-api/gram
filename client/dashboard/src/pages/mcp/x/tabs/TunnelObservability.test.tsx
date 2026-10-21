@@ -654,7 +654,9 @@ it("explains which requests the numbers include", () => {
   renderWith(legacy.connections);
   const notes = screen.getByText("About these numbers").closest("details")!;
   expect(
-    within(notes).getByText(/detected from the HTTP User-Agent/),
+    within(notes).getByText(
+      /identified by the name it reports when it connects, falling back to the HTTP User-Agent/,
+    ),
   ).toBeTruthy();
   expect(
     within(notes).getByText(/Requests that Speakeasy sends on a user/),

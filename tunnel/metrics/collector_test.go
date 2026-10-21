@@ -45,6 +45,37 @@ func TestDimensionsDiscardUnknownNames(t *testing.T) {
 	require.Equal(t, "claude", ClientFamily("Claude/1.0 private-user"))
 }
 
+func TestClientFamilyClassifiesMCPClientNames(t *testing.T) {
+	for name, family := range map[string]string{
+		"claude-code":                   "claude",
+		"Claude Code":                   "claude",
+		"claude-ai":                     "claude",
+		"cursor-vscode":                 "cursor",
+		"Cursor":                        "cursor",
+		"codex-mcp-client":              "codex",
+		"Codex CLI":                     "codex",
+		"ChatGPT":                       "chatgpt",
+		"mcp-inspector":                 "inspector",
+		"Visual Studio Code":            "other",
+		"Visual Studio Code - Insiders": "other",
+		"windsurf-client":               "other",
+		"PRIVATE_CLIENT_NAME":           "other",
+		"":                              "unknown",
+	} {
+		require.Equal(t, family, ClientFamily(name), name)
+	}
+}
+
+func TestPreferredFamilyTrustsTheFirstNamedSource(t *testing.T) {
+	require.Equal(t, "cursor", PreferredFamily("cursor", "claude"))
+	require.Equal(t, "claude", PreferredFamily("other", "claude"), "an unrecognized client name falls back to a recognized user agent")
+	require.Equal(t, "claude", PreferredFamily("", "claude"))
+	require.Equal(t, "other", PreferredFamily("other", "unknown"))
+	require.Equal(t, "other", PreferredFamily("unknown", "other"))
+	require.Equal(t, "unknown", PreferredFamily("", "unknown"))
+	require.Equal(t, "unknown", PreferredFamily())
+}
+
 func TestFullFleetFlushIsBoundedAndRecordingContinues(t *testing.T) {
 	c := New()
 	for i := range 10000 {

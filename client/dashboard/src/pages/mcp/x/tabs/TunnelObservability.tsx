@@ -759,8 +759,9 @@ function AboutTheseNumbers({ points }: { points: TunnelMetricPoint[] }) {
             60 seconds.
           </li>
           <li>
-            The client is detected from the HTTP User-Agent. Many SDK-based
-            clients appear as &ldquo;Other clients&rdquo;.
+            The client is identified by the name it reports when it connects,
+            falling back to the HTTP User-Agent. Clients Speakeasy does not
+            recognize appear as &ldquo;Other clients&rdquo;.
           </li>
           <li>
             Requests that Speakeasy sends on a user&rsquo;s behalf through this

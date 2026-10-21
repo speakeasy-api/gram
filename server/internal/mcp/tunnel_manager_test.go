@@ -139,14 +139,21 @@ func TestTunnelManagerRecordsRequestsWithNoConnectedAgent(t *testing.T) {
 	// Notifications and batches are not requests the proxy would observe either.
 	require.Error(t, build(`{"jsonrpc":"2.0","method":"notifications/initialized"}`))
 	require.Error(t, build(`[{"jsonrpc":"2.0","id":2,"method":"tools/list"}]`))
+	// An initialize is attributed to the client it reports, as when routed.
+	require.Error(t, build(`{"jsonrpc":"2.0","id":3,"method":"initialize","params":{"clientInfo":{"name":"cursor-vscode","version":"1.0"}}}`))
 
 	var rows []metrics.Snapshot
+	initializeFamily := ""
 	proxyManager.TunnelMetrics.Flush(t.Context(), func(_ context.Context, s metrics.Snapshot) error {
-		if s.Kind == "requests" {
+		switch {
+		case s.Kind == "requests" && s.Method == "initialize":
+			initializeFamily = s.ClientFamily
+		case s.Kind == "requests":
 			rows = append(rows, s)
 		}
 		return nil
 	})
+	require.Equal(t, "cursor", initializeFamily)
 	require.Len(t, rows, 1)
 	require.Equal(t, tunnel.String(), rows[0].SourceID)
 	require.Equal(t, wrapper.String(), rows[0].ServerID)

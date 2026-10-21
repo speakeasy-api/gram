@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
@@ -186,11 +187,25 @@ func (m *tunnelManager) observeNoRoute(tunnelID, mcpServerID string, r *http.Req
 	var rpc struct {
 		ID     json.RawMessage `json:"id"`
 		Method string          `json:"method"`
+		Params json.RawMessage `json:"params"`
 	}
 	if json.Unmarshal(body, &rpc) != nil || rpc.Method == "" || len(rpc.ID) == 0 || string(rpc.ID) == "null" {
 		return
 	}
-	method, client := metrics.Method(rpc.Method), metrics.ClientFamily(r.UserAgent())
+	// An initialize is attributed to the client it reports, as when routed.
+	// Other requests keep their User-Agent rather than pay a session lookup.
+	reported := ""
+	if rpc.Method == mcpversions.MethodInitialize {
+		var params struct {
+			ClientInfo struct {
+				Name string `json:"name"`
+			} `json:"clientInfo"`
+		}
+		if json.Unmarshal(rpc.Params, &params) == nil {
+			reported = reportedClientFamily(params.ClientInfo.Name)
+		}
+	}
+	method, client := metrics.Method(rpc.Method), metrics.PreferredFamily(reported, metrics.ClientFamily(r.UserAgent()))
 	m.proxyManager.TunnelMetrics.Observe(tunnelID, mcpServerID, method, client, "attempt", 0)
 	m.proxyManager.TunnelMetrics.Observe(tunnelID, mcpServerID, method, client, "unrouted", 0)
 }

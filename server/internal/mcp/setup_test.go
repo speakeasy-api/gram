@@ -137,6 +137,9 @@ type testInstance struct {
 	// tests replace it to control the upstream credential.
 	clientCredentials *testClientCredentials
 	toolCallRecords   *toolCallRecorder
+	// remoteProxyManager builds the service's remote and tunnel proxies; tests
+	// that assert tunnel activity metrics install a collector on it.
+	remoteProxyManager *remotemcp.ProxyManager
 }
 
 // migratedService models an organization after the upstream OAuth migration:
@@ -742,6 +745,7 @@ func buildTestMCPService(
 		efficacySignaler:     efficacySignaler,
 		clientCredentials:    clientCredentials,
 		toolCallRecords:      toolCallRecords,
+		remoteProxyManager:   remoteProxyManager,
 	}
 }
 

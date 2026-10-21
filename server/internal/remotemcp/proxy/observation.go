@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/tunnel/metrics"
 )
@@ -14,6 +15,18 @@ import (
 // RequestObserver receives bounded categories only. It never receives a body,
 // a tool name, raw user agent, request ID, credentials, or error text.
 type RequestObserver func(method, clientFamily, outcome string, elapsed time.Duration)
+
+// SessionClients remembers the MCP client each session reported at initialize,
+// so requests later in the session are attributed to it rather than to their
+// User-Agent, which Node-based clients leave generic.
+type SessionClients interface {
+	// RecordInitialize remembers what a session reported at initialize.
+	// sessionID is the Mcp-Session-Id the client was answered with.
+	RecordInitialize(ctx context.Context, sessionID string, params *mcp.InitializeParams)
+	// ClientFamily returns the family recorded for a session, or "" when none
+	// was.
+	ClientFamily(ctx context.Context, sessionID string) string
+}
 type observationKey struct{}
 type requestObservation struct {
 	once           sync.Once
@@ -64,7 +77,7 @@ func observeResponse(ctx context.Context, msg jsonrpc.Message) {
 	}
 	o.finish(outcome)
 }
-func beginObservation(ctx context.Context, record RequestObserver, req *UserRequest) (context.Context, *requestObservation) {
+func beginObservation(ctx context.Context, record RequestObserver, sessions SessionClients, req *UserRequest, initialize *InitializeRequest) (context.Context, *requestObservation) {
 	if record == nil || len(req.JSONRPCMessages) != 1 {
 		return ctx, nil
 	}
@@ -72,7 +85,25 @@ func beginObservation(ctx context.Context, record RequestObserver, req *UserRequ
 	if !ok || !rpc.ID.IsValid() {
 		return ctx, nil
 	}
-	o := &requestObservation{once: sync.Once{}, record: record, method: metrics.Method(rpc.Method), client: metrics.ClientFamily(req.UserHTTPRequest.UserAgent()), started: time.Now(), id: rpc.ID}
+	o := &requestObservation{once: sync.Once{}, record: record, method: metrics.Method(rpc.Method), client: observedClientFamily(ctx, sessions, req, initialize), started: time.Now(), id: rpc.ID}
 	record(o.method, o.client, "attempt", 0)
 	return context.WithValue(ctx, observationKey{}, o), o
+}
+
+// observedClientFamily prefers the client the MCP session reported for itself:
+// an initialize request's own clientInfo, otherwise what its session recorded.
+// The User-Agent is the fallback when neither names a known client.
+func observedClientFamily(ctx context.Context, sessions SessionClients, req *UserRequest, initialize *InitializeRequest) string {
+	reported := ""
+	switch {
+	case initialize != nil:
+		if initialize.Params.ClientInfo != nil {
+			reported = metrics.ClientFamily(initialize.Params.ClientInfo.Name)
+		}
+	case sessions != nil:
+		if sessionID := req.UserHTTPRequest.Header.Get(McpSessionIDHeader); sessionID != "" {
+			reported = sessions.ClientFamily(ctx, sessionID)
+		}
+	}
+	return metrics.PreferredFamily(reported, metrics.ClientFamily(req.UserHTTPRequest.UserAgent()))
 }
