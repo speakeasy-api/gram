@@ -36,6 +36,7 @@ const (
 
 	anthropicComplianceSourceWeb     = "claude-chat-web"
 	anthropicComplianceSourceDesktop = "claude"
+	anthropicComplianceSourceMobile  = "claude-chat-mobile"
 
 	// anthropicCompliancePageLimit is the messages endpoint's maximum page.
 	anthropicCompliancePageLimit = 1000
@@ -154,9 +155,9 @@ func NewComplianceImportService(logger *slog.Logger, db *pgxpool.Pool, guardianP
 //
 //   - The activity feed, window-polled for claude_chat_created between the
 //     schedule watermark and endTime. A created activity carries the actor's
-//     user agent, which classifies the chat as Claude web or desktop, and ip
-//     address; both are stamped on its messages, so a new chat is imported
-//     from here first.
+//     user agent, which classifies the chat as Claude web, desktop, or the
+//     mobile app, and ip address; both are stamped on its messages, so a new
+//     chat is imported from here first.
 //   - The chat list ordered by updated_at, walked forward from the stored
 //     cursor. It is the only feed that reports a chat receiving new messages:
 //     the activity feed has no message-level activity. Each chat it yields
@@ -592,7 +593,10 @@ func (s *ComplianceImportService) upsertDiscoveredChat(ctx context.Context, cfg 
 
 // storedChatClient returns the client identity stamped on the chat's newest
 // imported message, so the messages a chat-list visit adds keep the source
-// its created activity established. A chat with no imported messages yet is
+// its created activity established. The source is re-derived from the stored
+// user agent when there is one, so a chat imported before the classifier
+// learned a surface (the mobile apps once read as web or desktop) is labeled
+// correctly from its next message on. A chat with no imported messages yet is
 // attributed to Claude web, the surface with no distinguishing user agent.
 func (s *ComplianceImportService) storedChatClient(ctx context.Context, cfg Config, chatID uuid.UUID) (chatClient, error) {
 	row, err := chatrepo.New(s.db).GetLatestExternalChatMessageClient(ctx, chatrepo.GetLatestExternalChatMessageClientParams{
@@ -607,7 +611,10 @@ func (s *ComplianceImportService) storedChatClient(ctx context.Context, cfg Conf
 	}
 
 	source := row.Source.String
-	if source == "" {
+	switch {
+	case row.UserAgent.String != "":
+		source = complianceSourceFromUserAgent(row.UserAgent.String)
+	case source == "":
 		source = anthropicComplianceSourceWeb
 	}
 	return chatClient{source: source, userAgent: row.UserAgent.String, ipAddress: row.IpAddress.String}, nil
@@ -901,15 +908,41 @@ func (r *connectedUserResolver) resolve(ctx context.Context, email string) (stri
 	return r.cache[email], nil
 }
 
+// claudeMobileOSTokens mark a user agent as coming from a phone or tablet.
+// CFNetwork is iOS's networking stack: the iOS app's default user agent is
+// "Claude/<build> CFNetwork/<version> Darwin/<version>", with no OS name. The
+// desktop app is Electron on Chromium's network stack and never carries one.
+var claudeMobileOSTokens = []string{"Android", "iPhone", "iPad", "iOS", "CFNetwork/"}
+
 // complianceSourceFromUserAgent classifies the activity actor's user agent.
-// The Claude desktop app is an Electron shell whose user agent carries
-// "Claude/<version>" and "Electron/<version>" product tokens; plain browser
-// user agents (Claude web) have neither.
+// The Claude mobile apps name themselves ("Claude/<build>" on iOS, "Claude
+// com.anthropic.claude/<version> (Android <sdk>)" on Android) next to a
+// mobile OS token, so they are checked first: the iOS token would otherwise
+// read as desktop. The Claude desktop app is an Electron shell whose user
+// agent carries "Claude/<version>" and "Electron/<version>" product tokens.
+// Plain browser user agents, including mobile browsers on claude.ai, carry no
+// Claude token and are Claude web.
 func complianceSourceFromUserAgent(userAgent string) string {
-	if strings.Contains(userAgent, "Claude/") || strings.Contains(userAgent, "Electron/") {
+	switch {
+	case isClaudeMobileAppUserAgent(userAgent):
+		return anthropicComplianceSourceMobile
+	case strings.Contains(userAgent, "Claude/") || strings.Contains(userAgent, "Electron/"):
 		return anthropicComplianceSourceDesktop
+	default:
+		return anthropicComplianceSourceWeb
 	}
-	return anthropicComplianceSourceWeb
+}
+
+func isClaudeMobileAppUserAgent(userAgent string) bool {
+	if !strings.Contains(userAgent, "Claude") || strings.Contains(userAgent, "Electron/") {
+		return false
+	}
+	for _, token := range claudeMobileOSTokens {
+		if strings.Contains(userAgent, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseTimeOrDefault(value string, fallback time.Time) time.Time {
