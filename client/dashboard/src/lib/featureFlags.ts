@@ -5,7 +5,6 @@ export const FEATURE_FLAGS = {
   // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
   emaProviders: "ema-providers",
   explore: "gram-explore",
-  functions: "gram-functions",
   gatewayEndpoints: "gram-gateway-endpoints",
   headlessModeSwitcher: "headless-mode-switcher",
   killswitches: "gram-killswitches",
