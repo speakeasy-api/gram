@@ -44,7 +44,7 @@ type MetricsSnapshot struct {
 	ServerId string `protobuf:"bytes,6,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
 	// Requests only: tools/call, tools/list, initialize, resources/read, resources/list, prompts/list, prompts/get, ping, other.
 	Method string `protobuf:"bytes,7,opt,name=method,proto3" json:"method,omitempty"`
-	// Requests only: claude, codex, cursor, chatgpt, inspector, unknown, other, derived from the MCP client name the session reported at initialize, falling back to the HTTP User-Agent. Never the raw client name or user agent.
+	// Requests only: claude, codex, cursor, chatgpt, vscode, inspector, unknown, other, derived from the MCP client name the session reported at initialize, falling back to the HTTP User-Agent. Never the raw client name or user agent.
 	ClientFamily string `protobuf:"bytes,8,opt,name=client_family,json=clientFamily,proto3" json:"client_family,omitempty"`
 	// Cumulative logical MCP request starts in this bucket.
 	Attempts uint64 `protobuf:"varint,9,opt,name=attempts,proto3" json:"attempts,omitempty"`

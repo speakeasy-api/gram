@@ -78,6 +78,9 @@ func ClientFamily(value string) string {
 		return "cursor"
 	case strings.Contains(value, "chatgpt"):
 		return "chatgpt"
+	case strings.Contains(value, "visual studio code"), strings.Contains(value, "vscode"):
+		// After cursor: Cursor reports itself as "cursor-vscode".
+		return "vscode"
 	case strings.Contains(value, "mcp-inspector"):
 		return "inspector"
 	case value == "":
@@ -104,6 +107,7 @@ func PreferredFamily(families ...string) string {
 	}
 	return result
 }
+
 func (c *Collector) Observe(source, server, method, client, outcome string, duration time.Duration) {
 	if c == nil || source == "" {
 		return
@@ -288,7 +292,7 @@ send:
 
 func boundedFamily(value string) string {
 	switch value {
-	case "claude", "codex", "cursor", "chatgpt", "inspector", "unknown", "other":
+	case "claude", "codex", "cursor", "chatgpt", "vscode", "inspector", "unknown", "other":
 		return value
 	default:
 		return "other"

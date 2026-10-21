@@ -67,7 +67,7 @@ func validSnapshot(m *tunnelv1.MetricsSnapshot) bool {
 	}
 	switch m.Kind {
 	case "requests":
-		return m.BucketUnix%60 == 0 && metrics.Method(m.Method) == m.Method && slices.Contains([]string{"claude", "codex", "cursor", "chatgpt", "inspector", "unknown", "other"}, m.ClientFamily)
+		return m.BucketUnix%60 == 0 && metrics.Method(m.Method) == m.Method && slices.Contains([]string{"claude", "codex", "cursor", "chatgpt", "vscode", "inspector", "unknown", "other"}, m.ClientFamily)
 	case "coverage":
 		return m.BucketUnix%60 == 0 && m.Method == "" && m.ClientFamily == "" && m.ServerId == ""
 	case "connections":

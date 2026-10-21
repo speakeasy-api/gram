@@ -720,6 +720,7 @@ function clientLabel(family: string) {
     codex: "Codex",
     cursor: "Cursor",
     chatgpt: "ChatGPT",
+    vscode: "VS Code",
     inspector: "MCP Inspector",
     unknown: "Unknown client",
     other: "Other clients",

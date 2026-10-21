@@ -70,7 +70,10 @@ func TestTunnelSessionClientsClassifyReportedNames(t *testing.T) {
 	clients := newTunnelClientFamilies(store).forServer(testenv.NewLogger(t), uuid.New(), uuid.New())
 
 	clients.RecordInitialize(t.Context(), "vscode", reportedInitializeParams("Visual Studio Code"))
-	require.Equal(t, "other", clients.ClientFamily(t.Context(), "vscode"))
+	require.Equal(t, "vscode", clients.ClientFamily(t.Context(), "vscode"))
+
+	clients.RecordInitialize(t.Context(), "windsurf", reportedInitializeParams("windsurf-client"))
+	require.Equal(t, "other", clients.ClientFamily(t.Context(), "windsurf"))
 
 	clients.RecordInitialize(t.Context(), "nameless", reportedInitializeParams(""))
 	require.Empty(t, clients.ClientFamily(t.Context(), "nameless"), "no reported name leaves the User-Agent to decide")
