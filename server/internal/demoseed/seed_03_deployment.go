@@ -71,6 +71,7 @@ func (s *seeder) seedDeploymentBootstrapTokens(ctx context.Context) error {
 	}
 
 	redeemedBy := pgtype.Text{String: "device:" + s.det("device-subject-1").String(), Valid: true}
+	notRedeemed := pgtype.Text{String: "", Valid: false}
 	tokens := []struct {
 		n                                              string
 		creator                                        demoUser
@@ -78,13 +79,13 @@ func (s *seeder) seedDeploymentBootstrapTokens(ctx context.Context) error {
 		consumedBy                                     pgtype.Text
 	}{
 		// Active: issued a few minutes ago, waiting for its box.
-		{"1", demoUsers[0], "50 minutes", "", "10 minutes", "", pgtype.Text{}},
+		{"1", demoUsers[0], "50 minutes", "", "10 minutes", "", notRedeemed},
 		// Redeemed: the box enrolled shortly after it was issued.
 		{"2", demoUsers[0], "-2 days", "3 days", "3 days 1 hour", "", redeemedBy},
 		// Expired: nobody ran the install in time.
-		{"3", demoUsers[1], "-5 days", "", "5 days 1 hour", "", pgtype.Text{}},
+		{"3", demoUsers[1], "-5 days", "", "5 days 1 hour", "", notRedeemed},
 		// Revoked: withdrawn before it was used.
-		{"4", demoUsers[1], "-6 days", "", "7 days", "6 days 23 hours", pgtype.Text{}},
+		{"4", demoUsers[1], "-6 days", "", "7 days", "6 days 23 hours", notRedeemed},
 	}
 	for _, t := range tokens {
 		if err := s.q.DeployInsertDeviceJoinToken(ctx, repo.DeployInsertDeviceJoinTokenParams{

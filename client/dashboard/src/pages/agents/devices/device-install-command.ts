@@ -25,7 +25,7 @@ export interface DeviceInstallCommand {
   tokenExpiresAt: Date;
 }
 
-export interface DeviceInstallCommandRequest {
+interface DeviceInstallCommandRequest {
   agentId: string;
   hooksProjectSlug: string;
   expiresInSeconds: number;

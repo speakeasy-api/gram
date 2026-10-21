@@ -25,11 +25,11 @@ export const HOOKS_INGEST_SCOPE = "org:hooks_ingest";
  * prefix it gives their subjects. Mirrors deviceIssuerName and
  * deviceSubjectPrefix in server/internal/workloadpolicy/devices.go.
  */
-export const DEVICE_ISSUER_NAME = "Speakeasy devices";
-export const DEVICE_SUBJECT_PREFIX = "device:";
+const DEVICE_ISSUER_NAME = "Speakeasy devices";
+const DEVICE_SUBJECT_PREFIX = "device:";
 
 /** The production control plane, which the device binary assumes by default. */
-export const DEFAULT_CONTROL_PLANE_URL = "https://app.getgram.ai";
+const DEFAULT_CONTROL_PLANE_URL = "https://app.getgram.ai";
 
 /** How long a bootstrap token stays redeemable. The server allows 60s–24h. */
 export const TOKEN_LIFETIMES = [
@@ -179,7 +179,7 @@ export function isDeviceAdmission(admission: WorkloadAdmission): boolean {
  */
 export type WatchedToken = { id: string } | { expiresAt: Date };
 
-export function findWatchedToken(
+function findWatchedToken(
   tokens: WorkloadDeviceJoinTokenSummary[],
   watched: WatchedToken,
 ): WorkloadDeviceJoinTokenSummary | undefined {

@@ -377,7 +377,7 @@ function AgentBootstrapTokensContent({
  * Issuing a bootstrap token for an agent that already exists: the same
  * choices and the same setup as the agent wizard, in a side panel.
  */
-export function IssueBootstrapTokenSheet({
+function IssueBootstrapTokenSheet({
   agent,
   open,
   onOpenChange,
