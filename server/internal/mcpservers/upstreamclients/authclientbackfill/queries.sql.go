@@ -12,19 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const backfillRunStartedAt = `-- name: BackfillRunStartedAt :one
-SELECT clock_timestamp()::timestamptz AS started_at
-`
-
-// The database's clock when a run begins, against which retirement checks
-// for configuration changed since.
-func (q *Queries) BackfillRunStartedAt(ctx context.Context) (pgtype.Timestamptz, error) {
-	row := q.db.QueryRow(ctx, backfillRunStartedAt)
-	var started_at pgtype.Timestamptz
-	err := row.Scan(&started_at)
-	return started_at, err
-}
-
 const createAuthClient = `-- name: CreateAuthClient :one
 INSERT INTO mcp_auth_clients (id, organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
 SELECT $1::uuid, $2::text, $3::uuid, $4::text, 'backfill', $5::text, c.id, c.attachment_scope
@@ -2981,17 +2968,24 @@ func (q *Queries) SoftDeleteServerAuthClientLinksFixture(ctx context.Context, mc
 }
 
 const tryLockOrganizationBackfill = `-- name: TryLockOrganizationBackfill :one
-SELECT pg_try_advisory_lock(hashtext('authclientbackfill:' || $1::text))::boolean AS locked
+SELECT pg_try_advisory_lock(hashtext('authclientbackfill:' || $1::text))::boolean AS locked,
+       clock_timestamp()::timestamptz AS started_at
 `
+
+type TryLockOrganizationBackfillRow struct {
+	Locked    bool
+	StartedAt pgtype.Timestamptz
+}
 
 // Takes the organization's backfill lock for the session's life without
 // waiting, so one run holds it across all its phases; false means another run
-// holds it.
-func (q *Queries) TryLockOrganizationBackfill(ctx context.Context, organizationID string) (bool, error) {
+// holds it. started_at is the database's clock as the run begins, against
+// which retirement checks for configuration changed since.
+func (q *Queries) TryLockOrganizationBackfill(ctx context.Context, organizationID string) (TryLockOrganizationBackfillRow, error) {
 	row := q.db.QueryRow(ctx, tryLockOrganizationBackfill, organizationID)
-	var locked bool
-	err := row.Scan(&locked)
-	return locked, err
+	var i TryLockOrganizationBackfillRow
+	err := row.Scan(&i.Locked, &i.StartedAt)
+	return i, err
 }
 
 const unlockOrganizationBackfill = `-- name: UnlockOrganizationBackfill :exec

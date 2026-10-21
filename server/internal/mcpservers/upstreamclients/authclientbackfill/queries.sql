@@ -345,16 +345,13 @@ RETURNING target.id;
 -- transaction's life.
 SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || @organization_id::text));
 
--- name: BackfillRunStartedAt :one
--- The database's clock when a run begins, against which retirement checks
--- for configuration changed since.
-SELECT clock_timestamp()::timestamptz AS started_at;
-
 -- name: TryLockOrganizationBackfill :one
 -- Takes the organization's backfill lock for the session's life without
 -- waiting, so one run holds it across all its phases; false means another run
--- holds it.
-SELECT pg_try_advisory_lock(hashtext('authclientbackfill:' || @organization_id::text))::boolean AS locked;
+-- holds it. started_at is the database's clock as the run begins, against
+-- which retirement checks for configuration changed since.
+SELECT pg_try_advisory_lock(hashtext('authclientbackfill:' || @organization_id::text))::boolean AS locked,
+       clock_timestamp()::timestamptz AS started_at;
 
 -- name: UnlockOrganizationBackfill :exec
 -- Releases the organization's session backfill lock.

@@ -515,18 +515,14 @@ func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 		}
 		conn.Release()
 	}()
-	locked, err := New(conn).TryLockOrganizationBackfill(ctx, opts.OrganizationID)
+	lock, err := New(conn).TryLockOrganizationBackfill(ctx, opts.OrganizationID)
 	switch {
 	case err != nil:
 		return Report{}, fmt.Errorf("lock organization backfill: %w", err)
-	case !locked:
+	case !lock.Locked:
 		return Report{}, ErrRunInProgress
 	}
-	startedAt, err := New(conn).BackfillRunStartedAt(ctx)
-	if err != nil {
-		return Report{}, fmt.Errorf("read run start: %w", err)
-	}
-	return runLocked(ctx, conn, opts, startedAt)
+	return runLocked(ctx, conn, opts, lock.StartedAt)
 }
 
 func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype.Timestamptz) (Report, error) {

@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 const (
@@ -817,7 +819,7 @@ func TestRun_HoldsTheOrganizationLock(t *testing.T) {
 	stillHeld, err := New(other).TryLockOrganizationBackfill(t.Context(), f.orgID)
 	other.Release()
 	require.NoError(t, err)
-	require.False(t, stillHeld)
+	require.False(t, stillHeld.Locked)
 
 	require.NoError(t, tx.Rollback(t.Context()))
 	_, err = Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
@@ -1075,7 +1077,7 @@ func TestReconcileDerived_KeepsARacedClientsLinks(t *testing.T) {
 	f.run(true)
 	clientID := f.live(TypeStaticCredential)[0].ID
 
-	startedAt, err := f.q.BackfillRunStartedAt(t.Context())
+	startedAt, err := testrepo.New(f.pool).CurrentDatabaseTime(t.Context())
 	require.NoError(t, err)
 	want := newExpected()
 	want.race(clientID)
@@ -1389,10 +1391,11 @@ func TestRun_HoldsTheLockAcrossPhases(t *testing.T) { //nolint:paralleltest // s
 			return fmt.Errorf("acquire: %w", err)
 		}
 		defer conn.Release()
-		got, err := New(conn).TryLockOrganizationBackfill(t.Context(), f.orgID)
+		lock, err := New(conn).TryLockOrganizationBackfill(t.Context(), f.orgID)
 		if err != nil {
 			return fmt.Errorf("try lock: %w", err)
 		}
+		got := lock.Locked
 		if got {
 			_ = New(conn).UnlockOrganizationBackfill(t.Context(), f.orgID)
 		}
@@ -1411,6 +1414,6 @@ func TestRun_HoldsTheLockAcrossPhases(t *testing.T) { //nolint:paralleltest // s
 	defer conn.Release()
 	free, err := New(conn).TryLockOrganizationBackfill(t.Context(), f.orgID)
 	require.NoError(t, err)
-	require.True(t, free)
+	require.True(t, free.Locked)
 	require.NoError(t, New(conn).UnlockOrganizationBackfill(t.Context(), f.orgID))
 }
