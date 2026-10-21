@@ -2,7 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import type { DirectoryReviewItem } from "@gram/client/models/components/directoryreviewitem.js";
+import {
+  DirectoryReviewItemKind$inboundSchema,
+  type DirectoryReviewItem,
+} from "@gram/client/models/components/directoryreviewitem.js";
 import { DirectoryReviewPanel } from "./DirectoryReviewPanel";
 import type { Role } from "@gram/client/models/components/role.js";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -134,6 +137,28 @@ afterEach(() => {
 });
 
 describe("DirectoryReviewPanel", () => {
+  it("keeps an unknown change read-only and offers refresh", () => {
+    mocks.items = [
+      {
+        ...newGroup,
+        kind: DirectoryReviewItemKind$inboundSchema.parse("future_kind"),
+      },
+    ];
+    renderPanel();
+    expect(screen.getByText("Directory change: Platform")).toBeTruthy();
+    expect(
+      screen.getByText(/This directory change is not supported yet/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: /Map|Leave unmapped|Remove roles|Keep roles/,
+      }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(mocks.refetch).toHaveBeenCalledOnce();
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+
   it("renders nothing when there is nothing to review", () => {
     mocks.items = [];
     const { container } = renderPanel();

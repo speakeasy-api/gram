@@ -148,7 +148,7 @@ const grant = {
   },
 };
 
-function setup() {
+function setup(initialPlatformKey?: string) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -157,6 +157,7 @@ function setup() {
     <MemoryRouter>
       <QueryClientProvider client={client}>
         <ProvisionWizard
+          initialPlatformKey={initialPlatformKey}
           onDone={(id) => {
             onDone(id);
           }}
@@ -354,6 +355,73 @@ async function reachPlatformSetup() {
 }
 
 describe("Federating a platform's own tokens", () => {
+  it.each([
+    [
+      "unknown issuer visibility",
+      { ...platform, issuer: { ...platform.issuer, visibility: "future" } },
+    ],
+    [
+      "prototype issuer visibility",
+      {
+        ...platform,
+        issuer: { ...platform.issuer, visibility: "constructor" },
+      },
+    ],
+    [
+      "unknown key visibility",
+      { ...platform, jwksUri: { ...platform.jwksUri, visibility: "future" } },
+    ],
+    [
+      "unknown variable tier",
+      {
+        ...platform,
+        variables: platform.variables.map((variable) => ({
+          ...variable,
+          tier: "future",
+        })),
+      },
+    ],
+    [
+      "prototype variable tier",
+      {
+        ...platform,
+        variables: platform.variables.map((variable) => ({
+          ...variable,
+          tier: "toString",
+        })),
+      },
+    ],
+    ["disabled platform", { ...platform, enabled: false }],
+    ["unknown platform", { ...platform, key: "constructor" }],
+  ])(
+    "keeps %s visible without allowing preselected setup",
+    async (_case, unavailable) => {
+      mocks.platforms.mockReturnValue([unavailable]);
+      setup(unavailable.key);
+      fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+      expect(await screen.findByText("Unavailable")).toBeTruthy();
+      expect(screen.getByText(platform.description)).toBeTruthy();
+      expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
+      const next = screen.getByRole("button", { name: "Continue" });
+      expect(next.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(next);
+      expect(screen.queryByLabelText("Anthropic organization ID")).toBeNull();
+      expect(mocks.createAgent).not.toHaveBeenCalled();
+      expect(mocks.registerIssuer).not.toHaveBeenCalled();
+      expect(mocks.admitSubject).not.toHaveBeenCalled();
+
+      // The independent custom flow remains an available recovery path.
+      fireEvent.click(screen.getByRole("radio", { name: /Anything else/ }));
+      expect(
+        screen
+          .getByRole("button", { name: "Continue" })
+          .hasAttribute("disabled"),
+      ).toBe(false);
+    },
+  );
+
   it("keeps the credential to API keys without permission to trust a platform", async () => {
     mocks.canFederate = false;
     mocks.platforms.mockReturnValue([platform]);
