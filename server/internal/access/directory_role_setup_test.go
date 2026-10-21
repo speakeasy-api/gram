@@ -204,8 +204,16 @@ func TestService_ApplyDirectoryRoleSetup_RejectsMalformedItems(t *testing.T) {
 	otherGroupID := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Platform Ops").String()
 	otherSource := &gen.DirectoryRoleSetupSource{SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &otherGroupID}
 	spaced, dashed := "Platform Ops", "platform-ops"
+	tooManyRoles := make([]*gen.ApplyDirectoryRoleSetupRole, 0, maxDirectoryRolesPerSource+1)
+	for i := range maxDirectoryRolesPerSource + 1 {
+		tooManyRoles = append(tooManyRoles, &gen.ApplyDirectoryRoleSetupRole{CreateName: new(fmt.Sprintf("Role %d", i))})
+	}
 
 	for label, items := range map[string][]*gen.ApplyDirectoryRoleSetupItem{
+		// Refused before any of the new roles is created.
+		"more roles than the cap": {
+			{Source: source, Version: "v", Roles: tooManyRoles},
+		},
 		"duplicate source": {
 			{Source: source, Version: "v", Roles: nil},
 			{Source: source, Version: "v", Roles: nil},
