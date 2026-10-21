@@ -164,6 +164,8 @@ candidate_chats AS (
           AND at.project_id = $6
           AND at.assistant_id = $11::uuid
           AND at.deleted IS FALSE
+          -- Eager runtime warmup persists a blank chat, not a user session.
+          AND at.source_kind <> 'warmup'
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes
@@ -724,7 +726,7 @@ assistant_chats AS MATERIALIZED (
     AND c.project_id = at.project_id
     AND c.deleted IS FALSE
   WHERE at.project_id = $2
-    AND at.source_kind <> 'setup'
+    AND at.source_kind NOT IN ('setup', 'warmup')
     AND at.deleted IS FALSE
     AND ($3::text = '' OR c.external_user_id = $3::text)
     AND ($4::text = '' OR c.user_id = $4::text)
@@ -1839,7 +1841,7 @@ JOIN chats c
   AND c.deleted IS FALSE
 WHERE at.assistant_id = $1
   AND at.project_id = $2
-  AND at.source_kind <> 'setup'
+  AND at.source_kind NOT IN ('setup', 'warmup')
   AND at.deleted IS FALSE
   AND at.correlation_id > $3
   AND ($4::text = '' OR c.external_user_id = $4::text)
@@ -2977,6 +2979,8 @@ candidate_chats AS (
           AND at.project_id = $2
           AND at.assistant_id = $10::uuid
           AND at.deleted IS FALSE
+          -- Eager runtime warmup persists a blank chat, not a user session.
+          AND at.source_kind <> 'warmup'
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes

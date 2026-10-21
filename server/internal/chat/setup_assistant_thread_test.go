@@ -212,6 +212,19 @@ func TestListChats_SourceKindFilter(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Eager runtime provisioning creates a blank "New Chat" with source_kind
+	// warmup, not setup. It is infrastructure, never an assistant session.
+	warmupChatID := seedChat(t, ctx, ti, authCtx.UserID, "", "New Chat")
+	_, err = ar.UpsertAssistantThread(ctx, assistantsrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistantID,
+		ProjectID:     ti.projectID,
+		CorrelationID: "runtime-warmup",
+		ChatID:        warmupChatID,
+		SourceKind:    "warmup",
+		SourceRefJson: []byte("{}"),
+	})
+	require.NoError(t, err)
+
 	assistantIDStr := assistantID.String()
 
 	// No source_kind filter: both threads are listed under the assistant.

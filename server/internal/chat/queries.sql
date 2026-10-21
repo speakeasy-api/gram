@@ -608,6 +608,8 @@ candidate_chats AS (
           AND at.project_id = @project_id
           AND at.assistant_id = @assistant_id::uuid
           AND at.deleted IS FALSE
+          -- Eager runtime warmup persists a blank chat, not a user session.
+          AND at.source_kind <> 'warmup'
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes
@@ -767,6 +769,8 @@ candidate_chats AS (
           AND at.project_id = @project_id
           AND at.assistant_id = @assistant_id::uuid
           AND at.deleted IS FALSE
+          -- Eager runtime warmup persists a blank chat, not a user session.
+          AND at.source_kind <> 'warmup'
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes
@@ -1043,7 +1047,7 @@ assistant_chats AS MATERIALIZED (
     AND c.project_id = at.project_id
     AND c.deleted IS FALSE
   WHERE at.project_id = @project_id
-    AND at.source_kind <> 'setup'
+    AND at.source_kind NOT IN ('setup', 'warmup')
     AND at.deleted IS FALSE
     AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
     AND (@user_id::text = '' OR c.user_id = @user_id::text)
@@ -1092,7 +1096,7 @@ JOIN chats c
   AND c.deleted IS FALSE
 WHERE at.assistant_id = @assistant_id
   AND at.project_id = @project_id
-  AND at.source_kind <> 'setup'
+  AND at.source_kind NOT IN ('setup', 'warmup')
   AND at.deleted IS FALSE
   AND at.correlation_id > @after_correlation_id
   AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
