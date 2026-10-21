@@ -397,7 +397,13 @@ function TeamInner() {
     await Promise.all([
       invalidateAllListOrganizationUsers(queryClient),
       invalidateAllListInvites(queryClient),
-      // Removing a member moves their directory profile out of "member".
+    ]);
+  };
+  // Removing a member moves their directory profile out of "member".
+  // Invitations change no directory state, so only removal does this.
+  const invalidateAfterRemoval = async () => {
+    await Promise.all([
+      invalidateTeamData(),
       invalidateAllDirectoryPeople(queryClient),
       queryClient.invalidateQueries({
         queryKey: directoryPeopleQueryKey(organization.id),
@@ -484,7 +490,7 @@ function TeamInner() {
       {
         onSuccess: () => {
           void (async () => {
-            await invalidateTeamData();
+            await invalidateAfterRemoval();
             toast.success(`${displayName} has been removed`);
             setMemberToRemove(null);
           })();

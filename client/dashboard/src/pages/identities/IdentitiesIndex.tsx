@@ -535,6 +535,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const isPlatformAdmin = useIsPlatformAdmin();
   const { hasScope } = useRBAC();
   const canReadOrganization = hasScope("org:read", organization.id);
+  const canAdminOrganization = hasScope("org:admin", organization.id);
   // Match the existing agent screen's supported sessions, without changing scope.
   const agentsEnabled =
     organization.slug !== DEMO_ORG_SLUG &&
@@ -645,15 +646,15 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     : undefined;
   // Directory people who are not members yet: the only read that lists
   // someone the directory knows but who has never signed in. It needs
-  // org:read, and the roster stands without it, so a failure leaves the
+  // org:admin, and the roster stands without it, so a failure leaves the
   // member and activity rows as they are rather than failing the page.
   const directoryPeopleQuery = useQuery({
     queryKey: directoryPeopleQueryKey(organization.id),
     queryFn: () => fetchDirectoryPeople(client),
-    enabled: canReadOrganization,
+    enabled: canAdminOrganization,
     throwOnError: false,
   });
-  const directoryPeople = canReadOrganization
+  const directoryPeople = canAdminOrganization
     ? directoryPeopleQuery.data
     : undefined;
 
@@ -1489,13 +1490,8 @@ function IdentityGroup({
 }
 
 /**
- * When the directory knows which account produced the most recent activity,
- * the timestamp names it — the workspace this identity was last working in.
- * Plain text otherwise.
- */
-/**
  * The identity's directory status. Without the directory people read (no
- * org:read, or it failed) a member's profile is still known from the member
+ * org:admin, or it failed) a member's profile is still known from the member
  * row, so it says "In directory" rather than guessing a state.
  */
 function DirectoryStateCell({ identity }: { identity: Employee }): JSX.Element {
@@ -1518,6 +1514,11 @@ function DirectoryStateCell({ identity }: { identity: Employee }): JSX.Element {
   );
 }
 
+/**
+ * When the directory knows which account produced the most recent activity,
+ * the timestamp names it — the workspace this identity was last working in.
+ * Plain text otherwise.
+ */
 function LastActivityCell({ identity }: { identity: Employee }): JSX.Element {
   if (!identity.mostRecentAccount) {
     return (
