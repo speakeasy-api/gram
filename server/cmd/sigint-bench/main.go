@@ -143,7 +143,7 @@ func run(parent context.Context, logger *slog.Logger) error {
  requested, toDateTime64(?, 9, 'UTC'), 'answered', 'synthetic-definition', 'multi_label',
  [(toUUID(?), 'target', if(intDiv(number, ?) % 4 = 0, 0.9, 0.1))],
  toUUID(concat('20000000-0000-4000-8000-', leftPad(toString(intDiv(intDiv(number, ?), 100) + 1), 12, '0'))), 'original',
- map('department', concat('team-', toString(intDiv(number, ?) % 5)), 'model_provider', if(number % 2 = 0, 'openrouter', 'bedrock'))
+ map('department', concat('team-', toString(intDiv(number, ?) % 5)), 'inference_provider', if(number % 2 = 0, 'openrouter', 'bedrock'))
  FROM numbers(?, ?)`, org, project.String(), uuid.Nil.String(), *sensors, *sensors,
 			from, *sensors, *perDay, *sensors, now, now, now, signal.String(), *sensors, *sensors, *sensors, start, count)
 		if err != nil {
