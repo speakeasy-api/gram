@@ -39,10 +39,10 @@ func TestPlatformMCPSetupResourcesStaticCallback(t *testing.T) {
 				require.Nil(t, resource.Render, resource.URI)
 				if strings.Contains(resource.Body, wantCallback) {
 					foundCallback = true
-					require.True(t, strings.Contains(resource.Text, wantCallback), resource.URI)
+					require.Contains(t, resource.Text, wantCallback, resource.URI)
 				}
 				if tt.registration != nil {
-					require.False(t, strings.Contains(resource.Text, remotesessions.RemoteLoginCallbackURL(outbound)), resource.URI)
+					require.NotContains(t, resource.Text, remotesessions.RemoteLoginCallbackURL(outbound), resource.URI)
 				}
 			}
 			require.True(t, foundCallback, "setup resources must contain callback %s", wantCallback)
