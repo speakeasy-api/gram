@@ -385,6 +385,7 @@ type PostgresReader struct {
 	reviewLinks               ShadowMCPReviewLinker
 	toolExposure              *MCPToolExposureService
 	gateways                  *GatewayService
+	deploymentRedeploy        *DeploymentRedeployService
 	projectLifecycle          *ProjectLifecycleService
 	analytics                 *AnalyticsService
 	widgets                   *WidgetService
@@ -425,6 +426,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		reviewLinks:               nil,
 		toolExposure:              nil,
 		gateways:                  nil,
+		deploymentRedeploy:        nil,
 		projectLifecycle:          nil,
 		analytics:                 nil,
 		widgets:                   nil,
@@ -435,6 +437,15 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
 	if r != nil {
 		r.authz = engine
+	}
+	return r
+}
+
+// WithDeploymentRedeploy composes project snapshot redeployment; without it the
+// tool retains its contract and returns a bounded unavailable refusal.
+func (r *PostgresReader) WithDeploymentRedeploy(service *DeploymentRedeployService) *PostgresReader {
+	if r != nil {
+		r.deploymentRedeploy = service
 	}
 	return r
 }
