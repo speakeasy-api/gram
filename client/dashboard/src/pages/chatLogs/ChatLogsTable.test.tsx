@@ -353,9 +353,11 @@ describe("ChatLogsTable", () => {
       />,
     );
 
-    // The faces themselves are decorative, so each one carries its name.
-    expect(screen.getByText("Ada")).toBeTruthy();
-    expect(screen.getByText("Eli")).toBeTruthy();
+    // The faces themselves are decorative, so each one carries its name. All
+    // five, not just the ends: dropping a middle one is the regression.
+    for (const name of ["Ada", "Bruce", "Cleo", "Dara", "Eli"]) {
+      expect(screen.getByText(name)).toBeTruthy();
+    }
     // The sixth is counted rather than dropped.
     expect(screen.getByText("+1")).toBeTruthy();
     expect(screen.getByText("1 more participants")).toBeTruthy();

@@ -171,22 +171,28 @@ export function StepInstall({
   // Connected and handed to an agent, not just constructed: the server is
   // only a description of the endpoint until a session is open on it, so a
   // block that stops at the constructor copies into code that does nothing.
+  // The session is async, so it sits inside a coroutine `asyncio.run` drives:
+  // `async with` and `await` at module scope are a syntax error.
   const python = [
+    `import asyncio`,
     `import os`,
     `from agents import Agent, Runner`,
     `from agents.mcp import MCPServerStreamableHttp`,
     ``,
-    `async with MCPServerStreamableHttp(`,
-    `    params={`,
-    `        "url": "${gatewayURL}",`,
-    `        "headers": {`,
-    `            "Authorization": f"Bearer {os.environ['${KEY_ENV}']}"`,
+    `async def main():`,
+    `    async with MCPServerStreamableHttp(`,
+    `        params={`,
+    `            "url": "${gatewayURL}",`,
+    `            "headers": {`,
+    `                "Authorization": f"Bearer {os.environ['${KEY_ENV}']}"`,
+    `            },`,
     `        },`,
-    `    },`,
-    `) as server:`,
-    `    agent = Agent(name="Assistant", mcp_servers=[server])`,
-    `    result = await Runner.run(agent, "What tools do you have?")`,
-    `    print(result.final_output)`,
+    `    ) as server:`,
+    `        agent = Agent(name="Assistant", mcp_servers=[server])`,
+    `        result = await Runner.run(agent, "What tools do you have?")`,
+    `        print(result.final_output)`,
+    ``,
+    `asyncio.run(main())`,
   ].join("\n");
 
   if (unsafeTransport) {

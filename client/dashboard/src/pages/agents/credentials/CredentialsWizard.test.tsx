@@ -860,6 +860,20 @@ describe("Editing an agent that already exists", () => {
         },
       ],
     });
+    // Both servers delegable, or issuance stops on the one discovery did not
+    // cover and the key is never asked for.
+    mocks.listDelegableGrants.mockResolvedValue([
+      grant,
+      {
+        effect: "allow",
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "toolset_two",
+          projectId: "project_two",
+        },
+      },
+    ]);
     editing({ grants: [WILDCARD] });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     const all = await screen.findByRole("checkbox", { name: "All servers" });
@@ -877,6 +891,14 @@ describe("Editing an agent that already exists", () => {
       "toolset_one",
       "toolset_two",
     ]);
+    // And the key is issued for both, not just the agent's own project's.
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createKey.mock.calls[0]?.[0]?.createKeyForm?.requestedGrants?.map(
+        (form: { selector: { resourceId: string } }) =>
+          form.selector.resourceId,
+      ),
+    ).toEqual(["toolset_one", "toolset_two"]);
   });
 
   it("creates the wildcard once when a later removal fails", async () => {

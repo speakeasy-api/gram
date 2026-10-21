@@ -39,6 +39,7 @@ import {
   CONNECT_SCOPE,
   grantChanges,
   grantedServers,
+  reachCoversProject,
   wildcardConnectGrant,
   type GrantedServer,
   type WildcardConnectGrant,
@@ -352,24 +353,29 @@ export function CredentialsWizard({
   const scopeName = scopedProjectID
     ? projectName(scopedProjectID)
     : organization.name;
-  // What "All servers" covers. An agent that already holds a wildcard keeps
-  // that wildcard's own scope: re-issuing a key must not quietly narrow an
-  // organization-wide grant down to the project the agent is labelled with.
-  // The reach is named on screen from the same value, so a wildcard wider
-  // than its agent reads as what it is rather than as the agent's project.
-  const allServersProjectID = wildcardReach
-    ? wildcardReach.projectId || undefined
-    : scopedProjectID;
-  const allServersScopeName = allServersProjectID
-    ? projectName(allServersProjectID)
-    : organization.name;
-  // The rows the picker offers. Under "All servers" they are the ones that
-  // wildcard reaches, so an organization-wide one shows every project's;
+  // What "All servers" covers. An agent that already holds wildcards keeps
+  // their own scope: re-issuing a key must not quietly narrow an
+  // organization-wide grant down to the project the agent is labelled with,
+  // nor drop the projects of every wildcard but the first. Empty is every
+  // project. The reach is named on screen from the same value, so a wildcard
+  // wider than its agent reads as what it is rather than as the agent's
+  // project.
+  const allServersProjectIDs = wildcardReach
+    ? wildcardReach.projectIds
+    : scopedProjectID
+      ? [scopedProjectID]
+      : [];
+  const allServersScopeName =
+    allServersProjectIDs.length === 0
+      ? organization.name
+      : allServersProjectIDs.map(projectName).join(", ");
+  // The rows the picker offers. Under "All servers" they are the ones those
+  // wildcards reach, so an organization-wide one shows every project's;
   // otherwise it is the project the agent is bound to.
-  const listedProjectID = allServers ? allServersProjectID : scopedProjectID;
-  const listedServers = inventory.servers.filter(
-    (server) =>
-      listedProjectID === undefined || server.projectId === listedProjectID,
+  const listedServers = inventory.servers.filter((server) =>
+    allServers
+      ? reachCoversProject(allServersProjectIDs, server.projectId)
+      : scopedProjectID === undefined || server.projectId === scopedProjectID,
   );
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
@@ -552,7 +558,7 @@ export function CredentialsWizard({
         // Recorded as the write lands, so a failure further down this save
         // does not make the next attempt create a second wildcard.
         appliedWildcard.current = {
-          projectId: scopedProjectID ?? "",
+          projectIds: scopedProjectID ? [scopedProjectID] : [],
           grantIds: [created.id],
         };
       }
@@ -709,10 +715,8 @@ export function CredentialsWizard({
       // delegated.
       const reach = allServers
         ? inventory.servers
-            .filter(
-              (server) =>
-                allServersProjectID === undefined ||
-                server.projectId === allServersProjectID,
+            .filter((server) =>
+              reachCoversProject(allServersProjectIDs, server.projectId),
             )
             // Each of these needs an account attached to the agent before a
             // key can call it, which this flow has no step for.

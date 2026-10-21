@@ -186,11 +186,14 @@ function LogDetailContent({
   })();
   // The id is off a telemetry row, which is not permission to open that
   // agent, so the name links only once it resolved through the inventory this
-  // reader is allowed to read.
+  // reader is allowed to read. The matched record also names the agent: a
+  // call made under an authenticated actor carries no name on the span, and
+  // the id on its own reads as "agent:<uuid>".
   const agents = useReadableAgents(Boolean(actingAgent));
-  const agentIsReadable =
-    !agents.isError &&
-    (agents.data ?? []).some((agent) => agent.id === actingAgent?.id);
+  const readableAgent = agents.isError
+    ? undefined
+    : (agents.data ?? []).find((agent) => agent.id === actingAgent?.id);
+  const agentIsReadable = Boolean(readableAgent);
   const authorizerUserID = attrs
     ? getNestedValue(attrs, "gram.authorization.authorizer_user_id")
     : "";
@@ -295,7 +298,10 @@ function LogDetailContent({
           {actingAgent ? (
             <div className="flex items-center gap-2.5 pt-1.5 text-sm">
               <ActingPrincipal
-                agent={actingAgent}
+                agent={{
+                  ...actingAgent,
+                  name: readableAgent?.name ?? actingAgent.name,
+                }}
                 linked={agentIsReadable}
                 authorizer={
                   // The address is the better label when the log carries

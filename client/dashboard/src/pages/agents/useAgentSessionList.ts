@@ -65,13 +65,21 @@ export function useAgentSessionList(
   } = query;
   useEffect(() => {
     // A failed page stops the walk rather than retrying it forever; the
-    // caller's retry starts it again.
-    if (!all || !hasNextPage || isFetchingNextPage || isFetchNextPageError) {
+    // caller's retry starts it again. `enabled` does not reach an imperative
+    // fetchNextPage, so the permission is checked here too.
+    if (
+      !all ||
+      !canManage ||
+      !hasNextPage ||
+      isFetchingNextPage ||
+      isFetchNextPageError
+    ) {
       return;
     }
     void fetchNextPage();
   }, [
     all,
+    canManage,
     hasNextPage,
     isFetchingNextPage,
     isFetchNextPageError,
