@@ -1141,11 +1141,13 @@ WITH retired AS (
         AND (
           EXISTS (
             SELECT 1 FROM remote_mcp_server_headers AS h
+            JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.project_id = s.project_id
             WHERE h.remote_mcp_server_id = s.remote_mcp_server_id
               AND GREATEST(h.created_at, h.updated_at, h.deleted_at) >= @evidence_since::timestamptz
           )
           OR EXISTS (
             SELECT 1 FROM tunneled_mcp_server_headers AS h
+            JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id AND t.project_id = s.project_id
             WHERE h.tunneled_mcp_server_id = s.tunneled_mcp_server_id
               AND GREATEST(h.created_at, h.updated_at, h.deleted_at) >= @evidence_since::timestamptz
           )
