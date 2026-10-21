@@ -890,7 +890,7 @@ type AuditLog struct {
 	CreatedAt pgtype.Timestamptz
 }
 
-// Default auth permission grants the backfill provisioned, one row per grant, kept after the grant itself is deleted.
+// Default auth permission grants provisioned by the backfill or at organization creation, one row per grant, kept after the grant itself is deleted.
 type AuthPermissionProvision struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -906,7 +906,7 @@ type AuthPermissionProvision struct {
 	// The grant's selector, as in principal_grants.selectors.
 	// @access: opaque-restricted
 	Selectors []byte
-	// Which default the grant belongs to: personal_default, shared_client or api_key. Validated in application code.
+	// Which default the grant belongs to: personal_default, shared_client or api_key from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
 	// @access: confidential
 	Kind string
 	// When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
