@@ -3,7 +3,6 @@ package authclientbackfill
 import (
 	"context"
 	"fmt"
-	"maps"
 	"slices"
 
 	"github.com/google/uuid"
@@ -72,10 +71,10 @@ func (p *grantPlan) want(kind GrantKind, principal urn.Principal, scope authz.Sc
 	return nil
 }
 
-// runGrants provisions the default mcp:auth grants and legacy API key
-// policies, so the mandatory check allows what today's decisions allow. It
-// only ever adds grants.
-func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report) error {
+// runGrants provisions the default mcp:auth grants and, with withKeys, legacy
+// API key policies, so the mandatory check allows what today's decisions
+// allow. It only ever adds grants.
+func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report, withKeys bool) error {
 	q := New(tx)
 	plan := &grantPlan{existing: map[string]bool{}, missing: map[urn.Principal][]*authz.RoleGrant{}, kinds: map[urn.Principal][]GrantKind{}, order: nil, counts: map[GrantKind]int{}}
 
@@ -110,8 +109,12 @@ func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report) err
 	if err := planServerAccessGrants(ctx, q, opts, uses, plan); err != nil {
 		return err
 	}
-	if err := planAPIKeyGrants(ctx, q, opts, uses, plan); err != nil {
-		return err
+	// A key's policy is written once, so never from a run whose earlier
+	// phases failed to record some of its clients.
+	if withKeys {
+		if err := planAPIKeyGrants(ctx, q, opts, uses, plan); err != nil {
+			return err
+		}
 	}
 
 	for _, kind := range GrantKinds {
@@ -152,9 +155,10 @@ func indexUses(uses []ListSharedAuthClientServersRow) serverUses {
 }
 
 // planServerAccessGrants mirrors each server access grant onto the shared
-// clients its servers use, in the same shape: a grant naming a server names
-// its clients, and a wildcard grant covers each client type it reaches, so an
-// inferred grant never becomes a concrete direct grant that outranks a block.
+// clients its servers use, in the same shape: a role's or agent's grant
+// naming a server names its clients, and a wildcard grant, or any user's
+// grant, covers each client type it reaches, so an inferred grant never
+// becomes a concrete direct grant that outranks a block.
 // Agents also get the personal default, since user:all is not in their
 // policy. Connecting still requires mcp:connect, so nothing widens.
 func planServerAccessGrants(ctx context.Context, q *Queries, opts Options, uses []ListSharedAuthClientServersRow, plan *grantPlan) error {
@@ -177,10 +181,17 @@ func planServerAccessGrants(ctx context.Context, q *Queries, opts Options, uses 
 		resourceID := selector[authz.SelectorKeyResourceID]
 		if resourceID != authz.WildcardResource {
 			for _, use := range index.byID[resourceID] {
-				if reachesServer(grant, use) {
-					if err := plan.want(GrantSharedClient, row.PrincipalUrn, authz.ScopeMCPAuth, authz.AuthClientSelector(use.AuthClientID.String(), "")); err != nil {
-						return err
-					}
+				if !reachesServer(grant, use) {
+					continue
+				}
+				// A user's concrete grant outranks blocks it inherits, so a
+				// user gets the client's type in its project instead.
+				clientSelector := authz.AuthClientSelector(use.AuthClientID.String(), "")
+				if authz.IsDirectGrant(grant) {
+					clientSelector = authz.AuthClientTypeSelector(use.ClientType, use.ProjectID.String())
+				}
+				if err := plan.want(GrantSharedClient, row.PrincipalUrn, authz.ScopeMCPAuth, clientSelector); err != nil {
+					return err
 				}
 			}
 			continue
@@ -228,46 +239,20 @@ type keyGrant struct {
 	selector authz.Selector
 }
 
-// provisionedKeyProjects returns the projects a key's policy covers when
-// every grant in it has the shape this backfill writes, so later clients can
-// be added. Any other grant makes the policy explicit, and it is left alone.
-func provisionedKeyProjects(grants []authz.Grant) ([]string, bool) {
-	var projects []string
-	for _, grant := range grants {
-		project := grant.Selector[authz.SelectorKeyProjectID]
-		switch {
-		case grant.Scope == authz.ScopeMCPConnect && project != "" && maps.Equal(grant.Selector, authz.ProjectServersSelector(project)):
-			projects = append(projects, project)
-		case grant.Scope == authz.ScopeMCPAuth && project != "" && maps.Equal(grant.Selector, authz.AuthClientSelector(grant.Selector[authz.SelectorKeyResourceID], project)) && grant.Selector[authz.SelectorKeyResourceID] != authz.WildcardResource:
-		default:
-			return nil, false
-		}
-	}
-	return projects, len(projects) > 0
-}
-
-// planAPIKeyGrants gives each live legacy key that reaches MCP what it can
-// reach today. A key with no policy gets every server in its project, or in
-// every project for an organization-wide key, and those servers' shared
-// clients. A key whose policy is only what this backfill writes gets clients
-// added since, in the projects it already covers. EMA clients act for a user,
-// which a key never represents, so keys never get them.
+// planAPIKeyGrants gives each live legacy key that reaches MCP and has no
+// policy what it can reach today: every server in its project, or in every
+// project for an organization-wide key, and those servers' shared clients. A
+// key with any policy is left alone: without provenance, a policy this
+// backfill wrote cannot be told from one an admin wrote. EMA clients act for
+// a user, which a key never represents, so keys never get them.
 func planAPIKeyGrants(ctx context.Context, q *Queries, opts Options, uses []ListSharedAuthClientServersRow, plan *grantPlan) error {
 	keys, err := q.ListActiveLegacyAPIKeys(ctx, opts.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("list api keys: %w", err)
 	}
-	rows, err := q.ListAPIKeyGrantRows(ctx, opts.OrganizationID)
+	withPolicy, err := q.ListAPIKeyPrincipalsWithGrants(ctx, opts.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("list api key policies: %w", err)
-	}
-	policies := map[urn.Principal][]authz.Grant{}
-	for _, row := range rows {
-		selector, err := authz.SelectorFromRow(row.Selectors)
-		if err != nil {
-			selector = authz.Selector{}
-		}
-		policies[row.PrincipalUrn] = append(policies[row.PrincipalUrn], authz.Grant{PrincipalUrn: row.PrincipalUrn.String(), Scope: authz.Scope(row.Scope), Selector: selector})
 	}
 	projects, err := q.ListLiveProjects(ctx, opts.OrganizationID)
 	if err != nil {
@@ -278,24 +263,16 @@ func planAPIKeyGrants(ctx context.Context, q *Queries, opts Options, uses []List
 		if !authz.APIKeyReachesMCP(key.Scopes) {
 			continue
 		}
+		if slices.Contains(withPolicy, principal) {
+			continue
+		}
 		var reach []string
-		if policy, ok := policies[principal]; ok {
-			covered, provisioned := provisionedKeyProjects(policy)
-			if !provisioned {
-				continue
-			}
-			reach = covered
-		} else {
-			for _, project := range projects {
-				if !key.ProjectID.Valid || key.ProjectID.UUID == project {
-					reach = append(reach, project.String())
-				}
+		for _, project := range projects {
+			if !key.ProjectID.Valid || key.ProjectID.UUID == project {
+				reach = append(reach, project.String())
 			}
 		}
 		for _, project := range reach {
-			if key.ProjectID.Valid && project != key.ProjectID.UUID.String() {
-				continue
-			}
 			wants := []keyGrant{{scope: authz.ScopeMCPConnect, selector: authz.ProjectServersSelector(project)}}
 			for _, use := range uses {
 				if use.ProjectID.String() == project && use.ClientType != TypeEMA {
