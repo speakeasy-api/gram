@@ -15,7 +15,7 @@ import (
 
 func Publish(pub gcp.Publisher[*tunnelv1.MetricsSnapshot]) func(context.Context, metrics.Snapshot) error {
 	return func(ctx context.Context, s metrics.Snapshot) error {
-		message := &tunnelv1.MetricsSnapshot{SourceId: s.SourceID, ProducerId: s.ProducerID, BucketUnix: s.Bucket, Revision: s.Revision, Kind: s.Kind, ServerId: s.ServerID, Method: s.Method, ClientFamily: s.ClientFamily, Attempts: s.Attempts, Successes: s.Successes, Errors: s.Errors, Canceled: s.Canceled, Incomplete: s.Incomplete, LatencyBins: s.LatencyBins[:], Connections: s.Connections, Consumers: s.Consumers, Substreams: s.Substreams, ConnectionsOpened: s.ConnectionsOpened}
+		message := &tunnelv1.MetricsSnapshot{SourceId: s.SourceID, ProducerId: s.ProducerID, BucketUnix: s.Bucket, Revision: s.Revision, Kind: s.Kind, ServerId: s.ServerID, Method: s.Method, ClientFamily: s.ClientFamily, Attempts: s.Attempts, Successes: s.Successes, Errors: s.Errors, Canceled: s.Canceled, Incomplete: s.Incomplete, LatencyBins: s.LatencyBins[:], Connections: s.Connections, Consumers: s.Consumers, Substreams: s.Substreams, ConnectionsOpened: s.ConnectionsOpened, Rejected: s.Rejected}
 		_, err := pub.Publish(ctx, message).Get(ctx)
 		return err
 	}

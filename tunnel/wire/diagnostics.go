@@ -22,6 +22,15 @@ const (
 	DiagnosticsFreshness  = 90 * time.Second
 )
 
+// DiagnosticsDisabledCapability announces an agent that supports diagnostics
+// but runs with them turned off (TUNNEL_DISABLE_DIAGNOSTICS=1). It is sent
+// without a control token or target address, and the gateway never polls it.
+const DiagnosticsDisabledCapability = "diagnostics-disabled.v1"
+
+// maxCapabilitiesBytes bounds the optional capabilities header. Agents send one
+// or two short tokens; anything longer is treated as no capability at all.
+const maxCapabilitiesBytes = 256
+
 // DiagnosticStep contains only bounded categories and timing, never resolver or TLS error text.
 type DiagnosticStep struct {
 	State          string `json:"state"`
@@ -89,28 +98,43 @@ func oneOf(value string, allowed ...string) bool {
 
 // SupportsDiagnostics ignores malformed optional headers without rejecting the tunnel.
 func SupportsDiagnostics(capabilities, token string) bool {
-	if len(capabilities) > 256 || len(token) != 64 {
+	if len(token) != 64 {
 		return false
 	}
 	if _, err := hex.DecodeString(token); err != nil {
 		return false
 	}
+	return hasCapability(capabilities, DiagnosticsCapability)
+}
+
+// DiagnosticsDisabled reports whether an agent announced that it supports
+// diagnostics but has them turned off. Malformed headers count as no announcement.
+func DiagnosticsDisabled(capabilities string) bool {
+	return hasCapability(capabilities, DiagnosticsDisabledCapability)
+}
+
+func hasCapability(capabilities, want string) bool {
+	if len(capabilities) > maxCapabilitiesBytes {
+		return false
+	}
 	for capability := range strings.SplitSeq(capabilities, ",") {
-		if strings.TrimSpace(capability) == DiagnosticsCapability {
+		if strings.TrimSpace(capability) == want {
 			return true
 		}
 	}
 	return false
 }
 
-// TargetDisplay rebuilds an address without userinfo, query or fragment. The
-// hostname, port and escaped path are permitted configuration, not metric labels.
+// TargetDisplay reduces an address to its scheme, hostname and port. Paths,
+// queries, fragments and userinfo are dropped: some MCP servers carry
+// credentials in the path (such as /mcp/<token>), and everyone who can read
+// the MCP server sees this value.
 func TargetDisplay(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 		return ""
 	}
-	display := (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path, RawPath: u.RawPath}).String()
+	display := (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
 	if len(display) > MaxTargetDisplayBytes || strings.ContainsAny(display, "\r\n") {
 		return ""
 	}
@@ -162,7 +186,8 @@ func DecodeDiagnostics(data []byte) (*DiagnosticsReport, error) {
 	return &report, nil
 }
 
-// GatewayDisplay sanitizes WebSocket configuration before writing it to logs.
+// GatewayDisplay reduces a WebSocket gateway URL to its scheme, hostname and
+// port before it is written to logs.
 func GatewayDisplay(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "ws" && u.Scheme != "wss") || u.Hostname() == "" {

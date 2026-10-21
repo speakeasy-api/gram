@@ -114,8 +114,10 @@ the metrics topic; local development can use `PUBSUB_EMULATOR_HOST`.
 
 Diagnostics enrich the optional protocol. Old agents and gateways continue to
 forward traffic; old agents show diagnostics as unsupported. Set
-`TUNNEL_DISABLE_DIAGNOSTICS=1` on an agent to suppress the capability, target
-address, probes and passive diagnostic counters. Agents and gateways can be
+`TUNNEL_DISABLE_DIAGNOSTICS=1` on an agent to turn off its target address,
+probes and passive diagnostic counters. The agent then announces
+`diagnostics-disabled.v1`, so the dashboard shows that checks are turned off
+rather than asking for an upgrade. Agents and gateways can be
 rolled back independently.
 
 ## Local Validation

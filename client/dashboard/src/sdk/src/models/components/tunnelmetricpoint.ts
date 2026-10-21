@@ -43,6 +43,10 @@ export type TunnelMetricPoint = {
    */
   p95Ms?: number | undefined;
   /**
+   * Requests Speakeasy rejected before they reached the MCP server, for example by policy. Not counted as errors.
+   */
+  rejected?: number | undefined;
+  /**
    * Observed producer-minute heartbeats; proves only observed coverage, not every replica
    */
   requestCoverageSamples: number;
@@ -79,6 +83,7 @@ export const TunnelMetricPoint$inboundSchema: z.ZodMiniType<
     other_requests: z.optional(z.int()),
     p50_ms: z.optional(z.int()),
     p95_ms: z.optional(z.int()),
+    rejected: z.optional(z.int()),
     request_coverage_samples: z.int(),
     successes: z.optional(z.int()),
     time: z.pipe(

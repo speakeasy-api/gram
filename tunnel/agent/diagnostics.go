@@ -201,6 +201,16 @@ func transportFailure(err error) string {
 	}
 }
 
+// tlsFailure classifies a handshake failure. Errors without a specific
+// classification, such as a TLS alert, a protocol version mismatch or a plain
+// HTTP server on an https:// target, are still TLS failures.
+func tlsFailure(err error) string {
+	if failure := transportFailure(err); failure != "unknown" {
+		return failure
+	}
+	return "tls_error"
+}
+
 func probeTarget(ctx context.Context, target *url.URL) (string, wire.DiagnosticStep, wire.DiagnosticStep, wire.DiagnosticStep) {
 	dns := wire.DiagnosticStep{State: "not_tested"}
 	tcp, tlsStep := dns, dns
@@ -256,7 +266,7 @@ func probeTarget(ctx context.Context, target *url.URL) (string, wire.DiagnosticS
 		tlsStep.DurationMillis = min(time.Since(start).Milliseconds(), 5000)
 		if err != nil {
 			tlsStep.State = "fail"
-			tlsStep.Failure = transportFailure(err)
+			tlsStep.Failure = tlsFailure(err)
 			return "unreachable", dns, tcp, tlsStep
 		}
 		tlsStep.State = "pass"

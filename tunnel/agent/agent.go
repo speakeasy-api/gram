@@ -120,7 +120,11 @@ func (a *Agent) Run(ctx context.Context) error {
 func (a *Agent) connectOnce(ctx context.Context) error {
 	header := http.Header{}
 	controlToken := ""
-	if !a.cfg.DisableDiagnostics {
+	if a.cfg.DisableDiagnostics {
+		// Announce the opt-out so the gateway reports diagnostics as disabled
+		// instead of treating this agent as one that predates diagnostics.
+		header.Set(wire.HeaderCapabilities, wire.DiagnosticsDisabledCapability)
+	} else {
 		token := make([]byte, 32)
 		if _, err := crand.Read(token); err != nil {
 			return fmt.Errorf("generate tunnel control token: %w", err)

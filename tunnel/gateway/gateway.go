@@ -262,18 +262,7 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	sessionID := uuid.NewString()
 	now := time.Now().UTC()
-	controlToken := r.Header.Get(wire.HeaderControlToken)
-	supported := wire.SupportsDiagnostics(r.Header.Get(wire.HeaderCapabilities), controlToken)
-	diagnostics := &route.Diagnostics{State: "unsupported"}
-	targetDisplay := ""
-	if supported {
-		state := "disabled"
-		if g.cfg.DiagnosticsEnabled {
-			state = "pending"
-		}
-		diagnostics = &route.Diagnostics{State: state}
-		targetDisplay = wire.TargetDisplay(r.Header.Get(wire.HeaderTargetDisplay))
-	}
+	diagnostics, targetDisplay, poll := agentDiagnostics(r.Header, g.cfg.DiagnosticsEnabled)
 	remove := g.reg.add(tunnelID, sessionID, presentedKeyHash, session, g.newSessionProxy(tunnelID, session), route.Connection{
 		GatewaySessionID:       sessionID,
 		ServiceVersion:         serviceVersion,
@@ -299,8 +288,8 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	g.recordMetrics(tunnelID, 1)
 	go g.sayHello(session, tunnelID, sessionID)
-	if supported && g.cfg.DiagnosticsEnabled {
-		go g.pollDiagnostics(session, tunnelID, sessionID, controlToken)
+	if poll {
+		go g.pollDiagnostics(session, tunnelID, sessionID, r.Header.Get(wire.HeaderControlToken))
 	}
 
 	<-session.CloseChan()
@@ -310,6 +299,28 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 	g.logger.InfoContext(context.Background(), "tunnel disconnected",
 		slog.String("tunnel_id", tunnelID), slog.String("session_id", sessionID),
 		slog.Int("active", g.reg.activeSessions()))
+}
+
+// agentDiagnostics derives a new connection's diagnostics state and target from
+// the agent's connect headers, and whether the gateway should poll the agent.
+// An agent with diagnostics and a valid control token is "pending" until its
+// first poll, or "disabled" when this gateway does not collect diagnostics. An
+// agent that announces diagnostics are turned off is "disabled" and supplies no
+// target. An agent that announces neither predates diagnostics: "unsupported".
+func agentDiagnostics(header http.Header, gatewayCollects bool) (status *route.Diagnostics, targetDisplay string, poll bool) {
+	capabilities := header.Get(wire.HeaderCapabilities)
+	switch {
+	case wire.SupportsDiagnostics(capabilities, header.Get(wire.HeaderControlToken)):
+		state := "disabled"
+		if gatewayCollects {
+			state = "pending"
+		}
+		return &route.Diagnostics{State: state}, wire.TargetDisplay(header.Get(wire.HeaderTargetDisplay)), gatewayCollects
+	case wire.DiagnosticsDisabled(capabilities):
+		return &route.Diagnostics{State: "disabled"}, "", false
+	default:
+		return &route.Diagnostics{State: "unsupported"}, "", false
+	}
 }
 
 func routeOperationContext(parent context.Context) (context.Context, context.CancelFunc) {

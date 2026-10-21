@@ -29,9 +29,13 @@ func (o *requestObservation) finish(outcome string) {
 	}
 	o.once.Do(func() { o.record(o.method, o.client, outcome, time.Since(o.started)) })
 }
+
+// observeRejection records a request Speakeasy refused before it reached the
+// MCP server. It is reported separately so policy decisions do not raise the
+// server's error rate.
 func observeRejection(ctx context.Context) {
 	if o, _ := ctx.Value(observationKey{}).(*requestObservation); o != nil {
-		o.finish("error")
+		o.finish("rejected")
 	}
 }
 func observeResponse(ctx context.Context, msg jsonrpc.Message) {

@@ -51,7 +51,7 @@ export type TunneledMcpConnection = {
    */
   serviceVersion: string;
   /**
-   * Agent target scheme, hostname, port and path, without credentials, query or fragment
+   * Agent target scheme, hostname and port. The path, credentials, query and fragment are never shown, because some MCP servers put secrets in the path.
    */
   targetDisplay?: string | undefined;
 };

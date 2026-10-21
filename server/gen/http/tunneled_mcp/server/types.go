@@ -1759,8 +1759,8 @@ type TunneledMcpServerResponseBody struct {
 // TunneledMcpConnectionResponseBody is used to define fields on response body
 // types.
 type TunneledMcpConnectionResponseBody struct {
-	// Agent target scheme, hostname, port and path, without credentials, query or
-	// fragment
+	// Agent target scheme, hostname and port. The path, credentials, query and
+	// fragment are never shown, because some MCP servers put secrets in the path.
 	TargetDisplay *string `form:"target_display,omitempty" json:"target_display,omitempty" xml:"target_display,omitempty"`
 	// Optional agent diagnostics, absent for legacy agents
 	Diagnostics *TunnelDiagnosticsResponseBody `form:"diagnostics,omitempty" json:"diagnostics,omitempty" xml:"diagnostics,omitempty"`
@@ -1852,6 +1852,9 @@ type TunnelMetricPointResponseBody struct {
 	Errors     *int64 `form:"errors,omitempty" json:"errors,omitempty" xml:"errors,omitempty"`
 	Canceled   *int64 `form:"canceled,omitempty" json:"canceled,omitempty" xml:"canceled,omitempty"`
 	Incomplete *int64 `form:"incomplete,omitempty" json:"incomplete,omitempty" xml:"incomplete,omitempty"`
+	// Requests Speakeasy rejected before they reached the MCP server, for example
+	// by policy. Not counted as errors.
+	Rejected *int64 `form:"rejected,omitempty" json:"rejected,omitempty" xml:"rejected,omitempty"`
 	// Histogram upper bound for median completion latency, -1 means above 60
 	// seconds
 	P50Ms *int64 `form:"p50_ms,omitempty" json:"p50_ms,omitempty" xml:"p50_ms,omitempty"`

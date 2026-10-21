@@ -10,15 +10,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TunneledMcpServerConnections } from "@gram/client/models/components/tunneledmcpserverconnections.js";
 import { TunnelObservability } from "./TunnelObservability";
 
+type ChartData = {
+  datasets: { label: string; pointRadius: number[] }[];
+};
+const charts = vi.hoisted(() => new Map<string, ChartData>());
 vi.mock("react-chartjs-2", () => ({
-  Line: (props: { "aria-label": string }) => (
-    <div role="img" aria-label={props["aria-label"]} />
-  ),
+  Line: (props: { "aria-label": string; data: ChartData }) => {
+    charts.set(props["aria-label"], props.data);
+    return <div role="img" aria-label={props["aria-label"]} />;
+  },
 }));
 
 const mocks = vi.hoisted(() => ({ history: vi.fn() }));
 vi.mock("@gram/client/react-query/getTunneledMcpServerMetrics.js", () => ({
-  useGetTunneledMcpServerMetrics: () => mocks.history(),
+  useGetTunneledMcpServerMetrics: (...args: unknown[]) =>
+    mocks.history(...args),
 }));
 beforeEach(() =>
   mocks.history.mockReturnValue({
@@ -28,7 +34,10 @@ beforeEach(() =>
   }),
 );
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  charts.clear();
+});
 
 const legacy: TunneledMcpServerConnections = {
   activeConnectionCount: 1,
@@ -62,6 +71,7 @@ describe("tunnel status evidence", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Diagnostics unsupported")).toBeTruthy();
+    expect(screen.getByText(/Update the agent and\s+gateway/)).toBeTruthy();
     expect(screen.getByText("Not checked")).toBeTruthy();
     expect(screen.queryByText("Network reachable")).toBeNull();
     expect(screen.getByText("Activity history is unavailable")).toBeTruthy();
@@ -107,11 +117,10 @@ describe("tunnel status evidence", () => {
         />
       </MemoryRouter>,
     );
-    expect(
-      screen
-        .getByRole("link", { name: "View agent setup" })
-        .getAttribute("href"),
-    ).toBe("/settings#agent");
+    const setup = screen.getByRole("link", { name: "View agent setup" });
+    expect(setup.getAttribute("href")).toBe("/settings#agent");
+    // One control: the link is styled as a button, not wrapped around one.
+    expect(setup.querySelector("button")).toBeNull();
     expect(screen.getByText("No connected agents")).toBeTruthy();
   });
 });
@@ -156,7 +165,7 @@ it.each([
   [
     "disabled",
     { state: "disabled" },
-    "HTTP progress is unavailable because diagnostics are disabled.",
+    "Checks are turned off for this agent. Forwarding still works.",
   ],
   [
     "pending",
@@ -309,6 +318,7 @@ it("renders completion-only history and its charts", () => {
     within(screen.getByRole("group", { name: "MCP responses" })).getByText("2"),
   ).toBeTruthy();
   expect(screen.getByText("MCP requests")).toBeTruthy();
+  expect(screen.getByText("Worst interval's p95 response time")).toBeTruthy();
 });
 
 it("keeps live diagnostics visible when the history range is too large", () => {
@@ -386,9 +396,9 @@ it("keeps failure guidance visible and reveals dependent checks and HTTP details
   expect(
     screen.getByText(/Hostname was not found/).closest("details"),
   ).toBeNull();
-  expect(
-    screen.getByRole("link", { name: "View tool logs" }).getAttribute("href"),
-  ).toBe("/logs?af=tunnel-filter");
+  const logs = screen.getByRole("link", { name: "View tool logs" });
+  expect(logs.getAttribute("href")).toBe("/logs?af=tunnel-filter");
+  expect(logs.querySelector("button")).toBeNull();
   const details = screen.getByText("Connection details").closest("details")!;
   expect(details.open).toBe(false);
   expect(
@@ -515,5 +525,212 @@ it("shows activity from other MCP methods", () => {
   ).toBeTruthy();
   expect(
     within(screen.getByRole("group", { name: "MCP responses" })).getByText("0"),
+  ).toBeTruthy();
+});
+
+function renderWith(
+  connections: TunneledMcpServerConnections["connections"],
+): void {
+  render(
+    <MemoryRouter>
+      <TunnelObservability
+        id="source"
+        connections={{ ...legacy, connections }}
+        loading={false}
+        error={false}
+        logsHref="/logs"
+        agentSetupHref="/settings"
+      />
+    </MemoryRouter>,
+  );
+}
+
+it("says checks are off for a disabled agent without suggesting an update", () => {
+  renderWith([
+    {
+      ...legacy.connections[0]!,
+      diagnostics: { state: "disabled", receivedAt: new Date() },
+    },
+  ]);
+  expect(screen.getByText("Checks turned off")).toBeTruthy();
+  expect(
+    screen.getByText(
+      "Checks are turned off for this agent. Forwarding still works.",
+    ),
+  ).toBeTruthy();
+  expect(
+    screen.getByText(
+      "1 agent connected. Checks are turned off, so reachability is not reported.",
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText(/Update the agent/)).toBeNull();
+  expect(screen.queryByText("Connection details")).toBeNull();
+  expect(screen.queryByText(/may no longer reflect the target/)).toBeNull();
+});
+
+it("describes Reachable as network reachability, not MCP health", () => {
+  renderWith([
+    {
+      ...legacy.connections[0]!,
+      diagnostics: { state: "available", targetState: "reachable" },
+    },
+  ]);
+  expect(
+    within(screen.getByRole("group", { name: "Tunnel status" })).getByText(
+      /can reach the MCP server's address on the network/,
+    ),
+  ).toBeTruthy();
+});
+
+it("explains a server error response inside the connection details", () => {
+  renderWith([
+    {
+      ...legacy.connections[0]!,
+      diagnostics: {
+        state: "available",
+        targetState: "reachable",
+        requestsTotal: 3,
+        lastHttpStatus: 503,
+      },
+    },
+  ]);
+  const details = screen.getByText("Connection details").closest("details")!;
+  expect(
+    within(details).getByText(
+      /Last HTTP response: 503\. The MCP server answered with a server error\. Check the server's logs\./,
+    ),
+  ).toBeTruthy();
+  expect(within(details).queryByText(/credentials may be needed/)).toBeNull();
+});
+
+it("labels every client family the collector reports", () => {
+  const families = [
+    "claude",
+    "codex",
+    "cursor",
+    "chatgpt",
+    "inspector",
+    "unknown",
+    "other",
+  ];
+  mocks.history.mockReturnValue({
+    data: {
+      state: "available",
+      points: [{ time: new Date(), toolCalls: 7 }],
+      clients: families.map((family, i) => ({ family, requests: i + 1 })),
+    },
+    isPending: false,
+    isError: false,
+  });
+  renderWith(legacy.connections);
+  for (const label of [
+    "Claude",
+    "Codex",
+    "Cursor",
+    "ChatGPT",
+    "MCP Inspector",
+    "Unknown client",
+    "Other clients",
+  ]) {
+    expect(screen.getByText(label)).toBeTruthy();
+  }
+});
+
+it("explains which requests the numbers include", () => {
+  mocks.history.mockReturnValue({
+    data: {
+      state: "available",
+      points: [{ time: new Date(), toolCalls: 1 }],
+      clients: [],
+    },
+    isPending: false,
+    isError: false,
+  });
+  renderWith(legacy.connections);
+  const notes = screen.getByText("About these numbers").closest("details")!;
+  expect(
+    within(notes).getByText(/detected from the HTTP User-Agent/),
+  ).toBeTruthy();
+  expect(
+    within(notes).getByText(/Requests that Speakeasy sends on a user/),
+  ).toBeTruthy();
+  expect(
+    within(notes).getByText(
+      "Checks that Speakeasy runs to validate a connection are not counted.",
+    ),
+  ).toBeTruthy();
+});
+
+it("refreshes longer history windows less often", () => {
+  renderWith(legacy.connections);
+  const interval = () => mocks.history.mock.calls.at(-1)?.[2]?.refetchInterval;
+  expect(interval()).toBe(5 * 60_000);
+  fireEvent.click(screen.getByRole("button", { name: "1 hour" }));
+  expect(interval()).toBe(30_000);
+  fireEvent.click(screen.getByRole("button", { name: "7 days" }));
+  expect(interval()).toBe(15 * 60_000);
+});
+
+it("marks values with no neighbour so isolated samples stay visible", () => {
+  const start = Date.UTC(2026, 0, 1);
+  const at = (minute: number) => new Date(start + minute * 60_000);
+  mocks.history.mockReturnValue({
+    data: {
+      state: "available",
+      points: [
+        { time: at(0), toolCalls: 1 },
+        { time: at(1), toolCalls: 2 },
+        { time: at(2) },
+        { time: at(3), toolCalls: 4 },
+        { time: at(4) },
+      ],
+      clients: [],
+    },
+    isPending: false,
+    isError: false,
+  });
+  renderWith(legacy.connections);
+  const datasets = charts.get("MCP requests")!.datasets;
+  const toolCalls = datasets.find((d) => d.label === "Tool calls")!;
+  expect(toolCalls.pointRadius).toEqual([0, 0, 0, 3, 0]);
+  const errors = datasets.find((d) => d.label === "Errors")!;
+  expect(errors.pointRadius).toEqual([0, 0, 0, 0, 0]);
+});
+
+it("shows requests blocked by Speakeasy apart from errors", () => {
+  mocks.history.mockReturnValue({
+    data: {
+      state: "available",
+      points: [
+        {
+          time: new Date(),
+          toolCalls: 10,
+          successes: 6,
+          errors: 2,
+          rejected: 2,
+        },
+      ],
+      clients: [],
+    },
+    isPending: false,
+    isError: false,
+  });
+  render(
+    <MemoryRouter>
+      <TunnelObservability
+        id="source"
+        connections={legacy}
+        loading={false}
+        error={false}
+        logsHref="/logs"
+        agentSetupHref="/settings"
+      />
+    </MemoryRouter>,
+  );
+  const errors = within(screen.getByRole("group", { name: "Errors" }));
+  expect(errors.getByText("2")).toBeTruthy();
+  // Blocked requests never reached the MCP server, so they stay out of the error rate.
+  expect(
+    errors.getByText("25% of completed requests · 2 blocked by Speakeasy"),
   ).toBeTruthy();
 });

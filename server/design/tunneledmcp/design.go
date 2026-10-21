@@ -288,7 +288,7 @@ var TunneledMcpConnectionStatus = Type("TunneledMcpConnectionStatus", String, fu
 var TunneledMcpConnection = Type("TunneledMcpConnection", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("target_display", String, "Agent target scheme, hostname, port and path, without credentials, query or fragment")
+	Attribute("target_display", String, "Agent target scheme, hostname and port. The path, credentials, query and fragment are never shown, because some MCP servers put secrets in the path.")
 	Attribute("diagnostics", TunnelDiagnostics, "Optional agent diagnostics, absent for legacy agents")
 	Attribute("gateway_session_id", String, "Gateway session ID for a live tunnel connection")
 	Attribute("service_version", String, "Customer-declared version of the MCP service behind this tunnel connection")
@@ -431,6 +431,7 @@ var TunnelMetricPoint = Type("TunnelMetricPoint", func() {
 	Attribute("errors", Int64, "Terminal errors completed in this bucket")
 	Attribute("canceled", Int64)
 	Attribute("incomplete", Int64)
+	Attribute("rejected", Int64, "Requests Speakeasy rejected before they reached the MCP server, for example by policy. Not counted as errors.")
 	Attribute("p50_ms", Int64, "Histogram upper bound for median completion latency, -1 means above 60 seconds")
 	Attribute("p95_ms", Int64, "Histogram upper bound for p95 completion latency, -1 means above 60 seconds")
 	Attribute("connections", Float64, "Average of time-aligned sums of observed gateway connections. Missing owners are not zero.")

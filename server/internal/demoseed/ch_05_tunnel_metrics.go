@@ -65,7 +65,7 @@ FROM numbers(%d)`, tunnelHistoryGapMinutes*60, tunnelConnectionSamples-1, tunnel
 		return fmt.Errorf("insert demo tunnel connection metrics: %w", err)
 	}
 	return s.chRunChecks(ctx, ch, []chCheck{{
-		cond: fmt.Sprintf(`(SELECT count() FROM tunnel_metric_snapshots FINAL WHERE gram_project_id = toUUID(@proj)) != %d`,
+		cond: fmt.Sprintf(`(SELECT count() FROM tunnel_metric_snapshots FINAL WHERE gram_project_id = toUUID(@proj) AND source_id = toUUID(@tunnel_source)) != %d`,
 			tunnelRequestMinutes+tunnelConnectionSamples),
 		settings: chFinalSettings,
 		msg:      "demo seed postflight: tunnel metric rows missing",

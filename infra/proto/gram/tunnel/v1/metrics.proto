@@ -24,7 +24,7 @@ message MetricsSnapshot {
   string server_id = 6;
   // Requests only: tools/call, tools/list, initialize, resources/read, resources/list, prompts/list, prompts/get, ping, other.
   string method = 7;
-  // Requests only: claude, codex, cursor, chatgpt, inspector, unknown, other. Never a raw user agent.
+  // Requests only: claude, codex, cursor, chatgpt, inspector, unknown, other, derived from the HTTP User-Agent. Never the raw user agent.
   string client_family = 8;
   // Cumulative logical MCP request starts in this bucket.
   uint64 attempts = 9;
@@ -48,4 +48,6 @@ message MetricsSnapshot {
   reserved "diagnostics_available", "targets_unreachable";
   // Cumulative connections opened during this connection bucket.
   uint64 connections_opened = 20;
+  // Requests only: cumulative requests Speakeasy rejected before they reached the MCP server, for example by policy or request validation. Never counted as errors.
+  uint64 rejected = 21;
 }

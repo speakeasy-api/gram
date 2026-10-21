@@ -25,8 +25,11 @@ type Snapshot struct {
 	ProducerID                                                           string
 	Revision                                                             uint64
 	Attempts, Successes, Errors, Canceled, Incomplete, ConnectionsOpened uint64
-	LatencyBins                                                          [12]uint64
-	Connections, Consumers, Substreams                                   uint32
+	// Rejected counts requests Speakeasy refused before they reached the MCP
+	// server. They are neither errors nor completions, so they get no latency bin.
+	Rejected                           uint64
+	LatencyBins                        [12]uint64
+	Connections, Consumers, Substreams uint32
 }
 type Collector struct {
 	mu           sync.Mutex
@@ -97,6 +100,8 @@ func (c *Collector) Observe(source, server, method, client, outcome string, dura
 		row.Errors++
 	case "canceled":
 		row.Canceled++
+	case "rejected":
+		row.Rejected++
 	default:
 		row.Incomplete++
 	}

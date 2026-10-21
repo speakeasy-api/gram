@@ -441,6 +441,7 @@ func (s *Service) serveTunneledPublicInit(
 		UpstreamAuth:       "",
 		WWWAuthenticate:    "",
 		Selection:          nil,
+		Request:            r,
 	})
 	if err != nil {
 		if reserved {

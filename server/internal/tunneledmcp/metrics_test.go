@@ -33,7 +33,7 @@ func TestGetMetricsRequiresSourceProjectAccess(t *testing.T) {
 	ch, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	bucket := time.Now().UTC().Add(-time.Minute).Truncate(time.Minute)
-	writer := tunnelmetrics.NewWriter(ch, repo.New(ti.conn).ListMetricSourceOwners)
+	writer := tunnelmetrics.NewWriter(ch, nil, repo.New(ti.conn).ListMetricSourceOwners)
 	require.NoError(t, writer.HandleBatch(ctx, []*tunnelv1.MetricsSnapshot{{
 		SourceId: server.ID.String(), ProducerId: uuid.NewString(),
 		BucketUnix: bucket.Unix(), Revision: 1, Kind: "requests",
@@ -61,18 +61,26 @@ func TestMetricsAlignGaugeOwnersAndPreserveGaps(t *testing.T) {
 	t.Parallel()
 	since := time.Now().UTC().Truncate(time.Hour).Add(-time.Hour)
 	view := &types.TunnelMetrics{}
-	rows := []tunnelmetrics.Row{
-		{Bucket: since, Kind: "connections", Connections: 2, Consumers: 3},
-		{Bucket: since, Kind: "connections", Connections: 4, Consumers: 5},
-		{Bucket: since.Add(15 * time.Second), Kind: "connections", Connections: 2, Consumers: 3},
-		{Bucket: since, Kind: "requests", Method: "tools/call", Client: "claude", Server: uuid.NewString(), Attempts: 4, Successes: 3, Errors: 1, Bins: []uint64{0, 0, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0}},
+	server := uuid.NewString()
+	rows := tunnelmetrics.Aggregates{
+		Requests: []tunnelmetrics.RequestRow{
+			{Bucket: since, Kind: "requests", Method: "tools/call", Client: "claude", Servers: []string{server}, Attempts: 4, Successes: 3, Errors: 1, Rejected: 2, Bins: []uint64{0, 0, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0}, Latest: since},
+		},
+		Connections: []tunnelmetrics.ConnectionRow{
+			{Bucket: since, Connections: 4, Consumers: 5.5, Slots: 2, Latest: since.Add(15 * time.Second)},
+		},
 	}
 	fillMetrics(view, rows, since, since.Add(2*time.Minute), time.Minute)
 	require.Len(t, view.Points, 2)
 	require.InDelta(t, 4.0, *view.Points[0].Connections, 0.0001)
+	require.InDelta(t, 5.5, *view.Points[0].ConsumerSessions, 0.0001)
 	require.Equal(t, 2, view.Points[0].CoverageSamples)
 	require.EqualValues(t, 4, *view.Points[0].ToolCalls)
+	require.EqualValues(t, 1, *view.Points[0].Errors)
+	require.EqualValues(t, 2, *view.Points[0].Rejected)
 	require.EqualValues(t, 250, *view.Points[0].P95Ms)
+	require.Equal(t, 1, view.ActiveServers)
+	require.Equal(t, since.Add(15*time.Second).Format(time.RFC3339), *view.LastSampleAt)
 	require.Nil(t, view.Points[1].ToolCalls)
 	require.Nil(t, view.Points[1].Connections)
 }
@@ -81,12 +89,21 @@ func TestCoverageDistinguishesIdleFromMissingAndMarksLoss(t *testing.T) {
 	t.Parallel()
 	since := time.Now().UTC().Truncate(time.Hour).Add(-time.Hour)
 	view := &types.TunnelMetrics{}
-	fillMetrics(view, []tunnelmetrics.Row{{Bucket: since, Kind: "coverage", Incomplete: 3}}, since, since.Add(2*time.Minute), time.Minute)
+	rows := tunnelmetrics.Aggregates{
+		Requests: []tunnelmetrics.RequestRow{
+			{Bucket: since, Kind: "coverage", Snapshots: 1, Lost: true, Latest: since},
+			{Bucket: since.Add(time.Minute), Kind: "coverage", Snapshots: 2, Lost: false, Latest: since.Add(time.Minute)},
+		},
+		Connections: nil,
+	}
+	fillMetrics(view, rows, since, since.Add(3*time.Minute), time.Minute)
 	require.EqualValues(t, 0, *view.Points[0].ToolCalls)
 	require.Equal(t, 1, view.Points[0].RequestCoverageSamples)
 	require.True(t, view.Points[0].CollectionPartial)
 	require.Zero(t, *view.Points[0].Incomplete, "collector loss is not a request outcome")
-	require.Nil(t, view.Points[1].ToolCalls)
+	require.False(t, view.Points[1].CollectionPartial, "loss stays in the interval where it happened")
+	require.Equal(t, 2, view.Points[1].RequestCoverageSamples)
+	require.Nil(t, view.Points[2].ToolCalls)
 }
 
 func TestMetricOwnerLookupOmitsDeletedAndUnknownSources(t *testing.T) {

@@ -2072,6 +2072,7 @@ func unmarshalTunnelMetricPointResponseBodyToTypesTunnelMetricPoint(v *TunnelMet
 		Errors:                 v.Errors,
 		Canceled:               v.Canceled,
 		Incomplete:             v.Incomplete,
+		Rejected:               v.Rejected,
 		P50Ms:                  v.P50Ms,
 		P95Ms:                  v.P95Ms,
 		Connections:            v.Connections,

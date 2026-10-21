@@ -1,7 +1,10 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/tunnel/metrics"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -74,6 +78,11 @@ type buildProxyParams struct {
 
 	// Selection restricts the tools exposed through this proxy.
 	Selection *toolfilter.SessionSelection
+
+	// Request is the user's MCP request on the serving paths. When no agent is
+	// connected, it is recorded as a failed request in the tunnel's activity.
+	// Speakeasy-initiated callers leave it nil.
+	Request *http.Request
 }
 
 // buildProxy constructs the tunnel-backed proxy for one request.
@@ -106,6 +115,7 @@ func (m *tunnelManager) buildProxy(
 		// If necessary, use another observability solution if this requires
 		// explicit monitoring, ideally alerting the customer instead of using
 		// the platform 5xx error budget which alerts platform administrators.
+		m.observeNoRoute(tunnelID, mcpServer.ID.String(), params.Request)
 		return nil, oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("tunnel has no live route")))
 	}
 
@@ -155,6 +165,34 @@ func (m *tunnelManager) buildProxy(
 	p.DisableRedirects = true
 	p.GuardianClientOptions = m.guardianClientOptions()
 	return p, nil
+}
+
+// noRouteBodyLimit bounds how much of a request body is read to find its
+// JSON-RPC method when no agent is connected.
+const noRouteBodyLimit = 64 << 10
+
+// observeNoRoute records a request that failed because no agent was connected,
+// so an outage shows in the tunnel's activity rather than as a gap. Like the
+// proxy's own observation, only a single JSON-RPC request with an ID counts.
+func (m *tunnelManager) observeNoRoute(tunnelID, mcpServerID string, r *http.Request) {
+	if r == nil || r.Body == nil || m.proxyManager == nil || m.proxyManager.TunnelMetrics == nil {
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, noRouteBodyLimit))
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	var rpc struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+	}
+	if json.Unmarshal(body, &rpc) != nil || rpc.Method == "" || len(rpc.ID) == 0 || string(rpc.ID) == "null" {
+		return
+	}
+	method, client := metrics.Method(rpc.Method), metrics.ClientFamily(r.UserAgent())
+	m.proxyManager.TunnelMetrics.Observe(tunnelID, mcpServerID, method, client, "attempt", 0)
+	m.proxyManager.TunnelMetrics.Observe(tunnelID, mcpServerID, method, client, "error", 0)
 }
 
 // guardianClientOptions builds the shared client options for dialing tunnel

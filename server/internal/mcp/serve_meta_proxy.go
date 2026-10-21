@@ -248,6 +248,7 @@ func (s *Service) routeMetaMember(
 				UpstreamAuth:       upstreamToken,
 				WWWAuthenticate:    "",
 				Selection:          gate.toolSelection,
+				Request:            nil,
 			}, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)

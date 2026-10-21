@@ -8,10 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTargetDisplayRemovesCredentialsQueryAndFragment(t *testing.T) {
-	require.Equal(t, "https://internal.example:8443/mcp%2Fv2", TargetDisplay("https://user:secret@internal.example:8443/mcp%2Fv2?token=private#secret"))
+func TestTargetDisplayKeepsOnlySchemeHostAndPort(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "https://internal.example:8443", TargetDisplay("https://user:secret@internal.example:8443/mcp%2Fv2?token=private#secret"))
+	require.Equal(t, "http://internal.example", TargetDisplay("http://internal.example/mcp/0123456789abcdef"))
+	require.Equal(t, "http://[::1]:3000", TargetDisplay("http://[::1]:3000/mcp/secret-token"))
+	require.Equal(t, "https://internal.example:8443", TargetDisplay("https://internal.example:8443"), "sanitizing a sanitized value is a no-op")
 	require.Empty(t, TargetDisplay("file:///private/key"))
-	require.Empty(t, TargetDisplay("https://example.com/"+strings.Repeat("a", MaxTargetDisplayBytes)))
+	require.Empty(t, TargetDisplay("https://"+strings.Repeat("a", MaxTargetDisplayBytes)+".example/"))
 }
 
 func TestOptionalCapabilityIgnoresMalformedHeaders(t *testing.T) {
@@ -20,6 +25,17 @@ func TestOptionalCapabilityIgnoresMalformedHeaders(t *testing.T) {
 	require.False(t, SupportsDiagnostics(strings.Repeat("a", 300), strings.Repeat("a", 64)))
 	require.False(t, SupportsDiagnostics("future.v2", strings.Repeat("a", 64)))
 	require.True(t, SupportsDiagnostics("future.v2, diagnostics.v1", strings.Repeat("a", 64)))
+	require.False(t, SupportsDiagnostics(DiagnosticsDisabledCapability, strings.Repeat("a", 64)))
+}
+
+func TestDiagnosticsDisabledNeedsOnlyTheCapability(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, DiagnosticsDisabled(DiagnosticsDisabledCapability))
+	require.True(t, DiagnosticsDisabled("future.v2, "+DiagnosticsDisabledCapability))
+	require.False(t, DiagnosticsDisabled(""))
+	require.False(t, DiagnosticsDisabled(DiagnosticsCapability))
+	require.False(t, DiagnosticsDisabled(DiagnosticsDisabledCapability+","+strings.Repeat("a", 300)))
 }
 
 func TestDiagnosticsRejectArbitraryErrorLabels(t *testing.T) {
@@ -61,6 +77,6 @@ func TestDecodeRequiresV1FieldsAndDiscardsFutureData(t *testing.T) {
 }
 
 func TestGatewayDisplayDoesNotLogSecrets(t *testing.T) {
-	require.Equal(t, "wss://gateway.example:443/connect", GatewayDisplay("wss://user:secret@gateway.example:443/connect?token=secret#secret"))
+	require.Equal(t, "wss://gateway.example:443", GatewayDisplay("wss://user:secret@gateway.example:443/connect?token=secret#secret"))
 	require.Empty(t, GatewayDisplay("https://gateway.example"))
 }

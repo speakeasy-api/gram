@@ -838,6 +838,7 @@ func (s *Service) serveTunneledBackend(
 		UpstreamAuth:       upstream.Token,
 		WWWAuthenticate:    wwwAuthenticate,
 		Selection:          selection,
+		Request:            r,
 	}, buildOptions...)
 	if err != nil {
 		return err

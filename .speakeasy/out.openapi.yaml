@@ -111449,6 +111449,10 @@ components:
           type: integer
           description: Histogram upper bound for p95 completion latency, -1 means above 60 seconds
           format: int64
+        rejected:
+          type: integer
+          description: Requests Speakeasy rejected before they reached the MCP server, for example by policy. Not counted as errors.
+          format: int64
         request_coverage_samples:
           type: integer
           description: Observed producer-minute heartbeats; proves only observed coverage, not every replica
@@ -111551,7 +111555,7 @@ components:
           description: Customer-declared version of the MCP service behind this tunnel connection
         target_display:
           type: string
-          description: Agent target scheme, hostname, port and path, without credentials, query or fragment
+          description: Agent target scheme, hostname and port. The path, credentials, query and fragment are never shown, because some MCP servers put secrets in the path.
       required:
         - gateway_session_id
         - service_version

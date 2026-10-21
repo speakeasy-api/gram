@@ -417,6 +417,7 @@ func (s *Service) standaloneValidationTarget(
 			UpstreamAuth:       token,
 			WWWAuthenticate:    "",
 			Selection:          nil,
+			Request:            nil,
 		}, remotemcp.WithoutToolsCallIdentityCoverage())
 		if berr != nil {
 			return nil, fmt.Errorf("build tunnel proxy: %w", berr)

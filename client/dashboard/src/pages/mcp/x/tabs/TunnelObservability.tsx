@@ -63,9 +63,27 @@ const windowPhrase: Record<Window, string> = {
   week: "in the last 7 days",
 };
 
+// Longer windows change slowly, so they refresh less often.
+const historyRefetchMs: Record<Window, number> = {
+  hour: 30_000,
+  day: 5 * 60_000,
+  week: 15 * 60_000,
+};
+
 // The agent reports its slowest latency bin as a negative number; the chart
 // pins it just above the 60-second bound so the line stays on the axis.
 const OVER_SIXTY_SECONDS = 60_001;
+
+// Lines draw no point markers, so a value with no neighbour on either side
+// would be invisible. Only those isolated values get a marker.
+const ISOLATED_POINT_RADIUS = 3;
+function isolatedPointRadii(values: (number | null)[]): number[] {
+  return values.map((value, i) =>
+    value != null && values[i - 1] == null && values[i + 1] == null
+      ? ISOLATED_POINT_RADIUS
+      : 0,
+  );
+}
 
 type Tone = "success" | "warning" | "destructive" | "neutral";
 
@@ -88,7 +106,7 @@ export function TunnelObservability({
   const history = useGetTunneledMcpServerMetrics({ id, window }, undefined, {
     enabled: !!id,
     throwOnError: false,
-    refetchInterval: 30_000,
+    refetchInterval: historyRefetchMs[window],
     refetchIntervalInBackground: false,
   });
   const live = connections?.connections ?? [];
@@ -204,13 +222,16 @@ function tunnelStatus(
     return {
       tone: "success",
       title: "Reachable",
-      detail: `${agents} connected and able to reach the MCP server.`,
+      detail: `${agents} connected and can reach the MCP server's address on the network. Activity below shows whether MCP requests succeed.`,
     };
   }
+  const checksOff = live.every((c) => c.diagnostics?.state === "disabled");
   return {
     tone: "neutral",
     title: checked.length ? "Checks incomplete" : "Not checked",
-    detail: `${agents} connected. Reachability is reported once each agent runs its network checks.`,
+    detail: checksOff
+      ? `${agents} connected. Checks are turned off, so reachability is not reported.`
+      : `${agents} connected. Reachability is reported once each agent runs its network checks.`,
   };
 }
 
@@ -276,14 +297,13 @@ function TunnelStatus({
           </p>
         </div>
         {status.action && (
-          <Link to={status.action.href}>
-            <Button
-              variant={status.tone === "neutral" ? "primary" : "secondary"}
-              size="sm"
-            >
-              <Button.Text>{status.action.label}</Button.Text>
-            </Button>
-          </Link>
+          <Button
+            asChild
+            variant={status.tone === "neutral" ? "primary" : "secondary"}
+            size="sm"
+          >
+            <Link to={status.action.href}>{status.action.label}</Link>
+          </Button>
         )}
       </div>
       {live.length > 0 && !unavailable && (
@@ -325,7 +345,6 @@ function Fact({ label, value }: { label: string; value: number }) {
 
 function AgentRow({ connection: c }: { connection: TunneledMcpConnection }) {
   const d = c.diagnostics;
-  const supported = d && d.state !== "unsupported";
   return (
     <li className="space-y-3 px-6 py-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -358,13 +377,18 @@ function AgentRow({ connection: c }: { connection: TunneledMcpConnection }) {
           </Badge>
         </div>
       </div>
-      {supported ? (
-        <DiagnosticDetails value={d} />
-      ) : (
+      {!d || d.state === "unsupported" ? (
         <p className="text-muted-foreground text-sm">
           This agent does not report network checks. Update the agent and
           gateway to see them; forwarding still works.
         </p>
+      ) : d.state === "disabled" ? (
+        // The agent or the gateway can turn checks off; both report this.
+        <p className="text-muted-foreground text-sm">
+          Checks are turned off for this agent. Forwarding still works.
+        </p>
+      ) : (
+        <DiagnosticDetails value={d} />
       )}
     </li>
   );
@@ -387,7 +411,7 @@ function diagnosticLabel(d?: TunnelDiagnostics) {
         {
           unsupported: "Diagnostics unsupported",
           pending: "Waiting for checks",
-          disabled: "Checks disabled",
+          disabled: "Checks turned off",
           stale: "Checks are stale",
           unavailable: "Checks unavailable",
         } as Record<string, string>
@@ -512,6 +536,8 @@ function DiagnosticDetails({ value: d }: { value: TunnelDiagnostics }) {
                 ` · ${formatDistanceToNow(new Date(Date.now() - Number(d.lastHttpResponseAgeMs)), { addSuffix: true })}`}
               {(d.lastHttpStatus === 401 || d.lastHttpStatus === 403) &&
                 ". Target responded; credentials may be needed."}
+              {Number(d.lastHttpStatus) >= 500 &&
+                ". The MCP server answered with a server error. Check the server's logs."}
             </p>
           )}
         </div>
@@ -522,9 +548,7 @@ function DiagnosticDetails({ value: d }: { value: TunnelDiagnostics }) {
 
 function HttpProgress({ value: d }: { value: TunnelDiagnostics }) {
   let note: string | null = null;
-  if (d.state === "disabled") {
-    note = "HTTP progress is unavailable because diagnostics are disabled.";
-  } else if (d.state !== "available") {
+  if (d.state !== "available") {
     note = "HTTP progress unavailable. Waiting for a fresh report.";
   } else if (!d.httpProgress) {
     note = "HTTP progress unavailable for this agent.";
@@ -609,6 +633,7 @@ type CountKey =
   | "otherRequests"
   | "successes"
   | "errors"
+  | "rejected"
   | "connectionsOpened";
 
 function total(points: TunnelMetricPoint[], key: CountKey) {
@@ -638,7 +663,8 @@ function ActivityCharts({
       p.toolsList != null ||
       p.otherRequests != null ||
       p.successes != null ||
-      p.errors != null,
+      p.errors != null ||
+      p.rejected != null,
   );
   const requests =
     total(points, "toolCalls") +
@@ -648,6 +674,7 @@ function ActivityCharts({
   const errors = total(points, "errors");
   const completions = successes + errors;
   const errorRate = completions ? errors / completions : 0;
+  const rejected = total(points, "rejected");
   const p95 = percentile(points);
   const partial = points.some((p) => p.collectionPartial);
   const clients = [...history.clients].sort((a, b) => b.requests - a.requests);
@@ -677,16 +704,23 @@ function ActivityCharts({
             value: hasRequests ? errors.toLocaleString() : "—",
             size: "sm",
             tone: errors > 0 ? "destructive" : "neutral",
-            description: completions
-              ? `${(errorRate * 100).toFixed(errorRate < 0.1 ? 1 : 0)}% of completed requests`
-              : "No completed requests",
+            description: [
+              completions
+                ? `${(errorRate * 100).toFixed(errorRate < 0.1 ? 1 : 0)}% of completed requests`
+                : "No completed requests",
+              rejected > 0
+                ? `${rejected.toLocaleString()} blocked by Speakeasy`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · "),
           },
           {
             label: "Slowest p95",
             value: latencyLabel(p95),
             size: "sm",
             tone: "neutral",
-            description: "Response time, worst interval",
+            description: "Worst interval's p95 response time",
           },
         ]}
       />
@@ -763,11 +797,14 @@ function ActivityCharts({
 }
 
 function clientLabel(family: string) {
+  // Every family the tunnel collector reports.
   const known: Record<string, string> = {
     claude: "Claude",
+    codex: "Codex",
     cursor: "Cursor",
-    vscode: "VS Code",
     chatgpt: "ChatGPT",
+    inspector: "MCP Inspector",
+    unknown: "Unknown client",
     other: "Other clients",
   };
   return known[family] ?? family.charAt(0).toUpperCase() + family.slice(1);
@@ -791,6 +828,11 @@ function AboutTheseNumbers({ points }: { points: TunnelMetricPoint[] }) {
             which may fall in a later interval.
           </li>
           <li>
+            Requests that Speakeasy blocks before they reach the MCP server, for
+            example by policy, are not errors. They are shown as blocked next to
+            Errors and in the data table.
+          </li>
+          <li>
             Zero connections are recorded for up to five minutes after a
             disconnect. {total(points, "connectionsOpened").toLocaleString()}{" "}
             connections opened in this range.
@@ -798,6 +840,19 @@ function AboutTheseNumbers({ points }: { points: TunnelMetricPoint[] }) {
           <li>
             Response times are histogram bounds; the slowest bin means more than
             60 seconds.
+          </li>
+          <li>
+            The client is detected from the HTTP User-Agent. Many SDK-based
+            clients appear as &ldquo;Other clients&rdquo;.
+          </li>
+          <li>
+            Requests that Speakeasy sends on a user&rsquo;s behalf through this
+            tunnel are counted, because they reach the MCP server. Examples are
+            tool discovery while connecting a client and calls fanned out
+            through a gateway.
+          </li>
+          <li>
+            Checks that Speakeasy runs to validate a connection are not counted.
           </li>
         </ul>
         <div className="max-h-80 overflow-auto border">
@@ -829,6 +884,11 @@ function AboutTheseNumbers({ points }: { points: TunnelMetricPoint[] }) {
                 key: "errors",
                 header: "Errors",
                 render: (p) => p.errors ?? "—",
+              },
+              {
+                key: "rejected",
+                header: "Blocked",
+                render: (p) => p.rejected ?? "—",
               },
               {
                 key: "connections",
@@ -970,21 +1030,24 @@ function MetricChart({
             options={options}
             data={{
               labels: points.map((p) => axisLabel(new Date(p.time), window)),
-              datasets: series.map((s, i) => ({
-                label: s.label,
-                data: points.map((p) => {
+              datasets: series.map((s, i) => {
+                const data = points.map((p) => {
                   const value = p[s.key];
                   if (value == null) return null;
                   return Number(value) < 0 ? OVER_SIXTY_SECONDS : Number(value);
-                }),
-                borderColor: s.error ? ACCENT_RED : colors[i],
-                backgroundColor: s.error ? ACCENT_RED : colors[i],
-                borderWidth: 1.5,
-                pointRadius: 0,
-                pointHoverRadius: 4,
-                pointHitRadius: 8,
-                tension: 0,
-              })),
+                });
+                return {
+                  label: s.label,
+                  data,
+                  borderColor: s.error ? ACCENT_RED : colors[i],
+                  backgroundColor: s.error ? ACCENT_RED : colors[i],
+                  borderWidth: 1.5,
+                  pointRadius: isolatedPointRadii(data),
+                  pointHoverRadius: 4,
+                  pointHitRadius: 8,
+                  tension: 0,
+                };
+              }),
             }}
           />
         ) : (

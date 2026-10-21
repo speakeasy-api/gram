@@ -1,10 +1,14 @@
 package mcp
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/metrics"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/stretchr/testify/require"
 )
@@ -52,6 +57,7 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 		UpstreamAuth:       "upstream-oauth",
 		WWWAuthenticate:    "",
 		Selection:          nil,
+		Request:            nil,
 	}, remotemcp.WithMetaMCPServerID(meta))
 	require.NoError(t, err)
 	require.NotNil(t, p.CallerAssertion)
@@ -74,6 +80,7 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 		UpstreamAuth:       "upstream-oauth",
 		WWWAuthenticate:    "",
 		Selection:          nil,
+		Request:            nil,
 	}, remotemcp.WithMetaMCPServerID(meta))
 	require.NoError(t, err)
 	raw, err = configured.CallerAssertion(ctx)
@@ -93,6 +100,7 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 		UpstreamAuth:       "",
 		WWWAuthenticate:    "",
 		Selection:          nil,
+		Request:            nil,
 	})
 	require.NoError(t, err)
 	require.Nil(t, publicProxy.CallerAssertion)
@@ -101,4 +109,49 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	require.Nil(t, pinned.CallerAssertion)
 	remoteProxy := proxyManager.BuildTarget(logger, proxy.ServerIdentity{RemoteMCPServerID: uuid.NewString(), McpServerID: wrapper.String()}, "https://remote.example", nil, mcpservers.VisibilityPrivate, "org_test", project.String(), "", "", nil)
 	require.Nil(t, remoteProxy.CallerAssertion)
+}
+
+func TestTunnelManagerRecordsRequestsWithNoConnectedAgent(t *testing.T) {
+	t.Parallel()
+	logger := testenv.NewLogger(t)
+	proxyManager := remotemcp.NewProxyManager(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	proxyManager.TunnelMetrics = metrics.New()
+	project, tunnel, wrapper := uuid.New(), uuid.New(), uuid.New()
+	manager := newTunnelManager(route.NewRouteTable(), "", proxyManager, nil, nil)
+	server := &mcpserversrepo.McpServer{ID: wrapper, TunneledMcpServerID: conv.ToNullUUID(tunnel), Visibility: mcpservers.VisibilityPublic}
+	build := func(body string) error {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", strings.NewReader(body))
+		req.Header.Set("User-Agent", "Claude/1.0")
+		_, err := manager.buildProxy(t.Context(), logger, buildProxyParams{
+			ClientAffinityKey:  "",
+			ProjectID:          project,
+			OrganizationID:     "org_test",
+			MCPServer:          server,
+			ResourceIdentifier: "",
+			UpstreamAuth:       "",
+			WWWAuthenticate:    "",
+			Selection:          nil,
+			Request:            req,
+		})
+		return err
+	}
+	require.Error(t, build(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"PRIVATE_TOOL"}}`))
+	// Notifications and batches are not requests the proxy would observe either.
+	require.Error(t, build(`{"jsonrpc":"2.0","method":"notifications/initialized"}`))
+	require.Error(t, build(`[{"jsonrpc":"2.0","id":2,"method":"tools/list"}]`))
+
+	var rows []metrics.Snapshot
+	proxyManager.TunnelMetrics.Flush(t.Context(), func(_ context.Context, s metrics.Snapshot) error {
+		if s.Kind == "requests" {
+			rows = append(rows, s)
+		}
+		return nil
+	})
+	require.Len(t, rows, 1)
+	require.Equal(t, tunnel.String(), rows[0].SourceID)
+	require.Equal(t, wrapper.String(), rows[0].ServerID)
+	require.Equal(t, "tools/call", rows[0].Method)
+	require.Equal(t, "claude", rows[0].ClientFamily)
+	require.EqualValues(t, 1, rows[0].Attempts)
+	require.EqualValues(t, 1, rows[0].Errors)
 }

@@ -18,7 +18,9 @@ import { Link } from "react-router";
 
 // Live sessions come from Redis heartbeats; a short poll keeps the panel
 // honest without hammering the API while the page sits open.
-const CONNECTIONS_POLL_MS = 30_000;
+const CONNECTIONS_TABLE_POLL_MS = 15_000;
+// The tunnel status view refreshes less often and shows its own error state.
+const TUNNEL_STATUS_POLL_MS = 30_000;
 
 type StatusPresentation = {
   label: string;
@@ -141,7 +143,7 @@ export function TunneledMcpConnectionsPanel({
     undefined,
     {
       enabled: !enhanced,
-      refetchInterval: CONNECTIONS_POLL_MS,
+      refetchInterval: CONNECTIONS_TABLE_POLL_MS,
       refetchIntervalInBackground: false,
     },
   );
@@ -150,8 +152,13 @@ export function TunneledMcpConnectionsPanel({
       getTunneledMcpServerArgs(tunneledMcpServerId),
       undefined,
       {
-        throwOnError: false,
-        refetchInterval: CONNECTIONS_POLL_MS,
+        // The status view keeps rendering when a poll fails. The connections
+        // table keeps the app's default error handling, so the key is only
+        // set for the status view: an undefined value would still override it.
+        ...(enhanced ? { throwOnError: false } : {}),
+        refetchInterval: enhanced
+          ? TUNNEL_STATUS_POLL_MS
+          : CONNECTIONS_TABLE_POLL_MS,
         refetchIntervalInBackground: false,
       },
     );
@@ -208,11 +215,9 @@ export function TunneledMcpConnectionsPanel({
         heading="No live tunnel connections"
         description="Start a tunnel agent next to the upstream MCP server to connect this source."
         action={
-          <Link to={agentSetupHref}>
-            <Button variant="secondary" size="sm">
-              <Button.Text>View agent setup</Button.Text>
-            </Button>
-          </Link>
+          <Button asChild variant="secondary" size="sm">
+            <Link to={agentSetupHref}>View agent setup</Link>
+          </Button>
         }
       />
     );

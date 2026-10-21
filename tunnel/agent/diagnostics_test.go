@@ -93,3 +93,18 @@ func TestProbeUnsupportedSchemeIsUnknown(t *testing.T) {
 	require.Equal(t, "unknown", state)
 	require.Equal(t, "not_tested", tcp.State)
 }
+
+func TestProbeExplainsPlainHTTPOnHTTPSTargetAsTLSFailure(t *testing.T) {
+	// A plain HTTP server on an https:// target fails the handshake with an
+	// error that has no specific classification. It is still a TLS failure.
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+	target, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	target.Scheme = "https"
+	state, _, tcp, tls := probeTarget(t.Context(), target)
+	require.Equal(t, "unreachable", state)
+	require.Equal(t, "pass", tcp.State)
+	require.Equal(t, "fail", tls.State)
+	require.Equal(t, "tls_error", tls.Failure)
+}

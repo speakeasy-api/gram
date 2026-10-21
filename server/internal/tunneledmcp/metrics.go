@@ -52,7 +52,7 @@ func (s *Service) GetServerMetrics(ctx context.Context, payload *gen.GetServerMe
 		return view, nil
 	}
 	since := now.Add(-duration).Truncate(step)
-	rows, err := s.Metrics.Read(ctx, *authCtx.ProjectID, id, since)
+	rows, err := s.Metrics.Read(ctx, *authCtx.ProjectID, id, since, step)
 	if errors.Is(err, tunnelmetrics.ErrRangeTooLarge) {
 		view.State = "too_large"
 		return view, nil
@@ -67,17 +67,19 @@ func (s *Service) GetServerMetrics(ctx context.Context, payload *gen.GetServerMe
 }
 
 type metricBucket struct {
-	point   *types.TunnelMetricPoint
-	bins    [12]uint64
-	samples map[int64][3]uint64
+	point *types.TunnelMetricPoint
+	bins  [12]uint64
 }
 
-func fillMetrics(view *types.TunnelMetrics, rows []tunnelmetrics.Row, since, now time.Time, step time.Duration) {
+// fillMetrics shapes ClickHouse's per-interval aggregates into the response.
+// An interval with any observation starts its request counters at zero;
+// intervals with none stay null, so the dashboard can show gaps.
+func fillMetrics(view *types.TunnelMetrics, rows tunnelmetrics.Aggregates, since, now time.Time, step time.Duration) {
 	buckets := map[int64]*metricBucket{}
 	for t := since; t.Before(now); t = t.Add(step) {
-		point := &types.TunnelMetricPoint{Time: t.Format(time.RFC3339), CoverageSamples: 0, RequestCoverageSamples: 0, CollectionPartial: false, ToolCalls: nil, ToolsList: nil, OtherRequests: nil, Successes: nil, Errors: nil, Canceled: nil, Incomplete: nil, P50Ms: nil, P95Ms: nil, Connections: nil, ConsumerSessions: nil, ActiveRequests: nil, ConnectionsOpened: nil}
+		point := &types.TunnelMetricPoint{Time: t.Format(time.RFC3339), CoverageSamples: 0, RequestCoverageSamples: 0, CollectionPartial: false, ToolCalls: nil, ToolsList: nil, OtherRequests: nil, Successes: nil, Errors: nil, Canceled: nil, Incomplete: nil, Rejected: nil, P50Ms: nil, P95Ms: nil, Connections: nil, ConsumerSessions: nil, ActiveRequests: nil, ConnectionsOpened: nil}
 		view.Points = append(view.Points, point)
-		buckets[t.Unix()] = &metricBucket{bins: [12]uint64{}, point: point, samples: map[int64][3]uint64{}}
+		buckets[t.Unix()] = &metricBucket{bins: [12]uint64{}, point: point}
 	}
 	clients := map[string]int64{}
 	servers := map[string]struct{}{}
@@ -88,20 +90,27 @@ func fillMetrics(view *types.TunnelMetrics, rows []tunnelmetrics.Row, since, now
 		}
 		**dst += int64(min(n, math.MaxInt64))
 	}
-	for _, r := range rows {
+	observed := func(p *types.TunnelMetricPoint) {
+		add(&p.ToolCalls, 0)
+		add(&p.ToolsList, 0)
+		add(&p.OtherRequests, 0)
+		add(&p.Successes, 0)
+		add(&p.Errors, 0)
+		add(&p.Canceled, 0)
+		add(&p.Incomplete, 0)
+		add(&p.Rejected, 0)
+	}
+	for _, r := range rows.Requests {
 		b := buckets[r.Bucket.Truncate(step).Unix()]
 		if b == nil {
 			continue
 		}
-		if r.Bucket.After(latest) {
-			latest = r.Bucket
+		if r.Latest.After(latest) {
+			latest = r.Latest
 		}
+		observed(b.point)
 		switch r.Kind {
 		case "requests":
-			// An observed bucket starts at zero; missing buckets remain null.
-			add(&b.point.ToolCalls, 0)
-			add(&b.point.ToolsList, 0)
-			add(&b.point.OtherRequests, 0)
 			switch r.Method {
 			case "tools/call":
 				add(&b.point.ToolCalls, r.Attempts)
@@ -114,49 +123,37 @@ func fillMetrics(view *types.TunnelMetrics, rows []tunnelmetrics.Row, since, now
 			add(&b.point.Errors, r.Errors)
 			add(&b.point.Canceled, r.Canceled)
 			add(&b.point.Incomplete, r.Incomplete)
+			add(&b.point.Rejected, r.Rejected)
 			for i, n := range r.Bins {
 				if i < len(b.bins) {
 					b.bins[i] += n
 				}
 			}
 			clients[r.Client] += int64(min(r.Attempts, math.MaxInt64))
-			if r.Attempts > 0 && r.Server != uuid.Nil.String() {
-				servers[r.Server] = struct{}{}
+			for _, server := range r.Servers {
+				servers[server] = struct{}{}
 			}
 		case "coverage":
-			b.point.RequestCoverageSamples++
-			b.point.CollectionPartial = b.point.CollectionPartial || r.Incomplete > 0
-			add(&b.point.ToolCalls, 0)
-			add(&b.point.ToolsList, 0)
-			add(&b.point.OtherRequests, 0)
-			add(&b.point.Successes, 0)
-			add(&b.point.Errors, 0)
-			add(&b.point.Canceled, 0)
-			add(&b.point.Incomplete, 0)
-		case "connections":
-			b.point.CollectionPartial = b.point.CollectionPartial || r.Incomplete > 0
-			sample := b.samples[r.Bucket.Unix()]
-			sample[0] += uint64(r.Connections)
-			sample[1] += uint64(r.Consumers)
-			sample[2] += uint64(r.Substreams)
-			b.samples[r.Bucket.Unix()] = sample
-			add(&b.point.ConnectionsOpened, r.Opened)
+			b.point.RequestCoverageSamples += int(min(r.Snapshots, math.MaxInt32))
+			b.point.CollectionPartial = b.point.CollectionPartial || r.Lost
 		}
 	}
-	for _, b := range buckets {
-		b.point.CoverageSamples = len(b.samples)
-		if len(b.samples) > 0 {
-			var connections, consumers, substreams float64
-			for _, v := range b.samples {
-				connections += float64(v[0])
-				consumers += float64(v[1])
-				substreams += float64(v[2])
-			}
-			n := float64(len(b.samples))
-			b.point.Connections = new(connections / n)
-			b.point.ConsumerSessions = new(consumers / n)
-			b.point.ActiveRequests = new(substreams / n)
+	for _, r := range rows.Connections {
+		b := buckets[r.Bucket.Truncate(step).Unix()]
+		if b == nil || r.Slots == 0 {
+			continue
 		}
+		if r.Latest.After(latest) {
+			latest = r.Latest
+		}
+		b.point.CoverageSamples = int(min(r.Slots, math.MaxInt32))
+		b.point.CollectionPartial = b.point.CollectionPartial || r.Lost
+		b.point.Connections = new(r.Connections)
+		b.point.ConsumerSessions = new(r.Consumers)
+		b.point.ActiveRequests = new(r.Substreams)
+		add(&b.point.ConnectionsOpened, r.Opened)
+	}
+	for _, b := range buckets {
 		b.point.P50Ms = percentile(b.bins, 50)
 		b.point.P95Ms = percentile(b.bins, 95)
 	}

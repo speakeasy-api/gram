@@ -75,7 +75,7 @@ func TestTunnelObservationPolicyRejectionIsTerminal(t *testing.T) {
 	p.RequestObserver = func(_, _, outcome string, _ time.Duration) { outcomes = append(outcomes, outcome) }
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	require.NoError(t, p.Post(httptest.NewRecorder(), req))
-	require.Equal(t, []string{"attempt", "error"}, outcomes)
+	require.Equal(t, []string{"attempt", "rejected"}, outcomes, "a Speakeasy policy rejection never reached the MCP server, so it is not an error")
 }
 
 func TestTunnelObservationTerminalErrors(t *testing.T) {

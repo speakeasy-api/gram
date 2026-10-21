@@ -40,11 +40,15 @@ export function OverviewTab({
     slug: mcpServer.slug ?? "",
     name: mcpServer.name ?? "MCP Server",
   };
+  // With tunnel observability on, the marketplace banner sits above the tunnel
+  // status, so the usage dashboard below must not show it a second time.
+  const bannerAboveTunnel = enhanced && !!mcpServer.tunneledMcpServerId;
   // The usage dashboard is keyed by slug; a tunneled server without one still
   // gets its connections panel.
   const usage = mcpServer.slug ? (
     <MCPOverviewTab
       server={server}
+      showPluginBanner={!bannerAboveTunnel}
       // Tool Logs cannot currently filter a tunneled target by id. Treating
       // it as hosted or shadow would silently show the wrong server's calls.
       logsTarget={
@@ -68,13 +72,13 @@ export function OverviewTab({
   const logsHref = `${routes.logs.href()}?${new URLSearchParams({ af: filters ?? "" })}`;
   return (
     <Stack gap={6}>
-      {enhanced && <PluginStatusBanner server={server} />}
+      {bannerAboveTunnel && <PluginStatusBanner server={server} />}
       <TunneledMcpConnectionsPanel
         tunneledMcpServerId={mcpServer.tunneledMcpServerId}
         agentSetupHref={agentSetupHref}
         logsHref={logsHref}
       />
-      {!enhanced && usage}
+      {usage}
     </Stack>
   );
 }

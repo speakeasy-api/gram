@@ -21,6 +21,9 @@ type TunnelMetricPoint struct {
 	Errors     *int64
 	Canceled   *int64
 	Incomplete *int64
+	// Requests Speakeasy rejected before they reached the MCP server, for example
+	// by policy. Not counted as errors.
+	Rejected *int64
 	// Histogram upper bound for median completion latency, -1 means above 60
 	// seconds
 	P50Ms *int64

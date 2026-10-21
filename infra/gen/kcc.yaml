@@ -1667,6 +1667,7 @@ pubsub:
           reserved 18, 19;
           reserved "diagnostics_available", "targets_unreachable";
           uint64 connections_opened = 20;
+          uint64 rejected = 21;
         }
       type: PROTOCOL_BUFFER
   - labels:

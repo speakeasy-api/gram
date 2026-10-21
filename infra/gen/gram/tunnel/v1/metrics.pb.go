@@ -44,7 +44,7 @@ type MetricsSnapshot struct {
 	ServerId string `protobuf:"bytes,6,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
 	// Requests only: tools/call, tools/list, initialize, resources/read, resources/list, prompts/list, prompts/get, ping, other.
 	Method string `protobuf:"bytes,7,opt,name=method,proto3" json:"method,omitempty"`
-	// Requests only: claude, codex, cursor, chatgpt, inspector, unknown, other. Never a raw user agent.
+	// Requests only: claude, codex, cursor, chatgpt, inspector, unknown, other, derived from the HTTP User-Agent. Never the raw user agent.
 	ClientFamily string `protobuf:"bytes,8,opt,name=client_family,json=clientFamily,proto3" json:"client_family,omitempty"`
 	// Cumulative logical MCP request starts in this bucket.
 	Attempts uint64 `protobuf:"varint,9,opt,name=attempts,proto3" json:"attempts,omitempty"`
@@ -66,8 +66,10 @@ type MetricsSnapshot struct {
 	Substreams uint32 `protobuf:"varint,17,opt,name=substreams,proto3" json:"substreams,omitempty"`
 	// Cumulative connections opened during this connection bucket.
 	ConnectionsOpened uint64 `protobuf:"varint,20,opt,name=connections_opened,json=connectionsOpened,proto3" json:"connections_opened,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Requests only: cumulative requests Speakeasy rejected before they reached the MCP server, for example by policy or request validation. Never counted as errors.
+	Rejected      uint64 `protobuf:"varint,21,opt,name=rejected,proto3" json:"rejected,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MetricsSnapshot) Reset() {
@@ -226,11 +228,18 @@ func (x *MetricsSnapshot) GetConnectionsOpened() uint64 {
 	return 0
 }
 
+func (x *MetricsSnapshot) GetRejected() uint64 {
+	if x != nil {
+		return x.Rejected
+	}
+	return 0
+}
+
 var File_gram_tunnel_v1_metrics_proto protoreflect.FileDescriptor
 
 const file_gram_tunnel_v1_metrics_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgram/tunnel/v1/metrics.proto\x12\x0egram.tunnel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xfe\x04\n" +
+	"\x1cgram/tunnel/v1/metrics.proto\x12\x0egram.tunnel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x9a\x05\n" +
 	"\x0fMetricsSnapshot\x12\x1b\n" +
 	"\tsource_id\x18\x01 \x01(\tR\bsourceId\x12\x1f\n" +
 	"\vproducer_id\x18\x02 \x01(\tR\n" +
@@ -256,7 +265,8 @@ const file_gram_tunnel_v1_metrics_proto_rawDesc = "" +
 	"\n" +
 	"substreams\x18\x11 \x01(\rR\n" +
 	"substreams\x12-\n" +
-	"\x12connections_opened\x18\x14 \x01(\x04R\x11connectionsOpened:\n" +
+	"\x12connections_opened\x18\x14 \x01(\x04R\x11connectionsOpened\x12\x1a\n" +
+	"\brejected\x18\x15 \x01(\x04R\brejected:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$J\x04\b\x12\x10\x13J\x04\b\x13\x10\x14R\x15diagnostics_availableR\x13targets_unreachableBAZ?github.com/speakeasy-api/gram/infra/gen/gram/tunnel/v1;tunnelv1b\x06proto3"
 
 var (
