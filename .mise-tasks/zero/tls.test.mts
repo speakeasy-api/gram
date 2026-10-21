@@ -173,6 +173,12 @@ for (const host of [
       calls.some((call) => call.name === "mkcert"),
       false,
     );
+    assert.ok(
+      calls.some(
+        (call) =>
+          call.name === "mise" && call.args.includes("GRAM_HTTP_SCHEME=http"),
+      ),
+    );
     for (const name of ["GRAM_SSL_CERT_FILE", "GRAM_SSL_KEY_FILE"]) {
       assert.ok(
         calls.some(
@@ -201,6 +207,37 @@ for (const url of [
     );
   });
 }
+
+for (const base of [
+  "https://idp.example.ts.net:35291",
+  "http://localhost:35291",
+]) {
+  for (const suffix of ["?x=1", "?", "#fragment", "#", "?x=1#fragment"]) {
+    test(`dev-idp URL query or fragment fails before TLS changes (${base}${suffix})`, (t) => {
+      const f = fixture(t);
+      const { result, calls } = f.runResult({
+        GRAM_DEVIDP_EXTERNAL_URL: `${base}/${suffix}`,
+      });
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /GRAM_DEVIDP_EXTERNAL_URL.*query or fragment/,
+      );
+      assert.equal(
+        calls.some((call) => call.name === "mise" || call.name === "mkcert"),
+        false,
+      );
+    });
+  }
+}
+
+test("dev-idp URL validation permits escaped path delimiters", (t) => {
+  const f = fixture(t);
+  f.run({
+    GRAM_DEVIDP_EXTERNAL_URL:
+      "https://idp.example.ts.net:35291/tenant%3Fname%23id",
+  });
+});
 
 test("dev-idp HTTPS enables TLS when the server and dashboard URLs use HTTP", (t) => {
   const f = fixture(t);

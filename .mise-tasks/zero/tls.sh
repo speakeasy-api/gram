@@ -64,6 +64,10 @@ try {
   console.error("GRAM_DEVIDP_EXTERNAL_URL must be an absolute HTTP(S) URL without credentials.");
   process.exit(1);
 }
+if (raw.includes("?") || raw.includes("#")) {
+  console.error("GRAM_DEVIDP_EXTERNAL_URL must not contain a query or fragment.");
+  process.exit(1);
+}
 const host = url.hostname.replace(/^\[|\]$/g, "");
 const loopback = new BlockList();
 loopback.addSubnet("127.0.0.0", 8, "ipv4");

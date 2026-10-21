@@ -104,6 +104,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if scheme == "http" {
+		if err := validateHTTPListenerAddress(*address); err != nil {
+			return err
+		}
+	}
 
 	logger := plog.NewLogger(os.Stderr).With(slog.String("component", "dev-idp"))
 	slog.SetDefault(logger)
@@ -300,11 +305,33 @@ func listenerScheme(certFile, keyFile, externalURL string) (string, error) {
 		if err != nil || parsed.Hostname() == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return "", errors.New("external-url must be an absolute HTTP(S) URL without credentials")
 		}
+		if parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || strings.HasSuffix(externalURL, "#") {
+			return "", errors.New("external-url must not contain a query or fragment")
+		}
+		if parsed.Scheme == "http" && !isLoopbackHost(parsed.Hostname()) {
+			return "", errors.New("external-url must use HTTPS unless its host is loopback")
+		}
 		if parsed.Scheme != scheme {
 			return "", fmt.Errorf("external-url scheme %q does not match listener scheme %q; set or clear both ssl-cert-file and ssl-key-file to match", parsed.Scheme, scheme)
 		}
 	}
 	return scheme, nil
+}
+
+func validateHTTPListenerAddress(address string) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil || !isLoopbackHost(host) {
+		return errors.New("plain HTTP requires a loopback listener address")
+	}
+	return nil
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // deriveExternalURL turns a listener address ("host:port" or ":port") and

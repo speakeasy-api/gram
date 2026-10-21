@@ -44,6 +44,87 @@ func TestListenerScheme(t *testing.T) {
 	}
 }
 
+func TestListenerSchemeAllowsLoopbackHTTP(t *testing.T) {
+	t.Parallel()
+
+	for _, host := range []string{"localhost", "LOCALHOST", "127.0.0.1", "127.255.255.255", "[::1]", "[::ffff:127.0.0.1]"} {
+		t.Run(host, func(t *testing.T) {
+			t.Parallel()
+
+			scheme, err := listenerScheme("", "", "http://"+host+":35291")
+			require.NoError(t, err)
+			require.Equal(t, "http", scheme)
+		})
+	}
+}
+
+func TestListenerSchemeRejectsNonLoopbackHTTP(t *testing.T) {
+	t.Parallel()
+
+	for _, host := range []string{"idp.example.ts.net", "100.64.0.1", "[fd7a:115c:a1e0::1]", "[::ffff:100.64.0.1]", "localhost.example.com", "127.0.0.1.example.com", "0.0.0.0"} {
+		t.Run(host, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := listenerScheme("", "", "http://"+host+":35291")
+			require.EqualError(t, err, "external-url must use HTTPS unless its host is loopback")
+		})
+	}
+}
+
+func TestListenerSchemeRejectsQueryAndFragment(t *testing.T) {
+	t.Parallel()
+
+	for _, suffix := range []string{"?x=1", "?", "#fragment", "#", "?x=1#fragment"} {
+		t.Run(suffix, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := listenerScheme("local.pem", "local-key.pem", "https://idp.example.ts.net:35291/"+suffix)
+			require.EqualError(t, err, "external-url must not contain a query or fragment")
+		})
+	}
+}
+
+func TestListenerSchemeAllowsEscapedPathDelimiters(t *testing.T) {
+	t.Parallel()
+
+	scheme, err := listenerScheme("local.pem", "local-key.pem", "https://idp.example.ts.net:35291/tenant%3Fname%23id")
+	require.NoError(t, err)
+	require.Equal(t, "https", scheme)
+}
+
+func TestValidateHTTPListenerAddress(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		address string
+		wantErr bool
+	}{
+		{address: "localhost:35291", wantErr: false},
+		{address: "127.0.0.1:35291", wantErr: false},
+		{address: "127.255.255.255:35291", wantErr: false},
+		{address: "[::1]:35291", wantErr: false},
+		{address: "[::ffff:127.0.0.1]:35291", wantErr: false},
+		{address: "100.64.0.1:35291", wantErr: true},
+		{address: "[fd7a:115c:a1e0::1]:35291", wantErr: true},
+		{address: "dev-machine.example.ts.net:35291", wantErr: true},
+		{address: ":35291", wantErr: true},
+		{address: "0.0.0.0:35291", wantErr: true},
+		{address: "[::]:35291", wantErr: true},
+		{address: "localhost", wantErr: true},
+	} {
+		t.Run(tc.address, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateHTTPListenerAddress(tc.address)
+			if tc.wantErr {
+				require.EqualError(t, err, "plain HTTP requires a loopback listener address")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestDeriveExternalURL(t *testing.T) {
 	t.Parallel()
 
