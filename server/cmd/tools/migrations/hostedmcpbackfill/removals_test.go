@@ -215,7 +215,9 @@ func TestRekeyRemovalRecordsDuplicatePairMatchesAcrossModes(t *testing.T) {
 
 	dryOpts, _ := rekeyOptions(false)
 	dry := f.run(t, dryOpts)
-	require.Equal(t, map[Outcome]int{OutcomeWouldRekey: 1, OutcomeBlockedDuplicateRemoval: 1}, dry.Outcomes)
+	require.Len(t, dry.Outcomes, 2)
+	require.Equal(t, 1, dry.Outcomes[OutcomeWouldRekey])
+	require.Equal(t, 1, dry.Outcomes[OutcomeBlockedDuplicateRemoval])
 	require.Equal(t, 1, dry.Writes)
 	require.Equal(t, OutcomeWouldRekey, dependentRowFor(t, dry, first).Outcome)
 	require.Equal(t, reasonDuplicateInThisRun, dependentRowFor(t, dry, second).Reason)
@@ -223,7 +225,9 @@ func TestRekeyRemovalRecordsDuplicatePairMatchesAcrossModes(t *testing.T) {
 
 	applyOpts, journal := rekeyOptions(true)
 	applied := f.run(t, applyOpts)
-	require.Equal(t, map[Outcome]int{OutcomeRekeyed: 1, OutcomeBlockedDuplicateRemoval: 1}, applied.Outcomes)
+	require.Len(t, applied.Outcomes, 2)
+	require.Equal(t, 1, applied.Outcomes[OutcomeRekeyed])
+	require.Equal(t, 1, applied.Outcomes[OutcomeBlockedDuplicateRemoval])
 	require.Equal(t, dry.Writes, applied.Writes)
 	require.Equal(t, OutcomeRekeyed, dependentRowFor(t, applied, first).Outcome)
 	require.Equal(t, dependentRowFor(t, dry, second), dependentRowFor(t, applied, second))
