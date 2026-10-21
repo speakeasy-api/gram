@@ -49,14 +49,10 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     productFeatures.isSuccess &&
     productFeatures.data.signalsIntelligenceEnabled === true;
   const userSessionsFlag = useFeatureFlag(FEATURE_FLAGS.userSessionsDashboard);
-  const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
   const riskWatchdogFlag = useFeatureFlag(FEATURE_FLAGS.riskWatchdog);
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
-  // Deployments is opt-out: it remains visible unless PostHog explicitly
-  // resolves the flag to disabled.
-  const isDeploymentsPageEnabled = deploymentsPageFlag.status !== "disabled";
   // Watchdog is opt-in: unavailable flags remain hidden.
   const isRiskWatchdogEnabled = riskWatchdogFlag.status === "enabled";
   // Explore is opt-in while it is dogfooded: the flag is released to the
@@ -101,9 +97,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         route: routes.playground,
         scope: ["mcp:read", "mcp:write", "mcp:connect"],
       },
-      ...(isDeploymentsPageEnabled
-        ? [{ route: routes.deployments, scope: readWrite }]
-        : []),
+      { route: routes.deployments, scope: readWrite },
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
       {
         route: routes.assistants,
@@ -150,7 +144,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     routes,
     userSessionsFlag.status,
     projectId,
-    isDeploymentsPageEnabled,
     isExploreEnabled,
     isOrgMemoryEnabled,
     isRiskWatchdogEnabled,
