@@ -293,6 +293,12 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	search := conv.PtrValOr(payload.Search, "")
+	// Searching hidden titles would reveal their contents through result counts.
+	if search != "" {
+		if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
+			return nil, err
+		}
+	}
 	assistantID := conv.PtrValOr(payload.AssistantID, "")
 	sourceKind := conv.PtrValOr(payload.SourceKind, "")
 	excludeSourceKind := conv.PtrValOr(payload.ExcludeSourceKind, "")
@@ -470,7 +476,7 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 			Source:               conv.FromPGText[string](row.Source),
 			OriginatingClient:    conv.PtrEmpty(row.OriginatingClient),
 			LitellmProxied:       conv.PtrEmpty(row.LitellmProxied),
-			Title:                row.Title.String,
+			Title:                authz.RedactSessionTitle(ctx, row.Title.String),
 			NumMessages:          int(row.NumMessages),
 			CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
@@ -894,6 +900,12 @@ func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSession
 			DeviceHostname: conv.FromPGText[string](row.DeviceHostname),
 			CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
 		}
+		if link.ParentTitle != nil {
+			link.ParentTitle = new(authz.RedactSessionTitle(ctx, *link.ParentTitle))
+		}
+		if link.ChildTitle != nil {
+			link.ChildTitle = new(authz.RedactSessionTitle(ctx, *link.ChildTitle))
+		}
 		if unrestricted || row.ParentCaptured {
 			link.ParentChatID = conv.PtrEmpty(row.ParentChatID.String())
 		}
@@ -1095,15 +1107,10 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 func (s *Service) loadAuthorizedChat(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID, access chatAccess) (repo.GetChatRow, error) {
 	var none repo.GetChatRow
 
-	// A Speakeasy admin impersonating an org via the dev-tools override holds
-	// every scope (see authz.Engine), so RBAC cannot stop them — refuse before
-	// any session data is read. Covers the mutations too: an impersonating
-	// admin has no reason to pin, rename or delete a customer's sessions, and
-	// one rule for every endpoint avoids the per-endpoint bookkeeping that let
-	// the gate drift in the first place. The shared demo org is exempt: its
-	// transcripts are fabricated by seed/demo/ and exist to be read.
-	if contextvalues.IsSupportSession(ctx) && authCtx.ActiveOrganizationID != constants.DemoOrganizationID {
-		return none, oops.E(oops.CodeForbidden, nil, "chat sessions cannot be accessed while impersonating an organization")
+	// Impersonation grants may include every scope, so deny sensitive content
+	// independently of RBAC and before reading the chat.
+	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
+		return none, err
 	}
 
 	chat, err := s.repo.GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})

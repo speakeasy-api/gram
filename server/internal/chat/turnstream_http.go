@@ -33,6 +33,9 @@ func (s *Service) HandleTurnStream(w http.ResponseWriter, r *http.Request) error
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
+	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
+		return err
+	}
 	if err := s.authz.Require(ctx, authz.Check{
 		Scope:        authz.ScopeProjectRead,
 		ResourceKind: "",

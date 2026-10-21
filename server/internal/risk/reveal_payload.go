@@ -26,6 +26,9 @@ func (s *Service) RevealRiskResultPayload(ctx context.Context, payload *gen.Reve
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
+		return nil, err
+	}
 	projectID := *authCtx.ProjectID
 
 	id, err := uuid.Parse(payload.ID)
