@@ -99,30 +99,43 @@ function OrganizationGatewayContent({
         >
           <BrandMeshLayers />
           {header}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <section
+            aria-label={endpointUrl ? "Gateway endpoint" : "Gateway status"}
+            className="border-border flex min-w-0 flex-col gap-4 border bg-white px-5 py-4 text-black sm:flex-row sm:items-center"
+          >
             <div className="min-w-0 flex-1">
               <GatewayBody gateway={gateway} isOn={isOn} />
             </div>
-            {isOn !== undefined && !!features.data && !features.error ? (
-              // Not a <label>: label activation would forward clicks on the text
-              // to the switch past RequireScope's pointer-events guard.
-              <div className="flex items-center gap-3">
-                <Text small muted as="span">
-                  {isOn ? "Enabled" : "Disabled"}
-                </Text>
-                <OrganizationGatewaySwitch
-                  on={isOn}
-                  setOn={(enabled, options) => {
-                    if (enabled) {
-                      setReviewing(true);
-                      setTab("assignments");
-                    } else setOn(false, options);
-                  }}
-                  isPending={isPending}
+            <div className="flex shrink-0 items-stretch self-end divide-x divide-black/10 border border-black/10 bg-black/5 sm:self-auto">
+              {isOn !== undefined && !!features.data && !features.error ? (
+                // Not a <label>: label activation would forward clicks on the text
+                // to the switch past RequireScope's pointer-events guard.
+                <div className="flex items-center gap-3 px-4 py-2">
+                  <Text small as="span" className="text-black/60">
+                    {isOn ? "Enabled" : "Disabled"}
+                  </Text>
+                  <OrganizationGatewaySwitch
+                    on={isOn}
+                    setOn={(enabled, options) => {
+                      if (enabled) {
+                        setReviewing(true);
+                        setTab("assignments");
+                      } else setOn(false, options);
+                    }}
+                    isPending={isPending}
+                  />
+                </div>
+              ) : undefined}
+              {endpointUrl && (
+                <CopyButton
+                  text={endpointUrl}
+                  size="lg"
+                  tooltip="Copy endpoint"
+                  className="h-auto shrink-0 rounded-none text-black hover:bg-black/5 hover:text-black"
                 />
-              </div>
-            ) : undefined}
-          </div>
+              )}
+            </div>
+          </section>
         </section>
       )}
     >
@@ -247,23 +260,12 @@ function GatewayBody({
   }
 
   return (
-    <section
-      aria-label="Gateway endpoint"
-      className="border-border flex min-w-0 items-center gap-4 border bg-white px-5 py-4 text-black"
-    >
-      <div className="min-w-0 flex-1 space-y-2">
-        <h2 className="text-eyebrow text-black/60">Endpoint URL</h2>
-        <code className="block font-mono text-sm break-all sm:text-base">
-          {url}
-        </code>
-      </div>
-      <CopyButton
-        text={url}
-        size="lg"
-        tooltip="Copy endpoint"
-        className="shrink-0 text-black hover:bg-black/5 hover:text-black"
-      />
-    </section>
+    <div className="min-w-0 space-y-2">
+      <h2 className="text-eyebrow text-black/60">Endpoint URL</h2>
+      <code className="block font-mono text-sm break-all sm:text-base">
+        {url}
+      </code>
+    </div>
   );
 }
 
@@ -281,8 +283,7 @@ function OrganizationGatewayInstall({
   const [openPlatformId, setOpenPlatformId] = useState<string | null>(null);
   return (
     <section>
-      <h2 className="text-eyebrow">Install</h2>
-      <Text small muted className="mt-1 mb-4">
+      <Text small muted className="mb-4">
         Pick your agent for its steps. The first time it connects, it opens your
         browser to sign in.
       </Text>
