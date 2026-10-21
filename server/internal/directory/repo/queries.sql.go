@@ -348,8 +348,7 @@ WITH listed AS (
 )
 UPDATE directory_users AS du
 SET first_name = NULLIF(listed.first_name, ''),
-  last_name = NULLIF(listed.last_name, ''),
-  updated_at = clock_timestamp()
+  last_name = NULLIF(listed.last_name, '')
 FROM listed
 WHERE du.organization_id = $1
   AND du.workos_directory_user_id = listed.workos_directory_user_id
@@ -1005,6 +1004,7 @@ WITH profiles AS (
   LEFT JOIN users AS linked
     ON linked.id = d.user_id
     AND linked.deleted_at IS NULL
+    AND linked.workos_deleted_at IS NULL
   LEFT JOIN LATERAL (
     SELECT COUNT(*)::bigint AS account_count, MIN(u.id) AS user_id
     FROM users AS u
@@ -1012,6 +1012,7 @@ WITH profiles AS (
       AND NULLIF(TRIM(d.email), '') IS NOT NULL
       AND LOWER(u.email) = LOWER(d.email)
       AND u.deleted_at IS NULL
+      AND u.workos_deleted_at IS NULL
   ) AS email_accounts ON TRUE
   LEFT JOIN LATERAL (
     SELECT COUNT(*)::bigint AS profile_count

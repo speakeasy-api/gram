@@ -59,7 +59,7 @@ export type DirectoryPeopleQueryError =
  * listDirectoryPeople access
  *
  * @remarks
- * List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:read; API keys cannot enumerate it. Attribute values are not returned.
+ * List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.
  */
 export function useDirectoryPeople(
   request?: ListDirectoryPeopleRequest | undefined,
@@ -85,7 +85,7 @@ export function useDirectoryPeople(
  * listDirectoryPeople access
  *
  * @remarks
- * List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:read; API keys cannot enumerate it. Attribute values are not returned.
+ * List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.
  */
 export function useDirectoryPeopleSuspense(
   request?: ListDirectoryPeopleRequest | undefined,

@@ -21,7 +21,7 @@ func TestService_ListDirectoryPeople_States(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, orgID)})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, orgID)})
 
 	suffix := uuid.NewString()[:8]
 	linkedMember := seedOrgMember(t, ctx, ti, orgID, "linked-"+suffix+"@example.com")
@@ -80,7 +80,7 @@ func TestService_ListDirectoryPeople_NamesGroupsAndExclusions(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, orgID)})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, orgID)})
 
 	now := time.Now().UTC()
 	named, err := directoryrepo.New(ti.conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
@@ -143,7 +143,7 @@ func TestService_ListDirectoryPeople_Pages(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, orgID)})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, orgID)})
 
 	for i := range 5 {
 		seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "", uuid.NewString()[:8]+"-"+string(rune('a'+i))+"@example.com", `{}`)
@@ -170,17 +170,36 @@ func TestService_ListDirectoryPeople_Pages(t *testing.T) {
 	require.Len(t, seen, 5)
 	require.Equal(t, 3, pages)
 
+	// A cursor past the last profile returns no people, but still the totals.
+	last := uuid.Max.String()
+	past, err := ti.service.ListDirectoryPeople(ctx, &gen.ListDirectoryPeoplePayload{Limit: 2, Cursor: &last})
+	require.NoError(t, err)
+	require.Empty(t, past.People)
+	require.Equal(t, int64(5), past.Counts.NotSignedIn)
+
 	invalid := "not-a-uuid"
-	_, err := ti.service.ListDirectoryPeople(ctx, &gen.ListDirectoryPeoplePayload{Limit: 2, Cursor: &invalid})
+	_, err = ti.service.ListDirectoryPeople(ctx, &gen.ListDirectoryPeoplePayload{Limit: 2, Cursor: &invalid})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-func TestService_ListDirectoryPeople_RequiresOrgRead(t *testing.T) {
+func TestService_ListDirectoryPeople_RequiresOrgAdmin(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestAccessService(t)
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, uuid.NewString())})
-
-	_, err := ti.service.ListDirectoryPeople(ctx, &gen.ListDirectoryPeoplePayload{Limit: 10})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	for name, grant := range map[string]func(orgID string) authz.Grant{
+		// It names people who are not members, so reading the org is not enough.
+		"org read": func(orgID string) authz.Grant {
+			return authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, orgID)}
+		},
+		"admin of another org": func(string) authz.Grant {
+			return authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, uuid.NewString())}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAccessService(t)
+			ctx = withRBACGrants(t, ctx, grant(testAccessAuthContext(t, ctx).ActiveOrganizationID))
+			_, err := ti.service.ListDirectoryPeople(ctx, &gen.ListDirectoryPeoplePayload{Limit: 10})
+			requireOopsCode(t, err, oops.CodeForbidden)
+		})
+	}
 }

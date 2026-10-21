@@ -482,7 +482,7 @@ export class Access extends ClientSDK {
    * listDirectoryPeople access
    *
    * @remarks
-   * List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:read; API keys cannot enumerate it. Attribute values are not returned.
+   * List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.
    */
   async listDirectoryPeople(
     request?: ListDirectoryPeopleRequest | undefined,
