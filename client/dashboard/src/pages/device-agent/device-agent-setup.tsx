@@ -651,10 +651,21 @@ function ManualIdentity({ os }: { os: OsKey }) {
       </Text>
       {hasApp ? (
         <>
-          <Text muted>
-            Open the Speakeasy Agent app and click{" "}
-            <strong className="font-medium">Sign in to Speakeasy</strong>.
-          </Text>
+          {os === "macos" ? (
+            <>
+              <Text muted>
+                Click the Speakeasy icon in the menu bar at the top right of the
+                screen, then click{" "}
+                <strong className="font-medium">Sign in</strong>.
+              </Text>
+              <MenuBarPreview state="signIn" />
+            </>
+          ) : (
+            <Text muted>
+              Open the Speakeasy Agent app and click{" "}
+              <strong className="font-medium">Sign in</strong>.
+            </Text>
+          )}
           <details className="text-muted-foreground text-sm">
             <summary className="cursor-pointer">
               Sign in from a terminal instead
@@ -1114,25 +1125,43 @@ function MacInstallStep() {
   );
 }
 
-// MenuBarPreview shows a healthy menu bar panel, so people know what to look
-// for. The images are the device agent's own UI rendered with fixture data
-// (03-healthy.png from TestRenderShots in device-agent's cmd/speakeasy-ui),
-// one per theme.
-function MenuBarPreview() {
+// MENU_BAR_PREVIEWS are pictures of the macOS menu bar with the Speakeasy icon
+// marked and its panel open, one per theme. The icon and the panel are the
+// device agent's own assets, rendered with fixture data (TestRenderShots in
+// device-agent's cmd/speakeasy-ui: 03-healthy and 09c-never-enrolled); the
+// other menu bar items are stand-ins.
+const MENU_BAR_PREVIEWS = {
+  healthy: {
+    src: "/setup/device-agent-menu-bar",
+    height: 1521,
+    alt: "The macOS menu bar with the Speakeasy icon clicked. Its panel says All checks passed and shows the organization's plugins and a Device card with the user's email.",
+  },
+  signIn: {
+    src: "/setup/device-agent-menu-bar-sign-in",
+    height: 781,
+    alt: "The macOS menu bar with the Speakeasy icon clicked. Its panel says Not set up and has a Sign in button.",
+  },
+} as const;
+
+// MenuBarPreview shows where the Speakeasy icon sits in the macOS menu bar
+// and what its panel looks like, so people know what to click and what to
+// expect.
+function MenuBarPreview({ state }: { state: keyof typeof MENU_BAR_PREVIEWS }) {
+  const { src, height, alt } = MENU_BAR_PREVIEWS[state];
   return (
-    <figure className="border-border w-64 overflow-hidden border">
+    <figure className="border-border w-full max-w-md overflow-hidden border">
       <img
-        src="/setup/device-agent-menu-bar-light.png"
-        alt="The Speakeasy Agent menu bar panel: All checks passed, the organization's plugins, and a Device card with the user's email and Provisioned by IT."
-        width={360}
-        height={711}
+        src={`${src}-light.png`}
+        alt={alt}
+        width={1240}
+        height={height}
         className="block h-auto w-full dark:hidden"
       />
       <img
-        src="/setup/device-agent-menu-bar-dark.png"
-        alt="The Speakeasy Agent menu bar panel: All checks passed, the organization's plugins, and a Device card with the user's email and Provisioned by IT."
-        width={360}
-        height={711}
+        src={`${src}-dark.png`}
+        alt={alt}
+        width={1240}
+        height={height}
         className="hidden h-auto w-full dark:block"
       />
     </figure>
@@ -1151,16 +1180,18 @@ function MacVerifyStep() {
   return (
     <div className="flex flex-col gap-4">
       <Text muted>
-        Click the Speakeasy icon in your menu bar. A healthy agent looks like
-        this:
+        Click the Speakeasy icon in the menu bar at the top right of the screen.
+        A healthy agent looks like this:
       </Text>
-      <MenuBarPreview />
+      <MenuBarPreview state="healthy" />
       <details className="text-muted-foreground text-sm">
         <summary className="cursor-pointer">Not seeing it?</summary>
         <div className="mt-3 flex flex-col gap-2">
           <Text small muted>
-            The pkg starts the menu bar app right away and at every login. If
-            the icon is missing or the panel says{" "}
+            The pkg starts the menu bar app right away and at every login. On a
+            MacBook with a notch, a full menu bar can hide the icon behind the
+            notch: quit or hide some other menu bar apps. If the icon is missing
+            or the panel says{" "}
             <strong className="font-medium">
               The agent isn&apos;t running
             </strong>
