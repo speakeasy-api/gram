@@ -6,11 +6,11 @@ reusable **Source → Transform → Sink** pipeline.
 Each concrete migration is a set of three small implementations wired together by
 the shared harness. The migrations shipped today:
 
-| Migration                                                                           | Doc                                                                    |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Postgres `risk_results` → ClickHouse `risk_findings`                                | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md)               |
-| `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md)     |
-| Canonical hosted MCP wrappers for legacy toolsets, then their dependent move        | [HOSTED_MCP_WRAPPERS_MIGRATION.md](./HOSTED_MCP_WRAPPERS_MIGRATION.md) |
+| Migration                                                                           | Doc                                                                      |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Postgres `risk_results` → ClickHouse `risk_findings`                                | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md)                 |
+| `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md)       |
+| Canonical hosted MCP wrappers for legacy toolsets, then their dependent move        | [HOSTED_MCP_WRAPPERS_MIGRATION.md](./HOSTED_MCP_WRAPPERS_MIGRATION.md)   |
 | Stored assistant grants for legacy built-in Admin and Member roles                  | [ASSISTANT_ROLE_GRANTS_BACKFILL.md](./ASSISTANT_ROLE_GRANTS_BACKFILL.md) |
 
 ## Concepts
