@@ -31,7 +31,7 @@ var AdminUpstreamOAuthMigrationServer = Type("AdminUpstreamOAuthMigrationServer"
 })
 
 var AdminUpstreamOAuthMigrationStatus = Type("AdminUpstreamOAuthMigrationStatus", func() {
-	Description("Where one organization stands in the upstream OAuth migration, read from a dry run of both backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices.")
+	Description("Where one organization stands in the upstream OAuth migration, read from a dry run of its backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices. Typed auth clients are reported separately in auth_clients and never affect migrated.")
 	Required("organization_id", "migrated", "servers", "pending_associations", "unresolved_servers", "credentials", "pending_selections", "reconnect_credentials")
 
 	Attribute("organization_id", String, "The organization ID.")
@@ -42,6 +42,32 @@ var AdminUpstreamOAuthMigrationStatus = Type("AdminUpstreamOAuthMigrationStatus"
 	Attribute("credentials", Int64, "Live user session credentials scanned.")
 	Attribute("pending_selections", Int64, "Credential choices the configuration decides that are not yet recorded.")
 	Attribute("reconnect_credentials", Int64, "Credentials with at least one server they will be asked to reconnect to, because no single client is decided for them.")
+	Attribute("auth_clients", AdminUpstreamOAuthMigrationAuthClients, "Where the organization stands in recording typed auth clients. Separate from migrated: it never gates the upstream OAuth cutover. Absent when its check failed.")
+})
+
+var AdminUpstreamOAuthMigrationUnresolvedAssociation = Type("AdminUpstreamOAuthMigrationUnresolvedAssociation", func() {
+	Description("A server to upstream OAuth client association the typed auth client backfill cannot decide: the client's owner is unknown, or the auth client already recorded for it has another type or belongs to another project.")
+	Required("association_id", "mcp_server_id", "project_id", "remote_session_client_id")
+
+	Attribute("association_id", String, "The server to upstream OAuth client association ID.", func() { Format(FormatUUID) })
+	Attribute("mcp_server_id", String, "The MCP server ID.", func() { Format(FormatUUID) })
+	Attribute("project_id", String, "The server's project ID.", func() { Format(FormatUUID) })
+	Attribute("remote_session_client_id", String, "The upstream OAuth client ID.", func() { Format(FormatUUID) })
+	Attribute("auth_client_id", String, "The auth client already recorded for the client, if any.", func() { Format(FormatUUID) })
+})
+
+var AdminUpstreamOAuthMigrationAuthClients = Type("AdminUpstreamOAuthMigrationAuthClients", func() {
+	Description("Where one organization stands in recording a typed auth client for every upstream OAuth client its servers are associated with, and in retiring backfilled records whose association or client is gone. Nothing reads these records yet.")
+	Required("complete", "associations", "pending_clients", "pending_links", "pending_retirements", "pending_marked_servers", "unresolved", "unresolved_associations")
+
+	Attribute("complete", Boolean, "Whether every association has its auth client and server link recorded, no backfilled record is left to retire, and no server offering one is left undecided.")
+	Attribute("associations", Int64, "Live server to upstream OAuth client associations decided.")
+	Attribute("pending_clients", Int64, "Auth clients not yet recorded.")
+	Attribute("pending_links", Int64, "Server to auth client links not yet recorded.")
+	Attribute("pending_retirements", Int64, "Backfilled auth clients and server links whose association or upstream client is gone, not yet retired.")
+	Attribute("pending_marked_servers", Int64, "Servers offering a backfilled auth client whose need for upstream authentication is still undecided, not yet marked as needing it.")
+	Attribute("unresolved", Int64, "Associations whose client cannot be typed and need attention.")
+	Attribute("unresolved_associations", ArrayOf(AdminUpstreamOAuthMigrationUnresolvedAssociation), "The associations counted in unresolved.")
 })
 
 var AdminUpstreamOAuthMigrationRun = Type("AdminUpstreamOAuthMigrationRun", func() {
@@ -51,6 +77,10 @@ var AdminUpstreamOAuthMigrationRun = Type("AdminUpstreamOAuthMigrationRun", func
 	Attribute("associations_written", Int64, "Server to client associations recorded.")
 	Attribute("associations_skipped", Int64, "Associations not recorded because their configuration changed during the run. Run again to pick them up.")
 	Attribute("selections_written", Int64, "Credential choices recorded.")
+	Attribute("auth_clients_written", Int64, "Typed auth clients recorded.")
+	Attribute("auth_client_links_written", Int64, "Server to auth client links recorded.")
+	Attribute("servers_marked_requiring_upstream_auth", Int64, "Servers marked as needing upstream authentication because they offer a backfilled auth client.")
+	Attribute("auth_clients_error", String, "Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.")
 	Attribute("status", AdminUpstreamOAuthMigrationStatus, "The organization's status after the run.")
 })
 

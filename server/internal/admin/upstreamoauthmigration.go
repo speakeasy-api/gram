@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -60,6 +61,15 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate upstream oauth client selections").LogError(ctx, logger)
 	}
+	// Typed auth clients last, from the associations just recorded. A failure
+	// here is reported beside the run and never fails the migration above.
+	var authClientsError *string
+	authClients, err := authclientbackfill.Run(ctx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
+	if err != nil {
+		logger.ErrorContext(ctx, "record typed auth clients", attr.SlogError(err))
+		message := "Recording typed auth clients failed. Run again; the upstream OAuth migration is unaffected."
+		authClientsError = &message
+	}
 	status, err := s.upstreamOAuthMigrationStatus(ctx, organizationID)
 	if err != nil {
 		return nil, err
@@ -71,10 +81,14 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 		attr.SlogAdminOIDCSubject(auth.OIDCSubject),
 	)
 	return &gen.AdminUpstreamOAuthMigrationRun{
-		AssociationsWritten: int64(associations.Written),
-		AssociationsSkipped: int64(associations.Skipped),
-		SelectionsWritten:   selections.Written,
-		Status:              status,
+		AssociationsWritten:                int64(associations.Written),
+		AssociationsSkipped:                int64(associations.Skipped),
+		SelectionsWritten:                  selections.Written,
+		AuthClientsWritten:                 new(int64(authClients.ClientsWritten)),
+		AuthClientLinksWritten:             new(int64(authClients.LinksWritten)),
+		ServersMarkedRequiringUpstreamAuth: new(int64(authClients.ServersMarked)),
+		AuthClientsError:                   authClientsError,
+		Status:                             status,
 	}, nil
 }
 
@@ -117,6 +131,7 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 	pendingSelections := int64(selections.Pairs[selectionbackfill.OutcomeClient] + selections.Pairs[selectionbackfill.OutcomeNoAuth])
 
 	return &gen.AdminUpstreamOAuthMigrationStatus{
+		AuthClients:          s.authClientMigrationStatus(ctx, organizationID),
 		OrganizationID:       organizationID,
 		Migrated:             associations.Decided == 0 && len(unresolved) == 0 && pendingSelections == 0,
 		Servers:              int64(associations.Servers),
@@ -126,4 +141,43 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 		PendingSelections:    pendingSelections,
 		ReconnectCredentials: int64(len(reconnect)),
 	}, nil
+}
+
+// authClientMigrationStatus dry-runs the typed auth client backfill. It is
+// reported apart from migrated and never gates the cutover, so a failure only
+// leaves it out.
+func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID string) *gen.AdminUpstreamOAuthMigrationAuthClients {
+	report, err := authclientbackfill.Run(ctx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0})
+	if err != nil {
+		s.logger.With(attr.SlogOrganizationID(organizationID)).ErrorContext(ctx, "check typed auth clients", attr.SlogError(err))
+		return nil
+	}
+	unresolved := []*gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{}
+	for _, result := range report.Results {
+		if result.Outcome != authclientbackfill.OutcomeAmbiguous {
+			continue
+		}
+		var authClientID *string
+		if result.AuthClientID.Valid {
+			authClientID = new(result.AuthClientID.UUID.String())
+		}
+		unresolved = append(unresolved, &gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{
+			AssociationID:         result.AssociationID.String(),
+			McpServerID:           result.MCPServerID.String(),
+			ProjectID:             result.ProjectID.String(),
+			RemoteSessionClientID: result.RemoteSessionClientID.String(),
+			AuthClientID:          authClientID,
+		})
+	}
+	pendingRetirements := int64(report.PendingRetiredClients + report.PendingRetiredLinks)
+	return &gen.AdminUpstreamOAuthMigrationAuthClients{
+		Complete:               report.PendingClients == 0 && report.PendingLinks == 0 && report.Gaps == 0 && pendingRetirements == 0 && report.PendingMarkedServers == 0,
+		Associations:           int64(report.Associations),
+		PendingClients:         int64(report.PendingClients),
+		PendingLinks:           int64(report.PendingLinks),
+		PendingRetirements:     pendingRetirements,
+		PendingMarkedServers:   int64(report.PendingMarkedServers),
+		Unresolved:             int64(len(unresolved)),
+		UnresolvedAssociations: unresolved,
+	}
 }

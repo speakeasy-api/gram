@@ -1435,6 +1435,33 @@ type AdminStripeSubscriptionCandidate struct {
 	Status string
 }
 
+// Where one organization stands in recording a typed auth client for every
+// upstream OAuth client its servers are associated with, and in retiring
+// backfilled records whose association or client is gone. Nothing reads these
+// records yet.
+type AdminUpstreamOAuthMigrationAuthClients struct {
+	// Whether every association has its auth client and server link recorded, no
+	// backfilled record is left to retire, and no server offering one is left
+	// undecided.
+	Complete bool
+	// Live server to upstream OAuth client associations decided.
+	Associations int64
+	// Auth clients not yet recorded.
+	PendingClients int64
+	// Server to auth client links not yet recorded.
+	PendingLinks int64
+	// Backfilled auth clients and server links whose association or upstream
+	// client is gone, not yet retired.
+	PendingRetirements int64
+	// Servers offering a backfilled auth client whose need for upstream
+	// authentication is still undecided, not yet marked as needing it.
+	PendingMarkedServers int64
+	// Associations whose client cannot be typed and need attention.
+	Unresolved int64
+	// The associations counted in unresolved.
+	UnresolvedAssociations []*AdminUpstreamOAuthMigrationUnresolvedAssociation
+}
+
 // An organization the upstream OAuth migration applies to: it has a live MCP
 // server signed in through a user session issuer.
 type AdminUpstreamOAuthMigrationOrganization struct {
@@ -1465,6 +1492,16 @@ type AdminUpstreamOAuthMigrationRun struct {
 	AssociationsSkipped int64
 	// Credential choices recorded.
 	SelectionsWritten int64
+	// Typed auth clients recorded.
+	AuthClientsWritten *int64
+	// Server to auth client links recorded.
+	AuthClientLinksWritten *int64
+	// Servers marked as needing upstream authentication because they offer a
+	// backfilled auth client.
+	ServersMarkedRequiringUpstreamAuth *int64
+	// Why recording typed auth clients failed, when it did. The upstream OAuth
+	// migration itself is unaffected.
+	AuthClientsError *string
 	// The organization's status after the run.
 	Status *AdminUpstreamOAuthMigrationStatus
 }
@@ -1501,6 +1538,26 @@ type AdminUpstreamOAuthMigrationStatus struct {
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials int64
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClients
+}
+
+// A server to upstream OAuth client association the typed auth client backfill
+// cannot decide: the client's owner is unknown, or the auth client already
+// recorded for it has another type or belongs to another project.
+type AdminUpstreamOAuthMigrationUnresolvedAssociation struct {
+	// The server to upstream OAuth client association ID.
+	AssociationID string
+	// The MCP server ID.
+	McpServerID string
+	// The server's project ID.
+	ProjectID string
+	// The upstream OAuth client ID.
+	RemoteSessionClientID string
+	// The auth client already recorded for the client, if any.
+	AuthClientID *string
 }
 
 type AdminUser struct {

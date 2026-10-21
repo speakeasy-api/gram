@@ -21999,6 +21999,54 @@ func marshalAdminAdminUpstreamOAuthMigrationServerToAdminUpstreamOAuthMigrationS
 	return res
 }
 
+// marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody
+// builds a value of type *AdminUpstreamOAuthMigrationAuthClientsResponseBody
+// from a value of type *admin.AdminUpstreamOAuthMigrationAuthClients.
+func marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(v *admin.AdminUpstreamOAuthMigrationAuthClients) *AdminUpstreamOAuthMigrationAuthClientsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminUpstreamOAuthMigrationAuthClientsResponseBody{
+		Complete:             v.Complete,
+		Associations:         v.Associations,
+		PendingClients:       v.PendingClients,
+		PendingLinks:         v.PendingLinks,
+		PendingRetirements:   v.PendingRetirements,
+		PendingMarkedServers: v.PendingMarkedServers,
+		Unresolved:           v.Unresolved,
+	}
+	if v.UnresolvedAssociations != nil {
+		res.UnresolvedAssociations = make([]*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody, len(v.UnresolvedAssociations))
+		for i, val := range v.UnresolvedAssociations {
+			if val == nil {
+				res.UnresolvedAssociations[i] = nil
+				continue
+			}
+			res.UnresolvedAssociations[i] = marshalAdminAdminUpstreamOAuthMigrationUnresolvedAssociationToAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(val)
+		}
+	} else {
+		res.UnresolvedAssociations = []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAdminAdminUpstreamOAuthMigrationUnresolvedAssociationToAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody
+// builds a value of type
+// *AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody from a value
+// of type *admin.AdminUpstreamOAuthMigrationUnresolvedAssociation.
+func marshalAdminAdminUpstreamOAuthMigrationUnresolvedAssociationToAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(v *admin.AdminUpstreamOAuthMigrationUnresolvedAssociation) *AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody {
+	res := &AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody{
+		AssociationID:         v.AssociationID,
+		McpServerID:           v.McpServerID,
+		ProjectID:             v.ProjectID,
+		RemoteSessionClientID: v.RemoteSessionClientID,
+		AuthClientID:          v.AuthClientID,
+	}
+
+	return res
+}
+
 // marshalAdminAdminUpstreamOAuthMigrationStatusToAdminUpstreamOAuthMigrationStatusResponseBody
 // builds a value of type *AdminUpstreamOAuthMigrationStatusResponseBody from a
 // value of type *admin.AdminUpstreamOAuthMigrationStatus.
@@ -22023,6 +22071,9 @@ func marshalAdminAdminUpstreamOAuthMigrationStatusToAdminUpstreamOAuthMigrationS
 		}
 	} else {
 		res.UnresolvedServers = []*AdminUpstreamOAuthMigrationServerResponseBody{}
+	}
+	if v.AuthClients != nil {
+		res.AuthClients = marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(v.AuthClients)
 	}
 
 	return res
