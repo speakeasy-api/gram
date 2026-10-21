@@ -430,6 +430,49 @@ func (q *Queries) ListMCPServerRemoteSessionClients(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listServerAssociatedClients = `-- name: ListServerAssociatedClients :many
+SELECT a.mcp_server_id, a.remote_session_client_id
+FROM mcp_server_remote_session_clients AS a
+JOIN remote_session_clients AS c
+  ON c.id = a.remote_session_client_id
+ AND c.deleted IS FALSE
+WHERE a.mcp_server_id = ANY($1::uuid[])
+  AND a.organization_id = $2::text
+  AND a.deleted IS FALSE
+`
+
+type ListServerAssociatedClientsParams struct {
+	McpServerIds   []uuid.UUID
+	OrganizationID string
+}
+
+type ListServerAssociatedClientsRow struct {
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// The live clients associated with each of the given servers, for consent to
+// offer a server only its own clients.
+func (q *Queries) ListServerAssociatedClients(ctx context.Context, arg ListServerAssociatedClientsParams) ([]ListServerAssociatedClientsRow, error) {
+	rows, err := q.db.Query(ctx, listServerAssociatedClients, arg.McpServerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServerAssociatedClientsRow
+	for rows.Next() {
+		var i ListServerAssociatedClientsRow
+		if err := rows.Scan(&i.McpServerID, &i.RemoteSessionClientID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const pruneRemoteSessionClientAssociations = `-- name: PruneRemoteSessionClientAssociations :execrows
 DELETE FROM mcp_server_remote_session_clients AS a
 USING mcp_servers AS s

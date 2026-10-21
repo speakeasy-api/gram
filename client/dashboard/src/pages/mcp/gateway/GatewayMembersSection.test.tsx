@@ -9,6 +9,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { MemoryRouter } from "react-router";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 
@@ -91,23 +92,25 @@ function setup(
     { key: "server-b", name: "Beta", error: "Try again" },
   ]);
   render(
-    <MemoryRouter>
-      <AddServersSheet
-        open
-        onOpenChange={() => {}}
-        servers={servers}
-        toolsets={[]}
-        isLoading={false}
-        loadFailed={false}
-        onRetryLoad={() => {}}
-        memberServerIds={new Set()}
-        onAdd={onAdd}
-        adding={false}
-        projectId="project"
-        gatewayId="gateway"
-        {...overrides}
-      />
-    </MemoryRouter>,
+    <TooltipProvider>
+      <MemoryRouter>
+        <AddServersSheet
+          open
+          onOpenChange={() => {}}
+          servers={servers}
+          toolsets={[]}
+          isLoading={false}
+          loadFailed={false}
+          onRetryLoad={() => {}}
+          memberServerIds={new Set()}
+          onAdd={onAdd}
+          adding={false}
+          projectId="project"
+          gatewayId="gateway"
+          {...overrides}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
   );
   return { onAdd };
 }
@@ -428,9 +431,11 @@ describe("Add servers sheet", () => {
       wrappers,
     };
     const view = render(
-      <MemoryRouter>
-        <AddServersSheet {...props} servers={[]} />
-      </MemoryRouter>,
+      <TooltipProvider>
+        <MemoryRouter>
+          <AddServersSheet {...props} servers={[]} />
+        </MemoryRouter>
+      </TooltipProvider>,
     );
     fireEvent.click(screen.getByRole("checkbox", { name: "Hosted" }));
     fireEvent.click(
@@ -438,22 +443,29 @@ describe("Add servers sheet", () => {
     );
     await screen.findByText("Hosted: Try again");
     view.rerender(
-      <MemoryRouter>
-        <AddServersSheet
-          {...props}
-          servers={
-            [
-              { id: "other", name: "Other", slug: "other", toolsetId: "tools" },
-              {
-                id: "created",
-                name: "Hosted",
-                slug: "hosted",
-                toolsetId: "tools",
-              },
-            ] as McpServer[]
-          }
-        />
-      </MemoryRouter>,
+      <TooltipProvider>
+        <MemoryRouter>
+          <AddServersSheet
+            {...props}
+            servers={
+              [
+                {
+                  id: "other",
+                  name: "Other",
+                  slug: "other",
+                  toolsetId: "tools",
+                },
+                {
+                  id: "created",
+                  name: "Hosted",
+                  slug: "hosted",
+                  toolsetId: "tools",
+                },
+              ] as McpServer[]
+            }
+          />
+        </MemoryRouter>
+      </TooltipProvider>,
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Add selected servers" }),

@@ -179,7 +179,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDRemoteIdentityClients(ctx, repo.PostflightIDRemoteIdentityClientsParams{ProjectID: proj, OrgID: org})
 		}, 1, "demo seed postflight: expected 1 Remote MCP identity client, found %d"},
-		{byProj(s.q.PostflightIDRemoteIdentityBindings), 2, "demo seed postflight: expected 2 Remote MCP User Identity bindings, found %d"},
+		{byProj(s.q.PostflightIDRemoteIdentityBindings), 3, "demo seed postflight: expected 3 Remote MCP User Identity bindings, found %d"},
 		// The stamp has to be what ResyncMCPServerRemoteSessionIssuers would
 		// derive: every live client bound to Linear's user session issuer names
 		// one remote issuer, and it is the stamped one. The query returns no
@@ -207,6 +207,26 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byProj(s.q.PostflightIDLinearProtectedResource), 1, "demo seed postflight: expected Linear's protected resource pinned to read, found %d matching rows"},
 		// Linear's two clients, and each EMA service's own client.
 		{byProj(s.q.PostflightIDServerClientAssociations), 4, "demo seed postflight: expected 4 MCP server upstream client associations, found %d"},
+		// One per server each seeded sign-in reaches: the Linear and Slack
+		// sign-ins on their own server, the gateway sign-ins on both members.
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
+				ProjectID:        proj,
+				LinearSessionIds: []uuid.UUID{s.det("user-session-6"), s.det("user-session-7"), s.det("user-session-10"), s.det("user-session-11")},
+				SlackSessionIds:  []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11")},
+				LinearServerID:   s.det("mcpserver-linear"),
+				SlackServerID:    s.det("mcpserver-slack"),
+				LinearClientID:   s.det("remote-identity-client-linear"),
+			})
+		}, 8, "demo seed postflight: expected exactly 8 matching upstream client choices, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
+				ProjectID:      proj,
+				LinearServerID: s.det("mcpserver-linear"),
+				LinearClientID: s.det("remote-identity-client-linear"),
+				SlackServerID:  s.det("mcpserver-slack"),
+			})
+		}, 0, "demo seed postflight: %d upstream client choices are not the intended Linear client or Slack no-auth choice"},
 		{byProj(s.q.PostflightIDServiceAccountHeaders), 1, "demo seed postflight: expected 1 Remote MCP Service Account header, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.
@@ -295,7 +315,15 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// to write: an undecided overlay row renders as unreviewed and is
 		// indistinguishable on the page from a tool nobody has touched.
 		{byOrg(s.q.PostflightIDUndecidedAITools), 0, "demo seed postflight: %d AI tool rows carry a status other than approved or blocked"},
-		{byOrg(s.q.PostflightIDDirectoryRoleMappings), 4, "demo seed postflight: expected 4 directory role mappings, found %d"},
+		{byOrg(s.q.PostflightIDDirectoryRoleMappings), 5, "demo seed postflight: expected 5 directory role mappings, found %d"},
+		// One mapping's group was deleted from the directory, so the mappings
+		// page has a missing source to show.
+		{byOrg(s.q.PostflightIDDeletedGroupMappings), 1, "demo seed postflight: expected 1 mapping on a deleted directory group, found %d"},
+		// One directory change of each kind waits on the SSO tab's review list.
+		{byOrg(s.q.PostflightIDPendingDirectoryReviewItems), 3, "demo seed postflight: expected 3 pending directory review items, found %d"},
+		// The seeded items return on every reseed, so review emails stay off
+		// rather than emailing the organization's admins each day.
+		{byOrg(s.q.PostflightIDDirectoryReviewEmailsEnabled), 0, "demo seed postflight: directory review emails must be off, found %d organizations with them on"},
 		// One group grants a set of roles, so the mapping page shows two role
 		// chips on a single source.
 		{byOrg(s.q.PostflightIDInfraGroupMappedRoles), 2, "demo seed postflight: expected 2 roles for Infra, found %d"},

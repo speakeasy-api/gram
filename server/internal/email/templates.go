@@ -38,6 +38,7 @@ const (
 	TemplateKeyAccessPaused              TemplateKey = "access_paused"
 	TemplateKeyPaygActivated             TemplateKey = "payg_activated"
 	TemplateKeySetupTaskAssignment       TemplateKey = "setup_task_assignment"
+	TemplateKeyDirectoryReviewPending    TemplateKey = "directory_review_pending"
 )
 
 var (
@@ -124,4 +125,5 @@ var RegisteredTemplates = []Template{
 	AccessPaused{OrganizationName: "", ActionURL: ""},
 	PaygActivated{OrganizationName: "", TumPricePerMillionUsd: "", ActionURL: ""},
 	SetupTaskAssignment{AssignerName: "", OrganizationName: "", TaskTitle: "", TaskDescription: "", SetupLink: ""},
+	DirectoryReviewPending{OrganizationName: "", Summary: "", NewGroupCount: "", NewAttributeValueCount: "", SourceMissingCount: "", ReviewURL: "", IsReminder: ""},
 }

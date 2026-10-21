@@ -17,6 +17,7 @@ function routes(): ReturnType<typeof useRoutes> {
         usage: page("usage"),
         permissions: page("permissions"),
         sessions: page("sessions"),
+        credentials: page("credentials"),
         controls: page("controls"),
         security: page("security"),
         cost: page("cost"),
@@ -55,6 +56,7 @@ describe("identityRailItems", () => {
       "permissions",
       "sessions",
       "activity",
+      "credentials",
       "controls",
     ]);
   });
@@ -68,6 +70,10 @@ describe("identityRailItems", () => {
     expect(titles["permissions"]).toBe("Permissions");
     expect(titles["sessions"]).toBe("Sessions");
     expect(titles["controls"]).toBe("Controls & Safety");
+    // The keys and the federated platforms are the only way an agent gets
+    // in, so the rail has to reach them: without this entry the panels still
+    // render at their address and nothing links to it.
+    expect(titles["credentials"]).toBe("Credentials");
   });
 
   it("carries the current query string onto every link", () => {

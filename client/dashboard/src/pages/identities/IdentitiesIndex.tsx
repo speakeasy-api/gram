@@ -111,12 +111,31 @@ const IDENTITY_FILTERS = defineFilters([
     pinned: true,
     description: "People and agents.",
   },
+  // Three separate facts, each its own filter. None implies another: a
+  // directory profile can belong to someone who never signed in, and activity
+  // can come from someone with no account here.
   {
-    id: "enrollment",
-    label: "Enrollment",
+    id: "directory",
+    label: "Directory",
     kind: "select",
     allLabel: "All",
-    description: "Whether the platform has seen this identity work at all.",
+    description:
+      "Whether the identity has a live profile in the organization's synced directory.",
+  },
+  {
+    id: "membership",
+    label: "Membership",
+    kind: "select",
+    allLabel: "All",
+    description: "Whether the identity is a member of this organization.",
+  },
+  {
+    id: "seen",
+    label: "Seen",
+    kind: "select",
+    allLabel: "All",
+    description:
+      "Whether activity has ever been observed for the identity through hooks or MCP.",
   },
   {
     id: "activity",
@@ -244,9 +263,19 @@ const PERSONAL_ACCOUNT_OPTIONS = [
   { value: "no", label: "No personal account" },
 ];
 
-const ENROLLMENT_OPTIONS = [
-  { value: "enrolled", label: "Enrolled" },
-  { value: "not_enrolled", label: "Not enrolled" },
+const DIRECTORY_OPTIONS = [
+  { value: "in_directory", label: "In directory" },
+  { value: "not_in_directory", label: "Not in directory" },
+];
+
+const MEMBERSHIP_OPTIONS = [
+  { value: "member", label: "Member" },
+  { value: "not_member", label: "Not a member" },
+];
+
+const SEEN_OPTIONS = [
+  { value: "seen", label: "Seen" },
+  { value: "not_seen", label: "Not seen" },
 ];
 
 /**
@@ -618,15 +647,16 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     ],
   );
 
-  // Only the people count survives main's tally: the stat tiles it fed were
-  // removed because each table already states its own count. The sync callout
-  // still needs to know whether this org has a directory behind it.
-  const peopleCount = useMemo(
-    () =>
-      identities.filter((identity) => identityKindOf(identity) === "person")
-        .length,
-    [identities],
-  );
+  // The sync callout needs the people count, and the directory filter needs
+  // to know whether this org has a directory behind it.
+  const counts = useMemo(() => {
+    const tally = { people: 0, inDirectory: 0 };
+    for (const identity of identities) {
+      if (identityKindOf(identity) === "person") tally.people += 1;
+      if (identity.inDirectory) tally.inDirectory += 1;
+    }
+    return tally;
+  }, [identities]);
 
   const kindKey = (values.kind ?? []).join(",");
   const hasLegacyKindFilter =
@@ -710,11 +740,16 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
             if (dimension.id === "device_status") {
               return deviceStatusOptions.length > 0;
             }
+            // With no directory connected every identity answers "not in
+            // directory", so the filter could only empty the table or do
+            // nothing.
+            if (dimension.id === "directory") return counts.inDirectory > 0;
             return true;
           }),
     [
       kind,
       values,
+      counts.inDirectory,
       hasLegacyKindFilter,
       ownerOptions.length,
       roleOptions.length,
@@ -726,7 +761,9 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
 
   const accountType = (values.account_type as string | undefined) ?? "";
   const personalAccount = (values.personal_account as string | undefined) ?? "";
-  const enrollment = (values.enrollment as string | undefined) ?? "";
+  const directory = (values.directory as string | undefined) ?? "";
+  const membership = (values.membership as string | undefined) ?? "";
+  const seen = (values.seen as string | undefined) ?? "";
   const activity = (values.activity as string | undefined) ?? "";
   // Department and team hold whatever the directory calls them, so these keys
   // are JSON rather than a comma join: a department named "Sales, EMEA" would
@@ -754,7 +791,13 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       ) {
         return false;
       }
-      if (!matchesIdentityTelemetryFilters(identity, enrollment, activity))
+      if (
+        !matchesIdentityTelemetryFilters(
+          identity,
+          { directory, membership, seen },
+          activity,
+        )
+      )
         return false;
       if (
         selectedDeviceStatuses.length > 0 &&
@@ -810,7 +853,9 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     kindKey,
     accountType,
     personalAccount,
-    enrollment,
+    directory,
+    membership,
+    seen,
     activity,
     deviceStatusKey,
     deviceCoverage,
@@ -1071,7 +1116,9 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     kindKey,
     accountType,
     personalAccount,
-    enrollment,
+    directory,
+    membership,
+    seen,
     activity,
     deviceStatusKey,
     roleKey,
@@ -1125,7 +1172,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
         {kind === "person" &&
           !rosterLoading &&
           !rosterFailed &&
-          peopleCount <= 1 && <IdentitySyncCallout />}
+          counts.people <= 1 && <IdentitySyncCallout />}
         {/* The table is as tall as its rows, up to the room left under the
             controls. Past that it scrolls itself rather than the page: a short
             roster no longer leaves a band of empty table under the last row. */}
@@ -1160,7 +1207,9 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                     kind: Object.entries(IDENTITY_KIND_LABELS).map(
                       ([value, label]) => ({ value, label }),
                     ),
-                    enrollment: ENROLLMENT_OPTIONS,
+                    directory: DIRECTORY_OPTIONS,
+                    membership: MEMBERSHIP_OPTIONS,
+                    seen: SEEN_OPTIONS,
                     activity: ACTIVITY_OPTIONS,
                     device_status: deviceStatusOptions,
                     role: roleOptions,

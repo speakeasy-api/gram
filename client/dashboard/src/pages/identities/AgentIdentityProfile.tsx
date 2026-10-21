@@ -12,14 +12,12 @@ import {
 import { AgentFederatedAccess } from "@/pages/agents/AgentFederatedAccess";
 import { AgentBootstrapTokens } from "@/pages/agents/devices/AgentBootstrapTokens";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
-import { AgentGatewayInstall } from "@/pages/agents/AgentGatewayInstall";
 import { ManagedAgentSessions } from "@/pages/agents/ManagedAgentSessions";
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
 import {
   AgentIdentityAudit,
   AgentIdentityChallenges,
 } from "./AgentIdentityActivity";
-import { IdentityPanel } from "./IdentityPanel";
 import { IdentitySection } from "./IdentitySection";
 
 /** Agent data is keyed by its principal, never by its human owner's identifiers. */
@@ -36,7 +34,7 @@ export function AgentIdentityProfile({
   const navigate = useNavigate();
   const routes = useRoutes();
   // `?credential=new` opens issuance on this section. It is a query rather
-  // than a segment of its own because issuing is a state of the provisioning
+  // than a segment of its own because issuing is a state of the credentials
   // section, and because the links that used to name the retired
   // agent-management page carry it.
   const [params, setParams] = useSearchParams();
@@ -104,7 +102,7 @@ export function AgentIdentityProfile({
           <ManagedAgentSessions agent={agent} variant="bare" />
         </IdentitySection>
       );
-    case "provisioning":
+    case "credentials":
       if (issuing) {
         return (
           <IdentitySection
@@ -122,23 +120,20 @@ export function AgentIdentityProfile({
       // An agent holds keys, not provider logins and not machines. The
       // managed-device panel that sat here could only ever say so.
       //
-      // The endpoint and the keys, under one heading. Both come bare: the
-      // keys panel's own "Provision" header would repeat the section title
-      // the rail just sent the reader to.
+      // The gateway endpoint is not repeated here: the wizard hands it over
+      // while connecting the runtime, and a second copy under the keys read
+      // as a second thing to configure.
       return (
         <IdentitySection
-          title="Provisioning"
+          title="Credentials"
           meta={
             !credentialKnown
-              ? "Point the agent's runtime here"
+              ? "How this agent signs in"
               : federated
-                ? "Point the agent's runtime here; its platform signs it in"
-                : "Point the agent's runtime here, then issue it a key"
+                ? "The platforms that sign in as this agent, and the keys it holds"
+                : "The keys this agent holds, and the platforms that sign in as it"
           }
         >
-          <IdentityPanel title="Endpoint" contentClassName="p-4">
-            <AgentGatewayInstall agentID={agent.id} secret={null} />
-          </IdentityPanel>
           {/* Issuing is a flow of its own, so the button puts this section
               into it. Without this the control is enabled and does nothing:
               the panel only opens its own wizard in creation mode. */}
@@ -153,7 +148,6 @@ export function AgentIdentityProfile({
           )}
           <AgentAPIKeys
             agent={agent}
-            variant="bare"
             federated={credentialKnown ? federated : "unknown"}
             onCreate={() => setIssuing(true)}
           />
@@ -186,7 +180,8 @@ export function AgentIdentityProfile({
       const renamed: Record<string, string> = {
         access: "permissions",
         connections: "sessions",
-        devices: "provisioning",
+        devices: "credentials",
+        provisioning: "credentials",
       };
       const moved = renamed[section];
       if (moved) {

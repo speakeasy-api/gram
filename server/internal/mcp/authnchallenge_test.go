@@ -29,6 +29,7 @@ import (
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -506,7 +507,7 @@ func serveConsentMCPRequest(
 ) *httptest.ResponseRecorder {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodPost, "/"+endpoint.RouteBase+"/"+endpoint.Slug+"/connect/mcp", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/"+endpoint.RouteBase.String()+"/"+endpoint.Slug+"/connect/mcp", strings.NewReader(body))
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Gram-Consent-State", stateID)
@@ -1101,7 +1102,7 @@ func TestHandleIDPCallback_UsesBaseURLFromCachedState(t *testing.T) {
 			McpSlug:        toolset.McpSlug.String,
 			CustomDomainID: toolset.CustomDomainID,
 			BaseURL:        customDomainBaseURL,
-			RouteBase:      "mcp",
+			RouteBase:      mcproute.MCP,
 		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
@@ -1619,7 +1620,7 @@ func seedModernConsentChallenge(
 		ID:                  stateID,
 		UserSessionIssuerID: issuerID,
 		Endpoint: mcp.EndpointRef{
-			RouteBase:   "mcp",
+			RouteBase:   mcproute.MCP,
 			McpSlug:     endpointSlug,
 			McpServerID: uuid.NullUUID{UUID: mcpServerID, Valid: true},
 		},

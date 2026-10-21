@@ -109,6 +109,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// The endpoint backing an in-flight challenge could not be re-resolved
 		// (e.g. toolset removed mid-flow) — a config-class terminal failure.
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		if errors.Is(err, errToolsetEndpointMismatch) {
+			return oops.E(oops.CodeUnauthorized, err, "authn challenge endpoint does not match the endpoint that started the flow").LogWarn(ctx, logger)
+		}
 		return err
 	}
 	authorityStarted := time.Now()

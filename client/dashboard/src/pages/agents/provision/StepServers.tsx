@@ -61,7 +61,7 @@ export function StepServers({
   // to the agent before a key can call it, and this flow has no step for that.
   // Offering it would issue a key that reaches the gateway and then fails on
   // every call to that server, so it is shown and not selectable; the agent's
-  // own provisioning section connects the account.
+  // own credentials section connects the account.
   const needsAccount = (server: InventoryServer) => Boolean(server.issuerId);
   const matches = servers.filter((server) => {
     if (showSelectedOnly && !isSelected(server.id)) return false;
@@ -227,7 +227,7 @@ export function StepServers({
                   <Text muted small className="block px-4 pt-3">
                     These authorize each person separately, so an agent cannot
                     use them until an account is connected from the agent's
-                    provisioning section. A server that should answer to one
+                    credentials section. A server that should answer to one
                     shared credential instead can be changed in its settings.
                   </Text>
                   <ul className="divide-border divide-y">

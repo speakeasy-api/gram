@@ -658,10 +658,12 @@ describe("Agent API keys", () => {
     async (statusCode) => {
       mocks.list.mockRejectedValue({ statusCode });
       setup();
-      expect(await screen.findByRole("alert")).toHaveProperty(
-        "textContent",
-        expect.stringContaining("Could not load"),
-      );
+      // The panel says a failed read failed, and offers the retry. An empty
+      // list here would be a claim about the agent that we do not have.
+      expect(
+        await screen.findByText("This panel could not be loaded."),
+      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
       expect(screen.queryByText(/No key issued yet/)).toBeNull();
     },
   );
@@ -855,8 +857,8 @@ describe("Agent API keys", () => {
   });
   it("shows loading separately from an empty list", () => {
     mocks.list.mockImplementation(() => new Promise(() => {}));
-    setup();
-    expect(screen.getByText("Loading API keys…")).toBeTruthy();
+    const { container } = setup();
+    expect(container.querySelector("[aria-busy=true]")).toBeTruthy();
     expect(screen.queryByText(/No key issued yet/)).toBeNull();
   });
   it("requests inventory-scoped candidates and issues only selected MCP connect grants", async () => {

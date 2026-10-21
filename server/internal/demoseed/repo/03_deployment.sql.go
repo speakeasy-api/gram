@@ -874,7 +874,7 @@ func (q *Queries) DeployInsertUserSessionClient(ctx context.Context, arg DeployI
 
 const deployInsertUserSessionIssuer = `-- name: DeployInsertUserSessionIssuer :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
-VALUES ($1, $2::uuid, $3::text, 'acme-partner-gateway', 'interactive', interval '30 days')
+VALUES ($1, $2::uuid, $3::text, 'acme-partner-gateway', 'interactive', make_interval(secs => 30 * 24 * 60 * 60))
 `
 
 type DeployInsertUserSessionIssuerParams struct {

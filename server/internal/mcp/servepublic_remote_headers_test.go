@@ -312,3 +312,74 @@ func TestOnlyTunnelBuildersSelectTunneledHeaderPolicy(t *testing.T) {
 	slices.Sort(selecting)
 	require.Equal(t, tunnelHeaderPolicyFiles, selecting)
 }
+
+// The caller's Authorization authenticates them to Speakeasy, so no configured
+// header may carry it upstream under another name. An upstream credential the
+// caller supplies in a header of its own still reaches the upstream, even as
+// Authorization.
+func TestServePublic_RemoteEndpoint_DoesNotForwardSpeakeasyBearerFromConfiguredHeader(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	upstream := newHeaderRecordingUpstream(t, "Authorization")
+	endpointSlug := "endpoint-" + uuid.NewString()
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.server.URL, endpointSlug, "public", issuerID)
+	seedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, "X-Token", "", "Authorization", false)
+	seedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, "Authorization", "", "X-Upstream-Credential", false)
+	token := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+	mux := attachedMCPMux(ti)
+
+	// No inherited authentication context: the endpoint is gated.
+	for _, bearer := range []string{"", "invalid-synthetic-token"} {
+		w := serveAttached(t, context.Background(), mux, http.MethodPost, "/mcp/"+endpointSlug, bearer, makeInitializeBody(), nil)
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+		names, _ := upstream.requests()
+		require.Empty(t, names, "unauthenticated traffic must not reach the upstream")
+	}
+
+	// The caller's own copy under the suppressed row's name must not stand in.
+	w := serveAttached(t, context.Background(), mux, http.MethodPost, "/mcp/"+endpointSlug, token, makeInitializeBody(), map[string]string{
+		"X-Token":               "client-supplied",
+		"X-Upstream-Credential": "Bearer synthetic-upstream",
+	})
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+
+	names, markers := upstream.requests()
+	require.NotEmpty(t, names, "the request must reach the upstream for absence to mean anything")
+	for i, received := range names {
+		require.NotContains(t, received, "X-Token", "the caller's Speakeasy bearer reached the remote upstream")
+		require.Equal(t, "Bearer synthetic-upstream", markers[i]["Authorization"], "the upstream must receive the caller's upstream credential, not the Speakeasy bearer")
+	}
+}
+
+func TestServePublic_RemoteEndpoint_RequiredAuthorizationSourceRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	upstream := newHeaderRecordingUpstream(t)
+	endpointSlug := "endpoint-" + uuid.NewString()
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.server.URL, endpointSlug, "public", issuerID)
+	seedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, "X-Token", "", "authorization", true)
+	token := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+
+	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), token, nil)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable, "status=%d body=%s", w.Code, w.Body.String())
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
+	require.Contains(t, shareable.Error(), `"X-Token"`)
+	require.NotContains(t, shareable.Error(), token)
+	require.NotContains(t, w.Body.String(), token)
+
+	names, _ := upstream.requests()
+	require.Empty(t, names, "the upstream must not be called")
+}
