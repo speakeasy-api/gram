@@ -27,13 +27,6 @@ vi.mock(
     }),
   }),
 );
-vi.mock("@gram/client/react-query/getTunneledMcpServer.js", () => ({
-  useGetTunneledMcpServer: () => ({}),
-}));
-const flag = vi.hoisted(() => ({ enhanced: true }));
-vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ isFeatureEnabled: () => flag.enhanced }),
-}));
 vi.mock("react-chartjs-2", () => ({ Line: () => <div /> }));
 
 beforeEach(() => {
@@ -73,7 +66,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-  flag.enhanced = true;
 });
 
 function renderPanel() {
@@ -125,28 +117,5 @@ it("keeps activity history usable when the live request rejects", async () => {
     ).findByText("7"),
   ).toBeTruthy();
   expect(screen.queryByText("Overview crashed")).toBeNull();
-  client.clear();
-});
-
-it("keeps the connections table's default error handling with the flag off", async () => {
-  flag.enhanced = false;
-  requests.connections.mockRejectedValue(new Error("503 Service unavailable"));
-  const client = renderPanel();
-  expect(await screen.findByText("Overview crashed")).toBeTruthy();
-  expect(screen.queryByText("Live status is unavailable")).toBeNull();
-  client.clear();
-});
-
-it("renders the flag-off setup action as a single link", async () => {
-  flag.enhanced = false;
-  requests.connections.mockResolvedValue({
-    activeConnectionCount: 0,
-    activeConsumerSessionCount: 0,
-    connections: [],
-  });
-  const client = renderPanel();
-  const setup = await screen.findByRole("link", { name: "View agent setup" });
-  expect(setup.getAttribute("href")).toBe("/settings#agent");
-  expect(setup.querySelector("button")).toBeNull();
   client.clear();
 });

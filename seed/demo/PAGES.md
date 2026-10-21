@@ -186,7 +186,7 @@ and auto-refresh disabled; they are display-only. IDs derive from
 
 ## Tunnel source observability
 
-The Private inventory tunnel source has one linked private MCP server and deterministic 24-hour request/connection history with a recent gap. It has no connected agent. Live HTTP progress is never seeded as fresh evidence. Open its Overview with `gram-tunnel-observability` enabled and verify charts, the gap, and the no-agent diagnostic state.
+The Private inventory tunnel source has one linked private MCP server and deterministic 24-hour request/connection history with a recent gap. It has no connected agent. Live HTTP progress is never seeded as fresh evidence. Open its Overview and verify charts, the gap, and the no-agent diagnostic state.
 
 ## Local only (RunLocalFixtures, never the demo org)
 

@@ -100,14 +100,13 @@ Missing samples remain gaps. Metrics are best-effort.
 
 Speakeasy servers record request metrics and serve history automatically. Deploy the
 metrics schema and Pub/Sub topology/IAM before the server. These switches control
-ingestion, gateway reporting and the dashboard:
+ingestion and gateway reporting:
 
-| Switch                                   | Process                | Enables                        |
-| ---------------------------------------- | ---------------------- | ------------------------------ |
-| `GRAM_TUNNEL_METRICS_CONSUMER_ENABLED=1` | `gram streams`         | Metrics ingestion              |
-| `TUNNEL_METRICS_ENABLED=1`               | Tunnel gateway         | Connection history publication |
-| `TUNNEL_DIAGNOSTICS_ENABLED=1`           | Tunnel gateway         | Agent diagnostics polling      |
-| `gram-tunnel-observability`              | Dashboard feature flag | Enhanced Overview              |
+| Switch                                   | Process        | Enables                        |
+| ---------------------------------------- | -------------- | ------------------------------ |
+| `GRAM_TUNNEL_METRICS_CONSUMER_ENABLED=1` | `gram streams` | Metrics ingestion              |
+| `TUNNEL_METRICS_ENABLED=1`               | Tunnel gateway | Connection history publication |
+| `TUNNEL_DIAGNOSTICS_ENABLED=1`           | Tunnel gateway | Agent diagnostics polling      |
 
 Gateway publication also requires `GRAM_GCP_PROJECT_ID` and permission to publish
 the metrics topic; local development can use `PUBSUB_EMULATOR_HOST`.

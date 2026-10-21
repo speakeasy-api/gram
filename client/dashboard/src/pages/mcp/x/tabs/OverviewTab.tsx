@@ -1,5 +1,3 @@
-import { useTelemetry } from "@/contexts/Telemetry";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { serializeFilters } from "@/pages/logs/log-filter-url";
 import { Operator } from "@gram/client/models/components/logfilter";
@@ -12,7 +10,7 @@ import { UnproxiedMcpOverviewTab } from "./UnproxiedMcpOverviewTab";
 
 // Picks the overview for the server's backend. Unproxied servers have no
 // Speakeasy-proxied traffic and get their own scoped-down tab; tunneled servers
-// get the live connections panel on top of the shared usage dashboard.
+// get tunnel status and activity on top of the shared usage dashboard.
 export function OverviewTab({
   mcpServer,
   agentSetupHref,
@@ -20,10 +18,7 @@ export function OverviewTab({
   mcpServer: McpServer;
   agentSetupHref: string;
 }): JSX.Element | null {
-  const telemetry = useTelemetry();
   const routes = useRoutes();
-  const enhanced =
-    telemetry.isFeatureEnabled(FEATURE_FLAGS.tunnelObservability) === true;
   if (mcpServer.unproxiedMcpServerId) {
     return (
       <UnproxiedMcpOverviewTab
@@ -40,25 +35,21 @@ export function OverviewTab({
     slug: mcpServer.slug ?? "",
     name: mcpServer.name ?? "MCP Server",
   };
-  // With tunnel observability on, the marketplace banner sits above the tunnel
-  // status, so the usage dashboard below must not show it a second time.
-  const bannerAboveTunnel = enhanced && !!mcpServer.tunneledMcpServerId;
+  const tunneled = !!mcpServer.tunneledMcpServerId;
   // The usage dashboard is keyed by slug; a tunneled server without one still
-  // gets its connections panel.
+  // gets its tunnel status.
   const usage = mcpServer.slug ? (
     <MCPOverviewTab
       server={server}
-      showPluginBanner={!bannerAboveTunnel}
+      // For tunneled servers the marketplace banner sits above the tunnel
+      // status, so the usage dashboard must not show it a second time.
+      showPluginBanner={!tunneled}
       // Tool Logs does not mark MCP errors from tunneled servers as failed;
       // tunnel Activity counts them, so show failures only there.
-      failuresTracked={!bannerAboveTunnel}
+      failuresTracked={!tunneled}
       // Tool Logs cannot currently filter a tunneled target by id. Treating
       // it as hosted or shadow would silently show the wrong server's calls.
-      logsTarget={
-        mcpServer.tunneledMcpServerId
-          ? null
-          : { type: "hosted", id: mcpServer.slug }
-      }
+      logsTarget={tunneled ? null : { type: "hosted", id: mcpServer.slug }}
     />
   ) : null;
 
@@ -75,7 +66,7 @@ export function OverviewTab({
   const logsHref = `${routes.logs.href()}?${new URLSearchParams({ af: filters ?? "" })}`;
   return (
     <Stack gap={6}>
-      {bannerAboveTunnel && <PluginStatusBanner server={server} />}
+      <PluginStatusBanner server={server} />
       <TunneledMcpConnectionsPanel
         tunneledMcpServerId={mcpServer.tunneledMcpServerId}
         agentSetupHref={agentSetupHref}

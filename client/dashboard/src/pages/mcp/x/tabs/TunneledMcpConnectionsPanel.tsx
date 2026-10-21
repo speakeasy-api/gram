@@ -1,127 +1,12 @@
-import { useTelemetry } from "@/contexts/Telemetry";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { TunnelObservability } from "./TunnelObservability";
-import { InlineEmptyState } from "@/components/inline-empty-state";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { SkeletonTable } from "@/components/ui/Skeleton";
-import { Column, Table } from "@/components/ui/Table";
-import { Text } from "@/components/ui/Text";
-import { dateTimeFormatters } from "@/lib/dates";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
-import type { ConnectionStatus } from "@gram/client/models/components/tunneledmcpserver.js";
-import type { TunneledMcpConnection } from "@gram/client/models/components/tunneledmcpconnection.js";
-import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { useListTunneledMcpServerConnections } from "@gram/client/react-query/listTunneledMcpServerConnections.js";
-import { formatDistanceToNow } from "date-fns";
-import { Link } from "react-router";
 
-// Live sessions come from Redis heartbeats; a short poll keeps the panel
-// honest without hammering the API while the page sits open.
-const CONNECTIONS_TABLE_POLL_MS = 15_000;
-// The tunnel status view refreshes less often and shows its own error state.
+// Live sessions come from Redis heartbeats. The status view polls on this
+// cadence and shows its own error state when a poll fails.
 const TUNNEL_STATUS_POLL_MS = 30_000;
 
-type StatusPresentation = {
-  label: string;
-  variant: "success" | "warning" | "neutral";
-};
-
-function connectionStatusPresentation(
-  status: ConnectionStatus | undefined,
-): StatusPresentation {
-  switch (status) {
-    case "connected":
-      return { label: "Connected", variant: "success" };
-    case "inactive":
-      return { label: "Inactive", variant: "warning" };
-    case "never_connected":
-      return { label: "Never connected", variant: "neutral" };
-    case undefined:
-      return { label: "Unknown", variant: "neutral" };
-  }
-  return { label: "Unknown", variant: "neutral" };
-}
-
-function relative(date: Date): string {
-  return formatDistanceToNow(date, { addSuffix: true });
-}
-
-const columns: Column<TunneledMcpConnection>[] = [
-  {
-    key: "gatewaySessionId",
-    header: "Session",
-    render: (connection) => (
-      <Text small mono className="truncate" title={connection.gatewaySessionId}>
-        {connection.gatewaySessionId}
-      </Text>
-    ),
-  },
-  {
-    key: "agentVersion",
-    header: "Agent",
-    width: "120px",
-    render: (connection) => (
-      <Text small mono>
-        {connection.agentVersion ?? "-"}
-      </Text>
-    ),
-  },
-  {
-    key: "serviceVersion",
-    header: "Service",
-    width: "120px",
-    render: (connection) => (
-      <Text small mono>
-        {connection.serviceVersion}
-      </Text>
-    ),
-  },
-  {
-    key: "connectedAt",
-    header: "Connected",
-    width: "160px",
-    render: (connection) => (
-      <Text small>
-        {dateTimeFormatters.humanize(new Date(connection.connectedAt))}
-      </Text>
-    ),
-  },
-  {
-    key: "lastHeartbeatAt",
-    header: "Heartbeat",
-    width: "160px",
-    render: (connection) => (
-      <Text small>{relative(new Date(connection.lastHeartbeatAt))}</Text>
-    ),
-  },
-  {
-    key: "activeConsumerSessions",
-    header: "Sessions",
-    width: "90px",
-    render: (connection) => (
-      <Text small>{connection.activeConsumerSessions}</Text>
-    ),
-  },
-  {
-    key: "activeSubstreams",
-    header: "Streams",
-    width: "90px",
-    render: (connection) => <Text small>{connection.activeSubstreams}</Text>,
-  },
-  {
-    key: "remoteAddr",
-    header: "Remote address",
-    width: "160px",
-    render: (connection) => (
-      <Text small mono>
-        {connection.remoteAddr ?? "-"}
-      </Text>
-    ),
-  },
-];
-
-// Shows connected agents and the source's last-seen time.
+// Shows tunnel status, connected agents and activity for one tunnel source.
 export function TunneledMcpConnectionsPanel({
   tunneledMcpServerId,
   agentSetupHref,
@@ -132,126 +17,25 @@ export function TunneledMcpConnectionsPanel({
   agentSetupHref: string;
   logsHref: string;
 }): JSX.Element {
-  const telemetry = useTelemetry();
-  const enhanced =
-    telemetry.isFeatureEnabled(FEATURE_FLAGS.tunnelObservability) === true;
-  // The status badge and last-seen come from the source row, so it polls on
-  // the same cadence as the connections table or it would go stale as agents
-  // come and go.
-  const { data: source } = useGetTunneledMcpServer(
+  const { data, isLoading, isError } = useListTunneledMcpServerConnections(
     getTunneledMcpServerArgs(tunneledMcpServerId),
     undefined,
     {
-      enabled: !enhanced,
-      refetchInterval: CONNECTIONS_TABLE_POLL_MS,
+      // The status view keeps rendering when a poll fails.
+      throwOnError: false,
+      refetchInterval: TUNNEL_STATUS_POLL_MS,
       refetchIntervalInBackground: false,
     },
   );
-  const { data, isLoading, isError, refetch } =
-    useListTunneledMcpServerConnections(
-      getTunneledMcpServerArgs(tunneledMcpServerId),
-      undefined,
-      {
-        // The status view keeps rendering when a poll fails. The connections
-        // table keeps the app's default error handling, so the key is only
-        // set for the status view: an undefined value would still override it.
-        ...(enhanced ? { throwOnError: false } : {}),
-        refetchInterval: enhanced
-          ? TUNNEL_STATUS_POLL_MS
-          : CONNECTIONS_TABLE_POLL_MS,
-        refetchIntervalInBackground: false,
-      },
-    );
-
-  if (enhanced) {
-    return (
-      <TunnelObservability
-        id={tunneledMcpServerId}
-        connections={data}
-        loading={isLoading}
-        error={isError}
-        logsHref={logsHref}
-        agentSetupHref={agentSetupHref}
-      />
-    );
-  }
-
-  const connections = data?.connections ?? [];
-  // Without the source row (still loading, or its poll failed) there is no
-  // history to report; "never" would claim the agent has never connected.
-  let status: StatusPresentation = { label: "Unavailable", variant: "neutral" };
-  let lastSeen = "unavailable";
-  if (source) {
-    status = connectionStatusPresentation(source.connectionStatus);
-    lastSeen = source.lastSeenAt
-      ? relative(new Date(source.lastSeenAt))
-      : "never";
-  }
-
-  let body = (
-    <Table
-      columns={columns}
-      data={connections}
-      rowKey={(connection) => connection.gatewaySessionId}
-    />
-  );
-  if (isLoading) {
-    body = <SkeletonTable />;
-  } else if (isError && connections.length === 0) {
-    // A failed poll is not "no connections", whether nothing has loaded yet
-    // or an earlier poll legitimately returned an empty list.
-    body = (
-      <div className="flex flex-col items-start gap-2 py-6">
-        <Text muted>Failed to load tunnel connections.</Text>
-        <Button size="sm" variant="secondary" onClick={() => void refetch()}>
-          <Button.Text>Retry</Button.Text>
-        </Button>
-      </div>
-    );
-  } else if (connections.length === 0) {
-    body = (
-      <InlineEmptyState
-        icon="plug"
-        heading="No live tunnel connections"
-        description="Start a tunnel agent next to the upstream MCP server to connect this source."
-        action={
-          <Button asChild variant="secondary" size="sm">
-            <Link to={agentSetupHref}>View agent setup</Link>
-          </Button>
-        }
-      />
-    );
-  }
 
   return (
-    <div className="border p-5">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-eyebrow">Tunnel connections</h3>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={status.variant}>
-            <Badge.Text>{status.label}</Badge.Text>
-          </Badge>
-          <Badge variant="neutral">
-            <Badge.Text>{data?.activeConnectionCount ?? 0} active</Badge.Text>
-          </Badge>
-          <Badge variant="neutral">
-            <Badge.Text>
-              {data?.activeConsumerSessionCount ?? 0} consumer sessions
-            </Badge.Text>
-          </Badge>
-        </div>
-      </div>
-      <div className="mb-4 flex flex-wrap gap-x-6 gap-y-1">
-        <Text small muted>
-          Last seen {lastSeen}
-        </Text>
-        {source?.keyPrefix && (
-          <Text small muted>
-            Key prefix <span className="font-mono">{source.keyPrefix}</span>
-          </Text>
-        )}
-      </div>
-      {body}
-    </div>
+    <TunnelObservability
+      id={tunneledMcpServerId}
+      connections={data}
+      loading={isLoading}
+      error={isError}
+      logsHref={logsHref}
+      agentSetupHref={agentSetupHref}
+    />
   );
 }

@@ -4,10 +4,6 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { parseFilters } from "@/pages/logs/log-filter-url";
 import { OverviewTab } from "./OverviewTab";
 
-const state = vi.hoisted(() => ({ enhanced: true }));
-vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ isFeatureEnabled: () => state.enhanced }),
-}));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ logs: { href: () => "/example/projects/test/logs" } }),
 }));
@@ -37,10 +33,7 @@ vi.mock("./TunneledMcpConnectionsPanel", () => ({
     <a href={logsHref}>Tunnel status</a>
   ),
 }));
-afterEach(() => {
-  cleanup();
-  state.enhanced = true;
-});
+afterEach(cleanup);
 const server = {
   id: "server",
   slug: "sample",
@@ -67,18 +60,6 @@ it("places the marketplace above tunnel status and keeps the usage dashboard bel
   expect(parseFilters(url.searchParams.get("af"))).toMatchObject([
     { path: "gram.tunneled_mcp_server.id", op: "eq", value: "tunnel" },
   ]);
-});
-
-it("keeps the connections panel above the usage dashboard when tunnel observability is disabled", () => {
-  state.enhanced = false;
-  const { container } = render(
-    <OverviewTab mcpServer={server} agentSetupHref="/settings" />,
-  );
-  expect(container.textContent).toBe(
-    "Tunnel statusMarketplaceShared usage dashboard",
-  );
-  expect(screen.getAllByText("Marketplace")).toHaveLength(1);
-  expect(screen.getByTestId("usage").dataset.failures).toBe("true");
 });
 
 it("shows the tunnel status without a usage dashboard when the server has no slug", () => {
