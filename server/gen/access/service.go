@@ -42,6 +42,21 @@ type Service interface {
 	SetDirectoryRoleMappings(context.Context, *SetDirectoryRoleMappingsPayload) (res []*DirectoryRoleMapping, err error)
 	// Remove a directory role mapping.
 	DeleteDirectoryRoleMapping(context.Context, *DeleteDirectoryRoleMappingPayload) (err error)
+	// Propose roles for every live directory group and mappable attribute value,
+	// for bulk setup. An unmapped source is proposed one role: the live role whose
+	// slug matches the source name, or a new role named after the source. A mapped
+	// source is listed with its current roles. Nothing is written. Each item
+	// carries a version that applyDirectoryRoleSetup checks to detect changes
+	// since the preview; the version authorizes nothing.
+	PreviewDirectoryRoleSetup(context.Context, *PreviewDirectoryRoleSetupPayload) (res *DirectoryRoleSetupPreviewResult, err error)
+	// Apply a reviewed bulk setup in one transaction: create the requested new
+	// roles and replace each listed source's role set. New roles get no grants
+	// unless grant_set is given, in which case every new role in the batch gets
+	// exactly that set. If any item's version no longer matches, nothing is
+	// written and the request returns conflict; preview again. WorkOS role sync
+	// for new roles is requested after commit and reported as requested, not done.
+	// Creating roles sets up no plugin distribution.
+	ApplyDirectoryRoleSetup(context.Context, *ApplyDirectoryRoleSetupPayload) (res *ApplyDirectoryRoleSetupResult, err error)
 	// List all available scopes and their resource types.
 	ListScopes(context.Context, *ListScopesPayload) (res *ListScopesResult, err error)
 	// List all team members with their role assignments.
@@ -163,7 +178,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [33]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [35]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -301,6 +316,48 @@ type AccessibleSkill struct {
 	ProjectID string
 	// Slug of the project the skill belongs to.
 	ProjectSlug string
+}
+
+type ApplyDirectoryRoleSetupItem struct {
+	Source *DirectoryRoleSetupSource
+	// The item version from previewDirectoryRoleSetup.
+	Version string
+	// The complete role set for the source. Empty removes every mapping for the
+	// source.
+	Roles []*ApplyDirectoryRoleSetupRole
+}
+
+// ApplyDirectoryRoleSetupPayload is the payload type of the access service
+// applyDirectoryRoleSetup method.
+type ApplyDirectoryRoleSetupPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The sources to set up. Each source may appear once.
+	Items []*ApplyDirectoryRoleSetupItem
+	// Optional grants given to every role this request creates. Omit to create
+	// roles with no grants. Existing roles are never changed.
+	GrantSet []*RoleGrant
+}
+
+// ApplyDirectoryRoleSetupResult is the result type of the access service
+// applyDirectoryRoleSetup method.
+type ApplyDirectoryRoleSetupResult struct {
+	// Roles this request created.
+	CreatedRoles []*Role
+	// The resulting mappings of every source in the request.
+	Mappings []*DirectoryRoleMapping
+	// Work requested after commit.
+	SideEffects []*DirectoryRoleSetupSideEffect
+}
+
+// One role in an item's role set: an existing role by principal URN, or a new
+// role by name. Set exactly one.
+type ApplyDirectoryRoleSetupRole struct {
+	// Principal URN of an existing role.
+	RoleUrn *string
+	// Name of a role to create. Items in the batch that name the same new role
+	// share it.
+	CreateName *string
 }
 
 type AudienceOption struct {
@@ -512,6 +569,79 @@ type DirectoryRoleMapping struct {
 	RoleUrn   string
 	CreatedAt string
 	UpdatedAt string
+}
+
+type DirectoryRoleSetupHiddenAttributeKey struct {
+	// Directory attribute key with too many distinct values to offer in bulk setup.
+	Key string
+	// Number of distinct values the key has on live directory profiles.
+	ValueCount int64
+}
+
+type DirectoryRoleSetupPreviewItem struct {
+	Source *DirectoryRoleSetupSource
+	// The group name, or key=value for an attribute value.
+	SourceName string
+	// People with a live directory profile that matches the source, counted once
+	// per email address, so someone with profiles in two directories counts once
+	// and a profile with no email is not counted. These are directory people, not
+	// organization members or role members.
+	DirectoryPeople int64
+	// Roles the source already maps to. Empty for an unmapped source.
+	ExistingRoleUrns []string
+	// The suggested role set. For a mapped source this is its current set; for an
+	// unmapped source, one reused or new role.
+	ProposedRoles []*DirectoryRoleSetupProposedRole
+	// Opaque version of the source and its current mappings. Send it back with
+	// applyDirectoryRoleSetup.
+	Version string
+}
+
+// DirectoryRoleSetupPreviewResult is the result type of the access service
+// previewDirectoryRoleSetup method.
+type DirectoryRoleSetupPreviewResult struct {
+	// One item per live directory group and mappable attribute value.
+	Items []*DirectoryRoleSetupPreviewItem
+	// Attribute keys left out of items because they have more than
+	// max_values_per_attribute_key distinct values. Their values can still be
+	// mapped one at a time with setDirectoryRoleMappings.
+	HiddenAttributeKeys []*DirectoryRoleSetupHiddenAttributeKey
+	// The limit on distinct values above which an attribute key is left out.
+	MaxValuesPerAttributeKey int64
+}
+
+type DirectoryRoleSetupProposedRole struct {
+	// reuse an existing role, or create a new one.
+	RoleAction string
+	// The existing role. Set when role_action is reuse.
+	RoleID *string
+	// Principal URN of the existing role. Set when role_action is reuse.
+	RoleUrn *string
+	// The existing role's name, or the name a new role would get.
+	RoleName string
+	// Grants the existing role already has. Applying the proposal approves them
+	// for the source's members. Empty for a new role.
+	CurrentGrants []*RoleGrant
+}
+
+type DirectoryRoleSetupSideEffect struct {
+	// What was requested.
+	Kind string
+	// The role the request is for.
+	RoleID string
+	// Requested work runs after the response and is never reported as done.
+	RequestStatus string
+}
+
+type DirectoryRoleSetupSource struct {
+	// What the source is: a directory group or an attribute value.
+	SourceKind string
+	// The directory group. Set when source_kind is group.
+	DirectoryGroupID *string
+	// The directory attribute key. Set when source_kind is attribute.
+	AttributeKey *string
+	// The directory attribute value. Set when source_kind is attribute.
+	AttributeValue *string
 }
 
 // ExplainResourceAccessPayload is the payload type of the access service
@@ -909,6 +1039,13 @@ type ListShadowMCPInventoryUsersResult struct {
 type ListUserGrantsResult struct {
 	// The user's effective grants in this organization.
 	Grants []*ListRoleGrant
+}
+
+// PreviewDirectoryRoleSetupPayload is the payload type of the access service
+// previewDirectoryRoleSetup method.
+type PreviewDirectoryRoleSetupPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
 }
 
 // RequestAccessPayload is the payload type of the access service requestAccess

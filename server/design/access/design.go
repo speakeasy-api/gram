@@ -278,6 +278,59 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteDirectoryRoleMapping", "type": "mutation"}`)
 	})
 
+	Method("previewDirectoryRoleSetup", func() {
+		Description("Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(DirectoryRoleSetupPreviewResult)
+
+		HTTP(func() {
+			GET("/rpc/access.previewDirectoryRoleSetup")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "previewDirectoryRoleSetup")
+		Meta("openapi:extension:x-speakeasy-name-override", "previewDirectoryRoleSetup")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryRoleSetupPreview"}`)
+	})
+
+	Method("applyDirectoryRoleSetup", func() {
+		Description("Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source's role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item's version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ApplyDirectoryRoleSetupForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ApplyDirectoryRoleSetupResult)
+
+		HTTP(func() {
+			POST("/rpc/access.applyDirectoryRoleSetup")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "applyDirectoryRoleSetup")
+		Meta("openapi:extension:x-speakeasy-name-override", "applyDirectoryRoleSetup")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ApplyDirectoryRoleSetup", "type": "mutation"}`)
+	})
+
 	Method("listScopes", func() {
 		Description("List all available scopes and their resource types.")
 		Security(security.ByKey, func() {
@@ -1945,4 +1998,106 @@ var SetDirectoryRoleMappingsForm = Type("SetDirectoryRoleMappingsForm", func() {
 	})
 	Attribute("expected_role_urns", ArrayOf(String), "Optional compare-and-set precondition. The normalized current role set must match or the request returns conflict without changes. Omit for unconditional replacement; an empty array requires an unmapped source.")
 	Attribute("role_urns", ArrayOf(String), "The complete set of role principal URNs to grant, from Role.principal_urn. Empty removes every mapping for the source.")
+})
+
+var DirectoryRoleSetupSourceModel = Type("DirectoryRoleSetupSource", func() {
+	Required("source_kind")
+
+	Attribute("source_kind", String, "What the source is: a directory group or an attribute value.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_id", String, "The directory group. Set when source_kind is group.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("attribute_key", String, "The directory attribute key. Set when source_kind is attribute.", func() {
+		MinLength(1)
+	})
+	Attribute("attribute_value", String, "The directory attribute value. Set when source_kind is attribute.", func() {
+		MinLength(1)
+	})
+})
+
+var DirectoryRoleSetupProposedRoleModel = Type("DirectoryRoleSetupProposedRole", func() {
+	Required("role_action", "role_name", "current_grants")
+
+	Attribute("role_action", String, "reuse an existing role, or create a new one.", func() {
+		Enum("reuse", "create")
+	})
+	Attribute("role_id", String, "The existing role. Set when role_action is reuse.")
+	Attribute("role_urn", String, "Principal URN of the existing role. Set when role_action is reuse.")
+	Attribute("role_name", String, "The existing role's name, or the name a new role would get.")
+	Attribute("current_grants", ArrayOf(RoleGrantModel), "Grants the existing role already has. Applying the proposal approves them for the source's members. Empty for a new role.")
+})
+
+var DirectoryRoleSetupPreviewItemModel = Type("DirectoryRoleSetupPreviewItem", func() {
+	Required("source", "source_name", "directory_people", "existing_role_urns", "proposed_roles", "version")
+
+	Attribute("source", DirectoryRoleSetupSourceModel)
+	Attribute("source_name", String, "The group name, or key=value for an attribute value.")
+	Attribute("directory_people", Int64, "People with a live directory profile that matches the source, counted once per email address, so someone with profiles in two directories counts once and a profile with no email is not counted. These are directory people, not organization members or role members.")
+	Attribute("existing_role_urns", ArrayOf(String), "Roles the source already maps to. Empty for an unmapped source.")
+	Attribute("proposed_roles", ArrayOf(DirectoryRoleSetupProposedRoleModel), "The suggested role set. For a mapped source this is its current set; for an unmapped source, one reused or new role.")
+	Attribute("version", String, "Opaque version of the source and its current mappings. Send it back with applyDirectoryRoleSetup.")
+})
+
+var DirectoryRoleSetupHiddenAttributeKeyModel = Type("DirectoryRoleSetupHiddenAttributeKey", func() {
+	Required("key", "value_count")
+
+	Attribute("key", String, "Directory attribute key with too many distinct values to offer in bulk setup.")
+	Attribute("value_count", Int64, "Number of distinct values the key has on live directory profiles.")
+})
+
+var DirectoryRoleSetupPreviewResult = Type("DirectoryRoleSetupPreviewResult", func() {
+	Required("items", "hidden_attribute_keys", "max_values_per_attribute_key")
+
+	Attribute("items", ArrayOf(DirectoryRoleSetupPreviewItemModel), "One item per live directory group and mappable attribute value.")
+	Attribute("hidden_attribute_keys", ArrayOf(DirectoryRoleSetupHiddenAttributeKeyModel), "Attribute keys left out of items because they have more than max_values_per_attribute_key distinct values. Their values can still be mapped one at a time with setDirectoryRoleMappings.")
+	Attribute("max_values_per_attribute_key", Int64, "The limit on distinct values above which an attribute key is left out.")
+})
+
+var ApplyDirectoryRoleSetupRoleModel = Type("ApplyDirectoryRoleSetupRole", func() {
+	Description("One role in an item's role set: an existing role by principal URN, or a new role by name. Set exactly one.")
+
+	Attribute("role_urn", String, "Principal URN of an existing role.")
+	Attribute("create_name", String, "Name of a role to create. Items in the batch that name the same new role share it.", func() {
+		MinLength(1)
+	})
+})
+
+var ApplyDirectoryRoleSetupItemModel = Type("ApplyDirectoryRoleSetupItem", func() {
+	Required("source", "version", "roles")
+
+	Attribute("source", DirectoryRoleSetupSourceModel)
+	Attribute("version", String, "The item version from previewDirectoryRoleSetup.")
+	Attribute("roles", ArrayOf(ApplyDirectoryRoleSetupRoleModel), "The complete role set for the source. Empty removes every mapping for the source.")
+})
+
+var ApplyDirectoryRoleSetupForm = Type("ApplyDirectoryRoleSetupForm", func() {
+	Required("items")
+
+	Attribute("items", ArrayOf(ApplyDirectoryRoleSetupItemModel), "The sources to set up. Each source may appear once.", func() {
+		MinLength(1)
+		MaxLength(500)
+	})
+	Attribute("grant_set", ArrayOf(RoleGrantModel), "Optional grants given to every role this request creates. Omit to create roles with no grants. Existing roles are never changed.")
+})
+
+var DirectoryRoleSetupSideEffectModel = Type("DirectoryRoleSetupSideEffect", func() {
+	Required("kind", "role_id", "request_status")
+
+	Attribute("kind", String, "What was requested.", func() {
+		Enum("workos_role_sync")
+	})
+	Attribute("role_id", String, "The role the request is for.")
+	Attribute("request_status", String, "Requested work runs after the response and is never reported as done.", func() {
+		Enum("requested")
+	})
+})
+
+var ApplyDirectoryRoleSetupResult = Type("ApplyDirectoryRoleSetupResult", func() {
+	Required("created_roles", "mappings", "side_effects")
+
+	Attribute("created_roles", ArrayOf(RoleModel), "Roles this request created.")
+	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "The resulting mappings of every source in the request.")
+	Attribute("side_effects", ArrayOf(DirectoryRoleSetupSideEffectModel), "Work requested after commit.")
 })

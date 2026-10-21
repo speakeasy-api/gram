@@ -87,6 +87,16 @@ type SetDirectoryRoleMappingsRequestBody struct {
 	RoleUrns []string `form:"role_urns,omitempty" json:"role_urns,omitempty" xml:"role_urns,omitempty"`
 }
 
+// ApplyDirectoryRoleSetupRequestBody is the type of the "access" service
+// "applyDirectoryRoleSetup" endpoint HTTP request body.
+type ApplyDirectoryRoleSetupRequestBody struct {
+	// The sources to set up. Each source may appear once.
+	Items []*ApplyDirectoryRoleSetupItemRequestBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+	// Optional grants given to every role this request creates. Omit to create
+	// roles with no grants. Existing roles are never changed.
+	GrantSet []*RoleGrantRequestBody `form:"grant_set,omitempty" json:"grant_set,omitempty" xml:"grant_set,omitempty"`
+}
+
 // UpdateMemberRolesRequestBody is the type of the "access" service
 // "updateMemberRoles" endpoint HTTP request body.
 type UpdateMemberRolesRequestBody struct {
@@ -305,6 +315,30 @@ type SetDirectoryRoleMappingResponseBody struct {
 // SetDirectoryRoleMappingsResponseBody is the type of the "access" service
 // "setDirectoryRoleMappings" endpoint HTTP response body.
 type SetDirectoryRoleMappingsResponseBody []*DirectoryRoleMappingResponse
+
+// PreviewDirectoryRoleSetupResponseBody is the type of the "access" service
+// "previewDirectoryRoleSetup" endpoint HTTP response body.
+type PreviewDirectoryRoleSetupResponseBody struct {
+	// One item per live directory group and mappable attribute value.
+	Items []*DirectoryRoleSetupPreviewItemResponseBody `form:"items" json:"items" xml:"items"`
+	// Attribute keys left out of items because they have more than
+	// max_values_per_attribute_key distinct values. Their values can still be
+	// mapped one at a time with setDirectoryRoleMappings.
+	HiddenAttributeKeys []*DirectoryRoleSetupHiddenAttributeKeyResponseBody `form:"hidden_attribute_keys" json:"hidden_attribute_keys" xml:"hidden_attribute_keys"`
+	// The limit on distinct values above which an attribute key is left out.
+	MaxValuesPerAttributeKey int64 `form:"max_values_per_attribute_key" json:"max_values_per_attribute_key" xml:"max_values_per_attribute_key"`
+}
+
+// ApplyDirectoryRoleSetupResponseBody is the type of the "access" service
+// "applyDirectoryRoleSetup" endpoint HTTP response body.
+type ApplyDirectoryRoleSetupResponseBody struct {
+	// Roles this request created.
+	CreatedRoles []*RoleResponseBody `form:"created_roles" json:"created_roles" xml:"created_roles"`
+	// The resulting mappings of every source in the request.
+	Mappings []*DirectoryRoleMappingResponseBody `form:"mappings" json:"mappings" xml:"mappings"`
+	// Work requested after commit.
+	SideEffects []*DirectoryRoleSetupSideEffectResponseBody `form:"side_effects" json:"side_effects" xml:"side_effects"`
+}
 
 // ListScopesResponseBody is the type of the "access" service "listScopes"
 // endpoint HTTP response body.
@@ -2398,6 +2432,386 @@ type DeleteDirectoryRoleMappingUnexpectedResponseBody struct {
 // "access" service "deleteDirectoryRoleMapping" endpoint HTTP response body
 // for the "gateway_error" error.
 type DeleteDirectoryRoleMappingGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewDirectoryRoleSetupUnauthorizedResponseBody is the type of the
+// "access" service "previewDirectoryRoleSetup" endpoint HTTP response body for
+// the "unauthorized" error.
+type PreviewDirectoryRoleSetupUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewDirectoryRoleSetupForbiddenResponseBody is the type of the "access"
+// service "previewDirectoryRoleSetup" endpoint HTTP response body for the
+// "forbidden" error.
+type PreviewDirectoryRoleSetupForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewDirectoryRoleSetupBadRequestResponseBody is the type of the "access"
+// service "previewDirectoryRoleSetup" endpoint HTTP response body for the
+// "bad_request" error.
+type PreviewDirectoryRoleSetupBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewDirectoryRoleSetupNotFoundResponseBody is the type of the "access"
+// service "previewDirectoryRoleSetup" endpoint HTTP response body for the
+// "not_found" error.
+type PreviewDirectoryRoleSetupNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewDirectoryRoleSetupConflictResponseBody is the type of the "access"
+// service "previewDirectoryRoleSetup" endpoint HTTP response body for the
+// "conflict" error.
+type PreviewDirectoryRoleSetupConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewDirectoryRoleSetupUnsupportedMediaResponseBody is the type of the
+// "access" service "previewDirectoryRoleSetup" endpoint HTTP response body for
+// the "unsupported_media" error.
+type PreviewDirectoryRoleSetupUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewDirectoryRoleSetupInvalidResponseBody is the type of the "access"
+// service "previewDirectoryRoleSetup" endpoint HTTP response body for the
+// "invalid" error.
+type PreviewDirectoryRoleSetupInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewDirectoryRoleSetupInvariantViolationResponseBody is the type of the
+// "access" service "previewDirectoryRoleSetup" endpoint HTTP response body for
+// the "invariant_violation" error.
+type PreviewDirectoryRoleSetupInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewDirectoryRoleSetupUnexpectedResponseBody is the type of the "access"
+// service "previewDirectoryRoleSetup" endpoint HTTP response body for the
+// "unexpected" error.
+type PreviewDirectoryRoleSetupUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewDirectoryRoleSetupGatewayErrorResponseBody is the type of the
+// "access" service "previewDirectoryRoleSetup" endpoint HTTP response body for
+// the "gateway_error" error.
+type PreviewDirectoryRoleSetupGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyDirectoryRoleSetupUnauthorizedResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "unauthorized" error.
+type ApplyDirectoryRoleSetupUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyDirectoryRoleSetupForbiddenResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "forbidden" error.
+type ApplyDirectoryRoleSetupForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyDirectoryRoleSetupBadRequestResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "bad_request" error.
+type ApplyDirectoryRoleSetupBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyDirectoryRoleSetupNotFoundResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "not_found" error.
+type ApplyDirectoryRoleSetupNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyDirectoryRoleSetupConflictResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "conflict" error.
+type ApplyDirectoryRoleSetupConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyDirectoryRoleSetupUnsupportedMediaResponseBody is the type of the
+// "access" service "applyDirectoryRoleSetup" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ApplyDirectoryRoleSetupUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyDirectoryRoleSetupInvalidResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "invalid" error.
+type ApplyDirectoryRoleSetupInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyDirectoryRoleSetupInvariantViolationResponseBody is the type of the
+// "access" service "applyDirectoryRoleSetup" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ApplyDirectoryRoleSetupInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyDirectoryRoleSetupUnexpectedResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "unexpected" error.
+type ApplyDirectoryRoleSetupUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyDirectoryRoleSetupGatewayErrorResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "gateway_error" error.
+type ApplyDirectoryRoleSetupGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6809,6 +7223,76 @@ type DirectoryRoleMappingResponse struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// DirectoryRoleSetupPreviewItemResponseBody is used to define fields on
+// response body types.
+type DirectoryRoleSetupPreviewItemResponseBody struct {
+	Source *DirectoryRoleSetupSourceResponseBody `form:"source" json:"source" xml:"source"`
+	// The group name, or key=value for an attribute value.
+	SourceName string `form:"source_name" json:"source_name" xml:"source_name"`
+	// People with a live directory profile that matches the source, counted once
+	// per email address, so someone with profiles in two directories counts once
+	// and a profile with no email is not counted. These are directory people, not
+	// organization members or role members.
+	DirectoryPeople int64 `form:"directory_people" json:"directory_people" xml:"directory_people"`
+	// Roles the source already maps to. Empty for an unmapped source.
+	ExistingRoleUrns []string `form:"existing_role_urns" json:"existing_role_urns" xml:"existing_role_urns"`
+	// The suggested role set. For a mapped source this is its current set; for an
+	// unmapped source, one reused or new role.
+	ProposedRoles []*DirectoryRoleSetupProposedRoleResponseBody `form:"proposed_roles" json:"proposed_roles" xml:"proposed_roles"`
+	// Opaque version of the source and its current mappings. Send it back with
+	// applyDirectoryRoleSetup.
+	Version string `form:"version" json:"version" xml:"version"`
+}
+
+// DirectoryRoleSetupSourceResponseBody is used to define fields on response
+// body types.
+type DirectoryRoleSetupSourceResponseBody struct {
+	// What the source is: a directory group or an attribute value.
+	SourceKind string `form:"source_kind" json:"source_kind" xml:"source_kind"`
+	// The directory group. Set when source_kind is group.
+	DirectoryGroupID *string `form:"directory_group_id,omitempty" json:"directory_group_id,omitempty" xml:"directory_group_id,omitempty"`
+	// The directory attribute key. Set when source_kind is attribute.
+	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
+	// The directory attribute value. Set when source_kind is attribute.
+	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+}
+
+// DirectoryRoleSetupProposedRoleResponseBody is used to define fields on
+// response body types.
+type DirectoryRoleSetupProposedRoleResponseBody struct {
+	// reuse an existing role, or create a new one.
+	RoleAction string `form:"role_action" json:"role_action" xml:"role_action"`
+	// The existing role. Set when role_action is reuse.
+	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// Principal URN of the existing role. Set when role_action is reuse.
+	RoleUrn *string `form:"role_urn,omitempty" json:"role_urn,omitempty" xml:"role_urn,omitempty"`
+	// The existing role's name, or the name a new role would get.
+	RoleName string `form:"role_name" json:"role_name" xml:"role_name"`
+	// Grants the existing role already has. Applying the proposal approves them
+	// for the source's members. Empty for a new role.
+	CurrentGrants []*RoleGrantResponseBody `form:"current_grants" json:"current_grants" xml:"current_grants"`
+}
+
+// DirectoryRoleSetupHiddenAttributeKeyResponseBody is used to define fields on
+// response body types.
+type DirectoryRoleSetupHiddenAttributeKeyResponseBody struct {
+	// Directory attribute key with too many distinct values to offer in bulk setup.
+	Key string `form:"key" json:"key" xml:"key"`
+	// Number of distinct values the key has on live directory profiles.
+	ValueCount int64 `form:"value_count" json:"value_count" xml:"value_count"`
+}
+
+// DirectoryRoleSetupSideEffectResponseBody is used to define fields on
+// response body types.
+type DirectoryRoleSetupSideEffectResponseBody struct {
+	// What was requested.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The role the request is for.
+	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
+	// Requested work runs after the response and is never reported as done.
+	RequestStatus string `form:"request_status" json:"request_status" xml:"request_status"`
+}
+
 // ScopeDefinitionResponseBody is used to define fields on response body types.
 type ScopeDefinitionResponseBody struct {
 	// Unique scope identifier.
@@ -7392,6 +7876,40 @@ type SelectorRequestBody struct {
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 }
 
+// ApplyDirectoryRoleSetupItemRequestBody is used to define fields on request
+// body types.
+type ApplyDirectoryRoleSetupItemRequestBody struct {
+	Source *DirectoryRoleSetupSourceRequestBody `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// The item version from previewDirectoryRoleSetup.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// The complete role set for the source. Empty removes every mapping for the
+	// source.
+	Roles []*ApplyDirectoryRoleSetupRoleRequestBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
+}
+
+// DirectoryRoleSetupSourceRequestBody is used to define fields on request body
+// types.
+type DirectoryRoleSetupSourceRequestBody struct {
+	// What the source is: a directory group or an attribute value.
+	SourceKind *string `form:"source_kind,omitempty" json:"source_kind,omitempty" xml:"source_kind,omitempty"`
+	// The directory group. Set when source_kind is group.
+	DirectoryGroupID *string `form:"directory_group_id,omitempty" json:"directory_group_id,omitempty" xml:"directory_group_id,omitempty"`
+	// The directory attribute key. Set when source_kind is attribute.
+	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
+	// The directory attribute value. Set when source_kind is attribute.
+	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupRoleRequestBody is used to define fields on request
+// body types.
+type ApplyDirectoryRoleSetupRoleRequestBody struct {
+	// Principal URN of an existing role.
+	RoleUrn *string `form:"role_urn,omitempty" json:"role_urn,omitempty" xml:"role_urn,omitempty"`
+	// Name of a role to create. Items in the batch that name the same new role
+	// share it.
+	CreateName *string `form:"create_name,omitempty" json:"create_name,omitempty" xml:"create_name,omitempty"`
+}
+
 // SetResourceAudienceEntryRequestBody is used to define fields on request body
 // types.
 type SetResourceAudienceEntryRequestBody struct {
@@ -7615,6 +8133,83 @@ func NewSetDirectoryRoleMappingsResponseBody(res []*access.DirectoryRoleMapping)
 			continue
 		}
 		body[i] = marshalAccessDirectoryRoleMappingToDirectoryRoleMappingResponse(val)
+	}
+	return body
+}
+
+// NewPreviewDirectoryRoleSetupResponseBody builds the HTTP response body from
+// the result of the "previewDirectoryRoleSetup" endpoint of the "access"
+// service.
+func NewPreviewDirectoryRoleSetupResponseBody(res *access.DirectoryRoleSetupPreviewResult) *PreviewDirectoryRoleSetupResponseBody {
+	body := &PreviewDirectoryRoleSetupResponseBody{
+		MaxValuesPerAttributeKey: res.MaxValuesPerAttributeKey,
+	}
+	if res.Items != nil {
+		body.Items = make([]*DirectoryRoleSetupPreviewItemResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalAccessDirectoryRoleSetupPreviewItemToDirectoryRoleSetupPreviewItemResponseBody(val)
+		}
+	} else {
+		body.Items = []*DirectoryRoleSetupPreviewItemResponseBody{}
+	}
+	if res.HiddenAttributeKeys != nil {
+		body.HiddenAttributeKeys = make([]*DirectoryRoleSetupHiddenAttributeKeyResponseBody, len(res.HiddenAttributeKeys))
+		for i, val := range res.HiddenAttributeKeys {
+			if val == nil {
+				body.HiddenAttributeKeys[i] = nil
+				continue
+			}
+			body.HiddenAttributeKeys[i] = marshalAccessDirectoryRoleSetupHiddenAttributeKeyToDirectoryRoleSetupHiddenAttributeKeyResponseBody(val)
+		}
+	} else {
+		body.HiddenAttributeKeys = []*DirectoryRoleSetupHiddenAttributeKeyResponseBody{}
+	}
+	return body
+}
+
+// NewApplyDirectoryRoleSetupResponseBody builds the HTTP response body from
+// the result of the "applyDirectoryRoleSetup" endpoint of the "access" service.
+func NewApplyDirectoryRoleSetupResponseBody(res *access.ApplyDirectoryRoleSetupResult) *ApplyDirectoryRoleSetupResponseBody {
+	body := &ApplyDirectoryRoleSetupResponseBody{}
+	if res.CreatedRoles != nil {
+		body.CreatedRoles = make([]*RoleResponseBody, len(res.CreatedRoles))
+		for i, val := range res.CreatedRoles {
+			if val == nil {
+				body.CreatedRoles[i] = nil
+				continue
+			}
+			body.CreatedRoles[i] = marshalAccessRoleToRoleResponseBody(val)
+		}
+	} else {
+		body.CreatedRoles = []*RoleResponseBody{}
+	}
+	if res.Mappings != nil {
+		body.Mappings = make([]*DirectoryRoleMappingResponseBody, len(res.Mappings))
+		for i, val := range res.Mappings {
+			if val == nil {
+				body.Mappings[i] = nil
+				continue
+			}
+			body.Mappings[i] = marshalAccessDirectoryRoleMappingToDirectoryRoleMappingResponseBody(val)
+		}
+	} else {
+		body.Mappings = []*DirectoryRoleMappingResponseBody{}
+	}
+	if res.SideEffects != nil {
+		body.SideEffects = make([]*DirectoryRoleSetupSideEffectResponseBody, len(res.SideEffects))
+		for i, val := range res.SideEffects {
+			if val == nil {
+				body.SideEffects[i] = nil
+				continue
+			}
+			body.SideEffects[i] = marshalAccessDirectoryRoleSetupSideEffectToDirectoryRoleSetupSideEffectResponseBody(val)
+		}
+	} else {
+		body.SideEffects = []*DirectoryRoleSetupSideEffectResponseBody{}
 	}
 	return body
 }
@@ -9604,6 +10199,306 @@ func NewDeleteDirectoryRoleMappingUnexpectedResponseBody(res *goa.ServiceError) 
 // of the "access" service.
 func NewDeleteDirectoryRoleMappingGatewayErrorResponseBody(res *goa.ServiceError) *DeleteDirectoryRoleMappingGatewayErrorResponseBody {
 	body := &DeleteDirectoryRoleMappingGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewDirectoryRoleSetupUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "previewDirectoryRoleSetup" endpoint of
+// the "access" service.
+func NewPreviewDirectoryRoleSetupUnauthorizedResponseBody(res *goa.ServiceError) *PreviewDirectoryRoleSetupUnauthorizedResponseBody {
+	body := &PreviewDirectoryRoleSetupUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewDirectoryRoleSetupForbiddenResponseBody builds the HTTP response
+// body from the result of the "previewDirectoryRoleSetup" endpoint of the
+// "access" service.
+func NewPreviewDirectoryRoleSetupForbiddenResponseBody(res *goa.ServiceError) *PreviewDirectoryRoleSetupForbiddenResponseBody {
+	body := &PreviewDirectoryRoleSetupForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewDirectoryRoleSetupBadRequestResponseBody builds the HTTP response
+// body from the result of the "previewDirectoryRoleSetup" endpoint of the
+// "access" service.
+func NewPreviewDirectoryRoleSetupBadRequestResponseBody(res *goa.ServiceError) *PreviewDirectoryRoleSetupBadRequestResponseBody {
+	body := &PreviewDirectoryRoleSetupBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewDirectoryRoleSetupNotFoundResponseBody builds the HTTP response
+// body from the result of the "previewDirectoryRoleSetup" endpoint of the
+// "access" service.
+func NewPreviewDirectoryRoleSetupNotFoundResponseBody(res *goa.ServiceError) *PreviewDirectoryRoleSetupNotFoundResponseBody {
+	body := &PreviewDirectoryRoleSetupNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewDirectoryRoleSetupConflictResponseBody builds the HTTP response
+// body from the result of the "previewDirectoryRoleSetup" endpoint of the
+// "access" service.
+func NewPreviewDirectoryRoleSetupConflictResponseBody(res *goa.ServiceError) *PreviewDirectoryRoleSetupConflictResponseBody {
+	body := &PreviewDirectoryRoleSetupConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewDirectoryRoleSetupUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "previewDirectoryRoleSetup" endpoint of
+// the "access" service.
+func NewPreviewDirectoryRoleSetupUnsupportedMediaResponseBody(res *goa.ServiceError) *PreviewDirectoryRoleSetupUnsupportedMediaResponseBody {
+	body := &PreviewDirectoryRoleSetupUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewDirectoryRoleSetupInvalidResponseBody builds the HTTP response
+// body from the result of the "previewDirectoryRoleSetup" endpoint of the
+// "access" service.
+func NewPreviewDirectoryRoleSetupInvalidResponseBody(res *goa.ServiceError) *PreviewDirectoryRoleSetupInvalidResponseBody {
+	body := &PreviewDirectoryRoleSetupInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewDirectoryRoleSetupInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "previewDirectoryRoleSetup" endpoint of
+// the "access" service.
+func NewPreviewDirectoryRoleSetupInvariantViolationResponseBody(res *goa.ServiceError) *PreviewDirectoryRoleSetupInvariantViolationResponseBody {
+	body := &PreviewDirectoryRoleSetupInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewDirectoryRoleSetupUnexpectedResponseBody builds the HTTP response
+// body from the result of the "previewDirectoryRoleSetup" endpoint of the
+// "access" service.
+func NewPreviewDirectoryRoleSetupUnexpectedResponseBody(res *goa.ServiceError) *PreviewDirectoryRoleSetupUnexpectedResponseBody {
+	body := &PreviewDirectoryRoleSetupUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewDirectoryRoleSetupGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "previewDirectoryRoleSetup" endpoint of
+// the "access" service.
+func NewPreviewDirectoryRoleSetupGatewayErrorResponseBody(res *goa.ServiceError) *PreviewDirectoryRoleSetupGatewayErrorResponseBody {
+	body := &PreviewDirectoryRoleSetupGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyDirectoryRoleSetupUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "applyDirectoryRoleSetup" endpoint of the
+// "access" service.
+func NewApplyDirectoryRoleSetupUnauthorizedResponseBody(res *goa.ServiceError) *ApplyDirectoryRoleSetupUnauthorizedResponseBody {
+	body := &ApplyDirectoryRoleSetupUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyDirectoryRoleSetupForbiddenResponseBody builds the HTTP response
+// body from the result of the "applyDirectoryRoleSetup" endpoint of the
+// "access" service.
+func NewApplyDirectoryRoleSetupForbiddenResponseBody(res *goa.ServiceError) *ApplyDirectoryRoleSetupForbiddenResponseBody {
+	body := &ApplyDirectoryRoleSetupForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyDirectoryRoleSetupBadRequestResponseBody builds the HTTP response
+// body from the result of the "applyDirectoryRoleSetup" endpoint of the
+// "access" service.
+func NewApplyDirectoryRoleSetupBadRequestResponseBody(res *goa.ServiceError) *ApplyDirectoryRoleSetupBadRequestResponseBody {
+	body := &ApplyDirectoryRoleSetupBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyDirectoryRoleSetupNotFoundResponseBody builds the HTTP response body
+// from the result of the "applyDirectoryRoleSetup" endpoint of the "access"
+// service.
+func NewApplyDirectoryRoleSetupNotFoundResponseBody(res *goa.ServiceError) *ApplyDirectoryRoleSetupNotFoundResponseBody {
+	body := &ApplyDirectoryRoleSetupNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyDirectoryRoleSetupConflictResponseBody builds the HTTP response body
+// from the result of the "applyDirectoryRoleSetup" endpoint of the "access"
+// service.
+func NewApplyDirectoryRoleSetupConflictResponseBody(res *goa.ServiceError) *ApplyDirectoryRoleSetupConflictResponseBody {
+	body := &ApplyDirectoryRoleSetupConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyDirectoryRoleSetupUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "applyDirectoryRoleSetup" endpoint of
+// the "access" service.
+func NewApplyDirectoryRoleSetupUnsupportedMediaResponseBody(res *goa.ServiceError) *ApplyDirectoryRoleSetupUnsupportedMediaResponseBody {
+	body := &ApplyDirectoryRoleSetupUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyDirectoryRoleSetupInvalidResponseBody builds the HTTP response body
+// from the result of the "applyDirectoryRoleSetup" endpoint of the "access"
+// service.
+func NewApplyDirectoryRoleSetupInvalidResponseBody(res *goa.ServiceError) *ApplyDirectoryRoleSetupInvalidResponseBody {
+	body := &ApplyDirectoryRoleSetupInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyDirectoryRoleSetupInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "applyDirectoryRoleSetup" endpoint of
+// the "access" service.
+func NewApplyDirectoryRoleSetupInvariantViolationResponseBody(res *goa.ServiceError) *ApplyDirectoryRoleSetupInvariantViolationResponseBody {
+	body := &ApplyDirectoryRoleSetupInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyDirectoryRoleSetupUnexpectedResponseBody builds the HTTP response
+// body from the result of the "applyDirectoryRoleSetup" endpoint of the
+// "access" service.
+func NewApplyDirectoryRoleSetupUnexpectedResponseBody(res *goa.ServiceError) *ApplyDirectoryRoleSetupUnexpectedResponseBody {
+	body := &ApplyDirectoryRoleSetupUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyDirectoryRoleSetupGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "applyDirectoryRoleSetup" endpoint of the
+// "access" service.
+func NewApplyDirectoryRoleSetupGatewayErrorResponseBody(res *goa.ServiceError) *ApplyDirectoryRoleSetupGatewayErrorResponseBody {
+	body := &ApplyDirectoryRoleSetupGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -13151,6 +14046,44 @@ func NewDeleteDirectoryRoleMappingPayload(id string, apikeyToken *string, sessio
 	return v
 }
 
+// NewPreviewDirectoryRoleSetupPayload builds a access service
+// previewDirectoryRoleSetup endpoint payload.
+func NewPreviewDirectoryRoleSetupPayload(apikeyToken *string, sessionToken *string) *access.PreviewDirectoryRoleSetupPayload {
+	v := &access.PreviewDirectoryRoleSetupPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewApplyDirectoryRoleSetupPayload builds a access service
+// applyDirectoryRoleSetup endpoint payload.
+func NewApplyDirectoryRoleSetupPayload(body *ApplyDirectoryRoleSetupRequestBody, apikeyToken *string, sessionToken *string) *access.ApplyDirectoryRoleSetupPayload {
+	v := &access.ApplyDirectoryRoleSetupPayload{}
+	v.Items = make([]*access.ApplyDirectoryRoleSetupItem, len(body.Items))
+	for i, val := range body.Items {
+		if val == nil {
+			v.Items[i] = nil
+			continue
+		}
+		v.Items[i] = unmarshalApplyDirectoryRoleSetupItemRequestBodyToAccessApplyDirectoryRoleSetupItem(val)
+	}
+	if body.GrantSet != nil {
+		v.GrantSet = make([]*access.RoleGrant, len(body.GrantSet))
+		for i, val := range body.GrantSet {
+			if val == nil {
+				v.GrantSet[i] = nil
+				continue
+			}
+			v.GrantSet[i] = unmarshalRoleGrantRequestBodyToAccessRoleGrant(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewListScopesPayload builds a access service listScopes endpoint payload.
 func NewListScopesPayload(apikeyToken *string, sessionToken *string) *access.ListScopesPayload {
 	v := &access.ListScopesPayload{}
@@ -13569,6 +14502,35 @@ func ValidateSetDirectoryRoleMappingsRequestBody(body *SetDirectoryRoleMappingsR
 	return
 }
 
+// ValidateApplyDirectoryRoleSetupRequestBody runs the validations defined on
+// ApplyDirectoryRoleSetupRequestBody
+func ValidateApplyDirectoryRoleSetupRequestBody(body *ApplyDirectoryRoleSetupRequestBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	if len(body.Items) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.items", body.Items, len(body.Items), 1, true))
+	}
+	if len(body.Items) > 500 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.items", body.Items, len(body.Items), 500, false))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateApplyDirectoryRoleSetupItemRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.GrantSet {
+		if e != nil {
+			if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateUpdateMemberRolesRequestBody runs the validations defined on
 // UpdateMemberRolesRequestBody
 func ValidateUpdateMemberRolesRequestBody(body *UpdateMemberRolesRequestBody) (err error) {
@@ -13778,6 +14740,71 @@ func ValidateSelectorRequestBody(body *SelectorRequestBody) (err error) {
 	}
 	if body.ServerURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupItemRequestBody runs the validations defined
+// on ApplyDirectoryRoleSetupItemRequestBody
+func ValidateApplyDirectoryRoleSetupItemRequestBody(body *ApplyDirectoryRoleSetupItemRequestBody) (err error) {
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Roles == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
+	}
+	if body.Source != nil {
+		if err2 := ValidateDirectoryRoleSetupSourceRequestBody(body.Source); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Roles {
+		if e != nil {
+			if err2 := ValidateApplyDirectoryRoleSetupRoleRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateDirectoryRoleSetupSourceRequestBody runs the validations defined on
+// DirectoryRoleSetupSourceRequestBody
+func ValidateDirectoryRoleSetupSourceRequestBody(body *DirectoryRoleSetupSourceRequestBody) (err error) {
+	if body.SourceKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_kind", "body"))
+	}
+	if body.SourceKind != nil {
+		if !(*body.SourceKind == "group" || *body.SourceKind == "attribute") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_kind", *body.SourceKind, []any{"group", "attribute"}))
+		}
+	}
+	if body.DirectoryGroupID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.directory_group_id", *body.DirectoryGroupID, goa.FormatUUID))
+	}
+	if body.AttributeKey != nil {
+		if utf8.RuneCountInString(*body.AttributeKey) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute_key", *body.AttributeKey, utf8.RuneCountInString(*body.AttributeKey), 1, true))
+		}
+	}
+	if body.AttributeValue != nil {
+		if utf8.RuneCountInString(*body.AttributeValue) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute_value", *body.AttributeValue, utf8.RuneCountInString(*body.AttributeValue), 1, true))
+		}
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupRoleRequestBody runs the validations defined
+// on ApplyDirectoryRoleSetupRoleRequestBody
+func ValidateApplyDirectoryRoleSetupRoleRequestBody(body *ApplyDirectoryRoleSetupRoleRequestBody) (err error) {
+	if body.CreateName != nil {
+		if utf8.RuneCountInString(*body.CreateName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.create_name", *body.CreateName, utf8.RuneCountInString(*body.CreateName), 1, true))
+		}
 	}
 	return
 }

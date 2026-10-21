@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Trash2,
   TriangleAlert,
+  WandSparkles,
 } from "lucide-react";
 import {
   cloneElement,
@@ -88,6 +89,7 @@ import {
 
 import { invalidateDirectoryMappingAccess } from "./invalidateDirectoryMappingAccess";
 import { visibleChipCount } from "./chipOverflow";
+import { DirectoryRoleSetupDialog } from "./DirectoryRoleSetupDialog";
 
 const CREATE_ROLE = "__create_role";
 
@@ -241,6 +243,7 @@ export function DirectoryRoleMappings({
   const { data: rolesData } = useRoles();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
+  const [settingUp, setSettingUp] = useState(false);
 
   // The API orders roles by slug; the picker lists them by name, ignoring case.
   const roles = useMemo(
@@ -353,9 +356,29 @@ export function DirectoryRoleMappings({
               className="w-56"
             />
           )}
+          {!isPending && !isError && (
+            <Button
+              variant="secondary"
+              size="sm"
+              // Matches the search box beside it.
+              className="h-10"
+              onClick={() => setSettingUp(true)}
+            >
+              <Button.LeftIcon>
+                <WandSparkles className="h-4 w-4" />
+              </Button.LeftIcon>
+              Set up in bulk
+            </Button>
+          )}
           <SyncGroupsButton />
         </div>
       </div>
+      {settingUp && (
+        <DirectoryRoleSetupDialog
+          roles={roles}
+          onClose={() => setSettingUp(false)}
+        />
+      )}
 
       <Collapsible>
         {isPending && <SkeletonTable />}
@@ -855,8 +878,8 @@ function RoleChips({
 
   return (
     // Fills the cell, so its width is the room available and not its own
-    // content: sized to its content, a line that collapsed to "N roles"
-    // would measure too narrow to ever show its chips again.
+    // content: sized to its content, a line that collapsed to "+N more" would
+    // measure too narrow to ever show its chips again.
     <div
       ref={lineRef}
       className="relative flex h-8 w-full min-w-0 items-center gap-2"

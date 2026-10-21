@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	access "github.com/speakeasy-api/gram/server/gen/access"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -83,6 +85,16 @@ type SetDirectoryRoleMappingsRequestBody struct {
 	// The complete set of role principal URNs to grant, from Role.principal_urn.
 	// Empty removes every mapping for the source.
 	RoleUrns []string `form:"role_urns" json:"role_urns" xml:"role_urns"`
+}
+
+// ApplyDirectoryRoleSetupRequestBody is the type of the "access" service
+// "applyDirectoryRoleSetup" endpoint HTTP request body.
+type ApplyDirectoryRoleSetupRequestBody struct {
+	// The sources to set up. Each source may appear once.
+	Items []*ApplyDirectoryRoleSetupItemRequestBody `form:"items" json:"items" xml:"items"`
+	// Optional grants given to every role this request creates. Omit to create
+	// roles with no grants. Existing roles are never changed.
+	GrantSet []*RoleGrantRequestBody `form:"grant_set,omitempty" json:"grant_set,omitempty" xml:"grant_set,omitempty"`
 }
 
 // UpdateMemberRolesRequestBody is the type of the "access" service
@@ -298,6 +310,30 @@ type SetDirectoryRoleMappingResponseBody struct {
 	RoleUrn   *string `form:"role_urn,omitempty" json:"role_urn,omitempty" xml:"role_urn,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// PreviewDirectoryRoleSetupResponseBody is the type of the "access" service
+// "previewDirectoryRoleSetup" endpoint HTTP response body.
+type PreviewDirectoryRoleSetupResponseBody struct {
+	// One item per live directory group and mappable attribute value.
+	Items []*DirectoryRoleSetupPreviewItemResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+	// Attribute keys left out of items because they have more than
+	// max_values_per_attribute_key distinct values. Their values can still be
+	// mapped one at a time with setDirectoryRoleMappings.
+	HiddenAttributeKeys []*DirectoryRoleSetupHiddenAttributeKeyResponseBody `form:"hidden_attribute_keys,omitempty" json:"hidden_attribute_keys,omitempty" xml:"hidden_attribute_keys,omitempty"`
+	// The limit on distinct values above which an attribute key is left out.
+	MaxValuesPerAttributeKey *int64 `form:"max_values_per_attribute_key,omitempty" json:"max_values_per_attribute_key,omitempty" xml:"max_values_per_attribute_key,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupResponseBody is the type of the "access" service
+// "applyDirectoryRoleSetup" endpoint HTTP response body.
+type ApplyDirectoryRoleSetupResponseBody struct {
+	// Roles this request created.
+	CreatedRoles []*RoleResponseBody `form:"created_roles,omitempty" json:"created_roles,omitempty" xml:"created_roles,omitempty"`
+	// The resulting mappings of every source in the request.
+	Mappings []*DirectoryRoleMappingResponseBody `form:"mappings,omitempty" json:"mappings,omitempty" xml:"mappings,omitempty"`
+	// Work requested after commit.
+	SideEffects []*DirectoryRoleSetupSideEffectResponseBody `form:"side_effects,omitempty" json:"side_effects,omitempty" xml:"side_effects,omitempty"`
 }
 
 // ListScopesResponseBody is the type of the "access" service "listScopes"
@@ -2392,6 +2428,386 @@ type DeleteDirectoryRoleMappingUnexpectedResponseBody struct {
 // "access" service "deleteDirectoryRoleMapping" endpoint HTTP response body
 // for the "gateway_error" error.
 type DeleteDirectoryRoleMappingGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewDirectoryRoleSetupUnauthorizedResponseBody is the type of the
+// "access" service "previewDirectoryRoleSetup" endpoint HTTP response body for
+// the "unauthorized" error.
+type PreviewDirectoryRoleSetupUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewDirectoryRoleSetupForbiddenResponseBody is the type of the "access"
+// service "previewDirectoryRoleSetup" endpoint HTTP response body for the
+// "forbidden" error.
+type PreviewDirectoryRoleSetupForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewDirectoryRoleSetupBadRequestResponseBody is the type of the "access"
+// service "previewDirectoryRoleSetup" endpoint HTTP response body for the
+// "bad_request" error.
+type PreviewDirectoryRoleSetupBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewDirectoryRoleSetupNotFoundResponseBody is the type of the "access"
+// service "previewDirectoryRoleSetup" endpoint HTTP response body for the
+// "not_found" error.
+type PreviewDirectoryRoleSetupNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewDirectoryRoleSetupConflictResponseBody is the type of the "access"
+// service "previewDirectoryRoleSetup" endpoint HTTP response body for the
+// "conflict" error.
+type PreviewDirectoryRoleSetupConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewDirectoryRoleSetupUnsupportedMediaResponseBody is the type of the
+// "access" service "previewDirectoryRoleSetup" endpoint HTTP response body for
+// the "unsupported_media" error.
+type PreviewDirectoryRoleSetupUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewDirectoryRoleSetupInvalidResponseBody is the type of the "access"
+// service "previewDirectoryRoleSetup" endpoint HTTP response body for the
+// "invalid" error.
+type PreviewDirectoryRoleSetupInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewDirectoryRoleSetupInvariantViolationResponseBody is the type of the
+// "access" service "previewDirectoryRoleSetup" endpoint HTTP response body for
+// the "invariant_violation" error.
+type PreviewDirectoryRoleSetupInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewDirectoryRoleSetupUnexpectedResponseBody is the type of the "access"
+// service "previewDirectoryRoleSetup" endpoint HTTP response body for the
+// "unexpected" error.
+type PreviewDirectoryRoleSetupUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewDirectoryRoleSetupGatewayErrorResponseBody is the type of the
+// "access" service "previewDirectoryRoleSetup" endpoint HTTP response body for
+// the "gateway_error" error.
+type PreviewDirectoryRoleSetupGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupUnauthorizedResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "unauthorized" error.
+type ApplyDirectoryRoleSetupUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupForbiddenResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "forbidden" error.
+type ApplyDirectoryRoleSetupForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupBadRequestResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "bad_request" error.
+type ApplyDirectoryRoleSetupBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupNotFoundResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "not_found" error.
+type ApplyDirectoryRoleSetupNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupConflictResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "conflict" error.
+type ApplyDirectoryRoleSetupConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupUnsupportedMediaResponseBody is the type of the
+// "access" service "applyDirectoryRoleSetup" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ApplyDirectoryRoleSetupUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupInvalidResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "invalid" error.
+type ApplyDirectoryRoleSetupInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupInvariantViolationResponseBody is the type of the
+// "access" service "applyDirectoryRoleSetup" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ApplyDirectoryRoleSetupInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupUnexpectedResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "unexpected" error.
+type ApplyDirectoryRoleSetupUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupGatewayErrorResponseBody is the type of the "access"
+// service "applyDirectoryRoleSetup" endpoint HTTP response body for the
+// "gateway_error" error.
+type ApplyDirectoryRoleSetupGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6829,6 +7245,110 @@ type DirectoryRoleMappingResponse struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// DirectoryRoleSetupPreviewItemResponseBody is used to define fields on
+// response body types.
+type DirectoryRoleSetupPreviewItemResponseBody struct {
+	Source *DirectoryRoleSetupSourceResponseBody `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// The group name, or key=value for an attribute value.
+	SourceName *string `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	// People with a live directory profile that matches the source, counted once
+	// per email address, so someone with profiles in two directories counts once
+	// and a profile with no email is not counted. These are directory people, not
+	// organization members or role members.
+	DirectoryPeople *int64 `form:"directory_people,omitempty" json:"directory_people,omitempty" xml:"directory_people,omitempty"`
+	// Roles the source already maps to. Empty for an unmapped source.
+	ExistingRoleUrns []string `form:"existing_role_urns,omitempty" json:"existing_role_urns,omitempty" xml:"existing_role_urns,omitempty"`
+	// The suggested role set. For a mapped source this is its current set; for an
+	// unmapped source, one reused or new role.
+	ProposedRoles []*DirectoryRoleSetupProposedRoleResponseBody `form:"proposed_roles,omitempty" json:"proposed_roles,omitempty" xml:"proposed_roles,omitempty"`
+	// Opaque version of the source and its current mappings. Send it back with
+	// applyDirectoryRoleSetup.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+}
+
+// DirectoryRoleSetupSourceResponseBody is used to define fields on response
+// body types.
+type DirectoryRoleSetupSourceResponseBody struct {
+	// What the source is: a directory group or an attribute value.
+	SourceKind *string `form:"source_kind,omitempty" json:"source_kind,omitempty" xml:"source_kind,omitempty"`
+	// The directory group. Set when source_kind is group.
+	DirectoryGroupID *string `form:"directory_group_id,omitempty" json:"directory_group_id,omitempty" xml:"directory_group_id,omitempty"`
+	// The directory attribute key. Set when source_kind is attribute.
+	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
+	// The directory attribute value. Set when source_kind is attribute.
+	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+}
+
+// DirectoryRoleSetupProposedRoleResponseBody is used to define fields on
+// response body types.
+type DirectoryRoleSetupProposedRoleResponseBody struct {
+	// reuse an existing role, or create a new one.
+	RoleAction *string `form:"role_action,omitempty" json:"role_action,omitempty" xml:"role_action,omitempty"`
+	// The existing role. Set when role_action is reuse.
+	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// Principal URN of the existing role. Set when role_action is reuse.
+	RoleUrn *string `form:"role_urn,omitempty" json:"role_urn,omitempty" xml:"role_urn,omitempty"`
+	// The existing role's name, or the name a new role would get.
+	RoleName *string `form:"role_name,omitempty" json:"role_name,omitempty" xml:"role_name,omitempty"`
+	// Grants the existing role already has. Applying the proposal approves them
+	// for the source's members. Empty for a new role.
+	CurrentGrants []*RoleGrantResponseBody `form:"current_grants,omitempty" json:"current_grants,omitempty" xml:"current_grants,omitempty"`
+}
+
+// DirectoryRoleSetupHiddenAttributeKeyResponseBody is used to define fields on
+// response body types.
+type DirectoryRoleSetupHiddenAttributeKeyResponseBody struct {
+	// Directory attribute key with too many distinct values to offer in bulk setup.
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// Number of distinct values the key has on live directory profiles.
+	ValueCount *int64 `form:"value_count,omitempty" json:"value_count,omitempty" xml:"value_count,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupItemRequestBody is used to define fields on request
+// body types.
+type ApplyDirectoryRoleSetupItemRequestBody struct {
+	Source *DirectoryRoleSetupSourceRequestBody `form:"source" json:"source" xml:"source"`
+	// The item version from previewDirectoryRoleSetup.
+	Version string `form:"version" json:"version" xml:"version"`
+	// The complete role set for the source. Empty removes every mapping for the
+	// source.
+	Roles []*ApplyDirectoryRoleSetupRoleRequestBody `form:"roles" json:"roles" xml:"roles"`
+}
+
+// DirectoryRoleSetupSourceRequestBody is used to define fields on request body
+// types.
+type DirectoryRoleSetupSourceRequestBody struct {
+	// What the source is: a directory group or an attribute value.
+	SourceKind string `form:"source_kind" json:"source_kind" xml:"source_kind"`
+	// The directory group. Set when source_kind is group.
+	DirectoryGroupID *string `form:"directory_group_id,omitempty" json:"directory_group_id,omitempty" xml:"directory_group_id,omitempty"`
+	// The directory attribute key. Set when source_kind is attribute.
+	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
+	// The directory attribute value. Set when source_kind is attribute.
+	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+}
+
+// ApplyDirectoryRoleSetupRoleRequestBody is used to define fields on request
+// body types.
+type ApplyDirectoryRoleSetupRoleRequestBody struct {
+	// Principal URN of an existing role.
+	RoleUrn *string `form:"role_urn,omitempty" json:"role_urn,omitempty" xml:"role_urn,omitempty"`
+	// Name of a role to create. Items in the batch that name the same new role
+	// share it.
+	CreateName *string `form:"create_name,omitempty" json:"create_name,omitempty" xml:"create_name,omitempty"`
+}
+
+// DirectoryRoleSetupSideEffectResponseBody is used to define fields on
+// response body types.
+type DirectoryRoleSetupSideEffectResponseBody struct {
+	// What was requested.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// The role the request is for.
+	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// Requested work runs after the response and is never reported as done.
+	RequestStatus *string `form:"request_status,omitempty" json:"request_status,omitempty" xml:"request_status,omitempty"`
+}
+
 // ScopeDefinitionResponseBody is used to define fields on response body types.
 type ScopeDefinitionResponseBody struct {
 	// Unique scope identifier.
@@ -7515,6 +8035,35 @@ func NewSetDirectoryRoleMappingsRequestBody(p *access.SetDirectoryRoleMappingsPa
 		}
 	} else {
 		body.RoleUrns = []string{}
+	}
+	return body
+}
+
+// NewApplyDirectoryRoleSetupRequestBody builds the HTTP request body from the
+// payload of the "applyDirectoryRoleSetup" endpoint of the "access" service.
+func NewApplyDirectoryRoleSetupRequestBody(p *access.ApplyDirectoryRoleSetupPayload) *ApplyDirectoryRoleSetupRequestBody {
+	body := &ApplyDirectoryRoleSetupRequestBody{}
+	if p.Items != nil {
+		body.Items = make([]*ApplyDirectoryRoleSetupItemRequestBody, len(p.Items))
+		for i, val := range p.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalAccessApplyDirectoryRoleSetupItemToApplyDirectoryRoleSetupItemRequestBody(val)
+		}
+	} else {
+		body.Items = []*ApplyDirectoryRoleSetupItemRequestBody{}
+	}
+	if p.GrantSet != nil {
+		body.GrantSet = make([]*RoleGrantRequestBody, len(p.GrantSet))
+		for i, val := range p.GrantSet {
+			if val == nil {
+				body.GrantSet[i] = nil
+				continue
+			}
+			body.GrantSet[i] = marshalAccessRoleGrantToRoleGrantRequestBody(val)
+		}
 	}
 	return body
 }
@@ -9306,6 +9855,365 @@ func NewDeleteDirectoryRoleMappingUnexpected(body *DeleteDirectoryRoleMappingUne
 // NewDeleteDirectoryRoleMappingGatewayError builds a access service
 // deleteDirectoryRoleMapping endpoint gateway_error error.
 func NewDeleteDirectoryRoleMappingGatewayError(body *DeleteDirectoryRoleMappingGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewDirectoryRoleSetupDirectoryRoleSetupPreviewResultOK builds a
+// "access" service "previewDirectoryRoleSetup" endpoint result from a HTTP
+// "OK" response.
+func NewPreviewDirectoryRoleSetupDirectoryRoleSetupPreviewResultOK(body *PreviewDirectoryRoleSetupResponseBody) *access.DirectoryRoleSetupPreviewResult {
+	v := &access.DirectoryRoleSetupPreviewResult{
+		MaxValuesPerAttributeKey: *body.MaxValuesPerAttributeKey,
+	}
+	v.Items = make([]*access.DirectoryRoleSetupPreviewItem, len(body.Items))
+	for i, val := range body.Items {
+		if val == nil {
+			v.Items[i] = nil
+			continue
+		}
+		v.Items[i] = unmarshalDirectoryRoleSetupPreviewItemResponseBodyToAccessDirectoryRoleSetupPreviewItem(val)
+	}
+	v.HiddenAttributeKeys = make([]*access.DirectoryRoleSetupHiddenAttributeKey, len(body.HiddenAttributeKeys))
+	for i, val := range body.HiddenAttributeKeys {
+		if val == nil {
+			v.HiddenAttributeKeys[i] = nil
+			continue
+		}
+		v.HiddenAttributeKeys[i] = unmarshalDirectoryRoleSetupHiddenAttributeKeyResponseBodyToAccessDirectoryRoleSetupHiddenAttributeKey(val)
+	}
+
+	return v
+}
+
+// NewPreviewDirectoryRoleSetupUnauthorized builds a access service
+// previewDirectoryRoleSetup endpoint unauthorized error.
+func NewPreviewDirectoryRoleSetupUnauthorized(body *PreviewDirectoryRoleSetupUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewDirectoryRoleSetupForbidden builds a access service
+// previewDirectoryRoleSetup endpoint forbidden error.
+func NewPreviewDirectoryRoleSetupForbidden(body *PreviewDirectoryRoleSetupForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewDirectoryRoleSetupBadRequest builds a access service
+// previewDirectoryRoleSetup endpoint bad_request error.
+func NewPreviewDirectoryRoleSetupBadRequest(body *PreviewDirectoryRoleSetupBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewDirectoryRoleSetupNotFound builds a access service
+// previewDirectoryRoleSetup endpoint not_found error.
+func NewPreviewDirectoryRoleSetupNotFound(body *PreviewDirectoryRoleSetupNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewDirectoryRoleSetupConflict builds a access service
+// previewDirectoryRoleSetup endpoint conflict error.
+func NewPreviewDirectoryRoleSetupConflict(body *PreviewDirectoryRoleSetupConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewDirectoryRoleSetupUnsupportedMedia builds a access service
+// previewDirectoryRoleSetup endpoint unsupported_media error.
+func NewPreviewDirectoryRoleSetupUnsupportedMedia(body *PreviewDirectoryRoleSetupUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewDirectoryRoleSetupInvalid builds a access service
+// previewDirectoryRoleSetup endpoint invalid error.
+func NewPreviewDirectoryRoleSetupInvalid(body *PreviewDirectoryRoleSetupInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewDirectoryRoleSetupInvariantViolation builds a access service
+// previewDirectoryRoleSetup endpoint invariant_violation error.
+func NewPreviewDirectoryRoleSetupInvariantViolation(body *PreviewDirectoryRoleSetupInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewDirectoryRoleSetupUnexpected builds a access service
+// previewDirectoryRoleSetup endpoint unexpected error.
+func NewPreviewDirectoryRoleSetupUnexpected(body *PreviewDirectoryRoleSetupUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewDirectoryRoleSetupGatewayError builds a access service
+// previewDirectoryRoleSetup endpoint gateway_error error.
+func NewPreviewDirectoryRoleSetupGatewayError(body *PreviewDirectoryRoleSetupGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyDirectoryRoleSetupResultOK builds a "access" service
+// "applyDirectoryRoleSetup" endpoint result from a HTTP "OK" response.
+func NewApplyDirectoryRoleSetupResultOK(body *ApplyDirectoryRoleSetupResponseBody) *access.ApplyDirectoryRoleSetupResult {
+	v := &access.ApplyDirectoryRoleSetupResult{}
+	v.CreatedRoles = make([]*access.Role, len(body.CreatedRoles))
+	for i, val := range body.CreatedRoles {
+		if val == nil {
+			v.CreatedRoles[i] = nil
+			continue
+		}
+		v.CreatedRoles[i] = unmarshalRoleResponseBodyToAccessRole(val)
+	}
+	v.Mappings = make([]*access.DirectoryRoleMapping, len(body.Mappings))
+	for i, val := range body.Mappings {
+		if val == nil {
+			v.Mappings[i] = nil
+			continue
+		}
+		v.Mappings[i] = unmarshalDirectoryRoleMappingResponseBodyToAccessDirectoryRoleMapping(val)
+	}
+	v.SideEffects = make([]*access.DirectoryRoleSetupSideEffect, len(body.SideEffects))
+	for i, val := range body.SideEffects {
+		if val == nil {
+			v.SideEffects[i] = nil
+			continue
+		}
+		v.SideEffects[i] = unmarshalDirectoryRoleSetupSideEffectResponseBodyToAccessDirectoryRoleSetupSideEffect(val)
+	}
+
+	return v
+}
+
+// NewApplyDirectoryRoleSetupUnauthorized builds a access service
+// applyDirectoryRoleSetup endpoint unauthorized error.
+func NewApplyDirectoryRoleSetupUnauthorized(body *ApplyDirectoryRoleSetupUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyDirectoryRoleSetupForbidden builds a access service
+// applyDirectoryRoleSetup endpoint forbidden error.
+func NewApplyDirectoryRoleSetupForbidden(body *ApplyDirectoryRoleSetupForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyDirectoryRoleSetupBadRequest builds a access service
+// applyDirectoryRoleSetup endpoint bad_request error.
+func NewApplyDirectoryRoleSetupBadRequest(body *ApplyDirectoryRoleSetupBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyDirectoryRoleSetupNotFound builds a access service
+// applyDirectoryRoleSetup endpoint not_found error.
+func NewApplyDirectoryRoleSetupNotFound(body *ApplyDirectoryRoleSetupNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyDirectoryRoleSetupConflict builds a access service
+// applyDirectoryRoleSetup endpoint conflict error.
+func NewApplyDirectoryRoleSetupConflict(body *ApplyDirectoryRoleSetupConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyDirectoryRoleSetupUnsupportedMedia builds a access service
+// applyDirectoryRoleSetup endpoint unsupported_media error.
+func NewApplyDirectoryRoleSetupUnsupportedMedia(body *ApplyDirectoryRoleSetupUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyDirectoryRoleSetupInvalid builds a access service
+// applyDirectoryRoleSetup endpoint invalid error.
+func NewApplyDirectoryRoleSetupInvalid(body *ApplyDirectoryRoleSetupInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyDirectoryRoleSetupInvariantViolation builds a access service
+// applyDirectoryRoleSetup endpoint invariant_violation error.
+func NewApplyDirectoryRoleSetupInvariantViolation(body *ApplyDirectoryRoleSetupInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyDirectoryRoleSetupUnexpected builds a access service
+// applyDirectoryRoleSetup endpoint unexpected error.
+func NewApplyDirectoryRoleSetupUnexpected(body *ApplyDirectoryRoleSetupUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyDirectoryRoleSetupGatewayError builds a access service
+// applyDirectoryRoleSetup endpoint gateway_error error.
+func NewApplyDirectoryRoleSetupGatewayError(body *ApplyDirectoryRoleSetupGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13487,6 +14395,71 @@ func ValidateSetDirectoryRoleMappingResponseBody(body *SetDirectoryRoleMappingRe
 	return
 }
 
+// ValidatePreviewDirectoryRoleSetupResponseBody runs the validations defined
+// on PreviewDirectoryRoleSetupResponseBody
+func ValidatePreviewDirectoryRoleSetupResponseBody(body *PreviewDirectoryRoleSetupResponseBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	if body.HiddenAttributeKeys == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hidden_attribute_keys", "body"))
+	}
+	if body.MaxValuesPerAttributeKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("max_values_per_attribute_key", "body"))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateDirectoryRoleSetupPreviewItemResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.HiddenAttributeKeys {
+		if e != nil {
+			if err2 := ValidateDirectoryRoleSetupHiddenAttributeKeyResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupResponseBody runs the validations defined on
+// ApplyDirectoryRoleSetupResponseBody
+func ValidateApplyDirectoryRoleSetupResponseBody(body *ApplyDirectoryRoleSetupResponseBody) (err error) {
+	if body.CreatedRoles == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_roles", "body"))
+	}
+	if body.Mappings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mappings", "body"))
+	}
+	if body.SideEffects == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("side_effects", "body"))
+	}
+	for _, e := range body.CreatedRoles {
+		if e != nil {
+			if err2 := ValidateRoleResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Mappings {
+		if e != nil {
+			if err2 := ValidateDirectoryRoleMappingResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.SideEffects {
+		if e != nil {
+			if err2 := ValidateDirectoryRoleSetupSideEffectResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateListScopesResponseBody runs the validations defined on
 // ListScopesResponseBody
 func ValidateListScopesResponseBody(body *ListScopesResponseBody) (err error) {
@@ -16382,6 +17355,490 @@ func ValidateDeleteDirectoryRoleMappingUnexpectedResponseBody(body *DeleteDirect
 // ValidateDeleteDirectoryRoleMappingGatewayErrorResponseBody runs the
 // validations defined on deleteDirectoryRoleMapping_gateway_error_response_body
 func ValidateDeleteDirectoryRoleMappingGatewayErrorResponseBody(body *DeleteDirectoryRoleMappingGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewDirectoryRoleSetupUnauthorizedResponseBody runs the
+// validations defined on previewDirectoryRoleSetup_unauthorized_response_body
+func ValidatePreviewDirectoryRoleSetupUnauthorizedResponseBody(body *PreviewDirectoryRoleSetupUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewDirectoryRoleSetupForbiddenResponseBody runs the validations
+// defined on previewDirectoryRoleSetup_forbidden_response_body
+func ValidatePreviewDirectoryRoleSetupForbiddenResponseBody(body *PreviewDirectoryRoleSetupForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewDirectoryRoleSetupBadRequestResponseBody runs the validations
+// defined on previewDirectoryRoleSetup_bad_request_response_body
+func ValidatePreviewDirectoryRoleSetupBadRequestResponseBody(body *PreviewDirectoryRoleSetupBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewDirectoryRoleSetupNotFoundResponseBody runs the validations
+// defined on previewDirectoryRoleSetup_not_found_response_body
+func ValidatePreviewDirectoryRoleSetupNotFoundResponseBody(body *PreviewDirectoryRoleSetupNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewDirectoryRoleSetupConflictResponseBody runs the validations
+// defined on previewDirectoryRoleSetup_conflict_response_body
+func ValidatePreviewDirectoryRoleSetupConflictResponseBody(body *PreviewDirectoryRoleSetupConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewDirectoryRoleSetupUnsupportedMediaResponseBody runs the
+// validations defined on
+// previewDirectoryRoleSetup_unsupported_media_response_body
+func ValidatePreviewDirectoryRoleSetupUnsupportedMediaResponseBody(body *PreviewDirectoryRoleSetupUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewDirectoryRoleSetupInvalidResponseBody runs the validations
+// defined on previewDirectoryRoleSetup_invalid_response_body
+func ValidatePreviewDirectoryRoleSetupInvalidResponseBody(body *PreviewDirectoryRoleSetupInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewDirectoryRoleSetupInvariantViolationResponseBody runs the
+// validations defined on
+// previewDirectoryRoleSetup_invariant_violation_response_body
+func ValidatePreviewDirectoryRoleSetupInvariantViolationResponseBody(body *PreviewDirectoryRoleSetupInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewDirectoryRoleSetupUnexpectedResponseBody runs the validations
+// defined on previewDirectoryRoleSetup_unexpected_response_body
+func ValidatePreviewDirectoryRoleSetupUnexpectedResponseBody(body *PreviewDirectoryRoleSetupUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewDirectoryRoleSetupGatewayErrorResponseBody runs the
+// validations defined on previewDirectoryRoleSetup_gateway_error_response_body
+func ValidatePreviewDirectoryRoleSetupGatewayErrorResponseBody(body *PreviewDirectoryRoleSetupGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupUnauthorizedResponseBody runs the validations
+// defined on applyDirectoryRoleSetup_unauthorized_response_body
+func ValidateApplyDirectoryRoleSetupUnauthorizedResponseBody(body *ApplyDirectoryRoleSetupUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupForbiddenResponseBody runs the validations
+// defined on applyDirectoryRoleSetup_forbidden_response_body
+func ValidateApplyDirectoryRoleSetupForbiddenResponseBody(body *ApplyDirectoryRoleSetupForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupBadRequestResponseBody runs the validations
+// defined on applyDirectoryRoleSetup_bad_request_response_body
+func ValidateApplyDirectoryRoleSetupBadRequestResponseBody(body *ApplyDirectoryRoleSetupBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupNotFoundResponseBody runs the validations
+// defined on applyDirectoryRoleSetup_not_found_response_body
+func ValidateApplyDirectoryRoleSetupNotFoundResponseBody(body *ApplyDirectoryRoleSetupNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupConflictResponseBody runs the validations
+// defined on applyDirectoryRoleSetup_conflict_response_body
+func ValidateApplyDirectoryRoleSetupConflictResponseBody(body *ApplyDirectoryRoleSetupConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupUnsupportedMediaResponseBody runs the
+// validations defined on
+// applyDirectoryRoleSetup_unsupported_media_response_body
+func ValidateApplyDirectoryRoleSetupUnsupportedMediaResponseBody(body *ApplyDirectoryRoleSetupUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupInvalidResponseBody runs the validations
+// defined on applyDirectoryRoleSetup_invalid_response_body
+func ValidateApplyDirectoryRoleSetupInvalidResponseBody(body *ApplyDirectoryRoleSetupInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupInvariantViolationResponseBody runs the
+// validations defined on
+// applyDirectoryRoleSetup_invariant_violation_response_body
+func ValidateApplyDirectoryRoleSetupInvariantViolationResponseBody(body *ApplyDirectoryRoleSetupInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupUnexpectedResponseBody runs the validations
+// defined on applyDirectoryRoleSetup_unexpected_response_body
+func ValidateApplyDirectoryRoleSetupUnexpectedResponseBody(body *ApplyDirectoryRoleSetupUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupGatewayErrorResponseBody runs the validations
+// defined on applyDirectoryRoleSetup_gateway_error_response_body
+func ValidateApplyDirectoryRoleSetupGatewayErrorResponseBody(body *ApplyDirectoryRoleSetupGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22210,6 +23667,190 @@ func ValidateDirectoryRoleMappingResponse(body *DirectoryRoleMappingResponse) (e
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDirectoryRoleSetupPreviewItemResponseBody runs the validations
+// defined on DirectoryRoleSetupPreviewItemResponseBody
+func ValidateDirectoryRoleSetupPreviewItemResponseBody(body *DirectoryRoleSetupPreviewItemResponseBody) (err error) {
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.SourceName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_name", "body"))
+	}
+	if body.DirectoryPeople == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("directory_people", "body"))
+	}
+	if body.ExistingRoleUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("existing_role_urns", "body"))
+	}
+	if body.ProposedRoles == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("proposed_roles", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Source != nil {
+		if err2 := ValidateDirectoryRoleSetupSourceResponseBody(body.Source); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.ProposedRoles {
+		if e != nil {
+			if err2 := ValidateDirectoryRoleSetupProposedRoleResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateDirectoryRoleSetupSourceResponseBody runs the validations defined on
+// DirectoryRoleSetupSourceResponseBody
+func ValidateDirectoryRoleSetupSourceResponseBody(body *DirectoryRoleSetupSourceResponseBody) (err error) {
+	if body.SourceKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_kind", "body"))
+	}
+	if body.SourceKind != nil {
+		if !(*body.SourceKind == "group" || *body.SourceKind == "attribute") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_kind", *body.SourceKind, []any{"group", "attribute"}))
+		}
+	}
+	if body.DirectoryGroupID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.directory_group_id", *body.DirectoryGroupID, goa.FormatUUID))
+	}
+	if body.AttributeKey != nil {
+		if utf8.RuneCountInString(*body.AttributeKey) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute_key", *body.AttributeKey, utf8.RuneCountInString(*body.AttributeKey), 1, true))
+		}
+	}
+	if body.AttributeValue != nil {
+		if utf8.RuneCountInString(*body.AttributeValue) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute_value", *body.AttributeValue, utf8.RuneCountInString(*body.AttributeValue), 1, true))
+		}
+	}
+	return
+}
+
+// ValidateDirectoryRoleSetupProposedRoleResponseBody runs the validations
+// defined on DirectoryRoleSetupProposedRoleResponseBody
+func ValidateDirectoryRoleSetupProposedRoleResponseBody(body *DirectoryRoleSetupProposedRoleResponseBody) (err error) {
+	if body.RoleAction == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_action", "body"))
+	}
+	if body.RoleName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_name", "body"))
+	}
+	if body.CurrentGrants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_grants", "body"))
+	}
+	if body.RoleAction != nil {
+		if !(*body.RoleAction == "reuse" || *body.RoleAction == "create") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.role_action", *body.RoleAction, []any{"reuse", "create"}))
+		}
+	}
+	for _, e := range body.CurrentGrants {
+		if e != nil {
+			if err2 := ValidateRoleGrantResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateDirectoryRoleSetupHiddenAttributeKeyResponseBody runs the
+// validations defined on DirectoryRoleSetupHiddenAttributeKeyResponseBody
+func ValidateDirectoryRoleSetupHiddenAttributeKeyResponseBody(body *DirectoryRoleSetupHiddenAttributeKeyResponseBody) (err error) {
+	if body.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if body.ValueCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value_count", "body"))
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupItemRequestBody runs the validations defined
+// on ApplyDirectoryRoleSetupItemRequestBody
+func ValidateApplyDirectoryRoleSetupItemRequestBody(body *ApplyDirectoryRoleSetupItemRequestBody) (err error) {
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.Roles == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
+	}
+	if body.Source != nil {
+		if err2 := ValidateDirectoryRoleSetupSourceRequestBody(body.Source); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Roles {
+		if e != nil {
+			if err2 := ValidateApplyDirectoryRoleSetupRoleRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateDirectoryRoleSetupSourceRequestBody runs the validations defined on
+// DirectoryRoleSetupSourceRequestBody
+func ValidateDirectoryRoleSetupSourceRequestBody(body *DirectoryRoleSetupSourceRequestBody) (err error) {
+	if !(body.SourceKind == "group" || body.SourceKind == "attribute") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_kind", body.SourceKind, []any{"group", "attribute"}))
+	}
+	if body.DirectoryGroupID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.directory_group_id", *body.DirectoryGroupID, goa.FormatUUID))
+	}
+	if body.AttributeKey != nil {
+		if utf8.RuneCountInString(*body.AttributeKey) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute_key", *body.AttributeKey, utf8.RuneCountInString(*body.AttributeKey), 1, true))
+		}
+	}
+	if body.AttributeValue != nil {
+		if utf8.RuneCountInString(*body.AttributeValue) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute_value", *body.AttributeValue, utf8.RuneCountInString(*body.AttributeValue), 1, true))
+		}
+	}
+	return
+}
+
+// ValidateApplyDirectoryRoleSetupRoleRequestBody runs the validations defined
+// on ApplyDirectoryRoleSetupRoleRequestBody
+func ValidateApplyDirectoryRoleSetupRoleRequestBody(body *ApplyDirectoryRoleSetupRoleRequestBody) (err error) {
+	if body.CreateName != nil {
+		if utf8.RuneCountInString(*body.CreateName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.create_name", *body.CreateName, utf8.RuneCountInString(*body.CreateName), 1, true))
+		}
+	}
+	return
+}
+
+// ValidateDirectoryRoleSetupSideEffectResponseBody runs the validations
+// defined on DirectoryRoleSetupSideEffectResponseBody
+func ValidateDirectoryRoleSetupSideEffectResponseBody(body *DirectoryRoleSetupSideEffectResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.RoleID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	}
+	if body.RequestStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_status", "body"))
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "workos_role_sync") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"workos_role_sync"}))
+		}
+	}
+	if body.RequestStatus != nil {
+		if !(*body.RequestStatus == "requested") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.request_status", *body.RequestStatus, []any{"requested"}))
+		}
 	}
 	return
 }

@@ -120,7 +120,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -333,6 +333,15 @@ func ParseEndpoint(
 		accessDeleteDirectoryRoleMappingIDFlag           = accessDeleteDirectoryRoleMappingFlags.String("id", "REQUIRED", "")
 		accessDeleteDirectoryRoleMappingApikeyTokenFlag  = accessDeleteDirectoryRoleMappingFlags.String("apikey-token", "", "")
 		accessDeleteDirectoryRoleMappingSessionTokenFlag = accessDeleteDirectoryRoleMappingFlags.String("session-token", "", "")
+
+		accessPreviewDirectoryRoleSetupFlags            = flag.NewFlagSet("preview-directory-role-setup", flag.ExitOnError)
+		accessPreviewDirectoryRoleSetupApikeyTokenFlag  = accessPreviewDirectoryRoleSetupFlags.String("apikey-token", "", "")
+		accessPreviewDirectoryRoleSetupSessionTokenFlag = accessPreviewDirectoryRoleSetupFlags.String("session-token", "", "")
+
+		accessApplyDirectoryRoleSetupFlags            = flag.NewFlagSet("apply-directory-role-setup", flag.ExitOnError)
+		accessApplyDirectoryRoleSetupBodyFlag         = accessApplyDirectoryRoleSetupFlags.String("body", "REQUIRED", "")
+		accessApplyDirectoryRoleSetupApikeyTokenFlag  = accessApplyDirectoryRoleSetupFlags.String("apikey-token", "", "")
+		accessApplyDirectoryRoleSetupSessionTokenFlag = accessApplyDirectoryRoleSetupFlags.String("session-token", "", "")
 
 		accessListScopesFlags            = flag.NewFlagSet("list-scopes", flag.ExitOnError)
 		accessListScopesApikeyTokenFlag  = accessListScopesFlags.String("apikey-token", "", "")
@@ -5152,6 +5161,8 @@ func ParseEndpoint(
 	accessSetDirectoryRoleMappingFlags.Usage = accessSetDirectoryRoleMappingUsage
 	accessSetDirectoryRoleMappingsFlags.Usage = accessSetDirectoryRoleMappingsUsage
 	accessDeleteDirectoryRoleMappingFlags.Usage = accessDeleteDirectoryRoleMappingUsage
+	accessPreviewDirectoryRoleSetupFlags.Usage = accessPreviewDirectoryRoleSetupUsage
+	accessApplyDirectoryRoleSetupFlags.Usage = accessApplyDirectoryRoleSetupUsage
 	accessListScopesFlags.Usage = accessListScopesUsage
 	accessListMembersFlags.Usage = accessListMembersUsage
 	accessListGrantsFlags.Usage = accessListGrantsUsage
@@ -6507,6 +6518,12 @@ func ParseEndpoint(
 
 			case "delete-directory-role-mapping":
 				epf = accessDeleteDirectoryRoleMappingFlags
+
+			case "preview-directory-role-setup":
+				epf = accessPreviewDirectoryRoleSetupFlags
+
+			case "apply-directory-role-setup":
+				epf = accessApplyDirectoryRoleSetupFlags
 
 			case "list-scopes":
 				epf = accessListScopesFlags
@@ -9602,6 +9619,12 @@ func ParseEndpoint(
 			case "delete-directory-role-mapping":
 				endpoint = c.DeleteDirectoryRoleMapping()
 				data, err = accessc.BuildDeleteDirectoryRoleMappingPayload(*accessDeleteDirectoryRoleMappingIDFlag, *accessDeleteDirectoryRoleMappingApikeyTokenFlag, *accessDeleteDirectoryRoleMappingSessionTokenFlag)
+			case "preview-directory-role-setup":
+				endpoint = c.PreviewDirectoryRoleSetup()
+				data, err = accessc.BuildPreviewDirectoryRoleSetupPayload(*accessPreviewDirectoryRoleSetupApikeyTokenFlag, *accessPreviewDirectoryRoleSetupSessionTokenFlag)
+			case "apply-directory-role-setup":
+				endpoint = c.ApplyDirectoryRoleSetup()
+				data, err = accessc.BuildApplyDirectoryRoleSetupPayload(*accessApplyDirectoryRoleSetupBodyFlag, *accessApplyDirectoryRoleSetupApikeyTokenFlag, *accessApplyDirectoryRoleSetupSessionTokenFlag)
 			case "list-scopes":
 				endpoint = c.ListScopes()
 				data, err = accessc.BuildListScopesPayload(*accessListScopesApikeyTokenFlag, *accessListScopesSessionTokenFlag)
@@ -12907,6 +12930,8 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    set-directory-role-mapping: Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.`)
 	fmt.Fprintln(os.Stderr, `    set-directory-role-mappings: Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.`)
 	fmt.Fprintln(os.Stderr, `    delete-directory-role-mapping: Remove a directory role mapping.`)
+	fmt.Fprintln(os.Stderr, `    preview-directory-role-setup: Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.`)
+	fmt.Fprintln(os.Stderr, `    apply-directory-role-setup: Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source's role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item's version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.`)
 	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
@@ -13146,6 +13171,48 @@ func accessDeleteDirectoryRoleMappingUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-directory-role-mapping --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessPreviewDirectoryRoleSetupUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access preview-directory-role-setup", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access preview-directory-role-setup --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessApplyDirectoryRoleSetupUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access apply-directory-role-setup", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source's role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item's version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access apply-directory-role-setup --body '{\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"items\": [\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         },\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessListScopesUsage() {

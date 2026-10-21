@@ -285,6 +285,103 @@ paths:
       x-speakeasy-name-override: uploadTraces
       x-speakeasy-react-hook:
         name: UploadOpenTelemetryTraces
+  /rpc/access.applyDirectoryRoleSetup:
+    post:
+      description: 'Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source''s role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item''s version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.'
+      operationId: applyDirectoryRoleSetup
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyDirectoryRoleSetupForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyDirectoryRoleSetupResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: applyDirectoryRoleSetup access
+      tags:
+        - access
+      x-speakeasy-name-override: applyDirectoryRoleSetup
+      x-speakeasy-react-hook:
+        name: ApplyDirectoryRoleSetup
+        type: mutation
   /rpc/access.createRole:
     post:
       description: Create a new custom role.
@@ -2573,6 +2670,96 @@ paths:
       x-speakeasy-name-override: listShadowMCPInventoryUsers
       x-speakeasy-react-hook:
         name: ShadowMCPInventoryUsers
+  /rpc/access.previewDirectoryRoleSetup:
+    get:
+      description: 'Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.'
+      operationId: previewDirectoryRoleSetup
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectoryRoleSetupPreviewResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: previewDirectoryRoleSetup access
+      tags:
+        - access
+      x-speakeasy-name-override: previewDirectoryRoleSetup
+      x-speakeasy-react-hook:
+        name: DirectoryRoleSetupPreview
   /rpc/access.requestAccess:
     post:
       description: Request access to a scope by sending an email notification to organization administrators.
@@ -82353,6 +82540,73 @@ components:
       required:
         - has_signing_secret
         - enabled
+    ApplyDirectoryRoleSetupForm:
+      type: object
+      properties:
+        grant_set:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleGrant'
+          description: Optional grants given to every role this request creates. Omit to create roles with no grants. Existing roles are never changed.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApplyDirectoryRoleSetupItem'
+          description: The sources to set up. Each source may appear once.
+          minItems: 1
+          maxItems: 500
+      required:
+        - items
+    ApplyDirectoryRoleSetupItem:
+      type: object
+      properties:
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApplyDirectoryRoleSetupRole'
+          description: The complete role set for the source. Empty removes every mapping for the source.
+        source:
+          $ref: '#/components/schemas/DirectoryRoleSetupSource'
+        version:
+          type: string
+          description: The item version from previewDirectoryRoleSetup.
+      required:
+        - source
+        - version
+        - roles
+    ApplyDirectoryRoleSetupResult:
+      type: object
+      properties:
+        created_roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+          description: Roles this request created.
+        mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryRoleMapping'
+          description: The resulting mappings of every source in the request.
+        side_effects:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryRoleSetupSideEffect'
+          description: Work requested after commit.
+      required:
+        - created_roles
+        - mappings
+        - side_effects
+    ApplyDirectoryRoleSetupRole:
+      type: object
+      properties:
+        create_name:
+          type: string
+          description: Name of a role to create. Items in the batch that name the same new role share it.
+          minLength: 1
+        role_urn:
+          type: string
+          description: Principal URN of an existing role.
+      description: 'One role in an item''s role set: an existing role by principal URN, or a new role by name. Set exactly one.'
     ApprovalDecision:
       type: object
       properties:
@@ -87847,6 +88101,142 @@ components:
         - role_urn
         - created_at
         - updated_at
+    DirectoryRoleSetupHiddenAttributeKey:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Directory attribute key with too many distinct values to offer in bulk setup.
+        value_count:
+          type: integer
+          description: Number of distinct values the key has on live directory profiles.
+          format: int64
+      required:
+        - key
+        - value_count
+    DirectoryRoleSetupPreviewItem:
+      type: object
+      properties:
+        directory_people:
+          type: integer
+          description: People with a live directory profile that matches the source, counted once per email address, so someone with profiles in two directories counts once and a profile with no email is not counted. These are directory people, not organization members or role members.
+          format: int64
+        existing_role_urns:
+          type: array
+          items:
+            type: string
+          description: Roles the source already maps to. Empty for an unmapped source.
+        proposed_roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryRoleSetupProposedRole'
+          description: The suggested role set. For a mapped source this is its current set; for an unmapped source, one reused or new role.
+        source:
+          $ref: '#/components/schemas/DirectoryRoleSetupSource'
+        source_name:
+          type: string
+          description: The group name, or key=value for an attribute value.
+        version:
+          type: string
+          description: Opaque version of the source and its current mappings. Send it back with applyDirectoryRoleSetup.
+      required:
+        - source
+        - source_name
+        - directory_people
+        - existing_role_urns
+        - proposed_roles
+        - version
+    DirectoryRoleSetupPreviewResult:
+      type: object
+      properties:
+        hidden_attribute_keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryRoleSetupHiddenAttributeKey'
+          description: Attribute keys left out of items because they have more than max_values_per_attribute_key distinct values. Their values can still be mapped one at a time with setDirectoryRoleMappings.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryRoleSetupPreviewItem'
+          description: One item per live directory group and mappable attribute value.
+        max_values_per_attribute_key:
+          type: integer
+          description: The limit on distinct values above which an attribute key is left out.
+          format: int64
+      required:
+        - items
+        - hidden_attribute_keys
+        - max_values_per_attribute_key
+    DirectoryRoleSetupProposedRole:
+      type: object
+      properties:
+        current_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleGrant'
+          description: Grants the existing role already has. Applying the proposal approves them for the source's members. Empty for a new role.
+        role_action:
+          type: string
+          description: reuse an existing role, or create a new one.
+          enum:
+            - reuse
+            - create
+        role_id:
+          type: string
+          description: The existing role. Set when role_action is reuse.
+        role_name:
+          type: string
+          description: The existing role's name, or the name a new role would get.
+        role_urn:
+          type: string
+          description: Principal URN of the existing role. Set when role_action is reuse.
+      required:
+        - role_action
+        - role_name
+        - current_grants
+    DirectoryRoleSetupSideEffect:
+      type: object
+      properties:
+        kind:
+          type: string
+          description: What was requested.
+          enum:
+            - workos_role_sync
+        request_status:
+          type: string
+          description: Requested work runs after the response and is never reported as done.
+          enum:
+            - requested
+        role_id:
+          type: string
+          description: The role the request is for.
+      required:
+        - kind
+        - role_id
+        - request_status
+    DirectoryRoleSetupSource:
+      type: object
+      properties:
+        attribute_key:
+          type: string
+          description: The directory attribute key. Set when source_kind is attribute.
+          minLength: 1
+        attribute_value:
+          type: string
+          description: The directory attribute value. Set when source_kind is attribute.
+          minLength: 1
+        directory_group_id:
+          type: string
+          description: The directory group. Set when source_kind is group.
+          format: uuid
+        source_kind:
+          type: string
+          description: 'What the source is: a directory group or an attribute value.'
+          enum:
+            - group
+            - attribute
+      required:
+        - source_kind
     DisableOpenRouterKeyRequestBody:
       type: object
       properties:

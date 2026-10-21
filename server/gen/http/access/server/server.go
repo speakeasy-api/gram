@@ -29,6 +29,8 @@ type Server struct {
 	SetDirectoryRoleMapping              http.Handler
 	SetDirectoryRoleMappings             http.Handler
 	DeleteDirectoryRoleMapping           http.Handler
+	PreviewDirectoryRoleSetup            http.Handler
+	ApplyDirectoryRoleSetup              http.Handler
 	ListScopes                           http.Handler
 	ListMembers                          http.Handler
 	ListGrants                           http.Handler
@@ -91,6 +93,8 @@ func New(
 			{"SetDirectoryRoleMapping", "POST", "/rpc/access.setDirectoryRoleMapping"},
 			{"SetDirectoryRoleMappings", "POST", "/rpc/access.setDirectoryRoleMappings"},
 			{"DeleteDirectoryRoleMapping", "DELETE", "/rpc/access.deleteDirectoryRoleMapping"},
+			{"PreviewDirectoryRoleSetup", "GET", "/rpc/access.previewDirectoryRoleSetup"},
+			{"ApplyDirectoryRoleSetup", "POST", "/rpc/access.applyDirectoryRoleSetup"},
 			{"ListScopes", "GET", "/rpc/access.listScopes"},
 			{"ListMembers", "GET", "/rpc/access.listMembers"},
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
@@ -125,6 +129,8 @@ func New(
 		SetDirectoryRoleMapping:              NewSetDirectoryRoleMappingHandler(e.SetDirectoryRoleMapping, mux, decoder, encoder, errhandler, formatter),
 		SetDirectoryRoleMappings:             NewSetDirectoryRoleMappingsHandler(e.SetDirectoryRoleMappings, mux, decoder, encoder, errhandler, formatter),
 		DeleteDirectoryRoleMapping:           NewDeleteDirectoryRoleMappingHandler(e.DeleteDirectoryRoleMapping, mux, decoder, encoder, errhandler, formatter),
+		PreviewDirectoryRoleSetup:            NewPreviewDirectoryRoleSetupHandler(e.PreviewDirectoryRoleSetup, mux, decoder, encoder, errhandler, formatter),
+		ApplyDirectoryRoleSetup:              NewApplyDirectoryRoleSetupHandler(e.ApplyDirectoryRoleSetup, mux, decoder, encoder, errhandler, formatter),
 		ListScopes:                           NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
 		ListMembers:                          NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
 		ListGrants:                           NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
@@ -166,6 +172,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SetDirectoryRoleMapping = m(s.SetDirectoryRoleMapping)
 	s.SetDirectoryRoleMappings = m(s.SetDirectoryRoleMappings)
 	s.DeleteDirectoryRoleMapping = m(s.DeleteDirectoryRoleMapping)
+	s.PreviewDirectoryRoleSetup = m(s.PreviewDirectoryRoleSetup)
+	s.ApplyDirectoryRoleSetup = m(s.ApplyDirectoryRoleSetup)
 	s.ListScopes = m(s.ListScopes)
 	s.ListMembers = m(s.ListMembers)
 	s.ListGrants = m(s.ListGrants)
@@ -206,6 +214,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSetDirectoryRoleMappingHandler(mux, h.SetDirectoryRoleMapping)
 	MountSetDirectoryRoleMappingsHandler(mux, h.SetDirectoryRoleMappings)
 	MountDeleteDirectoryRoleMappingHandler(mux, h.DeleteDirectoryRoleMapping)
+	MountPreviewDirectoryRoleSetupHandler(mux, h.PreviewDirectoryRoleSetup)
+	MountApplyDirectoryRoleSetupHandler(mux, h.ApplyDirectoryRoleSetup)
 	MountListScopesHandler(mux, h.ListScopes)
 	MountListMembersHandler(mux, h.ListMembers)
 	MountListGrantsHandler(mux, h.ListGrants)
@@ -747,6 +757,114 @@ func NewDeleteDirectoryRoleMappingHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteDirectoryRoleMapping")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountPreviewDirectoryRoleSetupHandler configures the mux to serve the
+// "access" service "previewDirectoryRoleSetup" endpoint.
+func MountPreviewDirectoryRoleSetupHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.previewDirectoryRoleSetup", f)
+}
+
+// NewPreviewDirectoryRoleSetupHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "previewDirectoryRoleSetup"
+// endpoint.
+func NewPreviewDirectoryRoleSetupHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodePreviewDirectoryRoleSetupRequest(mux, decoder)
+		encodeResponse = EncodePreviewDirectoryRoleSetupResponse(encoder)
+		encodeError    = EncodePreviewDirectoryRoleSetupError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "previewDirectoryRoleSetup")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountApplyDirectoryRoleSetupHandler configures the mux to serve the "access"
+// service "applyDirectoryRoleSetup" endpoint.
+func MountApplyDirectoryRoleSetupHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.applyDirectoryRoleSetup", f)
+}
+
+// NewApplyDirectoryRoleSetupHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "applyDirectoryRoleSetup"
+// endpoint.
+func NewApplyDirectoryRoleSetupHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeApplyDirectoryRoleSetupRequest(mux, decoder)
+		encodeResponse = EncodeApplyDirectoryRoleSetupResponse(encoder)
+		encodeError    = EncodeApplyDirectoryRoleSetupError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "applyDirectoryRoleSetup")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {
