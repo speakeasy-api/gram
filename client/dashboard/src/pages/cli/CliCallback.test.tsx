@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   createKey: vi.fn(),
   authorizeCode: vi.fn(),
   locationSetter: vi.fn(),
+  locationReplace: vi.fn(),
   useSessionData: vi.fn(),
 }));
 
@@ -22,6 +23,7 @@ let originalLocation: Location | undefined;
 
 beforeEach(() => {
   mocks.locationSetter.mockReset();
+  mocks.locationReplace.mockReset();
   mocks.createKey.mockReset().mockResolvedValue({ key: "test-key" });
   mocks.authorizeCode.mockReset();
   originalLocation = window.location;
@@ -36,7 +38,7 @@ beforeEach(() => {
       set href(value: string) {
         mocks.locationSetter(value);
       },
-      replace: vi.fn(),
+      replace: mocks.locationReplace,
     },
   });
 });
@@ -101,12 +103,10 @@ describe("CliCallback", () => {
     );
 
     await waitFor(() => {
-      expect(window.location.replace).toHaveBeenCalledTimes(1);
+      expect(mocks.locationReplace).toHaveBeenCalledTimes(1);
     });
 
-    const target = new URL(
-      vi.mocked(window.location.replace).mock.calls[0]![0] as string,
-    );
+    const target = new URL(mocks.locationReplace.mock.calls[0]![0] as string);
     expect(target.origin).toBe("http://127.0.0.1:5555");
     expect(target.pathname).toBe("/callback");
     expect(target.searchParams.get("state")).toBe("cli-state-token");
