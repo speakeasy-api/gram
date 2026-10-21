@@ -285,3 +285,26 @@ func TestParseHostedMCPWrappersFlagsRekeyRemovalRecords(t *testing.T) {
 	require.Equal(t, "/tmp/r.json.journal.jsonl", applied.journalPath)
 	require.Equal(t, "-apply -rekey-removal-records", hostedMCPWrappersModeFlags(applied.options))
 }
+
+func TestParseHostedMCPWrappersFlagsDeleteLeftoverRemovalRecords(t *testing.T) {
+	t.Parallel()
+
+	dry, err := parseHostedMCPWrappersFlags([]string{"-delete-leftover-removal-records"}, hostedMCPWrappersGetenv, io.Discard)
+	require.NoError(t, err)
+	require.True(t, dry.options.DeleteLeftoverRemovals)
+	require.False(t, dry.options.Apply)
+	require.Empty(t, dry.journalPath)
+
+	_, err = parseHostedMCPWrappersFlags([]string{"-delete-leftover-removal-records", "-apply"}, hostedMCPWrappersGetenv, io.Discard)
+	require.ErrorContains(t, err, "-delete-leftover-removal-records -apply requires -report")
+	for _, other := range []string{"-move-dependents", "-cleanup-orphans", "-rekey-removal-records"} {
+		_, err = parseHostedMCPWrappersFlags([]string{"-delete-leftover-removal-records", other}, hostedMCPWrappersGetenv, io.Discard)
+		require.ErrorContains(t, err, "separate phases", other)
+	}
+
+	applied, err := parseHostedMCPWrappersFlags([]string{"-delete-leftover-removal-records", "-apply", "-report=/tmp/r.json"}, hostedMCPWrappersGetenv, io.Discard)
+	require.NoError(t, err)
+	require.True(t, applied.options.Apply)
+	require.Equal(t, "/tmp/r.json.journal.jsonl", applied.journalPath)
+	require.Equal(t, "-apply -delete-leftover-removal-records", hostedMCPWrappersModeFlags(applied.options))
+}

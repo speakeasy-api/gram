@@ -111,7 +111,7 @@ type JournalRecord struct {
 
 	CollapsedTwin *RowImage `json:"collapsed_twin,omitempty"`
 
-	// Removed is the deleted orphan in a -cleanup-orphans journal, with its row image; To is then empty.
+	// Removed is the deleted row in a -cleanup-orphans or -delete-leftover-removal-records journal, with its row image; To is then empty.
 	Removed *RowImage `json:"removed,omitempty"`
 
 	// Rekeyed is the removal record's row image before a -rekey-removal-records re-key.

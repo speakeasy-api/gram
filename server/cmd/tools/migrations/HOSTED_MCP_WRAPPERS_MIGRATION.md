@@ -6,7 +6,7 @@ Gives every live hosted toolset (non-empty `mcp_slug`) created before eager wrap
 go run ./server/cmd/tools/migrations hosted-mcp-wrappers -h
 ```
 
-Flags: `-apply` (default is a dry run), `-project <PROJECT_ID>`, `-limit N`, `-cursor <TOOLSET_ID>`, `-report <path>`, `-move-dependents`, `-readers-cut-over`, `-cleanup-orphans`, `-rekey-removal-records`.
+Flags: `-apply` (default is a dry run), `-project <PROJECT_ID>`, `-limit N`, `-cursor <TOOLSET_ID>`, `-report <path>`, `-move-dependents`, `-readers-cut-over`, `-cleanup-orphans`, `-rekey-removal-records`, `-delete-leftover-removal-records`.
 
 ## Precondition
 
@@ -222,15 +222,15 @@ Constraints: every unique index on `plugin_servers` that the re-key touches (`pl
 
 Nothing visible to users changes: a soft-deleted member is not in any plugin package or listing. So the re-key writes no audit rows and requests no plugin publication. The journal is the record.
 
-| Outcome                     | Meaning                                                                                                                                                                                 |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `would_rekey` / `rekeyed`   | The removal record now carries the canonical server key; `deleted_at` is unchanged.                                                                                                     |
-| `orphaned`                  | The toolset or its project is deleted; `reason` is "toolset deleted" or "project deleted". Left for AIM-581.                                                                            |
-| `blocked_no_wrapper`        | The toolset is not in the plugin's project ("toolset is not in the row's project"), or it is live but has no live canonical server (`id = toolset_id`, same project). Left for AIM-581. |
-| `blocked_duplicate_removal` | The plugin already has a soft-deleted server-keyed row for the canonical server, or an earlier row of this run re-keys one, and that row already blocks the re-add. Left for AIM-581.   |
-| `blocked_live`              | A live toolset-keyed member; this mode never touches it.                                                                                                                                |
-| `skipped`                   | The row changed concurrently; rerun.                                                                                                                                                    |
-| `commit_unknown`            | The commit errored after the server may have committed; the run stops. The journal covers the row either way.                                                                           |
+| Outcome                     | Meaning                                                                                                                                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `would_rekey` / `rekeyed`   | The removal record now carries the canonical server key; `deleted_at` is unchanged.                                                                                                                                |
+| `orphaned`                  | The toolset or its project is deleted; `reason` is "toolset deleted" or "project deleted". `-delete-leftover-removal-records` deletes it.                                                                          |
+| `blocked_no_wrapper`        | The toolset is not in the plugin's project ("toolset is not in the row's project"), or it is live but has no live canonical server (`id = toolset_id`, same project). Left for AIM-581.                            |
+| `blocked_duplicate_removal` | The plugin already has a soft-deleted server-keyed row for the canonical server, or an earlier row of this run re-keys one, and that row already blocks the re-add. `-delete-leftover-removal-records` deletes it. |
+| `blocked_live`              | A live toolset-keyed member; this mode never touches it.                                                                                                                                                           |
+| `skipped`                   | The row changed concurrently; rerun.                                                                                                                                                                               |
+| `commit_unknown`            | The commit errored after the server may have committed; the run stops. The journal covers the row either way.                                                                                                      |
 
 The run tracks the (plugin, canonical server) pairs it re-keys, or in a dry run would re-key, so a dry run reports the same `blocked_duplicate_removal` rows as the apply.
 
@@ -251,7 +251,7 @@ Precondition: run after the wrapper phase and `-move-dependents`, and before AIM
    It must equal the report's row count minus `blocked_live`. Review every `orphaned`, `blocked_no_wrapper` and `blocked_duplicate_removal` row; `would_rekey` is the rest.
 
 3. Prod: `-apply -rekey-removal-records -report <path>`, optionally with a canary `-project <PROJECT_ID>` first. Resume a stopped run with `-cursor <last_cursor>` and a new `-report`, which writes a new journal.
-4. A rerun must report `writes: 0`. Rows still listed are the `orphaned`, `blocked_*` and `skipped` ones, which AIM-581 handles.
+4. A rerun must report `writes: 0`. Rows still listed are the `orphaned`, `blocked_*` and `skipped` ones; `-delete-leftover-removal-records` runs next.
 
 ### Rollback
 
@@ -267,3 +267,61 @@ done
 ```
 
 Review each file, then run each in its own transaction (`psql -v ON_ERROR_STOP=1 --single-transaction -f <file>`), replaying every journal from every resumed batch, newest batch first. Each file replays only rows with a `committed` record, newest first. `commit_unknown` rows, and intents with no outcome record, are printed as `--` comments to check by hand. Each statement puts the row back under its toolset key, along with its recorded `updated_at`. It applies only while the row is still server-keyed and both its `deleted_at` and `updated_at` match the journal, so a replay is a no-op and a row someone changed since is left alone. A committed record without `rekeyed_updated_at` is printed as a comment to check by hand. `TestRestoreRemovalRecordsJQReplaysCommittedRows` runs this program against a real journal.
+
+## Leftover removal record delete (`-delete-leftover-removal-records`)
+
+AIM-581 drops `plugin_servers.toolset_id`. A row whose only backend is `toolset_id` would then have no backend and fail the new backend check, so every such row must be gone first. After `-rekey-removal-records`, the rows left are soft-deleted removal records the re-key cannot move: `orphaned` ones (toolset or project deleted) and `blocked_duplicate_removal` ones (extra copies of a (plugin, canonical server) pair that already has a server-keyed removal record). This mode hard-deletes those rows. The repo keeps DML out of migrations, so it is a tool mode.
+
+It walks the same rows as the re-key (toolset-keyed only: `toolset_id` set, `mcp_server_id` and `meta_mcp_server_id` NULL), with the same `-project`, `-cursor`, `-limit` and `-report` conventions, 5s `lock_timeout` and lock order: the advisory lock, project distribution admission, the toolset row `FOR NO KEY UPDATE` with its project `FOR SHARE`, the record `FOR UPDATE`, the canonical server `FOR SHARE`, then the plugin's server-keyed removal record `FOR UPDATE`. Under those locks a row is deleted only when it is soft-deleted (`deleted IS TRUE`) and either:
+
+- (a) its toolset or its project is deleted, or
+- (b) its toolset is live, the canonical server (`mcp_servers.id = toolset_id = id`, same project) is live, and the same plugin has a soft-deleted server-keyed row for that server.
+
+The `DELETE` repeats every one of those key conditions, so a live or server-keyed row is never removed. Every other row is left untouched with a blocked outcome.
+
+Why (b) keeps behaviour: `HasRoleDeliveryMembership` counts, under `preserve_removal`, a soft-deleted row keyed by any live server whose `toolset_id` is the toolset. The live canonical server is one, so its server-keyed record blocks the re-add of every server on that toolset, as the toolset-keyed copy did. A server-keyed record under a tombstoned canonical server does not count, so that row is `blocked_no_wrapper`, not deleted. For (a), role delivery reads neither deleted toolsets nor deleted projects. No product path restores either; a hand restore of a project should replay this mode's journal too.
+
+References to `plugin_servers.id` in `schema.sql`: only `platform_mcp_distributions_default_plugin_plugin_server_fkey` (`(default_plugin_id, plugin_server_id)` → `plugin_servers (plugin_id, id)`, `ON DELETE NO ACTION`). Under the locks the mode checks for any distribution in the project with `plugin_server_id` set to the row, including one with a NULL `default_plugin_id` that the FK would not check, and reports `blocked_distributed` instead of deleting. Admission and the row lock hold off a new reference until commit, and the FK still fails a delete it missed, which stops the run with nothing written. Nothing cascades from `plugin_servers`; its own outgoing keys (`plugin_id`, `toolset_id`, `mcp_server_id`, `meta_mcp_server_id`) do not block a delete.
+
+Audit: none, and no plugin publication, as for the re-key. A soft-deleted member is in no plugin package, listing or audit view, so deleting it changes nothing a user can see. The journal is the record.
+
+| Outcome                    | Meaning                                                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `would_delete` / `deleted` | The removal record is gone; `reason` is "toolset deleted", "project deleted", or that the server-keyed record keeps the server out. `removed` names the row.       |
+| `blocked_live`             | A live toolset-keyed member; this mode never touches it.                                                                                                           |
+| `blocked_needs_rekey`      | The toolset and its canonical server are live, but the plugin has no server-keyed removal record for it. Run `-rekey-removal-records` first, then rerun this mode. |
+| `blocked_no_wrapper`       | "toolset is not in the row's project", or a live toolset without a live canonical server. Resolve by hand before AIM-581.                                          |
+| `blocked_distributed`      | A platform distribution references the row; left untouched. Resolve by hand before AIM-581.                                                                        |
+| `skipped`                  | The row changed concurrently; rerun.                                                                                                                               |
+| `commit_unknown`           | The commit errored after the server may have committed; the run stops. The journal covers the row either way.                                                      |
+
+`-delete-leftover-removal-records -apply` requires `-report` and writes `<report>.journal.jsonl` (mode 0600): an `intent` record before each commit and a `committed` (or `commit_unknown`) record after. Each record carries `from` (`toolset_id`) and `removed` with the row's full image (`to_jsonb`) and its `soft_deleted_at`. The report, dry run or apply, carries ids, slugs, outcomes and reasons; never names or row images.
+
+### Run book
+
+Preconditions: `-rekey-removal-records` has run in prod and a rerun reports `writes: 0`; AIM-581's column drop has not shipped.
+
+1. Dev: dry run with `-delete-leftover-removal-records -report <path>`, then `-apply -delete-leftover-removal-records -report <new path>`. Rerun and confirm `writes: 0`.
+2. Prod: dry run with `-report`. Confirm `would_delete` equals the re-key run's `orphaned` plus `blocked_duplicate_removal`, and that there are no `blocked_live` or `blocked_needs_rekey` rows (run `-rekey-removal-records` first if there are). Review every other `blocked_*` row.
+3. Prod: `-apply -delete-leftover-removal-records -report <path>`, optionally with a canary `-project <PROJECT_ID>` first. Resume a stopped run with `-cursor <last_cursor>` and a new `-report`, which writes a new journal.
+4. A rerun must report `writes: 0`. This must return 0 before AIM-581 ships:
+
+   ```sql
+   SELECT count(*) FROM plugin_servers AS ps
+   WHERE ps.toolset_id IS NOT NULL AND ps.mcp_server_id IS NULL AND ps.meta_mcp_server_id IS NULL;
+   ```
+
+### Rollback
+
+While `plugin_servers.toolset_id` still exists, [`hostedmcpbackfill/restore-leftover-removal-records.jq`](hostedmcpbackfill/restore-leftover-removal-records.jq) turns a journal into restore SQL for one project. A run spans many projects, and a resumed run writes one journal per batch, so generate a file for every project of every journal. The files hold row images, so keep them 0600 and outside the repo, next to their journal:
+
+```
+umask 077
+for journal in <newest journal> ... <oldest journal>; do
+  for p in $(jq -r -s 'map(.project_id) | unique[]' "$journal"); do
+    jq -r -s --arg p "$p" -f server/cmd/tools/migrations/hostedmcpbackfill/restore-leftover-removal-records.jq "$journal" > "$journal.restore-$p.sql"
+  done
+done
+```
+
+Review each file, then run each in its own transaction (`psql -v ON_ERROR_STOP=1 --single-transaction -f <file>`). Each file replays only rows with a `committed` record, newest first. `commit_unknown` rows, and intents with no outcome record, are printed as `--` comments to check by hand. Each statement re-inserts the row from its image, listing every column except the generated `deleted`, only while its plugin is still in the project, with `ON CONFLICT (id) DO NOTHING`, so a replay is a no-op. Every unique index other than the primary key and `(plugin_id, id)` is partial on live rows, so a soft-deleted row cannot collide on them. A foreign-key error means the plugin, toolset or server was hard-deleted since; resolve that row by hand. After AIM-581 the rows cannot be represented, so the window closes there. `TestRestoreLeftoverRemovalRecordsJQReplaysCommittedRows` runs this program against a real journal.

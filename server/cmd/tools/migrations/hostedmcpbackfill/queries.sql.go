@@ -120,6 +120,32 @@ func (q *Queries) DeleteAssistantMcpServerTwin(ctx context.Context, arg DeleteAs
 	return result.RowsAffected(), nil
 }
 
+const deleteLeftoverRemovalRecord = `-- name: DeleteLeftoverRemovalRecord :execrows
+DELETE FROM plugin_servers AS ps
+USING plugins AS pl
+WHERE ps.id = $1
+  AND pl.id = ps.plugin_id
+  AND pl.project_id = $2
+  AND ps.toolset_id = $3::uuid
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+  AND ps.deleted IS TRUE
+`
+
+type DeleteLeftoverRemovalRecordParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+func (q *Queries) DeleteLeftoverRemovalRecord(ctx context.Context, arg DeleteLeftoverRemovalRecordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLeftoverRemovalRecord, arg.ID, arg.ProjectID, arg.ToolsetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteMetadataTwin = `-- name: DeleteMetadataTwin :execrows
 DELETE FROM mcp_metadata
 WHERE id = $1 AND project_id = $2 AND mcp_server_id = $3
@@ -663,6 +689,39 @@ func (q *Queries) ListMetadataFixture(ctx context.Context, projectID uuid.UUID) 
 			&i.DefaultEnvironmentID,
 			&i.Instructions,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPluginServerImagesFixture = `-- name: ListPluginServerImagesFixture :many
+SELECT ps.id, to_jsonb(ps)::text AS row_text
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE pl.project_id = $1
+ORDER BY ps.id
+`
+
+type ListPluginServerImagesFixtureRow struct {
+	ID      uuid.UUID
+	RowText string
+}
+
+func (q *Queries) ListPluginServerImagesFixture(ctx context.Context, projectID uuid.UUID) ([]ListPluginServerImagesFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listPluginServerImagesFixture, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPluginServerImagesFixtureRow
+	for rows.Next() {
+		var i ListPluginServerImagesFixtureRow
+		if err := rows.Scan(&i.ID, &i.RowText); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1559,6 +1618,27 @@ func (q *Queries) MoveAssistantToolset(ctx context.Context, arg MoveAssistantToo
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const pluginServerDistributed = `-- name: PluginServerDistributed :one
+SELECT EXISTS (
+  SELECT 1
+  FROM platform_mcp_distributions AS d
+  WHERE d.project_id = $1 AND d.plugin_server_id = $2::uuid
+)
+`
+
+type PluginServerDistributedParams struct {
+	ProjectID      uuid.UUID
+	PluginServerID uuid.UUID
+}
+
+// Any reference counts, including one the FK does not check because default_plugin_id is NULL.
+func (q *Queries) PluginServerDistributed(ctx context.Context, arg PluginServerDistributedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, pluginServerDistributed, arg.ProjectID, arg.PluginServerID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const rekeyMetadata = `-- name: RekeyMetadata :one

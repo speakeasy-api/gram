@@ -37,6 +37,7 @@ const (
 	phaseDependents = "dependents"
 	phaseOrphans    = "orphans"
 	phaseRemovals   = "removals"
+	phaseLeftovers  = "leftover_removals"
 )
 
 // defaultPageSize bounds each candidate page; rows are processed one transaction at a time regardless.
@@ -87,6 +88,8 @@ const (
 	OutcomeBlockedLive Outcome = "blocked_live"
 	// OutcomeBlockedDuplicateRemoval is a removal record whose plugin already has, or gets earlier in the run, a server-keyed record for the canonical server.
 	OutcomeBlockedDuplicateRemoval Outcome = "blocked_duplicate_removal"
+	// OutcomeBlockedNeedsRekey is a removal record of a live toolset whose canonical server has no server-keyed copy; -rekey-removal-records moves it.
+	OutcomeBlockedNeedsRekey Outcome = "blocked_needs_rekey"
 )
 
 // Options controls one run.
@@ -115,10 +118,13 @@ type Options struct {
 	// RekeyRemovals re-keys soft-deleted toolset-keyed plugin_servers rows onto the canonical server key.
 	RekeyRemovals bool
 
+	// DeleteLeftoverRemovals hard-deletes soft-deleted toolset-keyed plugin_servers rows the re-key cannot move.
+	DeleteLeftoverRemovals bool
+
 	// Publication enqueues a plugin publication request when the cleanup removes a member of a live project.
 	Publication plugins.PublicationRequests
 
-	// Journal receives each dependent write before and after its commit; required to apply MoveDependents, CleanupOrphans or RekeyRemovals.
+	// Journal receives each dependent write before and after its commit; required to apply any dependent phase.
 	Journal Journal
 
 	// LockTimeout bounds each dependent move's lock waits; 0 selects defaultLockTimeout.
@@ -159,7 +165,7 @@ type RowReport struct {
 	// CollapsedTwin is the server-keyed row a dependent move removed, as rollback needs it.
 	CollapsedTwin *RowImage `json:"collapsed_twin,omitempty"`
 
-	// Removed names the orphan a -cleanup-orphans run deleted; row images go to the journal only.
+	// Removed names the row a -cleanup-orphans or -delete-leftover-removal-records run deleted; row images go to the journal only.
 	Removed *RowImage `json:"removed,omitempty"`
 
 	// PublicationRequested reports a plugin publication request enqueued with an applied cleanup.
@@ -222,14 +228,14 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 		Rows:                  nil,
 	}
 	modes := 0
-	for _, on := range []bool{r.options.MoveDependents, r.options.CleanupOrphans, r.options.RekeyRemovals} {
+	for _, on := range []bool{r.options.MoveDependents, r.options.CleanupOrphans, r.options.RekeyRemovals, r.options.DeleteLeftoverRemovals} {
 		if on {
 			modes++
 		}
 	}
 	switch {
 	case modes > 1:
-		return report, errors.New("the dependent move, the orphan cleanup and the removal re-key are separate phases")
+		return report, errors.New("the dependent move, the orphan cleanup, the removal re-key and the leftover removal delete are separate phases")
 	case r.options.MoveDependents:
 		report.Phase = phaseDependents
 		return runDependents(ctx, r, report, r.dependentsPhase(r.moveOne))
@@ -239,6 +245,9 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 	case r.options.RekeyRemovals:
 		report.Phase = phaseRemovals
 		return runDependents(ctx, r, report, r.removalsPhase())
+	case r.options.DeleteLeftoverRemovals:
+		report.Phase = phaseLeftovers
+		return runDependents(ctx, r, report, r.leftoversPhase())
 	}
 	after := r.options.Cursor
 	for {

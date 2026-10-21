@@ -388,6 +388,25 @@ WHERE ps.id = @id
   AND ps.deleted IS TRUE
 RETURNING ps.deleted_at::text AS deleted_at, ps.updated_at::text AS updated_at;
 
+-- name: PluginServerDistributed :one
+-- Any reference counts, including one the FK does not check because default_plugin_id is NULL.
+SELECT EXISTS (
+  SELECT 1
+  FROM platform_mcp_distributions AS d
+  WHERE d.project_id = @project_id AND d.plugin_server_id = @plugin_server_id::uuid
+);
+
+-- name: DeleteLeftoverRemovalRecord :execrows
+DELETE FROM plugin_servers AS ps
+USING plugins AS pl
+WHERE ps.id = @id
+  AND pl.id = ps.plugin_id
+  AND pl.project_id = @project_id
+  AND ps.toolset_id = @toolset_id::uuid
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+  AND ps.deleted IS TRUE;
+
 -- TEST FIXTURE ONLY: every query below is for package tests and may create impossible states.
 
 -- name: SeedOrganizationFixture :exec
@@ -579,3 +598,10 @@ ORDER BY ps.id;
 SELECT count(*)
 FROM publish_outbox
 WHERE organization_id = @organization_id;
+
+-- name: ListPluginServerImagesFixture :many
+SELECT ps.id, to_jsonb(ps)::text AS row_text
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE pl.project_id = @project_id
+ORDER BY ps.id;
