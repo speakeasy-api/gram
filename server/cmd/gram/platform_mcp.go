@@ -1242,6 +1242,9 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 }
 
 func newPlatformMCPDeploymentRedeploy(config platformMCPConfig, projects *platformmcp.PostgresReader, limitStore ratelimit.Store) *platformmcp.DeploymentRedeployService {
+	if config.TemporalEnv == nil {
+		return nil
+	}
 	return platformmcp.NewDeploymentRedeployService(config.DB, config.DeploymentRedeploy, projects, platformmcp.OperationBudget{
 		Connection:   ratelimit.New(limitStore, platformmcp.DeploymentRedeployConnectionLimitName, ratelimit.PerMinute(platformmcp.DeploymentRedeploysPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		Organization: ratelimit.New(limitStore, platformmcp.DeploymentRedeployOrganizationLimitName, ratelimit.PerMinute(platformmcp.DeploymentRedeploysPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),

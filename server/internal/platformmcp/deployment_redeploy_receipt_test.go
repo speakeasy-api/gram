@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -109,4 +110,16 @@ func TestDeploymentRedeployReceiptCodecRejectsCorruption(t *testing.T) {
 		_, err := decodeDeploymentRedeployReceipt(payload)
 		require.ErrorIs(t, err, ErrUnavailable, name)
 	}
+}
+
+func TestRedeployDeploymentProjectResolutionIsOrganizationBound(t *testing.T) {
+	t.Parallel()
+	probe := newReceiptProbe(t, "platform_mcp_redeploy_organization_scope")
+	reader := NewPostgresReader(testenv.NewLogger(t), probe.conn)
+	input := FindMCPInput{ProjectID: probe.project.ID.String()}
+	project, err := reader.resolveInventoryProject(t.Context(), probe.principal.OrganizationID, input)
+	require.NoError(t, err)
+	require.Equal(t, probe.project.ID, project.ID)
+	_, err = reader.resolveInventoryProject(t.Context(), "another-organization", input)
+	require.ErrorIs(t, err, ErrForbidden)
 }

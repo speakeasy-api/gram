@@ -176,6 +176,9 @@ func NewDeploymentRedeployService(db *pgxpool.Pool, management DeploymentRedeplo
 		},
 		organizations: NewPostgresOrganizationSlugResolver(db),
 		activeDeployment: func(ctx context.Context, tx pgx.Tx, projectID uuid.UUID) (string, error) {
+			// Redeploy resolves this globally unique project ID under the
+			// principal's organization and checks project:write before any
+			// active lookup. The existing query is explicitly project-scoped.
 			q := deploymentrepo.New(db)
 			if tx != nil {
 				q = deploymentrepo.New(tx)

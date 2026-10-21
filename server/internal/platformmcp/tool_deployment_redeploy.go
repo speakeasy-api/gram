@@ -11,6 +11,10 @@ import (
 )
 
 func registerDeploymentRedeployTool(reg *Registrar, service *DeploymentRedeployService) {
+	// Match the dashboard Redeploy endpoint: project:write on the exact
+	// project, not org:admin. Live external membership is checked by runtime;
+	// the service resolves the project within that organization and reuses
+	// the canonical deployment service's authorization.
 	addTool(reg, &mcp.Tool{
 		Name:  redeployDeploymentToolName,
 		Title: "Redeploy a Project Deployment",

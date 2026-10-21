@@ -1,7 +1,9 @@
 package activities_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -166,4 +168,41 @@ func completeDeploymentFixture(t *testing.T, db *pgxpool.Pool, projectID uuid.UU
 	})
 	require.NoError(t, err)
 	require.True(t, state.Moved)
+}
+
+func TestGuardedCompletionSerializesWithLegacyWorkerStatement(t *testing.T) {
+	t.Parallel()
+	db, projectID, organizationID := setupTransitionDeploymentTest(t, "legacy_lock")
+	originalID := createPendingDeployment(t, db, organizationID, projectID)
+	completeDeploymentFixture(t, db, projectID, originalID)
+	legacyID := createPendingDeployment(t, db, organizationID, projectID)
+	guardedID := createPendingDeployment(t, db, organizationID, projectID)
+
+	tx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the project transaction lock is the behavior under test.
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
+	_, err = projectsrepo.New(tx).GetProjectByIDForUpdate(t.Context(), projectID)
+	require.NoError(t, err)
+
+	// This is the exact pre-rollout SQLc statement, without the new activity's
+	// explicit project lock. Its log's project FK still needs KEY SHARE, so it
+	// cannot commit while guarded promotion holds FOR UPDATE.
+	legacyCtx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	_, err = deploymentsrepo.New(db).TransitionDeployment(legacyCtx, deploymentsrepo.TransitionDeploymentParams{DeploymentID: legacyID, ProjectID: projectID, Status: "completed", Event: "deployment:status_change", Message: "legacy completion"})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	activeID, err := deploymentsrepo.New(db).GetActiveDeploymentID(t.Context(), projectID)
+	require.NoError(t, err)
+	require.Equal(t, originalID, activeID)
+	require.NoError(t, tx.Rollback(t.Context()))
+
+	legacy, err := deploymentsrepo.New(db).TransitionDeployment(t.Context(), deploymentsrepo.TransitionDeploymentParams{DeploymentID: legacyID, ProjectID: projectID, Status: "completed", Event: "deployment:status_change", Message: "legacy completion"})
+	require.NoError(t, err)
+	require.Equal(t, "completed", legacy.Status)
+	result, err := activities.NewTransitionDeployment(testenv.NewLogger(t), db).CompleteWithExpectedActive(t.Context(), projectID, guardedID, originalID)
+	require.NoError(t, err)
+	require.Equal(t, "failed", result.Status)
+	activeID, err = deploymentsrepo.New(db).GetActiveDeploymentID(t.Context(), projectID)
+	require.NoError(t, err)
+	require.Equal(t, legacyID, activeID)
 }

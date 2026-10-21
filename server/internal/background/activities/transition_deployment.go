@@ -53,6 +53,9 @@ func (t *TransitionDeployment) complete(ctx context.Context, projectID uuid.UUID
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	// Legacy TransitionDeployment also inserts a deployment_log in the same
+	// statement. Its existing project foreign key takes KEY SHARE on this row,
+	// which conflicts with FOR UPDATE, so old workers serialize here as well.
 	if _, err := projectsrepo.New(tx).GetProjectByIDForUpdate(ctx, projectID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error locking project for deployment transition").LogError(ctx, t.logger)
 	}

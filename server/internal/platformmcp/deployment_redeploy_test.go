@@ -21,6 +21,7 @@ type redeployManagementFake struct {
 	committed        *gendeployments.GetDeploymentResult
 	getErr           error
 	processErr       error
+	prepareTx        pgx.Tx
 	prepareCalls     int
 	processCalls     int
 	getCalls         int
@@ -38,7 +39,8 @@ func (f *redeployManagementFake) GetDeployment(_ context.Context, payload *gende
 	return f.committed, nil
 }
 
-func (f *redeployManagementFake) PrepareRedeploy(_ context.Context, _ pgx.Tx, payload *gendeployments.RedeployPayload) (*types.Deployment, error) {
+func (f *redeployManagementFake) PrepareRedeploy(_ context.Context, tx pgx.Tx, payload *gendeployments.RedeployPayload) (*types.Deployment, error) {
+	f.prepareTx = tx
 	f.prepareCalls++
 	clone := uuid.NewString()
 	f.committed = &gendeployments.GetDeploymentResult{ID: clone, OrganizationID: f.source.OrganizationID, ProjectID: f.source.ProjectID, Status: "created", ClonedFrom: &payload.DeploymentID}
@@ -51,7 +53,12 @@ func (f *redeployManagementFake) DispatchRedeploy(_ context.Context, _ string, e
 	return nil, f.processErr
 }
 
+// The fake proves transaction identity at the service boundary; actual atomic
+// commit/rollback and promotion locking are covered by database tests.
+type redeployTestTransaction struct{ pgx.Tx }
+
 type redeployReceiptFake struct {
+	tx      pgx.Tx
 	receipt *OperationReceipt
 	calls   int
 }
@@ -66,7 +73,7 @@ func (f *redeployReceiptFake) Execute(ctx context.Context, _ Principal, _ Resolv
 	if err := charge(ctx); err != nil {
 		return OperationReceipt{}, err
 	}
-	result, err := mutate(ctx, nil)
+	result, err := mutate(ctx, f.tx)
 	if err != nil {
 		return OperationReceipt{}, err
 	}
@@ -85,7 +92,7 @@ func newRedeployServiceFixture(t *testing.T) (*DeploymentRedeployService, *redep
 	principal := Principal{UserID: "user", OrganizationID: "org", ConnectionID: uuid.NewString(), Generation: uuid.NewString()}
 	sourceID := uuid.NewString()
 	management := &redeployManagementFake{source: &gendeployments.GetDeploymentResult{ID: sourceID, OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), Status: "completed"}}
-	receipts := &redeployReceiptFake{}
+	receipts := &redeployReceiptFake{tx: &redeployTestTransaction{Tx: nil}}
 	service := &DeploymentRedeployService{
 		management:       management,
 		resolveProject:   func(context.Context, Principal, FindMCPInput) (ResolvedProject, error) { return project, nil },
@@ -164,7 +171,8 @@ func TestRedeployDeploymentStaleActiveGuardRunsInsideMutation(t *testing.T) {
 	t.Parallel()
 	service, management, receipts, principal, project, ctx, sourceID := newRedeployServiceFixture(t)
 	activeChecks := 0
-	service.activeDeployment = func(context.Context, pgx.Tx, uuid.UUID) (string, error) {
+	service.activeDeployment = func(_ context.Context, tx pgx.Tx, _ uuid.UUID) (string, error) {
+		require.Same(t, receipts.tx, tx)
 		activeChecks++
 		return uuid.NewString(), nil
 	}
@@ -271,4 +279,13 @@ func TestRedeployDeploymentDispatchPreservesExpectedNoActiveSnapshot(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, uuid.Nil, management.dispatchedActive)
 	require.Equal(t, 1, management.processCalls)
+}
+
+func TestRedeployDeploymentPreparationUsesReceiptTransaction(t *testing.T) {
+	t.Parallel()
+	service, management, receipts, principal, project, ctx, sourceID := newRedeployServiceFixture(t)
+	_, err := service.Redeploy(ctx, principal, RedeployDeploymentInput{ProjectID: project.ID.String(), DeploymentID: sourceID, ExpectedActiveDeploymentID: sourceID, IdempotencyKey: "transaction", Confirmed: true})
+	require.NoError(t, err)
+	require.NotNil(t, management.prepareTx)
+	require.Same(t, receipts.tx, management.prepareTx)
 }
