@@ -42,6 +42,7 @@ const FEATURES: ProductFeatures = {
   logsEnabled: true,
   networkIngressEnabled: false,
   organizationGatewayDisabled: false,
+  riskEnforcementFailClosed: false,
   platformMcpEnabled: true,
   remoteSessionAutoRefreshEnabled: false,
   remoteSessionAutoRefreshEnforcedEnabled: false,
@@ -66,6 +67,7 @@ const FEATURES_RESPONSE = {
   logs_enabled: true,
   network_ingress_enabled: false,
   organization_gateway_disabled: false,
+  risk_enforcement_fail_closed: false,
   platform_mcp_enabled: true,
   remote_session_auto_refresh_enabled: false,
   remote_session_auto_refresh_enforced_enabled: false,
@@ -145,6 +147,7 @@ const OMITTED_FEATURES = {
   skill_capture_metadata_only: "omitted",
   remote_session_auto_refresh_enforced: "omitted",
   organization_gateway_disabled: "omitted",
+  risk_enforcement_fail_closed: "omitted",
 } as const satisfies Record<Exclude<FeatureName, ToggleFeatureName>, "omitted">;
 
 function jsonResponse(body: unknown, status = 200): Response {

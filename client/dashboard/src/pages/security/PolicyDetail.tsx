@@ -24,7 +24,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Switch } from "@/components/ui/Switch";
 import { TextArea } from "@/components/ui/Textarea";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -112,6 +111,10 @@ import {
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
+import {
+  JudgeFailureModeCard,
+  useJudgeFailureMode,
+} from "./judge-failure-mode";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import { PolicyScopeModeCards } from "./PolicyScopeModeCards";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -453,9 +456,7 @@ function PromptPolicyEditor({
   const [temperature, setTemperature] = useState(
     policy?.modelConfig?.temperature ?? 0,
   );
-  const [failOpen, setFailOpen] = useState(
-    policy?.modelConfig?.failOpen ?? true,
-  );
+  const judgeFailureMode = useJudgeFailureMode();
   const [scopeOverrides, setScopeOverrides] = useState<
     Map<string, ScopeOverride>
   >(() => scopeOverridesFromPolicy(policy?.detectionScopes));
@@ -503,7 +504,6 @@ function PromptPolicyEditor({
     (name !== policy.name ||
       prompt !== (policy.prompt ?? "") ||
       temperature !== (policy.modelConfig?.temperature ?? 0) ||
-      failOpen !== (policy.modelConfig?.failOpen ?? true) ||
       !sameScopeOverrides(
         scopeOverrides,
         scopeOverridesFromPolicy(policy.detectionScopes),
@@ -584,7 +584,6 @@ function PromptPolicyEditor({
           prompt,
           modelConfig: {
             temperature,
-            failOpen,
           },
           detectionScopes: detectionScopesPayloadForPrompt(),
           mcpScope: mcpScopePayload ?? { servers: [] },
@@ -606,7 +605,7 @@ function PromptPolicyEditor({
           ...(autoName ? {} : { name: name.trim() }),
           enabled: true,
           prompt,
-          modelConfig: { temperature, failOpen },
+          modelConfig: { temperature },
           ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
           ...(mcpScopePayload === null ? {} : { mcpScope: mcpScopePayload }),
           ...actionPayload(),
@@ -641,7 +640,7 @@ function PromptPolicyEditor({
     () => ({
       prompt,
       temperature,
-      failOpen,
+      failClosed: judgeFailureMode.failClosed ?? false,
       messageTypes: [],
       scopeInclude: effectiveScope.scopeInclude,
       scopeExempt: effectiveScope.scopeExempt,
@@ -649,7 +648,7 @@ function PromptPolicyEditor({
     [
       prompt,
       temperature,
-      failOpen,
+      judgeFailureMode.failClosed,
       effectiveScope.scopeInclude,
       effectiveScope.scopeExempt,
     ],
@@ -687,9 +686,8 @@ function PromptPolicyEditor({
           <JudgeSection
             temperature={temperature}
             onTemperatureChange={setTemperature}
-            failOpen={failOpen}
-            onFailOpenChange={setFailOpen}
           />
+          <JudgeFailureModeCard mode={judgeFailureMode} />
         </>
       )}
 
@@ -741,7 +739,7 @@ function PromptPolicyEditor({
         <PromptReview
           prompt={prompt}
           temperature={temperature}
-          failOpen={failOpen}
+          failClosed={judgeFailureMode.failClosed}
           mcpScope={mcpScope}
           customizedScopeCount={scopeOverrides.size}
           action={action}
@@ -805,24 +803,20 @@ function GuardrailCard({
   );
 }
 
-// ── Judge section (temperature · fail behavior) ──────────────────────────────
+// ── Judge section (temperature) ──────────────────────────────────────────────
 
 function JudgeSection({
   temperature,
   onTemperatureChange,
-  failOpen,
-  onFailOpenChange,
 }: {
   temperature: number;
   onTemperatureChange: (v: number) => void;
-  failOpen: boolean;
-  onFailOpenChange: (v: boolean) => void;
 }): JSX.Element {
   return (
     <Card>
       <SectionHeader
         title="Judge"
-        description="How the judge evaluates each in-scope message and how it behaves under error."
+        description="How the judge evaluates each in-scope message."
       />
       <Stack gap={8}>
         {/* Temperature */}
@@ -847,24 +841,6 @@ function JudgeSection({
               ticks={[0, 0.5, 1]}
             />
           </div>
-        </div>
-
-        {/* On judge error */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Text small>On judge error</Text>
-            <Stack direction="horizontal" gap={2} align="center">
-              <Text small muted>
-                {failOpen ? "Fail open" : "Fail closed"}
-              </Text>
-              <Switch checked={failOpen} onCheckedChange={onFailOpenChange} />
-            </Stack>
-          </div>
-          <Text small muted>
-            If the judge times out or errors, fail open lets the message through
-            (no false blocks); fail closed blocks it (stricter, but can
-            interrupt legitimate traffic).
-          </Text>
         </div>
       </Stack>
     </Card>
@@ -1734,7 +1710,9 @@ type EvalMatchFilter = "all" | "flagged" | "clean";
 type Guardrail = {
   prompt: string;
   temperature: number;
-  failOpen: boolean;
+  // The organization's failure mode. The replay reads it server-side; it is
+  // part of the cache key so changing it re-runs the replay.
+  failClosed: boolean;
   messageTypes: string[];
   scopeInclude: string;
   scopeExempt: string;
@@ -1749,7 +1727,6 @@ function evalRequestBody(guardrail: Guardrail, chatId: string) {
       prompt: guardrail.prompt,
       modelConfig: {
         temperature: guardrail.temperature,
-        failOpen: guardrail.failOpen,
       },
       messageTypes: guardrail.messageTypes.length
         ? guardrail.messageTypes
@@ -1766,6 +1743,7 @@ function evalQueryKey(guardrail: Guardrail, chatId: string) {
     "evals",
     "evaluate",
     evalRequestBody(guardrail, chatId),
+    { failClosed: guardrail.failClosed },
   ] as const;
 }
 
@@ -1802,7 +1780,7 @@ function guardrailEvalKey(guardrail: Guardrail): string {
   return JSON.stringify({
     prompt: guardrail.prompt,
     temperature: guardrail.temperature,
-    failOpen: guardrail.failOpen,
+    failClosed: guardrail.failClosed,
     messageTypes: guardrail.messageTypes,
     scopeInclude: guardrail.scopeInclude,
     scopeExempt: guardrail.scopeExempt,
@@ -2058,7 +2036,7 @@ function EvalTuner({
 function PromptReview({
   prompt,
   temperature,
-  failOpen,
+  failClosed,
   mcpScope,
   customizedScopeCount,
   action,
@@ -2071,7 +2049,7 @@ function PromptReview({
 }: {
   prompt: string;
   temperature: number;
-  failOpen: boolean;
+  failClosed: boolean | undefined;
   mcpScope: PolicyMCPScopeValue;
   customizedScopeCount: number;
   action: PolicyAction;
@@ -2096,8 +2074,12 @@ function PromptReview({
           </SummaryRow>
           <SummaryRow label="Judge">
             <Text small className="text-right">
-              temperature {temperature.toFixed(1)} ·{" "}
-              {failOpen ? "fail open" : "fail closed"}
+              temperature {temperature.toFixed(1)}
+              {failClosed === undefined
+                ? null
+                : failClosed
+                  ? " · blocks when it can't answer"
+                  : " · allows when it can't answer"}
             </Text>
           </SummaryRow>
           <SummaryRow label="Scope">

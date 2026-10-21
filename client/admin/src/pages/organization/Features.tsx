@@ -160,6 +160,11 @@ const PRODUCT_FEATURES = {
     kind: "omitted",
     where: "Dashboard Gateway settings",
   },
+  // reason: managed in the dashboard prompt policy editor
+  risk_enforcement_fail_closed: {
+    kind: "omitted",
+    where: "Dashboard prompt policy editor",
+  },
 } satisfies Record<FeatureName, ProductFeatureDecision>;
 
 export function FeaturesRoute(): JSX.Element | null {
