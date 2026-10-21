@@ -630,6 +630,7 @@ func newFullLoop(ctx context.Context, logger *slog.Logger, redisClient *redis.Cl
 		})
 		handler, handlerErr := promptpolicy.NewEnforceHandler(
 			logger,
+			otel.GetMeterProvider(),
 			promptpolicy.NewScanner(logger, evaluate),
 			writer,
 			riskRecorder,
@@ -725,8 +726,12 @@ func runFullPoint(
 	content := loop.content
 	loadProjectID := uuid.MustParse("018ffad2-1c32-7f73-8a54-85306c37a313")
 	loadPolicyID := uuid.Nil
+	loadPolicyVersion := int64(0)
+	loadPolicyLinkReason := "enforcement_load_test"
 	if lane.PolicyID != "" {
 		loadPolicyID = uuid.MustParse(lane.PolicyID)
+		loadPolicyVersion = 1
+		loadPolicyLinkReason = ""
 	}
 	for range concurrency {
 		go func() {
@@ -752,8 +757,8 @@ func runFullPoint(
 						OrganizationID:         "load-org",
 						ProjectID:              loadProjectID,
 						RiskPolicyID:           loadPolicyID,
-						RiskPolicyVersion:      0,
-						PolicyLinkReason:       "enforcement_load_test",
+						RiskPolicyVersion:      loadPolicyVersion,
+						PolicyLinkReason:       loadPolicyLinkReason,
 						ChatID:                 uuid.Nil,
 						ExternalConversationID: "",
 						ChatMessageID:          uuid.Nil,
