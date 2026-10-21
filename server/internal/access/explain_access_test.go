@@ -549,18 +549,28 @@ func TestSummarizeMCPAccessRulesReportsBlocksAndOverridesWithoutIdentity(t *test
 	block.PrincipalUrn = "user:all"
 	direct := authz.NewGrant(authz.ScopeMCPConnect, serverID)
 	direct.PrincipalUrn = "user:private-member-id"
+	narrowBlock := authz.NewGrant(authz.ScopeMCPBlockedConnect, serverID)
+	narrowBlock.Selector[authz.SelectorKeyTool] = "delete_tasks"
+	narrowBlock.PrincipalUrn = "user:all"
+	unrelated := authz.NewGrant(authz.ScopeMCPBlockedConnect, "other-server")
+	unrelated.Selector[authz.SelectorKeyTool] = "other_tool"
+	unrelated.PrincipalUrn = "user:all"
 	for _, test := range []struct {
 		name    string
 		grants  []authz.Grant
 		effects []string
 	}{
+		{name: "narrowed block", grants: []authz.Grant{allow, narrowBlock, unrelated}, effects: []string{"allows", "limits"}},
 		{name: "blocked", grants: []authz.Grant{allow, block}, effects: []string{"blocks", "blocked"}},
 		{name: "override", grants: []authz.Grant{allow, block, direct}, effects: []string{"overrides", "blocked", "overridden"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			rules, err := SummarizeMCPAccessRules(test.grants, serverID, projectID, map[string]string{allow.PrincipalUrn: "Readers"})
+			effective, rules, err := SummarizeMCPAccessRules(test.grants, serverID, projectID, map[string]string{allow.PrincipalUrn: "Readers"})
 			require.NoError(t, err)
+			expected, err := EvaluateEffectiveMCPAccess(test.grants, serverID, projectID)
+			require.NoError(t, err)
+			require.Equal(t, expected, effective)
 			var effects []string
 			for _, rule := range rules {
 				require.Equal(t, "use", rule.AccessLevel)

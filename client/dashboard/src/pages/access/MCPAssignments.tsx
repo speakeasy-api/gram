@@ -1,4 +1,3 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { Ban } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -456,7 +455,7 @@ function RoleAssignments({
             (grant) => grant.appliesTo === "all_resources",
           ),
         ) && (
-          <Text small muted className="py-2">
+          <Text small muted className="px-5 py-2">
             A role-wide rule grants access across servers.{" "}
             <RoleLink roleId={role.id}>Edit role</RoleLink> to change that rule.
           </Text>
@@ -469,7 +468,7 @@ function RoleAssignments({
         />
       ))}
       {!filtered.length && (
-        <Text small muted>
+        <Text small muted className="px-5 py-2">
           {servers.length
             ? "No MCP servers match."
             : "This role does not grant connection access to any MCP servers."}
@@ -1000,16 +999,11 @@ function MemberIdentityAvatar({
 }: {
   member: AccessMember;
 }): JSX.Element {
-  if (!member.photoUrl)
-    return (
-      <IdentityAvatar label={member.name || member.email} className="size-9" />
-    );
   return (
-    <Avatar className="size-9 shrink-0">
-      <AvatarImage src={member.photoUrl} alt="" />
-      <AvatarFallback>
-        {(member.name || member.email).slice(0, 2).toUpperCase()}
-      </AvatarFallback>
-    </Avatar>
+    <IdentityAvatar
+      label={member.name || member.email}
+      src={member.photoUrl}
+      className="size-9"
+    />
   );
 }

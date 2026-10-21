@@ -468,11 +468,7 @@ func (s *AccessReadService) getMemberMCPAccess(ctx context.Context, principal Pr
 		if name == "" {
 			name = row.McpServerID.String()
 		}
-		effective, err := access.EvaluateEffectiveMCPAccess(grants, row.McpServerID.String(), row.ProjectID.String())
-		if err != nil {
-			return GetMemberMCPAccessOutput{}, fmt.Errorf("evaluate member access to MCP %q: %w", name, err)
-		}
-		rules, err := access.SummarizeMCPAccessRules(grants, row.McpServerID.String(), row.ProjectID.String(), roleNames)
+		effective, rules, err := access.SummarizeMCPAccessRules(grants, row.McpServerID.String(), row.ProjectID.String(), roleNames)
 		if err != nil {
 			return GetMemberMCPAccessOutput{}, fmt.Errorf("explain member access to MCP %q: %w", name, err)
 		}

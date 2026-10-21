@@ -125,7 +125,18 @@ type MCPAccessRuleSummary struct {
 
 // SummarizeMCPAccessRules uses the dashboard explanation to report grant and
 // block sources while withholding principal identifiers and directory data.
-func SummarizeMCPAccessRules(grants []authz.Grant, resourceID, projectID string, roleNames map[string]string) ([]MCPAccessRuleSummary, error) {
+func SummarizeMCPAccessRules(grants []authz.Grant, resourceID, projectID string, roleNames map[string]string) (EffectiveMCPAccess, []MCPAccessRuleSummary, error) {
+	// Filter once before tool probes: unrelated servers cannot contribute to
+	// either a resource decision or any tool decision on this server.
+	check := authz.MCPCheck(authz.ScopeMCPConnect, resourceID, projectID)
+	relevant := make([]authz.Grant, 0, len(grants))
+	for _, grant := range grants {
+		if selectorReachesMCP(grant.Selector, check) {
+			relevant = append(relevant, grant)
+		}
+	}
+	grants = relevant
+	var effective EffectiveMCPAccess
 	names := make(map[string]audienceName)
 	for _, grant := range grants {
 		kind, name := "unknown", "Unknown source"
@@ -147,7 +158,16 @@ func SummarizeMCPAccessRules(grants []authz.Grant, resourceID, projectID string,
 	for _, level := range explainedAccessLevels {
 		explained, err := explainAccessLevel(grants, level.level, authz.MCPCheck(level.scope, resourceID, projectID), describe)
 		if err != nil {
-			return nil, err
+			return EffectiveMCPAccess{}, nil, err
+		}
+		switch level.level {
+		case audienceLevelUse:
+			effective.CanConnect = explained.Allowed
+			effective.ToolAccess = *explained.ToolAccess
+		case audienceLevelView:
+			effective.CanView = explained.Allowed
+		case audienceLevelManage:
+			effective.CanManage = explained.Allowed
 		}
 		for _, rule := range explained.Rules {
 			rules = append(rules, MCPAccessRuleSummary{
@@ -157,7 +177,7 @@ func SummarizeMCPAccessRules(grants []authz.Grant, resourceID, projectID string,
 			})
 		}
 	}
-	return rules, nil
+	return effective, rules, nil
 }
 
 // effectiveToolAccess computes only the compact all/some/none decision. Unlike
