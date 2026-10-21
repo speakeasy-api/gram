@@ -9,12 +9,12 @@ import type { SkillLinkTarget } from "./skill-links";
  * write for the organization gateway.
  */
 export function useCanWriteSkillLinkTarget(
-  target: SkillLinkTarget,
+  target: SkillLinkTarget | undefined,
   { grantResourceId }: { grantResourceId?: string } = {},
 ): boolean {
   const { grants, isLoading } = useRBAC();
   const project = useProject();
-  if (isLoading || !grants) return false;
+  if (isLoading || !grants || !target) return false;
   switch (target.kind) {
     case "mcp_server":
       return hasScopeInGrants(
