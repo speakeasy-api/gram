@@ -42,11 +42,16 @@ function GoogleChatContent(): JSX.Element {
     throwOnError: false,
   });
   const begin = useBeginGoogleChatConnectionMutation();
-  const disconnect = useDisconnectGoogleChatConnectionMutation();
   const [selected, setSelected] = useState("");
   const [remove, setRemove] = useState<GoogleChatConnection | null>(null);
   const [error, setError] = useState<string | null>(null);
   const refresh = () => invalidateAllGoogleChatConnections(cache);
+  const disconnect = useDisconnectGoogleChatConnectionMutation({
+    onSuccess: async () => {
+      setRemove(null);
+      await refresh();
+    },
+  });
   const connections =
     query.data?.connections.filter((c) => c.status !== "disconnected") ?? [];
   const connection =
@@ -170,9 +175,11 @@ function GoogleChatContent(): JSX.Element {
         title="Disconnect Google?"
         description="This stops connected assistants, removes their event subscriptions, and deletes the stored Google credentials. It does not delete your Google spaces or messages."
         confirmLabel="Disconnect"
-        onConfirm={async () => {
+        isPending={disconnect.isPending}
+        error={disconnect.error?.message}
+        onConfirm={() => {
           if (!remove) return;
-          await disconnect.mutateAsync({
+          disconnect.mutate({
             request: {
               disconnectGoogleChatRequestBody: {
                 id: remove.id,
@@ -181,8 +188,6 @@ function GoogleChatContent(): JSX.Element {
             },
             security: SESSION_SECURITY,
           });
-          setRemove(null);
-          await refresh();
         }}
       />
     </section>
@@ -216,9 +221,14 @@ function AddGoogleChatSpace({
     SESSION_SECURITY,
     { retry: false, throwOnError: false },
   );
-  const bind = useBindGoogleChatSpaceMutation();
-  const save = async () => {
-    await bind.mutateAsync({
+  const bind = useBindGoogleChatSpaceMutation({
+    onSuccess: async () => {
+      setRequestId(crypto.randomUUID());
+      await onSaved();
+    },
+  });
+  const save = () => {
+    bind.mutate({
       request: {
         bindGoogleChatRequestBody: {
           requestId,
@@ -237,8 +247,6 @@ function AddGoogleChatSpace({
       },
       security: SESSION_SECURITY,
     });
-    setRequestId(crypto.randomUUID());
-    await onSaved();
   };
   return (
     <div className="border border-border p-5 space-y-4">
@@ -324,7 +332,7 @@ function AddGoogleChatSpace({
       </Text>
       <ApiErrorAlert error={bind.error ?? spaces.error ?? assistants.error} />
       <Button
-        onClick={() => void save()}
+        onClick={save}
         disabled={
           !assistant ||
           !projectId ||

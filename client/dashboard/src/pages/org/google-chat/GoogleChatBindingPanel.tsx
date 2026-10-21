@@ -41,20 +41,26 @@ export function GoogleChatBindingPanel({
     retry: false,
     throwOnError: false,
   });
-  const sync = useSyncGoogleChatMembersMutation();
-  const map = useMapGoogleChatMemberMutation();
-  const update = useUpdateGoogleChatBindingMutation();
+  const refresh = async () => {
+    await invalidateAllGoogleChatMembers(cache);
+    await onChanged();
+  };
+  const sync = useSyncGoogleChatMembersMutation({ onSuccess: refresh });
+  const map = useMapGoogleChatMemberMutation({
+    onSuccess: refresh,
+    onError: refresh,
+  });
+  const update = useUpdateGoogleChatBindingMutation({
+    onSuccess: refresh,
+    onError: refresh,
+  });
   const disabled =
     org.slug === DEMO_ORG_SLUG ||
     map.isPending ||
     sync.isPending ||
     update.isPending;
-  const refresh = async () => {
-    await invalidateAllGoogleChatMembers(cache);
-    await onChanged();
-  };
-  const action = async (value: "pause" | "resume" | "repair") => {
-    await update.mutateAsync({
+  const action = (value: "pause" | "resume" | "repair") => {
+    update.mutate({
       request: {
         updateBindingGoogleChatRequestBody: {
           bindingId: binding.id,
@@ -64,7 +70,6 @@ export function GoogleChatBindingPanel({
       },
       security: SESSION_SECURITY,
     });
-    await refresh();
   };
   return (
     <article className="border border-border p-5 space-y-4">
@@ -89,7 +94,7 @@ export function GoogleChatBindingPanel({
           variant="secondary"
           disabled={disabled || (binding.status !== "active" && !canConnect)}
           onClick={() =>
-            void action(binding.status === "active" ? "pause" : "resume")
+            action(binding.status === "active" ? "pause" : "resume")
           }
         >
           <Button.Text>
@@ -99,7 +104,7 @@ export function GoogleChatBindingPanel({
         {binding.status === "error" && (
           <Button
             disabled={disabled || !canConnect}
-            onClick={() => void action("repair")}
+            onClick={() => action("repair")}
           >
             <Button.Text>Retry setup</Button.Text>
           </Button>
@@ -130,14 +135,13 @@ export function GoogleChatBindingPanel({
           <Button
             variant="secondary"
             disabled={disabled || !canConnect}
-            onClick={async () => {
-              await sync.mutateAsync({
+            onClick={() => {
+              sync.mutate({
                 request: {
                   syncMembersGoogleChatRequestBody: { bindingId: binding.id },
                 },
                 security: SESSION_SECURITY,
               });
-              await refresh();
             }}
           >
             <Button.Text>Refresh participants</Button.Text>
@@ -169,9 +173,9 @@ export function GoogleChatBindingPanel({
                     description: p.email,
                   })) ?? []),
                 ]}
-                onSelectionChange={async (item) => {
+                onSelectionChange={(item) => {
                   const value = item.value;
-                  await map.mutateAsync({
+                  map.mutate({
                     request: {
                       mapMemberGoogleChatRequestBody: {
                         bindingId: binding.id,
@@ -182,7 +186,6 @@ export function GoogleChatBindingPanel({
                     },
                     security: SESSION_SECURITY,
                   });
-                  await refresh();
                 }}
               />
             </div>

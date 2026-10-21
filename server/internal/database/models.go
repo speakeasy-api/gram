@@ -2240,6 +2240,89 @@ type GlobalRole struct {
 	Deleted bool
 }
 
+type GoogleChatBinding struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	ConnectionID uuid.UUID
+	// @access: confidential
+	AssistantID uuid.UUID
+	// @access: confidential
+	TriggerID uuid.NullUUID
+	// @access: restricted
+	SpaceName string
+	// @access: opaque-confidential
+	DisplayName string
+	// @access: opaque-confidential
+	Prefix string
+	// @access: restricted
+	SubscriptionName pgtype.Text
+	// @access: confidential
+	Status string
+	// @access: confidential
+	LastError pgtype.Text
+	// @access: confidential
+	Revision int64
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type GoogleChatConnection struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential-pii
+	GoogleSubject string
+	// @access: confidential-pii
+	Email string
+	// @access: secret-restricted
+	CredentialsEncrypted pgtype.Text
+	// @access: confidential
+	GrantedScopes []string
+	// @access: confidential
+	Generation uuid.UUID
+	// @access: confidential
+	Status string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type GoogleChatMember struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	BindingID uuid.UUID
+	// @access: confidential-pii
+	GoogleUserName string
+	// @access: confidential-pii
+	DisplayName string
+	// @access: confidential-pii
+	Email string
+	// @access: confidential-pii
+	UserID pgtype.Text
+	// @access: confidential
+	Active bool
+	// @access: confidential
+	Revision int64
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type HooksServerNameOverride struct {
 	// @access: confidential
 	ID uuid.UUID
