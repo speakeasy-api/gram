@@ -690,7 +690,7 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 	}
 	// The admission lock taken above precedes the gateway row lock, as the
 	// risk policy cleanup requires.
-	deletedPolicies, err := policylifecycle.NewCleaner(s.tracerProvider, s.audit).SoftDeleteForMCPServer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, deleted.ID, policylifecycle.Actor{
+	policyCleanup, err := policylifecycle.NewCleaner(s.tracerProvider, s.audit).SoftDeleteForMCPServer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, deleted.ID, policylifecycle.Actor{
 		Principal:   actor,
 		DisplayName: authCtx.Email,
 		Slug:        nil,
@@ -725,7 +725,7 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, len(detached) > 0)
 	resultsCleaner := background.TemporalRiskPolicyResultsCleaner{TemporalEnv: s.temporalEnv, Logger: logger}
-	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, deletedPolicies)
+	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, policyCleanup.Deleted)
 	if err := s.reconcileCustomDomains(ctx, rootDomainIDs(rootEndpoints)); err != nil {
 		return err
 	}

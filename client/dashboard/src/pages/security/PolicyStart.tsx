@@ -793,7 +793,7 @@ export function DraftReview({
             ) : null}
           </dl>
           {blockedByFlag ? (
-            <Alert variant="warning" alignTop>
+            <Alert variant="warning">
               Prompt-based policies aren't switched on for this project.
               {alsoClose.length > 0
                 ? " Pick one of the use cases below instead."

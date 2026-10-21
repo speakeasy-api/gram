@@ -26,7 +26,7 @@ func hostedMCPWrappersGetenv(key string) string {
 func TestParseHostedMCPWrappersFlagsDefaultsToDryRun(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := parseHostedMCPWrappersFlags(nil, hostedMCPWrappersGetenv, io.Discard)
+	cfg, err := parseHostedMCPWrappersFlags([]string{"-all-projects"}, hostedMCPWrappersGetenv, io.Discard)
 	require.NoError(t, err)
 	require.False(t, cfg.options.Apply)
 	require.False(t, cfg.options.ProjectID.Valid)
@@ -55,26 +55,30 @@ func TestHostedMCPWrappersResumeArgsKeepScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "-apply -project "+project.String()+" -limit 5 -cursor "+cursor.String(), hostedMCPWrappersResumeArgs(cfg.options, cursor))
 
-	cfg, err = parseHostedMCPWrappersFlags([]string{"-apply"}, hostedMCPWrappersGetenv, io.Discard)
+	cfg, err = parseHostedMCPWrappersFlags([]string{"-apply", "-all-projects"}, hostedMCPWrappersGetenv, io.Discard)
 	require.NoError(t, err)
-	require.Equal(t, "-apply -cursor "+cursor.String(), hostedMCPWrappersResumeArgs(cfg.options, cursor))
+	require.Equal(t, "-apply -all-projects -cursor "+cursor.String(), hostedMCPWrappersResumeArgs(cfg.options, cursor))
 }
 
 func TestParseHostedMCPWrappersFlagsRejectsBadInput(t *testing.T) {
 	t.Parallel()
 
-	_, err := parseHostedMCPWrappersFlags(nil, func(string) string { return "" }, io.Discard)
+	_, err := parseHostedMCPWrappersFlags([]string{"-all-projects"}, func(string) string { return "" }, io.Discard)
 	require.ErrorContains(t, err, "GRAM_DATABASE_URL")
 	_, err = parseHostedMCPWrappersFlags([]string{"-project=nope"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "invalid -project")
-	_, err = parseHostedMCPWrappersFlags([]string{"-cursor=nope"}, hostedMCPWrappersGetenv, io.Discard)
+	_, err = parseHostedMCPWrappersFlags([]string{"-all-projects", "-cursor=nope"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "invalid -cursor")
-	_, err = parseHostedMCPWrappersFlags([]string{"-limit=-1"}, hostedMCPWrappersGetenv, io.Discard)
+	_, err = parseHostedMCPWrappersFlags([]string{"-all-projects", "-limit=-1"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "nonnegative")
-	_, err = parseHostedMCPWrappersFlags([]string{"-move-dependents"}, hostedMCPWrappersGetenv, io.Discard)
+	_, err = parseHostedMCPWrappersFlags([]string{"-all-projects", "-move-dependents"}, hostedMCPWrappersGetenv, io.Discard)
 	require.Error(t, err)
-	_, err = parseHostedMCPWrappersFlags([]string{"extra"}, hostedMCPWrappersGetenv, io.Discard)
+	_, err = parseHostedMCPWrappersFlags([]string{"-all-projects", "extra"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "positional")
+	_, err = parseHostedMCPWrappersFlags(nil, hostedMCPWrappersGetenv, io.Discard)
+	require.ErrorContains(t, err, "-all-projects")
+	_, err = parseHostedMCPWrappersFlags([]string{"-all-projects", "-project=" + uuid.NewString()}, hostedMCPWrappersGetenv, io.Discard)
+	require.ErrorContains(t, err, "mutually exclusive")
 }
 
 func TestParseHostedMCPWrappersFlagsHelpPrintsUsage(t *testing.T) {
@@ -92,7 +96,7 @@ func TestRunHostedMCPWrappersRejectsUnwritableReportBeforeRunning(t *testing.T) 
 
 	report := filepath.Join(t.TempDir(), "missing", "report.json")
 	var out bytes.Buffer
-	code := runHostedMCPWrappers([]string{"-apply", "-report", report}, &out, hostedMCPWrappersGetenv)
+	code := runHostedMCPWrappers([]string{"-all-projects", "-apply", "-report", report}, &out, hostedMCPWrappersGetenv)
 	require.Equal(t, 2, code, "a bad report path must fail before any apply")
 	require.Empty(t, out.String())
 }
@@ -108,7 +112,7 @@ func TestRunHostedMCPWrappersKeepsPreviousReportWhenConnectFails(t *testing.T) {
 		}
 		return ""
 	}
-	code := runHostedMCPWrappers([]string{"-report", report}, io.Discard, getenv)
+	code := runHostedMCPWrappers([]string{"-all-projects", "-report", report}, io.Discard, getenv)
 	require.Equal(t, 1, code)
 	got, err := os.ReadFile(report)
 	require.NoError(t, err)
@@ -120,7 +124,7 @@ func TestRunHostedMCPWrappersApplyRefusesAnExistingReport(t *testing.T) {
 
 	report := filepath.Join(t.TempDir(), "report.json")
 	require.NoError(t, os.WriteFile(report, []byte("previous batch"), 0o600))
-	code := runHostedMCPWrappers([]string{"-apply", "-report", report}, io.Discard, hostedMCPWrappersGetenv)
+	code := runHostedMCPWrappers([]string{"-all-projects", "-apply", "-report", report}, io.Discard, hostedMCPWrappersGetenv)
 	require.Equal(t, 2, code, "an apply must not overwrite another batch's report")
 	got, err := os.ReadFile(report)
 	require.NoError(t, err)
@@ -159,7 +163,7 @@ func TestRunHostedMCPWrappersWritesReportEvenWhenSummaryFails(t *testing.T) {
 		}
 		return ""
 	}
-	code := runHostedMCPWrappers([]string{"-report", report}, failingWriter{}, getenv)
+	code := runHostedMCPWrappers([]string{"-all-projects", "-report", report}, failingWriter{}, getenv)
 	require.Equal(t, 1, code)
 	got, err := os.ReadFile(report)
 	require.NoError(t, err)

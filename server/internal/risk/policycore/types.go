@@ -205,6 +205,11 @@ func shadowMCPDisposition(row repo.RiskPolicy) *string {
 	return &disposition
 }
 
+// DecodeMCPScope reads a stored scope as evaluation does; nil means the policy is not MCP-scoped.
+func DecodeMCPScope(raw []byte) *MCPScope {
+	return unmarshalMCPScope(raw)
+}
+
 func unmarshalMCPScope(raw []byte) *MCPScope {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil

@@ -45,7 +45,8 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	fs := flag.NewFlagSet("hosted-mcp-wrappers", flag.ContinueOnError)
 	fs.SetOutput(helpOut)
 	apply := fs.Bool("apply", false, "commit writes (default: dry run)")
-	project := fs.String("project", "", "project_id (uuid) to scope the run")
+	project := fs.String("project", "", "project_id (uuid) to scope the run; this or -all-projects is required")
+	allProjects := fs.Bool("all-projects", false, "run across every project; this or -project is required")
 	cursor := fs.String("cursor", "", "resume after this toolset id")
 	limit := fs.Int("limit", 0, "max toolsets to process; 0 means all")
 	reportPath := fs.String("report", "", "per-row JSON report path; -apply refuses an existing file")
@@ -57,6 +58,13 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	}
 	if fs.NArg() != 0 {
 		return hostedMCPWrappersConfig{}, errors.New("unexpected positional arguments")
+	}
+	// The run writes on -apply, so neither a dry run nor an apply may fall back to every tenant by omission.
+	if *project != "" && *allProjects {
+		return hostedMCPWrappersConfig{}, errors.New("-project and -all-projects are mutually exclusive")
+	}
+	if *project == "" && !*allProjects {
+		return hostedMCPWrappersConfig{}, errors.New("pass -project <id> or -all-projects")
 	}
 	if *limit < 0 {
 		return hostedMCPWrappersConfig{}, errors.New("limit must be nonnegative")
@@ -154,6 +162,8 @@ func hostedMCPWrappersResumeArgs(opts hostedmcpbackfill.Options, cursor uuid.UUI
 	args := []string{"-apply"}
 	if opts.ProjectID.Valid {
 		args = append(args, "-project "+opts.ProjectID.UUID.String())
+	} else {
+		args = append(args, "-all-projects")
 	}
 	if opts.Limit > 0 {
 		args = append(args, "-limit "+strconv.Itoa(opts.Limit))

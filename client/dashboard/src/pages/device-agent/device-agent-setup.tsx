@@ -1680,7 +1680,7 @@ function OrgValues() {
       </dl>
 
       {generatedToken && (
-        <Alert variant="warning" alignTop className="mt-3">
+        <Alert variant="warning" className="mt-3">
           <AlertTitle>
             {autoCopied
               ? "org_token copied to your clipboard"
@@ -1698,7 +1698,7 @@ function OrgValues() {
       )}
 
       {isError && (
-        <Alert variant="error" alignTop className="mt-3">
+        <Alert variant="error" className="mt-3">
           <AlertTitle>Couldn't generate a token</AlertTitle>
           <AlertDescription>
             Something went wrong creating the agent token. Try again, or create

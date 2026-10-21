@@ -29,6 +29,9 @@ export function StepServers({
   isLoading,
   isError,
   onRetry,
+  allServers,
+  onAllServersChange,
+  scopeLabel,
   selected,
   onChange,
 }: {
@@ -36,6 +39,20 @@ export function StepServers({
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
+  /**
+   * Every server, including ones added after this is saved — the reach a
+   * wildcard grant carries. While it is on the individual rows are what the
+   * agent reaches, so they are shown ticked, and they are not the thing to
+   * change: the toggle above them is.
+   */
+  allServers: boolean;
+  onAllServersChange: (next: boolean) => void;
+  /**
+   * What "all" covers, named: the agent's project, or the organization where
+   * the agent already holds a wildcard that reaches every one of them.
+   * Nothing here chooses it — it is the reach the grant carries.
+   */
+  scopeLabel: string;
   selected: ServerSelection[];
   onChange: (next: ServerSelection[]) => void;
 }): JSX.Element {
@@ -56,7 +73,7 @@ export function StepServers({
 
   const query = search.trim().toLowerCase();
   const isSelected = (id: string) =>
-    selected.some((entry) => entry.server.id === id);
+    allServers || selected.some((entry) => entry.server.id === id);
   // A server that authorizes each person separately needs an account attached
   // to the agent before a key can call it, and this flow has no step for that.
   // Offering it would issue a key that reaches the gateway and then fails on
@@ -76,6 +93,9 @@ export function StepServers({
   // find it and be told why, not find nothing.
   const shown = matches.filter((server) => !needsAccount(server));
   const blockedServers = matches.filter(needsAccount);
+  // Counted across the whole scope rather than the filtered rows: it is told
+  // beside "All servers", which is about the scope and not about the search.
+  const perUserCount = servers.filter(needsAccount).length;
 
   const toggle = (server: InventoryServer) => {
     onChange(
@@ -124,13 +144,16 @@ export function StepServers({
         <div className="border-border border">
           <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border-b px-4 py-2">
             <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
-              {servers.length} servers · {selected.length} selected
+              {servers.length} servers ·{" "}
+              {allServers ? "all selected" : `${selected.length} selected`}
             </span>
             <div className="flex gap-2">
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={shown.every((server) => isSelected(server.id))}
+                disabled={
+                  allServers || shown.every((server) => isSelected(server.id))
+                }
                 onClick={() => {
                   const additions = shown
                     .filter((server) => !isSelected(server.id))
@@ -143,7 +166,9 @@ export function StepServers({
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={shown.every((server) => !isSelected(server.id))}
+                disabled={
+                  allServers || shown.every((server) => !isSelected(server.id))
+                }
                 onClick={() => {
                   const hidden = new Set(shown.map((server) => server.id));
                   onChange(
@@ -155,6 +180,30 @@ export function StepServers({
               </Button>
             </div>
           </div>
+          {/* Above the rows and outside the filters, because it is not one of
+              them: it covers servers this list has never shown, including the
+              ones that do not exist yet. */}
+          <label className="border-border hover:bg-muted/40 flex cursor-pointer items-center gap-4 border-b px-4 py-3">
+            <Checkbox
+              checked={allServers}
+              onCheckedChange={() => onAllServersChange(!allServers)}
+              aria-label="All servers"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block">All servers</span>
+              {/* Names the scope, because "all" means a different set under
+                  each one and the answer is a grant that outlives this
+                  screen. And names the gap, because the grant covers every
+                  server while the key this flow issues cannot: a key names
+                  servers one by one, and one that authorizes each person
+                  separately is not one it can name. */}
+              <span className="text-muted-foreground block text-xs">
+                Every server in {scopeLabel}, including ones added later.
+                {perUserCount > 0 &&
+                  ` The ${perUserCount} below that authorize each person separately stay out of the key: the agent reaches them once an account is connected.`}
+              </span>
+            </span>
+          </label>
           {shown.length === 0 ? (
             <Text muted small className="block px-4 py-10 text-center">
               {servers.length === 0
@@ -171,12 +220,20 @@ export function StepServers({
                   <li key={server.id}>
                     <label
                       className={cn(
-                        "flex cursor-pointer items-center gap-4 px-4 py-3",
-                        checked ? "bg-accent/40" : "hover:bg-muted/40",
+                        "flex items-center gap-4 px-4 py-3",
+                        allServers
+                          ? "cursor-default"
+                          : checked
+                            ? "cursor-pointer bg-accent/40"
+                            : "cursor-pointer hover:bg-muted/40",
                       )}
                     >
+                      {/* Ticked and locked under "All servers": the agent does
+                          reach this one, and unticking it alone would not be
+                          true until the wildcard above is turned off. */}
                       <Checkbox
                         checked={checked}
+                        disabled={allServers}
                         onCheckedChange={() => toggle(server)}
                         aria-label={server.name}
                       />
