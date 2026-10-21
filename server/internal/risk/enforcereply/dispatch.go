@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -59,7 +59,8 @@ const (
 	// MaxContentBytes is the hard ceiling for distinct enforcement payload
 	// values. Equal Content, Body, and tool-call arguments consume the budget
 	// once so every lane receives the same prefix.
-	MaxContentBytes = 1 * 1024 * 1024
+	MaxContentBytes               = 1 * 1024 * 1024
+	presidioEngineMaxContentBytes = 50 * 1024
 
 	// contentLimitDistinctID keys the global content limit flag; the flag
 	// carries no targeting so any stable id resolves the same payload.
@@ -237,18 +238,6 @@ func NewDispatcher(ctx context.Context, logger *slog.Logger, meterProvider metri
 	if cfg.WaitTimeout <= 0 {
 		cfg.WaitTimeout = DefaultWaitTimeout
 	}
-	laneWaitTimeout := make(map[riskv1.EnforcementScanner]time.Duration, len(cfg.LaneWaitTimeout)+3)
-	maps.Copy(laneWaitTimeout, cfg.LaneWaitTimeout)
-	if laneWaitTimeout[riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION] <= 0 {
-		laneWaitTimeout[riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION] = DefaultPromptInjectionWaitTimeout
-	}
-	if laneWaitTimeout[riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE] <= 0 {
-		laneWaitTimeout[riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE] = DefaultPromptPolicyWaitTimeout
-	}
-	if laneWaitTimeout[riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_CUSTOM_RULES] <= 0 {
-		laneWaitTimeout[riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_CUSTOM_RULES] = DefaultCustomRulesWaitTimeout
-	}
-	cfg.LaneWaitTimeout = laneWaitTimeout
 
 	var publishers []publisherStopper
 	gitleaksPub, err := gcp.PubSubPublisherForMessage(ctx, broker, &riskv1.GitleaksEnforcement{})
@@ -429,6 +418,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	failed := make(map[Lane]error, len(request.Lanes))
 	deadline := false
 	var mu sync.Mutex
+	var handlerTruncated atomic.Bool
 	group, groupCtx := errgroup.WithContext(ctx)
 	for _, lane := range request.Lanes {
 		group.Go(func() error {
@@ -495,7 +485,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 					"", "", origin.OperationID,
 				)
 				var meterReading []byte
-				stokenCount, countErr := d.stokenCodec.Count(laneCtx, request.Content)
+				stokenCount, countErr := d.stokenCodec.Count(laneCtx, truncateAtRuneBoundary(request.Content, presidioEngineMaxContentBytes))
 				if countErr == nil {
 					reading, prepareErr := metering.PrepareRiskReading(metering.RiskPresidio(), origin, int64(stokenCount), createdAt)
 					if prepareErr == nil && reading != nil {
@@ -563,6 +553,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 			}
 			mu.Lock()
 			byLane[lane] = reply
+			if reply.GetContentTruncated() {
+				handlerTruncated.Store(true)
+			}
 			mu.Unlock()
 			return nil
 		})
@@ -570,7 +563,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	if err := group.Wait(); err != nil {
 		return Outcome{}, fmt.Errorf("dispatch enforcement lanes: %w", err)
 	}
-	return Outcome{ByLane: byLane, Failed: failed, Complete: len(byLane) == len(request.Lanes), Deadline: deadline, Truncated: truncated}, nil
+	return Outcome{ByLane: byLane, Failed: failed, Complete: len(byLane) == len(request.Lanes), Deadline: deadline, Truncated: truncated || handlerTruncated.Load()}, nil
 }
 
 func promptInjectionEnforcement(request DispatchRequest, origin metering.RiskProvenance, requestID, createdAt string, truncated bool) *riskv1.PromptInjectionEnforcement {

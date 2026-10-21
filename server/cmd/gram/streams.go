@@ -608,6 +608,7 @@ func newStreamsCommand() *cli.Command {
 			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, riskRecorder)
 			promptInjectionEnforceHandler, err := promptinjection.NewEnforceHandler(
 				logger,
+				meterProvider,
 				promptInjectionScanner,
 				replyWriter,
 				riskRecorder,
@@ -621,6 +622,7 @@ func newStreamsCommand() *cli.Command {
 			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, riskRecorder)
 			promptPolicyEnforceHandler, err := promptpolicy.NewEnforceHandler(
 				logger,
+				meterProvider,
 				promptPolicyScanner,
 				replyWriter,
 				riskRecorder,
@@ -656,6 +658,7 @@ func newStreamsCommand() *cli.Command {
 			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub, riskRecorder)
 			customRulesEnforceHandler, err := customruleanalyzer.NewEnforceHandler(
 				logger,
+				meterProvider,
 				scanner,
 				replyWriter,
 				riskRecorder,

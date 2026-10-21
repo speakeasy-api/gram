@@ -53,6 +53,7 @@ type EnforceHandler struct {
 	scanner         *Scanner
 	fingerprint     FingerprintFinding
 	metrics         enforceHandlerMetrics
+	truncations     metric.Int64Counter
 	riskRecorder    *metering.RiskRecorder
 	consumerID      string
 	maxRequestAge   time.Duration
@@ -93,6 +94,7 @@ func NewEnforceHandler(
 		scanner:         NewScanner(),
 		fingerprint:     fingerprint,
 		metrics:         metrics,
+		truncations:     enforce.NewTruncationCounter(meterProvider),
 		riskRecorder:    riskRecorder,
 		consumerID:      uuid.NewString(),
 		maxRequestAge:   cfg.MaxRequestAge,
@@ -131,7 +133,11 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 
 	started := time.Now().UTC()
 	content := m.GetContent()
-	truncated := m.GetContentTruncated() || enforce.TruncateFields(h.maxContentBytes, &content)
+	contentCut := enforce.TruncateFields(h.maxContentBytes, &content)
+	truncated := m.GetContentTruncated() || contentCut
+	if contentCut {
+		enforce.RecordTruncation(ctx, h.truncations, "gitleaks")
+	}
 	result, err := h.scanner.Scan(ctx, content)
 	findings := result.Findings
 	status := riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK

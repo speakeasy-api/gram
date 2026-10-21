@@ -305,7 +305,7 @@ func TestEnforceHandlerScansBoundedPrefix(t *testing.T) {
 	t.Parallel()
 
 	_, client, writer := newReplyWriter(t)
-	meterProvider, _ := newTestMeterProvider(t)
+	meterProvider, reader := newTestMeterProvider(t)
 	meterPub, _ := capturingMeterPub(t)
 	handler, err := gitleaks.NewEnforceHandler(
 		testenv.NewLogger(t),
@@ -322,9 +322,10 @@ func TestEnforceHandlerScansBoundedPrefix(t *testing.T) {
 		ProjectId:         new(uuid.NewString()),
 		OrganizationId:    new("org-truncated"),
 		CreatedAt:         new(time.Now().UTC().Format(time.RFC3339Nano)),
-		Content:           new("abcé"),
+		Content:           new("safe AccessKeyId: " + fakeAccessKeyID + ", SecretAccessKey: " + fakeSecret),
 		PolicyLinkReason:  new("realtime_no_matching_policy"),
 		MessageLinkReason: new("enforcement_test_unlinked"),
+		ContentTruncated:  new(true),
 	}.Build()
 	require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-truncated", "scan-truncated", nil)))
 
@@ -335,6 +336,8 @@ func TestEnforceHandlerScansBoundedPrefix(t *testing.T) {
 	require.Equal(t, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK, reply.GetStatus())
 	require.True(t, reply.GetContentTruncated())
 	require.False(t, reply.GetIncomplete())
+	require.Empty(t, reply.GetFindings())
+	require.Equal(t, int64(1), counterValue(t, reader, "risk.enforcement.engine_truncations"))
 }
 
 func replyMetadata(replicaID, correlationID string, deliveryAttempt *int) gcp.MessageMetadata {

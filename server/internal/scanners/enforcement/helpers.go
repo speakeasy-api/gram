@@ -1,6 +1,7 @@
 package enforcement
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -21,6 +24,23 @@ const (
 	// MaxReplyReasonRunes matches the EnforcementReply reason contract.
 	MaxReplyReasonRunes = 256
 )
+
+// NewTruncationCounter records engine-local input cuts separately from transport cuts.
+func NewTruncationCounter(meterProvider metric.MeterProvider) metric.Int64Counter {
+	counter, _ := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/scanners/enforcement").Int64Counter(
+		"risk.enforcement.engine_truncations",
+		metric.WithDescription("Number of enforcement scans truncated to an engine input limit"),
+		metric.WithUnit("{scan}"),
+	)
+	return counter
+}
+
+// RecordTruncation records one engine-local input cut.
+func RecordTruncation(ctx context.Context, counter metric.Int64Counter, scanner string) {
+	if counter != nil {
+		counter.Add(ctx, 1, metric.WithAttributes(attribute.String("gram.risk.enforcement.scanner", scanner)))
+	}
+}
 
 // Request identifies the common structural fields of an enforcement request.
 type Request struct {

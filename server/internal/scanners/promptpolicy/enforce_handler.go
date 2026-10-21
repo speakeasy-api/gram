@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -45,18 +46,22 @@ type EnforceHandler struct {
 	scanner         enforcementScanner
 	writer          requestreply.ReplyBroker[*riskv1.EnforcementReply]
 	riskRecorder    *metering.RiskRecorder
+	truncations     metric.Int64Counter
 	consumerID      string
 	maxRequestAge   time.Duration
 	maxContentBytes int
 }
 
 // NewEnforceHandler builds the prompt-policy enforcement handler.
-func NewEnforceHandler(logger *slog.Logger, scanner enforcementScanner, writer requestreply.ReplyBroker[*riskv1.EnforcementReply], riskRecorder *metering.RiskRecorder, cfg EnforceHandlerConfig) (*EnforceHandler, error) {
+func NewEnforceHandler(logger *slog.Logger, meterProvider metric.MeterProvider, scanner enforcementScanner, writer requestreply.ReplyBroker[*riskv1.EnforcementReply], riskRecorder *metering.RiskRecorder, cfg EnforceHandlerConfig) (*EnforceHandler, error) {
 	if scanner == nil {
 		return nil, errors.New("prompt policy enforcement scanner is required")
 	}
 	if writer == nil {
 		return nil, errors.New("prompt policy enforcement reply writer is required")
+	}
+	if riskRecorder == nil {
+		return nil, errors.New("prompt policy enforcement risk recorder is required")
 	}
 	if cfg.MaxRequestAge <= 0 {
 		cfg.MaxRequestAge = DefaultEnforcementMaxRequestAge
@@ -68,6 +73,7 @@ func NewEnforceHandler(logger *slog.Logger, scanner enforcementScanner, writer r
 		logger:          logger.With(attr.SlogComponent("prompt-policy-enforcer")),
 		scanner:         scanner,
 		writer:          writer,
+		truncations:     enforce.NewTruncationCounter(meterProvider),
 		riskRecorder:    riskRecorder,
 		consumerID:      uuid.NewString(),
 		maxRequestAge:   cfg.MaxRequestAge,
@@ -106,6 +112,9 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.PromptPolicyEnfor
 	contentCut := enforce.TruncateFields(h.maxContentBytes, &content)
 	messageCut := enforce.TruncateFields(h.maxContentBytes, fields...)
 	truncated := m.GetContentTruncated() || contentCut || messageCut
+	if contentCut || messageCut {
+		enforce.RecordTruncation(ctx, h.truncations, "judge")
+	}
 	var judgeMessage judgemessage.Message
 	if len(argumentFields) == 0 {
 		judgeMessage = judgemessage.New(m.GetMessageType(), m.GetToolName(), body)
@@ -138,7 +147,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.PromptPolicyEnfor
 		h.logger.ErrorContext(ctx, "write prompt policy enforcement reply; acknowledging request", attr.SlogError(replyErr))
 	}
 
-	if h.riskRecorder != nil && result.Completed {
+	if result.Completed {
 		provenance, provenanceErr := scanners.ParseRiskProvenance(m, m.GetMessageType(), "realtime_streams")
 		if provenanceErr != nil {
 			h.logger.WarnContext(ctx, "skipping prompt policy enforcement usage with invalid attribution", attr.SlogError(provenanceErr))

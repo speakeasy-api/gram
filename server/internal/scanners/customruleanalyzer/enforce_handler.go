@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -44,18 +45,22 @@ type EnforceHandler struct {
 	scanner         enforcementScanner
 	writer          requestreply.ReplyBroker[*riskv1.EnforcementReply]
 	riskRecorder    *metering.RiskRecorder
+	truncations     metric.Int64Counter
 	consumerID      string
 	maxRequestAge   time.Duration
 	maxContentBytes int
 }
 
 // NewEnforceHandler builds the custom-rules enforcement handler.
-func NewEnforceHandler(logger *slog.Logger, scanner enforcementScanner, writer requestreply.ReplyBroker[*riskv1.EnforcementReply], riskRecorder *metering.RiskRecorder, cfg EnforceHandlerConfig) (*EnforceHandler, error) {
+func NewEnforceHandler(logger *slog.Logger, meterProvider metric.MeterProvider, scanner enforcementScanner, writer requestreply.ReplyBroker[*riskv1.EnforcementReply], riskRecorder *metering.RiskRecorder, cfg EnforceHandlerConfig) (*EnforceHandler, error) {
 	if scanner == nil {
 		return nil, errors.New("custom rules enforcement scanner is required")
 	}
 	if writer == nil {
 		return nil, errors.New("custom rules enforcement reply writer is required")
+	}
+	if riskRecorder == nil {
+		return nil, errors.New("custom rules enforcement risk recorder is required")
 	}
 	if cfg.MaxRequestAge <= 0 {
 		cfg.MaxRequestAge = DefaultEnforcementMaxRequestAge
@@ -67,6 +72,7 @@ func NewEnforceHandler(logger *slog.Logger, scanner enforcementScanner, writer r
 		logger:          logger.With(attr.SlogComponent("custom-rules-enforcer")),
 		scanner:         scanner,
 		writer:          writer,
+		truncations:     enforce.NewTruncationCounter(meterProvider),
 		riskRecorder:    riskRecorder,
 		consumerID:      uuid.NewString(),
 		maxRequestAge:   cfg.MaxRequestAge,
@@ -100,7 +106,11 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.CustomRulesEnforc
 		argumentFields[i] = call.GetArguments()
 		fieldPointers = append(fieldPointers, &argumentFields[i])
 	}
-	truncated := m.GetContentTruncated() || enforce.TruncateFields(h.maxContentBytes, fieldPointers...)
+	contentCut := enforce.TruncateFields(h.maxContentBytes, fieldPointers...)
+	truncated := m.GetContentTruncated() || contentCut
+	if contentCut {
+		enforce.RecordTruncation(ctx, h.truncations, "custom_rules")
+	}
 	for i, call := range m.GetToolCalls() {
 		toolCalls = append(toolCalls, ScanToolCall{Name: call.GetName(), Arguments: argumentFields[i]})
 	}
@@ -134,7 +144,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.CustomRulesEnforc
 		h.logger.ErrorContext(ctx, "write custom rules enforcement reply; acknowledging request", attr.SlogError(replyErr))
 	}
 
-	if h.riskRecorder != nil && result.Completed {
+	if result.Completed {
 		provenance, provenanceErr := scanners.ParseRiskProvenance(m, m.GetMessageType(), "realtime_streams")
 		if provenanceErr != nil {
 			h.logger.WarnContext(ctx, "skipping custom rules enforcement usage with invalid attribution", attr.SlogError(provenanceErr))

@@ -62,7 +62,10 @@ func newRiskEnforcementDispatcher(
 	dispatcher, err := enforcereply.NewDispatcher(ctx, logger, meterProvider, broker, inbox, enforcereply.DispatcherConfig{
 		WaitTimeout: 0,
 		LaneWaitTimeout: map[riskv1.EnforcementScanner]time.Duration{ //nolint:exhaustive // an override list is partial by definition; other lanes use WaitTimeout
-			riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER: enforcereply.DefaultLLMAnalyzerWaitTimeout,
+			riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER:     enforcereply.DefaultLLMAnalyzerWaitTimeout,
+			riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION: enforcereply.DefaultPromptInjectionWaitTimeout,
+			riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE:            enforcereply.DefaultPromptPolicyWaitTimeout,
+			riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_CUSTOM_RULES:     enforcereply.DefaultCustomRulesWaitTimeout,
 		},
 		Flags: features,
 	})

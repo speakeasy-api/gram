@@ -7,9 +7,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -43,9 +45,10 @@ func TestEnforceHandlerPreservesFailClosedFindingOnIncompleteJudge(t *testing.T)
 	writer := &captureEnforcementReply{}
 	handler, err := NewEnforceHandler(
 		testenv.NewLogger(t),
+		testenv.NewMeterProvider(t),
 		scanner,
 		writer,
-		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		EnforceHandlerConfig{},
 	)
 	require.NoError(t, err)

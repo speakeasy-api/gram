@@ -112,6 +112,11 @@ _reply_write_errors = _meter.create_counter(
     unit="{error}",
     description=("Presidio enforcement reply writes acknowledged after Redis failure"),
 )
+_content_truncations = _meter.create_counter(
+    "risk.enforcement.engine_truncations",
+    unit="{scan}",
+    description="Number of enforcement scans truncated to an engine input limit",
+)
 
 
 class MalformedEnforcementRequest(ValueError):
@@ -185,6 +190,7 @@ class PresidioEnforceHandler:
         if len(encoded_content) > MAX_CONTENT_BYTES:
             content = encoded_content[:MAX_CONTENT_BYTES].decode(errors="ignore")
             content_truncated = True
+            _content_truncations.add(1, {"gram.risk.enforcement.scanner": "presidio"})
         else:
             content = message.content
         if len(message.entities) > MAX_REQUESTED_ENTITIES:

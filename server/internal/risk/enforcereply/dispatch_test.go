@@ -245,6 +245,37 @@ func TestDispatchPublishesTenantContextAndReplyMetadata(t *testing.T) {
 	require.NotEqual(t, message.GetRequestId(), correlationID)
 }
 
+func TestDispatchAggregatesHandlerTruncation(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-handler-truncation")
+	publisher := &captureEnforcementPublisher{onPublish: func(ctx context.Context, _ *riskv1.GitleaksEnforcement, attributes map[string]string) error {
+		replyURN := attributes[requestreply.ReplyURNAttribute]
+		_, correlationID, err := ParseReplyURN(replyURN)
+		if err != nil {
+			return err
+		}
+		return te.writer.Reply(ctx, replyURN, riskv1.EnforcementReply_builder{
+			CorrelationId:    new(correlationID),
+			Scanner:          new(gitleaksLane.Scanner),
+			Status:           new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
+			ContentTruncated: new(true),
+		}.Build())
+	}}
+	dispatcher := testDispatcher(te, publisher, time.Second)
+
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID: "org-dispatch",
+		ProjectID:      "project-dispatch",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane},
+		Origins:        testOrigins(gitleaksLane),
+	})
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.True(t, outcome.Truncated)
+}
+
 func TestDispatchAcceptsOpaqueOperationID(t *testing.T) {
 	t.Parallel()
 
@@ -383,6 +414,7 @@ func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 	require.Equal(t, "safe content", message.GetContent())
 	require.Equal(t, origins[presidioLane].RiskPolicyID.String(), message.GetOriginRiskPolicyId())
 	require.Equal(t, origins[presidioLane].RiskPolicyVersion, message.GetOriginRiskPolicyVersion())
+
 	require.Equal(t, origins[presidioLane].ExecutionPath, message.GetExecutionPath())
 	require.Equal(t, origins[presidioLane].MessageLinkReason, message.GetMessageLinkReason())
 	require.Empty(t, message.GetRiskPolicyId(), "shared origin must not alter finding/reply policy correlation")
@@ -413,6 +445,33 @@ func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 	_, gitleaksCorrelation, err := ParseReplyURN(gitleaksPub.attributes[0][requestreply.ReplyURNAttribute])
 	require.NoError(t, err)
 	require.NotEqual(t, gitleaksCorrelation, correlationID)
+}
+
+func TestDispatchCapsPresidioMeteringAtEngineLimit(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-presidio-meter-limit")
+	gitleaksPub := &captureEnforcementPublisher{}
+	presidioPub := &capturePresidioPublisher{}
+	presidioPub.onPublish = replyOK[*riskv1.PresidioEnforcement](te, presidioLane)
+	dispatcher := testDispatcherWithPresidio(te, gitleaksPub, presidioPub, time.Second)
+	content := strings.Repeat("x", presidioEngineMaxContentBytes*2)
+
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID: "org-presidio",
+		ProjectID:      "project-presidio",
+		Content:        content,
+		Lanes:          []Lane{presidioLane},
+		Origins:        testOrigins(presidioLane),
+	})
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.Len(t, presidioPub.messages, 1)
+	var reading meteringv1.MeterReading
+	require.NoError(t, proto.Unmarshal(presidioPub.messages[0].GetMeterReading(), &reading))
+	expected, err := stokens.NewCodec().Count(t.Context(), content[:presidioEngineMaxContentBytes])
+	require.NoError(t, err)
+	require.Equal(t, int64(expected), reading.GetValue())
 }
 
 func TestDispatchPreservesSuccessfulSiblingOnLaneFailure(t *testing.T) {

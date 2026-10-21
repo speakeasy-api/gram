@@ -640,9 +640,20 @@ async def test_handler_rejects_oversized_entity_selection_without_scanning():
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
 
 
-async def test_handler_scans_utf8_safe_prefix_for_oversized_content():
+async def test_handler_scans_utf8_safe_prefix_for_oversized_content(
+    monkeypatch: pytest.MonkeyPatch,
+):
     client = fakeredis.aioredis.FakeRedis()
     scanner = FakeScanner()
+    truncations: list[tuple[int, dict[str, str]]] = []
+
+    class TruncationCounter:
+        def add(self, value: int, attributes: dict[str, str]) -> None:
+            truncations.append((value, attributes))
+
+    monkeypatch.setattr(
+        enforce_handler_mod, "_content_truncations", TruncationCounter()
+    )
     big = "a" * (MAX_CONTENT_BYTES - 1) + "é"
     await _handler(scanner, client).handle(_message(content=big), _meta())
     assert scanner.calls == ["a" * (MAX_CONTENT_BYTES - 1)]
@@ -650,6 +661,7 @@ async def test_handler_scans_utf8_safe_prefix_for_oversized_content():
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_OK
     assert reply.content_truncated
     assert not reply.incomplete
+    assert truncations == [(1, {"gram.risk.enforcement.scanner": "presidio"})]
 
 
 async def test_truncated_request_publishes_one_enforcement_meter():
