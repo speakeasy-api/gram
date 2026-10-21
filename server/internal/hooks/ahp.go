@@ -431,7 +431,7 @@ func ahpPayload(source string, harness *ahp.Harness, id, rawType, occurredAt, ev
 		Source:           &gen.HookIngestSource{Adapter: ahpAdapter, AdapterVersion: nil, RawEventName: &rawType, Hostname: nil, UserEmail: nil},
 		Session:          nil,
 		Event:            &gen.HookIngestEvent{Type: eventType, OccurredAt: &occurredAt},
-		Data:             &gen.HookIngestData{Prompt: nil, ToolCall: nil, Mcp: nil, McpInventory: nil, McpInventoryCollected: nil, Usage: nil, Message: nil, Skill: nil, Notification: nil, McpAttribution: nil, PromptAttachments: nil},
+		Data:             &gen.HookIngestData{Prompt: nil, ToolCall: nil, Mcp: nil, McpInventory: nil, McpInventoryCollected: nil, Usage: nil, Message: nil, Skill: nil, Notification: nil, McpAttribution: nil, PromptAttachments: nil, DeliveryFailure: nil},
 		Raw:              nil,
 	}
 	if harness != nil && strings.TrimSpace(harness.Name) != "" {

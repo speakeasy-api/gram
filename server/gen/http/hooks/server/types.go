@@ -1969,6 +1969,9 @@ type HookIngestDataRequestBody struct {
 	// Transcript-derived prompt attachment content (Claude
 	// Stop/SubagentStop/SessionEnd).
 	PromptAttachments []*HookPromptAttachmentEntryRequestBody `form:"prompt_attachments,omitempty" json:"prompt_attachments,omitempty" xml:"prompt_attachments,omitempty"`
+	// Device-side delivery failure report. Required on client.delivery_failed and
+	// rejected on every other event type.
+	DeliveryFailure *HookDeliveryFailureDataRequestBody `form:"delivery_failure,omitempty" json:"delivery_failure,omitempty" xml:"delivery_failure,omitempty"`
 }
 
 // HookPromptDataRequestBody is used to define fields on request body types.
@@ -2105,6 +2108,47 @@ type HookPromptAttachmentEntryRequestBody struct {
 	StartLine *int `form:"start_line,omitempty" json:"start_line,omitempty" xml:"start_line,omitempty"`
 	// Provider transcript timestamp for this attachment, when available.
 	Timestamp *string `form:"timestamp,omitempty" json:"timestamp,omitempty" xml:"timestamp,omitempty"`
+}
+
+// HookDeliveryFailureDataRequestBody is used to define fields on request body
+// types.
+type HookDeliveryFailureDataRequestBody struct {
+	// Canonical type of the event whose delivery failed.
+	EventType *string `form:"event_type,omitempty" json:"event_type,omitempty" xml:"event_type,omitempty"`
+	// Whether the failed send was a live hook or a spool-drain replay.
+	DeliveryPhase *string `form:"delivery_phase,omitempty" json:"delivery_phase,omitempty" xml:"delivery_phase,omitempty"`
+	// Failure class the client observed.
+	Cause *string `form:"cause,omitempty" json:"cause,omitempty" xml:"cause,omitempty"`
+	// HTTP status of the final attempt, 0 when no response arrived.
+	StatusCode *int `form:"status_code,omitempty" json:"status_code,omitempty" xml:"status_code,omitempty"`
+	// Wall time the client spent on the send across its attempts, in milliseconds.
+	ElapsedMs *int `form:"elapsed_ms,omitempty" json:"elapsed_ms,omitempty" xml:"elapsed_ms,omitempty"`
+	// Number of send attempts the client made.
+	Attempts *int `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
+	// Whether the send gated an agent action (a verdict was awaited) rather than
+	// observing one.
+	Gating *bool `form:"gating,omitempty" json:"gating,omitempty" xml:"gating,omitempty"`
+	// RFC3339 time the failed send started, on the device clock.
+	AttemptedAt *string `form:"attempted_at,omitempty" json:"attempted_at,omitempty" xml:"attempted_at,omitempty"`
+	// speakeasy-hooks binary version that made the attempt.
+	BinaryVersion *string `form:"binary_version,omitempty" json:"binary_version,omitempty" xml:"binary_version,omitempty"`
+	// Operating system of the device.
+	Os *string `form:"os,omitempty" json:"os,omitempty" xml:"os,omitempty"`
+	// CPU architecture of the device.
+	Arch *string `form:"arch,omitempty" json:"arch,omitempty" xml:"arch,omitempty"`
+	// Coding agent harness the hook ran under.
+	Harness *string `form:"harness,omitempty" json:"harness,omitempty" xml:"harness,omitempty"`
+	// Harness variant, when the harness distinguishes one.
+	HarnessVariant *string `form:"harness_variant,omitempty" json:"harness_variant,omitempty" xml:"harness_variant,omitempty"`
+	// Harness version, when known.
+	HarnessVersion *string `form:"harness_version,omitempty" json:"harness_version,omitempty" xml:"harness_version,omitempty"`
+	// Idempotency key of the event that failed, so the report joins to the row its
+	// eventual replay produces.
+	FailedIdempotencyKey *string `form:"failed_idempotency_key,omitempty" json:"failed_idempotency_key,omitempty" xml:"failed_idempotency_key,omitempty"`
+	// Session id of the event that failed.
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// Events waiting in the device's offline spool when the report was written.
+	SpoolDepth *int `form:"spool_depth,omitempty" json:"spool_depth,omitempty" xml:"spool_depth,omitempty"`
 }
 
 // OTELResourceLogRequestBody is used to define fields on request body types.
@@ -3983,8 +4027,8 @@ func ValidateHookIngestEventRequestBody(body *HookIngestEventRequestBody) (err e
 		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
 	}
 	if body.Type != nil {
-		if !(*body.Type == "session.started" || *body.Type == "session.updated" || *body.Type == "session.ended" || *body.Type == "mcp.inventory" || *body.Type == "prompt.submitted" || *body.Type == "tool.requested" || *body.Type == "tool.completed" || *body.Type == "tool.failed" || *body.Type == "assistant.responded" || *body.Type == "assistant.thought" || *body.Type == "usage.reported" || *body.Type == "skill.activated" || *body.Type == "notification.reported") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted", "tool.requested", "tool.completed", "tool.failed", "assistant.responded", "assistant.thought", "usage.reported", "skill.activated", "notification.reported"}))
+		if !(*body.Type == "session.started" || *body.Type == "session.updated" || *body.Type == "session.ended" || *body.Type == "mcp.inventory" || *body.Type == "prompt.submitted" || *body.Type == "tool.requested" || *body.Type == "tool.completed" || *body.Type == "tool.failed" || *body.Type == "assistant.responded" || *body.Type == "assistant.thought" || *body.Type == "usage.reported" || *body.Type == "skill.activated" || *body.Type == "notification.reported" || *body.Type == "client.delivery_failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted", "tool.requested", "tool.completed", "tool.failed", "assistant.responded", "assistant.thought", "usage.reported", "skill.activated", "notification.reported", "client.delivery_failed"}))
 		}
 	}
 	if body.OccurredAt != nil {
@@ -4013,6 +4057,11 @@ func ValidateHookIngestDataRequestBody(body *HookIngestDataRequestBody) (err err
 			if err2 := ValidateHookPromptAttachmentEntryRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.DeliveryFailure != nil {
+		if err2 := ValidateHookDeliveryFailureDataRequestBody(body.DeliveryFailure); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -4072,6 +4121,82 @@ func ValidateHookPromptAttachmentEntryRequestBody(body *HookPromptAttachmentEntr
 	}
 	if body.Content == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
+	}
+	return
+}
+
+// ValidateHookDeliveryFailureDataRequestBody runs the validations defined on
+// HookDeliveryFailureDataRequestBody
+func ValidateHookDeliveryFailureDataRequestBody(body *HookDeliveryFailureDataRequestBody) (err error) {
+	if body.EventType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event_type", "body"))
+	}
+	if body.DeliveryPhase == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("delivery_phase", "body"))
+	}
+	if body.Cause == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cause", "body"))
+	}
+	if body.AttemptedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attempted_at", "body"))
+	}
+	if body.EventType != nil {
+		if utf8.RuneCountInString(*body.EventType) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event_type", *body.EventType, utf8.RuneCountInString(*body.EventType), 64, false))
+		}
+	}
+	if body.DeliveryPhase != nil {
+		if !(*body.DeliveryPhase == "live" || *body.DeliveryPhase == "drain") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.delivery_phase", *body.DeliveryPhase, []any{"live", "drain"}))
+		}
+	}
+	if body.Cause != nil {
+		if !(*body.Cause == "dns" || *body.Cause == "tls" || *body.Cause == "timeout" || *body.Cause == "canceled" || *body.Cause == "connection" || *body.Cause == "unreadable-response" || *body.Cause == "unknown" || *body.Cause == "http") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.cause", *body.Cause, []any{"dns", "tls", "timeout", "canceled", "connection", "unreadable-response", "unknown", "http"}))
+		}
+	}
+	if body.AttemptedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.attempted_at", *body.AttemptedAt, goa.FormatDateTime))
+	}
+	if body.BinaryVersion != nil {
+		if utf8.RuneCountInString(*body.BinaryVersion) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.binary_version", *body.BinaryVersion, utf8.RuneCountInString(*body.BinaryVersion), 64, false))
+		}
+	}
+	if body.Os != nil {
+		if utf8.RuneCountInString(*body.Os) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.os", *body.Os, utf8.RuneCountInString(*body.Os), 32, false))
+		}
+	}
+	if body.Arch != nil {
+		if utf8.RuneCountInString(*body.Arch) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.arch", *body.Arch, utf8.RuneCountInString(*body.Arch), 32, false))
+		}
+	}
+	if body.Harness != nil {
+		if utf8.RuneCountInString(*body.Harness) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.harness", *body.Harness, utf8.RuneCountInString(*body.Harness), 64, false))
+		}
+	}
+	if body.HarnessVariant != nil {
+		if utf8.RuneCountInString(*body.HarnessVariant) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.harness_variant", *body.HarnessVariant, utf8.RuneCountInString(*body.HarnessVariant), 64, false))
+		}
+	}
+	if body.HarnessVersion != nil {
+		if utf8.RuneCountInString(*body.HarnessVersion) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.harness_version", *body.HarnessVersion, utf8.RuneCountInString(*body.HarnessVersion), 64, false))
+		}
+	}
+	if body.FailedIdempotencyKey != nil {
+		if utf8.RuneCountInString(*body.FailedIdempotencyKey) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.failed_idempotency_key", *body.FailedIdempotencyKey, utf8.RuneCountInString(*body.FailedIdempotencyKey), 256, false))
+		}
+	}
+	if body.SessionID != nil {
+		if utf8.RuneCountInString(*body.SessionID) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", *body.SessionID, utf8.RuneCountInString(*body.SessionID), 256, false))
+		}
 	}
 	return
 }
