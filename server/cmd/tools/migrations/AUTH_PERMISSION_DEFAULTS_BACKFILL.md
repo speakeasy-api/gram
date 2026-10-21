@@ -37,7 +37,7 @@ After applying, a preview should report zero kind counts apart from organization
 
 ## Rollback
 
-Delete the provisioned grants that are still live, then the ledger rows, per organization or for all:
+Delete the provisioned grants that are still live and that no admin took over, then the ledger rows, per organization or for all:
 
 ```sql
 DELETE FROM principal_grants g
@@ -45,8 +45,9 @@ USING auth_permission_provisions p
 WHERE g.organization_id = p.organization_id
   AND g.principal_urn = p.principal_urn
   AND g.scope = p.scope
-  AND g.selectors = p.selectors;
+  AND g.selectors = p.selectors
+  AND p.taken_over_at IS NULL;
 DELETE FROM auth_permission_provisions;
 ```
 
-A grant an admin wrote the same way afterwards is no longer in the ledger and survives.
+A grant an admin wrote the same way afterwards has `taken_over_at` set and survives.

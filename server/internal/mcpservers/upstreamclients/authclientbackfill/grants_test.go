@@ -228,7 +228,9 @@ func TestRun_ExplicitAndTakenOverKeyPoliciesStayPut(t *testing.T) {
 	require.NoError(t, authz.PatchPrincipalGrants(t.Context(), f.pool, f.orgID, urn.NewAPIKeyPrincipal(adopted),
 		[]*authz.RoleGrant{{Scope: string(authz.ScopeMCPConnect), Selectors: []authz.Selector{authz.ProjectServersSelector(f.projectID.String())}}}, nil))
 	for _, row := range f.provisions() {
-		require.NotEqual(t, urn.NewAPIKeyPrincipal(adopted).String(), row.PrincipalUrn, "the admin's grant is no longer provisioned")
+		if row.PrincipalUrn == urn.NewAPIKeyPrincipal(adopted).String() {
+			require.True(t, row.TakenOver, "the admin's grant is no longer provisioned")
+		}
 	}
 
 	_, clientID := f.sharedClient()
@@ -340,4 +342,39 @@ func TestRun_UserServerGrantsKeepInheritedBlocks(t *testing.T) {
 	f.grant(role, authz.ScopeMCPBlockedAuth, authz.AuthClientSelector(clientID.String(), ""))
 	grants := append(f.grantsOf(user), f.grantsOf(role)...)
 	require.False(t, mandatory(t, authz.GrantsToContext(ctx, grants), f, check).Allowed, "a role's block still applies")
+}
+
+func TestRun_NeverRestoresAGrantTakenOverThenRemoved(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	key := f.apiKey(uuid.NullUUID{}, "consumer")
+	f.run(true)
+
+	for principal, grant := range map[urn.Principal]*authz.RoleGrant{
+		authz.AllUsersPrincipal():   {Scope: string(authz.ScopeMCPAuth), Selectors: []authz.Selector{authz.PersonalAuthClientSelector()}},
+		urn.NewAPIKeyPrincipal(key): {Scope: string(authz.ScopeMCPConnect), Selectors: []authz.Selector{authz.ProjectServersSelector(f.projectID.String())}},
+	} {
+		grants := []*authz.RoleGrant{grant}
+		require.NoError(t, authz.PatchPrincipalGrants(t.Context(), f.pool, f.orgID, principal, grants, nil))
+		require.NoError(t, authz.PatchPrincipalGrants(t.Context(), f.pool, f.orgID, principal, nil, grants))
+	}
+
+	f.run(true)
+	require.Empty(t, f.grantsOf(authz.AllUsersPrincipal()))
+	require.Empty(t, f.grantsOf(urn.NewAPIKeyPrincipal(key)))
+}
+
+func TestRun_TrimmedKeyPoliciesAreNotToppedUp(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	key := f.apiKey(uuid.NullUUID{}, "consumer")
+	_, clientID := f.sharedClient()
+	principal := urn.NewAPIKeyPrincipal(key)
+	trimmed := []*authz.RoleGrant{{Scope: string(authz.ScopeMCPAuth), Selectors: []authz.Selector{authz.AuthClientSelector(clientID.String(), f.projectID.String())}}}
+	require.NoError(t, authz.PatchPrincipalGrants(t.Context(), f.pool, f.orgID, principal, nil, trimmed))
+	before := f.grantsOf(principal)
+	require.Len(t, before, 1)
+
+	f.sharedClient()
+	require.Equal(t, before, f.grantsOf(principal), "an admin trimmed this policy, so it is theirs")
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func TestNewOrganizationsGetThePersonalAuthClientDefault(t *testing.T) {
+func TestSeedPersonalAuthClientDefaultIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
