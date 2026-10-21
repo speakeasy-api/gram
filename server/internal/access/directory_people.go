@@ -22,15 +22,15 @@ const (
 
 // ListDirectoryPeople returns the organization's live directory profiles with
 // one state each, so the dashboard can show people the directory knows about
-// even before they sign in. It is session-only (API keys cannot enumerate it)
-// and never returns attribute values, which stay behind org:admin on the
-// mapping reads.
+// even before they sign in. It needs org:admin, because it names people who
+// are not members, is session-only (API keys cannot enumerate it), and never
+// returns attribute values.
 func (s *Service) ListDirectoryPeople(ctx context.Context, payload *gen.ListDirectoryPeoplePayload) (*gen.ListDirectoryPeopleResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -52,7 +52,8 @@ func (s *Service) ListDirectoryPeople(ctx context.Context, payload *gen.ListDire
 	}
 
 	// One extra row says whether another page exists.
-	rows, err := directoryrepo.New(s.db).ListDirectoryPeople(ctx, directoryrepo.ListDirectoryPeopleParams{
+	queries := directoryrepo.New(s.db)
+	rows, err := queries.ListDirectoryPeople(ctx, directoryrepo.ListDirectoryPeopleParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		Cursor:         cursor,
 		LimitValue:     int32(limit + 1),
@@ -60,19 +61,32 @@ func (s *Service) ListDirectoryPeople(ctx context.Context, payload *gen.ListDire
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list directory people").LogError(ctx, s.logger)
 	}
+	totalsRow := rows
+	if len(rows) == 0 && cursor.Valid {
+		// A cursor past the last profile returns no rows, but the totals still
+		// describe the whole organization, so read them from the first row.
+		totalsRow, err = queries.ListDirectoryPeople(ctx, directoryrepo.ListDirectoryPeopleParams{
+			OrganizationID: ac.ActiveOrganizationID,
+			Cursor:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			LimitValue:     1,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count directory people").LogError(ctx, s.logger)
+		}
+	}
 
 	result := &gen.ListDirectoryPeopleResult{
 		People:     make([]*gen.DirectoryPerson, 0, min(len(rows), limit)),
 		Counts:     &gen.DirectoryPeopleStateCounts{Member: 0, AccountNotMember: 0, NotSignedIn: 0, AmbiguousEmail: 0},
 		NextCursor: nil,
 	}
-	if len(rows) > 0 {
+	if len(totalsRow) > 0 {
 		// Every row carries the same organization-wide totals.
 		result.Counts = &gen.DirectoryPeopleStateCounts{
-			Member:           rows[0].MemberCount,
-			AccountNotMember: rows[0].AccountNotMemberCount,
-			NotSignedIn:      rows[0].NotSignedInCount,
-			AmbiguousEmail:   rows[0].AmbiguousEmailCount,
+			Member:           totalsRow[0].MemberCount,
+			AccountNotMember: totalsRow[0].AccountNotMemberCount,
+			NotSignedIn:      totalsRow[0].NotSignedInCount,
+			AmbiguousEmail:   totalsRow[0].AmbiguousEmailCount,
 		}
 	}
 	if len(rows) > limit {

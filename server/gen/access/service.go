@@ -32,8 +32,8 @@ type Service interface {
 	ListDirectoryRoleMappings(context.Context, *ListDirectoryRoleMappingsPayload) (res *ListDirectoryRoleMappingsResult, err error)
 	// List every live directory profile in the active organization with its name,
 	// groups and whether it belongs to a member. Requires an authenticated session
-	// authorized for org:read; API keys cannot enumerate it. Attribute values are
-	// not returned.
+	// authorized for org:admin, because it names people who are not members; API
+	// keys cannot enumerate it. Attribute values are not returned.
 	ListDirectoryPeople(context.Context, *ListDirectoryPeoplePayload) (res *ListDirectoryPeopleResult, err error)
 	// Fetch the organization's directory groups from WorkOS and save any that are
 	// new or changed.

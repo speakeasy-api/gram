@@ -100,6 +100,18 @@ func TestFillDirectoryUserNamesOnlyFillsEmptyNames(t *testing.T) {
 	require.Zero(t, repeated.UsersFilled)
 }
 
+func TestFillDirectoryUserNamesRejectsDuplicateUsers(t *testing.T) {
+	t.Parallel()
+	_, conn := newTestService(t)
+	const organizationID = "org_directory_names_duplicate"
+	seedOrganization(t, conn, organizationID)
+	inventory := namedInventory()
+	users := inventory.users["directory_1"]
+	inventory.users["directory_1"] = append(users, users[0])
+	_, err := directory.FillDirectoryUserNames(t.Context(), conn, inventory, organizationID, "workos_org", false)
+	require.ErrorContains(t, err, "listed more than once")
+}
+
 func TestFillDirectoryUserNamesRejectsTenantMismatch(t *testing.T) {
 	t.Parallel()
 	_, conn := newTestService(t)

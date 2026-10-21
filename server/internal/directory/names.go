@@ -44,6 +44,7 @@ func FillDirectoryUserNames(ctx context.Context, beginner interface {
 	}
 
 	report := NameFillReport{DryRun: dryRun, Directories: len(directories), ListedUsers: 0, UsersWithName: 0, UsersFilled: 0}
+	seen := map[string]struct{}{}
 	ids := make([]string, 0)
 	firstNames := make([]string, 0)
 	lastNames := make([]string, 0)
@@ -59,6 +60,12 @@ func FillDirectoryUserNames(ctx context.Context, beginner interface {
 			if user.ID == "" || user.OrganizationID != workosOrganizationID || user.DirectoryID != dir.ID {
 				return NameFillReport{}, fmt.Errorf("WorkOS directory user %q has mismatched organization or directory IDs", user.ID)
 			}
+			// A user listed twice could match one row twice with different
+			// names, so an inconsistent listing is refused outright.
+			if _, ok := seen[user.ID]; ok {
+				return NameFillReport{}, fmt.Errorf("WorkOS directory user %q is listed more than once", user.ID)
+			}
+			seen[user.ID] = struct{}{}
 			report.ListedUsers++
 			first := strings.TrimSpace(user.FirstName)
 			last := strings.TrimSpace(user.LastName)
