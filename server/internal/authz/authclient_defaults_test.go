@@ -29,7 +29,7 @@ func TestNewOrganizationsGetThePersonalAuthClientDefault(t *testing.T) {
 	require.Equal(t, ScopeMCPAuth, grants[0].Scope)
 	require.Equal(t, PersonalAuthClientSelector(), grants[0].Selector)
 
-	user := GrantsToContext(enterpriseSessionCtx(t), grants)
+	user := GrantsToContext(enterpriseSessionCtxWithOrg(t, organizationID), grants)
 	own := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: "p", ConnectionOwner: sessionUserID})
 	foreign := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: "p", ConnectionOwner: "someone_else"})
 	shared := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: "p", ConnectionOwner: ""})
